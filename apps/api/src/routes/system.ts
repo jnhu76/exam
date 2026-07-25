@@ -9,6 +9,7 @@ import {
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
+import { createWorkerHeartbeatRepo } from "@exam/db/src/repository/workerHeartbeatRepo.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -23,67 +24,142 @@ import { Permission } from "@exam/authz";
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
 /**
- * Builds the email diagnostics status block. Never throws: if the outbox
+ * Builds the email diagnostics status block (P5-0). Never throws: if the outbox
  * query fails, the status degrades to `unavailable` rather than failing the
  * whole diagnostics response. Never exposes SMTP host/user/password,
  * recipient addresses, or email body content — only booleans, a derived
  * status, worker state, and row counts.
  *
- * Status rules (task P3-M5A):
+ * Status rules:
  * - disabled: `!config.email.enabled`
- * - degraded: enabled and (`outbox.failed > 0` or worker status is
- *   degraded/unknown)
- * - available: enabled, outbox query succeeded, `failed === 0`
+ * - degraded: enabled and (`outbox.dead > 0` or worker status is
+ *   degraded/unavailable)
+ * - available: enabled, outbox query succeeded, `dead === 0`
  * - unavailable: enabled but the outbox query threw
  *
- * Worker status is `unknown` in M3 — `processDueEmails` is
- * manually-triggered (no resident daemon to observe), per
- * `email/outboxService.ts`.
+ * Worker status is derived from the PostgreSQL heartbeat record:
+ * - available: heartbeat exists and lastPollAt is within the stale threshold
+ * - degraded: heartbeat exists but lastPollAt is older than the threshold
+ * - unknown: no heartbeat record found
+ * - disabled: email is disabled
  */
 async function buildEmailStatus(
   config: ReturnType<typeof getRuntimeConfig>,
   db: Database,
   ctx: ReturnType<typeof getRequestContext>,
+  now: Date,
 ): Promise<{
   status: "available" | "degraded" | "unavailable" | "disabled";
   enabled: boolean;
   worker: {
     status: "available" | "degraded" | "unavailable" | "disabled" | "unknown";
+    lastPollAt: string | null;
+    lastSuccessAt: string | null;
+    lastErrorAt: string | null;
+    lastError: string | null;
   };
-  outbox: { pending: number; sent: number; failed: number };
+  outbox: {
+    pending: number;
+    processing: number;
+    retryWait: number;
+    sent: number;
+    dead: number;
+  };
+  oldestPendingAge: number | null;
+  lastSuccessfulDeliveryAt: string | null;
 }> {
   const enabled = config.email.enabled;
   if (!enabled) {
     return {
       status: "disabled",
       enabled: false,
-      worker: { status: "disabled" },
-      outbox: { pending: 0, sent: 0, failed: 0 },
+      worker: {
+        status: "disabled",
+        lastPollAt: null,
+        lastSuccessAt: null,
+        lastErrorAt: null,
+        lastError: null,
+      },
+      outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
+      oldestPendingAge: null,
+      lastSuccessfulDeliveryAt: null,
     };
   }
-  // Worker state is unobservable in M3 (no resident daemon) → "unknown".
-  // Per the M5 status rules, an unknown worker counts as "not explicitly
-  // unavailable", so it does NOT by itself force `degraded`; only
-  // `failed > 0` does. When a resident worker arrives, observe its real
-  // state here and let degraded/unavailable worker statuses force the
-  // email status down.
-  const workerStatus = "unknown" as const;
+
   try {
-    const counts = await createEmailOutboxRepo(db).countByStatus(ctx);
-    const status: "available" | "degraded" =
-      counts.failed > 0 ? "degraded" : "available";
+    const emailRepo = createEmailOutboxRepo(db);
+    const heartbeatRepo = createWorkerHeartbeatRepo(db);
+
+    // Read worker heartbeat
+    const heartbeat = await heartbeatRepo.findLatestByName("email-delivery");
+    const staleThresholdMs = 60_000; // 1 minute without heartbeat = degraded
+    let workerStatus: "available" | "degraded" | "unknown" = "unknown";
+    let lastPollAt: string | null = null;
+    let lastSuccessAt: string | null = null;
+    let lastErrorAt: string | null = null;
+    let lastError: string | null = null;
+
+    if (heartbeat) {
+      lastPollAt = heartbeat.lastPollAt.toISOString();
+      lastSuccessAt = heartbeat.lastSuccessAt?.toISOString() ?? null;
+      lastErrorAt = heartbeat.lastErrorAt?.toISOString() ?? null;
+      lastError = heartbeat.lastError;
+      const age = now.getTime() - heartbeat.lastPollAt.getTime();
+      workerStatus = age > staleThresholdMs ? "degraded" : "available";
+    }
+
+    // Read outbox counts
+    const counts = await emailRepo.countByStatus(ctx);
+
+    // Determine oldest pending age
+    const allPendingRows = await emailRepo.findDuePending(ctx, now, 1);
+    let oldestPendingAge: number | null = null;
+    if (allPendingRows.length > 0) {
+      oldestPendingAge = Math.floor(
+        (now.getTime() - allPendingRows[0]!.createdAt.getTime()) / 1000,
+      );
+    }
+
+    // Determine last successful delivery
+    let lastSuccessfulDeliveryAt: string | null = null;
+    if (heartbeat?.lastSuccessAt) {
+      lastSuccessfulDeliveryAt = heartbeat.lastSuccessAt.toISOString();
+    }
+
+    // Overall status
+    const isDegraded =
+      counts.dead > 0 ||
+      workerStatus === "degraded" ||
+      workerStatus === "unknown";
+
     return {
-      status,
+      status: isDegraded ? "degraded" : "available",
       enabled: true,
-      worker: { status: workerStatus },
+      worker: {
+        status: workerStatus,
+        lastPollAt,
+        lastSuccessAt,
+        lastErrorAt,
+        lastError,
+      },
       outbox: counts,
+      oldestPendingAge,
+      lastSuccessfulDeliveryAt,
     };
   } catch {
     return {
       status: "unavailable",
       enabled: true,
-      worker: { status: workerStatus },
-      outbox: { pending: 0, sent: 0, failed: 0 },
+      worker: {
+        status: "unknown",
+        lastPollAt: null,
+        lastSuccessAt: null,
+        lastErrorAt: null,
+        lastError: null,
+      },
+      outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
+      oldestPendingAge: null,
+      lastSuccessfulDeliveryAt: null,
     };
   }
 }
@@ -313,6 +389,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           config,
           anyDb,
           getRequestContext(request),
+          fastify.now(),
         ),
         config: {
           heartbeatInterval: config.heartbeat.scanIntervalMs ?? 30_000,

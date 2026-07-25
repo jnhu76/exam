@@ -441,21 +441,29 @@ export function SystemDiagnosticsPage() {
                 value={`${diag.emailStatus.outbox.pending}`}
               />
               <InfoRow
+                label={t("diagnostics.labels.outboxProcessing")}
+                value={`${diag.emailStatus.outbox.processing}`}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.outboxRetryWait")}
+                value={`${diag.emailStatus.outbox.retryWait}`}
+              />
+              <InfoRow
                 label={t("diagnostics.labels.outboxSent")}
                 value={`${diag.emailStatus.outbox.sent}`}
               />
               <div className="flex items-baseline justify-between gap-2 py-1.5">
                 <span className="text-sm text-muted-foreground">
-                  {t("diagnostics.labels.outboxFailed")}
+                  {t("diagnostics.labels.outboxDead")}
                 </span>
                 <span
                   className={cn(
                     "text-sm tabular-nums text-foreground",
-                    diag.emailStatus.outbox.failed > 0 &&
+                    diag.emailStatus.outbox.dead > 0 &&
                       getToneTextColor("warning"),
                   )}
                 >
-                  {diag.emailStatus.outbox.failed}
+                  {diag.emailStatus.outbox.dead}
                 </span>
               </div>
             </DiagCard>

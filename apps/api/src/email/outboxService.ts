@@ -1,29 +1,31 @@
-import type { EmailSender } from "@exam/domain";
-import type { RequestContext } from "@exam/domain";
-import type { EmailOutboxRepo } from "@exam/db";
+import type { EmailSender, EmailSendResult } from "@exam/domain";
+import type { EmailRepoContext, EmailOutboxRepo } from "@exam/db";
 import { computeNextRetryAt } from "./retryPolicy.js";
 import { sanitizeEmailError } from "./sanitizeError.js";
 
 /** Per-tick result of {@link EmailOutboxService.processDueEmails}. */
 export interface ProcessResult {
-  /** Total due rows picked up this tick. */
+  /** Total due rows claimed this tick. */
   processed: number;
   /** Rows moved to terminal `sent`. */
   sent: number;
-  /** Rows kept `pending` with a scheduled retry. */
-  retryScheduled: number;
-  /** Rows moved to terminal `failed` (maxAttempts reached). */
-  failed: number;
+  /** Rows moved to `retry_wait` (attempts remaining). */
+  retryWait: number;
+  /** Rows moved to terminal `dead` (maxAttempts reached). */
+  dead: number;
 }
 
 /**
- * The email outbox worker service (M3).
+ * The email outbox worker service (P5-0).
  *
- * Reads due `pending` rows from PostgreSQL and drives each through a sender:
+ * Claims due rows from PostgreSQL using `FOR UPDATE SKIP LOCKED` and drives
+ * each through a sender. The claim is atomic: selected rows are immediately
+ * set to `processing` with lock ownership.
  *
- *   success                            -> markSent
- *   failure && attempts < maxAttempts  -> markRetryScheduled (exponential backoff)
- *   failure && attempts == maxAttempts -> markFailed (terminal)
+ * After the send attempt (outside the claim transaction):
+ *   success                      -> markSent (with providerMessageId)
+ *   failure && attempts < max    -> markRetryWait (exponential backoff)
+ *   failure && attempts >= max   -> markDead (terminal)
  *
  * Contract guarantees:
  *  - One email's failure NEVER blocks another (each is processed in its own
@@ -32,20 +34,18 @@ export interface ProcessResult {
  *    touches `email_outbox` rows, long after the business commit).
  *  - Time is injected (`now`), so retry arithmetic is deterministic and
  *    testable — no raw wall-clock reads.
- *
- * This is a manually-triggered service (no background daemon in M3). A future
- * scanner plugin may call `processDueEmails` on an interval.
+ *  - SMTP is never called inside the claim transaction.
  */
 export class EmailOutboxService {
   constructor(
     private readonly deps: {
       repo: EmailOutboxRepo;
-      ctx: RequestContext;
+      ctx: EmailRepoContext;
       sender: EmailSender;
       retryBaseSeconds: number;
       /** Literal secrets to scrub from persisted `lastError` (e.g. SMTP password). */
       scrubSecrets?: string[];
-      /** Optional audit emitter for P3-M4A email outbox events. */
+      /** Optional audit emitter for email outbox events. */
       auditEmitter?: (event: {
         action: string;
         targetType: string;
@@ -56,72 +56,87 @@ export class EmailOutboxService {
   ) {}
 
   /**
-   * Process up to `limit` due pending emails as of `now`. Returns counts.
+   * Process up to `limit` due emails as of `now`. Returns counts.
    * Never throws for a single email's send failure.
    */
   async processDueEmails(opts: {
     now: Date;
     limit: number;
+    workerInstanceId: string;
   }): Promise<ProcessResult> {
     const { repo, ctx, sender } = this.deps;
     const result: ProcessResult = {
       processed: 0,
       sent: 0,
-      retryScheduled: 0,
-      failed: 0,
+      retryWait: 0,
+      dead: 0,
     };
 
-    const due = await repo.findDuePending(ctx, opts.now, opts.limit);
-    result.processed = due.length;
+    // Claim due rows atomically (one READ COMMITTED transaction)
+    const claimed = await repo.claimDue(
+      ctx,
+      opts.now,
+      opts.workerInstanceId,
+      opts.limit,
+    );
+    result.processed = claimed.length;
 
-    for (const row of due) {
+    // Process each claimed row — send outside the transaction
+    for (const row of claimed) {
       try {
-        await sender.send({
+        const sendResult: EmailSendResult = await sender.send({
           to: row.recipientEmail,
           subject: row.subject,
           text: row.bodyText,
           ...(row.bodyHtml ? { html: row.bodyHtml } : {}),
         });
-        await repo.markSent(ctx, row.id, opts.now);
+        // Mark sent (short ownership-fenced update, not a transaction)
+        await repo.markSent(
+          ctx,
+          row.id,
+          opts.now,
+          sendResult.providerMessageId,
+        );
         result.sent += 1;
       } catch (err) {
-        const nextAttempts = row.attempts + 1;
+        // attemptCount is already incremented by the claim SQL
+        const currentAttemptCount = row.attemptCount;
         const lastError = sanitizeEmailError(err, this.deps.scrubSecrets ?? []);
-        if (nextAttempts >= row.maxAttempts) {
-          await repo.markFailed(ctx, row.id, nextAttempts, lastError);
-          result.failed += 1;
+        if (currentAttemptCount >= row.maxAttempts) {
+          await repo.markDead(ctx, row.id, currentAttemptCount, lastError);
+          result.dead += 1;
           this.deps.auditEmitter?.({
             action: "email.send_failed",
             targetType: "email_outbox",
             targetId: row.id,
             metadata: {
               outboxId: row.id,
-              attempts: nextAttempts,
+              attempts: currentAttemptCount,
               lastError,
             },
           });
         } else {
-          const nextRetryAt = computeNextRetryAt(
+          const nextAttemptAt = computeNextRetryAt(
             opts.now,
-            nextAttempts,
+            currentAttemptCount,
             this.deps.retryBaseSeconds,
           );
-          await repo.markRetryScheduled(
+          await repo.markRetryWait(
             ctx,
             row.id,
-            nextAttempts,
+            currentAttemptCount,
             lastError,
-            nextRetryAt,
+            nextAttemptAt,
           );
-          result.retryScheduled += 1;
+          result.retryWait += 1;
           this.deps.auditEmitter?.({
             action: "email.send_retried",
             targetType: "email_outbox",
             targetId: row.id,
             metadata: {
               outboxId: row.id,
-              attempts: nextAttempts,
-              nextRetryAt: nextRetryAt.toISOString(),
+              attempts: currentAttemptCount,
+              nextAttemptAt: nextAttemptAt.toISOString(),
             },
           });
         }

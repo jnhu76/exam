@@ -126,6 +126,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
     reason:
       "Uses new Date() for createdAt/updatedAt storage stamps only (non-business); grading authority timestamps are passed in explicitly by callers.",
   },
+  {
+    path: "packages/db/src/repository/workerHeartbeatRepo.ts",
+    reason:
+      "Uses baseRepo now() for worker_heartbeats createdAt/updatedAt storage stamps only (non-business); worker poll timestamps are passed in explicitly by the caller.",
+  },
 ];
 
 /** Directories scanned for raw-time regressions in business paths. */

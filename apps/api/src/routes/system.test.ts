@@ -304,8 +304,10 @@ describe("system routes", () => {
       expect(body.emailStatus).toHaveProperty("outbox");
       expect(body.emailStatus.outbox).toEqual({
         pending: 0,
+        processing: 0,
+        retryWait: 0,
         sent: 0,
-        failed: 0,
+        dead: 0,
       });
     });
 
@@ -318,7 +320,7 @@ describe("system routes", () => {
       process.env.EMAIL_ENABLED = "true";
       resetRuntimeConfigForTest();
 
-      // Seed a failed row + a sent row into the test org's outbox. We use
+      // Seed a dead row + a sent row into the test org's outbox. We use
       // raw insert (not the repo) so we can set terminal statuses directly.
       const orgId = ctx.org.id;
       const seeded: (typeof emailOutbox.$inferInsert)[] = [
@@ -329,8 +331,8 @@ describe("system routes", () => {
           recipientEmail: "a@x.com",
           subject: "s",
           bodyText: "t",
-          status: "failed",
-          attempts: 3,
+          status: "dead",
+          attemptCount: 3,
           maxAttempts: 3,
           lastError: "boom",
         },
@@ -342,7 +344,7 @@ describe("system routes", () => {
           subject: "s",
           bodyText: "t",
           status: "sent",
-          attempts: 1,
+          attemptCount: 1,
           maxAttempts: 3,
           sentAt: new Date(),
         },
@@ -359,9 +361,9 @@ describe("system routes", () => {
         expect(res.statusCode).toBe(200);
         const body = res.json();
         expect(body.emailStatus.enabled).toBe(true);
-        // failed > 0 ⇒ degraded per the status rules.
+        // dead > 0 ⇒ degraded per the status rules.
         expect(body.emailStatus.status).toBe("degraded");
-        expect(body.emailStatus.outbox.failed).toBeGreaterThanOrEqual(1);
+        expect(body.emailStatus.outbox.dead).toBeGreaterThanOrEqual(1);
         expect(body.emailStatus.outbox.sent).toBeGreaterThanOrEqual(1);
       } finally {
         // Cleanup: remove seeded rows + restore env.

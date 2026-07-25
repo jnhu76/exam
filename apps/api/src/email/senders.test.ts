@@ -37,23 +37,25 @@ const baseConfig = (
 });
 
 describe("DisabledEmailSender", () => {
-  it("send resolves as a no-op", async () => {
+  it("send resolves with providerMessageId null", async () => {
     const sender = new DisabledEmailSender();
-    await expect(
-      sender.send({ to: "x@example.com", subject: "s", text: "t" }),
-    ).resolves.toBeUndefined();
+    const result = await sender.send({
+      to: "x@example.com",
+      subject: "s",
+      text: "t",
+    });
+    expect(result).toEqual({ providerMessageId: null });
   });
 });
 
 describe("FakeEmailSender", () => {
-  it("success mode resolves", async () => {
-    await expect(
-      new FakeEmailSender("success").send({
-        to: "x@example.com",
-        subject: "s",
-        text: "t",
-      }),
-    ).resolves.toBeUndefined();
+  it("success mode resolves with providerMessageId null", async () => {
+    const result = await new FakeEmailSender("success").send({
+      to: "x@example.com",
+      subject: "s",
+      text: "t",
+    });
+    expect(result).toEqual({ providerMessageId: null });
   });
 
   it("failure mode rejects with the fixed message", async () => {
@@ -68,14 +70,14 @@ describe("FakeEmailSender", () => {
 });
 
 describe("SmtpEmailSender", () => {
-  it("sends the expected from/to/subject/text/html via the transport", async () => {
+  it("sends the expected from/to/subject/text/html via the transport and returns the messageId", async () => {
     const captured: Record<string, unknown>[] = [];
     const sender = new SmtpEmailSender({
       from: "no-reply@example.local",
       fromName: "Exam Platform",
       transporter: recordingTransporter(captured),
     });
-    await sender.send({
+    const result = await sender.send({
       to: "to@example.com",
       subject: "Hello",
       text: "Body text",
@@ -88,6 +90,7 @@ describe("SmtpEmailSender", () => {
       text: "Body text",
       html: "<b>Body text</b>",
     });
+    expect(result).toEqual({ providerMessageId: "rec-1" });
   });
 
   it("passes fromName as an object From (safe header formatting) when set", async () => {
@@ -144,6 +147,42 @@ describe("SmtpEmailSender", () => {
       expect(err.message).toContain("EAUTH");
       return true;
     });
+  });
+
+  it("returns null messageId when sendMail succeeds without a messageId", async () => {
+    const transporter = {
+      sendMail: () => Promise.resolve({}),
+      close() {},
+    } as unknown as Transporter;
+    const sender = new SmtpEmailSender({
+      from: "no-reply@example.local",
+      transporter,
+    });
+    const result = await sender.send({
+      to: "to@example.com",
+      subject: "s",
+      text: "t",
+    });
+    expect(result).toEqual({ providerMessageId: null });
+  });
+
+  it("rejects when the transport indicates the single recipient was rejected", async () => {
+    const transporter = {
+      sendMail: () =>
+        Promise.resolve({
+          messageId: "some-id",
+          accepted: [],
+          rejected: ["to@example.com"],
+        }),
+      close() {},
+    } as unknown as Transporter;
+    const sender = new SmtpEmailSender({
+      from: "no-reply@example.local",
+      transporter,
+    });
+    await expect(
+      sender.send({ to: "to@example.com", subject: "s", text: "t" }),
+    ).rejects.toThrow("was rejected by the SMTP server");
   });
 });
 

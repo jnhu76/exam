@@ -83,21 +83,29 @@ export type WorkerStatus = z.infer<typeof WorkerStatusSchema>;
 
 /**
  * Schema for the email infrastructure status block in diagnostics. Surfaces
- * whether email is enabled, the derived status, the (unknown, in M3) worker
- * state, and outbox row counts. Never includes SMTP host/user/password,
- * recipient addresses, or email body content.
+ * whether email is enabled, the derived status, the worker state, and outbox
+ * row counts (P5-0 extended with new statuses and heartbeat). Never includes
+ * SMTP host/user/password, recipient addresses, or email body content.
  */
 export const EmailDiagnosticsStatusSchema = z.object({
   status: InfrastructureStatusSchema,
   enabled: z.boolean(),
   worker: z.object({
     status: WorkerStatusSchema,
+    lastPollAt: z.string().nullable(),
+    lastSuccessAt: z.string().nullable(),
+    lastErrorAt: z.string().nullable(),
+    lastError: z.string().nullable(),
   }),
   outbox: z.object({
     pending: z.number().int().min(0),
+    processing: z.number().int().min(0),
+    retryWait: z.number().int().min(0),
     sent: z.number().int().min(0),
-    failed: z.number().int().min(0),
+    dead: z.number().int().min(0),
   }),
+  oldestPendingAge: z.number().int().min(0).nullable(),
+  lastSuccessfulDeliveryAt: z.string().nullable(),
 });
 
 /** Type for the email diagnostics status block. */

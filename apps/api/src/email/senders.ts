@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import type { EmailMessage, EmailSender } from "@exam/domain";
+import type { EmailMessage, EmailSender, EmailSendResult } from "@exam/domain";
 import { sanitizeEmailError } from "./sanitizeError.js";
 
 /**
@@ -38,8 +38,8 @@ export interface EmailSenderConfig {
  * the network. Safe default so a disabled deployment cannot accidentally send.
  */
 export class DisabledEmailSender implements EmailSender {
-  async send(_message: EmailMessage): Promise<void> {
-    /* intentionally empty — disabled mode */
+  async send(_message: EmailMessage): Promise<EmailSendResult> {
+    return { providerMessageId: null };
   }
 }
 
@@ -50,10 +50,11 @@ export class DisabledEmailSender implements EmailSender {
  */
 export class FakeEmailSender implements EmailSender {
   constructor(private readonly mode: EmailFakeMode) {}
-  async send(_message: EmailMessage): Promise<void> {
+  async send(_message: EmailMessage): Promise<EmailSendResult> {
     if (this.mode === "failure") {
       throw new EmailSendError("Fake email sender failure");
     }
+    return { providerMessageId: null };
   }
 }
 
@@ -86,7 +87,7 @@ export class SmtpEmailSender implements EmailSender {
     );
   }
 
-  async send(message: EmailMessage): Promise<void> {
+  async send(message: EmailMessage): Promise<EmailSendResult> {
     // Pass `from` as an object when a display name is set: nodemailer then
     // handles the address/name formatting (and any necessary escaping) itself,
     // which is safer than interpolating fromName into an RFC 5322 string and
@@ -96,14 +97,37 @@ export class SmtpEmailSender implements EmailSender {
         ? { name: this.opts.fromName, address: this.opts.from }
         : this.opts.from;
     try {
-      await this.opts.transporter.sendMail({
+      const info = await this.opts.transporter.sendMail({
         from: fromAddress,
         to: message.to,
         subject: message.subject,
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
       });
+      // Inspect the SendInfo result: extract messageId, and check accepted/rejected
+      // for single-recipient sends.
+      const messageId =
+        info && typeof info.messageId === "string" && info.messageId.length > 0
+          ? info.messageId
+          : null;
+
+      // Check accepted/rejected for single-recipient sends
+      if (
+        info &&
+        Array.isArray(info.rejected) &&
+        info.rejected.length > 0 &&
+        info.rejected.includes(message.to)
+      ) {
+        throw new EmailSendError(
+          `Recipient ${message.to} was rejected by the SMTP server`,
+        );
+      }
+
+      return { providerMessageId: messageId };
     } catch (err) {
+      if (err instanceof EmailSendError) {
+        throw err;
+      }
       throw new EmailSendError(sanitizeEmailError(err, this.scrubSecrets));
     }
   }
