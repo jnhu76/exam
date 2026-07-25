@@ -615,6 +615,19 @@ export const emailOutbox = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    /**
+     * Optional link to the Inbox notification that triggered this Email
+     * (P5-N1-I2). Identity-flow Emails (registration_welcome etc.) keep this
+     * null; operational Emails (result_published -> grade_notification) set
+     * it so an Email can be traced back to its Inbox row.
+     */
+    notificationId: text("notification_id"),
+    /**
+     * Optional recipient user link, independent of `recipient_email`. Lets a
+     * future recipient-scoped query join without resolving through the
+     * notification. Nullable for identity-flow Emails with no user binding.
+     */
+    recipientUserId: text("recipient_user_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
