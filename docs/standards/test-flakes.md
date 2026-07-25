@@ -1526,8 +1526,8 @@ Error: Test timed out in 5000ms.
 
 ### 后续动作
 
-- 观察：若复发 ≥3 次，考虑给该用例加 positional `15_000` ms timeout（选项 C）或降低循环次数。
-- 根因修复走 BUG-FLAKE-001 B 方案后续（coverage 插桩下 PG 争用基线改善）。
+- 不采用单点 positional timeout（如 `15_000` ms 选项 C）。A′ 策略明确禁止在 A′ 串行缓解之上继续给单个用例加 timeout 来掩盖 I/O 争用根因（见上文 BUG-FLAKE-001 「升级理由」与登记规则）；该类 timeout 曾于 2026-06-13 被判为仅延长边界、未消除根因，并据此升级到 A′。若复发 ≥3 次，按登记规则升级为正式跟踪条目，并在原条目标记「已升级」。
+- 根因修复统一走 BUG-FLAKE-001 B 方案后续（coverage 插桩下 PG 争用基线改善）：降低 coverage 放大、评估 worker-database 并行基线、或在更接近 CI 的硬件上重测以判定是否为 WSL2 host-performance 放大。在根因收敛前，本机 verify 继续用 serial baseline，不针对本用例做单点缓解。
 
 ### 复发记录
 

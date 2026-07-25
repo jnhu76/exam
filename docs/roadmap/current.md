@@ -18,30 +18,33 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
-- **Phase 3, Module P5-N1 — Notification Inbox + Result-Published Email
-  integration (IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS).**
-  P3 result-publishing closeout is
-  now **CLOSED** (PR #211 merged; independent closeout review satisfied by the
-  P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API proof, M9
-  Teacher all-view result proof, M12 Teacher browser publication E2E, M13
-  concurrent publication idempotency; no production behavior changes). The
-  authoritative transaction seam that P5-N1 extends is frozen at
-  `apps/api/src/routes/exam.ts:1269-1279` (inside the `!alreadyPublished`
-  block, after `recordAtomicHttpAudit`). P5-N1 reality audit (P5-N1-R0) owns
-  the contract correction and the frozen V1 scope. See
-  [`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) §P5-N1,
+- **Phase 3, Module P6 — MVP ready closeout is now UNBLOCKED.** All Phase 3
+  MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0 (Email delivery
+  runtime hardening, PR #210), P3 (result publishing closeout, PR #211), and
+  P5-N1 (Notification Inbox + result-published Email integration, **PR #213
+  merged 2026-07-25**). P5-N1 delivered the first operational two-channel
+  notification: candidate Inbox plus optional Email for `result_published`,
+  integrated atomically into the result-publication transaction. The final
+  review corrective cycle (CI FK-flake on `audit_logs_organization_id_*` from
+  late best-effort audit writes racing org cleanup) is resolved — `pnpm verify`
+  is green (127/127 API test files). See
+  [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md) for the
+  implementation closeout and
   [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md)
-  (ADR status corrected to **Accepted** by this audit).
+  for architecture authority.
 
 > Note: the former P2-1 Exam Authoring UI Flow has been removed from the
 > active Phase 3 plan by scope decision.
 
-## What is blocked
+## Gate status
 
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PENDING.** It blocks future
-  RBAC-sensitive changes only. It does not block documentation or non-RBAC
-  work. The last-recorded route inventory stands but is not freshly
-  re-verified.
+- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
+  `f2a7a80`, re-verified during P4-R1 closeout on `b4dc1d6`). The runtime route
+  tree reconciles exactly; full evidence in
+  [`docs/status/implementation-status.md`](../status/implementation-status.md)
+  and
+  [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
+  Nothing in the current Phase 3 module sequence is blocked on Gate 0.5.
 
 ## What comes next (Phase 3 module order)
 
@@ -54,8 +57,8 @@ result-publication transaction (P5-N1):
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
-  → P5-N1 (Notification Inbox + result-published Email integration) 🔄 IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS
-  → P6 (MVP ready closeout) ⏸ BLOCKED until P5-N1 final corrective gates pass and PR is merged
+  → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
+  → P6 (MVP ready closeout) ⏭ NEXT — unblocked by P5-N1 close
 ```
 
 P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
@@ -66,8 +69,8 @@ Inbox + Email business integration.
 | P4   | Authorization infrastructure implemented        | ✅ CLOSED |
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | ✅ CLOSED |
 | P3   | P4 closed                                       | ✅ CLOSED |
-| P5-N1| P4 + P5-0 + P3 closed                           | 🔄 IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS |
-| P6   | Preceding MVP blockers closed                   | ⏸ BLOCKED until P5-N1 final corrective gates pass and PR is merged |
+| P5-N1| P4 + P5-0 + P3 closed                           | ✅ CLOSED (2026-07-25, PR #213) |
+| P6   | Preceding MVP blockers closed                   | ⏭ NEXT — unblocked by P5-N1 close |
 
 After Phase 3 MVP closeout, the deferred design items (M11 resource-relationship
 authorization, custom roles, Proctor runtime permission boundary, etc.) may be
