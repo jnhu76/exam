@@ -19,8 +19,8 @@ Phase 3 **product** work that remains.
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
-  → P5-N1 (Notification Inbox + result-published Email integration) 🔄 REALITY AUDIT IN PROGRESS
-  → P6 (MVP ready closeout) ⏸ BLOCKED on P5-N1
+  → P5-N1 (Notification Inbox + result-published Email integration) 🔄 IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS
+  → P6 (MVP ready closeout) ⏸ BLOCKED until P5-N1 final corrective gates pass and PR is merged
 ```
 
 P2-1 authoring UI flow has been removed from the active Phase 3 plan by scope
@@ -86,12 +86,12 @@ P5-N1.
 - **NOT AUTHORIZED ASSUMPTIONS**: Inbox; users.email; real business caller; invitation; password reset; template engine; generic queue platform; Redis/BullMQ/RabbitMQ/Kafka.
 - **ACCEPTANCE BOUNDARY**: A standalone Email worker continuously claims, retries, and terminally records outbox rows without duplicate concurrent ownership; its heartbeat and backlog are visible through existing diagnostics.
 
-## P5-N1: Notification Inbox + result-published Email integration (REALITY AUDIT IN PROGRESS)
+## P5-N1: Notification Inbox + result-published Email integration (IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS)
 
 - **CAPABILITY**: First operational two-channel notification: candidate Inbox plus optional Email for `result_published`.
-- **CURRENT STATE**: REALITY AUDIT IN PROGRESS (P5-N1-R0). P3, P4, and P5-0 are all closed; the P5-N1-R0 audit owns the V1 contract correction and the frozen implementation scope. ADR-011 is the architecture authority (status corrected to **Accepted** by this audit).
-- **WHAT EXISTS**: Result publishing command and result-visibility rules; hardened Email delivery runtime from P5-0 (5-state outbox, `FOR UPDATE SKIP LOCKED` claim, heartbeat, diagnostics, `EmailDeliveryService`); existing `EmailType` value `grade_notification` (defined, not yet rendered).
-- **WHAT IS MISSING**: Optional `users.email` recipient source; `notifications` table/repository/contracts; channel-neutral `NotificationService`; static `result_published -> grade_notification` policy mapping; safe relative action link; Inbox APIs and candidate UI; atomic result mutation + Inbox + outbox transaction. (No old route-local Email trigger exists to remove — verified.)
+- **CURRENT STATE**: IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS (PR #213). P3, P4, and P5-0 are all closed; the P5-N1-R0 audit owns the V1 contract correction and the frozen implementation scope. ADR-011 is the architecture authority (status corrected to **Accepted** by this audit).
+- **WHAT EXISTS**: notifications migration + Drizzle schema; notification repository; NotificationService and result_published policy; optional users.email; grade_notification renderer; atomic publication → audit → Inbox → outbox flow; Inbox APIs; Candidate NotificationBell UI; API/unit/integration/E2E coverage; PUBLIC_WEB_ORIGIN and action-path validation.
+- **WHAT IS MISSING**: final corrective verification; final independent review disposition; PR merge/closeout.
 - **DEPENDENCIES**: P3, P4, and P5-0 closed.
 - **NOT AUTHORIZED ASSUMPTIONS**: invitation/password reset migration; additional notification types; user preferences; announcements; WebSocket/SSE; stale-message skip; template engine; generic queue platform; `publicationVersion`; opaque-cursor pagination (repo uses offset/page); generic URL-security framework; removal of a nonexistent old Email caller.
 - **ACCEPTANCE BOUNDARY**: Authorized manual result publication atomically commits result state, one candidate Inbox record, and a linked Email outbox row when an email exists; candidate can read the Inbox item and open the authoritative result at `/exam/:attemptId/result`; SMTP remains asynchronous.

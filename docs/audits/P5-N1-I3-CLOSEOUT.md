@@ -251,14 +251,26 @@ pending the environment recovery (E2E spec is in place).
    justification).
 5. **No dedicated admin Inbox / notification-management API** (out of V1
    scope per §19).
+6. **Composite tenant FK deferred (DEFERRED_SYSTEMIC_DATA_INTEGRITY_HARDENING).**
+   notifications currently has independent organization_id and recipient_user_id
+   foreign keys. Application writes and reads are scoped by organization context,
+   and Phase 1 is singleTenant, but direct SQL could theoretically pair a user with
+   a different organization_id.
+
+   A system-wide composite tenant-FK policy is deferred. It must be evaluated
+   consistently across users/candidateProfiles/examAttempts/emailOutbox and other
+   tenant-owned tables rather than applied to notifications alone.
+
+   Classification: not a P5-N1 release blocker under current singleTenant runtime;
+   revisit before multiTenant/Phase 4.
 
 ---
 
 ## 9. Next authorized work
 
 ```text
-P5-N1 is implementation-complete pending environment recovery for DB-backed
-verification. Next roadmap item: P6 (per docs/roadmap/current.md, P6 was
-BLOCKED on P5-N1). Do NOT start P6 until pnpm verify + the new E2E spec pass
-in CI.
+P5-N1 is implementation-complete; final review correctives are in progress
+(PR #213, task P5-N1-FINAL-REVIEW-CORRECTIVE-1). Next roadmap item: P6
+(per docs/roadmap/current.md, P6 is BLOCKED until P5-N1 final corrective
+gates pass and PR is merged). Do NOT start P6 before merge.
 ```
