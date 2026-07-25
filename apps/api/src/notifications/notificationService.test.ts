@@ -7,6 +7,7 @@ import { getIsolatedTestDb } from "@exam/db/src/testDb.js";
 import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { notifications } from "@exam/db/src/schema/pg.js";
 import { emailOutbox } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
@@ -42,11 +43,32 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let orgId: string;
+  let userCounter: number;
+
+  async function createTestUser(organizationId: string): Promise<string> {
+    const userRepo = createUserRepo(db);
+    const ctx: RequestContext = {
+      actorId: "system",
+      organizationId,
+      role: "Admin",
+      permissions: [],
+      sessionId: "s",
+    };
+    const user = await userRepo.create(ctx, {
+      username: `notifsvc-${userCounter++}-${randomUUID().slice(0, 6)}`,
+      passwordHash: "x",
+      name: `User ${userCounter}`,
+      role: "Candidate",
+      isActive: true,
+    });
+    return user.id;
+  }
 
   beforeAll(async () => {
     const env = await getIsolatedTestDb("api-notificationService");
     db = env.db;
     cleanup = env.cleanup;
+    userCounter = 0;
     const org = await createOrganizationRepo(db).create(
       {
         actorId: "system",
@@ -70,7 +92,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
 
   it("creates an Inbox row (required) and an outbox row when email exists, atomically", async () => {
     const ctx = createContext(orgId);
-    const recipientUserId = randomUUID();
+    const recipientUserId = await createTestUser(orgId);
     const attemptId = randomUUID();
     const examId = randomUUID();
 
@@ -121,7 +143,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
 
   it("creates Inbox-only (no outbox row) when recipient has no email", async () => {
     const ctx = createContext(orgId);
-    const recipientUserId = randomUUID();
+    const recipientUserId = await createTestUser(orgId);
     const attemptId = randomUUID();
     const examId = randomUUID();
 
@@ -153,12 +175,11 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
 
   it("is idempotent on a duplicate publication trigger (no new rows)", async () => {
     const ctx = createContext(orgId);
-    const recipientUserId = randomUUID();
+    const recipientUserId = await createTestUser(orgId);
     const attemptId = randomUUID();
     const examId = randomUUID();
 
-    const opts = {
-      db: db,
+    const baseOpts = {
       ctx,
       examTitle: "Idempotent Exam",
       examId,
@@ -169,16 +190,19 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
 
     // First dispatch.
     await executeInTransaction(db, async (tx) => {
-      return dispatchResultPublishedToRecipient(opts, {
-        userId: recipientUserId,
-        email: "cand@example.com",
-        attemptId,
-      });
+      return dispatchResultPublishedToRecipient(
+        { ...baseOpts, db: tx },
+        {
+          userId: recipientUserId,
+          email: "cand@example.com",
+          attemptId,
+        },
+      );
     });
     // Second dispatch with the SAME dedupe key.
     const second = await executeInTransaction(db, async (tx) => {
       return dispatchResultPublishedToRecipient(
-        { ...opts, db: tx },
+        { ...baseOpts, db: tx },
         { userId: recipientUserId, email: "cand@example.com", attemptId },
       );
     });
@@ -210,7 +234,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
     // the SAME dedupe key before the dispatch — the unique constraint violation
     // must propagate and roll back the whole tx (Inbox row included).
     const ctx = createContext(orgId);
-    const recipientUserId = randomUUID();
+    const recipientUserId = await createTestUser(orgId);
     const attemptId = randomUUID();
     const examId = randomUUID();
     const dedupeKey = `result_published:${examId}:${recipientUserId}`;
@@ -263,11 +287,32 @@ describe("dispatchResultPublishedFanOut", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let orgId: string;
+  let fanOutUserCounter: number;
+
+  async function createFanOutUser(organizationId: string): Promise<string> {
+    const userRepo = createUserRepo(db);
+    const ctx: RequestContext = {
+      actorId: "system",
+      organizationId,
+      role: "Admin",
+      permissions: [],
+      sessionId: "s",
+    };
+    const user = await userRepo.create(ctx, {
+      username: `fanout-${fanOutUserCounter++}-${randomUUID().slice(0, 6)}`,
+      passwordHash: "x",
+      name: `FanOut User ${fanOutUserCounter}`,
+      role: "Candidate",
+      isActive: true,
+    });
+    return user.id;
+  }
 
   beforeAll(async () => {
     const env = await getIsolatedTestDb("api-notificationService-fanout");
     db = env.db;
     cleanup = env.cleanup;
+    fanOutUserCounter = 0;
     const org = await createOrganizationRepo(db).create(
       {
         actorId: "system",
@@ -293,9 +338,21 @@ describe("dispatchResultPublishedFanOut", () => {
     const ctx = createContext(orgId);
     const examId = randomUUID();
     const recipients = [
-      { userId: randomUUID(), email: "a@example.com", attemptId: randomUUID() },
-      { userId: randomUUID(), email: null, attemptId: randomUUID() },
-      { userId: randomUUID(), email: "c@example.com", attemptId: randomUUID() },
+      {
+        userId: await createFanOutUser(orgId),
+        email: "a@example.com",
+        attemptId: randomUUID(),
+      },
+      {
+        userId: await createFanOutUser(orgId),
+        email: null,
+        attemptId: randomUUID(),
+      },
+      {
+        userId: await createFanOutUser(orgId),
+        email: "c@example.com",
+        attemptId: randomUUID(),
+      },
     ];
 
     const summary = await executeInTransaction(db, async (tx) => {

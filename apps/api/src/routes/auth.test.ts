@@ -228,6 +228,7 @@ describe("auth routes", () => {
     vi.stubEnv("JWT_SECRET", "test-production-secret");
     vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
     vi.stubEnv("CORS_ORIGIN", "https://example.com");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://example.com");
     vi.stubEnv("COOKIE_SECURE", "false");
     resetRuntimeConfigForTest();
     const response = await ctx.app.inject({

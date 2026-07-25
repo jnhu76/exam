@@ -108,9 +108,10 @@ export async function dispatchResultPublishedToRecipient(
   });
 
   // 2. OPTIONAL Email outbox row — only when policy enables Email for this
-  //    recipient (normalized email present).
+  //    recipient (normalized email present) AND the Inbox row was newly
+  //    created (idempotent: a duplicate trigger skips the outbox insert).
   let outboxCreated = false;
-  if (emailEnabledForRecipient(type, recipient.email)) {
+  if (inboxInsert.created && emailEnabledForRecipient(type, recipient.email)) {
     const emailType = resolveEmailTypeForNotification(type);
     if (emailType == null) {
       throw new Error(

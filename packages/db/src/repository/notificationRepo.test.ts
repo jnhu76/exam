@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getIsolatedTestDb } from "../testDb.js";
 import { createNotificationRepo } from "./notificationRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
+import { createUserRepo } from "./userRepo.js";
 import { notifications } from "../schema/pg.js";
 import type { Database } from "../types.js";
 import { eq } from "drizzle-orm";
@@ -62,11 +63,32 @@ describe("notificationRepo", () => {
   let orgId: string;
   let recipientA: string;
   let recipientB: string;
+  let userCounter: number;
+
+  async function createTestUser(organizationId: string): Promise<string> {
+    const userRepo = createUserRepo(db);
+    const ctx: RequestContext = {
+      actorId: "system",
+      organizationId,
+      role: "Admin",
+      permissions: [],
+      sessionId: "s",
+    };
+    const user = await userRepo.create(ctx, {
+      username: `notif-user-${userCounter++}-${randomUUID().slice(0, 6)}`,
+      passwordHash: "x",
+      name: `User ${userCounter}`,
+      role: "Candidate",
+      isActive: true,
+    });
+    return user.id;
+  }
 
   beforeAll(async () => {
     const env = await getIsolatedTestDb("db-notificationRepo");
     db = env.db;
     cleanup = env.cleanup;
+    userCounter = 0;
     const org = await createOrganizationRepo(db).create(
       {
         actorId: "system",
@@ -82,8 +104,8 @@ describe("notificationRepo", () => {
       },
     );
     orgId = org.id;
-    recipientA = randomUUID();
-    recipientB = randomUUID();
+    recipientA = await createTestUser(orgId);
+    recipientB = await createTestUser(orgId);
   });
 
   afterAll(async () => {
@@ -182,8 +204,8 @@ describe("notificationRepo", () => {
     it("inserts multiple rows in one statement and reports the count", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r1 = randomUUID();
-      const r2 = randomUUID();
+      const r1 = await createTestUser(orgId);
+      const r2 = await createTestUser(orgId);
       const result = await repo.insertMany(ctx, [
         {
           recipientUserId: r1,
@@ -206,7 +228,7 @@ describe("notificationRepo", () => {
     it("is idempotent on duplicate dedupe keys within a batch", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       // First batch creates 1 row.
       await repo.insertMany(ctx, [
         {
@@ -242,7 +264,7 @@ describe("notificationRepo", () => {
     it("returns rows in stable created_at DESC, id DESC order", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       const t0 = new Date("2026-07-25T00:00:00.000Z");
       const t1 = new Date("2026-07-25T01:00:00.000Z");
       const t2 = new Date("2026-07-25T02:00:00.000Z");
@@ -271,7 +293,7 @@ describe("notificationRepo", () => {
     it("paginates by page/pageSize and reports total", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       for (let i = 0; i < 5; i++) {
         await seedRow(db, {
           organizationId: orgId,
@@ -292,7 +314,7 @@ describe("notificationRepo", () => {
     it("filters to unread only when unreadOnly=true", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       await seedRow(db, {
         organizationId: orgId,
         recipientUserId: r,
@@ -316,8 +338,8 @@ describe("notificationRepo", () => {
     it("isolates by recipient within the same organization", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r1 = randomUUID();
-      const r2 = randomUUID();
+      const r1 = await createTestUser(orgId);
+      const r2 = await createTestUser(orgId);
       await seedRow(db, {
         organizationId: orgId,
         recipientUserId: r1,
@@ -368,7 +390,7 @@ describe("notificationRepo", () => {
     it("counts only unread rows for the recipient", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       await seedRow(db, {
         organizationId: orgId,
         recipientUserId: r,
@@ -393,7 +415,7 @@ describe("notificationRepo", () => {
     it("sets read_at on an unread row and returns it", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       const seeded = await seedRow(db, {
         organizationId: orgId,
         recipientUserId: r,
@@ -407,7 +429,7 @@ describe("notificationRepo", () => {
     it("is idempotent (repeat mark-read returns the row, no error)", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       const seeded = await seedRow(db, {
         organizationId: orgId,
         recipientUserId: r,
@@ -421,8 +443,8 @@ describe("notificationRepo", () => {
     it("returns null for another recipient's notification (anti-enumeration)", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const owner = randomUUID();
-      const attacker = randomUUID();
+      const owner = await createTestUser(orgId);
+      const attacker = await createTestUser(orgId);
       const seeded = await seedRow(db, {
         organizationId: orgId,
         recipientUserId: owner,
@@ -449,7 +471,7 @@ describe("notificationRepo", () => {
     it("marks all unread rows for the recipient and returns the count", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r = randomUUID();
+      const r = await createTestUser(orgId);
       await seedRow(db, { organizationId: orgId, recipientUserId: r });
       await seedRow(db, { organizationId: orgId, recipientUserId: r });
       await seedRow(db, {
@@ -466,8 +488,8 @@ describe("notificationRepo", () => {
     it("does not touch another recipient's rows", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const r1 = randomUUID();
-      const r2 = randomUUID();
+      const r1 = await createTestUser(orgId);
+      const r2 = await createTestUser(orgId);
       await seedRow(db, { organizationId: orgId, recipientUserId: r1 });
       await seedRow(db, { organizationId: orgId, recipientUserId: r2 });
       await repo.markAllRead(ctx, r1);

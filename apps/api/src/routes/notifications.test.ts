@@ -196,6 +196,15 @@ describe("notification routes", () => {
     });
 
     it("returns 0 for a user with no unread notifications", async () => {
+      const repo = createNotificationRepo(ctx.db);
+      const otherCtx = {
+        actorId: otherUserId,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [],
+        sessionId: "s",
+      };
+      await repo.markAllRead(otherCtx, otherUserId);
       const res = await ctx.app.inject({
         method: "GET",
         url: "/api/notifications/unread-count",

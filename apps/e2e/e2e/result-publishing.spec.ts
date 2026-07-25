@@ -613,9 +613,9 @@ test.describe("P5-N1: result_published Inbox notification", () => {
     expect(countBody.count).toBeGreaterThanOrEqual(1);
 
     // ── 5. Candidate browser shows the unread badge ──
-    // The candidate is still logged in from step 1; reload to refresh the
-    // bell's initial count fetch.
-    await page.reload();
+    // The candidate is still on the result page from the submit flow;
+    // navigate to the exam list to see the notification bell.
+    await page.goto(`${BASE_URL}/exam/list`);
     await expect(page).toHaveURL(/\/exam\/list(?:$|[/?#])/);
     await expect(page.getByTestId("notification-unread-badge")).toBeVisible({
       timeout: 15_000,
