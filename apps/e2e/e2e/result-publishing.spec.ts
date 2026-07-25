@@ -526,3 +526,133 @@ test.describe("M12: Teacher browser publication E2E", () => {
     expect(afterPublish.passed).toBe(true);
   });
 });
+
+/**
+ * P5-N1: result_published Inbox notification E2E.
+ *
+ * Extends the M12 publication flow with the Inbox steps:
+ *   Admin/Teacher manual publish (API)
+ *     -> candidate Inbox notification committed (verified via API)
+ *     -> candidate browser sees unread badge
+ *     -> opens panel, marks read
+ *     -> clicks the notification, navigates to the authoritative result page
+ *
+ * This proves the P5-N1 architecture end-to-end (P5-N1-R0 §25.8 / §21 DoD):
+ * one real product event — authorized result publication — flows through
+ * result state mutation -> Inbox row -> candidate reads + navigates.
+ */
+test.describe("P5-N1: result_published Inbox notification", () => {
+  test("manual publish commits an Inbox notification; candidate sees badge, reads, navigates", async ({
+    page,
+    request,
+  }) => {
+    // ── 1. Seed a manual-mode exam + complete a graded attempt (API) ──
+    const seeded = await seedExam(request, "p5n1-notif", {
+      questionAnswer: true,
+      questionScore: 100,
+      passingScore: 60,
+      resultPublicationMode: "manual",
+    });
+    await candidateLogin(page, seeded.candidate);
+    await startExamFromList(page, seeded.examId);
+    await answerTrueFalse(page, true);
+    await waitForSaveSaved(page);
+    await submitExam(page);
+    const attemptId = new URL(page.url()).pathname
+      .split("/")
+      .filter(Boolean)[1]!;
+
+    // ── 2. Confirm no Inbox notification exists before publish ──
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+    const beforeList = await request.get(`${BASE_URL}/api/notifications`, {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    });
+    expect(beforeList.status()).toBe(200);
+    const beforeBody = (await beforeList.json()) as { total: number };
+    const beforeTotal = beforeBody.total;
+
+    // ── 3. Publish results via the Admin API (authoritative mutation) ──
+    const adminToken = await adminApiToken(request);
+    const publishRes = await publishResultsApi(
+      request,
+      adminToken,
+      seeded.examId,
+    );
+    expect(publishRes.status()).toBe(200);
+    const publishBody = (await publishRes.json()) as {
+      alreadyPublished: boolean;
+    };
+    expect(publishBody.alreadyPublished).toBe(false);
+
+    // ── 4. Inbox notification was committed atomically (API check) ──
+    const afterList = await request.get(`${BASE_URL}/api/notifications`, {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    });
+    expect(afterList.status()).toBe(200);
+    const afterBody = (await afterList.json()) as {
+      total: number;
+      items: Array<{
+        type: string;
+        actionPath: string | null;
+        readAt: string | null;
+      }>;
+    };
+    expect(afterBody.total).toBe(beforeTotal + 1);
+    const notif = afterBody.items[0]!;
+    expect(notif.type).toBe("result_published");
+    expect(notif.readAt).toBeNull();
+    expect(notif.actionPath).toBe(`/exam/${attemptId}/result`);
+
+    // Unread-count reflects the new notification.
+    const countRes = await request.get(
+      `${BASE_URL}/api/notifications/unread-count`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(countRes.status()).toBe(200);
+    const countBody = (await countRes.json()) as { count: number };
+    expect(countBody.count).toBeGreaterThanOrEqual(1);
+
+    // ── 5. Candidate browser shows the unread badge ──
+    // The candidate is still logged in from step 1; reload to refresh the
+    // bell's initial count fetch.
+    await page.reload();
+    await expect(page).toHaveURL(/\/exam\/list(?:$|[/?#])/);
+    await expect(page.getByTestId("notification-unread-badge")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // ── 6. Open the panel, mark read by clicking the notification ──
+    await page.getByTestId("notification-bell").click();
+    const panel = page.getByTestId("notification-panel");
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    // The first notification item navigates to the result page on click.
+    const item = page.locator('[data-testid^="notification-item-"]').first();
+    await expect(item).toBeVisible({ timeout: 10_000 });
+    await item.click();
+
+    // ── 7. Navigation lands on the authoritative result page ──
+    await expect(page).toHaveURL(
+      new RegExp(`/exam/${attemptId}/result(?:$|[/?#])`),
+    );
+    await expect(page.getByTestId("result-total-score")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // ── 8. Idempotency: re-publishing does not create a duplicate row ──
+    const republishRes = await publishResultsApi(
+      request,
+      adminToken,
+      seeded.examId,
+    );
+    expect(republishRes.status()).toBe(200);
+    const republishBody = (await republishRes.json()) as {
+      alreadyPublished: boolean;
+    };
+    expect(republishBody.alreadyPublished).toBe(true);
+    const recheckList = await request.get(`${BASE_URL}/api/notifications`, {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    });
+    const recheckBody = (await recheckList.json()) as { total: number };
+    expect(recheckBody.total).toBe(afterBody.total); // unchanged
+  });
+});
