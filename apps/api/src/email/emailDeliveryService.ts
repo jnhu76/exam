@@ -12,12 +12,12 @@ export interface EnqueueEmailInput {
 }
 
 /**
- * The notification service business routes use to enqueue emails (M3).
+ * The email delivery service business routes use to enqueue emails (M3/P5-0).
  *
  * It ONLY writes to the outbox — it never sends SMTP. A separate worker
- * (`EmailOutboxService.processDueEmails`) drains the outbox asynchronously.
- * This keeps email out of the request path and guarantees email failure can
- * never roll back a business transaction.
+ * (`EmailDeliveryWorker`) drains the outbox asynchronously. This keeps email
+ * out of the request path and guarantees email failure can never roll back a
+ * business transaction.
  *
  * Two surfaces:
  *  - {@link enqueueEmail} / {@link enqueueTestEmail}: throw on outbox write
@@ -26,14 +26,14 @@ export interface EnqueueEmailInput {
  *    `null` (use from business flows where email must never break the main
  *    transaction — the recommended pattern).
  */
-export class EmailNotificationService {
+export class EmailDeliveryService {
   constructor(
     private readonly deps: {
       repo: Pick<EmailOutboxRepo, "create">;
       defaultMaxAttempts: number;
       /** Optional pino-style logger for best-effort failure warnings. */
       logger?: { warn(obj: Record<string, unknown>, msg: string): void };
-      /** Optional audit emitter for P3-M4A email outbox events. */
+      /** Optional audit emitter for email outbox events. */
       auditEmitter?: (event: {
         action: string;
         targetType: string;

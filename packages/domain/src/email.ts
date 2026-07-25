@@ -1,9 +1,9 @@
 /**
- * Email domain types (M3 — Email Outbox + SMTP Backend Foundation).
+ * Email domain types (M3/P5-0 — Email Outbox + Delivery Runtime).
  *
  * This module is the single source of truth for the email abstraction shared
  * across `@exam/db` (outbox persistence) and `@exam/api` (senders, worker,
- * notification service). It lives in the leaf `@exam/domain` package so it
+ * delivery service). It lives in the leaf `@exam/domain` package so it
  * carries no Fastify / Drizzle / nodemailer dependency.
  *
  * Scope note: this Job builds reusable email infrastructure ONLY. There is no
@@ -12,18 +12,28 @@
  */
 
 /**
- * Lifecycle status of an outbox row.
+ * Lifecycle status of an outbox row (P5-0 target state).
  *
- * - `pending`  — queued, waiting to be processed (immediately or after retry).
- * - `sent`     — successfully delivered by a sender.
- * - `failed`   — exhausted all retry attempts; terminal.
+ * - `pending`    — first-time or immediately claimable.
+ * - `processing` — claimed by one worker; locked_at and locked_by are non-null.
+ * - `retry_wait` — retryable failure under backoff; next_attempt_at is non-null.
+ * - `sent`       — terminal: sender adapter returned successfully.
+ * - `dead`       — terminal: retry budget exhausted; last_error is non-null.
  *
- * State transitions (driven by `EmailOutboxService`):
- *   pending -> sent            (send succeeded)
- *   pending -> pending+retry   (send failed, attempts < maxAttempts)
- *   pending -> failed          (send failed, attempts == maxAttempts)
+ * State transitions:
+ *   pending    -> processing  (worker claims)
+ *   retry_wait -> processing  (worker claims when next_attempt_at <= now())  // adr-006-allow
+ *   processing -> sent        (send succeeded)
+ *   processing -> retry_wait  (send failed, attempt_count < max_attempts)
+ *   processing -> dead        (send failed, attempt_count >= max_attempts)
+ *   processing -> pending     (abandoned-lock recovery)
  */
-export type EmailOutboxStatus = "pending" | "sent" | "failed";
+export type EmailOutboxStatus =
+  | "pending"
+  | "processing"
+  | "retry_wait"
+  | "sent"
+  | "dead";
 
 /**
  * Logical category of an outbox row. Used for filtering / observability only —
@@ -50,11 +60,33 @@ export interface EmailMessage {
 }
 
 /**
+ * Result returned by an EmailSender after a send attempt.
+ *
+ * - `providerMessageId`: the identifier returned by the configured sender
+ *   adapter. For SMTP/Nodemailer this is the RFC 5322 Message-ID exposed as
+ *   SendInfo.messageId. It is not an SMTP transaction identifier and is not
+ *   proof that the target mailbox received or displayed the message.
+ */
+export interface EmailSendResult {
+  providerMessageId: string | null;
+}
+
+/**
  * Abstraction every email sender implements. Business/worker code MUST go
  * through this interface — it must never call `nodemailer.sendMail` directly.
  */
 export interface EmailSender {
-  send(message: EmailMessage): Promise<void>;
+  send(message: EmailMessage): Promise<EmailSendResult>;
+  close?(): void | Promise<void>;
+}
+
+/**
+ * Narrowest honest context for system processes (e.g. the email worker) that
+ * only need an organization boundary without an authenticated user, role, or
+ * permissions.
+ */
+export interface OrganizationScope {
+  organizationId: string;
 }
 
 /**
@@ -71,10 +103,14 @@ export interface EmailOutboxRow {
   bodyText: string;
   bodyHtml: string | null;
   status: EmailOutboxStatus;
-  attempts: number;
+  attemptCount: number;
   maxAttempts: number;
+  lockedAt: Date | null;
+  lockedBy: string | null;
+  providerMessageId: string | null;
+  dedupeKey: string | null;
   lastError: string | null;
-  nextRetryAt: Date | null;
+  nextAttemptAt: Date | null;
   sentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

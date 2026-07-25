@@ -17941,9 +17941,31 @@
                                 "disabled",
                                 "unknown"
                               ]
+                            },
+                            "lastPollAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "lastSuccessAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "lastErrorAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "lastError": {
+                              "type": "string",
+                              "nullable": true
                             }
                           },
-                          "required": ["status"],
+                          "required": [
+                            "status",
+                            "lastPollAt",
+                            "lastSuccessAt",
+                            "lastErrorAt",
+                            "lastError"
+                          ],
                           "additionalProperties": false
                         },
                         "outbox": {
@@ -17953,20 +17975,50 @@
                               "type": "integer",
                               "minimum": 0
                             },
+                            "processing": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "retryWait": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
                             "sent": {
                               "type": "integer",
                               "minimum": 0
                             },
-                            "failed": {
+                            "dead": {
                               "type": "integer",
                               "minimum": 0
                             }
                           },
-                          "required": ["pending", "sent", "failed"],
+                          "required": [
+                            "pending",
+                            "processing",
+                            "retryWait",
+                            "sent",
+                            "dead"
+                          ],
                           "additionalProperties": false
+                        },
+                        "oldestPendingAge": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "lastSuccessfulDeliveryAt": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
-                      "required": ["status", "enabled", "worker", "outbox"],
+                      "required": [
+                        "status",
+                        "enabled",
+                        "worker",
+                        "outbox",
+                        "oldestPendingAge",
+                        "lastSuccessfulDeliveryAt"
+                      ],
                       "additionalProperties": false
                     },
                     "config": {

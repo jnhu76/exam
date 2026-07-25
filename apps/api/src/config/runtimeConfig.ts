@@ -140,6 +140,22 @@ export interface EmailConfig {
   smtp: SmtpConfig | null;
 }
 
+/**
+ * Email delivery worker runtime configuration (P5-0).
+ *
+ * All parameters are read from environment variables with sensible defaults.
+ * The worker uses these for poll interval, batch size, lock timeout, heartbeat
+ * stale threshold, and shutdown behavior.
+ */
+export interface EmailWorkerConfig {
+  pollIntervalMs: number;
+  batchSize: number;
+  lockTimeoutMs: number;
+  heartbeatStaleThresholdMs: number;
+  shutdownTimeoutMs: number;
+  concurrency: number;
+}
+
 export interface AppRuntimeConfig {
   app: {
     mode: AppMode;
@@ -163,6 +179,7 @@ export interface AppRuntimeConfig {
   security: SecurityConfig;
   timezone: TimezoneConfig;
   email: EmailConfig;
+  emailWorker: EmailWorkerConfig;
 }
 
 const DEFAULT_JWT_SECRET = "development-only-change-me";
@@ -519,6 +536,42 @@ function resolveEmailConfig(
 }
 
 /**
+ * Resolve the email delivery worker runtime configuration from env (P5-0).
+ *
+ * All parameters have safe defaults for local development. Production
+ * deployments should tune these via environment variables.
+ */
+function resolveEmailWorkerConfig(env: NodeJS.ProcessEnv): EmailWorkerConfig {
+  const pollIntervalMs = positiveIntSchema.parse(
+    env.EMAIL_WORKER_POLL_INTERVAL_MS ?? "5000",
+  );
+  const batchSize = positiveIntSchema.parse(
+    env.EMAIL_WORKER_BATCH_SIZE ?? "20",
+  );
+  const lockTimeoutMs = positiveIntSchema.parse(
+    env.EMAIL_WORKER_LOCK_TIMEOUT_MS ?? "300000",
+  );
+  const heartbeatStaleThresholdMs = positiveIntSchema.parse(
+    env.EMAIL_WORKER_HEARTBEAT_STALE_MS ?? "60000",
+  );
+  const shutdownTimeoutMs = positiveIntSchema.parse(
+    env.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS ?? "30000",
+  );
+  // Concurrency is fixed at 1 for Phase 1 (single worker instance).
+  // The config field exists for forward compatibility.
+  const concurrency = 1;
+
+  return {
+    pollIntervalMs,
+    batchSize,
+    lockTimeoutMs,
+    heartbeatStaleThresholdMs,
+    shutdownTimeoutMs,
+    concurrency,
+  };
+}
+
+/**
  * Pure function: build config from an explicit env object.
  * All validation and fail-fast logic lives here.
  */
@@ -594,6 +647,7 @@ export function loadRuntimeConfig(
     },
     timezone: { timezone: resolveTimezone(env) },
     email,
+    emailWorker: resolveEmailWorkerConfig(env),
   };
 }
 

@@ -565,17 +565,21 @@ export const clientEvents = pgTable(
 );
 
 /**
- * Email outbox table — persistent queue of emails to be sent by the email
- * worker (M3 — Email Outbox + SMTP Backend Foundation).
+ * Email outbox — a durable PostgreSQL-backed queue for email delivery (P5-0).
  *
  * The outbox pattern: business transactions only INSERT rows here; a separate
- * worker (`EmailOutboxService.processDueEmails`) reads due `pending` rows and
- * sends them via an `EmailSender`. Email failure is therefore asynchronous to
- * the business transaction and can never roll it back.
+ * worker (`EmailDeliveryWorker`) claims due rows and sends them via an
+ * `EmailSender`. Email failure is therefore asynchronous to the business
+ * transaction and can never roll it back.
  *
- * Status lifecycle: `pending` -> `sent` | `pending`(retry) | `failed`.
- * `nextRetryAt` is null for first-attempt rows and for terminal (`sent`/
- * `failed`) rows; it is set on retry-scheduled rows using exponential backoff.
+ * Status lifecycle:
+ *   pending -> processing -> sent (terminal)
+ *                         -> retry_wait -> processing (on next_attempt_at due)
+ *                         -> dead (terminal)
+ *   processing -> pending (abandoned-lock recovery)
+ *
+ * `next_attempt_at` is null for first-attempt rows and for terminal (`sent`/
+ * `dead`) rows; it is set on retry-scheduled rows using exponential backoff.
  */
 export const emailOutbox = pgTable(
   "email_outbox",
@@ -588,10 +592,14 @@ export const emailOutbox = pgTable(
     bodyText: text("body_text").notNull(),
     bodyHtml: text("body_html"),
     status: text("status").$type<EmailOutboxStatus>().notNull(),
-    attempts: integer("attempts").notNull(),
+    attemptCount: integer("attempt_count").notNull(),
     maxAttempts: integer("max_attempts").notNull(),
+    lockedAt: timestamp("locked_at", { withTimezone: true, mode: "date" }),
+    lockedBy: text("locked_by"),
+    providerMessageId: text("provider_message_id"),
+    dedupeKey: text("dedupe_key"),
     lastError: text("last_error"),
-    nextRetryAt: timestamp("next_retry_at", {
+    nextAttemptAt: timestamp("next_attempt_at", {
       withTimezone: true,
       mode: "date",
     }),
@@ -603,20 +611,105 @@ export const emailOutbox = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // Worker's primary query: due pending rows, oldest first, within an org.
-    // Covers the `status = 'pending' AND (next_retry_at IS NULL OR ...)`
-    // access path. The org prefix keeps the single-tenant data boundary.
+    // Worker's primary query: due pending/retry_wait rows, oldest first, within an org.
     index("email_outbox_org_status_retry_idx").on(
       table.organizationId,
       table.status,
-      table.nextRetryAt,
+      table.nextAttemptAt,
     ),
     index("email_outbox_org_created_at_idx").on(
       table.organizationId,
       table.createdAt,
     ),
-    check("email_outbox_attempts_check", sql`${table.attempts} >= 0`),
+    // Recovery query: abandoned processing rows (locked_at cutoff).
+    index("email_outbox_org_status_locked_at_idx").on(
+      table.organizationId,
+      table.status,
+      table.lockedAt,
+    ),
+    // Dedupe: only one non-null dedupe key per org across the full lifecycle.
+    uniqueIndex("email_outbox_org_dedupe_key_unique")
+      .on(table.organizationId, table.dedupeKey)
+      .where(sql`"dedupe_key" IS NOT NULL`),
+    // State machine CHECK constraints (database backstop).
+    check(
+      "email_outbox_status_check",
+      sql`${table.status} IN ('pending','processing','retry_wait','sent','dead')`,
+    ),
+    check("email_outbox_attempt_count_check", sql`${table.attemptCount} >= 0`),
     check("email_outbox_max_attempts_check", sql`${table.maxAttempts} >= 1`),
+    check(
+      "email_outbox_processing_must_have_lock",
+      sql`
+      (${table.status} <> 'processing') OR (${table.lockedAt} IS NOT NULL AND ${table.lockedBy} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_retry_wait_must_have_next",
+      sql`
+      (${table.status} <> 'retry_wait') OR (${table.nextAttemptAt} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_sent_must_have_sent_at",
+      sql`
+      (${table.status} <> 'sent') OR (${table.sentAt} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_dead_must_have_error",
+      sql`
+      (${table.status} <> 'dead') OR (${table.lastError} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_non_processing_no_lock",
+      sql`
+      (${table.status} = 'processing') OR (${table.lockedAt} IS NULL AND ${table.lockedBy} IS NULL)
+    `,
+    ),
+  ],
+);
+
+/**
+ * Worker heartbeats — PostgreSQL-backed liveness for background worker
+ * processes (P5-0). The email worker updates its heartbeat after each
+ * successful poll cycle. The API diagnostics surface reads these records
+ * to determine worker liveness without process-local shared state, HTTP
+ * RPC, or Redis.
+ */
+export const workerHeartbeats = pgTable(
+  "worker_heartbeats",
+  {
+    id: id(),
+    workerName: text("worker_name").notNull(),
+    workerInstanceId: text("worker_instance_id").notNull(),
+    lastPollAt: timestamp("last_poll_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    lastSuccessAt: timestamp("last_success_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastErrorAt: timestamp("last_error_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("worker_heartbeats_instance_uk").on(table.workerInstanceId),
+    index("worker_heartbeats_name_instance_idx").on(
+      table.workerName,
+      table.workerInstanceId,
+    ),
+    index("worker_heartbeats_last_poll_at_idx").on(
+      table.workerName,
+      table.lastPollAt,
+    ),
   ],
 );
 

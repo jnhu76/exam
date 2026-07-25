@@ -57,8 +57,16 @@ function diag() {
     emailStatus: {
       status: "available" as const,
       enabled: true,
-      worker: { status: "available" as const },
-      outbox: { pending: 0, sent: 0, failed: 0 },
+      worker: {
+        status: "available" as const,
+        lastPollAt: null,
+        lastSuccessAt: null,
+        lastErrorAt: null,
+        lastError: null,
+      },
+      outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
+      oldestPendingAge: null,
+      lastSuccessfulDeliveryAt: null,
     },
   };
 }
@@ -193,7 +201,7 @@ describe("SystemDiagnosticsPage", () => {
         status: "disabled" as const,
         enabled: false,
         worker: { status: "disabled" as const },
-        outbox: { pending: 0, sent: 0, failed: 0 },
+        outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
       },
     });
     renderPage();
@@ -336,7 +344,7 @@ describe("SystemDiagnosticsPage", () => {
         status: "degraded",
         enabled: true,
         worker: { status: "unknown" },
-        outbox: { pending: 2, sent: 10, failed: 1 },
+        outbox: { pending: 2, processing: 0, retryWait: 0, sent: 10, dead: 1 },
       },
     });
     renderPage();
@@ -366,7 +374,7 @@ describe("SystemDiagnosticsPage", () => {
         status: "disabled",
         enabled: false,
         worker: { status: "disabled" },
-        outbox: { pending: 0, sent: 0, failed: 0 },
+        outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
       },
     });
     renderPage();
@@ -387,7 +395,7 @@ describe("SystemDiagnosticsPage", () => {
         status: "available",
         enabled: true,
         worker: { status: "available" },
-        outbox: { pending: 1, sent: 5, failed: 0 },
+        outbox: { pending: 1, processing: 0, retryWait: 0, sent: 5, dead: 0 },
       },
     });
     renderPage();

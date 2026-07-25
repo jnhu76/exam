@@ -6,7 +6,7 @@ import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.j
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import type { RequestContext as RC } from "@exam/domain";
-import { EmailNotificationService } from "./notificationService.js";
+import { EmailDeliveryService } from "./emailDeliveryService.js";
 
 const permissions: RequestContext["permissions"] = [];
 
@@ -20,13 +20,13 @@ function createContext(organizationId: string): RC {
   };
 }
 
-describe("EmailNotificationService", () => {
+describe("EmailDeliveryService", () => {
   let cleanup: () => Promise<void>;
   let ctx: RequestContext;
   let realRepo: ReturnType<typeof createEmailOutboxRepo>;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("api-email-notify");
+    const result = await getIsolatedTestDb("api-email-delivery");
     cleanup = result.cleanup;
     const organizationRepo = createOrganizationRepo(result.db);
     const org = await organizationRepo.create(
@@ -52,7 +52,7 @@ describe("EmailNotificationService", () => {
   });
 
   it("enqueueEmail inserts a pending outbox row with the given recipient", async () => {
-    const svc = new EmailNotificationService({
+    const svc = new EmailDeliveryService({
       repo: realRepo,
       defaultMaxAttempts: 3,
     });
@@ -65,7 +65,7 @@ describe("EmailNotificationService", () => {
     });
     expect(row).toMatchObject({
       status: "pending",
-      attempts: 0,
+      attemptCount: 0,
       maxAttempts: 3,
       recipientEmail: "to@example.com",
       type: "test_email",
@@ -73,7 +73,7 @@ describe("EmailNotificationService", () => {
   });
 
   it("enqueueTestEmail enqueues a test_email row", async () => {
-    const svc = new EmailNotificationService({
+    const svc = new EmailDeliveryService({
       repo: realRepo,
       defaultMaxAttempts: 3,
     });
@@ -87,7 +87,7 @@ describe("EmailNotificationService", () => {
     const failingRepo = {
       create: vi.fn().mockRejectedValue(new Error("DB down")),
     } as unknown as ReturnType<typeof createEmailOutboxRepo>;
-    const svc = new EmailNotificationService({
+    const svc = new EmailDeliveryService({
       repo: failingRepo,
       defaultMaxAttempts: 3,
     });
@@ -104,7 +104,7 @@ describe("EmailNotificationService", () => {
 
   it("emits email.outbox_created audit event on successful enqueue", async () => {
     const auditEmitter = vi.fn();
-    const svc = new EmailNotificationService({
+    const svc = new EmailDeliveryService({
       repo: realRepo,
       defaultMaxAttempts: 3,
       auditEmitter,
@@ -131,7 +131,7 @@ describe("EmailNotificationService", () => {
 
   it("email.outbox_created audit metadata excludes bodyText and bodyHtml", async () => {
     const auditEmitter = vi.fn();
-    const svc = new EmailNotificationService({
+    const svc = new EmailDeliveryService({
       repo: realRepo,
       defaultMaxAttempts: 3,
       auditEmitter,
@@ -153,9 +153,9 @@ describe("EmailNotificationService", () => {
   });
 
   it("BUSINESS SAFETY: a committed business row persists even when email enqueue fails", async () => {
-    // This is the M3 business-transaction non-rollback invariant (Option C).
+    // This is the business-transaction non-rollback invariant.
     // We use a real course repo to write a real business row, then call the
-    // notification service backed by a FAILING repo (best-effort). The audit
+    // delivery service backed by a FAILING repo (best-effort). The audit
     // row must still exist — email failure must never roll back committed work.
     const result = await getIsolatedTestDb("api-email-safety");
     try {
@@ -177,7 +177,7 @@ describe("EmailNotificationService", () => {
       );
       const bizCtx = createContext(org.id);
 
-      // 1. Commit a real business row (audit log).
+      // 1. Commit a real business row (course).
       const courseRepo = createCourseRepo(db);
       const course = await courseRepo.create(bizCtx, {
         name: "Email safety course",
@@ -190,7 +190,7 @@ describe("EmailNotificationService", () => {
       const failingRepo = {
         create: vi.fn().mockRejectedValue(new Error("outbox insert failed")),
       } as unknown as ReturnType<typeof createEmailOutboxRepo>;
-      const svc = new EmailNotificationService({
+      const svc = new EmailDeliveryService({
         repo: failingRepo,
         defaultMaxAttempts: 3,
       });
