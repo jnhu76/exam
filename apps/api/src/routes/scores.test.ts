@@ -7,7 +7,11 @@ import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import type { TestContext } from "./testHelpers.js";
-import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createAssignedUserForTest,
+  uniquePrefix,
+} from "./testHelpers.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
@@ -1570,6 +1574,104 @@ describe("P3-3 admin frozen result view", () => {
     expect(candBody).not.toHaveProperty("totalScore");
     expect(candBody).not.toHaveProperty("passed");
     expect(candBody).not.toHaveProperty("questionResults");
+  });
+
+  /**
+   * M9 — Teacher all-view result proof.
+   *
+   * Proves the final P4 assignment-backed Teacher authority drives the
+   * capability-path result view. Teacher preset grants ScoreAllView, so the
+   * score route arbitrates own/all purely from capability and the Teacher
+   * reaches the all-view path: (a) bypasses Stage 2 publication gate and (b)
+   * keeps frozen standardAnswer. The Teacher is created via
+   * createAssignedUserForTest (assignment-backed authority, not role-name). The
+   * behavior must be immune to live-question edits (frozen snapshot truth).
+   *
+   * Capability-path proof:
+   *   Teacher: ScoreAllView → all-view path → bypass Candidate Stage 2
+   *            → retain frozen standardAnswer
+   *   Candidate: ScoreOwnView → own-view path → publication gate applies
+   */
+  it("M9: Teacher all-view result bypasses publication gate and keeps frozen standardAnswer", async () => {
+    const { attemptId } = await buildTerminalManualAttempt();
+
+    // Teacher via assignment-backed authority (capability-driven, not role-name).
+    const teacher = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Teacher",
+      "m9-teacher",
+    );
+
+    // SAME attempt, SAME moment as the candidate read below. Teacher holds
+    // ScoreAllView → all-view path → bypasses Stage 2 publication gate and
+    // keeps frozen standardAnswer.
+    const teacherRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": teacher.token },
+    });
+    expect(teacherRes.statusCode).toBe(200);
+    const teacherBody = teacherRes.json();
+    expect(teacherBody.showResultImmediately).toBe(true);
+    expect(teacherBody.totalScore).toBe(25);
+    expect(teacherBody.passed).toBe(true);
+    expect(teacherBody.questionResults).toHaveLength(2);
+
+    // Teacher keeps standardAnswer (all-view → NOT stripped).
+    const objQ = teacherBody.questionResults.find(
+      (q: { questionId: string }) => q.questionId === singleChoiceId,
+    );
+    expect(objQ.standardAnswer).toBe("a");
+
+    // Candidate at the SAME moment: own-view → publication gate applies → hidden.
+    const candRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(candRes.statusCode).toBe(200);
+    const candBody = candRes.json();
+    expect(candBody.showResultImmediately).toBe(false);
+    expect(candBody.hiddenReason).toBe("pending_publish");
+    expect(candBody).not.toHaveProperty("totalScore");
+    expect(candBody).not.toHaveProperty("passed");
+    expect(candBody).not.toHaveProperty("questionResults");
+
+    // Frozen snapshot truth: mutate the LIVE question, Teacher still reads frozen.
+    await ctx.db
+      .update(schema.questions)
+      .set({
+        content: "M9 LIVE MUTATED objective prompt",
+        standardAnswer: "b",
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.questions.id, singleChoiceId));
+
+    const afterMutate = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": teacher.token },
+    });
+    const afterObj = afterMutate
+      .json()
+      .questionResults.find(
+        (q: { questionId: string }) => q.questionId === singleChoiceId,
+      );
+    expect(afterObj.content).toBe("P3-3 objective prompt");
+    expect(afterObj.standardAnswer).toBe("a");
+    expect(afterObj.standardAnswer).not.toBe("b");
+
+    // Restore the shared live-question fixture so later tests in this block
+    // (which assert the original content/standardAnswer) see a clean state.
+    await ctx.db
+      .update(schema.questions)
+      .set({
+        content: "P3-3 objective prompt",
+        standardAnswer: "a",
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.questions.id, singleChoiceId));
   });
 
   it("admin scores result is immune to live-question mutation (frozen snapshot truth)", async () => {

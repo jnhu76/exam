@@ -16,10 +16,10 @@ Phase 3 **product** work that remains.
 ## Module execution order (hard constraint)
 
 ```text
-P4 (RBAC MVP role switch)
-  → P5-0 (Email delivery runtime hardening)
-  → P3 (result publishing closeout)
-  → P5-N1 (Notification Inbox + result-published Email integration)
+P4 (RBAC MVP role switch) ✅ CLOSED
+  → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
+  → P3 (result publishing closeout) 🔄 IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW (2026-07-25, PR #211)
+  → P5-N1 (Notification Inbox + result-published Email integration) ⏸ BLOCKED on P3
   → P6 (MVP ready closeout)
 ```
 
@@ -42,14 +42,16 @@ P5-N1.
 
 ---
 
-## P3: Result publishing closeout (QUEUED)
+## P3: Result publishing closeout (IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW)
 
 - **CAPABILITY**: Results are published under the configured strategy; candidates see only what policy permits; Admin and Teacher access is verified under the final MVP role model.
-- **CURRENT STATE**: QUEUED after P5-0 in the hard execution order. Backend result-visibility modes already exist (`immediate`, `after_grading`, `manual`), but the published flow is not closed by final-role E2E and leak tests.
-- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes.
-- **WHAT IS MISSING**: Result-visibility E2E for manual or after-grading publication; candidate answer/standard-answer leak tests; Admin/Teacher result-view verification after the P4 role switch; a stable transaction and route boundary that P5-N1 can safely extend.
-- **DEPENDENCIES**: P4 closed. P5-0 is ordered before P3 for delivery-infrastructure readiness but is not a semantic dependency of result publishing.
-- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules.
+- **CURRENT STATE**: IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW (2026-07-25, PR #211). P4 and P5-0 are now closed (2026-07-25). The result-publication boundary is audited (P3-R0 reality audit) and test-only closed (P3-R1: M8 Teacher publish API proof, M9 Teacher all-view result proof, M12 Teacher browser publication E2E, M13 concurrent publication idempotency; no production behavior changes). Independent closeout review owns P3 closure.
+  - P3-R0 reality audit: [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md).
+  - P3-R1 test-only closeout: [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md).
+- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes (`immediate`, `after_grading`, `manual`); frozen-question-snapshot truth; Teacher all-view (ScoreAllView) and publish (ExamResultPublish) capability behavior; browser publication UI through ExamDetailPage.
+- **WHAT IS MISSING**: (none blocking — M8/M9/M12/M13 closed by P3-R1).
+- **DEPENDENCIES**: P4 closed. P5-0 closed (not a semantic dependency of result publishing).
+- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules; WYSIWYG final-answer barrier; IP/CIDR examination policy; concurrent-session/device policy; Candidate emergency examination credentials.
 - **ACCEPTANCE BOUNDARY**: Under the final Admin/Teacher/Candidate role model, an authorized actor publishes results according to configured policy; the candidate can view only the candidate's own permitted result and cannot see hidden standard answers. The result-publication command and transaction boundary are stable enough for P5-N1 to extend without redefining result semantics.
 
 ## P4: RBAC MVP role switch — Admin / Teacher / Candidate (CLOSED)
@@ -74,20 +76,20 @@ P5-N1.
 - **NOT AUTHORIZED ASSUMPTIONS**: Proctor role activation; independent Grader role activation; custom roles; tenant/course/exam scope; `teacher_exam_assignments`; scoped role dispatch (teacher@course, proctor@exam).
 - **ACCEPTANCE BOUNDARY**: Admin/Teacher/Candidate each complete their MVP duties; unauthorized MVP-route access is rejected by the backend; result publication and result viewing have final, explicit role/capability ownership for P3 verification.
 
-## P5-0: Email delivery runtime hardening (QUEUED)
+## P5-0: Email delivery runtime hardening (CLOSED)
 
 - **CAPABILITY**: Existing PostgreSQL Email outbox runs as a resident, observable, failure-recoverable worker process.
-- **CURRENT STATE**: QUEUED after P4. Email outbox and sender foundation exist, but delivery is manually invoked and lacks production locking/heartbeat semantics.
-- **WHAT EXISTS**: `email_outbox`; Email repository/service; SMTP, console, and disabled senders; retry policy; admin-only `POST /api/email/test`; existing Email diagnostics surface.
-- **WHAT IS MISSING**: `pending|processing|retry_wait|sent|dead` target state machine; `FOR UPDATE SKIP LOCKED` claim; persisted lock ownership; abandoned-lock recovery; explicit worker build/start entry; PostgreSQL-backed heartbeat; backlog/liveness diagnostics; unambiguous `EmailDeliveryService` naming.
-- **DEPENDENCIES**: P4 closed in the hard execution order; ADR-011 accepted. There is no dependency on P3 result-publishing closeout.
+- **CURRENT STATE**: **CLOSED** (2026-07-25, PR #210, commit `cac6b85`). The Email delivery runtime now implements the `pending|processing|retry_wait|sent|dead` state machine with `FOR UPDATE SKIP LOCKED` claim, persisted lock ownership, abandoned-lock recovery, PostgreSQL-backed heartbeat, and backlog/liveness diagnostics.
+- **WHAT EXISTS**: `email_outbox`; `EmailDeliveryService` (renamed); SMTP, console, and disabled senders; retry policy; resident worker loop with claim/heartbeat; admin-only `POST /api/email/test`; existing Email diagnostics surface.
+- **WHAT IS MISSING**: (none for P5-0 scope — Email runtime hardened). The Email runtime is implemented, but there is not yet a real business caller.
+- **DEPENDENCIES**: P4 closed; ADR-011 accepted.
 - **NOT AUTHORIZED ASSUMPTIONS**: Inbox; users.email; real business caller; invitation; password reset; template engine; generic queue platform; Redis/BullMQ/RabbitMQ/Kafka.
 - **ACCEPTANCE BOUNDARY**: A standalone Email worker continuously claims, retries, and terminally records outbox rows without duplicate concurrent ownership; its heartbeat and backlog are visible through existing diagnostics.
 
-## P5-N1: Notification Inbox + result-published Email integration (QUEUED)
+## P5-N1: Notification Inbox + result-published Email integration (BLOCKED on P3)
 
 - **CAPABILITY**: First operational two-channel notification: candidate Inbox plus optional Email for `result_published`.
-- **CURRENT STATE**: QUEUED after P3 and P5-0. ADR-011 is the architecture authority.
+- **CURRENT STATE**: BLOCKED on P3 (P4 and P5-0 are now closed). ADR-011 is the architecture authority.
 - **WHAT EXISTS**: Result publishing command and result-visibility rules; hardened Email delivery runtime from P5-0; existing `EmailType` for grade notification.
 - **WHAT IS MISSING**: Optional `users.email` recipient source; `notifications` table/repository/contracts; channel-neutral `NotificationService`; static `result_published -> grade_notification` policy mapping; safe relative action link; Inbox APIs and candidate UI; atomic result mutation + Inbox + outbox transaction; removal of any old route-local Email trigger.
 - **DEPENDENCIES**: P3, P4, and P5-0 closed.

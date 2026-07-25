@@ -13,6 +13,8 @@ import {
   getCandidateResult,
   gradeQuestionApi,
 } from "../lib/flow";
+import { loginAsTeacher } from "../lib/login";
+import { createTeacherViaApi } from "../lib/teacher";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
@@ -386,5 +388,141 @@ test.describe("result publishing policy (P2D-J5)", () => {
     await expect(page.getByTestId("result-total-score")).toHaveText("25");
     await expect(page.getByText("已通过")).toBeVisible();
     await expect(page.getByTestId("result-status-message")).toHaveCount(0);
+  });
+});
+
+/**
+ * M12 — Teacher browser publication E2E.
+ *
+ * Proves the real Teacher product path for result publication through the
+ * browser UI: a manual-mode exam's candidate result stays hidden until a
+ * Teacher (created via the supported POST /api/users { role: "Teacher" }
+ * product interface, then logged in through the real /login UI) clicks the
+ * capability-gated Publish Results control on ExamDetailPage. The publication
+ * mutation MUST travel through the browser UI — the publish-results API is NOT
+ * called directly for the publication step.
+ *
+ * API use is allowed here only for fixture setup (seedExam) and for verifying
+ * the authoritative frozen score via the candidate result API after the browser
+ * publication. The Publish Results action itself is performed through the
+ * rendered ExamDetailPage control + its confirmation dialog.
+ */
+test.describe("M12: Teacher browser publication E2E", () => {
+  test("Teacher publishes results through the ExamDetailPage UI; candidate sees the frozen score only after", async ({
+    page,
+    request,
+  }) => {
+    // ── 1. Create a manual-mode exam + enroll a Candidate (API setup) ──
+    const seeded = await seedExam(request, "teacher-publish", {
+      questionAnswer: true,
+      questionScore: 100,
+      passingScore: 60,
+      resultPublicationMode: "manual",
+    });
+
+    // ── 2-3. Candidate completes the attempt + auto-grading ──
+    await candidateLogin(page, seeded.candidate);
+    await startExamFromList(page, seeded.examId);
+    await answerTrueFalse(page, true);
+    await waitForSaveSaved(page);
+    await submitExam(page);
+
+    const resultUrl = new URL(page.url());
+    const attemptId = resultUrl.pathname.split("/").filter(Boolean)[1]!;
+
+    // ── 4. Candidate sees pending_publish and no score ──
+    await expect(page.getByTestId("result-status-message")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByText("成绩正在审核中，将在公布后可见"),
+    ).toBeVisible();
+    await expect(page.getByTestId("result-total-score")).toHaveCount(0);
+
+    // Confirm via API: hidden with pending_publish.
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+    const beforePublish = await getCandidateResult(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(beforePublish.showResultImmediately).toBe(false);
+    expect(beforePublish.hiddenReason).toBe("pending_publish");
+
+    // ── 5. Log in through the browser as Teacher ──
+    // Teacher created via the SUPPORTED product interface (POST /api/users),
+    // NOT direct DB insertion or a demo seed.
+    const teacher = await createTeacherViaApi(request, {
+      name: "M12教师-发布",
+      usernamePrefix: "m12-tpublish",
+    });
+    await loginAsTeacher(page, teacher.username, teacher.password);
+    await expect(page).toHaveURL(/\/admin\/exams(?:$|[/?#])/);
+
+    // ── 6. Navigate to the Exam Detail publication surface ──
+    await page.goto(`${BASE_URL}/admin/exams/${seeded.examId}`);
+    await expect(page).toHaveURL(
+      new RegExp(`/admin/exams/${seeded.examId}(?:$|[/?#])`),
+    );
+
+    // ── 7. Publish Results action is visible through capability gating ──
+    const publishBtn = page.getByTestId("exam-detail-publish-results-btn");
+    await expect(
+      publishBtn,
+      "Teacher must see the capability-gated Publish Results action",
+    ).toBeVisible({ timeout: 15_000 });
+
+    // ── 8. Click the real UI control ──
+    // The button opens a confirmation dialog; confirm the publication.
+    await publishBtn.click();
+    const dialog = page.locator('[role="alertdialog"]');
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole("button", { name: "确认" }).click();
+
+    // ── 9. Wait for the production success state (locators, not sleeps) ──
+    // On success handlePublishResults refetches the exam; the Publish Results
+    // button re-renders only when resultsPublishedAt is null, so its
+    // disappearance is the observable publication-success signal.
+    await expect(
+      publishBtn,
+      "Publish Results action disappears after successful publication",
+    ).toHaveCount(0, { timeout: 15_000 });
+
+    // Confirm via API: resultsPublishedAt is now set (the mutation committed).
+    const adminToken = await adminApiToken(request);
+    const publishRes = await publishResultsApi(
+      request,
+      adminToken,
+      seeded.examId,
+    );
+    expect(publishRes.status()).toBe(200);
+    const publishBody = (await publishRes.json()) as {
+      alreadyPublished: boolean;
+    };
+    expect(publishBody.alreadyPublished).toBe(true);
+
+    // ── 10-11. Candidate re-enters the result surface → sees frozen score ──
+    // The browser is currently the Teacher's session; log back in as the
+    // Candidate to verify the candidate-facing result UI (the publication
+    // must flip candidate visibility, not just the admin/API view).
+    await candidateLogin(page, seeded.candidate);
+    await expect(page).toHaveURL(/\/exam\/list(?:$|[/?#])/);
+    await page.goto(`${BASE_URL}/exam/${attemptId}/result`);
+    await expect(page.getByTestId("result-total-score")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("result-total-score")).toHaveText("100");
+    await expect(page.getByText("已通过")).toBeVisible();
+    await expect(page.getByTestId("result-status-message")).toHaveCount(0);
+
+    // Confirm the frozen score + pass result via the authoritative candidate API.
+    const afterPublish = await getCandidateResult(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(afterPublish.showResultImmediately).toBe(true);
+    expect(afterPublish.totalScore).toBe(100);
+    expect(afterPublish.passed).toBe(true);
   });
 });
