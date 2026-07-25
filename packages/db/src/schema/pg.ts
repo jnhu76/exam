@@ -621,8 +621,53 @@ export const emailOutbox = pgTable(
       table.organizationId,
       table.createdAt,
     ),
+    // Recovery query: abandoned processing rows (locked_at cutoff).
+    index("email_outbox_org_status_locked_at_idx").on(
+      table.organizationId,
+      table.status,
+      table.lockedAt,
+    ),
+    // Dedupe: only one non-null dedupe key per org across the full lifecycle.
+    uniqueIndex("email_outbox_org_dedupe_key_unique")
+      .on(table.organizationId, table.dedupeKey)
+      .where(sql`"dedupe_key" IS NOT NULL`),
+    // State machine CHECK constraints (database backstop).
+    check(
+      "email_outbox_status_check",
+      sql`${table.status} IN ('pending','processing','retry_wait','sent','dead')`,
+    ),
     check("email_outbox_attempt_count_check", sql`${table.attemptCount} >= 0`),
     check("email_outbox_max_attempts_check", sql`${table.maxAttempts} >= 1`),
+    check(
+      "email_outbox_processing_must_have_lock",
+      sql`
+      (${table.status} <> 'processing') OR (${table.lockedAt} IS NOT NULL AND ${table.lockedBy} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_retry_wait_must_have_next",
+      sql`
+      (${table.status} <> 'retry_wait') OR (${table.nextAttemptAt} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_sent_must_have_sent_at",
+      sql`
+      (${table.status} <> 'sent') OR (${table.sentAt} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_dead_must_have_error",
+      sql`
+      (${table.status} <> 'dead') OR (${table.lastError} IS NOT NULL)
+    `,
+    ),
+    check(
+      "email_outbox_non_processing_no_lock",
+      sql`
+      (${table.status} = 'processing') OR (${table.lockedAt} IS NULL AND ${table.lockedBy} IS NULL)
+    `,
+    ),
   ],
 );
 
@@ -656,9 +701,14 @@ export const workerHeartbeats = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex("worker_heartbeats_instance_uk").on(table.workerInstanceId),
     index("worker_heartbeats_name_instance_idx").on(
       table.workerName,
       table.workerInstanceId,
+    ),
+    index("worker_heartbeats_last_poll_at_idx").on(
+      table.workerName,
+      table.lastPollAt,
     ),
   ],
 );
