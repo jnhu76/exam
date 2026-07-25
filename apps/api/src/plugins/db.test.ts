@@ -106,6 +106,7 @@ describe("db plugin: P0-2 uses runtimeConfig.database.url", () => {
     vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("JWT_SECRET", "s");
     vi.stubEnv("CORS_ORIGIN", "https://example.com");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://example.com");
     vi.stubEnv("DATABASE_URL", "postgresql://prod:prod@host:5432/prod_db");
 
     createDatabaseMock.mockResolvedValueOnce(databaseConnectionMock());
@@ -124,6 +125,7 @@ describe("db plugin: P0-2 uses runtimeConfig.database.url", () => {
     vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("JWT_SECRET", "s");
     vi.stubEnv("CORS_ORIGIN", "https://example.com");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://example.com");
     vi.stubEnv("DATABASE_URL", "");
 
     const dbPlugin = await loadDbPlugin();

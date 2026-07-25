@@ -9,6 +9,7 @@ function stubProductionEnv() {
   vi.stubEnv("JWT_SECRET", "test-secret");
   vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
   vi.stubEnv("CORS_ORIGIN", "https://example.com");
+  vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://example.com");
 }
 
 async function buildApp(): Promise<FastifyInstance> {
@@ -182,6 +183,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
     vi.stubEnv("JWT_SECRET", "test-secret");
     vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
     vi.stubEnv("CORS_ORIGIN", "https://a.example.com,https://b.example.com");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://a.example.com");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",

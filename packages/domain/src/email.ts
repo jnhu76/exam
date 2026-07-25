@@ -112,6 +112,16 @@ export interface EmailOutboxRow {
   lastError: string | null;
   nextAttemptAt: Date | null;
   sentAt: Date | null;
+  /**
+   * Optional Inbox notification that triggered this Email (P5-N1-I2). Null for
+   * identity-flow Emails; set on operational Emails
+   * (result_published -> grade_notification).
+   */
+  notificationId: string | null;
+  /**
+   * Optional recipient user link, independent of recipientEmail (P5-N1-I2).
+   */
+  recipientUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

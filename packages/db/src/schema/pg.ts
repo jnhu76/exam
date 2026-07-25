@@ -10,6 +10,7 @@ import type {
   GradingRule,
   GradingStatus,
   MisconductFlag,
+  NotificationType,
   QuestionScoreResult,
   QuestionSnapshot,
   ResultPublicationMode,
@@ -110,6 +111,14 @@ export const users = pgTable(
     name: text("name").notNull(),
     role: text("role").notNull(),
     isActive: boolean("is_active").notNull(),
+    /**
+     * Optional notification recipient email (P5-N1 §13).
+     *
+     * NOT used for login. NOT unique. NOT verified. The first V1 consumer is
+     * the `result_published` Inbox + Email outbox integration. The contract
+     * layer normalizes (trim-only, case-preserved) and maps blank input to null.
+     */
+    email: text("email"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -607,6 +616,19 @@ export const emailOutbox = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    /**
+     * Optional link to the Inbox notification that triggered this Email
+     * (P5-N1-I2). Identity-flow Emails (registration_welcome etc.) keep this
+     * null; operational Emails (result_published -> grade_notification) set
+     * it so an Email can be traced back to its Inbox row.
+     */
+    notificationId: text("notification_id").references(() => notifications.id),
+    /**
+     * Optional recipient user link, independent of `recipient_email`. Lets a
+     * future recipient-scoped query join without resolving through the
+     * notification. Nullable for identity-flow Emails with no user binding.
+     */
+    recipientUserId: text("recipient_user_id").references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -777,6 +799,60 @@ export const userRoleAssignments = pgTable(
   ],
 );
 
+/**
+ * Notification Inbox — the first-class PostgreSQL Inbox surface (P5-N1).
+ *
+ * The Inbox is the authoritative in-product notification channel. It is
+ * scoped per (organization, recipient user) and supports stable list
+ * ordering, unread count, mark-read, and idempotent fan-out via a recipient-
+ * scoped dedupe key. Email outbox rows (P5-N1-I2) link back to a notification
+ * via `email_outbox.notification_id`.
+ *
+ * V1 only writes rows of `type = "result_published"`. Every V1 notification
+ * is actionable (action_path NOT NULL); future informational types that lack
+ * a navigation target must introduce an explicit migration + contract change.
+ * The schema intentionally does NOT carry severity / resource_type /
+ * resource_id / archived_at / invalidated_at columns — they have no V1 reader
+ * or writer and are deferred (P5-N1-R0 §12, §22).
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id),
+    type: text("type").notNull().$type<NotificationType>(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    actionPath: text("action_path").notNull(),
+    createdAt: createdAt(),
+    readAt: timestamp("read_at", { withTimezone: true, mode: "date" }),
+    dedupeKey: text("dedupe_key"),
+  },
+  (table) => [
+    // Stable Inbox list order: org + recipient + newest first, id as tiebreak.
+    index("notifications_org_recipient_created_at_id_idx").on(
+      table.organizationId,
+      table.recipientUserId,
+      table.createdAt,
+      table.id,
+    ),
+    // Unread count query: org + recipient + read_at (null = unread).
+    index("notifications_org_recipient_read_at_idx").on(
+      table.organizationId,
+      table.recipientUserId,
+      table.readAt,
+    ),
+    // Idempotent fan-out: at most one row per (org, recipient, dedupe_key)
+    // across the lifetime of a notification. NULL keys are unrestricted.
+    uniqueIndex("notifications_org_recipient_dedupe_key_unique")
+      .on(table.organizationId, table.recipientUserId, table.dedupeKey)
+      .where(sql`"dedupe_key" IS NOT NULL`),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -795,4 +871,5 @@ export const schema = {
   clientEvents,
   importJobLogs,
   emailOutbox,
+  notifications,
 };

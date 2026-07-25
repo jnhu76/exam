@@ -170,7 +170,7 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
  *   - 'not_graded'   — result not yet computable (grading pending or incomplete).
  *   - 'pending_publish' — manual mode and admin has not called publish-results.
  */
-function computeResultVisibility(
+export function computeResultVisibility(
   exam: Exam,
   attempt: ExamAttempt,
   view: "own" | "all",

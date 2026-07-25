@@ -20,6 +20,7 @@ import {
   canAccessAdminConsole,
   adminLandingPath,
 } from "@/lib/capabilities";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 /**
  * Shell layout for candidate-facing exam pages. Renders a top header
@@ -74,6 +75,7 @@ export function ExamLayout() {
               {t("examLayout.myExams")}
             </NavLink>
           </Button>
+          <NotificationBell />
           <span className="mx-2 h-4 w-px bg-border" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

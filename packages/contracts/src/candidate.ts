@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { passwordField } from "./passwordPolicy.js";
+import { optionalEmailField } from "./emailField.js";
 
 // ── Candidate Exam Summary (Phase 1 derived contract) ─────────────
 
@@ -109,6 +110,7 @@ export const CreateCandidateRequestSchema = z.object({
   password: passwordField(),
   name: z.string().min(1).max(100),
   fields: z.record(z.unknown()),
+  email: optionalEmailField(),
 });
 
 /** Type for a create-candidate request. */
@@ -123,6 +125,7 @@ export const UpdateCandidateRequestSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   fields: z.record(z.unknown()).optional(),
   isActive: z.boolean().optional(),
+  email: optionalEmailField(),
 });
 
 /** Type for an update-candidate request. */

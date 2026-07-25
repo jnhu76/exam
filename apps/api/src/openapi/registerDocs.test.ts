@@ -24,6 +24,7 @@ const ENV_KEYS = [
   "JWT_SECRET",
   "DATABASE_URL",
   "CORS_ORIGIN",
+  "PUBLIC_WEB_ORIGIN",
 ] as const;
 
 async function buildAppWithDocs(
@@ -202,6 +203,7 @@ describe("registerOpenApiDocs", () => {
         JWT_SECRET: "test-secret",
         DATABASE_URL: "postgresql://test:test@localhost:5432/test",
         CORS_ORIGIN: "https://example.com",
+        PUBLIC_WEB_ORIGIN: "https://example.com",
       });
       try {
         const response = await app.inject({
@@ -221,6 +223,7 @@ describe("registerOpenApiDocs", () => {
         JWT_SECRET: "test-secret",
         DATABASE_URL: "postgresql://test:test@localhost:5432/test",
         CORS_ORIGIN: "https://example.com",
+        PUBLIC_WEB_ORIGIN: "https://example.com",
       });
       try {
         const response = await app.inject({

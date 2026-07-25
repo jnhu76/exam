@@ -1772,6 +1772,20 @@ const zhCN = {
     logout: "退出登录",
   },
 
+  /** NotificationBell + Inbox panel copy (P5-N1). */
+  notifications: {
+    bell: "通知",
+    panelTitle: "通知",
+    empty: "暂无通知",
+    markAllRead: "全部标为已读",
+    more: "还有 {{count}} 条",
+    badgeOverflow: "99+",
+    errors: {
+      loadFailed: "加载通知失败",
+      markAllFailed: "标记全部已读失败",
+    },
+  },
+
   /** BrandProvider default branding (used only when no remote/prop override). */
   branding: {
     defaultName: "考试平台",

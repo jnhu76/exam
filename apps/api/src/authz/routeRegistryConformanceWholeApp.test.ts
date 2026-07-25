@@ -304,6 +304,10 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       ["PATCH", "/api/auth/me/password"],
       ["PATCH", "/api/auth/me/profile"],
       ["POST", "/api/client-events"],
+      ["GET", "/api/notifications"],
+      ["GET", "/api/notifications/unread-count"],
+      ["POST", "/api/notifications/:id/read"],
+      ["POST", "/api/notifications/read-all"],
     ];
     return set.some(([m, u]) => m === method && url === u);
   }
@@ -343,15 +347,16 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 91 primary routes (81 protected + 10 non-protected)", () => {
+  it("the full composition reconciles to 95 primary routes (81 protected + 14 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
     const nonProtectedCount = capturedRoutes.filter(
       (r) => categorize(r) !== "protected",
     ).length;
-    // Document the P4-V0 Gate 0.5 baseline: 91 primary = 81 protected + 10
-    // non-protected. This is a regression anchor, not a hard-coded PASS: if a
+    // Document the P5-N1 baseline: 95 primary = 81 protected + 14
+    // non-protected (4 notification Inbox routes added by P5-N1-I3).
+    // This is a regression anchor, not a hard-coded PASS: if a
     // route is added/removed the counts move and the failure message names
     // the delta so the regression is triaged, not silently swallowed.
     expect(
@@ -359,9 +364,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       "protected (capability/ownership-gated) routes",
     ).toBe(81);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
-      10,
+      14,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(91);
+    expect(capturedRoutes.length, "total primary routes").toBe(95);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

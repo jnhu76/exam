@@ -22,6 +22,18 @@ export interface CreateEmailOutboxInput {
   bodyHtml?: string | null;
   maxAttempts: number;
   dedupeKey?: string | null;
+  /**
+   * Optional Inbox notification that triggered this Email (P5-N1-I2). Set on
+   * operational Emails (result_published -> grade_notification); null for
+   * identity-flow Emails.
+   */
+  notificationId?: string | null;
+  /**
+   * Optional recipient user link, independent of recipientEmail (P5-N1-I2).
+   * Lets a future recipient-scoped query join without resolving through the
+   * notification. Nullable for identity-flow Emails with no user binding.
+   */
+  recipientUserId?: string | null;
 }
 
 /** Context type accepted by email outbox repo methods. */
@@ -82,6 +94,8 @@ export function createEmailOutboxRepo(db: Database) {
         ? new Date(raw.next_attempt_at as string)
         : null,
       sentAt: raw.sent_at ? new Date(raw.sent_at as string) : null,
+      notificationId: (raw.notification_id as string | null) ?? null,
+      recipientUserId: (raw.recipient_user_id as string | null) ?? null,
       createdAt: new Date(raw.created_at as string),
       updatedAt: new Date(raw.updated_at as string),
     };
@@ -117,6 +131,9 @@ export function createEmailOutboxRepo(db: Database) {
       lastError: null,
       nextAttemptAt: null,
       sentAt: null,
+      // P5-N1-I2: optional notification + recipient user linkage.
+      notificationId: input.notificationId ?? null,
+      recipientUserId: input.recipientUserId ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     };

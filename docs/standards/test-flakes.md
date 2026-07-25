@@ -1488,6 +1488,53 @@ path 拆出。**不 skip、不从 full path 删除、不加专属 timeout**—�
 
 ---
 
+## 2026-07-25 — `ea-lock-order.test.ts` 100 次并发 contention 循环在全量 coverage 下超时
+
+### 失败位置
+
+- 文件：`apps/api/tests/concurrency/ea-lock-order.test.ts`
+- 用例：`repaired contention schedule is stable across 100 consecutive runs`
+- 调用：`pnpm verify`（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4` + coverage instrumentation）
+
+### 错误
+
+```text
+Error: Test timed out in 5000ms.
+  ❯ tests/concurrency/ea-lock-order.test.ts:292:3
+```
+
+### 出现场景
+
+- 分支：`feat/p5-n1-notification-inbox`（P5-N1 review 修复阶段）
+- 当时正在做：应用 CodeRabbit review 意见修复后跑 `pnpm verify`
+- 触发命令：`pnpm verify`（full turbo coverage）
+- 复跑结果：同代码单独运行立即通过（`npx vitest run tests/concurrency/ea-lock-order.test.ts --testTimeout=15000` → 3/3 PASS，100 次循环 1251ms）
+
+### 根因假设
+
+属 BUG-FLAKE-001 家族：100 次连续 contention schedule 循环（每次含 PG 事务 + advisory lock 争用）在全量 coverage（v8 instrumentation 放大 I/O）+ 4 worker 并行调度下，累积延迟击穿 5s 默认 testTimeout。standalone 无 coverage 插桩时 100 次循环仅需 ~1.2s，远低于阈值。
+
+### 已知不是的原因
+
+- 不是 P5-N1 通知改动引入：改动仅触及 notifications 模块、contracts、文档，与 `ea-lock-order.test.ts`（exam attempt 锁序）无因果
+- 不是锁序逻辑回归：同代码 standalone 100 次循环稳定通过
+- 不是 PG 连接池耗尽：错误是 timeout，不是连接错误
+
+### 当前缓解
+
+无单点缓解（符合登记规则——偶发、与当前改动无因果，不主动加 timeout 或 skip）。该测试 standalone 稳定通过，仅在全量 coverage 并行负载下偶发超时。
+
+### 后续动作
+
+- 观察：若复发 ≥3 次，考虑给该用例加 positional `15_000` ms timeout（选项 C）或降低循环次数。
+- 根因修复走 BUG-FLAKE-001 B 方案后续（coverage 插桩下 PG 争用基线改善）。
+
+### 复发记录
+
+- 2026-07-25：P5-N1 review 修复阶段，`pnpm verify` 全量 coverage 下单次出现（1/1598），standalone 立即 3/3 PASS（1.2s）。
+
+---
+
 
 ## 模板（新增 flake 时复制使用）
 

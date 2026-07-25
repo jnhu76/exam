@@ -2006,6 +2006,11 @@
                           "isActive": {
                             "type": "boolean"
                           },
+                          "email": {
+                            "type": "string",
+                            "format": "email",
+                            "nullable": true
+                          },
                           "createdAt": {
                             "type": "string"
                           },
@@ -2020,6 +2025,7 @@
                           "name",
                           "role",
                           "isActive",
+                          "email",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -2137,6 +2143,33 @@
                       "Grader",
                       "Candidate"
                     ]
+                  },
+                  "email": {
+                    "allOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 320
+                          }
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "format": "email",
+                            "maxLength": 320
+                          }
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": ["username", "password", "name", "role"],
@@ -2186,6 +2219,11 @@
                     "isActive": {
                       "type": "boolean"
                     },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2200,6 +2238,7 @@
                     "name",
                     "role",
                     "isActive",
+                    "email",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -2289,6 +2328,33 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "email": {
+                    "allOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 320
+                          }
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "format": "email",
+                            "maxLength": 320
+                          }
+                        ]
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -2348,6 +2414,11 @@
                     "isActive": {
                       "type": "boolean"
                     },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2362,6 +2433,7 @@
                     "name",
                     "role",
                     "isActive",
+                    "email",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -3565,6 +3637,11 @@
                           "isActive": {
                             "type": "boolean"
                           },
+                          "email": {
+                            "type": "string",
+                            "format": "email",
+                            "nullable": true
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -3577,6 +3654,7 @@
                           "name",
                           "username",
                           "isActive",
+                          "email",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -3687,6 +3765,33 @@
                   "fields": {
                     "type": "object",
                     "additionalProperties": {}
+                  },
+                  "email": {
+                    "allOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 320
+                          }
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "format": "email",
+                            "maxLength": 320
+                          }
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": ["username", "password", "name", "fields"],
@@ -3734,6 +3839,11 @@
                     "isActive": {
                       "type": "boolean"
                     },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     }
@@ -3746,6 +3856,7 @@
                     "name",
                     "username",
                     "isActive",
+                    "email",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -3860,6 +3971,33 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "email": {
+                    "allOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 320
+                          }
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {}
+                          },
+                          {
+                            "type": "string",
+                            "format": "email",
+                            "maxLength": 320
+                          }
+                        ]
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -3917,6 +4055,11 @@
                     "isActive": {
                       "type": "boolean"
                     },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     }
@@ -3929,6 +4072,7 @@
                     "name",
                     "username",
                     "isActive",
+                    "email",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -19591,6 +19735,447 @@
           },
           "403": {
             "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["true"]
+            },
+            "in": "query",
+            "name": "unread",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "organizationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recipientUserId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["result_published"]
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "body": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "actionPath": {
+                            "type": "string",
+                            "pattern": "^\\/exam\\/[A-Za-z0-9_-]+\\/result$"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "readAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "recipientUserId",
+                          "type",
+                          "title",
+                          "body",
+                          "actionPath",
+                          "createdAt",
+                          "readAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "totalPages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/unread-count": {
+      "get": {
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["count"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/{id}/read": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "organizationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "recipientUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["result_published"]
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "body": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "actionPath": {
+                      "type": "string",
+                      "pattern": "^\\/exam\\/[A-Za-z0-9_-]+\\/result$"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "readAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "recipientUserId",
+                    "type",
+                    "title",
+                    "body",
+                    "actionPath",
+                    "createdAt",
+                    "readAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/read-all": {
+      "post": {
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["updated"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
             "content": {
               "application/json": {
                 "schema": {

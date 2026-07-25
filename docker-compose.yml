@@ -13,6 +13,7 @@ services:
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN is required for production}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       # ADR-006: runtime timezone (display/log/diagnostics only; does not
       # change business-time comparison semantics).

@@ -111,17 +111,17 @@ order with real dependencies (not narrative sequence):
 ```text
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
-  → P3 (result publishing closeout) 🔄 IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW (2026-07-25, PR #211)
-  → P5-N1 (Notification Inbox + result-published Email integration) ⏸ BLOCKED on P3
-  → P6 (MVP ready closeout)
+  → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
+  → P5-N1 (Notification Inbox + result-published Email integration) 🔄 IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS
+  → P6 (MVP ready closeout) ⏸ BLOCKED until P5-N1 final corrective gates pass and PR is merged
 ```
 
 | Job  | True dependency                                | What it adds                                                                                      |
 | ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes. **CLOSED** (2026-07-24, tested commit `b4dc1d6`); see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md). |
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. **CLOSED** (2026-07-25, PR #210). |
-| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW** (P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API, M9 Teacher all-view result, M12 Teacher browser E2E, M13 concurrent idempotency). See [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md). |
-| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **BLOCKED on P3**. |
+| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **CLOSED** (P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API, M9 Teacher all-view result, M12 Teacher browser E2E, M13 concurrent idempotency). See [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md). |
+| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS** (PR #213). See [`docs/roadmap/P5-N1-notification-inbox-result-published-job-v2.md`](../roadmap/P5-N1-notification-inbox-result-published-job-v2.md). |
 | P6   | Preceding MVP blockers closed                   | MVP ready closeout.                                                                        |
 
 The ordering principle: define permissions first (P4), then harden the Email
@@ -149,13 +149,11 @@ audit, external log shipping. All Phase 4; none started.
   result page with an "answering interrupted" message. Backend capability
   exists; productization of frontend restore UI, heartbeat tuning, and proctor
   intervention is deferred to Phase 2+ hardening.
-- **Email runtime has no business caller**: The Email delivery runtime
-  (P5-0) is closed — the resident worker, claim/heartbeat, and diagnostics are
-  implemented. However, no real business route enqueues outbox rows yet;
-  `POST /api/email/test` is the only production send path (synchronous, bypasses
-  outbox). No `users.email` column. No password-reset / invitation /
-  registration flows. P5-N1 adds the first real `result_published` business
-  caller.
+- **Email runtime business caller (P5-N1)**: The Email delivery runtime
+  (P5-0) is closed and P5-N1 adds the first real `result_published` business
+  caller (atomic publication → Inbox + outbox). The resident worker drains the
+  outbox asynchronously. `POST /api/email/test` remains as the synchronous test
+  path. No password-reset / invitation / registration flows yet.
 - **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
   `f2a7a80`): the runtime route tree was re-captured via a Fastify `onRoute`
   hook over the full production composition and reconciles exactly — **91

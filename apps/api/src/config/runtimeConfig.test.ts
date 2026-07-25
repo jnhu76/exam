@@ -57,6 +57,7 @@ const ENV_KEYS = [
   "SMTP_CONNECTION_TIMEOUT_MS",
   "SMTP_GREETING_TIMEOUT_MS",
   "SMTP_SOCKET_TIMEOUT_MS",
+  "PUBLIC_WEB_ORIGIN",
 ] as const;
 
 describe("runtimeConfig", () => {
@@ -145,6 +146,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       process.env.API_DOCS_ENABLED = "true";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
@@ -161,6 +163,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       process.env.API_DOCS_ENABLED = "true";
       // APP_MODE intentionally left unset (the clean-baseline contract).
       delete process.env.APP_MODE;
@@ -267,6 +270,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("production");
@@ -291,6 +295,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("production");
@@ -314,6 +319,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("production");
@@ -370,6 +376,7 @@ describe("runtimeConfig", () => {
         JWT_SECRET: "s",
         DATABASE_URL: "postgresql://x",
         CORS_ORIGIN: "https://a.com,https://b.com",
+        PUBLIC_WEB_ORIGIN: "https://a.com",
       });
       expect(config.cors.origin).toEqual(["https://a.com", "https://b.com"]);
     });
@@ -390,6 +397,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.cors.origin).toBe("https://example.com");
@@ -508,6 +516,7 @@ describe("runtimeConfig", () => {
       process.env.JWT_SECRET = "prod-secret";
       process.env.DATABASE_URL = "postgresql://p:p@h:5432/prod";
       process.env.CORS_ORIGIN = "https://example.com";
+      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
       delete process.env.COOKIE_SECURE;
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
@@ -591,6 +600,7 @@ describe("runtimeConfig", () => {
         JWT_SECRET: "s",
         DATABASE_URL: "postgresql://x",
         CORS_ORIGIN: "https://a.com,https://b.com",
+        PUBLIC_WEB_ORIGIN: "https://a.com",
       });
       expect(config.cors.origin).toEqual(["https://a.com", "https://b.com"]);
     });
@@ -726,6 +736,7 @@ describe("runtimeConfig", () => {
         DATABASE_URL: "postgresql://p:p@h:5432/proddb",
         JWT_SECRET: "production-secret",
         CORS_ORIGIN: "https://example.com",
+        PUBLIC_WEB_ORIGIN: "https://example.com",
       });
       expect(config.rateLimit.enabled).toBe(true);
     });

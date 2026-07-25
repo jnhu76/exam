@@ -62,6 +62,9 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 import { buildCandidateStatusItems } from "../lib/proctorService.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { resolveResultPublishedRecipients } from "../notifications/recipientResolver.js";
+import { dispatchResultPublishedFanOut } from "../notifications/notificationService.js";
 
 /** Convert an Exam domain entity to the API response shape with ISO date strings. */
 function toExamResponse(exam: Exam) {
@@ -1259,12 +1262,13 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       let result: { exam: Exam; alreadyPublished: boolean } | null = null;
+      const operationNow = fastify.now();
       try {
         result = await executeInTransaction(fastify.db, async (tx) => {
           const published = await publishResults(
             createExamRepoAdapter(createExamRepo(tx), ctx),
             id,
-            fastify.now(),
+            operationNow,
           );
           if (!published.alreadyPublished) {
             await recordAtomicHttpAudit(tx, request, ctx, {
@@ -1276,6 +1280,29 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                   published.exam.resultsPublishedAt!.toISOString(),
               },
             });
+            // P5-N1 §17 — atomic fan-out: result mutation + Inbox rows +
+            // required outbox rows commit together inside this transaction.
+            // SMTP is NOT called here; the worker drains the outbox
+            // asynchronously (P5-0). A failed required Inbox/outbox write
+            // rolls back the publication.
+            const recipients = await resolveResultPublishedRecipients(
+              tx,
+              ctx,
+              published.exam,
+            );
+            if (recipients.length > 0) {
+              const config = getRuntimeConfig();
+              await dispatchResultPublishedFanOut({
+                db: tx,
+                ctx,
+                examTitle: published.exam.title,
+                examId: published.exam.id,
+                recipients,
+                publicWebOrigin: config.publicWebOrigin.origin,
+                emailMaxAttempts: config.email.maxAttempts,
+                now: operationNow,
+              });
+            }
           }
           return published;
         });

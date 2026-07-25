@@ -1,9 +1,9 @@
 # ADR-011: Notification Inbox and Email Delivery Architecture
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-07-25, P5-N1-R0)
 - **Date:** 2026-07-23
 - **Owners:** EXAM maintainers
-- **Related:** ADR-003 Job Queue, ADR-001 Redis, P3-MOD-P5 Email Minimal Wiring
+- **Related:** ADR-003 Job Queue, ADR-001 Redis, P5-0 Email Delivery Runtime, P3 Result Publishing Closeout, P5-N1 Notification Inbox
 
 ## 1. Decision
 
@@ -54,22 +54,24 @@ The repository already contains:
 
 The design should extend these boundaries instead of introducing an unrelated utility layer or premature infrastructure.
 
-### 2.1 Current implementation facts (verified from code)
+### 2.1 Current implementation facts (verified from code, 2026-07-25 post-P5-0)
 
-| Aspect | Current state |
-|---|---|
-| `email_outbox.organizationId` | NOT NULL, FK → organizations.id (exists) |
-| `email_outbox.notification_id` | Does not exist; will be added as nullable |
-| `email_outbox.recipient_user_id` | Does not exist; will be added as nullable |
-| `email_outbox` status enum | `pending`, `sent`, `failed` |
-| `email_outbox` locking | No `locked_at`/`locked_by` columns; no `FOR UPDATE SKIP LOCKED` |
-| Worker trigger | `EmailOutboxService.processDueEmails` — manually invoked, no background daemon |
-| `EMAIL_ENABLED=false` | `DisabledEmailSender` (no-op); outbox rows ARE still written |
-| `apps/api/src/notifications/` | Does not exist yet |
-| `apps/api/src/workers/` | Does not exist yet |
-| Frontend routes | `/admin/*`, `/exam/*`, `/login` only |
-| `users` table email column | Does not exist |
-| Diagnostics | `buildEmailStatus` in `apps/api/src/routes/system.ts` — worker status is `unknown` (no resident daemon) |
+| Aspect | Current state | Evidence |
+| --- | --- | --- |
+| `email_outbox.organizationId` | NOT NULL, FK → organizations.id (exists) | `packages/db/src/schema/pg.ts:587-611` |
+| `email_outbox.notification_id` | Does not exist; P5-N1 adds as nullable FK | schema `pg.ts` (absent) |
+| `email_outbox.recipient_user_id` | Does not exist; P5-N1 owns recipient linkage | schema `pg.ts` (absent) |
+| `email_outbox` status enum | `pending`, `processing`, `retry_wait`, `sent`, `dead` (5-state, migrated) | `packages/domain/src/email.ts:31-36`; `packages/db/src/schema/pg.ts:636-638` |
+| `email_outbox` locking | `locked_at`/`locked_by` columns exist; `FOR UPDATE SKIP LOCKED` claim implemented | `packages/db/src/repository/emailOutboxRepo.ts:221-275`; `schema/pg.ts:597-598` |
+| Worker | Resident daemon loop (`apps/api/src/workers/emailDeliveryWorker.ts`) — `while(!shuttingDown)` poll + heartbeat + graceful shutdown | `emailDeliveryWorker.ts:150-235`; script `worker:email` in `apps/api/package.json` |
+| `EMAIL_ENABLED=false` | `DisabledEmailSender` (no-op, returns `{providerMessageId:null}`); enqueue layer is NOT gated by `enabled` (no business caller exists yet) | `apps/api/src/email/senders.ts:40-44,189-192`; `emailDeliveryService.ts:50-70` |
+| `apps/api/src/notifications/` | Does not exist yet (P5-N1 owns) | verified absent |
+| `apps/api/src/workers/` | EXISTS — `emailDeliveryWorker.ts` (P5-0) | `apps/api/src/workers/emailDeliveryWorker.ts` |
+| Frontend routes | `/admin/*`, `/exam/*`, `/login` only; candidate result route is `/exam/:attemptId/result` | `apps/web/src/lib/routes.ts:33-39` |
+| `users` table email column | Does not exist (P5-N1 adds optional `users.email`) | `packages/db/src/schema/pg.ts:106-114`; migrations 0001-0018 |
+| Diagnostics | `buildEmailStatus` exposes `outbox.{pending,processing,retryWait,sent,dead}`, `worker.{status,lastPollAt,...}`, `oldestPendingAge`, `lastSuccessfulDeliveryAt` | `apps/api/src/routes/system.ts:46-166` |
+| Email service name | `EmailDeliveryService` (renamed from `EmailNotificationService` by P5-0) | `apps/api/src/email/emailDeliveryService.ts:29`; zero business callers (verified) |
+| `grade_notification` EmailType | Defined in domain (`email.ts:47`) but NOT yet rendered/enqueued by any caller | `packages/domain/src/email.ts:47` (verified unused by grep) |
 
 ## 3. Architecture
 
@@ -591,7 +593,8 @@ notifications
 - severity              TEXT NOT NULL (enum: info, warning, high)
 - resource_type         TEXT (nullable — e.g. 'exam', 'attempt')
 - resource_id           TEXT (nullable — e.g. exam UUID)
-- action_path           TEXT (nullable — validated relative path)
+- action_path           TEXT (nullable in the target model; V1 freezes this
+                          column as NOT NULL — see P5-N1-R0 audit §12.1)
 - created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 - read_at               TIMESTAMPTZ (nullable — null = unread)
 - archived_at           TIMESTAMPTZ (nullable)
@@ -672,7 +675,7 @@ Examples:
 
 | Scenario | dedupe_key |
 |---|---|
-| Result published to a candidate | `grade_notification:{attemptId}:{recipientUserId}:{publicationVersion}` |
+| Result published to a candidate | `result_published:{examId}:{recipientUserId}` (V1 outbox key — no `publicationVersion`; the single irreversible `resultsPublishedAt` transition is the stable key; Inbox dedupe key is `result_published:{examId}`) |
 | Exam assigned to a candidate | `exam_notification:{examId}:{recipientUserId}:{assignmentVersion}` |
 | Password reset for a user | `password_reset:{userId}:{tokenVersion}` |
 | Invitation to a pre-user email | `registration_welcome:{invitationId}:{normalizedEmail}` |
@@ -683,7 +686,7 @@ Rules:
 2. The same logical delivery for the same recipient MUST generate the same key on retry or re-trigger.
 3. `recipientIdentity` should use the stable `recipient_user_id` when available.
 4. For identity emails without a user ID, use the normalized email address or invitation ID.
-5. Email addresses used as key components MUST be normalized (lowercase, trimmed).
+5. Email addresses used as key components MUST be normalized (V1: trim + preserve case; no lowercase — see P5-N1-R0 audit §13).
 6. Random UUIDs MUST NOT be used as business deduplication keys.
 7. `dedupe_key` does NOT guarantee SMTP exactly-once delivery (see §11.1).
 8. Worker retry reuses the same outbox row; it does not create a new key.
@@ -741,32 +744,22 @@ GET /api/notifications
 
 **Pagination** (required, not optional):
 
-V1 uses cursor-based pagination. The cursor is an opaque base64url-encoded value:
+V1 uses offset/page pagination (consistent with the repository's existing
+`PaginationParamsSchema` / `PaginatedResponseSchema` convention — see
+`packages/contracts/src/common.ts`):
 
 ```http
-GET /api/notifications?cursor=eyJjcmVhdGVkQXQiOi...&limit=20
-```
-
-Cursor payload (decoded, not visible to clients):
-
-```json
-{
-  "createdAt": "2026-07-23T10:30:00.000Z",
-  "id": "notification-uuid"
-}
+GET /api/notifications?page=1&pageSize=20
 ```
 
 Rules:
 
-- Default `limit`: 20
-- Maximum `limit`: 100
+- Default `pageSize`: 20
+- Maximum `pageSize`: 100
 - Ordering: `created_at DESC, id DESC` (stable sort)
-- Cursor uses base64url encoding; the client must treat it as opaque
-- Decoded cursor must pass schema validation; malformed cursors return the standard validation error (400)
-- Cursor does not contain authorization information
-- Cursor cannot substitute for organization/user scope — the query MUST still filter by `organization_id` and `recipient_user_id` from the request context
-- The next-page query must correctly handle multiple rows sharing the same `created_at` timestamp via the `id` tiebreaker
+- Response: `{ items, total, page, pageSize, totalPages }`
 - No unbounded list responses
+- Pagination remains scoped by organization and recipient from context
 
 Optional filters:
 
@@ -1107,7 +1100,7 @@ Rejected because environment and domain changes would make persisted links stale
 6. Add `apps/api/src/notifications/service.ts` and `policy.ts`.
 7. Register the notification service through a Fastify plugin.
 8. Add the independent email worker entrypoint with build entry constraints.
-9. Add Inbox API contracts and routes with cursor pagination.
+9. Add Inbox API contracts and routes with offset/page pagination (reuse `PaginationParamsSchema`).
 10. Add the minimal web notification center.
 11. Rename `apps/api/src/email/notificationService.ts` → `emailDeliveryService.ts`.
 12. Migrate business events one at a time: result published, exam assigned, schedule change/cancellation, grading assigned.
@@ -1173,10 +1166,9 @@ The following items are explicitly deferred and NOT part of V1:
 - [ ] Inbox API passes authentication tests
 - [ ] Inbox API passes same-organization user isolation tests
 - [ ] Repository queries use `organization_id + recipient_user_id`
-- [ ] Inbox list enforces cursor pagination (no unbounded lists)
-- [ ] Cursor is an opaque base64url value (§10.1)
-- [ ] Malformed cursors are rejected with the standard validation error
-- [ ] Cursor pagination remains scoped by organization and recipient
+- [ ] Inbox list enforces offset/page pagination (no unbounded lists)
+- [ ] Pagination reuses `PaginationParamsSchema` + `PaginatedResponseSchema`
+- [ ] Pagination remains scoped by organization and recipient
 
 ### Worker and observability
 

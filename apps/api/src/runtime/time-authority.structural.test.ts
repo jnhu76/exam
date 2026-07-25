@@ -131,6 +131,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
     reason:
       "Uses baseRepo now() for worker_heartbeats createdAt/updatedAt storage stamps only (non-business); worker poll timestamps are passed in explicitly by the caller.",
   },
+  {
+    path: "packages/db/src/repository/notificationRepo.ts",
+    reason:
+      "Uses baseRepo now() for notifications createdAt/readAt storage stamps only (non-business); notification creation time is a storage stamp, not an exam-lifecycle time authority decision.",
+  },
 ];
 
 /** Directories scanned for raw-time regressions in business paths. */

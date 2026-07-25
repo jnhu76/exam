@@ -91,6 +91,12 @@ describe("candidate field routes", () => {
   });
 
   afterAll(async () => {
+    // Quiescence precondition (see testCleanup.ts): candidate-field routes
+    // emit best-effort audit writes via `fastify.auditWrites`. A late insert
+    // that commits between `deleteExamBusinessData` and the org-row delete
+    // causes an `audit_logs_organization_id_organizations_id_fk` FK violation.
+    // Drain the accepted audit work BEFORE deleting the org tree.
+    await ctx.drainAuditWrites();
     await cleanupOrganizationTestData(ctx.db, organizationId);
     await ctx.cleanup();
   });

@@ -163,7 +163,7 @@ Requirements:
 
 - email remains optional;
 - blank input is stored as null;
-- trim and normalize case according to the repository's chosen rule;
+- trim surrounding whitespace; preserve the validated address spelling/case (no lowercase — Email is not a login identifier, not unique, no case-insensitive lookup required);
 - do not invent invitation, verification, uniqueness, or ownership semantics;
 - do not require email for login;
 - do not add organization switching;
@@ -217,7 +217,7 @@ notifications
 - severity               NOT NULL
 - resource_type          nullable
 - resource_id            nullable
-- action_path            nullable
+- action_path            NOT NULL (V1 has no non-actionable notification type)
 - created_at             NOT NULL
 - read_at                nullable
 - archived_at            nullable
@@ -273,17 +273,16 @@ Do not migrate identity flows in this Job.
 
 ### Inbox dedupe key
 
-Use a stable result-publication key at recipient scope, for example:
+Use a stable result-publication key at recipient scope:
 
 ```text
-result_published:{attemptId}:{publicationVersion}
+result_published:{examId}
 ```
 
-Because the unique constraint already contains `recipient_user_id`, the
-notification key itself does not need to repeat the recipient ID.
-
-The implementation must identify a real stable publication version, transition
-identifier, or equivalent existing source. Do not use a random UUID.
+`{examId}` is the stable business identity of the publication event. Because
+`resultsPublishedAt` is write-once, `result_published:{examId}` is immutable and
+globally unique per exam. No `publicationVersion` concept exists — publication
+is a single irreversible `resultsPublishedAt: null → non-null` transition.
 
 ### Email outbox dedupe key
 
@@ -296,7 +295,7 @@ organization_id + recipient-scoped dedupe_key
 Example:
 
 ```text
-grade_notification:{attemptId}:{recipientUserId}:{publicationVersion}
+result_published:{examId}:{recipientUserId}
 ```
 
 Different recipients must never collide.
@@ -336,8 +335,7 @@ recipientEmail | null
 examId
 attemptId
 examTitle
-publicationVersion
-actionPath
+actionPath (NOT NULL — builder always produces a valid path)
 ```
 
 Responsibilities:
@@ -435,7 +433,7 @@ accepted by the whitelist.
 
 ## 13. Contracts and Inbox API
 
-Add notification contracts with opaque cursor pagination.
+Add notification contracts with offset/page pagination (reuse `PaginationParamsSchema`).
 
 Routes:
 
@@ -449,14 +447,12 @@ POST /api/notifications/read-all
 ### List
 
 ```text
-default limit = 20
-maximum limit = 100
+default pageSize = 20
+maximum pageSize = 100
 order = created_at DESC, id DESC
-cursor = opaque base64url encoded { createdAt, id }
+pagination = offset/page (reuses PaginationParamsSchema bounds)
 optional unread=true
 ```
-
-Malformed cursor returns the repository's standard validation error.
 
 ### Authorization
 
@@ -538,8 +534,7 @@ P5-N1 does not introduce `skipped`, stale TTL, or Email preference behavior.
 - duplicate dedupe key is idempotent;
 - same key for different recipients does not conflict;
 - list uses stable created_at/id order;
-- opaque cursor paging works;
-- malformed cursor rejected;
+- offset/page paging works;
 - unread count;
 - mark one read;
 - mark all read;
@@ -686,7 +681,7 @@ git commit -m "test(notification): cover transaction dedupe auth and navigation"
 [ ] no SMTP call occurs in the business transaction
 [ ] old Email-only result trigger is removed
 [ ] no old/new double-send path exists
-[ ] Inbox list uses bounded opaque-cursor pagination
+[ ] Inbox list uses bounded offset/page pagination (reuses `PaginationParamsSchema`)
 [ ] Inbox API authentication and user isolation pass
 [ ] Candidate Inbox UI is usable
 [ ] EMAIL_ENABLED=false still leaves Inbox authoritative
