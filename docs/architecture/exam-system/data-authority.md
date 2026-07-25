@@ -2,6 +2,14 @@
 
 > Normative description of what data is authoritative, who writes it, when it becomes immutable, and which transaction boundaries protect those transitions.
 
+```text
+Last verified against commit:
+cac6b85c425c85ad4077002bc518fca0b50f766f
+
+Verification scope:
+Current master implementation after merged P5-0 / PR #210.
+```
+
 ## 1. Definition of Authoritative Data
 
 Authoritative data is the **single source of truth** that all readers MUST consult. When copies or projections exist, they MUST be derived from the authoritative source and MUST NEVER be used as input to grading, scoring, or state transitions.
@@ -10,10 +18,10 @@ Authoritative data is the **single source of truth** that all readers MUST consu
 
 | Data | Authoritative storage | Who writes | Mutable? |
 |------|----------------------|------------|----------|
-| Question content | `questions` row | Admin (create/update routes) | Yes — always mutable while the row exists |
-| Question standardAnswer | `questions.standardAnswer` | Admin | Yes |
-| Question rubric | `questions.rubric` | Admin | Yes |
-| Exam configuration | `exams` row (most fields) | Admin (in draft) | Yes in draft; frozen at publish |
+| Question content | `questions` row | Admin, Teacher (create/update routes) | Yes — always mutable while the row exists |
+| Question standardAnswer | `questions.standardAnswer` | Admin, Teacher | Yes |
+| Question rubric | `questions.rubric` | Admin, Teacher | Yes |
+| Exam configuration | `exams` row (most fields) | Admin, Teacher (in draft) | Yes in draft; frozen at publish |
 | Organization settings | `organization_settings` row | Admin | Yes |
 
 **Rule**: Live authoring data is authoritative for the **next** snapshot, but NOT for any existing snapshot. Once a `QuestionSnapshot` is created, the live `questions` row is no longer consulted for that snapshot's grading.
@@ -26,31 +34,25 @@ Authoritative data is the **single source of truth** that all readers MUST consu
 | Exam totalScore | `exams.totalScore` | `publishExam()` (validated) | At publish | **Never** |
 | Exam passingScore | `exams.passingScore` | `publishExam()` (validated) | At publish | **Never** |
 | Exam control flags | `exams.controlFlags` | `publishExam()` | At publish | **Never** |
-| Exam schedule (openAt/closeAt) | `exams.openAt`, `exams.closeAt` | Admin (published: schedule-only) | After publish via extend | Only `closeAt` via `extendExam()` |
 
-**Invariant**: INV-E-002 — `publishExam()` MUST build the question snapshot. An exam cannot be published without a snapshot.
+**Invariant**: INV-E-002 — `publishExam()` MUST build the question snapshot.
 
 ## 4. Attempt Execution Data
 
 | Data | Authoritative storage | Who writes | Mutable until |
 |------|----------------------|------------|---------------|
-| Attempt status | `exam_attempts.status` | Command functions (`submitAttempt`, `markDisrupted`, `restoreAttempt`, `finalizeTerminalGrading`) | Terminal state |
+| Attempt status | `exam_attempts.status` | Command functions | Terminal state |
 | Draft answers | `exam_attempts.answers` (JSONB) | `saveAnswer()` | Submit freeze barrier |
-| Question snapshot (attempt-level) | `exam_attempts.questionSnapshot` | `startOrRestoreAttempt()` (copied from exam) | Never (copied once at start) |
+| Question snapshot (attempt-level) | `exam_attempts.questionSnapshot` | `startOrRestoreAttempt()` (copied from exam) | Never |
 | Heartbeat | `exam_attempts.lastActivityAt` | `saveAnswer()` / heartbeat route | Never (monotonic) |
-| Deadline | `exam_attempts.deadlineAt` | `startOrRestoreAttempt()` / `extendAttemptTime()` / `restoreAttempt()` | Terminal state |
 
 ### 4.1 Draft answers authority
 
-Draft answers (`exam_attempts.answers`) are authoritative for the candidate's work-in-progress. The Save Answer protocol (`processSaveAnswer()`) is the sole writer. It enforces:
-- `attemptStatus === 'in_progress'` required.
-- `now < effectiveDeadline` required.
-- Versioned optimistic concurrency (`baseVersion >= currentVersion`).
-- Idempotent replay per `(questionId, clientSeq)`.
+Draft answers (`exam_attempts.answers`) are authoritative for the candidate's work-in-progress. The Save Answer protocol (`processSaveAnswer()`) is the sole writer.
 
 ### 4.2 Question membership
 
-`saveAnswer()` validates that the `request.questionId` is a member of the attempt's frozen `questionSnapshot` (INV local legality). Accepting an answer for a question outside the universe is illegal.
+`saveAnswer()` validates that the `request.questionId` is a member of the attempt's frozen `questionSnapshot`. Accepting an answer for a question outside the universe is illegal.
 
 ## 5. Submitted-Answer Authority
 
@@ -60,18 +62,9 @@ Draft answers (`exam_attempts.answers`) are authoritative for the candidate's wo
 
 **Invariant**: INV-A-002 — `submitted_answers` MUST be written exactly once, inside the submit transaction.
 
-The submit freeze barrier:
-1. Reads attempt via `findByIdForUpdate` (FOR UPDATE).
-2. Reads draft `answers` and `questionSnapshot`.
-3. Builds `SubmittedAnswersSnapshot` (strips protocol metadata: version, savedAt, clientSeq).
-4. Writes `submitted_answers`, `status = 'submitted'`, `submittedAt`, `submissionReason` in ONE update.
-5. Materializes `attempt_grading_entries`.
-
-This is the **single point** where draft answers become frozen truth. No other code path writes `submitted_answers`.
-
 ### 5.1 Hash is NOT the authority
 
-`submitted_answers_hash` is **NOT a DB column**. Hash utilities (`hashSubmittedAnswers()`) exist for testing and backfill verification, but idempotency is guaranteed by transactions + status guards + immutability, not by hash comparison.
+`submitted_answers_hash` is **NOT a DB column**. Hash utilities exist for testing and backfill verification, but idempotency is guaranteed by transactions + status guards + immutability, not by hash comparison.
 
 ## 6. Grading Authority
 
@@ -86,7 +79,7 @@ This is the **single point** where draft answers become frozen truth. No other c
 
 ### 6.1 Grading workset is the single durable truth
 
-**Invariant**: INV-G-002 — `attempt_grading_entries` is the single durable grading truth. `attempt.gradingResult` is a denormalized projection generated from these entries — never consumed as scoring input.
+**Invariant**: INV-G-002 — `attempt_grading_entries` is the single durable grading truth. `attempt.gradingResult` is a denormalized projection — never consumed as scoring input.
 
 ### 6.2 No live Question joins in grading
 
@@ -96,7 +89,7 @@ This is the **single point** where draft answers become frozen truth. No other c
 - `attempt.questionSnapshot` (frozen question universe)
 - `attempt_grading_entries` (materialized workset)
 
-It NEVER reads `attempt.gradingResult` (that's an output), draft `attempt.answers`, or live `questions`.
+It NEVER reads `attempt.gradingResult` (output), draft `attempt.answers`, or live `questions`.
 
 ## 7. Result Projection Authority
 
@@ -107,14 +100,18 @@ It NEVER reads `attempt.gradingResult` (that's an output), draft `attempt.answer
 | Enrollment final attempt | `exam_enrollments.finalAttemptId` | `finalizeTerminalGrading()` | At terminal closure |
 | Result visibility | Computed from `exam.resultPublicationMode` + `exam.resultsPublishedAt` + `attempt.gradingStatus` | `publishResults()` (for manual mode) | At publish or grading completion |
 
-### 7.1 Projection vs. source of truth
+### 7.1 Candidate answer-key visibility
 
-The result returned to candidates is a **projection** computed from authoritative data. There is no `results` table. The projection rules are:
+Under the current MVP contract (`apps/api/src/routes/attempts.shared.ts`):
 
-- **Visibility** = `publishPolicySatisfied AND resultComputable`
-  - `publishPolicySatisfied`: `immediate` (always) | `after_grading` (always) | `manual` (`resultsPublishedAt IS NOT NULL`)
-  - `resultComputable`: `gradingStatus IN (auto_graded, fully_graded)`
-- **Content**: `score`, `passed`, `gradingResult` only if visible. `standardAnswer`/`rubric` only if `answerVisibility = 'visible'`.
+```text
+computeAnswerVisibility() always returns "hidden" (no arguments, no conditions).
+CandidateTakeSnapshot and candidate attempt serializers never include standardAnswer or rubric.
+Result own-view strips standardAnswer unconditionally.
+Rubric is absent from the Candidate result contract.
+```
+
+**INV-R-001**: Under the current MVP contract, Candidate-facing Attempt and Result projections MUST NOT expose `standardAnswer` or `rubric`. `answerVisibility` is currently fixed to hidden. A future configurable answer-key release policy is NOT IMPLEMENTED.
 
 ### 7.2 What must never read live data
 
@@ -126,13 +123,19 @@ The result returned to candidates is a **projection** computed from authoritativ
 
 ## 8. Notification and Email Authority
 
+### 8.1 Email outbox (infrastructure, IMPLEMENTED)
+
 | Data | Authoritative storage | Who writes | When authoritative |
 |------|----------------------|------------|-------------------|
-| Email outbox row | `email_outbox` | Business transaction (currently no production caller) | At enqueue |
+| Email outbox row | `email_outbox` | Business transaction (currently NO production caller) | At enqueue |
 | Email delivery status | `email_outbox.status` | Email worker (`markSent`/`markRetryWait`/`markDead`) | At send attempt |
 | Provider message ID | `email_outbox.providerMessageId` | Email worker (`markSent`) | At successful send |
 
 **Invariant**: INV-N-001 — Email outbox rows are written by business transactions; SMTP send happens OUTSIDE the transaction.
+
+### 8.2 Business notification-to-outbox protocol (NOT IMPLEMENTED)
+
+No production business transaction currently inserts an outbox row. The infrastructure primitives exist but the business protocol is NOT IMPLEMENTED (P5-N1 scope).
 
 ## 9. Transaction Boundaries
 
@@ -155,7 +158,6 @@ The `packages/exam-engine/src/` layer contains **no explicit `db.transaction` ca
 | Force submit | `executeInTransaction` → EA lock → `submitAttempt()` → grade | REPEATABLE READ | Atomic |
 | Email claim | `executeInTransaction` → `claimDue()` (atomic CTE) | READ COMMITTED | None |
 | Email mark result | Single repo call (after SMTP send outside tx) | N/A | None |
-| Enrollment mutations | `executeInTransaction` → lock → update | REPEATABLE READ | Atomic |
 
 ### 9.3 Lock ordering
 
@@ -165,8 +167,6 @@ To avoid deadlocks, all code paths MUST acquire locks in a consistent order:
 Enrollment → Attempt → Exam
 ```
 
-The deadline scanner explicitly uses this order. `extendExam()` acquires the exam lock separately but is protected by the route-layer reconciliation.
-
 ### 9.4 Row-lock acquisition methods
 
 | Repository | Method | Lock |
@@ -174,7 +174,6 @@ The deadline scanner explicitly uses this order. `extendExam()` acquires the exa
 | `examRepo` | `findByIdForUpdate(ctx, examId)` | `FOR UPDATE` |
 | `attemptRepo` | `findByIdForUpdate(ctx, attemptId)` | `FOR UPDATE` |
 | `enrollmentRepo` | `findByExamAndCandidateForUpdate(ctx, examId, candidateId)` | `FOR UPDATE` |
-| `attemptRepo` | `findActiveByEnrollment(ctx, enrollmentId)` | `FOR UPDATE` |
 | `emailOutboxRepo` | `claimDue()` | `FOR UPDATE SKIP LOCKED` |
 
 ## 10. Idempotency and Concurrency
@@ -185,19 +184,11 @@ The Save Answer protocol is idempotent per `(questionId, clientSeq)` pair:
 - Same key + same payload → accepted as replay (no write, returns prior `savedAt`).
 - Same key + different payload → rejected as `CONFLICTING_PAYLOAD`.
 
-The idempotency state is stored in `attempt.answers[].clientSeqHistory` (JSONB column).
-
 ### 10.2 Submit idempotency
 
-`submitAttempt()` is idempotent:
-- If the attempt is already `submitted`/`grading`/`graded`, returns the existing frozen snapshot unchanged.
-- Validates workset consistency on re-entry (fail closed on inconsistency).
+`submitAttempt()` is idempotent: if the attempt is already `submitted`/`grading`/`graded`, returns the existing frozen snapshot unchanged.
 
-### 10.3 Deadline scanner vs. inline reconciliation
-
-Both the deadline scanner (`deadlineScanner.ts`) and the inline reconciliation (`ensureAttemptDeadlineReconciled()`) converge on the same authority: `isAttemptDeadlineExpired()` → `submitAttempt()`. The scanner uses REPEATABLE READ with explicit EA lock; inline reconciliation runs inside the caller's transaction.
-
-### 10.4 Email worker concurrency
+### 10.3 Email worker concurrency
 
 Multiple email workers can run concurrently. `claimDue()` uses `FOR UPDATE SKIP LOCKED` to ensure each row is claimed by at most one worker. Ownership fencing (`lockedBy = workerInstanceId`) prevents double-send.
 
@@ -208,22 +199,19 @@ Multiple email workers can run concurrently. `claimDue()` uses `FOR UPDATE SKIP 
 If the process crashes **during** the submit transaction:
 - The DB transaction rolls back. The attempt remains `in_progress`.
 - On the next access, `ensureAttemptDeadlineReconciled()` re-runs (idempotent).
-- If the deadline has passed, the attempt is auto-submitted.
-- If not, the candidate can continue and submit manually.
 
 ### 11.2 Grading crash
 
 If the process crashes **after** submit but **before** grading completes:
 - The attempt is `submitted` (submit committed) but not `graded`.
 - `gradeAttemptIdempotent()` detects `submitted` status and re-runs grading.
-- The workset was materialized in the submit transaction, so it is available.
 
 ### 11.3 Email worker crash
 
 If the email worker crashes while a row is in `processing`:
 - The `lockedAt` timestamp remains set.
 - On the next worker startup (or the next poll cycle), `recoverAbandoned()` resets rows where `lockedAt < cutoff` back to `pending`.
-- The row is then re-claimed and re-sent.
+- The row is then re-claimed and re-sent (at-least-once delivery).
 
 ### 11.4 Candidate crash/disconnect
 

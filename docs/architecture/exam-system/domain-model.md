@@ -2,6 +2,14 @@
 
 > Normative description of the exam system's core domain objects, their classification, ownership, and relationships.
 
+```text
+Last verified against commit:
+cac6b85c425c85ad4077002bc518fca0b50f766f
+
+Verification scope:
+Current master implementation after merged P5-0 / PR #210.
+```
+
 ## 1. System Purpose
 
 The exam platform is a configurable LAN/on-premise assessment system. Its core domain supports: authoring reusable questions, composing them into exams, enrolling candidates, executing timed attempts, saving and submitting answers, grading (automatic and manual), and publishing results.
@@ -14,14 +22,42 @@ Phase 1 is single-tenant (one internal default organization). All business data 
 |-------|---------------------|-------|
 | Admin | `user_role_assignments` with Admin preset | Phase 1 product role |
 | Candidate | `user_role_assignments` with Candidate preset | Phase 1 product role |
-| Teacher | `user_role_assignments` with Teacher preset | Phase 3 product role |
-| Proctor | `user_role_assignments` with Proctor preset | Phase 3 product role |
-| Grader | `user_role_assignments` with Grader preset | Phase 3 product role |
+| Teacher | `user_role_assignments` with Teacher preset | Phase 3 infrastructure / Phase 3 product role |
+| Proctor | `user_role_assignments` with Proctor preset | Phase 3 infrastructure |
+| Grader | `user_role_assignments` with Grader preset | Phase 3 infrastructure |
 | System | Synthetic actor (`system:deadline-scanner`, `system:heartbeat`) | Phase 2 infrastructure |
 
 **Critical rule**: Authorization is resolved from **active `user_role_assignments` rows** at request time, never from `users.role` or JWT role claims (those are compatibility projections only).
 
+### 2.1 Teacher capability scope gap
+
+Teacher has the following relevant capabilities (from `packages/authz/src/presets.ts`):
+
+```text
+question.create, question.update, question.delete, question.import
+course.view, course.create, course.update
+exam.view, exam.create, exam.update, exam.publish, exam.close
+exam.enrollment.manage, exam.result.publish
+score.all.view
+```
+
+**Scope status**: Teacher's `course.create`, `course.update`, `exam.create`, `exam.update`, `exam.publish`, `exam.close`, `exam.enrollment.manage`, `exam.result.publish`, and `score.all.view` are marked scoped in the preset matrix, but the scoped resolver infrastructure (Teacher@course) is **NOT IMPLEMENTED**. Teacher permissions are currently flat org-wide. This is a **known Teacher resource-scope gap** (future M11 work).
+
 ## 3. Aggregate Catalog
+
+### 3.1 Classification methodology
+
+Each object is classified by its actual consistency ownership:
+
+- **Aggregate root**: Can be mutated independently through a business command; defines its own consistency boundary.
+- **Child entity**: Lifecycle owned by a parent aggregate; mutated only through the parent.
+- **Embedded value**: Immutable copy stored inside a parent; no independent identity.
+- **Projection**: Derived data regenerated from authoritative sources; never consumed as input.
+- **Infrastructure record**: Durable record owned by a background process or cross-cutting concern.
+
+A row with an ID and repository is **not** automatically an aggregate root. The test is: can it be mutated independently through a business command?
+
+### 3.2 Catalog
 
 | Object | Classification | Authority | Mutable until | Frozen at | Consumers |
 |--------|---------------|-----------|---------------|-----------|-----------|
@@ -29,17 +65,29 @@ Phase 1 is single-tenant (one internal default organization). All business data 
 | User | Aggregate root | `users` table | Always mutable | Never | Auth, authorization |
 | Candidate | Aggregate root | `candidate_profiles` table | Always mutable | Never | Enrollment, attempt ownership |
 | Course | Aggregate root | `courses` table | Always mutable | Never | Question/Exam grouping |
-| Question | Aggregate root | `questions` table | Always mutable (while not snapshotted) | N/A (snapshots are copies) | Exam composition, grading reference |
-| QuestionSnapshot | Embedded value | `exam.questionSnapshot` / `attempt.questionSnapshot` | Never (immutable copy) | Exam publish (exam-level) or Attempt start (attempt-level) | Grading, result computation |
+| Question | Aggregate root | `questions` table | Always mutable (until deletion) | N/A | Exam composition, grading reference |
+| QuestionSnapshot | Embedded value | `exam.questionSnapshot` / `attempt.questionSnapshot` | Never (immutable copy) | Exam publish / Attempt start | Grading, result computation |
 | Exam | Aggregate root | `exams` table | Draft state only | Publish (partial fields freeze) | Candidate enrollment, attempt creation |
-| ExamEnrollment | Aggregate root | `exam_enrollments` table | Attempt lifecycle | Completion | Retake policy, final score selection |
+| ExamEnrollment | Child entity of Exam | `exam_enrollments` table | Attempt lifecycle | Completion | Retake policy, final score selection |
 | ExamAttempt | Aggregate root | `exam_attempts` table | In-progress state | Submit (answers freeze) | Grading, result projection |
 | AnswerRecord | Embedded value | `exam_attempts.answers` JSONB | In-progress state | Submit (copied to submittedAnswers) | Grading input |
 | SubmittedAnswersSnapshot | Embedded value | `exam_attempts.submitted_answers` JSONB | Never (written once) | Submit freeze barrier | Grading authority, result computation |
-| AttemptGradingEntry | Aggregate root | `attempt_grading_entries` table | Created at submit; updated during manual grading | Terminal status (`completed_auto` / `completed_manual`) | Grading queue, terminal aggregation |
+| AttemptGradingEntry | Child entity of Attempt | `attempt_grading_entries` table | Created at submit; updated during manual grading | Terminal status | Grading queue, terminal aggregation |
+| gradingResult | Projection | `exam_attempts.gradingResult` JSONB | N/A | N/A | Result display |
 | ScoreResult | Projection | Computed from AttemptGradingEntry | N/A | N/A | Result display |
 | AuditLog | Infrastructure record | `audit_logs` table | Never (append-only) | Write time | Compliance, timeline |
-| EmailOutbox | Infrastructure record | `email_outbox` table | Pending → processing → sent/retry_wait/dead | Terminal (`sent` / `dead`) | Email delivery |
+| EmailOutbox | Infrastructure record | `email_outbox` table | Pending → terminal | Terminal (`sent` / `dead`) | Email delivery |
+| WorkerHeartbeat | Infrastructure record | `worker_heartbeats` table | Always mutable | Never | Worker liveness diagnostics |
+
+### 3.3 Aggregate ownership rules
+
+1. **ExamEnrollment** is a child entity of Exam. Its lifecycle is bounded by the exam: it is created when a candidate is enrolled, transitions when attempts are made, and completes when the exam window closes or retake policy is exhausted. It is always mutated in the same transaction as the attempt or exam operation that affects it.
+
+2. **AttemptGradingEntry** is a child entity of Attempt. It is created at submit-freeze time (inside the submit transaction), updated by manual grading, and read by terminal aggregation. It cannot exist without its parent attempt.
+
+3. **gradingResult** (on ExamAttempt) is a projection. It is regenerated from AttemptGradingEntries at terminal closure. It is never read as scoring input.
+
+4. **AuditLog** and **WorkerHeartbeat** are infrastructure records — append-only, no business lifecycle, mutated by background processes or cross-cutting audit writes.
 
 ## 4. Question Model
 
@@ -53,9 +101,9 @@ Phase 1 is single-tenant (one internal default organization). All business data 
 - **Mutation commands**: Question update route (`PATCH /api/questions/:id`)
 - **Deletion**: Question delete route (`DELETE /api/questions/:id`) — **ACCEPTED LIMITATION**: no referential integrity guard against deletion of questions referenced by existing snapshots (snapshots are copies, so deletion does not break historical attempts)
 
-### 4.2 Question has no explicit lifecycle state
+### 4.2 Question is a live mutable authoring entity until deletion
 
-Question has **no lifecycle status field**. It is a live mutable authoring entity from creation until deletion. There is no "published" or "archived" state for questions.
+Question has **no lifecycle state field**. It is always mutable while it row-exists. Snapshot creation freezes the **copy**, not the live source row. The live `questions` row remains mutable even after one or more snapshots have been created.
 
 ### 4.3 Question versions
 
@@ -66,7 +114,6 @@ Question has **NO version table**. Edits mutate the row in place. Historical fid
 - `questions.standardAnswer` is the authoring source. It is copied into `QuestionSnapshot.standardAnswer` at snapshot creation.
 - `questions.rubric` (P3-L0-1 dual-layer) is the authoring source for manual grading guidance. It is copied into `QuestionSnapshot.rubric` at snapshot creation.
 - **Grading paths MUST read from the snapshot, never JOIN the live `questions` table.** This is the invariant that prevents live question edits from affecting in-progress or completed attempts.
-- **Candidate-facing projections MUST NOT expose `standardAnswer` or `rubric`** unless `answerVisibility` is `visible` AND the result is published.
 
 ## 5. Paper Classification
 
@@ -95,7 +142,7 @@ Composition **cannot be reused between exams** in the current implementation. Ea
 
 ### 5.4 Total score
 
-`exam.totalScore` is an independently writable field, but `publishExam()` enforces that it MUST equal the sum of `questionSnapshot.score`. This is a publish-time invariant, not a database constraint.
+`exam.totalScore` is an independently writable field, but `publishExam()` enforces that it MUST equal the sum of `questionSnapshot.score`. This is a publish-time invariant enforced at the application layer, not a database constraint.
 
 ### 5.5 Decision boundary for a future Paper aggregate
 
@@ -163,7 +210,7 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 ### 7.1 Core entity
 
 - **Identity**: `exam_enrollments.id` (UUID)
-- **Owner**: Aggregate root, scoped by `organizationId`
+- **Classification**: Child entity of Exam (lifecycle bounded by exam)
 - **Unique constraint**: `(organizationId, examId, candidateId)` — one enrollment per candidate per exam
 - **State machine**: `assigned → started → completed` (+ `blocked` branch)
 
@@ -195,7 +242,7 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 | `in_progress` | YES | `startOrRestoreAttempt()`, `restoreAttempt()` |
 | `disrupted` | YES | Heartbeat scanner (`markDisrupted`) |
 | `submitted` | YES | `submitAttempt()`, deadline reconciliation |
-| `grading` | **NO** | No write path — submit goes directly to `graded` for auto-graded attempts |
+| `grading` | **NO** | No write path — `finalizeTerminalGrading()` writes `graded` directly, bypassing the `grading` state. The state machine table has `submitted:grade → grading` entries but they are unreachable. |
 | `graded` | YES | `finalizeTerminalGrading()` |
 | `voided` | **NO** | Target design only — no admin/proctor entry point |
 
@@ -303,7 +350,7 @@ A result is computable when the attempt reaches terminal grading:
 
 ### 10.3 What makes a result visible?
 
-Visibility is the AND of "result computable" AND "publish policy satisfied":
+Visibility is the AND of "result computable" and "publish policy satisfied":
 
 | `resultPublicationMode` | Visible when |
 |------------------------|--------------|
@@ -311,34 +358,47 @@ Visibility is the AND of "result computable" AND "publish policy satisfied":
 | `after_grading` | `gradingStatus === 'fully_graded'` |
 | `manual` | `resultsPublishedAt IS NOT NULL` AND result computable |
 
-### 10.4 Candidate vs. all-view actors
+### 10.4 Candidate answer-key visibility
 
-| Field | Candidate view | Admin/All view |
-|-------|---------------|----------------|
+Under the current MVP contract (`apps/api/src/routes/attempts.shared.ts`):
+
+```text
+CandidateTakeSnapshot.computeAnswerVisibility() always returns "hidden".
+CandidateTakeSnapshot and candidate attempt serializers never include standardAnswer or rubric.
+Result own-view strips standardAnswer unconditionally.
+Rubric is absent from the Candidate result contract.
+```
+
+**INV-R-001**: Under the current MVP contract, Candidate-facing Attempt and Result projections MUST NOT expose `standardAnswer` or `rubric`. `answerVisibility` is currently fixed to hidden. A future configurable answer-key release policy is **NOT IMPLEMENTED**.
+
+### 10.5 Candidate vs. all-view actors
+
+| Field | Candidate view | Admin/Teacher view |
+|-------|---------------|-------------------|
 | `score` | Only if result visible | Always (if graded) |
 | `passed` | Only if result visible | Always (if graded) |
-| `standardAnswer` | Only if `answerVisibility === 'visible'` | Always (in grading detail) |
-| `rubric` | Only if `answerVisibility === 'visible'` | Always (in grading detail) |
+| `standardAnswer` | **Never** (fixed hidden) | Always (in grading detail) |
+| `rubric` | **Never** (absent from contract) | Always (in grading detail) |
 | `gradingResult` | Only if result visible | Always (if graded) |
 
-### 10.5 Manual publication command
+### 10.6 Manual publication command
 
 `publishResults()` sets `exam.resultsPublishedAt` (write-once, idempotent). Allowed from `published | open | closed`. Does NOT advance grading — if grading is still pending, the result stays hidden.
 
-### 10.6 Repeated/concurrent publication
+### 10.7 Repeated/concurrent publication
 
 `publishResults()` is idempotent: if `resultsPublishedAt` is already set, returns `{ exam, alreadyPublished: true }` without updating. The route layer detects this to suppress duplicate audit.
 
 ## 11. Notification and Email Infrastructure
 
-### 11.1 Email outbox
+### 11.1 Email outbox infrastructure primitive (IMPLEMENTED)
 
 - **Identity**: `email_outbox.id` (UUID)
 - **State machine**: `pending → processing → sent | retry_wait → processing → ... | dead`
 - **Classification**: Infrastructure record (durable queue)
-- **Owner**: Standalone aggregate, scoped by `organizationId`
+- **Owner**: Background worker process, scoped by `organizationId`
 
-### 11.2 Email worker
+### 11.2 Email worker (IMPLEMENTED)
 
 - Standalone Node process (`apps/api/src/workers/emailDeliveryWorker.ts`).
 - Poll loop: `recoverAbandoned` → `processDueEmails` → heartbeat → sleep.
@@ -347,9 +407,19 @@ Visibility is the AND of "result computable" AND "publish policy satisfied":
 - Retry: exponential backoff (`baseSeconds * 2^(attempts-1)`).
 - Terminal: `sent` (success) or `dead` (max attempts exceeded).
 
-### 11.3 Notification Inbox
+### 11.3 Email delivery semantics
 
-**NOT IMPLEMENTED.** There is no `notifications` table, no `NotificationService`, and no business caller that enqueues notifications. The email outbox infrastructure exists but has no production caller.
+- Ownership fencing prevents a stale/lost worker from updating delivery state; it does **NOT** guarantee exactly-once SMTP delivery.
+- A crash after provider acceptance but before `markSent` may cause duplicate delivery.
+- Current semantic is **at-least-once**.
+
+### 11.4 Business notification-to-outbox protocol (NOT IMPLEMENTED)
+
+No production business transaction currently inserts an outbox row atomically. The infrastructure primitives (table, repo, service, worker) exist, but the business protocol that enqueues notification emails is **NOT IMPLEMENTED**. This is the P5-N1 scope.
+
+### 11.5 Notification Inbox (NOT IMPLEMENTED)
+
+There is no `notifications` table, no `NotificationService`, and no business caller that enqueues notifications.
 
 ## 12. Audit and Observability
 
@@ -380,6 +450,8 @@ Visibility is the AND of "result computable" AND "publish policy satisfied":
 4. **The engine layer has no transaction boundaries**. Transaction composition is owned by the API route layer.
 5. **Row-lock ordering**: Enrollment → Attempt → Exam (to avoid deadlock).
 6. **The `LockedEnrollmentAttemptIdentity` capability** is an opaque witness that the canonical lock protocol ran. It is threaded through submit, grade, and deadline reconciliation.
+7. **ExamEnrollment** is always mutated inside the same transaction as its parent attempt or exam operation.
+8. **AttemptGradingEntry** is always created inside the submit transaction and updated inside the grading transaction.
 
 ## 14. Explicitly Absent Aggregates
 
@@ -396,7 +468,9 @@ Visibility is the AND of "result computable" AND "publish policy satisfied":
 1. **Question deletion**: No referential integrity guard against deleting questions referenced by existing snapshots. Snapshots are copies, so historical attempts are not broken, but the question bank loses the source.
 2. **No question lifecycle**: Questions are always mutable (no publish/archive state).
 3. **Disrupted recovery UI**: Backend capability exists; candidate-facing restore flow is incomplete.
-4. **Email has no business caller**: Outbox + worker exist but are never invoked by production routes.
+4. **Email has no business caller**: Infrastructure exists (P5-0 merged), but no production route invokes it.
 5. **Notification Inbox**: Not implemented — only the email channel exists.
-6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`.
+6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`. State machine table entries for `grading` are unreachable.
 7. **`not_started` / `queued` / `voided`**: No write path — target design only.
+8. **Teacher resource scope**: Teacher has capabilities but scoped authorization (Teacher@course) is NOT IMPLEMENTED — currently flat org-wide.
+9. **Candidate answer-key visibility**: Fixed to hidden. Configurable release is NOT IMPLEMENTED.
