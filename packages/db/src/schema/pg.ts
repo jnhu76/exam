@@ -621,13 +621,13 @@ export const emailOutbox = pgTable(
      * null; operational Emails (result_published -> grade_notification) set
      * it so an Email can be traced back to its Inbox row.
      */
-    notificationId: text("notification_id"),
+    notificationId: text("notification_id").references(() => notifications.id),
     /**
      * Optional recipient user link, independent of `recipient_email`. Lets a
      * future recipient-scoped query join without resolving through the
      * notification. Nullable for identity-flow Emails with no user binding.
      */
-    recipientUserId: text("recipient_user_id"),
+    recipientUserId: text("recipient_user_id").references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

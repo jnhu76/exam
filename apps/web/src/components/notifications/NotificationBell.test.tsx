@@ -185,7 +185,7 @@ describe("NotificationBell", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   });
 
-  it("marks one read on click, decrements the badge, and navigates to the result route", async () => {
+  it("marks one read on click and navigates to the result route", async () => {
     const n = makeNotification({
       id: "00000000-0000-4000-8000-000000000099",
       actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",

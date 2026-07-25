@@ -13,6 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 
 // P5-N1-I3 — Candidate NotificationBell + panel (V1).
 //
@@ -52,6 +53,7 @@ interface UnreadCountResponse {
 export function NotificationBell() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { formatDateTime } = useProductDateTime();
 
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [list, setList] = useState<NotificationDTO[]>([]);
@@ -176,7 +178,9 @@ export function NotificationBell() {
               className="absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]"
               data-testid="notification-unread-badge"
             >
-              {unreadCount > 99 ? "99+" : unreadCount}
+              {unreadCount > 99
+                ? t("notifications.badgeOverflow")
+                : unreadCount}
             </Badge>
           )}
         </Button>
@@ -243,7 +247,7 @@ export function NotificationBell() {
                       {n.body}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
-                      {new Date(n.createdAt).toLocaleString()}
+                      {formatDateTime(n.createdAt)}
                     </span>
                   </button>
                 </li>

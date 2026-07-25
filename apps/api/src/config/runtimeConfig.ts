@@ -422,7 +422,22 @@ function resolvePublicWebOrigin(env: NodeJS.ProcessEnv, mode: AppMode): string {
     raw = env.PUBLIC_WEB_ORIGIN || "http://localhost:5173";
   }
   const trimmed = raw.replace(/\/+$/, "");
-  if (!/^https?:\/\/[^/]+$/i.test(trimmed)) {
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new RuntimeConfigError(
+      `PUBLIC_WEB_ORIGIN must be an absolute origin (scheme + host[+port], no path, no trailing slash); got: ${raw}`,
+    );
+  }
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    (parsed.pathname !== "/" && parsed.pathname !== "")
+  ) {
     throw new RuntimeConfigError(
       `PUBLIC_WEB_ORIGIN must be an absolute origin (scheme + host[+port], no path, no trailing slash); got: ${raw}`,
     );

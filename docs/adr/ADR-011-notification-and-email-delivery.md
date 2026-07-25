@@ -675,7 +675,7 @@ Examples:
 
 | Scenario | dedupe_key |
 |---|---|
-| Result published to a candidate | `grade_notification:{examId}:{recipientUserId}` (V1 uses `result_published:{examId}:{recipientUserId}` — no `publicationVersion`; the single irreversible `resultsPublishedAt` transition is the stable key) |
+| Result published to a candidate | `result_published:{examId}:{recipientUserId}` (V1 outbox key — no `publicationVersion`; the single irreversible `resultsPublishedAt` transition is the stable key; Inbox dedupe key is `result_published:{examId}`) |
 | Exam assigned to a candidate | `exam_notification:{examId}:{recipientUserId}:{assignmentVersion}` |
 | Password reset for a user | `password_reset:{userId}:{tokenVersion}` |
 | Invitation to a pre-user email | `registration_welcome:{invitationId}:{normalizedEmail}` |

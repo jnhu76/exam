@@ -1,5 +1,3 @@
-import type { NotificationType } from "@exam/domain";
-
 // P5-N1-I2 — API-local interfaces for the NotificationService.
 //
 // These are the inputs the publication fan-out hands to the channel-neutral
@@ -24,10 +22,3 @@ export interface ResultPublishedNotificationInput {
   /** Server-trusted exam title (HTML-escaped at Email render time). */
   examTitle: string;
 }
-
-/**
- * The notification type the service dispatches. V1: result_published only.
- * Kept as a parameter so the service is channel-neutral; the policy layer
- * decides Inbox/Email enablement per type.
- */
-export type NotificationDispatchType = NotificationType;

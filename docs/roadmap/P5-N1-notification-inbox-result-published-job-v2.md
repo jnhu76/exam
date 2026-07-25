@@ -447,14 +447,12 @@ POST /api/notifications/read-all
 ### List
 
 ```text
-default limit = 20
-maximum limit = 100
+default pageSize = 20
+maximum pageSize = 100
 order = created_at DESC, id DESC
-cursor = opaque base64url encoded { createdAt, id }
+pagination = offset/page (reuses PaginationParamsSchema bounds)
 optional unread=true
 ```
-
-Malformed cursor returns the repository's standard validation error.
 
 ### Authorization
 

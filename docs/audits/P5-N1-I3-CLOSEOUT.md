@@ -64,7 +64,7 @@ Every P5-N1-R0 §20 acceptance criterion maps to implemented code:
 | NotificationType -> EmailType mapping explicit | ✅ | `policy.ts` resolveEmailTypeForNotification (NOT string equality) |
 | Operational Email row links to Inbox notification | ✅ | email_outbox.notification_id (migration 0020) + dispatch sets it |
 | Identity Email may keep notification_id null | ✅ | column nullable; identity flows untouched |
-| Inbox + outbox dedupe keys stable + scoped | ✅ | result_published:{examId} (Inbox); :{recipientUserId} (outbox) |
+| Inbox + outbox dedupe keys stable + scoped | ✅ | result_published:{examId} (Inbox); result_published:{examId}:{recipientUserId} (outbox) |
 | actionPath uses real /exam/* result route | ✅ | buildResultPublishedActionPath -> /exam/:attemptId/result |
 | actionPath validated at write + render time | ✅ | isResultPublishedActionPath (contracts) + validateStoredActionPath |
 | result mutation + Inbox + outbox commit atomically | ✅ | publish-results tx extension inside !alreadyPublished |

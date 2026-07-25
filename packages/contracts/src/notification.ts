@@ -95,6 +95,11 @@ export const UnreadCountResponseSchema = z.object({
 /** Response payload for the unread-count endpoint. */
 export type UnreadCountResponse = z.infer<typeof UnreadCountResponseSchema>;
 
+/** Response schema for POST /notifications/read-all. */
+export const MarkAllReadResponseSchema = z.object({
+  updated: z.number().int().min(0),
+});
+
 /**
  * Factory for the paginated notification list response schema.
  * Reuses PaginatedResponseSchema so the Inbox list shape matches every other

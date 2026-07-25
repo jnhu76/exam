@@ -598,10 +598,12 @@ test.describe("P5-N1: result_published Inbox notification", () => {
       }>;
     };
     expect(afterBody.total).toBe(beforeTotal + 1);
-    const notif = afterBody.items[0]!;
-    expect(notif.type).toBe("result_published");
-    expect(notif.readAt).toBeNull();
-    expect(notif.actionPath).toBe(`/exam/${attemptId}/result`);
+    const notif = afterBody.items.find(
+      (i) => i.actionPath === `/exam/${attemptId}/result`,
+    );
+    expect(notif).toBeDefined();
+    expect(notif!.type).toBe("result_published");
+    expect(notif!.readAt).toBeNull();
 
     // Unread-count reflects the new notification.
     const countRes = await request.get(

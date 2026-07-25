@@ -243,7 +243,7 @@ acceptance criteria:
 | Criterion | Status | Evidence |
 | --- | --- | --- |
 | `EmailDeliveryService` named, no ambiguous `EmailNotificationService` | ✅ | `emailDeliveryService.ts:29`; zero `EmailNotificationService` references in source |
-| 5-state outbox `pending|processing|retry_wait|sent|dead` | ✅ | `email.ts:31-36`; `schema/pg.ts:636-638`; migration `0017` |
+| 5-state outbox `pending, processing, retry_wait, sent, dead` | ✅ | `email.ts:31-36`; `schema/pg.ts:636-638`; migration `0017` |
 | `retry_wait` distinct | ✅ | CHECK `email_outbox_retry_wait_must_have_next` (`0018:30-35`) |
 | Claim handles `pending` + due `retry_wait` | ✅ | `emailOutboxRepo.ts:240-268` |
 | `FOR UPDATE SKIP LOCKED` claim | ✅ | `emailOutboxRepo.ts:240-268` |
@@ -540,7 +540,7 @@ The Job v2 §8.1 proposed 14 columns. Each is classified by V1 need:
 | `dedupe_key` | dedupe insert | no | yes | duplicate rows | **REQUIRED_NOW** |
 | `severity` | NONE (V1 = info only) | no | no | nothing | **SPECULATIVE → DEFER** |
 | `resource_type` | NONE | no | no | nothing | **SPECULATIVE → DEFER** |
-| `resource_id` | NONE | no | nothing breaks; examId is reconstructible from dedupe_key | **SPECULATIVE → DEFER** |
+| `resource_id` | NONE | no | no | nothing breaks; examId is reconstructible from dedupe_key | **SPECULATIVE → DEFER** |
 | `archived_at` | NONE | no | no | nothing | **SPECULATIVE → DEFER** |
 | `invalidated_at` | NONE | no | no | nothing | **SPECULATIVE → DEFER** |
 

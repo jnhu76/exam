@@ -32,7 +32,13 @@ export function buildResultPublishedActionPath(attemptId: string): string {
       "buildResultPublishedActionPath: attemptId must be a non-empty string",
     );
   }
-  return `/exam/${attemptId}/result`;
+  const path = `/exam/${attemptId}/result`;
+  if (!isResultPublishedActionPath(path)) {
+    throw new Error(
+      `buildResultPublishedActionPath: attemptId produced a non-canonical path: ${attemptId}`,
+    );
+  }
+  return path;
 }
 
 /**

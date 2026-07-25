@@ -5,6 +5,7 @@ import {
   NotificationListResponseSchema,
   NotificationSchema,
   UnreadCountResponseSchema,
+  MarkAllReadResponseSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
 import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo.js";
@@ -85,7 +86,7 @@ const notificationRoutes: FastifyPluginAsync = async (fastify) => {
      */
     async (request) => {
       const ctx = getRequestContext(request);
-      const query = NotificationListQuerySchema.parse(request.query);
+      const query = request.query as typeof NotificationListQuerySchema._type;
       const repo = createNotificationRepo(fastify.db);
       const { items, total } = await repo.list(ctx, ctx.actorId, {
         page: query.page,
@@ -165,7 +166,7 @@ const notificationRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         security: cookieAuth,
         response: {
-          200: z.object({ updated: z.number().int().min(0) }),
+          200: MarkAllReadResponseSchema,
         },
       },
     },

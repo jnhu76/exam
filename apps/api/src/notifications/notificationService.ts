@@ -111,7 +111,12 @@ export async function dispatchResultPublishedToRecipient(
   //    recipient (normalized email present) AND the Inbox row was newly
   //    created (idempotent: a duplicate trigger skips the outbox insert).
   let outboxCreated = false;
-  if (inboxInsert.created && emailEnabledForRecipient(type, recipient.email)) {
+  const recipientEmail = recipient.email;
+  if (
+    inboxInsert.created &&
+    recipientEmail != null &&
+    emailEnabledForRecipient(type, recipientEmail)
+  ) {
     const emailType = resolveEmailTypeForNotification(type);
     if (emailType == null) {
       throw new Error(
@@ -126,7 +131,7 @@ export async function dispatchResultPublishedToRecipient(
     // REQUIRED insert (throws on failure → rolls back the publication tx).
     await emailOutboxRepo.create(ctx, {
       type: emailType,
-      recipientEmail: recipient.email!,
+      recipientEmail,
       subject: rendered.subject,
       bodyText: rendered.bodyText,
       bodyHtml: rendered.bodyHtml,

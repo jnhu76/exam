@@ -8,7 +8,6 @@ import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
-import { notifications } from "@exam/db/src/schema/pg.js";
 import { emailOutbox } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import {
@@ -123,8 +122,6 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
     expect(unread).toBe(1);
 
     // Outbox row is committed and links to the notification.
-    const outboxRepo = createEmailOutboxRepo(db);
-    void outboxRepo; // smoke: repo constructs on the same db handle
     const outboxRows = await db
       .select()
       .from(emailOutbox)
@@ -390,6 +387,3 @@ describe("dispatchResultPublishedFanOut", () => {
     expect(summary.outboxRowsCreated).toBe(0);
   });
 });
-
-// Smoke check: the notifications schema is reachable for direct read-back.
-void notifications;

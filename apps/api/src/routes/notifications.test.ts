@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import notificationRoutes from "./notifications.js";
-import { buildTestApp, type TestContext } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createAssignedUserForTest,
+  type TestContext,
+} from "./testHelpers.js";
 import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo.js";
 
 // P5-N1-I3 — Notification Inbox API integration tests (P5-N1-R0 §25.6).
@@ -18,13 +22,11 @@ describe("notification routes", () => {
   beforeAll(async () => {
     ctx = await buildTestApp(notificationRoutes);
     // Create a second user in the same org to prove cross-user isolation.
-    const other = await import("./testHelpers.js").then((m) =>
-      m.createAssignedUserForTest(
-        ctx.db,
-        ctx.org.id,
-        "Candidate",
-        "other-cand",
-      ),
+    const other = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Candidate",
+      "other-cand",
     );
     otherUserId = other.user.id;
     otherToken = other.token;
@@ -286,15 +288,12 @@ describe("notification routes", () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().updated).toBeGreaterThanOrEqual(2);
-      // Follow-up count is 0.
       const countRes = await ctx.app.inject({
         method: "GET",
         url: "/api/notifications/unread-count",
         cookies: { "auth-token": ctx.candidateToken },
       });
-      // Note: count may include rows seeded by other test cases in this file;
-      // the read-all call cleared the actor's unread set at the time of call.
-      void countRes;
+      expect(countRes.json().count).toBe(0);
     });
 
     it("does not touch another user's notifications", async () => {
