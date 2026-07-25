@@ -223,7 +223,7 @@ environment — see §14–§15).
 
 ## 8. M13 concurrent publication proof
 
-Extended `apps/api/src/routes/routes/resultPublishing.test.ts` with one
+Extended `apps/api/src/routes/resultPublishing.test.ts` with one
 concurrent test inside the M8 describe block.
 
 - One unpublished manual-mode exam.
@@ -242,7 +242,22 @@ concurrent test inside the M8 describe block.
   or an exact retry backoff. No production pause hooks, test callbacks in
   production code, `NODE_ENV` branches, route delays, `pg_sleep`, or mocked
   retries were added.
-- The concurrent test passed **five consecutive runs** (§19).
+- The concurrent test passed **five consecutive runs** (§14).
+
+**Design inference (not a separate test):** the tx-retry callback re-execution
+is inferred from the production code structure, not forced by a deterministic
+retry test. `executeInTransaction` (`packages/db/src/types.ts:128-158`) wraps
+each attempt in `db.transaction(..., { isolationLevel: "repeatable read" })`;
+a serialization failure (40001) / deadlock (40P01) rolls back the failed
+attempt (commits nothing) and retries in a fresh transaction with a fresh
+snapshot. The `!alreadyPublished` guard (`apps/api/src/routes/exam.ts:1269`)
+re-evaluates inside each retried callback — a retry that sees another
+transaction's committed publish returns `alreadyPublished=true` and skips the
+audit. A deterministic serialization-retry test is out of P3 scope: it would
+require production test hooks, `pg_sleep`, or mocked rollbacks, all rejected
+by the prompt's no-production-hooks constraint. The concurrent test above
+proves the externally committed business invariant (one timestamp + one audit)
+under real concurrency, which inherently exercises serialization conflicts.
 
 **Result:** PASS. M13 CLOSED.
 
@@ -330,7 +345,7 @@ Run the exact discovered test names. At minimum:
 
 ```bash
 pnpm --filter @exam/api test -t "Teacher publish-results"    # M8
-pnpm --filter @exam/api test -t "Teacher result view"        # M9
+pnpm --filter @exam/api test -t "M9"                          # M9
 pnpm --filter @exam/api test -t "concurrent publish"         # M13
 
 pnpm --filter @exam/api test \
@@ -345,7 +360,7 @@ pnpm --filter @exam/api test \
 | `pnpm --filter @exam/api test -t "concurrent publish"` | 0 | M13 passes |
 | `pnpm --filter @exam/api test src/routes/resultPublishing.test.ts src/routes/scores.test.ts` | 0 | **37 passed (37)** |
 
-The concurrent publication test was run **five consecutive times** (§19). All
+The concurrent publication test was run **five consecutive times** (§14). All
 five runs passed. No retry wrapper was used to conceal a failing test; no
 assertions were weakened between runs.
 

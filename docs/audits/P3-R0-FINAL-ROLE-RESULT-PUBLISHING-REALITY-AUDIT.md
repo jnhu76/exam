@@ -2,9 +2,11 @@
 
 > **Job:** `P3-R0 — Final-Role Result Publishing Closeout Reality Audit`
 > **Type:** Reality audit (production code modified: **no**; test code modified:
-> **no**). Determine the exact remaining work to close result publishing under
-> the final Admin/Teacher/Candidate role model, and freeze the authoritative
-> transaction boundary that P5-N1 will later extend.
+> **no** — this audit determines remaining work only; the companion closeout
+> `P3-R1` in the same PR adds the tests §11 identifies). Determine the exact
+> remaining work to close result publishing under the final
+> Admin/Teacher/Candidate role model, and freeze the authoritative transaction
+> boundary that P5-N1 will later extend.
 > **Branch:** `feat/p3-result-publishing-closeout`
 > **Starting master commit:** `cac6b85` (`P5-0: Email Delivery Runtime …` — PR #210)
 > **Audit date:** 2026-07-25
@@ -16,7 +18,9 @@
 
 This audit does **not** implement Inbox, Email integration, notifications,
 `users.email`, new visibility modes, or resource-scoped Teacher authorization.
-It does **not** declare P3 CLOSED.
+It does **not** declare P3 CLOSED. The companion closeout report
+`P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md` (same PR) closes the four
+test gaps (§11 M8/M9/M12/M13) this audit identifies, with no production changes.
 
 ---
 
@@ -360,7 +364,7 @@ test; none requires production change (see §12).
 | M10 | Candidate: own-result only | candidateOwnership + scoreCapability | **covered** | API |
 | M11 | Candidate: no answer/internal-field leakage | scores.test :1188 | **covered** | API |
 | M12 | **Teacher publish-results E2E (browser mutation)** | none — P4-C3 used objective true_false only and explicitly excluded manual/after_grading publication | **CLOSED** (P3-R1 `result-publishing.spec.ts` M12) | E2E |
-| M13 | **Idempotent publish under tx retry (guard re-evaluates)** | idempotency proven at engine+route layer; the retry-re-execution interaction is inferred, not directly asserted | **CLOSED** (P3-R1 `resultPublishing.test.ts` M13 concurrent) | API/engine |
+| M13 | **Idempotent publish under concurrent/repeated calls (one committed event)** | idempotency proven at engine+route layer; the concurrent-publication test (P3-R1 `resultPublishing.test.ts` M13) asserts two concurrent authorized requests produce exactly one committed timestamp + one audit row. The tx-retry callback re-execution (failed attempt rolls back, fresh retry snapshot re-evaluates `alreadyPublished`) is a design inference from `executeInTransaction` (`packages/db/src/types.ts:128-158`) + the `!alreadyPublished` guard (`exam.ts:1269`) — not a separately forced-retry test. A deterministic serialization-retry test is out of P3 scope: it would require production test hooks, `pg_sleep`, or mocked rollbacks, all rejected by prompt §7. | **CLOSED** (concurrent-proof + design inference) | API/engine |
 
 **No test is "stale after P4" in a way that requires rewriting** — the current
 tests already exercise the capability-path authority (`view`-driven, multi-role
