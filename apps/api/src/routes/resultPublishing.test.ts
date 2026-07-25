@@ -4,7 +4,11 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import type { TestContext } from "./testHelpers.js";
-import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createAssignedUserForTest,
+  uniquePrefix,
+} from "./testHelpers.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
@@ -538,5 +542,298 @@ describe("P2D-J5a: result publishing policy", () => {
       passed: true,
     });
     expect(response.json().questionResults).toHaveLength(1);
+  });
+});
+
+/**
+ * M8 — Teacher publish-results API proof.
+ *
+ * Proves the final P4 assignment-backed Teacher authority for
+ * POST /exams/:id/publish-results. The Teacher is created via
+ * createAssignedUserForTest (writes the users row + the primary active Teacher
+ * assignment), so runtime authority resolves from active assignments — NOT from
+ * a legacy JWT role string alone. The Teacher preset grants ExamResultPublish,
+ * so the flat requireCapability(Permission.ExamResultPublish) gate on the route
+ * allows publication of any same-org exam. Resource-scoped Teacher authorization
+ * (T2, P3-R0 audit note T2) is deferred and deliberately not asserted here.
+ */
+describe("M8: Teacher publish-results capability", () => {
+  let ctx: TestContext;
+  let courseId: string;
+  let questionId: string;
+  let candidateProfileId: string;
+  let teacherToken: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(scoreRoutes, { prefix: "" });
+    });
+    courseId = crypto.randomUUID();
+    questionId = crypto.randomUUID();
+    candidateProfileId = crypto.randomUUID();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Course",
+      code: `M8-${uniquePrefix()}`,
+      description: "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.questions).values({
+      id: questionId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "single_choice",
+      content: "Choose A",
+      options: [
+        { id: "a", content: "A" },
+        { id: "b", content: "B" },
+      ],
+      standardAnswer: "a",
+      attachments: [],
+      score: 10,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const existing = await ctx.db
+      .select({ id: schema.candidateProfiles.id })
+      .from(schema.candidateProfiles)
+      .where(eq(schema.candidateProfiles.userId, ctx.candidate.id));
+    if (existing[0]) {
+      candidateProfileId = existing[0].id;
+    } else {
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id: candidateProfileId,
+        organizationId: ctx.org.id,
+        userId: ctx.candidate.id,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+    // Teacher via assignment-backed authority (capability-driven, not role-name).
+    const teacher = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Teacher",
+      "m8-teacher",
+    );
+    teacherToken = teacher.token;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  async function createPublishedManualExam(): Promise<string> {
+    const createResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: `M8-manual-${uniquePrefix()}`,
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3_600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 6,
+        totalScore: 10,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+        resultPublicationMode: "manual",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createResponse.json().id as string;
+    // Publish the exam (lifecycle) so results publication is allowed.
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    return examId;
+  }
+
+  it("Teacher publish-results: first call publishes, repeat call is idempotent (one audit)", async () => {
+    const examId = await createPublishedManualExam();
+
+    // Sanity: unpublished manual-mode exam.
+    const stored = (await createExamRepo(ctx.db).findById(
+      {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      },
+      examId,
+    )) as { resultsPublishedAt?: Date | null } | null;
+    expect(stored?.resultsPublishedAt).toBeNull();
+
+    // ── Teacher first publish ─────────────────────────────────────────────
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().alreadyPublished).toBe(false);
+    expect(first.json().resultsPublishedAt).toBeTruthy();
+
+    // Exam lifecycle status is unchanged (publication is NOT a status transition).
+    const afterFirst = (await createExamRepo(ctx.db).findById(
+      {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      },
+      examId,
+    )) as { status?: string; resultsPublishedAt?: Date | null } | null;
+    expect(afterFirst?.status).toBe("published");
+    expect(afterFirst?.resultsPublishedAt).toBeTruthy();
+
+    // ── Teacher repeat publish (idempotent) ──────────────────────────────
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().alreadyPublished).toBe(true);
+    expect(second.json().resultsPublishedAt).toBe(
+      first.json().resultsPublishedAt,
+    );
+
+    // Exactly one exam.publish_results audit row exists.
+    const transitionAudits = await ctx.db
+      .select({ id: schema.auditLogs.id })
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.action, "exam.publish_results"),
+          eq(schema.auditLogs.targetId, examId),
+        ),
+      );
+    expect(transitionAudits).toHaveLength(1);
+  });
+
+  /**
+   * M13 — Concurrent publication idempotency.
+   *
+   * Proves that two authorized publish-requests launched concurrently in the
+   * same event-loop turn produce exactly one committed publication event: one
+   * authoritative persisted timestamp and exactly one exam.publish_results audit
+   * row. The invariant is "one committed publication event, one committed
+   * publication audit" — NOT a specific internal PostgreSQL retry count. The
+   * test starts two real concurrent app.inject() calls via Promise.all and
+   * asserts the externally committed business result.
+   */
+  it("concurrent publish: two concurrent requests produce one committed publication", async () => {
+    const examId = await createPublishedManualExam();
+
+    // Sanity: unpublished manual-mode exam.
+    const stored = (await createExamRepo(ctx.db).findById(
+      {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      },
+      examId,
+    )) as { resultsPublishedAt?: Date | null } | null;
+    expect(stored?.resultsPublishedAt).toBeNull();
+
+    // Two independently authenticated actors: Admin + Teacher.
+    // Launch BOTH requests concurrently in the same event-loop turn.
+    const [responseA, responseB] = await Promise.all([
+      ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish-results`,
+        cookies: { "auth-token": ctx.adminToken },
+      }),
+      ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish-results`,
+        cookies: { "auth-token": teacherToken },
+      }),
+    ]);
+
+    // Both requests conform to the documented idempotent route behavior.
+    expect(responseA.statusCode).toBe(200);
+    expect(responseB.statusCode).toBe(200);
+    const bodyA = responseA.json();
+    const bodyB = responseB.json();
+    expect(bodyA.ok).toBe(true);
+    expect(bodyB.ok).toBe(true);
+
+    // Stable under the current implementation: exactly one "winner"
+    // (alreadyPublished=false) and exactly one "observer" (alreadyPublished=true).
+    const alreadyPublishedFlags = [
+      bodyA.alreadyPublished,
+      bodyB.alreadyPublished,
+    ].sort();
+    expect(alreadyPublishedFlags).toEqual([false, true]);
+
+    // The timestamps observed by both callers are identical (one committed event).
+    expect(bodyA.resultsPublishedAt).toBe(bodyB.resultsPublishedAt);
+    expect(bodyA.resultsPublishedAt).toBeTruthy();
+
+    // ── Mandatory persisted invariants ────────────────────────────────────
+    // Final exams.resultsPublishedAt is non-null (one authoritative timestamp).
+    const finalExam = (await createExamRepo(ctx.db).findById(
+      {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      },
+      examId,
+    )) as { resultsPublishedAt?: Date | null } | null;
+    expect(finalExam?.resultsPublishedAt).toBeTruthy();
+
+    // Exactly one exam.publish_results audit row exists (no double audit).
+    const transitionAudits = await ctx.db
+      .select({ id: schema.auditLogs.id })
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.action, "exam.publish_results"),
+          eq(schema.auditLogs.targetId, examId),
+        ),
+      );
+    expect(transitionAudits).toHaveLength(1);
   });
 });
