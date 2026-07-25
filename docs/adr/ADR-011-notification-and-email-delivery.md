@@ -1,9 +1,9 @@
 # ADR-011: Notification Inbox and Email Delivery Architecture
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-07-25, P5-N1-R0)
 - **Date:** 2026-07-23
 - **Owners:** EXAM maintainers
-- **Related:** ADR-003 Job Queue, ADR-001 Redis, P3-MOD-P5 Email Minimal Wiring
+- **Related:** ADR-003 Job Queue, ADR-001 Redis, P5-0 Email Delivery Runtime, P3 Result Publishing Closeout, P5-N1 Notification Inbox
 
 ## 1. Decision
 
@@ -54,22 +54,24 @@ The repository already contains:
 
 The design should extend these boundaries instead of introducing an unrelated utility layer or premature infrastructure.
 
-### 2.1 Current implementation facts (verified from code)
+### 2.1 Current implementation facts (verified from code, 2026-07-25 post-P5-0)
 
-| Aspect | Current state |
-|---|---|
-| `email_outbox.organizationId` | NOT NULL, FK → organizations.id (exists) |
-| `email_outbox.notification_id` | Does not exist; will be added as nullable |
-| `email_outbox.recipient_user_id` | Does not exist; will be added as nullable |
-| `email_outbox` status enum | `pending`, `sent`, `failed` |
-| `email_outbox` locking | No `locked_at`/`locked_by` columns; no `FOR UPDATE SKIP LOCKED` |
-| Worker trigger | `EmailOutboxService.processDueEmails` — manually invoked, no background daemon |
-| `EMAIL_ENABLED=false` | `DisabledEmailSender` (no-op); outbox rows ARE still written |
-| `apps/api/src/notifications/` | Does not exist yet |
-| `apps/api/src/workers/` | Does not exist yet |
-| Frontend routes | `/admin/*`, `/exam/*`, `/login` only |
-| `users` table email column | Does not exist |
-| Diagnostics | `buildEmailStatus` in `apps/api/src/routes/system.ts` — worker status is `unknown` (no resident daemon) |
+| Aspect | Current state | Evidence |
+| --- | --- | --- |
+| `email_outbox.organizationId` | NOT NULL, FK → organizations.id (exists) | `packages/db/src/schema/pg.ts:587-611` |
+| `email_outbox.notification_id` | Does not exist; P5-N1 adds as nullable FK | schema `pg.ts` (absent) |
+| `email_outbox.recipient_user_id` | Does not exist; P5-N1 owns recipient linkage | schema `pg.ts` (absent) |
+| `email_outbox` status enum | `pending`, `processing`, `retry_wait`, `sent`, `dead` (5-state, migrated) | `packages/domain/src/email.ts:31-36`; `packages/db/src/schema/pg.ts:636-638` |
+| `email_outbox` locking | `locked_at`/`locked_by` columns exist; `FOR UPDATE SKIP LOCKED` claim implemented | `packages/db/src/repository/emailOutboxRepo.ts:221-275`; `schema/pg.ts:597-598` |
+| Worker | Resident daemon loop (`apps/api/src/workers/emailDeliveryWorker.ts`) — `while(!shuttingDown)` poll + heartbeat + graceful shutdown | `emailDeliveryWorker.ts:150-235`; script `worker:email` in `apps/api/package.json` |
+| `EMAIL_ENABLED=false` | `DisabledEmailSender` (no-op, returns `{providerMessageId:null}`); enqueue layer is NOT gated by `enabled` (no business caller exists yet) | `apps/api/src/email/senders.ts:40-44,189-192`; `emailDeliveryService.ts:50-70` |
+| `apps/api/src/notifications/` | Does not exist yet (P5-N1 owns) | verified absent |
+| `apps/api/src/workers/` | EXISTS — `emailDeliveryWorker.ts` (P5-0) | `apps/api/src/workers/emailDeliveryWorker.ts` |
+| Frontend routes | `/admin/*`, `/exam/*`, `/login` only; candidate result route is `/exam/:attemptId/result` | `apps/web/src/lib/routes.ts:33-39` |
+| `users` table email column | Does not exist (P5-N1 adds optional `users.email`) | `packages/db/src/schema/pg.ts:106-114`; migrations 0001-0018 |
+| Diagnostics | `buildEmailStatus` exposes `outbox.{pending,processing,retryWait,sent,dead}`, `worker.{status,lastPollAt,...}`, `oldestPendingAge`, `lastSuccessfulDeliveryAt` | `apps/api/src/routes/system.ts:46-166` |
+| Email service name | `EmailDeliveryService` (renamed from `EmailNotificationService` by P5-0) | `apps/api/src/email/emailDeliveryService.ts:29`; zero business callers (verified) |
+| `grade_notification` EmailType | Defined in domain (`email.ts:47`) but NOT yet rendered/enqueued by any caller | `packages/domain/src/email.ts:47` (verified unused by grep) |
 
 ## 3. Architecture
 
