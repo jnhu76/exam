@@ -53,9 +53,28 @@ export function createUserRepo(db: Database) {
     return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
   }
 
+  /**
+   * Batch-loads users by id, scoped to the tenant. Empty input returns [].
+   * Used by the result_published recipient composition (P5-N1-I2) to resolve
+   * userId -> email without an N+1.
+   */
+  async function findByIds(
+    ctx: TenantContext | RequestContext,
+    userIds: string[],
+  ) {
+    if (userIds.length === 0) return [];
+    const orgId = resolveOptionalOrganizationId(ctx);
+    const rows = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.organizationId, orgId), inArray(users.id, userIds)));
+    return rows as (typeof users.$inferSelect)[];
+  }
+
   return {
     ...repo,
     findByOrganizationAndUsername,
+    findByIds,
     /**
      * Finds a user by organization ID and user ID, scoped to the tenant.
      */

@@ -29,8 +29,33 @@ type UserSelect = typeof users.$inferSelect;
 export function createAttemptRepo(db: Database) {
   const repo = createAsyncTenantCrudRepo(db, examAttempts);
 
+  /**
+   * Batch-loads attempts by id, scoped to the tenant. Empty input returns [].
+   * Used by the result_published recipient composition (P5-N1-I2) to avoid an
+   * N+1 over enrollments. Returns at most one row per requested id; missing
+   * ids are simply absent from the result (no error).
+   */
+  async function findByIds(
+    ctx: TenantContext | RequestContext,
+    attemptIds: string[],
+  ) {
+    if (attemptIds.length === 0) return [];
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select()
+      .from(examAttempts)
+      .where(
+        and(
+          eq(examAttempts.organizationId, orgId),
+          inArray(examAttempts.id, attemptIds),
+        ),
+      );
+    return rows as (typeof examAttempts.$inferSelect)[];
+  }
+
   return {
     ...repo,
+    findByIds,
     async findAuthorizationChain(
       ctx: TenantContext | RequestContext,
       attemptId: string,

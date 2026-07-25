@@ -93,6 +93,20 @@ export interface CorsConfig {
   origin: string | string[];
 }
 
+/**
+ * Public web origin used to build absolute URLs in server-generated content
+ * (P5-N1 §12). Currently the only consumer is the grade_notification Email
+ * renderer, which combines `PUBLIC_WEB_ORIGIN` with a validated site-relative
+ * action path to produce an in-Email link back to the candidate result page.
+ *
+ * Validated at boot to an absolute origin (scheme + host[+port], no path).
+ * Defaults to `http://localhost:5173` in non-production so a bare dev run
+ * still works; production requires the env var (fail-fast).
+ */
+export interface PublicWebOriginConfig {
+  origin: string;
+}
+
 export interface FeaturesConfig {
   restoreFrontend: boolean;
   manualExamOpenClose: boolean;
@@ -180,6 +194,7 @@ export interface AppRuntimeConfig {
   timezone: TimezoneConfig;
   email: EmailConfig;
   emailWorker: EmailWorkerConfig;
+  publicWebOrigin: PublicWebOriginConfig;
 }
 
 const DEFAULT_JWT_SECRET = "development-only-change-me";
@@ -384,6 +399,35 @@ function resolveCorsOrigin(
     return parts;
   }
   return raw;
+}
+
+/**
+ * Resolves and validates PUBLIC_WEB_ORIGIN (P5-N1 §12).
+ *
+ * The value is an absolute origin (scheme + host[+port], no path, no trailing
+ * slash). Production requires the env var; non-production defaults to the Vite
+ * dev origin so a bare `pnpm dev` works. The renderer re-validates at combine
+ * time as defense in depth.
+ */
+function resolvePublicWebOrigin(env: NodeJS.ProcessEnv, mode: AppMode): string {
+  let raw: string | undefined;
+  if (mode === "production") {
+    raw = env.PUBLIC_WEB_ORIGIN;
+    if (!raw) {
+      throw new RuntimeConfigError(
+        "PUBLIC_WEB_ORIGIN is required in production (used to build Email links)",
+      );
+    }
+  } else {
+    raw = env.PUBLIC_WEB_ORIGIN || "http://localhost:5173";
+  }
+  const trimmed = raw.replace(/\/+$/, "");
+  if (!/^https?:\/\/[^/]+$/i.test(trimmed)) {
+    throw new RuntimeConfigError(
+      `PUBLIC_WEB_ORIGIN must be an absolute origin (scheme + host[+port], no path, no trailing slash); got: ${raw}`,
+    );
+  }
+  return trimmed;
 }
 
 /**
@@ -648,6 +692,7 @@ export function loadRuntimeConfig(
     timezone: { timezone: resolveTimezone(env) },
     email,
     emailWorker: resolveEmailWorkerConfig(env),
+    publicWebOrigin: { origin: resolvePublicWebOrigin(env, mode) },
   };
 }
 
