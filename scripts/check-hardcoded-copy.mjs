@@ -135,6 +135,24 @@ const CJK_ALLOWLIST = [
     removal:
       "When server-side messages are standardized to English (follow-up); not user-facing.",
   },
+  // ── Backend: server-generated Email + Inbox copy (P5-N1). Per ADR-011 +
+  //    P5-N1-R0 §23, route-local inline zh-CN strings remain until a backend
+  //    Email template engine + i18n is introduced (deferred). The Email body
+  //    is rendered server-side and never passes through the web i18n catalog. ──
+  {
+    path: "apps/api/src/notifications/gradeNotificationEmail.ts",
+    reason:
+      "Server-generated grade_notification Email subject/bodyText/bodyHtml (考试结果已发布). Email is rendered server-side and never routed through the web i18n catalog.",
+    removal:
+      "When a backend Email template engine + i18n is introduced (P5-N1-R0 §23 deferred capability).",
+  },
+  {
+    path: "apps/api/src/notifications/notificationService.ts",
+    reason:
+      "Server-generated result_published Inbox title/body (考试结果已发布 / 您参加的考试「...」的结果已发布). The Inbox row is persisted server-side; its copy does not flow through the web i18n catalog at write time.",
+    removal:
+      "When notification copy is templated + i18n-resolved at read time (P5-N1-R0 §23 deferred capability).",
+  },
   {
     path: "apps/api/src/routes/candidate.ts",
     reason:
