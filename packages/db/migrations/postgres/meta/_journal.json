@@ -127,6 +127,13 @@
       "when": 1785600000000,
       "tag": "0017_email_delivery_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786000000000,
+      "tag": "0018_email_outbox_constraints",
+      "breakpoints": true
     }
   ]
 }

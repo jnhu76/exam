@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
 import type {
   EmailOutboxRow,
   EmailOutboxStatus,
@@ -7,7 +6,7 @@ import type {
   OrganizationScope,
 } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
-import { and, asc, count, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { emailOutbox } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
@@ -129,6 +128,28 @@ export function createEmailOutboxRepo(db: Database) {
   }
 
   /**
+   * Finds the most recently sent row for the organization. Used by diagnostics
+   * to derive `lastSuccessfulDeliveryAt`. Returns null if no sent rows exist.
+   */
+  async function findLastSent(
+    ctx: EmailRepoContext,
+    limit: number,
+  ): Promise<EmailOutboxRow | null> {
+    const rows = await db
+      .select()
+      .from(emailOutbox)
+      .where(
+        and(
+          eq(emailOutbox.organizationId, resolveOrgId(ctx)),
+          eq(emailOutbox.status, "sent"),
+        ),
+      )
+      .orderBy(desc(emailOutbox.sentAt), desc(emailOutbox.id))
+      .limit(limit);
+    return (rows[0] as EmailOutboxRow | undefined) ?? null;
+  }
+
+  /**
    * Finds a single outbox row by id, scoped to the organization.
    * Returns `null` if not found or outside the organization boundary.
    */
@@ -212,12 +233,9 @@ export function createEmailOutboxRepo(db: Database) {
     const result = await executeInTransaction(
       db,
       async (tx) => {
-        // Format the timestamp as a PostgreSQL literal string to avoid
-        // Drizzle's Date->string serialization which postgres.js rejects
-        // for timestamptz parameters. We use sql.raw() to inline the
-        // literal directly into the SQL text.
-        const ts = nowDate.toISOString();
-        const tsLiteral = sql.raw(`'${ts}'::timestamptz`);
+        // Pass the timestamp as a bound parameter and cast to timestamptz.
+        // This is fully parameterized — no string interpolation of user input.
+        const tsParam = sql`${nowDate.toISOString()}::timestamptz`;
 
         const rows = tx.execute<Record<string, unknown>>(
           sql`
@@ -229,7 +247,7 @@ export function createEmailOutboxRepo(db: Database) {
                   status = 'pending'
                   OR (
                     status = 'retry_wait'
-                    AND next_attempt_at <= ${tsLiteral}
+                    AND next_attempt_at <= ${tsParam}
                   )
                 )
               ORDER BY created_at ASC, id ASC
@@ -239,10 +257,10 @@ export function createEmailOutboxRepo(db: Database) {
             UPDATE email_outbox AS outbox
             SET
               status = 'processing',
-              locked_at = ${tsLiteral},
+              locked_at = ${tsParam},
               locked_by = ${workerInstanceId},
               attempt_count = outbox.attempt_count + 1,
-              updated_at = ${tsLiteral}
+              updated_at = ${tsParam}
             FROM candidates
             WHERE outbox.id = candidates.id
             RETURNING outbox.*;
@@ -290,13 +308,17 @@ export function createEmailOutboxRepo(db: Database) {
   /**
    * Marks a processing row as `sent`. Sets the terminal status, sent timestamp,
    * provider message ID, and clears lock fields and nextAttemptAt.
-   * Returns the updated row or `null` if not found / outside organization.
+   *
+   * Ownership-fenced: only succeeds if the row is still `processing` and locked
+   * by the given `workerInstanceId`. Returns `null` if ownership was lost
+   * (another worker recovered and re-claimed the row) or the row doesn't exist.
    */
   async function markSent(
     ctx: EmailRepoContext,
     id: string,
     sentAt: Date,
     providerMessageId: string | null,
+    workerInstanceId: string,
   ): Promise<EmailOutboxRow | null> {
     const [updated] = await db
       .update(emailOutbox)
@@ -313,6 +335,8 @@ export function createEmailOutboxRepo(db: Database) {
         and(
           eq(emailOutbox.organizationId, resolveOrgId(ctx)),
           eq(emailOutbox.id, id),
+          eq(emailOutbox.status, "processing"),
+          eq(emailOutbox.lockedBy, workerInstanceId),
         ),
       )
       .returning();
@@ -325,6 +349,9 @@ export function createEmailOutboxRepo(db: Database) {
    * sets status to `retry_wait`. The caller supplies the post-increment
    * `attemptCount` value and the computed retry time so retry arithmetic lives
    * in one testable place (`computeNextRetryAt`).
+   *
+   * Ownership-fenced: only succeeds if the row is still `processing` and locked
+   * by the given `workerInstanceId`. Returns `null` if ownership was lost.
    */
   async function markRetryWait(
     ctx: EmailRepoContext,
@@ -332,6 +359,7 @@ export function createEmailOutboxRepo(db: Database) {
     attemptCount: number,
     lastError: string,
     nextAttemptAt: Date,
+    workerInstanceId: string,
   ): Promise<EmailOutboxRow | null> {
     const [updated] = await db
       .update(emailOutbox)
@@ -348,6 +376,8 @@ export function createEmailOutboxRepo(db: Database) {
         and(
           eq(emailOutbox.organizationId, resolveOrgId(ctx)),
           eq(emailOutbox.id, id),
+          eq(emailOutbox.status, "processing"),
+          eq(emailOutbox.lockedBy, workerInstanceId),
         ),
       )
       .returning();
@@ -359,12 +389,16 @@ export function createEmailOutboxRepo(db: Database) {
    * sanitized `lastError`, sets status to `dead`, clears lock fields and
    * `nextAttemptAt`. Used when the send fails and `attemptCount` has reached
    * `maxAttempts`.
+   *
+   * Ownership-fenced: only succeeds if the row is still `processing` and locked
+   * by the given `workerInstanceId`. Returns `null` if ownership was lost.
    */
   async function markDead(
     ctx: EmailRepoContext,
     id: string,
     attemptCount: number,
     lastError: string,
+    workerInstanceId: string,
   ): Promise<EmailOutboxRow | null> {
     const [updated] = await db
       .update(emailOutbox)
@@ -381,6 +415,8 @@ export function createEmailOutboxRepo(db: Database) {
         and(
           eq(emailOutbox.organizationId, resolveOrgId(ctx)),
           eq(emailOutbox.id, id),
+          eq(emailOutbox.status, "processing"),
+          eq(emailOutbox.lockedBy, workerInstanceId),
         ),
       )
       .returning();
@@ -425,6 +461,7 @@ export function createEmailOutboxRepo(db: Database) {
     create,
     findById,
     findDuePending,
+    findLastSent,
     claimDue,
     recoverAbandoned,
     markSent,

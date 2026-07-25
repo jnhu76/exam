@@ -13,6 +13,8 @@ export interface ProcessResult {
   retryWait: number;
   /** Rows moved to terminal `dead` (maxAttempts reached). */
   dead: number;
+  /** Rows whose ownership was lost before finalize (stale-worker ack suppressed). */
+  ownershipLost: number;
 }
 
 /**
@@ -70,6 +72,7 @@ export class EmailOutboxService {
       sent: 0,
       retryWait: 0,
       dead: 0,
+      ownershipLost: 0,
     };
 
     // Claim due rows atomically (one READ COMMITTED transaction)
@@ -90,55 +93,77 @@ export class EmailOutboxService {
           text: row.bodyText,
           ...(row.bodyHtml ? { html: row.bodyHtml } : {}),
         });
-        // Mark sent (short ownership-fenced update, not a transaction)
-        await repo.markSent(
+        // Mark sent (ownership-fenced: only if still locked by us)
+        const sent = await repo.markSent(
           ctx,
           row.id,
           opts.now,
           sendResult.providerMessageId,
+          opts.workerInstanceId,
         );
-        result.sent += 1;
+        if (sent) {
+          result.sent += 1;
+        } else {
+          // Ownership was lost (another worker recovered + re-claimed this row).
+          // Do NOT count as success — the row will be retried by the new owner.
+          result.ownershipLost += 1;
+        }
       } catch (err) {
         // attemptCount is already incremented by the claim SQL
         const currentAttemptCount = row.attemptCount;
         const lastError = sanitizeEmailError(err, this.deps.scrubSecrets ?? []);
         if (currentAttemptCount >= row.maxAttempts) {
-          await repo.markDead(ctx, row.id, currentAttemptCount, lastError);
-          result.dead += 1;
-          this.deps.auditEmitter?.({
-            action: "email.send_failed",
-            targetType: "email_outbox",
-            targetId: row.id,
-            metadata: {
-              outboxId: row.id,
-              attempts: currentAttemptCount,
-              lastError,
-            },
-          });
+          const dead = await repo.markDead(
+            ctx,
+            row.id,
+            currentAttemptCount,
+            lastError,
+            opts.workerInstanceId,
+          );
+          if (dead) {
+            result.dead += 1;
+            this.deps.auditEmitter?.({
+              action: "email.send_failed",
+              targetType: "email_outbox",
+              targetId: row.id,
+              metadata: {
+                outboxId: row.id,
+                attempts: currentAttemptCount,
+                lastError,
+              },
+            });
+          } else {
+            result.ownershipLost += 1;
+          }
         } else {
           const nextAttemptAt = computeNextRetryAt(
             opts.now,
             currentAttemptCount,
             this.deps.retryBaseSeconds,
           );
-          await repo.markRetryWait(
+          const retried = await repo.markRetryWait(
             ctx,
             row.id,
             currentAttemptCount,
             lastError,
             nextAttemptAt,
+            opts.workerInstanceId,
           );
-          result.retryWait += 1;
-          this.deps.auditEmitter?.({
-            action: "email.send_retried",
-            targetType: "email_outbox",
-            targetId: row.id,
-            metadata: {
-              outboxId: row.id,
-              attempts: currentAttemptCount,
-              nextAttemptAt: nextAttemptAt.toISOString(),
-            },
-          });
+          if (retried) {
+            result.retryWait += 1;
+            this.deps.auditEmitter?.({
+              action: "email.send_retried",
+              targetType: "email_outbox",
+              targetId: row.id,
+              metadata: {
+                outboxId: row.id,
+                attempts: currentAttemptCount,
+                nextAttemptAt: nextAttemptAt.toISOString(),
+              },
+            });
+          } else {
+            result.ownershipLost += 1;
+          }
         }
       }
     }

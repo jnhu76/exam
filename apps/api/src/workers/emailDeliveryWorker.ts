@@ -31,9 +31,6 @@ import { hostname } from "node:os";
 // ── Constants ──────────────────────────────────────────────────────
 
 const WORKER_NAME = "email-delivery";
-const POLL_INTERVAL_MS = 5_000; // 5 seconds between polls
-const DEFAULT_BATCH_SIZE = 20;
-const LOCK_TIMEOUT_MS = 300_000; // 5 minutes — abandoned processing rows
 
 // ── State ───────────────────────────────────────────────────────────
 
@@ -58,20 +55,16 @@ function log(level: string, msg: string, meta?: Record<string, unknown>) {
 
 // ── Shutdown handling ───────────────────────────────────────────────
 
-function setupShutdown(cleanup: () => Promise<void>): void {
-  const handleSignal = async (signal: string) => {
+/**
+ * Registers signal handlers that set the `shuttingDown` flag and interrupt
+ * the poll-loop sleep. The actual resource cleanup happens in `main()` after
+ * the current poll cycle finishes — NOT in the signal handler itself.
+ */
+function setupShutdown(): void {
+  const handleSignal = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log("info", `received ${signal}, starting graceful shutdown`);
-    try {
-      await cleanup();
-    } catch (err) {
-      log("error", "shutdown error", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    log("info", "shutdown complete");
-    process.exit(0);
+    log("info", `received ${signal}, will shutdown after current poll`);
   };
 
   process.on("SIGTERM", () => handleSignal("SIGTERM"));
@@ -85,6 +78,11 @@ async function main(): Promise<void> {
 
   const config = getRuntimeConfig();
   const workerInstanceId = `${hostname()}-${process.pid}-${randomUUID()}`;
+  const {
+    pollIntervalMs: POLL_INTERVAL_MS,
+    batchSize: DEFAULT_BATCH_SIZE,
+    lockTimeoutMs: LOCK_TIMEOUT_MS,
+  } = config.emailWorker;
 
   log("info", "worker identity", {
     workerName: WORKER_NAME,
@@ -102,31 +100,13 @@ async function main(): Promise<void> {
   log("info", "running migrations");
   await migratePostgres(db);
 
-  // 2. Resolve default organization
+  // 2. Resolve default organization (no Admin context — uses branding resolver)
   const orgRepo = createOrganizationRepo(db);
-  const orgs = await orgRepo.list({
-    actorId: "worker",
-    organizationId: "system",
-    role: "Admin",
-    permissions: [],
-    sessionId: "worker",
+  const defaultOrg = await orgRepo.resolveBrandingTenant({
+    purpose: "public_branding",
   });
 
-  if (orgs.length === 0) {
-    log("error", "no default organization found — cannot start");
-    await sql.end();
-    process.exit(1);
-  }
-  if (orgs.length > 1) {
-    log(
-      "error",
-      `multiple organizations found (${orgs.length}) — cannot determine default`,
-    );
-    await sql.end();
-    process.exit(1);
-  }
-
-  const organizationId = orgs[0]!.id;
+  const organizationId = defaultOrg.id;
   const orgScope = { organizationId };
   log("info", "resolved default organization", { organizationId });
 
@@ -157,20 +137,8 @@ async function main(): Promise<void> {
       : [],
   });
 
-  // 5. Setup graceful shutdown
-  const cleanup = async () => {
-    log("info", "closing sender");
-    try {
-      await sender.close?.();
-    } catch (err) {
-      log("error", "sender close error", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    log("info", "closing database connection");
-    await sql.end();
-  };
-  setupShutdown(cleanup);
+  // 5. Setup graceful shutdown (signal handler only sets the flag)
+  setupShutdown();
 
   // 6. Main poll loop
   log("info", "starting poll loop", {
@@ -208,16 +176,17 @@ async function main(): Promise<void> {
           sent: result.sent,
           retryWait: result.retryWait,
           dead: result.dead,
+          ownershipLost: result.ownershipLost,
         });
       }
 
-      // 6c. Persist heartbeat
+      // 6c. Persist heartbeat (lastSuccessAt = every successful poll)
       try {
         await heartbeatRepo.upsert({
           workerName: WORKER_NAME,
           workerInstanceId,
           lastPollAt: pollStart,
-          lastSuccessAt: result.processed > 0 ? pollStart : null,
+          lastSuccessAt: pollStart,
           lastErrorAt: null,
           lastError: null,
         });
@@ -251,6 +220,19 @@ async function main(): Promise<void> {
       await sleep(POLL_INTERVAL_MS);
     }
   }
+
+  // 7. Shutdown: current poll cycle has finished; close resources.
+  log("info", "shutting down — closing sender");
+  try {
+    await sender.close?.();
+  } catch (err) {
+    log("error", "sender close error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  log("info", "closing database connection");
+  await sql.end();
+  log("info", "shutdown complete");
 }
 
 function sleep(ms: number): Promise<void> {

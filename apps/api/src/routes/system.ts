@@ -92,7 +92,7 @@ async function buildEmailStatus(
 
     // Read worker heartbeat
     const heartbeat = await heartbeatRepo.findLatestByName("email-delivery");
-    const staleThresholdMs = 60_000; // 1 minute without heartbeat = degraded
+    const staleThresholdMs = config.emailWorker.heartbeatStaleThresholdMs;
     let workerStatus: "available" | "degraded" | "unknown" = "unknown";
     let lastPollAt: string | null = null;
     let lastSuccessAt: string | null = null;
@@ -120,10 +120,11 @@ async function buildEmailStatus(
       );
     }
 
-    // Determine last successful delivery
+    // Determine last successful delivery from actual outbox data
     let lastSuccessfulDeliveryAt: string | null = null;
-    if (heartbeat?.lastSuccessAt) {
-      lastSuccessfulDeliveryAt = heartbeat.lastSuccessAt.toISOString();
+    const lastSentRow = await emailRepo.findLastSent(ctx, 1);
+    if (lastSentRow) {
+      lastSuccessfulDeliveryAt = lastSentRow.sentAt!.toISOString();
     }
 
     // Overall status
