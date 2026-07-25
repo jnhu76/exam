@@ -37,6 +37,7 @@ function createContext(organizationId: string): RequestContext {
 
 const PUBLIC_WEB_ORIGIN = "https://exam.example.local";
 const EMAIL_MAX_ATTEMPTS = 3;
+const NOW = new Date("2026-07-25T12:00:00.000Z");
 
 describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
   let db: Database;
@@ -105,6 +106,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
           recipients: [],
           publicWebOrigin: PUBLIC_WEB_ORIGIN,
           emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+          now: NOW,
         },
         { userId: recipientUserId, email: "cand@example.com", attemptId },
       );
@@ -154,6 +156,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
           recipients: [],
           publicWebOrigin: PUBLIC_WEB_ORIGIN,
           emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+          now: NOW,
         },
         { userId: recipientUserId, email: null, attemptId },
       );
@@ -183,6 +186,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
       recipients: [] as never[],
       publicWebOrigin: PUBLIC_WEB_ORIGIN,
       emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+      now: NOW,
     };
 
     // First dispatch.
@@ -261,6 +265,7 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
             recipients: [],
             publicWebOrigin: PUBLIC_WEB_ORIGIN,
             emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+            now: NOW,
           },
           { userId: recipientUserId, email: "cand@example.com", attemptId },
         );
@@ -361,6 +366,7 @@ describe("dispatchResultPublishedFanOut", () => {
         recipients,
         publicWebOrigin: PUBLIC_WEB_ORIGIN,
         emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+        now: NOW,
       });
     });
 
@@ -380,6 +386,7 @@ describe("dispatchResultPublishedFanOut", () => {
         recipients: [],
         publicWebOrigin: PUBLIC_WEB_ORIGIN,
         emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+        now: NOW,
       });
     });
     expect(summary.recipientsProcessed).toBe(0);

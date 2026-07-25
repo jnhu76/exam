@@ -19840,7 +19840,7 @@
                           },
                           "actionPath": {
                             "type": "string",
-                            "nullable": true
+                            "pattern": "^\\/exam\\/[A-Za-z0-9_-]+\\/result$"
                           },
                           "createdAt": {
                             "type": "string",
@@ -20059,7 +20059,7 @@
                     },
                     "actionPath": {
                       "type": "string",
-                      "nullable": true
+                      "pattern": "^\\/exam\\/[A-Za-z0-9_-]+\\/result$"
                     },
                     "createdAt": {
                       "type": "string",

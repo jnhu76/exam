@@ -36,7 +36,7 @@ function toDTO(row: {
   type: string;
   title: string;
   body: string;
-  actionPath: string | null;
+  actionPath: string;
   createdAt: Date;
   readAt: Date | null;
 }) {
@@ -149,7 +149,7 @@ const notificationRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = getRequestContext(request);
       const { id } = request.params as { id: string };
       const repo = createNotificationRepo(fastify.db);
-      const updated = await repo.markRead(ctx, ctx.actorId, id);
+      const updated = await repo.markRead(ctx, ctx.actorId, id, fastify.now());
       if (!updated) {
         return reply
           .code(404)
@@ -178,7 +178,7 @@ const notificationRoutes: FastifyPluginAsync = async (fastify) => {
     async (request) => {
       const ctx = getRequestContext(request);
       const repo = createNotificationRepo(fastify.db);
-      const updated = await repo.markAllRead(ctx, ctx.actorId);
+      const updated = await repo.markAllRead(ctx, ctx.actorId, fastify.now());
       return { updated };
     },
   );

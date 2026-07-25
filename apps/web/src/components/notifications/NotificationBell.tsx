@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Bell } from "lucide-react";
-import type { NotificationDTO, PaginatedResponse } from "@exam/contracts";
+import type {
+  NotificationDTO,
+  PaginatedResponse,
+  UnreadCountResponse,
+} from "@exam/contracts";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,11 +42,6 @@ const PANEL_PAGE_SIZE = 20;
 
 /** Response shape for GET /notifications. */
 type NotificationListResponse = PaginatedResponse<NotificationDTO>;
-
-/** Response shape for GET /notifications/unread-count. */
-interface UnreadCountResponse {
-  count: number;
-}
 
 /**
  * Bell icon + unread badge + popover panel for the candidate Inbox.
@@ -114,16 +113,16 @@ export function NotificationBell() {
 
   const handleOpenNotification = useCallback(
     async (notification: NotificationDTO) => {
-      // Mark one read (idempotent server-side; ignore errors so a transient
-      // failure does not block navigation).
+      const wasUnread = notification.readAt == null;
       try {
         await api.post(`/api/notifications/${notification.id}/read`);
       } catch {
         // Non-fatal: the user can still navigate; the row will be marked on
         // the next open.
       }
-      // Optimistically decrement + refresh.
-      setUnreadCount((c) => Math.max(0, c - 1));
+      if (wasUnread) {
+        setUnreadCount((c) => Math.max(0, c - 1));
+      }
       setList((items) =>
         items.map((n) =>
           n.id === notification.id
@@ -132,11 +131,8 @@ export function NotificationBell() {
         ),
       );
       void refreshCount();
-      // Navigate to the authoritative result page if actionable.
-      if (notification.actionPath) {
-        setOpen(false);
-        navigate(notification.actionPath);
-      }
+      setOpen(false);
+      navigate(notification.actionPath);
     },
     [navigate, refreshCount],
   );

@@ -1262,12 +1262,13 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       let result: { exam: Exam; alreadyPublished: boolean } | null = null;
+      const operationNow = fastify.now();
       try {
         result = await executeInTransaction(fastify.db, async (tx) => {
           const published = await publishResults(
             createExamRepoAdapter(createExamRepo(tx), ctx),
             id,
-            fastify.now(),
+            operationNow,
           );
           if (!published.alreadyPublished) {
             await recordAtomicHttpAudit(tx, request, ctx, {
@@ -1299,6 +1300,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                 recipients,
                 publicWebOrigin: config.publicWebOrigin.origin,
                 emailMaxAttempts: config.email.maxAttempts,
+                now: operationNow,
               });
             }
           }

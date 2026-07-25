@@ -42,10 +42,11 @@ export function buildResultPublishedActionPath(attemptId: string): string {
 }
 
 /**
- * Re-validates a stored action path at render time. Returns true for null
- * (a notification may be non-actionable) or any path that matches the V1
- * trusted-builder pattern. Rejects every off-site / traversal / control-char
- * shape so a tampered row cannot become an external Email link.
+ * Re-validates a stored action path at render time. Returns true for any
+ * path that matches the V1 trusted-builder pattern. Rejects every off-site /
+ * traversal / control-char shape so a tampered row cannot become an external
+ * Email link. V1 action_path is NOT NULL; the null guard is retained as
+ * defense-in-depth for legacy/tampered rows only.
  *
  * Thin wrapper over the contract validator so the API never re-implements
  * the regex.
@@ -83,11 +84,11 @@ export function buildAbsoluteResultLink(
 }
 
 /**
- * Convenience: extracts the action path from a notification DTO, returning
- * null for non-actionable notifications. Used by the renderer.
+ * Convenience: extracts the action path from a notification DTO.
+ * V1 notifications are always actionable (action_path NOT NULL).
  */
 export function actionPathOf(
   notification: Pick<NotificationDTO, "actionPath">,
-): string | null {
+): string {
   return notification.actionPath;
 }

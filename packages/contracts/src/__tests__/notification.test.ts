@@ -31,12 +31,13 @@ describe("NotificationSchema (read DTO)", () => {
     type: "result_published",
     title: "考试结果已发布",
     body: "您的考试结果已发布，点击查看。",
+    actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
     createdAt: "2026-07-25T00:00:00.000Z",
     readAt: null,
   };
 
-  it("accepts a minimal unread notification (actionPath null)", () => {
-    const result = NotificationSchema.safeParse({ ...base, actionPath: null });
+  it("accepts a minimal unread notification", () => {
+    const result = NotificationSchema.safeParse(base);
     expect(result.success).toBe(true);
   });
 
@@ -51,10 +52,14 @@ describe("NotificationSchema (read DTO)", () => {
   it("accepts a read notification (readAt set)", () => {
     const result = NotificationSchema.safeParse({
       ...base,
-      actionPath: null,
       readAt: "2026-07-25T01:00:00.000Z",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects a null actionPath (V1 NOT NULL contract)", () => {
+    const result = NotificationSchema.safeParse({ ...base, actionPath: null });
+    expect(result.success).toBe(false);
   });
 
   it("rejects an unknown notification type", () => {
@@ -68,10 +73,7 @@ describe("NotificationSchema (read DTO)", () => {
   it("rejects a notification missing required title", () => {
     const { title: _omit, ...withoutTitle } = base;
     void _omit;
-    const result = NotificationSchema.safeParse({
-      ...withoutTitle,
-      actionPath: null,
-    });
+    const result = NotificationSchema.safeParse(withoutTitle);
     expect(result.success).toBe(false);
   });
 });
@@ -167,7 +169,7 @@ describe("NotificationListResponseSchema (paginated)", () => {
           type: "result_published",
           title: "t",
           body: "b",
-          actionPath: null,
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
           createdAt: "2026-07-25T00:00:00.000Z",
           readAt: null,
         },

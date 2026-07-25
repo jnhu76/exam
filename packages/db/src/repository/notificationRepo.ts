@@ -7,7 +7,6 @@ import type {
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { notifications } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
-import { now } from "./baseRepo.js";
 
 /**
  * Context type accepted by notification repo methods.
@@ -37,7 +36,7 @@ export interface CreateNotificationInput {
   type: NotificationType;
   title: string;
   body: string;
-  actionPath?: string | null;
+  actionPath: string;
   dedupeKey?: string | null;
 }
 
@@ -82,8 +81,9 @@ export function createNotificationRepo(db: Database) {
   async function insert(
     ctx: NotificationRepoContext,
     input: CreateNotificationInput,
+    at: Date,
   ): Promise<InsertResult> {
-    const timestamp = now();
+    const timestamp = at;
     const id = randomUUID();
     const organizationId = resolveOrgId(ctx);
     const dedupeKey = input.dedupeKey ?? null;
@@ -102,7 +102,7 @@ export function createNotificationRepo(db: Database) {
         type: input.type,
         title: input.title,
         body: input.body,
-        actionPath: input.actionPath ?? null,
+        actionPath: input.actionPath,
         createdAt: timestamp,
         readAt: null,
         dedupeKey,
@@ -147,10 +147,11 @@ export function createNotificationRepo(db: Database) {
   async function insertMany(
     ctx: NotificationRepoContext,
     inputs: CreateNotificationInput[],
+    at: Date,
   ): Promise<{ insertedCount: number }> {
     if (inputs.length === 0) return { insertedCount: 0 };
     const organizationId = resolveOrgId(ctx);
-    const timestamp = now();
+    const timestamp = at;
     const rows = inputs.map((input) => ({
       id: randomUUID(),
       organizationId,
@@ -158,7 +159,7 @@ export function createNotificationRepo(db: Database) {
       type: input.type,
       title: input.title,
       body: input.body,
-      actionPath: input.actionPath ?? null,
+      actionPath: input.actionPath,
       createdAt: timestamp,
       readAt: null,
       dedupeKey: input.dedupeKey ?? null,
@@ -236,11 +237,12 @@ export function createNotificationRepo(db: Database) {
     ctx: NotificationRepoContext,
     recipientUserId: string,
     notificationId: string,
+    at: Date,
   ): Promise<NotificationRow | null> {
     const organizationId = resolveOrgId(ctx);
     const [updated] = await db
       .update(notifications)
-      .set({ readAt: now() })
+      .set({ readAt: at })
       .where(
         and(
           eq(notifications.organizationId, organizationId),
@@ -274,11 +276,12 @@ export function createNotificationRepo(db: Database) {
   async function markAllRead(
     ctx: NotificationRepoContext,
     recipientUserId: string,
+    at: Date,
   ): Promise<number> {
     const organizationId = resolveOrgId(ctx);
     const result = await db
       .update(notifications)
-      .set({ readAt: now() })
+      .set({ readAt: at })
       .where(
         and(
           eq(notifications.organizationId, organizationId),

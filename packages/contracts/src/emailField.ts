@@ -7,7 +7,7 @@ import { z } from "zod";
  * (the first V1 use case is the `result_published` Inbox + Email outbox). It
  * is:
  *   - optional on every write surface;
- *   - normalized: trim, then lowercase (the repository's chosen rule);
+ *   - normalized: trim-only (preserves validated spelling/case);
  *   - blank / whitespace-only / empty -> absent (the route stores `null`);
  *   - validated by `z.string().email()` after normalization;
  *   - capped at 320 characters (RFC 5321 practical ceiling);
@@ -24,8 +24,9 @@ export const EMAIL_MAX_LENGTH = 320;
 
 /**
  * Normalizes a raw email input: trims surrounding whitespace, collapses an
- * empty/whitespace-only string to `undefined` (so callers store `null`), and
- * lowercases the result. Returns `undefined` for `undefined`/`null` input.
+ * empty/whitespace-only string to `undefined` (so callers store `null`).
+ * Preserves validated spelling/case (trim-only normalization).
+ * Returns `undefined` for `undefined`/`null` input.
  */
 export function normalizeEmailInput(
   value: string | undefined | null,
@@ -33,14 +34,14 @@ export function normalizeEmailInput(
   if (value == null) return undefined;
   const trimmed = value.trim();
   if (trimmed === "") return undefined;
-  return trimmed.toLowerCase();
+  return trimmed;
 }
 
 /**
  * Zod schema for an optional write-side email field.
  *
  * Accepts a string (or undefined). Blank/whitespace-only normalizes to
- * `undefined`. Otherwise the trimmed+lowercased value must pass
+ * `undefined`. Otherwise the trimmed value must pass
  * `z.string().email()` and be no longer than {@link EMAIL_MAX_LENGTH}.
  *
  * Use this on create/update request schemas where the email is optional.

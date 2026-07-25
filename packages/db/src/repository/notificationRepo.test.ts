@@ -9,6 +9,8 @@ import { notifications } from "../schema/pg.js";
 import type { Database } from "../types.js";
 import { eq } from "drizzle-orm";
 
+const AT = new Date("2026-07-25T12:00:00.000Z");
+
 function createContext(organizationId: string): RequestContext {
   return {
     actorId: randomUUID(),
@@ -31,7 +33,7 @@ async function seedRow(
     type?: string;
     title?: string;
     body?: string;
-    actionPath?: string | null;
+    actionPath?: string;
     createdAt?: Date;
     readAt?: Date | null;
     dedupeKey?: string | null;
@@ -47,7 +49,8 @@ async function seedRow(
       type: (args.type ?? "result_published") as never,
       title: args.title ?? "t",
       body: args.body ?? "b",
-      actionPath: args.actionPath ?? null,
+      actionPath:
+        args.actionPath ?? "/exam/00000000-0000-4000-8000-00000000000a/result",
       createdAt: ts,
       readAt: args.readAt ?? null,
       dedupeKey: args.dedupeKey ?? null,
@@ -116,14 +119,18 @@ describe("notificationRepo", () => {
     it("creates a new notification and returns it with created=true", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const { row, created } = await repo.insert(ctx, {
-        recipientUserId: recipientA,
-        type: "result_published",
-        title: "考试结果已发布",
-        body: "您的考试结果已发布。",
-        actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
-        dedupeKey: "result_published:exam-A",
-      });
+      const { row, created } = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientA,
+          type: "result_published",
+          title: "考试结果已发布",
+          body: "您的考试结果已发布。",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+          dedupeKey: "result_published:exam-A",
+        },
+        AT,
+      );
       expect(created).toBe(true);
       expect(row.organizationId).toBe(orgId);
       expect(row.recipientUserId).toBe(recipientA);
@@ -136,21 +143,31 @@ describe("notificationRepo", () => {
     it("is idempotent on a duplicate dedupe key (returns existing, created=false)", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const first = await repo.insert(ctx, {
-        recipientUserId: recipientB,
-        type: "result_published",
-        title: "first",
-        body: "b",
-        dedupeKey: "result_published:exam-dedupe",
-      });
+      const first = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientB,
+          type: "result_published",
+          title: "first",
+          body: "b",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+          dedupeKey: "result_published:exam-dedupe",
+        },
+        AT,
+      );
       expect(first.created).toBe(true);
-      const second = await repo.insert(ctx, {
-        recipientUserId: recipientB,
-        type: "result_published",
-        title: "second-should-be-ignored",
-        body: "b",
-        dedupeKey: "result_published:exam-dedupe",
-      });
+      const second = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientB,
+          type: "result_published",
+          title: "second-should-be-ignored",
+          body: "b",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+          dedupeKey: "result_published:exam-dedupe",
+        },
+        AT,
+      );
       expect(second.created).toBe(false);
       // Same row, NOT the second input.
       expect(second.row.id).toBe(first.row.id);
@@ -160,20 +177,30 @@ describe("notificationRepo", () => {
     it("allows the same dedupe key for DIFFERENT recipients (no conflict)", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const a = await repo.insert(ctx, {
-        recipientUserId: recipientA,
-        type: "result_published",
-        title: "to A",
-        body: "b",
-        dedupeKey: "result_published:exam-shared",
-      });
-      const b = await repo.insert(ctx, {
-        recipientUserId: recipientB,
-        type: "result_published",
-        title: "to B",
-        body: "b",
-        dedupeKey: "result_published:exam-shared",
-      });
+      const a = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientA,
+          type: "result_published",
+          title: "to A",
+          body: "b",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+          dedupeKey: "result_published:exam-shared",
+        },
+        AT,
+      );
+      const b = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientB,
+          type: "result_published",
+          title: "to B",
+          body: "b",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+          dedupeKey: "result_published:exam-shared",
+        },
+        AT,
+      );
       expect(a.created).toBe(true);
       expect(b.created).toBe(true);
       expect(a.row.id).not.toBe(b.row.id);
@@ -182,18 +209,28 @@ describe("notificationRepo", () => {
     it("creates multiple rows when dedupeKey is null (no dedupe applied)", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const a = await repo.insert(ctx, {
-        recipientUserId: recipientA,
-        type: "result_published",
-        title: "no-key-1",
-        body: "b",
-      });
-      const b = await repo.insert(ctx, {
-        recipientUserId: recipientA,
-        type: "result_published",
-        title: "no-key-2",
-        body: "b",
-      });
+      const a = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientA,
+          type: "result_published",
+          title: "no-key-1",
+          body: "b",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+        },
+        AT,
+      );
+      const b = await repo.insert(
+        ctx,
+        {
+          recipientUserId: recipientA,
+          type: "result_published",
+          title: "no-key-2",
+          body: "b",
+          actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+        },
+        AT,
+      );
       expect(a.created).toBe(true);
       expect(b.created).toBe(true);
       expect(a.row.id).not.toBe(b.row.id);
@@ -206,22 +243,28 @@ describe("notificationRepo", () => {
       const ctx = createContext(orgId);
       const r1 = await createTestUser(orgId);
       const r2 = await createTestUser(orgId);
-      const result = await repo.insertMany(ctx, [
-        {
-          recipientUserId: r1,
-          type: "result_published",
-          title: "batch-1",
-          body: "b",
-          dedupeKey: "result_published:batch-r1",
-        },
-        {
-          recipientUserId: r2,
-          type: "result_published",
-          title: "batch-2",
-          body: "b",
-          dedupeKey: "result_published:batch-r2",
-        },
-      ]);
+      const result = await repo.insertMany(
+        ctx,
+        [
+          {
+            recipientUserId: r1,
+            type: "result_published",
+            title: "batch-1",
+            body: "b",
+            actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+            dedupeKey: "result_published:batch-r1",
+          },
+          {
+            recipientUserId: r2,
+            type: "result_published",
+            title: "batch-2",
+            body: "b",
+            actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+            dedupeKey: "result_published:batch-r2",
+          },
+        ],
+        AT,
+      );
       expect(result.insertedCount).toBe(2);
     });
 
@@ -230,32 +273,42 @@ describe("notificationRepo", () => {
       const ctx = createContext(orgId);
       const r = await createTestUser(orgId);
       // First batch creates 1 row.
-      await repo.insertMany(ctx, [
-        {
-          recipientUserId: r,
-          type: "result_published",
-          title: "first",
-          body: "b",
-          dedupeKey: "result_published:batch-dedupe",
-        },
-      ]);
+      await repo.insertMany(
+        ctx,
+        [
+          {
+            recipientUserId: r,
+            type: "result_published",
+            title: "first",
+            body: "b",
+            actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+            dedupeKey: "result_published:batch-dedupe",
+          },
+        ],
+        AT,
+      );
       // Second batch with the same key inserts nothing.
-      const result = await repo.insertMany(ctx, [
-        {
-          recipientUserId: r,
-          type: "result_published",
-          title: "second",
-          body: "b",
-          dedupeKey: "result_published:batch-dedupe",
-        },
-      ]);
+      const result = await repo.insertMany(
+        ctx,
+        [
+          {
+            recipientUserId: r,
+            type: "result_published",
+            title: "second",
+            body: "b",
+            actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
+            dedupeKey: "result_published:batch-dedupe",
+          },
+        ],
+        AT,
+      );
       expect(result.insertedCount).toBe(0);
     });
 
     it("returns insertedCount=0 for an empty input", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const result = await repo.insertMany(ctx, []);
+      const result = await repo.insertMany(ctx, [], AT);
       expect(result.insertedCount).toBe(0);
     });
   });
@@ -421,7 +474,7 @@ describe("notificationRepo", () => {
         recipientUserId: r,
       });
       expect(seeded.readAt).toBeNull();
-      const updated = await repo.markRead(ctx, r, seeded.id);
+      const updated = await repo.markRead(ctx, r, seeded.id, AT);
       expect(updated).not.toBeNull();
       expect(updated!.readAt).not.toBeNull();
     });
@@ -434,8 +487,8 @@ describe("notificationRepo", () => {
         organizationId: orgId,
         recipientUserId: r,
       });
-      await repo.markRead(ctx, r, seeded.id);
-      const second = await repo.markRead(ctx, r, seeded.id);
+      await repo.markRead(ctx, r, seeded.id, AT);
+      const second = await repo.markRead(ctx, r, seeded.id, AT);
       expect(second).not.toBeNull();
       expect(second!.id).toBe(seeded.id);
     });
@@ -449,7 +502,7 @@ describe("notificationRepo", () => {
         organizationId: orgId,
         recipientUserId: owner,
       });
-      const result = await repo.markRead(ctx, attacker, seeded.id);
+      const result = await repo.markRead(ctx, attacker, seeded.id, AT);
       expect(result).toBeNull();
       // Owner's row is still unread (the mark did not touch it).
       const rows = await db
@@ -462,7 +515,7 @@ describe("notificationRepo", () => {
     it("returns null for a missing notification id", async () => {
       const repo = createNotificationRepo(db);
       const ctx = createContext(orgId);
-      const result = await repo.markRead(ctx, recipientA, randomUUID());
+      const result = await repo.markRead(ctx, recipientA, randomUUID(), AT);
       expect(result).toBeNull();
     });
   });
@@ -479,7 +532,7 @@ describe("notificationRepo", () => {
         recipientUserId: r,
         readAt: new Date(),
       });
-      const updated = await repo.markAllRead(ctx, r);
+      const updated = await repo.markAllRead(ctx, r, AT);
       expect(updated).toBe(2);
       const unread = await repo.countUnread(ctx, r);
       expect(unread).toBe(0);
@@ -492,7 +545,7 @@ describe("notificationRepo", () => {
       const r2 = await createTestUser(orgId);
       await seedRow(db, { organizationId: orgId, recipientUserId: r1 });
       await seedRow(db, { organizationId: orgId, recipientUserId: r2 });
-      await repo.markAllRead(ctx, r1);
+      await repo.markAllRead(ctx, r1, AT);
       expect(await repo.countUnread(ctx, r1)).toBe(0);
       expect(await repo.countUnread(ctx, r2)).toBe(1);
     });

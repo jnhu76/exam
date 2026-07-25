@@ -10,6 +10,7 @@ import type {
   GradingRule,
   GradingStatus,
   MisconductFlag,
+  NotificationType,
   QuestionScoreResult,
   QuestionSnapshot,
   ResultPublicationMode,
@@ -115,7 +116,7 @@ export const users = pgTable(
      *
      * NOT used for login. NOT unique. NOT verified. The first V1 consumer is
      * the `result_published` Inbox + Email outbox integration. The contract
-     * layer normalizes (trim + lowercase) and maps blank input to null.
+     * layer normalizes (trim-only, case-preserved) and maps blank input to null.
      */
     email: text("email"),
     createdAt: createdAt(),
@@ -807,10 +808,12 @@ export const userRoleAssignments = pgTable(
  * scoped dedupe key. Email outbox rows (P5-N1-I2) link back to a notification
  * via `email_outbox.notification_id`.
  *
- * V1 only writes rows of `type = "result_published"`. The schema intentionally
- * does NOT carry severity / resource_type / resource_id / archived_at /
- * invalidated_at columns — they have no V1 reader or writer and are deferred
- * (P5-N1-R0 §12, §22).
+ * V1 only writes rows of `type = "result_published"`. Every V1 notification
+ * is actionable (action_path NOT NULL); future informational types that lack
+ * a navigation target must introduce an explicit migration + contract change.
+ * The schema intentionally does NOT carry severity / resource_type /
+ * resource_id / archived_at / invalidated_at columns — they have no V1 reader
+ * or writer and are deferred (P5-N1-R0 §12, §22).
  */
 export const notifications = pgTable(
   "notifications",
@@ -820,10 +823,10 @@ export const notifications = pgTable(
     recipientUserId: text("recipient_user_id")
       .notNull()
       .references(() => users.id),
-    type: text("type").notNull(),
+    type: text("type").notNull().$type<NotificationType>(),
     title: text("title").notNull(),
     body: text("body").notNull(),
-    actionPath: text("action_path"),
+    actionPath: text("action_path").notNull(),
     createdAt: createdAt(),
     readAt: timestamp("read_at", { withTimezone: true, mode: "date" }),
     dedupeKey: text("dedupe_key"),

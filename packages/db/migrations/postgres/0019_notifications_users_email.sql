@@ -25,7 +25,7 @@ CREATE TABLE "notifications" (
 	"type" text NOT NULL,
 	"title" text NOT NULL,
 	"body" text NOT NULL,
-	"action_path" text,
+	"action_path" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"read_at" timestamp with time zone,
 	"dedupe_key" text

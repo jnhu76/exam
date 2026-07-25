@@ -12,7 +12,6 @@ import {
   buildAbsoluteResultLink,
 } from "./actionLink.js";
 import { renderGradeNotificationEmail } from "./gradeNotificationEmail.js";
-import type { ResultPublishedNotificationInput } from "./types.js";
 
 // P5-N1-I2 — channel-neutral NotificationService.
 //
@@ -56,6 +55,8 @@ export interface DispatchResultPublishedOptions {
   publicWebOrigin: string;
   /** Default maxAttempts for outbox rows (from email config). */
   emailMaxAttempts: number;
+  /** Authoritative timestamp for this fan-out (from fastify.now()). */
+  now: Date;
 }
 
 /** Result of a single recipient's dispatch (Inbox + optional outbox). */
@@ -82,7 +83,7 @@ export async function dispatchResultPublishedToRecipient(
   opts: DispatchResultPublishedOptions,
   recipient: { userId: string; email: string | null; attemptId: string },
 ): Promise<RecipientDispatchResult> {
-  const { db, ctx, examTitle, examId, publicWebOrigin, emailMaxAttempts } =
+  const { db, ctx, examTitle, examId, publicWebOrigin, emailMaxAttempts, now } =
     opts;
   const type = "result_published";
 
@@ -98,14 +99,18 @@ export async function dispatchResultPublishedToRecipient(
 
   // 1. REQUIRED Inbox row.
   const actionPath = buildResultPublishedActionPath(recipient.attemptId);
-  const inboxInsert = await notificationRepo.insert(ctx, {
-    recipientUserId: recipient.userId,
-    type,
-    title: "考试结果已发布",
-    body: `您参加的考试「${examTitle}」的结果已发布，点击查看。`,
-    actionPath,
-    dedupeKey: inboxDedupeKey(examId),
-  });
+  const inboxInsert = await notificationRepo.insert(
+    ctx,
+    {
+      recipientUserId: recipient.userId,
+      type,
+      title: "考试结果已发布",
+      body: `您参加的考试「${examTitle}」的结果已发布，点击查看。`,
+      actionPath,
+      dedupeKey: inboxDedupeKey(examId),
+    },
+    now,
+  );
 
   // 2. OPTIONAL Email outbox row — only when policy enables Email for this
   //    recipient (normalized email present) AND the Inbox row was newly
@@ -175,22 +180,5 @@ export async function dispatchResultPublishedFanOut(
     recipientsProcessed: opts.recipients.length,
     inboxRowsCreated,
     outboxRowsCreated,
-  };
-}
-
-/**
- * Convenience adapter: maps a ResultPublishedNotificationInput (the
- * publication route's per-recipient payload) into the recipient shape the
- * dispatcher expects.
- */
-export function toRecipient(input: ResultPublishedNotificationInput): {
-  userId: string;
-  email: string | null;
-  attemptId: string;
-} {
-  return {
-    userId: input.recipientUserId,
-    email: input.recipientEmail,
-    attemptId: input.attemptId,
   };
 }

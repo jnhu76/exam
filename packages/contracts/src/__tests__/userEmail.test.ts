@@ -15,7 +15,7 @@ import {
 // POST /candidates) or edits one (PATCH /users/:id, PATCH /candidates/:id)
 // accepts an optional `email` field. The contract:
 //   - blank/whitespace-only -> normalized away (treated as absent on write)
-//   - valid email -> trimmed + lowercased
+//   - valid email -> trimmed (case-preserved)
 //   - malformed -> rejected
 //   - candidate without email remains valid
 // Per the P5-N1-R0 §13 frozen contract: email is optional, not for login,
@@ -37,14 +37,14 @@ describe("CreateUserRequestSchema.email (optional recipient source)", () => {
     }
   });
 
-  it("accepts and normalizes a valid email (trim + lowercase)", () => {
+  it("accepts and normalizes a valid email (trim-only, case-preserved)", () => {
     const result = CreateUserRequestSchema.safeParse({
       ...base,
       email: "  Alice@Example.COM  ",
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.email).toBe("alice@example.com");
+      expect(result.data.email).toBe("Alice@Example.COM");
     }
   });
 
@@ -103,7 +103,7 @@ describe("UpdateUserRequestSchema.email (optional recipient source)", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.email).toBe("bob@example.com");
+      expect(result.data.email).toBe("Bob@Example.com");
     }
   });
 
@@ -149,7 +149,7 @@ describe("CreateCandidateRequestSchema.email (optional recipient source)", () =>
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.email).toBe("cand@example.com");
+      expect(result.data.email).toBe("Cand@Example.COM");
     }
   });
 
@@ -169,7 +169,7 @@ describe("UpdateCandidateRequestSchema.email", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.email).toBe("updated@example.com");
+      expect(result.data.email).toBe("Updated@Example.com");
     }
   });
 });

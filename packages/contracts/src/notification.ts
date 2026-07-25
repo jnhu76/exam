@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NOTIFICATION_TYPES } from "@exam/domain";
 import { PaginationParamsSchema, PaginatedResponseSchema } from "./common.js";
 
 // P5-N1 — Notification Inbox contracts (V1: result_published only).
@@ -9,11 +10,11 @@ import { PaginationParamsSchema, PaginatedResponseSchema } from "./common.js";
 // scope derives from authenticated context.
 
 /**
- * Zod enum for the V1 NotificationType values. Mirrors the domain union in
- * `@exam/domain` so the contract layer can validate API payloads without a
- * cross-package import of the type alias.
+ * Zod enum for the V1 NotificationType values. Derived from the domain
+ * constant `NOTIFICATION_TYPES` (`@exam/domain`) so the contract layer
+ * validates API payloads against the single source of truth.
  */
-export const NotificationTypeSchema = z.enum(["result_published"]);
+export const NotificationTypeSchema = z.enum(NOTIFICATION_TYPES);
 
 /** V1 NotificationType (mirror of the domain union). */
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
@@ -55,9 +56,11 @@ export function isResultPublishedActionPath(path: string): boolean {
 /**
  * Schema for a single notification row as exposed over the Inbox API.
  *
- * `actionPath` is nullable (a notification may be non-actionable). `readAt`
- * is null while unread and set when marked read; it does NOT represent
- * business completion (P5-N1-R0 §19.4).
+ * `actionPath` is NOT NULL in V1: every result_published notification
+ * navigates to the authoritative result page. Future informational types
+ * that lack a navigation target must introduce an explicit contract change.
+ * `readAt` is null while unread and set when marked read; it does NOT
+ * represent business completion (P5-N1-R0 §19.4).
  */
 export const NotificationSchema = z.object({
   id: z.string().uuid(),
@@ -66,7 +69,7 @@ export const NotificationSchema = z.object({
   type: NotificationTypeSchema,
   title: z.string().min(1),
   body: z.string().min(1),
-  actionPath: z.string().nullable(),
+  actionPath: z.string().regex(NOTIFICATION_ACTION_PATH_PATTERN),
   createdAt: z.string().datetime(),
   readAt: z.string().datetime().nullable(),
 });
