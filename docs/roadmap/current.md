@@ -18,11 +18,12 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
-- **Phase 3, Module P4 — RBAC MVP role switch (NEXT).** This activates the
-  final Admin/Teacher/Candidate product-role model on MVP routes. It is the
-  current execution cursor — authorization infrastructure is already live;
-  P4 is the first step in the hard module execution order below. See
-  [`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) §P4.
+- **Phase 3, Module P3 — Result publishing closeout (NEXT).** This audits and
+  closes the result-publication boundary under the final Admin/Teacher/Candidate
+  role model and freezes the authoritative transaction seam that P5-N1 will
+  extend. P4 (RBAC MVP role switch) and P5-0 (Email delivery runtime) are now
+  closed; P3 is the current execution cursor. See
+  [`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) §P3.
   Notification and Email delivery architecture authority:
   [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md).
 
@@ -44,23 +45,23 @@ result publishing (P3), then attach the first notification onto the now-stable
 result-publication transaction (P5-N1):
 
 ```text
-P4 (RBAC MVP role switch)
-  → P5-0 (Email delivery runtime hardening)
-  → P3 (result publishing closeout)
-  → P5-N1 (Notification Inbox + result-published Email integration)
+P4 (RBAC MVP role switch) ✅ CLOSED
+  → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
+  → P3 (result publishing closeout) 🔄 NEXT
+  → P5-N1 (Notification Inbox + result-published Email integration) ⏸ BLOCKED on P3
   → P6 (MVP ready closeout)
 ```
 
 P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
 Inbox + Email business integration.
 
-| Job  | True dependency                                |
-| ---- | ---------------------------------------------- |
-| P4   | Authorization infrastructure implemented        |
-| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) |
-| P3   | P4 closed                                       |
-| P5-N1| P4 + P5-0 + P3 closed                           |
-| P6   | Preceding MVP blockers closed                   |
+| Job  | True dependency                                | Status |
+| ---- | ---------------------------------------------- | ------ |
+| P4   | Authorization infrastructure implemented        | ✅ CLOSED |
+| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | ✅ CLOSED |
+| P3   | P4 closed                                       | 🔄 NEXT |
+| P5-N1| P4 + P5-0 + P3 closed                           | ⏸ BLOCKED on P3 |
+| P6   | Preceding MVP blockers closed                   | ⏸ |
 
 After Phase 3 MVP closeout, the deferred design items (M11 resource-relationship
 authorization, custom roles, Proctor runtime permission boundary, etc.) may be

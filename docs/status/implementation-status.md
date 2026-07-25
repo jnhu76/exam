@@ -85,6 +85,9 @@ The authorization **infrastructure** is live (not "not started"):
   scores subjective items, completes grading → `graded + fully_graded`.
 - ✅ Email outbox + SMTP backend foundation (outbox table, 3 senders, retry
   policy, notification service, `POST /api/email/test`). See Known limitations.
+- ✅ Email delivery runtime (P5-0 CLOSED, 2026-07-25, PR #210): resident worker
+  with `FOR UPDATE SKIP LOCKED` claim, lock ownership, heartbeat, abandoned-lock
+  recovery, and backlog/liveness diagnostics.
 - ✅ ADR-011 accepted as the Notification and Email delivery architecture
   authority (two-channel Inbox + asynchronous Email outbox, resident worker,
   atomic business transaction, validated `PUBLIC_WEB_ORIGIN` / `actionPath`).
@@ -106,19 +109,19 @@ The remaining Phase 3 product work is sequenced as a hard module execution
 order with real dependencies (not narrative sequence):
 
 ```text
-P4 (RBAC MVP role switch)
-  → P5-0 (Email delivery runtime hardening)
-  → P3 (result publishing closeout)
-  → P5-N1 (Notification Inbox + result-published Email integration)
+P4 (RBAC MVP role switch) ✅ CLOSED
+  → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
+  → P3 (result publishing closeout) 🔄 NEXT
+  → P5-N1 (Notification Inbox + result-published Email integration) ⏸ BLOCKED on P3
   → P6 (MVP ready closeout)
 ```
 
-| Job  | True dependency                                | What it adds                                                                              |
-| ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Job  | True dependency                                | What it adds                                                                                      |
+| ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes. **CLOSED** (2026-07-24, tested commit `b4dc1d6`); see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md). |
-| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. (NEXT) |
-| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. |
-| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically.    |
+| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. **CLOSED** (2026-07-25, PR #210). |
+| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **NEXT** (P3-R0 audit in progress). |
+| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **BLOCKED on P3**. |
 | P6   | Preceding MVP blockers closed                   | MVP ready closeout.                                                                        |
 
 The ordering principle: define permissions first (P4), then harden the Email
@@ -146,14 +149,14 @@ audit, external log shipping. All Phase 4; none started.
   result page with an "answering interrupted" message. Backend capability
   exists; productization of frontend restore UI, heartbeat tuning, and proctor
   intervention is deferred to Phase 2+ hardening.
-- **Email foundation has no business caller**: `EmailNotificationService` is
-  never instantiated by any route; no email is ever enqueued in a real flow.
+- **Email runtime has no business caller**: The Email delivery runtime
+  (P5-0) is closed — the resident worker, claim/heartbeat, and diagnostics are
+  implemented. However, no real business route enqueues outbox rows yet;
   `POST /api/email/test` is the only production send path (synchronous, bypasses
-  outbox). No worker daemon (enqueued rows would sit `pending` forever). No
-  `users.email` column. No password-reset / invitation / registration flows.
-  This is the P5-0 + P5-N1 scope: P5-0 turns the outbox into a resident,
-  observable worker (ADR-011); P5-N1 adds the first real `result_published`
-  business caller. Neither is started yet.
+  outbox). No `users.email` column. No password-reset / invitation /
+  registration flows. P5-N1 adds the first real `result_published` business
+  caller. The Email runtime is implemented, but there is not yet a real
+  business caller.
 - **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
   `f2a7a80`): the runtime route tree was re-captured via a Fastify `onRoute`
   hook over the full production composition and reconciles exactly — **91
