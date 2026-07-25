@@ -1,6 +1,14 @@
 # State and Authority Model
 
-> Normative description of the exam system's lifecycle states, sub-process states, policies, and fact timestamps. Explains why these must not be collapsed into one giant state enum.
+> Normative description of the exam system's lifecycle states, sub-process states, policies, and fact timestamps.
+
+```text
+Last verified against commit:
+cac6b85c425c85ad4077002bc518fca0b50f766f
+
+Verification scope:
+Current master implementation after merged P5-0 / PR #210.
+```
 
 ## Why these must not be collapsed
 
@@ -12,7 +20,7 @@ The system has **five orthogonal state dimensions**:
 4. **Enrollment status** — the candidate's overall qualification state for an exam.
 5. **Email outbox status** — the delivery lifecycle of an email record.
 
-Collapsing these into one enum would create a combinatorial explosion (6 × 8 × 3 × 4 × 5 = 2,880 theoretical combinations, most illegal) and make it impossible to reason about one dimension independently. Each dimension has its own transitions, its own commands, and its own invariants.
+Collapsing these into one enum would create a combinatorial explosion and make it impossible to reason about one dimension independently.
 
 ---
 
@@ -23,64 +31,62 @@ Collapsing these into one enum would create a combinatorial explosion (6 × 8 ×
 | State | Meaning | Candidates can start attempts? |
 |-------|---------|-------------------------------|
 | `draft` | Being configured by Admin | No |
-| `published` | Released; visible to candidates; `now < openAt` | Yes (OPEN_STATUSES includes published) |
+| `published` | Released; `now < openAt` | Yes (OPEN_STATUSES includes published) |
 | `open` | `now >= openAt`; actively accepting attempts | Yes |
-| `closed` | Normal end (`now >= closeAt` or admin close) | No |
+| `closed` | Normal end | No |
 | `canceled` | Abnormal cancellation | No |
 | `archived` | Terminal archive; read-only | No |
 
-### Legal transitions
+### State machine diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> draft
+    draft --> published: publishExam()
+    published --> draft: unpublishExam()
+    published --> open: openExam() / lazy
+    published --> canceled: cancelExam()
+    published --> archived: archiveExam()
+    open --> closed: closeExam() / lazy
+    open --> canceled: cancelExam()
+    closed --> archived: archiveExam()
+    canceled --> archived: archiveExam()
+    archived --> [*]
+
+    note right of draft
+        Admin/Teacher editable
+    end note
+    note right of published
+        Candidates can start
+        but now < openAt
+    end note
+    note right of open
+        Candidates can start
+        now >= openAt
+    end note
+    note right of archived
+        Terminal state
+        Read-only
+    end note
 ```
-draft → [published]
-published → [draft, open, canceled, archived]
-open → [closed, canceled]
-closed → [archived]
-canceled → [archived]
-archived → []  (terminal)
-```
+
+**Authority**: `packages/exam-engine/src/examStateMachine.ts` `EXAM_VALID_TRANSITIONS`
+**Evidence**: All transitions go through `assertTransition()` in `examCommands.ts`
+**Known limitations**: `published → archived` is legal in the state machine but the route layer only allows archive from `closed` or `canceled` after reconciliation.
 
 ### Commands owning each transition
 
 | Transition | Command | Actor |
 |------------|---------|-------|
-| `draft → published` | `publishExam()` | Admin |
+| `draft → published` | `publishExam()` | Admin, Teacher |
 | `published → draft` | `unpublishExam()` | Admin |
 | `published → open` | `openExam()` (or `checkAndUpdateExamStatus()`) | Admin / System (lazy) |
-| `open → closed` | `closeExam()` (or `checkAndUpdateExamStatus()`) | Admin / System (lazy) |
+| `open → closed` | `closeExam()` (or `checkAndUpdateExamStatus()`) | Admin, Teacher / System (lazy) |
 | `published → canceled` | `cancelExam()` | Admin |
 | `open → canceled` | `cancelExam()` | Admin |
 | `published → archived` | `archiveExam()` | Admin |
 | `closed → archived` | `archiveExam()` | Admin |
 | `canceled → archived` | `archiveExam()` | Admin |
-
-### Preconditions
-
-| Transition | Preconditions |
-|------------|--------------|
-| `draft → published` | ≥1 question; valid schedule; `timed_window`; manual selection; valid retake policy; totalScore matches question scores; auto questions have standardAnswer; text_response has rubric |
-| `published → draft` | After reconciliation, exam is still `published` (`now < openAt`) |
-| `published → open` | `now >= openAt` (auto) or admin operation |
-| `open → closed` | `now >= closeAt` (auto) or admin close with no unresolved attempts |
-| `open → canceled` | Admin cancels; no unresolved attempts |
-| `published → canceled` | Admin cancels |
-| `any → archived` | From `closed`, `canceled`, or `published` (after reconciliation) |
-
-### Terminal states
-
-`archived` is the sole terminal state. `closed` and `canceled` can transition to `archived`.
-
-### Recovery transitions
-
-None — exam transitions are one-way. The only "recovery" is `published → draft` (unpublish), which is gated by `now < openAt`.
-
-### Forbidden transitions
-
-Any transition not listed in the table above is forbidden. Specifically:
-- `open → published` is forbidden.
-- `open → draft` is forbidden.
-- `canceled → open` is forbidden.
-- `archived → anything` is forbidden.
 
 ---
 
@@ -88,31 +94,51 @@ Any transition not listed in the table above is forbidden. Specifically:
 
 ### States
 
-| State | Meaning | Answers writable? |
-|-------|---------|-------------------|
-| `not_started` | Enrolled but not started | N/A (no attempt row) |
-| `queued` | Waiting for batch entry (Phase 2) | N/A |
-| `in_progress` | Actively taking the exam | Yes |
-| `disrupted` | Heartbeat timeout; disconnected | No |
-| `submitted` | Candidate submitted; frozen | No |
-| `grading` | Auto-grading in progress (transient) | No |
-| `graded` | All scoring complete | No |
-| `voided` | Terminal override | No |
+| State | Meaning | Answers writable? | Reachable? |
+|-------|---------|-------------------|------------|
+| `not_started` | Enrolled but not started | N/A | **NO** — no write path |
+| `queued` | Waiting for batch entry (Phase 2) | N/A | **NO** — Phase 2 planned |
+| `in_progress` | Actively taking the exam | Yes | YES |
+| `disrupted` | Heartbeat timeout; disconnected | No | YES |
+| `submitted` | Candidate submitted; frozen | No | YES |
+| `grading` | Auto-grading in progress (transient) | No | **NO** — no write path |
+| `graded` | All scoring complete | No | YES |
+| `voided` | Terminal override | No | **NO** — target design |
 
-### Reachable states
+### State machine diagram
 
-Only `in_progress`, `disrupted`, `submitted`, and `graded` have write paths in the current implementation. `not_started`, `queued`, `grading`, and `voided` are **target design states with no current write path**.
+```mermaid
+stateDiagram-v2
+    [*] --> in_progress: startOrRestoreAttempt()
 
-### Legal transitions
+    in_progress --> submitted: submitAttempt()
+    in_progress --> disrupted: markDisrupted()
+    disrupted --> submitted: submitAttempt()
+    disrupted --> in_progress: restoreAttempt()
+    submitted --> graded: finalizeTerminalGrading()
+    graded --> [*]
 
+    state "not_started (no write path)" as not_started
+    state "queued (Phase 2)" as queued
+    state "grading (unreachable)" as grading
+    state "voided (target design)" as voided
+
+    note right of grading
+        State machine table has
+        submitted:grade → grading
+        but finalizeTerminalGrading()
+        writes 'graded' directly.
+        This state is unreachable.
+    end note
+    note right of voided
+        Target design only.
+        No admin/proctor entry point.
+    end note
 ```
-in_progress → [submitted, disrupted]
-disrupted → [submitted, in_progress]
-submitted → [grading]
-grading → [graded]
-submitted → [graded]  (auto-graded attempts skip "grading" state)
-graded → [voided]  (target design — no write path)
-```
+
+**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE`
+**Evidence**: `submitAttempt()`, `markDisrupted()`, `restoreAttempt()`, `finalizeTerminalGrading()` all use `transition()` from the state machine
+**Known limitations**: The `grading` state is unreachable — `finalizeTerminalGrading()` writes `status = 'graded'` directly. The state machine table entries `submitted:grade → grading` and `grading:complete_grading → graded` exist but are never invoked.
 
 ### Commands owning each transition
 
@@ -124,33 +150,6 @@ graded → [voided]  (target design — no write path)
 | `in_progress → submitted` | `submitAttempt()` | Candidate / System (deadline) / Admin (force) |
 | `disrupted → submitted` | `submitAttempt()` | System (deadline) / Admin (force) |
 | `submitted → graded` | `finalizeTerminalGrading()` | System (auto-grade or manual-grade closure) |
-
-### Preconditions
-
-| Transition | Preconditions |
-|------------|--------------|
-| `startOrRestoreAttempt` | Exam is `published`/`open`; time within `[openAt, closeAt)`; enrollment exists; retake policy allows; late-entry cutoff not passed |
-| `markDisrupted` | Attempt is `in_progress`; `lastActivityAt` older than timeout |
-| `restoreAttempt` | Attempt is `disrupted`; EA lock held |
-| `submitAttempt` | Attempt is `in_progress` or `disrupted`; (candidate-only) `minSubmitAfterStartMinutes` elapsed; zero pre-existing grading entries |
-| `finalizeTerminalGrading` | Attempt is `submitted`; workset is fully terminal |
-
-### Terminal states
-
-`graded` is the terminal state for normal flow. `voided` is the terminal override (target design). `submitted` with `pending_manual` is a waiting state — not terminal, but no further automatic progression.
-
-### Recovery transitions
-
-`disrupted → in_progress` via `restoreAttempt()`. The deadline is adjusted to compensate for disconnected time: `newDeadline = oldDeadline + disconnectedDuration`, capped at `exam.closeAt`.
-
-### Forbidden transitions
-
-- `submitted → in_progress` is forbidden.
-- `graded → submitted` is forbidden.
-- `graded → in_progress` is forbidden.
-- `voided → anything` is forbidden.
-- `not_started → anything` has no write path.
-- `queued → anything` has no write path.
 
 ---
 
@@ -170,26 +169,21 @@ graded → [voided]  (target design — no write path)
 - `submitted` + `pending_manual` (awaiting manual scoring)
 - `graded` + `auto_graded` (pure-objective, graded at submit)
 - `graded` + `fully_graded` (manual scoring complete)
-- `graded` + `pending_manual` (**inconsistent** — prevented by `finalizeGrading()` guard)
 
-### Legal transitions
+### State machine diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> auto_graded: submit-freeze (pure-objective)
+    [*] --> pending_manual: submit-freeze (has text_response)
+
+    pending_manual --> fully_graded: gradeQuestion() completes last manual entry
+    auto_graded --> [*]
+    fully_graded --> [*]
 ```
-(at submit-freeze):
-  pure-objective attempt → auto_graded
-  has-manual attempt → pending_manual
 
-(manual grading):
-  pending_manual → fully_graded  (when last manual entry is scored)
-```
-
-### Authority
-
-`gradingStatus` is set **once** at the submit-freeze barrier by `submitAttempt()`:
-- `requiresManualGrading(questionSnapshot)` → `pending_manual`
-- otherwise → `auto_graded`
-
-It advances to `fully_graded` by `finalizeTerminalGrading()` when the last manual entry is completed.
+**Authority**: Set once at submit-freeze by `submitAttempt()`, advanced to `fully_graded` by `finalizeTerminalGrading()`
+**Evidence**: `packages/exam-engine/src/attemptCommands.ts` `submitAttempt()` sets gradingStatus; `grading.ts` `finalizeTerminalGrading()` advances it
 
 ---
 
@@ -204,29 +198,20 @@ It advances to `fully_graded` by `finalizeTerminalGrading()` when the last manua
 | `completed` | Retake policy exhausted, passed, or exam window closed |
 | `blocked` | Violation; candidate is blocked |
 
-### Legal transitions
+### State machine diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> assigned: enrollment created
+    assigned --> started: startOrRestoreAttempt()
+    started --> completed: finalizeTerminalGrading() when policy says so
+    started --> blocked: (future)
+    blocked --> started: (future)
+    completed --> [*]
 ```
-assigned → [started, blocked]
-started → [completed, blocked]
-blocked → [started]
-completed → []  (terminal)
-```
 
-### Commands owning each transition
-
-| Transition | Command | Actor |
-|------------|---------|-------|
-| `assigned → started` | `startOrRestoreAttempt()` | Candidate |
-| `started → completed` | `finalizeTerminalGrading()` (via `shouldEnrollmentComplete()`) | System |
-| `started → blocked` | (future) | Admin |
-
-### Preconditions for completion
-
-`shouldEnrollmentComplete()` returns true when:
-- `retakePolicy === 'max_attempts'` AND `attemptCount >= maxAttempts`
-- `retakePolicy === 'pass_then_stop'` AND candidate passed
-- `now >= exam.closeAt`
+**Authority**: `packages/exam-engine/src/enrollmentStateMachine.ts` `ENROLLMENT_VALID_TRANSITIONS`
+**Evidence**: `startOrRestoreAttempt()` transitions `assigned → started`; `finalizeTerminalGrading()` transitions `started → completed`
 
 ---
 
@@ -242,36 +227,28 @@ completed → []  (terminal)
 | `sent` | Successfully delivered (terminal) |
 | `dead` | Max attempts exceeded (terminal) |
 
-### Legal transitions
+### State machine diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> pending: business transaction (currently NO production caller)
+    pending --> processing: claimDue()
+    processing --> sent: markSent()
+    processing --> retry_wait: markRetryWait()
+    processing --> pending: recoverAbandoned()
+    retry_wait --> processing: claimDue()
+    processing --> dead: markDead()
+    sent --> [*]
+    dead --> [*]
 ```
-pending → [processing]
-processing → [sent, retry_wait, pending (abandoned-lock recovery)]
-retry_wait → [processing]
-sent → []  (terminal)
-dead → []  (terminal)
-```
 
-### Commands owning each transition
-
-| Transition | Command | Actor |
-|------------|---------|-------|
-| `pending → processing` | `claimDue()` | Email worker |
-| `processing → sent` | `markSent()` | Email worker |
-| `processing → retry_wait` | `markRetryWait()` | Email worker |
-| `processing → pending` | `recoverAbandoned()` | Email worker |
-| `retry_wait → processing` | `claimDue()` | Email worker |
-| `processing → dead` | `markDead()` | Email worker |
-
-### Ownership fence
-
-`markSent`, `markRetryWait`, and `markDead` are ownership-fenced: `WHERE status='processing' AND lockedBy=workerInstanceId`. Returns null if ownership is lost.
+**Authority**: `packages/db/src/repository/emailOutboxRepo.ts` + DB CHECK constraints
+**Evidence**: `claimDue()` uses `FOR UPDATE SKIP LOCKED`; `markSent()`/`markRetryWait()`/`markDead()` are ownership-fenced
+**Known limitations**: No production business caller exists. The infrastructure is implemented (P5-0 merged) but the business notification-to-outbox protocol is NOT IMPLEMENTED (P5-N1 scope).
 
 ---
 
 ## 6. Policy Fields
-
-These are not lifecycle states — they are configuration fields that control behavior.
 
 ### 6.1 Result Publication Policy
 
@@ -279,7 +256,7 @@ These are not lifecycle states — they are configuration fields that control be
 |-------|------|--------|
 | `exam.resultPublicationMode` | `immediate` / `after_grading` / `manual` | Controls when candidates see results |
 
-- `immediate`: visible as soon as grading is computable (auto_graded or fully_graded).
+- `immediate`: visible as soon as grading is computable.
 - `after_grading`: visible only when `gradingStatus = fully_graded`.
 - `manual`: hidden until `publishResults()` sets `resultsPublishedAt`.
 
@@ -289,26 +266,15 @@ These are not lifecycle states — they are configuration fields that control be
 |-------|------|--------|
 | `exam.retakePolicy` | `unlimited` / `max_attempts` / `pass_then_stop` | Controls whether a new attempt is allowed |
 
-- `unlimited`: always allowed.
-- `max_attempts`: allowed while `attemptCount < maxAttempts`.
-- `pass_then_stop`: allowed while candidate has not passed.
-
 ### 6.3 Score Strategy
 
 | Field | Type | Effect |
 |-------|------|--------|
 | `exam.scoreStrategy` | `highest` / `latest` / `first` | Selects which attempt's score becomes the enrollment final score |
 
-Implemented by `shouldSelectAttempt()`:
-- `latest`: always replace (the latest attempt's score wins).
-- `highest`: replace if new score > current final score.
-- `first`: never replace (the first attempt's score wins).
-
 ---
 
 ## 7. Fact Timestamps
-
-These are not states — they are authoritative instants recorded once.
 
 | Field | Meaning | Set by | Writable? |
 |-------|---------|--------|-----------|
@@ -318,29 +284,16 @@ These are not states — they are authoritative instants recorded once.
 | `attempt.gradedAt` | When grading finalized | `finalizeTerminalGrading()` | Write-once |
 | `attempt.deadlineAt` | Effective deadline for the attempt | `startOrRestoreAttempt()` / `extendAttemptTime()` / `restoreAttempt()` | Updated by extension/restore |
 | `attempt.lastActivityAt` | Heartbeat field | `saveAnswer()` / heartbeat route / `restoreAttempt()` | Updated on activity |
-| `attempt.createdAt` | Row creation time | Repo (auto) | Never |
-| `attempt.updatedAt` | Row update time | Repo (auto) | Never |
 | `emailOutbox.sentAt` | When the email was delivered | `markSent()` | Write-once |
-| `emailOutbox.lockedAt` | When the row was claimed | `claimDue()` | Updated on claim |
-| `auditLog.createdAt` | When the audit event occurred | Repo (auto) | Never |
-
-### Why these are timestamps, not states
-
-A timestamp records **when** something happened. A state describes **what condition** something is in. Collapsing them would lose information: `submittedAt = null` tells you the attempt hasn't been submitted; `submittedAt = 2026-07-25T10:00:00Z` tells you exactly when. A state cannot carry that precision.
 
 ---
 
 ## 8. Summary: State Machine Independence
 
-| Dimension | States | Independent? | Why |
-|-----------|--------|--------------|-----|
-| Exam status | 6 | Yes | Exam lifecycle is unrelated to any specific candidate |
-| Attempt status | 8 (4 reachable) | Yes | Each attempt progresses independently |
-| Grading status | 3 | Yes | Orthogonal to attempt lifecycle — describes scoring progress |
-| Enrollment status | 4 | Yes | Describes the candidate's overall qualification |
-| Email outbox status | 5 | Yes | Describes delivery progress; unrelated to exams |
-
-A transition in one dimension does not imply a transition in another. For example:
-- An exam can be `closed` while attempts are still `in_progress` (existing attempts finish independently).
-- An attempt can be `submitted` while `gradingStatus` is `pending_manual` (waiting for human grading).
-- An enrollment can be `started` while the exam is `closed` (the candidate started before close).
+| Dimension | States | Independent? |
+|-----------|--------|--------------|
+| Exam status | 6 | Yes — unrelated to any specific candidate |
+| Attempt status | 8 (4 reachable) | Yes — each attempt progresses independently |
+| Grading status | 3 | Yes — orthogonal to attempt lifecycle |
+| Enrollment status | 4 | Yes — describes candidate qualification |
+| Email outbox status | 5 | Yes — describes delivery progress |

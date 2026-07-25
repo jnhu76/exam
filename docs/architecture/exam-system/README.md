@@ -2,6 +2,14 @@
 
 > Normative architecture documentation for the exam platform's domain protocols, state machines, and data authority.
 
+```text
+Last verified against commit:
+cac6b85c425c85ad4077002bc518fca0b50f766f
+
+Verification scope:
+Current master implementation after merged P5-0 / PR #210.
+```
+
 ## Purpose
 
 This directory contains the authoritative normative description of how the exam system's core domain actually works. It answers:
@@ -22,22 +30,41 @@ This documentation covers the **exam domain core**: Question authoring, Exam com
 
 It does **not** cover UI implementation details, deployment topology, or non-domain infrastructure (build system, CI configuration, frontend component library).
 
-## Authority Order
+## Authority Model
 
-When evidence conflicts, the following authority order resolves the conflict:
+The repository has two distinct authority dimensions. Architecture documents must respect both.
 
-```
+### Normative intent authority
+
+These define intended invariants and accepted decisions:
+
+```text
 Accepted ADR
-  → SPEC.md + CONTEXT.md
-  → Current architecture documents (this directory)
-  → Domain command functions (packages/exam-engine/src/)
-  → API composition (apps/api/src/routes/, apps/api/src/orchestrators/)
-  → Repository implementation (packages/db/src/repository/)
-  → Frontend projection (apps/web/src/)
-  → Tests and audits
+  → active SPEC / CONTEXT
+  → approved architecture documents (this directory)
 ```
 
-**Rule**: An ADR's explicit decision overrides an architecture document. An architecture document overrides a code comment. Code comments override tests. Tests are evidence of behavior, not authority for it.
+### As-built reality authority
+
+These define what the system actually does at runtime:
+
+```text
+database schema and constraints
+  → domain/engine commands
+  → API/orchestrator transaction composition
+  → repository implementation
+  → frontend projections
+  → executable tests
+```
+
+### Conflict resolution
+
+Architecture documents do **not** override executable reality. When normative intent and implementation conflict:
+
+- Record **DOCUMENTATION_DRIFT** when documentation is stale.
+- Record **DEFECT** or **SECURITY_DEFECT** when implementation violates an accepted invariant.
+- Record **OPEN_DECISION** when the intended semantics are genuinely unresolved.
+- Do not silently select one authority over the other.
 
 ## Document Map
 
@@ -45,9 +72,10 @@ Accepted ADR
 |----------|---------|
 | [domain-model.md](./domain-model.md) | Aggregate catalog, Question/Paper/Exam/Enrollment/Attempt/Grading/Result models |
 | [protocol-catalog.md](./protocol-catalog.md) | Every protocol: purpose, actor, preconditions, state transition, writes, transaction boundary, idempotency, audit |
-| [state-and-authority.md](./state-and-authority.md) | State machines for Exam, Attempt, Enrollment, Grading, Email outbox; policy fields; fact timestamps |
+| [state-and-authority.md](./state-and-authority.md) | State machines for Exam, Attempt, Grading, Enrollment, Email outbox; policy fields; fact timestamps |
 | [data-authority.md](./data-authority.md) | What data is authoritative, who writes it, when it becomes immutable, transaction boundaries, crash recovery |
 | [security-model.md](./security-model.md) | Authentication, organization boundary, capability authorization, ownership, frozen-data integrity, threat model |
+| [diagrams.md](./diagrams.md) | Mermaid architecture diagrams: system context, aggregate relationships, data flow, state machines, sequence diagrams, security boundaries |
 
 ## Normative Terminology
 
@@ -71,22 +99,20 @@ For absent or proposed behavior, these explicit labels are used:
 | **FUTURE CAPABILITY** | Valid product capability not currently required |
 | **OPEN DECISION** | Product semantics have not been decided |
 
-## Current Implementation Commit
-
-These documents describe the system state at the commit at which they are authored. See the git log of this branch for the exact commit. Unmerged PR content is identified as **PENDING / NON-AUTHORITATIVE UNTIL MERGED**.
-
 ## Known Limitations
 
 - Phase 1 only implements `timed_window` timing mode; `timed_sync`, `deadline`, and `untimed` are **NOT IMPLEMENTED** as runtime modes (schema fields exist).
 - `not_started`, `queued`, `grading`, and `voided` attempt statuses have **no write path** in the current implementation — they exist as target design.
 - Disrupted recovery UI is **NOT IMPLEMENTED** — the backend capability (heartbeat scanner, `restoreAttempt`) exists, but the candidate-facing restore flow is incomplete.
-- Email delivery infrastructure (outbox, worker) has **no business caller** — the `EmailNotificationService` is never instantiated by any route.
+- Email delivery infrastructure (outbox + worker) is **IMPLEMENTED** (P5-0 merged), but has **no production business caller** — the business notification-to-outbox protocol is **NOT IMPLEMENTED**.
 - Notification Inbox is **NOT IMPLEMENTED** — only the email outbox channel exists.
-- `Paper` is an **implicit or embedded composition concept**, not an explicit aggregate (see [domain-model.md §Paper classification](./domain-model.md#paper-classification)).
+- `Paper` is an **implicit or embedded composition concept**, not an explicit aggregate (see [domain-model.md](./domain-model.md)).
+- Candidate answer-key visibility is **fixed to hidden** — a future configurable release policy is **NOT IMPLEMENTED**.
+- Teacher role has capability grants but resource-scoped authorization (Teacher@course) is **NOT IMPLEMENTED** — Teacher permissions are currently flat org-wide.
 
 ## How Future Audits Update These Documents
 
 1. A new audit or architecture Job SHOULD read these documents as the current normative baseline.
 2. When implementation changes, the relevant document MUST be updated to reflect the new normative state.
 3. When an ADR supersedes a document section, the document MUST be updated to reference the ADR and remove the superseded content.
-4. Each document carries a "Last verified against commit" marker. After a change, the marker MUST be updated and the affected sections re-verified.
+4. Each document carries a "Last verified against commit" marker near its title. After a change, the marker MUST be updated and the affected sections re-verified.
