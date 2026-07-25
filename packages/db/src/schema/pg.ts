@@ -110,6 +110,14 @@ export const users = pgTable(
     name: text("name").notNull(),
     role: text("role").notNull(),
     isActive: boolean("is_active").notNull(),
+    /**
+     * Optional notification recipient email (P5-N1 §13).
+     *
+     * NOT used for login. NOT unique. NOT verified. The first V1 consumer is
+     * the `result_published` Inbox + Email outbox integration. The contract
+     * layer normalizes (trim + lowercase) and maps blank input to null.
+     */
+    email: text("email"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -777,6 +785,58 @@ export const userRoleAssignments = pgTable(
   ],
 );
 
+/**
+ * Notification Inbox — the first-class PostgreSQL Inbox surface (P5-N1).
+ *
+ * The Inbox is the authoritative in-product notification channel. It is
+ * scoped per (organization, recipient user) and supports stable list
+ * ordering, unread count, mark-read, and idempotent fan-out via a recipient-
+ * scoped dedupe key. Email outbox rows (P5-N1-I2) link back to a notification
+ * via `email_outbox.notification_id`.
+ *
+ * V1 only writes rows of `type = "result_published"`. The schema intentionally
+ * does NOT carry severity / resource_type / resource_id / archived_at /
+ * invalidated_at columns — they have no V1 reader or writer and are deferred
+ * (P5-N1-R0 §12, §22).
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    actionPath: text("action_path"),
+    createdAt: createdAt(),
+    readAt: timestamp("read_at", { withTimezone: true, mode: "date" }),
+    dedupeKey: text("dedupe_key"),
+  },
+  (table) => [
+    // Stable Inbox list order: org + recipient + newest first, id as tiebreak.
+    index("notifications_org_recipient_created_at_id_idx").on(
+      table.organizationId,
+      table.recipientUserId,
+      table.createdAt,
+      table.id,
+    ),
+    // Unread count query: org + recipient + read_at (null = unread).
+    index("notifications_org_recipient_read_at_idx").on(
+      table.organizationId,
+      table.recipientUserId,
+      table.readAt,
+    ),
+    // Idempotent fan-out: at most one row per (org, recipient, dedupe_key)
+    // across the lifetime of a notification. NULL keys are unrestricted.
+    uniqueIndex("notifications_org_recipient_dedupe_key_unique")
+      .on(table.organizationId, table.recipientUserId, table.dedupeKey)
+      .where(sql`"dedupe_key" IS NOT NULL`),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -795,4 +855,5 @@ export const schema = {
   clientEvents,
   importJobLogs,
   emailOutbox,
+  notifications,
 };

@@ -134,6 +134,13 @@
       "when": 1786000000000,
       "tag": "0018_email_outbox_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786400000000,
+      "tag": "0019_notifications_users_email",
+      "breakpoints": true
     }
   ]
 }
