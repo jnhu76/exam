@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { passwordField } from "./passwordPolicy.js";
+import { nullableEmailField, optionalEmailField } from "./emailField.js";
 
 // ── User ──────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export const UserSchema = z.object({
   name: z.string(),
   role: RoleSchema,
   isActive: z.boolean(),
+  email: nullableEmailField(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -56,6 +58,7 @@ export const CreateUserRequestSchema = z.object({
   password: passwordField(),
   name: z.string().min(1).max(100),
   role: AssignableRoleSchema,
+  email: optionalEmailField(),
 });
 
 /** Type for a create-user request. */
@@ -69,6 +72,7 @@ export const UpdateUserRequestSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   role: AssignableRoleSchema.optional(),
   isActive: z.boolean().optional(),
+  email: optionalEmailField(),
 });
 
 /** Type for an update-user request. */

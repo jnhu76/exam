@@ -156,6 +156,7 @@ const candidateItemSchema = z.object({
   name: z.string(),
   username: z.string(),
   isActive: z.boolean(),
+  email: z.string().email().nullable(),
   createdAt: z.string(),
 });
 
@@ -213,6 +214,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             name: user?.name ?? "",
             username: user?.username ?? "",
             isActive: user?.isActive ?? false,
+            email: user?.email ?? null,
             createdAt: c.createdAt.toISOString(),
             updatedAt: c.updatedAt.toISOString(),
           };
@@ -269,8 +271,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
 
       const passwordHash = await hashPassword(data.password);
       let candidate;
+      let createdEmail: string | null;
       try {
-        candidate = await executeInTransaction(fastify.db, async (tx) => {
+        const created = await executeInTransaction(fastify.db, async (tx) => {
           const txUserRepo = createUserRepo(tx);
           const txCandidateRepo = createCandidateRepo(tx);
           const user = await txUserRepo.createUnique(ctx, {
@@ -279,6 +282,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             name: data.name,
             role: "Candidate" as const,
             isActive: true,
+            // P5-N1 §13: optional recipient email; contract normalizes + maps
+            // blank to undefined, so we store null when absent.
+            email: data.email ?? null,
           });
           // RBAC-M10-E: a candidate created here MUST get a primary active
           // Candidate assignment in the SAME transaction, or the M10-E flip
@@ -293,17 +299,19 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
               isActive: true,
             },
           );
-          const created = await txCandidateRepo.create(ctx, {
+          const createdProfile = await txCandidateRepo.create(ctx, {
             userId: user.id,
             fields: data.fields,
           });
           await recordAtomicHttpAudit(tx, request, ctx, {
             action: "candidate.create",
             targetType: "candidate",
-            targetId: created.id,
+            targetId: createdProfile.id,
           });
-          return created;
+          return { profile: createdProfile, email: user.email };
         });
+        candidate = created.profile;
+        createdEmail = created.email;
       } catch (err: unknown) {
         if (err instanceof UserAlreadyExistsError) {
           return reply
@@ -336,6 +344,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         name: data.name,
         username: data.username,
         isActive: true,
+        email: createdEmail ?? null,
         createdAt: candidate.createdAt.toISOString(),
         updatedAt: candidate.updatedAt.toISOString(),
       });
@@ -392,6 +401,10 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           throw new CandidateIdentityConflictError();
         }
       }
+      // P5-N1 §13: `email` is optional. Treat "field present in body" as an
+      // explicit write (blank -> null clears it); "field absent" is a no-op.
+      const emailProvided =
+        request.body != null && "email" in (request.body as object);
       const updated = await executeInTransaction(fastify.db, async (tx) => {
         const txCandidateRepo = createCandidateRepo(tx);
         const txUserRepo = createUserRepo(tx);
@@ -403,10 +416,15 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         if (data.fields) {
           await txCandidateRepo.update(ctx, id, { fields: data.fields });
         }
-        if (data.name !== undefined || data.isActive !== undefined) {
+        if (
+          data.name !== undefined ||
+          data.isActive !== undefined ||
+          emailProvided
+        ) {
           await txUserRepo.update(ctx, candidate.userId, {
             ...(data.name !== undefined ? { name: data.name } : {}),
             ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+            ...(emailProvided ? { email: data.email ?? null } : {}),
           });
         }
         const changed = await txCandidateRepo.findById(ctx, id);
@@ -432,6 +450,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const changedFields = [
         ...(data.fields ? ["fields"] : []),
         ...(data.name !== undefined ? ["name"] : []),
+        ...(emailProvided ? ["email"] : []),
       ];
       if (changedFields.length > 0) {
         recordBestEffortAudit(fastify, request, ctx, {
@@ -446,6 +465,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         name: user?.name ?? "",
         username: user?.username ?? "",
         isActive: user?.isActive ?? false,
+        email: user?.email ?? null,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };

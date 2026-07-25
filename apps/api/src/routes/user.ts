@@ -38,6 +38,7 @@ const userItemSchema = z.object({
   name: z.string(),
   role: AssignableRoleSchema,
   isActive: z.boolean(),
+  email: z.string().email().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -107,6 +108,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           name: u.name,
           role: u.role,
           isActive: u.isActive,
+          email: u.email ?? null,
           createdAt: u.createdAt.toISOString(),
           updatedAt: u.updatedAt.toISOString(),
         })),
@@ -153,6 +155,9 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           name: data.name,
           role: data.role,
           isActive: true,
+          // P5-N1 §13: optional recipient email; contract normalizes + maps
+          // blank to undefined, so we store null when absent.
+          email: data.email ?? null,
         });
         await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
           tx,
@@ -178,6 +183,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         name: user.name,
         role: user.role,
         isActive: user.isActive,
+        email: user.email ?? null,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
       });
@@ -238,6 +244,13 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         data.isActive !== undefined && data.isActive !== target.isActive;
       const profileChanged =
         data.name !== undefined && data.name !== target.name;
+      // P5-N1 §13: `email` is optional. The contract normalizes blank to
+      // undefined; the route treats "field present in body" as an explicit
+      // write (blank -> null clears it), and "field absent" as a no-op.
+      const emailProvided =
+        request.body != null && "email" in (request.body as object);
+      const emailChanged =
+        emailProvided && (data.email ?? null) !== (target.email ?? null);
 
       const finalUser = await mutateWithEffectiveAdminPostcondition(
         fastify.db,
@@ -249,6 +262,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           const updated = await txUserRepo.update(ctx, id, {
             ...(data.name !== undefined ? { name: data.name } : {}),
             ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+            ...(emailProvided ? { email: data.email ?? null } : {}),
           });
           if (!updated) {
             return null;
@@ -293,12 +307,17 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      if (profileChanged) {
+      if (profileChanged || emailChanged) {
         recordBestEffortAudit(fastify, request, ctx, {
           action: "user.profile_updated",
           targetType: "user",
           targetId: id,
-          metadata: { changedFields: ["name"] },
+          metadata: {
+            changedFields: [
+              ...(profileChanged ? ["name"] : []),
+              ...(emailChanged ? ["email"] : []),
+            ],
+          },
         });
       }
 
@@ -309,6 +328,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         name: finalUser.name,
         role: finalUser.role,
         isActive: finalUser.isActive,
+        email: finalUser.email ?? null,
         createdAt: finalUser.createdAt.toISOString(),
         updatedAt: finalUser.updatedAt.toISOString(),
       };
