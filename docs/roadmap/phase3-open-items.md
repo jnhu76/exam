@@ -18,7 +18,7 @@ Phase 3 **product** work that remains.
 ```text
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
-  → P3 (result publishing closeout) 🔄 NEXT
+  → P3 (result publishing closeout) 🔄 IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ⏸ BLOCKED on P3
   → P6 (MVP ready closeout)
 ```
@@ -42,14 +42,16 @@ P5-N1.
 
 ---
 
-## P3: Result publishing closeout (NEXT)
+## P3: Result publishing closeout (IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW)
 
 - **CAPABILITY**: Results are published under the configured strategy; candidates see only what policy permits; Admin and Teacher access is verified under the final MVP role model.
-- **CURRENT STATE**: NEXT — P4 and P5-0 are now closed (2026-07-25). Backend result-visibility modes already exist (`immediate`, `after_grading`, `manual`), but the published flow is not closed by final-role E2E and leak tests. This audit (P3-R0) determines the exact remaining work.
-- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes.
-- **WHAT IS MISSING**: Result-visibility E2E for manual or after-grading publication; candidate answer/standard-answer leak tests; Admin/Teacher result-view verification after the P4 role switch; a stable transaction and route boundary that P5-N1 can safely extend.
+- **CURRENT STATE**: IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW (2026-07-25, PR #211). P4 and P5-0 are now closed (2026-07-25). The result-publication boundary is audited (P3-R0 reality audit) and test-only closed (P3-R1: M8 Teacher publish API proof, M9 Teacher all-view result proof, M12 Teacher browser publication E2E, M13 concurrent publication idempotency; no production behavior changes). Independent closeout review owns P3 closure.
+  - P3-R0 reality audit: [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md).
+  - P3-R1 test-only closeout: [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md).
+- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes (`immediate`, `after_grading`, `manual`); frozen-question-snapshot truth; Teacher all-view (ScoreAllView) and publish (ExamResultPublish) capability behavior; browser publication UI through ExamDetailPage.
+- **WHAT IS MISSING**: (none blocking — M8/M9/M12/M13 closed by P3-R1).
 - **DEPENDENCIES**: P4 closed. P5-0 closed (not a semantic dependency of result publishing).
-- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules.
+- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules; WYSIWYG final-answer barrier; IP/CIDR examination policy; concurrent-session/device policy; Candidate emergency examination credentials.
 - **ACCEPTANCE BOUNDARY**: Under the final Admin/Teacher/Candidate role model, an authorized actor publishes results according to configured policy; the candidate can view only the candidate's own permitted result and cannot see hidden standard answers. The result-publication command and transaction boundary are stable enough for P5-N1 to extend without redefining result semantics.
 
 ## P4: RBAC MVP role switch — Admin / Teacher / Candidate (CLOSED)

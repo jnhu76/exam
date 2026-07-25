@@ -18,12 +18,16 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
-- **Phase 3, Module P3 — Result publishing closeout (NEXT).** This audits and
-  closes the result-publication boundary under the final Admin/Teacher/Candidate
-  role model and freezes the authoritative transaction seam that P5-N1 will
-  extend. P4 (RBAC MVP role switch) and P5-0 (Email delivery runtime) are now
-  closed; P3 is the current execution cursor. See
-  [`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) §P3.
+- **Phase 3, Module P3 — Result publishing closeout
+  (IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW).** The
+  result-publication boundary is audited (P3-R0) and test-only closed (P3-R1:
+  M8 Teacher publish API proof, M9 Teacher all-view result proof, M12 Teacher
+  browser publication E2E, M13 concurrent publication idempotency; no
+  production behavior changes). The authoritative transaction seam that P5-N1
+  will extend is frozen. Independent closeout review owns P3 closure. See
+  [`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) §P3,
+  [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md),
+  [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md).
   Notification and Email delivery architecture authority:
   [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md).
 
@@ -47,7 +51,7 @@ result-publication transaction (P5-N1):
 ```text
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
-  → P3 (result publishing closeout) 🔄 NEXT
+  → P3 (result publishing closeout) 🔄 IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ⏸ BLOCKED on P3
   → P6 (MVP ready closeout)
 ```
@@ -59,7 +63,7 @@ Inbox + Email business integration.
 | ---- | ---------------------------------------------- | ------ |
 | P4   | Authorization infrastructure implemented        | ✅ CLOSED |
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | ✅ CLOSED |
-| P3   | P4 closed                                       | 🔄 NEXT |
+| P3   | P4 closed                                       | 🔄 AWAITING INDEPENDENT CLOSEOUT REVIEW |
 | P5-N1| P4 + P5-0 + P3 closed                           | ⏸ BLOCKED on P3 |
 | P6   | Preceding MVP blockers closed                   | ⏸ |
 

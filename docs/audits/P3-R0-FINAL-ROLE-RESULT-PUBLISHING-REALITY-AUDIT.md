@@ -268,13 +268,26 @@ executeInTransaction(fastify.db, async (tx) => {        // repeatable read, retr
   Scenario B idempotent re-publish no-op.
 - **Retry interaction with the tx.** `executeInTransaction` auto-retries on
   serialization conflicts (`isRetryableError`, `db/types.ts:135-157`, exponential
-  backoff). On retry the `fn` body **re-executes**: `publishResults` re-reads
-  the exam, sees `resultsPublishedAt != null` (own write visible under
-  REPEATABLE READ within the same snapshot — but on a *fresh* retry snapshot it
-  sees the committed prior attempt's write), returns `alreadyPublished: true`,
-  and the `!alreadyPublished` guard suppresses the audit. **Net: retries cannot
-  duplicate side effects** (no double timestamp write, no double audit row).
-  This holds because the guard is re-evaluated inside each retried `fn`.
+  backoff). `executeInTransaction` re-executes the callback in a fresh
+  transaction after a retryable serialization or deadlock failure.
+
+  The failed transaction attempt commits no `resultsPublishedAt` change, audit
+  row, notification row or outbox row.
+
+  On the fresh retry snapshot:
+
+  - if another concurrent transaction successfully published the exam, the retry
+    observes `resultsPublishedAt != null`, `publishResults` returns
+    `alreadyPublished=true`, and the guarded side effects are skipped;
+
+  - if the conflict came from a non-publish mutation, `resultsPublishedAt` may
+    remain null, and the retried callback performs exactly one successful
+    publication mutation and one audit insert.
+
+  Transaction rollback prevents side effects from a failed attempt. The
+  `alreadyPublished` guard controls repeated or concurrent business calls. These
+  are related but distinct protections. **Net: retries cannot duplicate side
+  effects** (no double timestamp write, no double audit row).
 - **Caveat recorded (not a defect).** The idempotency guard reads
   `exam.resultsPublishedAt` set by a *prior committed* publish. Under the
   retry model that is the correct authority. If P5-N1 adds an outbox row
@@ -342,12 +355,12 @@ test; none requires production change (see §12).
 | M5 | after_grading: fully_graded ⟹ Candidate visible per policy | J5a-9 | **covered** | API |
 | M6 | immediate: ready ⟹ Candidate visible without explicit publish | J5a-1 | **covered** | API |
 | M7 | Admin: sees frozen result before Candidate publication | scores.test cross-proof :1531 | **covered** | API |
-| M8 | **Teacher: final P4 capability behavior for publish** | none — `resultPublishing.test.ts` has 0 `Teacher` references; only Admin-allow + Candidate-deny asserted | **MISSING** | API |
-| M9 | **Teacher: final P4 capability behavior for result view (all-view, keeps standardAnswer, bypasses Stage 2)** | none direct (P4-C3 E2E asserts only `200 \| 409 EXAM_NOT_FINISHED` authorization, explicitly *not* result semantics) | **MISSING** | API |
+| M8 | **Teacher: final P4 capability behavior for publish** | none — `resultPublishing.test.ts` has 0 `Teacher` references; only Admin-allow + Candidate-deny asserted | **CLOSED** (P3-R1 `resultPublishing.test.ts` M8) | API |
+| M9 | **Teacher: final P4 capability behavior for result view (all-view, keeps standardAnswer, bypasses Stage 2)** | none direct (P4-C3 E2E asserts only `200 \| 409 EXAM_NOT_FINISHED` authorization, explicitly *not* result semantics) | **CLOSED** (P3-R1 `scores.test.ts` M9) | API |
 | M10 | Candidate: own-result only | candidateOwnership + scoreCapability | **covered** | API |
 | M11 | Candidate: no answer/internal-field leakage | scores.test :1188 | **covered** | API |
-| M12 | **Teacher publish-results E2E (browser mutation)** | none — P4-C3 used objective true_false only and explicitly excluded manual/after_grading publication | **MISSING (E2E)** | E2E |
-| M13 | **Idempotent publish under tx retry (guard re-evaluates)** | idempotency proven at engine+route layer; the retry-re-execution interaction is inferred, not directly asserted | **PARTIAL** | API/engine |
+| M12 | **Teacher publish-results E2E (browser mutation)** | none — P4-C3 used objective true_false only and explicitly excluded manual/after_grading publication | **CLOSED** (P3-R1 `result-publishing.spec.ts` M12) | E2E |
+| M13 | **Idempotent publish under tx retry (guard re-evaluates)** | idempotency proven at engine+route layer; the retry-re-execution interaction is inferred, not directly asserted | **CLOSED** (P3-R1 `resultPublishing.test.ts` M13 concurrent) | API/engine |
 
 **No test is "stale after P4" in a way that requires rewriting** — the current
 tests already exercise the capability-path authority (`view`-driven, multi-role
@@ -481,13 +494,13 @@ result is valid.
 ## 16. Recommended implementation Job
 
 ```text
-P3-R1 TEST-ONLY CLOSEOUT
+P3 IMPLEMENTED — AWAITING INDEPENDENT CLOSEOUT REVIEW
 ```
 
-**Rationale.** No production change is required (§12). The publication command,
+**Rationale.** No production change was required (§12). The publication command,
 transaction boundary, capability gates, frozen projection, and leakage boundary
-are correct and proven under the final role model. The only remaining work is
-closing four test gaps (§11 M8, M9, M12, M13), all additive and test-only:
+are correct and proven under the final role model. The four test gaps (§11 M8,
+M9, M12, M13) are closed by P3-R1 (test-only, no production changes):
 
 - **M8** — Teacher `publish-results` capability behavior (allow, any exam;
   idempotent; capability-driven, not role-name). Add to
