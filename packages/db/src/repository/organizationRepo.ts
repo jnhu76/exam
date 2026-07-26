@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { PublicBrandingContext, RequestContext } from "@exam/domain";
+import type {
+  Organization,
+  PublicBrandingContext,
+  RequestContext,
+} from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
 import { eq } from "drizzle-orm";
 import type { Database } from "../types.js";
@@ -8,6 +12,22 @@ import { now } from "./baseRepo.js";
 
 /** Creates a repository for the `organizations` table with branding lookup. */
 export function createOrganizationRepo(db: Database) {
+  /**
+   * Resolves the single organization for public branding display when one
+   * exists, or returns `null` when none exist. Throws when multiple
+   * organizations exist because the caller cannot disambiguate without a slug.
+   */
+  async function resolveOptionalBrandingTenant(
+    _ctx: PublicBrandingContext,
+  ): Promise<Organization | null> {
+    const all = await db.select().from(organizations);
+    if (all.length === 0) return null;
+    if (all.length === 1) return all[0]!;
+    throw new NotFoundError(
+      "Multiple organizations exist; organizationSlug is required",
+    );
+  }
+
   return {
     /**
      * Creates a new organization with auto-generated `id` and timestamps.
@@ -63,12 +83,13 @@ export function createOrganizationRepo(db: Database) {
         .where(eq(organizations.id, id));
       return (result.count ?? 0) > 0;
     },
+    resolveOptionalBrandingTenant,
     /**
      * Resolves the organization for public branding display.
      * If a slug is provided, looks up by slug. If omitted and exactly one
      * organization exists, returns it. Throws `NotFoundError` otherwise.
      */
-    async resolveBrandingTenant(_ctx: PublicBrandingContext, slug?: string) {
+    async resolveBrandingTenant(ctx: PublicBrandingContext, slug?: string) {
       if (slug) {
         const rows = await db
           .select()
@@ -80,13 +101,11 @@ export function createOrganizationRepo(db: Database) {
         }
         return organization;
       }
-      const all = await db.select().from(organizations);
-      if (all.length === 1) return all[0]!;
-      throw new NotFoundError(
-        all.length === 0
-          ? "No organization found"
-          : "Multiple organizations exist; organizationSlug is required",
-      );
+      const organization = await resolveOptionalBrandingTenant(ctx);
+      if (!organization) {
+        throw new NotFoundError("No organization found");
+      }
+      return organization;
     },
   };
 }

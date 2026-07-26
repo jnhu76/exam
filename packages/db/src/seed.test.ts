@@ -10,7 +10,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { getIsolatedTestDb } from "./testDb.js";
-import { seed } from "./seed.js";
+import { seed, assertNotProductionSeed } from "./seed.js";
 import { schema } from "./schema/pg.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { verifyPassword } from "@exam/auth/src/password.js";
@@ -231,5 +231,58 @@ describe("seed authority preservation (RBAC-M10-E)", () => {
 
     const active = await repo.listActiveForUser(ctx, first.users.candidateId);
     expect(active).toHaveLength(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// P6-008: production fail-closed guard. The baseline seed ships known
+// default credentials (admin/admin123, candidate/candidate123) and MUST
+// NOT run in production. The canonical production bootstrap is
+// apps/api/src/scripts/bootstrap-admin.ts.
+// ──────────────────────────────────────────────────────────────────────
+
+describe("assertNotProductionSeed (P6-008 production guard)", () => {
+  it("throws when APP_MODE=production", () => {
+    expect(() => assertNotProductionSeed({ APP_MODE: "production" })).toThrow(
+      /Refusing to run the baseline seed in production/,
+    );
+  });
+
+  it("throws when APP_MODE unset and NODE_ENV=production", () => {
+    expect(() => assertNotProductionSeed({ NODE_ENV: "production" })).toThrow(
+      /Refusing to run the baseline seed in production/,
+    );
+  });
+
+  it("points operators to the production bootstrap path", () => {
+    try {
+      assertNotProductionSeed({ APP_MODE: "production" });
+      expect.fail("expected assertNotProductionSeed to throw");
+    } catch (err) {
+      expect((err as Error).message).toContain("bootstrap-admin");
+      expect((err as Error).message).toContain("--password");
+    }
+  });
+
+  it("does not throw in development", () => {
+    expect(() =>
+      assertNotProductionSeed({ APP_MODE: "development" }),
+    ).not.toThrow();
+  });
+
+  it("does not throw in test mode", () => {
+    expect(() => assertNotProductionSeed({ APP_MODE: "test" })).not.toThrow();
+  });
+
+  it("does not throw in e2e mode", () => {
+    expect(() => assertNotProductionSeed({ APP_MODE: "e2e" })).not.toThrow();
+  });
+
+  it("does not throw in ci mode", () => {
+    expect(() => assertNotProductionSeed({ APP_MODE: "ci" })).not.toThrow();
+  });
+
+  it("does not throw when APP_MODE is unset (defaults to development)", () => {
+    expect(() => assertNotProductionSeed({})).not.toThrow();
   });
 });

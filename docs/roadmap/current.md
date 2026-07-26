@@ -18,20 +18,23 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
-- **Phase 3, Module P6 — MVP ready closeout is now UNBLOCKED.** All Phase 3
-  MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0 (Email delivery
-  runtime hardening, PR #210), P3 (result publishing closeout, PR #211), and
-  P5-N1 (Notification Inbox + result-published Email integration, **PR #213
-  merged 2026-07-25**). P5-N1 delivered the first operational two-channel
-  notification: candidate Inbox plus optional Email for `result_published`,
-  integrated atomically into the result-publication transaction. The final
-  review corrective cycle (CI FK-flake on `audit_logs_organization_id_*` from
-  late best-effort audit writes racing org cleanup) is resolved — `pnpm verify`
-  is green (127/127 API test files). See
-  [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md) for the
-  implementation closeout and
-  [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md)
-  for architecture authority.
+- **Phase 3, Module P6 — MVP ready closeout is IN PROGRESS (reality audit).**
+  All Phase 3 MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0
+  (Email delivery runtime hardening, PR #210), P3 (result publishing closeout,
+  PR #211), and P5-N1 (Notification Inbox + result-published Email integration,
+  **PR #213 merged 2026-07-25**). P5-N1 delivered the first operational
+  two-channel notification: candidate Inbox plus optional Email for
+  `result_published`, integrated atomically into the result-publication
+  transaction.
+
+  P6 (branch `feat/p6-mvp-ready-closeout`) is now auditing the implemented MVP
+  subset for genuine release readiness against the documented
+  LAN/on-premise, single-organization mode. See
+  [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md)
+  for the audit and
+  [`docs/deployment/mvp-deployment-runbook.md`](../deployment/mvp-deployment-runbook.md)
+  for the deployment/recovery runbook. P6 does **not** mark all Phase 3 work
+  complete — it concerns only the implemented MVP subset.
 
 > Note: the former P2-1 Exam Authoring UI Flow has been removed from the
 > active Phase 3 plan by scope decision.
@@ -58,7 +61,7 @@ P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
-  → P6 (MVP ready closeout) ⏭ NEXT — unblocked by P5-N1 close
+  → P6 (MVP ready closeout) 🔄 IN PROGRESS — REALITY AUDIT (branch feat/p6-mvp-ready-closeout)
 ```
 
 P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
@@ -70,7 +73,7 @@ Inbox + Email business integration.
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | ✅ CLOSED |
 | P3   | P4 closed                                       | ✅ CLOSED |
 | P5-N1| P4 + P5-0 + P3 closed                           | ✅ CLOSED (2026-07-25, PR #213) |
-| P6   | Preceding MVP blockers closed                   | ⏭ NEXT — unblocked by P5-N1 close |
+| P6   | Preceding MVP blockers closed                   | 🔄 IN PROGRESS — REALITY AUDIT |
 
 After Phase 3 MVP closeout, the deferred design items (M11 resource-relationship
 authorization, custom roles, Proctor runtime permission boundary, etc.) may be

@@ -130,25 +130,79 @@ pnpm dev         # Start API + Web with hot reload
 
 ### Mode 2: Docker Compose (Full Stack)
 
-Production-like deployment. Builds the app image and starts both API and PostgreSQL in containers.
+Production-like deployment. Builds the app image and starts the default MVP
+topology in containers: API + PostgreSQL + Email delivery worker. Redis is
+**optional** (gated behind the `redis` profile — no MVP business code uses
+it; see ADR-001). The Email worker is required to drain the PostgreSQL
+`email_outbox` table that `result_published` notifications write into
+(ADR-011). See
+[`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md)
+for the canonical deployment & operations runbook (prerequisites, env vars,
+first install, recovery, upgrade checklist, known limitations).
 
 ```bash
-docker compose up -d
+# Configure production-required env (copy template, edit):
+cp .env.example .env
+#   POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN, PUBLIC_WEB_ORIGIN are
+#   REQUIRED in the bundled docker-compose.yml (it uses ${VAR:?...}
+#   required-expansion — Compose fails to start if any is unset). There
+#   is NO default database password in production (P6-007).
+
+docker compose up -d --build    # build + start app, db, email-worker
 docker compose logs -f app
+docker compose ps               # verify app, db, email-worker are up
 docker compose down
-docker compose down -v   # remove database data
+docker compose down -v          # DANGEROUS: removes database data volumes
+
+# (Optional) enable the Redis profile for forward-compatibility testing:
+docker compose --profile redis up -d --build
+# and set REDIS_URL=redis://redis:6379 in .env
 ```
 
 - App: <http://localhost:3000>
 - Database: PostgreSQL (internal, not exposed to host)
-- Migrations run automatically on container start
+- Email worker: drains `email_outbox` (resident process; see ADR-011)
+- Migrations run on container start. The `app` container runs
+  `node dist/scripts/migrate.js` in its entrypoint before binding the API.
+  The `email-worker` depends on `app: service_healthy`, so its startup
+  self-migrate call is serialized strictly AFTER the app's migrate call
+  (the drizzle journal tracks state; it is NOT a concurrency lock — P6-009).
+- Redis: **optional** profile (`--profile redis`); not started by a bare
+  `docker compose up` (P6-010 / ADR-001). No MVP business code reads or
+  writes Redis.
+
+The scanner (heartbeat + deadline) runs **in-process** inside the `app`
+container — there is no separate scanner service.
+
+#### Production first-Admin bootstrap
+
+The first Admin is created via the `bootstrap-admin` CLI against a fresh
+migrated database (P6-008). The baseline dev/test seed
+(`packages/db/src/seed.ts`) ships known default credentials and refuses to
+run when `APP_MODE=production`. Do NOT use the baseline seed as the
+production bootstrap path.
+
+```bash
+docker compose exec app \
+  node dist/scripts/bootstrap-admin.js \
+  --username admin \
+  --password '<STRONG_OPERATOR_PASSWORD>' \
+  --name 'System Admin' \
+  --organization-name 'My Organization'
+```
+
+The bootstrap: (1) locates or creates the internal default organization
+(slug `default`); (2) creates the first Admin with the explicit password;
+(3) creates the primary Admin role assignment in the same transaction;
+(4) writes an `admin.bootstrap` audit row. It refuses a second active
+Admin unless `--force` is supplied. It does NOT create Candidate accounts.
 
 ## Docker Files Reference
 
 | File                      | Purpose                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `Dockerfile`              | Multi-stage build: base → builder → production runner                         |
-| `docker-compose.yml`      | Production: app + PostgreSQL 18 + Redis 7                                     |
+| `docker-compose.yml`      | Production: app + email-worker + PostgreSQL 18 (Redis 7 optional, `--profile redis`) |
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |

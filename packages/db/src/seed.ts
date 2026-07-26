@@ -9,6 +9,7 @@ import {
 import { schema, ASSIGNABLE_ROLES } from "./schema/pg.js";
 import type { AssignableRole } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
+import { parseAppMode } from "./databaseUrl.js";
 import dotenv from "dotenv";
 
 dotenv.config({ quiet: true });
@@ -75,6 +76,37 @@ const USER_DEFS = [
 ] as const;
 
 /**
+ * P6-008: refuse to run the baseline seed in production. The baseline seed
+ * ships known default credentials (admin/admin123, candidate/candidate123)
+ * and is dev/test infrastructure only. The canonical production bootstrap
+ * is `apps/api/src/scripts/bootstrap-admin.ts` (explicit credentials, no
+ * Candidate accounts, audit evidence).
+ *
+ * This guard is fail-closed: it throws when `APP_MODE=production` (or
+ * `NODE_ENV=production` when APP_MODE is unset). It does NOT throw in
+ * development, test, e2e, or ci modes, so dev/E2E seed behavior is
+ * unchanged.
+ *
+ * @param env - Process environment to read from (defaults to process.env).
+ * @throws Error when the resolved runtime mode is production.
+ */
+export function assertNotProductionSeed(
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const mode = parseAppMode(env);
+  if (mode === "production") {
+    throw new Error(
+      "Refusing to run the baseline seed in production (APP_MODE=production). " +
+        "The baseline seed ships known default credentials and is dev/test " +
+        "infrastructure only. Use the production bootstrap instead: " +
+        "'node dist/scripts/bootstrap-admin.js --username <admin> " +
+        "--password <STRONG_PASSWORD> --name <name> " +
+        "--organization-name <org>'.",
+    );
+  }
+}
+
+/**
  * Seeds the baseline database with a default organization and three users
  * (admin, candidate, candidate2). Idempotent — re-running upserts on
  * conflict by username.
@@ -87,6 +119,10 @@ const USER_DEFS = [
  * `POST /users/:id/reset-password` will reject it (target identity check
  * requires a profile).
  *
+ * Production safety (P6-008): this function refuses to run when
+ * `APP_MODE=production`. Use {@link assertNotProductionSeed} directly when
+ * you need to guard without invoking the seed.
+ *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
  * @returns Created organization ID and user IDs.
@@ -95,6 +131,15 @@ export async function seed(
   db: Database,
   hashFn: HashFunction,
 ): Promise<SeedResult> {
+  // P6-008: production fail-closed guard. The baseline seed is dev/test
+  // infrastructure and ships known default credentials (admin/admin123,
+  // candidate/candidate123). It MUST NOT be used as the production
+  // bootstrap path. The canonical production bootstrap is
+  // apps/api/src/scripts/bootstrap-admin.ts. This guard refuses to seed
+  // when APP_MODE=production so a misconfigured entrypoint (RUN_SEED=1
+  // in production) cannot silently introduce default credentials.
+  assertNotProductionSeed();
+
   const timestamp = new Date();
 
   const orgRows = await db
