@@ -103,7 +103,7 @@ For absent or proposed behavior, these explicit labels are used:
 
 - Phase 1 only implements `timed_window` timing mode; `timed_sync`, `deadline`, and `untimed` are **NOT IMPLEMENTED** as runtime modes (schema fields exist).
 - `not_started`, `queued`, `grading`, and `voided` attempt statuses have **no write path** in the current implementation — they exist as target design.
-- Disrupted recovery UI is **NOT IMPLEMENTED** — the backend capability (heartbeat scanner, `restoreAttempt`) exists, but the candidate-facing restore flow is incomplete.
+- Disrupted recovery UI is **NOT IMPLEMENTED** — the backend capability (heartbeat scanner, `restoreAttempt`) exists, but the candidate-facing restore flow is incomplete. See [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md) for the frozen recovery contract and [candidate-recovery.md](./candidate-recovery.md) for sequence diagrams.
 - Email delivery infrastructure (outbox + worker) is **IMPLEMENTED** (P5-0 merged), but has **no production business caller** — the business notification-to-outbox protocol is **NOT IMPLEMENTED**.
 - Notification Inbox is **NOT IMPLEMENTED** — only the email outbox channel exists.
 - `Paper` is an **implicit or embedded composition concept**, not an explicit aggregate (see [domain-model.md](./domain-model.md)).
