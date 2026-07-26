@@ -1,18 +1,39 @@
+# Production Compose contract.
+#
+# Security invariants enforced here and by the
+# scripts/repository-contract/deployment-topology-contract.mjs guard:
+#
+#   - POSTGRES_PASSWORD is REQUIRED (no functional fallback). The bundled
+#     production Compose must never accept a default database credential.
+#     See P6-007 in docs/audits/P6-MVP-READY-REALITY-AUDIT.md.
+#   - JWT_SECRET is REQUIRED for the API and the worker.
+#   - PUBLIC_WEB_ORIGIN and CORS_ORIGIN are REQUIRED for the API and the
+#     worker (the worker's shared runtime-config loader validates both).
+#   - The email-worker depends on app: service_healthy so its self-migrate
+#     call occurs strictly AFTER the app container has completed migrations
+#     and become healthy. The drizzle migration journal tracks state; it is
+#     NOT a concurrency lock (P6-009).
+#   - Redis is an OPTIONAL profile (`--profile redis` /
+#     COMPOSE_PROFILES=redis). The MVP has no Redis business code; the API
+#     defaults REDIS_URL to empty (disabled). See P6-010 / ADR-001.
 services:
   app:
     build: .
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam}
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}@db:5432/${POSTGRES_DB:-exam}
+      # Redis is optional in the implemented MVP (ADR-001). The default
+      # empty value disables Redis; set REDIS_URL when the optional
+      # `redis` profile is enabled.
+      REDIS_URL: ${REDIS_URL:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
       NODE_ENV: production
       APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required for production}
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN is required for production}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       # ADR-006: runtime timezone (display/log/diagnostics only; does not
@@ -21,8 +42,6 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test:
@@ -44,7 +63,13 @@ services:
     image: postgres:18.4-bookworm
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-exam}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exam}
+      # P6-007: the database superuser password is REQUIRED for production.
+      # The bundled production Compose must never accept a default
+      # credential. The same required value is composed into the API and
+      # worker DATABASE_URL above. Note: if an existing pgdata volume was
+      # initialized with a different password, the operator must either
+      # supply that password here or recreate the volume.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}
       POSTGRES_DB: ${POSTGRES_DB:-exam}
       # ADR-006: display/session timezone only; business time is instant-based.
       TZ: ${TZ:-Asia/Shanghai}
@@ -68,9 +93,16 @@ services:
       - exam-net
     restart: unless-stopped
 
+  # Redis is OPTIONAL in the implemented MVP (ADR-001 / P6-010). No MVP
+  # business code reads or writes Redis. The service is gated behind the
+  # `redis` profile: it is NOT started by a bare `docker compose up`. Enable
+  # it explicitly with `docker compose --profile redis up` (or set
+  # COMPOSE_PROFILES=redis) AND set REDIS_URL on the `app` service to
+  # `redis://redis:6379`. See docs/deployment/mvp-deployment-runbook.md §10.
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes
+    profiles: ["redis"]
     environment:
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
@@ -88,26 +120,34 @@ services:
   # PostgreSQL `email_outbox` table that `result_published` notifications
   # write into. Without this service, `docker compose up` would start the
   # API and DB but Email queued by the publication transaction would never
-  # be sent. The worker is PostgreSQL-only (no Redis/Fastify); it
-  # self-migrates at startup (idempotent via the drizzle journal, so it
-  # does not race the app container's migrate call) and resolves the single
-  # internal default organization via the branding resolver. It is
-  # intentionally NOT wired to start when EMAIL_ENABLED is false at the
+  # be sent. The worker is PostgreSQL-only (no Redis/Fastify); it resolves
+  # the single internal default organization via the branding resolver. It
+  # is intentionally NOT wired to start when EMAIL_ENABLED is false at the
   # Compose level: a stopped-but-restarted worker is harmless (it polls an
   # empty outbox and writes a heartbeat). Disable Email delivery by setting
   # EMAIL_ENABLED=false in the runtime env, not by removing this service.
   #
+  # Migration ordering (P6-009): the worker self-migrates at startup via
+  # `migratePostgres(db)`. The drizzle migration journal tracks applied
+  # state; it is NOT a distributed lock and does NOT serialize concurrent
+  # migration runners. To avoid racing the app container's migration call,
+  # this service depends on `app: condition: service_healthy`, so the
+  # required startup sequence is:
+  #     db healthy → app entrypoint migrates → app becomes healthy
+  #                → email-worker starts → worker's migratePostgres re-run
+  #                → worker poll loop starts
+  # The app's healthcheck only passes once the API is bound, which is
+  # strictly after the entrypoint's `node dist/scripts/migrate.js` returns.
+  #
   # The image's ENTRYPOINT is docker-entrypoint.sh, which hard-codes
   # `exec node dist/server.js`. To run the worker instead, override the
   # entrypoint to `node` and pass the worker entrypoint as the command.
-  # The worker self-migrates before its poll loop, so no migrate step is
-  # needed here.
   email-worker:
     build: .
     entrypoint: ["node"]
     command: ["dist/workers/emailDeliveryWorker.js"]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}@db:5432/${POSTGRES_DB:-exam}
       # JWT_SECRET is required by the runtime config loader at worker boot
       # (getRuntimeConfig → resolveJwtSecret fails fast in production
       # without it). The worker itself never signs or verifies JWTs.
@@ -142,8 +182,14 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    # P6-009: serialize migrations. The worker's startup migratePostgres
+    # call MUST run strictly after the app container has completed its
+    # migrations (the drizzle journal tracks state, it does not lock). The
+    # app healthcheck only passes once the API is bound, which is strictly
+    # after `node dist/scripts/migrate.js` returns. depending on db alone
+    # would let the worker race the app's migrate call.
     depends_on:
-      db:
+      app:
         condition: service_healthy
     networks:
       - exam-net

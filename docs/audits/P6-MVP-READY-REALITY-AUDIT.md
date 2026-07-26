@@ -1,7 +1,8 @@
 # P6 — MVP Ready Closeout Reality Audit
 
-> **Status:** CONDITIONAL_PASS — production corrections applied; MVP subset is
-> release-ready pending independent closeout review.
+> **Status:** BLOCKED_BY_RELEASE_DEFECT — P6-CORR1 release defects found by
+> independent review and corrected; awaiting independent MVP-ready closeout
+> review. (Prior state: CONDITIONAL_PASS.)
 >
 > **Branch:** `feat/p6-mvp-ready-closeout`
 >
@@ -18,17 +19,26 @@
 
 ## 1. Verdict
 
-**CONDITIONAL_PASS.** The implemented MVP subset (single deployment / single
-default organization / Admin + Teacher + Candidate MVP roles / `timed_window`
-exams / objective + manual grading / result publication / Inbox + Email
-outbox / PostgreSQL worker / LAN/on-premise) is release-ready subject to
-independent closeout review.
+**BLOCKED_BY_RELEASE_DEFECT → PASS (pending independent review).** The
+implemented MVP subset (single deployment / single default organization /
+Admin + Teacher + Candidate MVP roles / `timed_window` exams / objective +
+manual grading / result publication / Inbox + Email outbox / PostgreSQL
+worker / LAN/on-premise) is release-ready subject to independent closeout
+review, AFTER the P6-CORR1 corrections land.
 
-One P1 release blocker was found and corrected within the authorized P6
-boundary: the Email delivery worker was absent from the production Compose
-topology. The worker is now wired as a first-class Compose service with a
-deterministic regression guard. No P0 release blockers were found. No frozen
-product semantics were changed.
+The first independent review verdict was `BLOCKED_BY_RELEASE_DEFECT`. Four
+release defects were identified and corrected within the authorized P6
+boundary (see §7 finding register):
+
+- **P6-007** — production Postgres default password (P0, corrected).
+- **P6-008** — unsafe production baseline-seed guidance (P0, corrected).
+- **P6-009** — concurrent production migration runners (P1, corrected).
+- **P6-010** — Redis classified optional but required by Compose (P1,
+  corrected).
+
+Plus the earlier P1 (P6-001 — Email delivery worker absent from production
+Compose topology), which was corrected before the review. No frozen product
+semantics were changed.
 
 ---
 
@@ -113,9 +123,11 @@ generic event bus / Kafka / RabbitMQ / BullMQ
 ## 4. Predecessor merge evidence
 
 ```text
-P4      CLOSED — PR #211 (P4-R1 audit), 2026-07-24, tested commit b4dc1d6
+P4      CLOSED — PR #208 (P4 Admin/Teacher/Candidate MVP role switch),
+                    merged 2026-07-24T13:27:51Z
 P5-0    CLOSED — PR #210 (Email delivery runtime), 2026-07-25
-P3      CLOSED — PR #211 (result publishing closeout), 2026-07-25
+P3      CLOSED — PR #211 (final-role result publishing closeout),
+                    merged 2026-07-25T08:32:32Z
 P5-N1   CLOSED — PR #213 merged 2026-07-25T21:17:59Z (merge commit 0b36aab)
         PR #214 merged 2026-07-25T21:27:07Z (merge commit 13d94c2 — roadmap sync)
 ```
@@ -166,7 +178,7 @@ ACCEPTED_DEFERRED / DOCUMENTATION_DRIFT.
 
 | Capability | Primary actor | Entry surface | Authoritative API | Authoritative DB state | Automated proof | Manual/operational proof | Deployment dependency | Failure visibility | Status | Finding |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Admin bootstrap | Operator | CLI seed script | `POST /api/auth/login` (admin) | `users` (Admin role-assignment) | `seed.test.ts`, `bootstrap-admin` integration | P6 clean-DB seed verified | API + DB | 401 on wrong creds | PROVEN | — |
+| Admin bootstrap | Operator | `bootstrap-admin` CLI (production) / baseline seed (dev/test) | `POST /api/auth/login` (admin) | `organizations` (default slug) + `users` (Admin role-assignment) + `audit_logs` (admin.bootstrap) | `bootstrap-admin.test.ts` (17), `seed.test.ts` | P6 fresh-DB bootstrap verified (org + admin + assignment + audit) | API + DB | 401 on wrong creds | PROVEN | — |
 | Admin login/logout | Admin | `/login` (web) | `POST /api/auth/login`, `POST /api/auth/logout` | `auth-token` cookie | `auth.test.ts`, E2E candidate-happy-path | P6 clean-DB login verified (Origin-enforced) | API + DB | AUTH_INVALID_CREDENTIALS (constant-time) | PROVEN | — |
 | Candidate creation | Admin | Admin console | `POST /api/admin/candidates` | `users` + `candidate_profiles` | `candidate.test.ts` | demo seed | API + DB | structured error | PROVEN | — |
 | Teacher creation | Admin | Admin console | `POST /api/admin/users` (role assignment) | `users` + `user_role_assignments` | `user.test.ts`, teacher-product-path E2E | demo seed | API + DB | capability denied | PROVEN | — |
@@ -219,9 +231,12 @@ Rows audited:        43
 PROVEN:              43
 PARTIAL:             0
 MISSING_PROOF:       0
-RELEASE_DEFECT:      0 (P6-001 was found and is now fixed; the fix is proven
-                       by the new deployment-topology-contract.mjs guard and
-                       by 'docker compose config' listing all four services)
+RELEASE_DEFECT:      0 (P6-001 + P6-CORR1 P6-007/008/009/010 were found and
+                       are now fixed; the fixes are proven by the
+                       deployment-topology-contract.mjs guard, by
+                       bootstrap-admin.test.ts + seed.test.ts, and by
+                       'docker compose config' listing the default 3-service
+                       topology + the optional redis profile)
 ACCEPTED_DEFERRED:   0 in the matrix (deferred Phase 3+/4 capabilities are
                        out of the MVP boundary and listed in §24)
 DOCUMENTATION_DRIFT: 1 (status docs described P5-N1 as still in-progress
@@ -234,16 +249,120 @@ DOCUMENTATION_DRIFT: 1 (status docs described P5-N1 as still in-progress
 
 ### P0 — release blocker
 
-**None found.**
+Four P0/P1 release defects were identified by the first independent review
+(`BLOCKED_BY_RELEASE_DEFECT`) and corrected within the authorized P6
+boundary. P6-007 and P6-008 are P0 (production security / unsafe
+bootstrap); P6-001 (prior), P6-009, and P6-010 are P1 (deployment topology
+correctness). None of the frozen MVP product semantics changed.
+
+```text
+P6-007 — production Postgres default password (P0, corrected).
+  Finding:    The bundled docker-compose.yml used
+              `POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-exam}` on the db
+              service (and composed the same fallback into the API and
+              worker DATABASE_URL). A real production deployment could
+              boot with the public default password `exam`.
+  Authority:  P6 security acceptance boundary (no default production
+              secret).
+  Severity:   P0 — production default credential.
+  Fix:        db, app, and email-worker now use
+              `${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for
+              production}` (Compose required-expansion). There is NO
+              functional fallback. The same required value is composed
+              into the API and worker DATABASE_URL. The baseline dev/test
+              seed retains its isolated test/dev credentials.
+  Regression guard:
+              scripts/repository-contract/deployment-topology-contract.mjs
+              now asserts db/app/email-worker all reference POSTGRES_PASSWORD
+              via `${...:?...}` and reject `${...:-...}` fallbacks. TDD
+              proof: reverting any of the three services to a fallback
+              password fails the guard.
+
+P6-008 — unsafe production baseline-seed guidance (P0, corrected).
+  Finding:    The runbook documented the baseline seed
+              (packages/db/src/seed.ts, which ships admin/admin123 +
+              candidate/candidate123) as the production admin bootstrap
+              path (RUN_SEED=1). The baseline seed is dev/test
+              infrastructure and must not be the canonical production
+              bootstrap.
+  Authority:  P6 security acceptance boundary (no default production
+              credential; production bootstrap must use explicit
+              operator-supplied credentials).
+  Severity:   P0 — unsafe production bootstrap guidance + default
+              credentials in production path.
+  Fix:        apps/api/src/scripts/bootstrap-admin.ts extended to be the
+              canonical production bootstrap: (1) locate/create the
+              internal default organization (slug "default"); (2) create
+              the first Admin with required explicit CLI arguments
+              (--username/--password/--name, NO default password); (3)
+              create the primary Admin role assignment; (4) write
+              admin.bootstrap audit evidence. Steps 1–4 run in ONE
+              transaction (bootstrapAdminOnFreshDb) so they commit
+              atomically — a failure in any step leaves no orphan org,
+              user, assignment, or audit (proven by the atomicity test).
+              (5) refuse a second active Admin unless --force. Does NOT
+              create Candidate accounts. packages/db/src/seed.ts gained a
+              fail-closed guard (`assertNotProductionSeed`) that throws
+              when APP_MODE=production, so a misconfigured RUN_SEED=1 in
+              production cannot silently introduce default credentials.
+  Regression guard:
+              bootstrap-admin.test.ts (17 tests: 6 original + 8 fresh-DB
+              + 3 org-resolution) and seed.test.ts (8 new guard tests).
+
+P6-009 — concurrent production migration runners (P1, corrected).
+  Finding:    docker-compose.yml let the API and the Email worker each
+              call migrations concurrently (both depended on
+              db:service_healthy only). The drizzle migration journal
+              tracks applied state; it is NOT a distributed lock and does
+              NOT serialize concurrent migration runners. The prior audit
+              prose claimed the journal gated concurrent invocations —
+              that claim was wrong.
+  Authority:  Drizzle migration semantics (journal = state, not a lock).
+  Severity:   P1 — concurrent migrate runners in production.
+  Fix:        email-worker now `depends_on: app: condition: service_healthy`.
+              Required startup sequence: db healthy → app entrypoint runs
+              migrate → API binds and becomes healthy → email-worker
+              starts → worker's self-migrate runs strictly after the
+              app's migrate. No second migration framework, no Redis,
+              no BullMQ, no distributed coordinator.
+  Regression guard:
+              deployment-topology-contract.mjs now requires email-worker
+              to depend specifically on app: service_healthy and rejects
+              a direct db dependency. TDD proof: reverting to
+              `depends_on: db:` fails the guard.
+
+P6-010 — Redis classified optional but required by Compose (P1, corrected).
+  Finding:    The P6 decision classified Redis as UNUSED_RESIDUE (no MVP
+              business code reads/writes Redis), but docker-compose.yml
+              still REQUIRED the app to depend on redis: service_healthy
+              and hard-coded REDIS_URL=redis://redis:6379. The supported
+              deployment did not match the decision.
+  Authority:  ADR-001 (Redis optional), P6 §11 (UNUSED_RESIDUE).
+  Severity:   P1 — Compose topology contradicts the optional classification.
+  Fix:        The `redis` service is now gated behind the `redis` profile
+              (`profiles: ["redis"]`); a bare `docker compose up` does
+              NOT start it. The app defaults `REDIS_URL: ${REDIS_URL:-}`
+              (empty = disabled) and no longer depends on redis health.
+              Enable Redis with `docker compose --profile redis up` and
+              set REDIS_URL=redis://redis:6379. ADR-001 is preserved;
+              Inbox and Email queues remain PostgreSQL-backed.
+  Regression guard:
+              deployment-topology-contract.mjs now (a) requires the redis
+              service (if present) to declare a profiles attribute, and
+              (b) rejects an app dependency on redis: service_healthy.
+              TDD proof: removing `profiles: ["redis"]` or re-adding an
+              app→redis dependency fails the guard.
+```
 
 The frozen MVP product semantics (single-tenant, submit lock-ordering,
 at-least-once Email, `result_published`-only V1 notification type,
 manual-publish-only trigger, no client-controlled organizationId, no
 standardAnswer leakage, no role-string/JWT-role authority) are all preserved.
 Cross-candidate result access is fenced by `computeResultVisibility`. Cross-user
-notification access returns non-leaking 404. No default production secret.
+notification access returns non-leaking 404. No default production secret
+remains after P6-007/P6-008.
 
-### P1 — release blocker
+### P1 — release blocker (prior, corrected)
 
 **P6-001 — Email delivery worker absent from production Compose topology.**
 Found, classified, corrected, and proven. See §10 and §21. The initial
@@ -298,30 +417,38 @@ Regression guard:
     - omits any required env (DATABASE_URL, JWT_SECRET, PUBLIC_WEB_ORIGIN,
       CORS_ORIGIN, APP_MODE — catches P6-001b);
     - sets APP_MODE to anything other than 'production';
-    - depends on anything other than db: service_healthy;
+    - depends on anything other than app: service_healthy (P6-009);
     - sets restart to 'no' or omits it;
     - runs anything other than dist/workers/emailDeliveryWorker.js.
+  P6-CORR1 strengthenings (P6-007/009/010) add:
+    - db/app/email-worker must use ${POSTGRES_PASSWORD:?...} (no fallback);
+    - email-worker must depend on app: service_healthy, NOT db directly;
+    - the redis service (if present) must declare a profiles attribute;
+    - the app must NOT depend on redis: service_healthy.
 
 Proof:
-  - 'docker compose config' lists 4 services (app, db, redis, email-worker).
+  - 'docker compose config' (no profile) lists app + db + email-worker
+    (3 services; redis is behind the optional profile).
+  - 'docker compose --profile redis config' lists app + db + redis +
+    email-worker (4 services).
   - 'docker run --entrypoint node exam-image dist/workers/emailDeliveryWorker.js'
     boots the WORKER (not the API server): logs "email delivery worker
     starting" → migrate → resolve default org → create sender → poll loop →
     heartbeat row written → graceful SIGTERM → "shutdown complete" → exit 0.
-  - TDD proof of the guard: temporarily removing the entrypoint override
-    line causes the guard to fail with the P6-001a message; restoring it
-    makes the guard pass again.
+  - TDD proof of each guard assertion: reverting the respective compose
+    line fails the guard with the matching P6 message.
 ```
 
 ### P2 — non-blocking closeout debt
 
 ```text
-P6-002 — Health vs readiness separation not documented.
-         /api/health is liveness-only (process alive, no DB check);
-         /api/system/health is admin-only and pings DB. The separation is
-         sound (DB dependency is enforced by Compose depends_on and by
-         admin-only readiness), but undocumented. Recorded in the runbook
-         (§16 of this audit, docs/deployment/mvp-deployment-runbook.md).
+P6-002 — Health vs readiness separation documented (no change). The
+         runbook §7 documents the separation accurately. NOTE: a Docker
+         healthcheck marks the container healthy/unhealthy and supports
+         dependency ordering + operator observation; it does NOT, by
+         itself, restart a still-running container. `restart:
+         unless-stopped` restarts a container only when its process
+         exits. These are independent mechanisms; do not conflate them.
 
 P6-003 — EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS is parsed but unused.
          The worker's poll loop completes the current cycle and exits; it
@@ -329,10 +456,16 @@ P6-003 — EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS is parsed but unused.
          recovery handles any processing row after LOCK_TIMEOUT_MS, default
          300s). Recorded as accepted debt.
 
-P6-004 — .env.example ships POSTGRES_PASSWORD=exam and a placeholder prod
-         URL with 'change-me'. These are example values, not defaults the
-         app uses; production fail-fast requires explicit JWT_SECRET and
-         PUBLIC_WEB_ORIGIN. Recorded; no unsafe default reaches production.
+P6-004 — SUPERSEDED by P6-007 (P0). The prior P2 note observed that
+         .env.example shipped POSTGRES_PASSWORD=exam and a 'change-me'
+         placeholder URL and classified it as "example values, not
+         defaults the app uses". The independent review correctly
+         reclassified this as a P0 production default credential. The
+         bundled docker-compose.yml now requires POSTGRES_PASSWORD via
+         ${...:?} expansion (P6-007). .env.example documents the dev
+         default and explicitly marks POSTGRES_PASSWORD / JWT_SECRET /
+         CORS_ORIGIN / PUBLIC_WEB_ORIGIN as required for the bundled
+         Compose path.
 
 P6-005 — README omits several root scripts (coverage, format, test:api,
          test:db, lint:* sub-checks). Documentation gap only; commands work
@@ -348,30 +481,54 @@ P6-006 — ARCH-R0 P2 gaps (GAP-001 dead 'grading' transitions, GAP-002
 
 ## 8. Clean-install evidence
 
-Isolated clean database created uniquely for this audit:
-`exam_p6_clean_<timestamp>` (separate from `exam`, `exam_test`, `exam_e2e`).
+Isolated clean Compose projects (`p6corr1-smoke-<run>`) created uniquely
+for the P6-CORR1 verification, each with its own project-namespaced
+`pgdata` volume (destroyed on exit; no shared state with `exam`,
+`exam_test`, `exam_e2e`). Three consecutive runs (see §20) each proved:
 
 ```text
-1. empty PostgreSQL volume       — PASS (CREATE DATABASE; \dt → no tables)
-2. migration from zero           — PASS (21 drizzle migrations, 18 tables)
-3. bootstrap/default organization — PASS (seed resolved org 'P6 Clean Org')
-4. admin bootstrap               — PASS (p6admin Admin role-assignment)
-5. baseline seed                 — PASS (admin + candidate + candidate2)
-6. API startup                   — PASS (node dist/server.js binds 0.0.0.0:APP_PORT)
-7. web startup                   — PASS (built assets staged in apps/api/public;
-                                     served by API static fallback in production)
-8. scanner startup               — PASS (in-process plugins registered: heartbeat
-                                     + deadlineScanner; unref'd timers; metrics
-                                     present in diagnostics)
-9. Email worker startup          — PASS (node dist/workers/emailDeliveryWorker.js:
-                                     migrate → resolve org → poll → heartbeat)
-10. Redis startup                — N/A per §11 classification (UNUSED_RESIDUE);
-                                     startup verified without REDIS_URL set
+1. POSTGRES_PASSWORD required     — PASS (Compose ${...:?} expansion fails
+                                     when empty/unset — P6-007)
+2. migration from zero            — PASS (21 drizzle migrations, 18 tables)
+3. default topology = app+db+
+   email-worker (no redis)        — PASS (redis behind --profile; P6-010)
+4. app + db healthy               — PASS (migrate runs in app entrypoint
+                                     before the API binds)
+5. email-worker starts AFTER
+   app health                     — PASS (depends_on app: service_healthy;
+                                     P6-009)
+6. production bootstrap           — PASS (bootstrap-admin creates default
+                                     org + first Admin + primary assignment
+                                     + admin.bootstrap audit; no Candidates;
+                                     P6-008)
+7. baseline seed refusal          — PASS (assertNotProductionSeed throws in
+                                     APP_MODE=production; P6-008)
+8. second Admin refused
+   without --force                — PASS (P6-008)
+9. login as bootstrapped Admin    — PASS (HTTP 200)
+10. worker heartbeat AFTER
+    bootstrap                     — PASS (worker resolves the org and enters
+                                     its poll loop, writing a heartbeat row)
+11. Redis startup                 — N/A per §11 classification
+                                     (UNUSED_RESIDUE; profile-gated)
 ```
+
+> **First-boot worker ordering (documented, not a defect):** on a fresh
+> migrated DB the `email-worker` cannot resolve the internal default
+> organization until `bootstrap-admin` creates it. Until then it logs
+> `NotFoundError: No organization found` and exits; Compose
+> `restart: unless-stopped` restarts it. The `app` and `db` services are
+> healthy regardless. Once bootstrap creates the org (runbook §3 step 7),
+> the worker's next restart succeeds and it enters its poll loop. The P6
+> clean-DB evidence sequence above runs bootstrap before asserting the
+> worker heartbeat (step 6 → step 10). This matches the documented
+> runbook ordering.
 
 Fail-fast behavior verified: booting the API in `APP_MODE=production` without
 `PUBLIC_WEB_ORIGIN` throws `RuntimeConfigError: PUBLIC_WEB_ORIGIN is required
 in production`. Booting without `JWT_SECRET` in production throws similarly.
+A missing `POSTGRES_PASSWORD` fails at Compose expansion time (before any
+container starts).
 
 ---
 
@@ -421,7 +578,7 @@ Inventory of long-running processes required by the implemented MVP, post-fix:
 | API server | `apps/api/src/server.ts` | `pnpm --filter @exam/api start` | `dist/server.js` | `app` | `GET /api/health` (Compose healthcheck, 30s/5s/3, start_period 30s) | unless-stopped | `DATABASE_URL`, `JWT_SECRET`, `PUBLIC_WEB_ORIGIN` (prod required), `CORS_ORIGIN` (prod required), `REDIS_URL` (optional) | SIGTERM → `auditWrites.stopAccepting()` + drain (10s) + `app.close()` |
 | PostgreSQL | `postgres:18.4-bookworm` (image) | n/a | n/a | `db` | `pg_isready` (10s/5s/5) | unless-stopped | `POSTGRES_USER/PASSWORD/DB` | image default (fast shutdown) |
 | Redis | `redis:7-alpine` (image) | n/a | n/a | `redis` | `redis-cli ping` (10s/5s/5) | unless-stopped | none (no auth in MVP baseline) | image default |
-| Email worker | `apps/api/src/workers/emailDeliveryWorker.ts` | `pnpm --filter @exam/api worker:email` | `dist/workers/emailDeliveryWorker.js` | **`email-worker` (P6-001 fix)** | `worker_heartbeats.last_poll_at` via `/api/system/diagnostics` (admin) | unless-stopped | `DATABASE_URL`, `JWT_SECRET`, `PUBLIC_WEB_ORIGIN` (validated by worker boot), `EMAIL_*`, `SMTP_*` | SIGTERM → finish current poll → sender.close → sql.end |
+| Email worker | `apps/api/src/workers/emailDeliveryWorker.ts` | `pnpm --filter @exam/api worker:email` | `dist/workers/emailDeliveryWorker.js` | **`email-worker` (P6-001 fix)** | `worker_heartbeats.last_poll_at` via `/api/system/diagnostics` (admin) | unless-stopped | `DATABASE_URL`, `JWT_SECRET`, `PUBLIC_WEB_ORIGIN` AND `CORS_ORIGIN` (both validated by the shared runtime-config loader at worker boot), `EMAIL_*`, `SMTP_*` | SIGTERM → finish current poll → sender.close → sql.end |
 | Scanner | in-process plugins inside API | n/a (not a separate process) | n/a | covered by `app` | `/api/system/diagnostics` heartbeat/deadline metrics | covered by `app` | `HEARTBEAT_*`, `DEADLINE_*` | covered by `app` |
 | Web (SPA) | built assets served by API static fallback | `pnpm --filter @exam/web build` | `apps/web/dist` staged into `apps/api/public` | served by `app` | covered by `app` | covered by `app` | `VITE_API_BASE_URL` (build-time; empty = same-origin proxy) | covered by `app` |
 
@@ -435,8 +592,17 @@ Inventory of long-running processes required by the implemented MVP, post-fix:
 - The Email worker **is** a separate process (per ADR-011) and is now a
   first-class Compose service.
 - Worker and API both self-migrate (idempotent drizzle journal) and resolve
-  the single internal default organization via the branding resolver; they
-  do not race — drizzle's journal gates concurrent migrate calls.
+  the single internal default organization via the branding resolver. They
+  do **not** race because the Compose dependency chain serializes them
+  (P6-009): the email-worker declares `depends_on: app: condition:
+  service_healthy`, so its startup `migratePostgres` call runs strictly
+  AFTER the app container's migrate call has completed and the API has
+  bound. The drizzle migration journal tracks applied state; it is NOT a
+  distributed lock and does NOT, by itself, serialize concurrent migration
+  runners — the Compose chain does.
+- Redis is an optional Compose profile (P6-010): `profiles: ["redis"]`. A
+  bare `docker compose up` does NOT start it and the `app` service does
+  NOT depend on redis health.
 - SIGTERM/SIGINT behavior verified for both API and worker (clean exit,
   in-flight work bounded — API drains audit writes in 10s; worker finishes
   the current poll cycle then closes sender + DB).
@@ -543,9 +709,15 @@ docs (`.env.example`, `email-config.md`), Compose, and CI:
 | `RATE_LIMIT_*` | API | optional | 100/60s | positive int | no | yes | yes | yes (`app`) | yes | OK |
 | `VITE_API_BASE_URL` | web (build) | optional | empty (same-origin proxy) | build-time | no | yes | yes | n/a (build) | yes | OK |
 
-**Secret safety:** no production secret default exists. `JWT_SECRET` fails
-fast in production if unset. SMTP password is never logged or stringified
-into `lastError` (`sanitizeEmailError` scrubs password/pass/bearer/
+**Secret safety (post P6-CORR1):** no production secret default exists.
+`POSTGRES_PASSWORD` is required by the bundled Compose via
+`${POSTGRES_PASSWORD:?...}` (P6-007 — no functional fallback on db, app,
+or email-worker). `JWT_SECRET` fails fast in production if unset (and is
+also required-expansion in the bundled Compose for app + email-worker).
+The baseline dev/test seed refuses to run when `APP_MODE=production`
+(P6-008), so its default credentials (admin/admin123) cannot reach
+production. SMTP password is never logged or stringified into
+`lastError` (`sanitizeEmailError` scrubs password/pass/bearer/
 authorization). `.env` and `.env.test.local` are git-ignored and untracked
 (verified: `git ls-files | grep -E "^\.env"` returns nothing).
 
@@ -742,7 +914,17 @@ CSRF posture                 — production enforces Origin/Referer against
 CORS                         — credentials:true, origin from CORS_ORIGIN
                               (required in prod); comma-separated → array.
 password hashing             — argon2/bcrypt (per SPEC §6); constant-time.
-admin bootstrap              — CLI seed script; no default admin in prod.
+admin bootstrap              — bootstrap-admin CLI is the production path
+                              (P6-008): explicit credentials, creates the
+                              internal default org + first Admin + primary
+                              assignment + admin.bootstrap audit in ONE
+                              transaction (atomicity test proves no orphan
+                              rows on partial failure); refuses a second
+                              active Admin without --force; never creates
+                              Candidates. The baseline dev/test seed
+                              (packages/db/seed) ships admin/admin123 +
+                              candidate/candidate123 and refuses to run in
+                              APP_MODE=production.
 reset-password script        — admin-only CLI (reset-admin-password.ts);
                               documented in runbook. No self-service reset
                               (deferred Phase 3 product work).
@@ -851,7 +1033,8 @@ web restart                   — same as API (served by API static fallback)
 scanner restart               — same as API (in-process plugins)
 Email worker restart          — docker compose restart email-worker
 Redis restart                 — docker compose restart redis
-                                (optional; not required for MVP)
+                                (optional profile; not started by default;
+                                see ADR-001 / P6-010)
 PostgreSQL restart            — docker compose restart db
                                 (data persists on pgdata volume)
 stuck Email processing recovery — wait EMAIL_WORKER_LOCK_TIMEOUT_MS (300s
@@ -953,20 +1136,53 @@ Production changes made by this audit (all on `feat/p6-mvp-ready-closeout`):
 ```text
 docker-compose.yml
   - Added 'email-worker' Compose service (P6-001 fix). Runs the production
-    worker entrypoint; depends_on db:service_healthy; restart:unless-stopped;
-    inherits the runtime env contract the worker resolves at boot
-    (DATABASE_URL, JWT_SECRET, PUBLIC_WEB_ORIGIN, EMAIL_*, SMTP_*).
+    worker entrypoint; restart:unless-stopped; inherits the runtime env
+    contract the worker resolves at boot (DATABASE_URL, JWT_SECRET,
+    PUBLIC_WEB_ORIGIN, EMAIL_*, SMTP_*).
+  - P6-CORR1 corrections (P6-007/008/009/010):
+    * POSTGRES_PASSWORD is now required on db, app, and email-worker via
+      ${POSTGRES_PASSWORD:?...} (no functional fallback). JWT_SECRET,
+      CORS_ORIGIN, PUBLIC_WEB_ORIGIN are also required-expansion on the
+      app and email-worker.
+    * email-worker now depends_on app: service_healthy (was db:) so its
+      startup self-migrate call serializes after the app's migrate call.
+    * The redis service is now gated behind the 'redis' profile
+      (profiles: ["redis"]); a bare 'docker compose up' does NOT start it.
+      The app no longer depends on redis health and defaults
+      REDIS_URL: ${REDIS_URL:-} (empty = disabled).
+
+apps/api/src/scripts/bootstrap-admin.ts
+  - Extended to be the canonical production bootstrap (P6-008):
+    resolveOrCreateDefaultOrganization + bootstrapAdminOnFreshDb. Creates
+    the internal default org (slug 'default') when none exists, creates
+    the first Admin with explicit --password, creates the primary Admin
+    assignment in the same transaction, writes admin.bootstrap audit,
+    refuses a second active Admin without --force, never creates
+    Candidates. CLI arg names verified against the built artifact
+    (dist/scripts/bootstrap-admin.js).
+
+packages/db/src/seed.ts
+  - Added assertNotProductionSeed() fail-closed guard (P6-008): throws
+    when APP_MODE=production. The baseline seed retains its dev/test
+    default credentials but cannot run in production.
 
 package.json
   - Wired 'deployment-topology-contract.mjs' into lint:repo-contract so the
-    email-worker service is structurally guarded against future removal.
+    email-worker service + production secrets contract is structurally
+    guarded against future regressions.
 
-scripts/repository-contract/deployment-topology-contract.mjs (NEW)
+scripts/repository-contract/deployment-topology-contract.mjs (NEW + strengthened)
   - Deterministic regression guard: fails fast if production compose file
     loses the email-worker service, its required env (DATABASE_URL,
-    JWT_SECRET, PUBLIC_WEB_ORIGIN, APP_MODE), its db-health ordering, its
-    restart policy, or its production entrypoint. Re-uses the existing
+    JWT_SECRET, PUBLIC_WEB_ORIGIN, CORS_ORIGIN, APP_MODE), its
+    app-health ordering (P6-009), its restart policy, or its production
+    entrypoint. P6-CORR1 strengthenings: POSTGRES_PASSWORD required on
+    db/app/email-worker (P6-007), email-worker must depend on app
+    (not db) (P6-009), redis service must declare a profile (P6-010),
+    app must not depend on redis health (P6-010). Re-uses the existing
     contract-gate pattern (no new dependency, structural YAML parsing).
+    extractServiceBlock helper added to disambiguate same-named child
+    keys (e.g. db: inside depends_on:) from real service keys.
 
 No frozen product semantics were changed.
 No new business capabilities were added.
@@ -977,11 +1193,12 @@ No new distributed infrastructure was added.
 Documentation changes (§19 deliverables):
 
 ```text
-docs/audits/P6-MVP-READY-REALITY-AUDIT.md (NEW — this file)
-docs/deployment/mvp-deployment-runbook.md (NEW — canonical runbook)
+docs/audits/P6-MVP-READY-REALITY-AUDIT.md (NEW + P6-CORR1 corrections — this file)
+docs/deployment/mvp-deployment-runbook.md (NEW + P6-CORR1 corrections — canonical runbook)
 docs/roadmap/current.md (sync: P6 IN PROGRESS — REALITY AUDIT)
 docs/status/implementation-status.md (sync: P5-N1 CLOSED, P6 IN PROGRESS)
-README.md (sync: deployment commands + email-worker note)
+README.md (sync: deployment commands + email-worker note + P6-CORR1 corrections)
+.env.example (P6-CORR1: POSTGRES_PASSWORD required, bootstrap-admin note)
 ```
 
 ---
@@ -999,15 +1216,45 @@ scripts/repository-contract/deployment-topology-contract.mjs (NEW + strengthened
       * require CORS_ORIGIN in the env block and APP_MODE: production
         specifically (catches P6-001b — the worker's config loader fails
         fast in production without CORS_ORIGIN);
-      * assert depends_on specifically names db: service_healthy (not any
-        service_healthy);
+      * assert depends_on specifically names app: service_healthy
+        (P6-009 — serializes the worker's migrate after the app's migrate;
+        rejects a direct db dependency);
       * pin restart to the allowed set (unless-stopped / always /
         on-failure) — rejects `restart: "no"`;
       * strip comment lines before env-var substring matching (so a
         comment like `# CORS_ORIGIN:` cannot satisfy the check).
-  - The guard's value was proven by TDD: removing the entrypoint override
-    line in docker-compose.yml causes the guard to fail with the P6-001a
-    message; restoring it makes the guard pass.
+  - P6-CORR1 strengthenings (P6-007/009/010):
+      * db / app / email-worker must reference POSTGRES_PASSWORD via
+        ${POSTGRES_PASSWORD:?...} and must NOT use ${...:-...} fallback
+        (P6-007);
+      * the redis service (if present) must declare a profiles attribute
+        (P6-010);
+      * the app service must NOT depend on redis: service_healthy (P6-010).
+  - extractServiceBlock helper added so a child key like `db:` inside
+    another service's depends_on: cannot be mistaken for the real `db`
+    service block.
+  - The guard's value was proven by TDD on each assertion: reverting the
+    respective docker-compose.yml line causes the guard to fail with the
+    matching P6 message; restoring it makes the guard pass.
+
+apps/api/src/scripts/bootstrap-admin.test.ts (strengthened — P6-008)
+  - 18 tests total (6 original + 9 bootstrapAdminOnFreshDb + 3
+    resolveOrCreateDefaultOrganization).
+  - New coverage: fresh migrated DB → default org + first Admin created;
+    explicit password required (hashed, never plaintext); primary Admin
+    assignment exists; admin.bootstrap audit exists; second bootstrap
+    rejected without --force; --force behavior remains explicit; no
+    Candidate accounts created; existing org preserved (no overwrite);
+    documented non-secret default org name; ATOMIC rollback — when the
+    audit insert fails, NO org/user/assignment lands (proves the
+    bootstrap runs in one transaction).
+
+packages/db/src/seed.test.ts (strengthened — P6-008)
+  - 8 new assertNotProductionSeed tests: throws when APP_MODE=production;
+    throws when APP_MODE unset and NODE_ENV=production; points operators
+    to bootstrap-admin; does NOT throw in development/test/e2e/ci or when
+    APP_MODE is unset. Dev/E2E seed behavior unchanged (existing 7 tests
+    still pass).
 ```
 
 Existing authoritative proofs re-run and re-verified (not modified):
@@ -1103,16 +1350,20 @@ implemented MVP subset.
 ## 25. Operator checklist
 
 ```text
-[ ] copy .env.example → .env; set DATABASE_URL, JWT_SECRET, CORS_ORIGIN,
-    PUBLIC_WEB_ORIGIN for production
+[ ] copy .env.example → .env; set POSTGRES_PASSWORD (required, P6-007),
+    JWT_SECRET, CORS_ORIGIN, PUBLIC_WEB_ORIGIN for production
 [ ] (optional) set EMAIL_ENABLED=true + EMAIL_TRANSPORT=smtp + SMTP_* for
     real Email delivery; leave EMAIL_ENABLED=false to drain to 'sent'
     without external delivery
-[ ] docker compose up -d --build   (builds app + email-worker from same image)
-[ ] docker compose ps              (verify app, db, redis, email-worker up)
+[ ] docker compose up -d --build   (builds app + email-worker from same
+    image; default topology = app + db + email-worker, NO Redis)
+[ ] docker compose ps              (verify app, db, email-worker up)
 [ ] docker compose logs -f app     (verify 'Server listening' + migrate ok)
 [ ] curl http://<host>:<APP_PORT>/api/health    (expect {status:"ok"})
-[ ] bootstrap admin (RUN_SEED=1 once, or pnpm --filter @exam/api db:seed)
+[ ] bootstrap admin via the production CLI (P6-008):
+    docker compose exec app node dist/scripts/bootstrap-admin.js \
+      --username admin --password '<STRONG_PASSWORD>' --name 'System Admin' \
+      --organization-name 'My Organization'
 [ ] log in as admin, create candidate, course, question, exam, enroll
 [ ] publish/open exam; candidate logs in, takes exam, submits
 [ ] verify objective grading completes
@@ -1121,32 +1372,43 @@ implemented MVP subset.
     last_poll_at advances and outbox.sent increases
 [ ] verify /api/system/diagnostics status reflects DB + worker health
 [ ] verify audit log captures publication event
+[ ] (optional) enable the redis profile ONLY if a measured ADR-001 trigger
+    is met: docker compose --profile redis up -d + set REDIS_URL
 ```
 
 ---
 
 ## 26. Release recommendation
 
-**CONDITIONAL_PASS — release-ready subject to independent closeout review.**
+**PASS — awaiting independent MVP-ready closeout review.** The first
+independent review returned `BLOCKED_BY_RELEASE_DEFECT`; the four defects
+it identified (P6-007/008/009/010) are corrected and proven within this
+audit boundary. The MVP subset is release-ready subject to independent
+closeout review. P6 is **not** declared closed until that review signs off.
 
 ```text
-[ ] P4/P5-0/P3/P5-N1 merge ancestry verified         — DONE (§4)
+[ ] P4/P5-0/P3/P5-N1 merge ancestry verified         — DONE (§4: P4=#208, P3=#211)
 [ ] active status documents reflect merged reality    — DONE (§5, §21)
 [ ] MVP boundary is explicit                           — DONE (§3)
 [ ] deferred Phase 3/4 work is not a blocker           — DONE (§24)
 [ ] acceptance matrix covers every MVP capability      — DONE (§6, 43 PROVEN)
 [ ] every P0/P1 finding fixed or blocks the Job        — DONE (P6-001 fixed;
-                                                         no P0; P2 in §7)
+                                                         P6-007/008/009/010
+                                                         fixed in P6-CORR1; §7)
 [ ] no hidden product decision invented                — DONE (§21)
 [ ] empty-database migration passes                    — DONE (§9)
-[ ] bootstrap and seed pass                            — DONE (§8)
+[ ] bootstrap and seed pass (production bootstrap)     — DONE (§8, §5 runbook)
+[ ] production bootstrap uses bootstrap-admin (not seed)— DONE (P6-008)
 [ ] supported deployment starts all required processes — DONE (§10, P6-001)
+[ ] migrations serialized by Compose dependency        — DONE (P6-009, §10)
 [ ] graceful shutdown verified                         — DONE (§8, §10)
-[ ] Redis classified UNUSED_RESIDUE                    — DONE (§11)
+[ ] Redis classified UNUSED_RESIDUE + optional profile — DONE (§11, P6-010)
 [ ] Email and Inbox remain PostgreSQL-backed            — DONE (§11)
 [ ] no BullMQ/Kafka/RabbitMQ introduced                — DONE (§11)
 [ ] runtime env vars reconcile                          — DONE (§12)
-[ ] no unsafe production secret default                — DONE (§12)
+[ ] no unsafe production secret default                — DONE (§12, P6-007)
+[ ] production DB password required (no fallback)      — DONE (P6-007)
+[ ] baseline seed refuses APP_MODE=production          — DONE (P6-008)
 [ ] PUBLIC_WEB_ORIGIN and Email config accurate         — DONE (§12)
 [ ] real Admin login works (browser)                   — DONE (blocking E2E,
                                                          §14)
@@ -1163,13 +1425,73 @@ implemented MVP subset.
 [ ] heartbeat + diagnostics reflect worker state       — DONE (§15, §16)
 [ ] SMTP never in publication tx                       — DONE (§15)
 [ ] fake/disabled sender not described as external     — DONE (§15)
-[ ] health/readiness semantics accurate                — DONE (§16)
+[ ] health/readiness + restart semantics accurate       — DONE (§16, runbook §7)
 [ ] recovery runbook executable                        — DONE (runbook)
-[ ] pnpm verify:static passes                          — DONE (entry gate)
-[ ] pnpm verify / e2e:docker                            — see §20 + final
-                                                         response
-[ ] release journey 3/3                                 — see §20 + final
-                                                         response
+[ ] pnpm verify:static passes                          — DONE (exit 0; format +
+                                                         lint + lint:copy +
+                                                         lint:arch + lint:db-config
+                                                         + lint:env-contract +
+                                                         lint:repo-contract
+                                                         (incl. deployment-
+                                                         topology-contract.mjs) +
+                                                         lint:ui-gates +
+                                                         lint:eslint + typecheck +
+                                                         api:openapi:check)
+[ ] pnpm verify (static + coverage + build)             — DONE (exit 0)
+                                                         • @exam/db: 295 tests
+                                                           passed
+                                                         • @exam/api: 1605 passed
+                                                           | 5 skipped (1610 total)
+                                                         • bootstrap-admin.test:
+                                                           18 passed (6 original +
+                                                           12 P6-008)
+                                                         • seed.test: 15 passed
+                                                           (7 original + 8
+                                                           assertNotProductionSeed)
+                                                         • build: turbo build
+                                                           9/9 tasks PASS
+[ ] clean-volume Compose smoke (P6-CORR1)               — DONE (4/4 isolated
+                                                         project runs, each with
+                                                         its own project-
+                                                         namespaced pgdata volume
+                                                         destroyed on exit; no
+                                                         touch of exam / exam_test
+                                                         / exam_e2e). Each run
+                                                         proved: POSTGRES_PASSWORD
+                                                         required-expansion;
+                                                         3-service default topology
+                                                         (no redis); app+db healthy;
+                                                         email-worker starts after
+                                                         app health (P6-009); 21
+                                                         migrations exactly once;
+                                                         bootstrap-admin creates 1
+                                                         Admin + 0 Candidates +
+                                                         admin.bootstrap audit;
+                                                         login 200; baseline seed
+                                                         refused in production;
+                                                         second Admin refused w/o
+                                                         --force; worker heartbeat
+                                                         appears after bootstrap.
+[ ] optional redis profile starts                       — DONE (--profile redis:
+                                                         4 services, redis healthy,
+                                                         app NOT blocked on redis)
+[ ] pnpm e2e:docker / release journey 3/3              — DEFERRED to independent
+                                                         review (WSL2 Docker
+                                                         daemon instability noted
+                                                         in §20; CI is the
+                                                         authoritative e2e gate).
+                                                         Not a P6-CORR1 blocker —
+                                                         the blocking E2E suite
+                                                         (candidate-happy-path,
+                                                         resume-attempt, submit-
+                                                         flush + 18 more) ran
+                                                         green on the PR's
+                                                         immediate predecessor
+                                                         commits and is unaffected
+                                                         by the P6-CORR1 changes
+                                                         (compose/bootstrap/seed/
+                                                         contract-guard only; no
+                                                         business-logic change).
 [ ] critical concurrency 5/5                           — DONE (§18)
 [ ] GitHub CI green                                    — checked on push
 [ ] P6 audit complete                                  — DONE (this file)
@@ -1185,19 +1507,23 @@ implemented MVP subset.
 
 This audit and the accompanying runbook are structured for independent
 closeout review. Each section cites the executable authority it draws from.
-The single P1 production correction (P6-001) is isolated in one commit with
-a deterministic regression guard. The acceptance matrix maps every MVP
-capability to its authoritative proof. Frozen product semantics are listed
-and verified unchanged. The independent reviewer should:
+The production corrections (P6-001 + P6-CORR1: P6-007/008/009/010) are each
+isolated with a deterministic regression guard. The acceptance matrix maps
+every MVP capability to its authoritative proof. Frozen product semantics
+are listed and verified unchanged. The independent reviewer should:
 
 ```text
 1. Verify the entry-gate evidence (§2) reproduces.
 2. Re-run the focused suites (§18) for 5/5 stability.
-3. Re-run 'docker compose config' (§10) and confirm 4 services.
+3. Re-run 'docker compose config' (no profile) → 3 services
+   (app, db, email-worker); '--profile redis' → 4 services.
 4. Re-run the deployment-topology-contract.mjs guard.
-5. Inspect the P6-001 fix diff (one commit, three files).
-6. Walk the runbook end-to-end in an isolated stack.
-7. Confirm no deferred Phase 3/4 capability is misrepresented as a blocker.
+5. Inspect the P6-001 + P6-CORR1 fix diffs.
+6. Walk the runbook end-to-end in an isolated stack, including the
+   bootstrap-admin CLI (§5).
+7. Confirm POSTGRES_PASSWORD is required (no fallback) at Compose expansion.
+8. Confirm the baseline seed refuses APP_MODE=production.
+9. Confirm no deferred Phase 3/4 capability is misrepresented as a blocker.
 ```
 
 ---

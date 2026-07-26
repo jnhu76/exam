@@ -35,13 +35,17 @@ Network:   internal LAN only. The platform must remain offline-capable.
            TLS is delegated to a reverse proxy (nginx/caddy) in front of the
            API when the deployment needs HTTPS — the app does not terminate
            TLS itself.
-Postgres:  provided by the 'db' service (postgres:18.4-bookworm). External
-           Postgres is also supported by setting DATABASE_URL and removing
-           the 'db' service — but the supported MVP path is the bundled
-           service.
+Postgres:  provided by the 'db' service (postgres:18.4-bookworm). The
+           bundled docker-compose.yml composes DATABASE_URL for app and
+           email-worker from POSTGRES_USER / POSTGRES_PASSWORD /
+           POSTGRES_DB, so the bundled 'db' service is REQUIRED for the
+           supported MVP path. External Postgres is NOT a supported MVP
+           deployment — the worker's DATABASE_URL is composed, not read
+           from an external DATABASE_URL. Do NOT remove the 'db' service.
 Redis:     OPTIONAL. The 'redis' service ships for forward-compatibility
-           with the Phase 2 baseline. No MVP business code reads/writes
-           Redis. See §9.
+           with the Phase 2 baseline and is gated behind the 'redis'
+           profile (P6-010) — a bare 'docker compose up' does NOT start
+           it. No MVP business code reads/writes Redis. See §10.
 SMTP:      OPTIONAL. Leave EMAIL_ENABLED=false to drain the outbox to 'sent'
            status without external delivery. Set EMAIL_ENABLED=true +
            EMAIL_TRANSPORT=smtp + SMTP_* to enable real Email delivery.
@@ -53,18 +57,21 @@ Backups:   operator-supplied pg_dump schedule against the 'pgdata' volume
 
 ## 2. Environment variables
 
-Copy `.env.example` → `.env` and set the production-required values. Every
-variable below has a safe default for local/dev; production-required values
-fail fast at boot if missing.
+Copy `.env.example` → `.env` and set the production-required values. The
+bundled `docker-compose.yml` uses Compose `${VAR:?...}` required-expansion
+for the production-required variables below — Compose itself fails to start
+if any is unset. There is NO default database password in production
+(P6-007).
 
-### Production-required (fail-fast at boot if missing or invalid)
+### Production-required (Compose `${VAR:?...}` expansion fails if unset)
 
 | Variable | Purpose | Validation |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection for API + worker | postgres URL; production does not fall back to localhost |
+| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API and worker | required, no default (P6-007) |
 | `JWT_SECRET` | Signs the `auth-token` cookie JWT; also required by the worker's runtime-config loader | non-empty; no default in production |
 | `CORS_ORIGIN` | Browser origin allowlist (credentials:true) | comma-separated → array |
 | `PUBLIC_WEB_ORIGIN` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path) | HTTPS recommended in production; never derived from `request.headers.host` |
+| `DATABASE_URL` | PostgreSQL connection for API + worker | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
 
 ### Optional (with safe defaults)
 
@@ -77,7 +84,7 @@ fail fast at boot if missing.
 | `DEPLOYMENT_MODE` | singleTenant | `multiTenant` is rejected at boot (Phase 4 only) |
 | `COOKIE_SECURE` | false (auto-true in production) | cookie Secure flag |
 | `APP_TIMEZONE` / `TZ` | Asia/Shanghai | display/log/diagnostics only; does not change business-time comparison semantics |
-| `REDIS_URL` | unset (disabled) | optional; see §9 |
+| `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`) |
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed in-memory rate limiter |
@@ -127,11 +134,12 @@ git clone <repo-url> exam && cd exam
 # 2. Configure environment (copy template, edit production-required values)
 cp .env.example .env
 # Edit .env:
-#   DATABASE_URL=postgresql://exam:<STRONG_DB_PASSWORD>@db:5432/exam
-#   JWT_SECRET=<GENERATE_A_LONG_RANDOM_SECRET>
-#   CORS_ORIGIN=https://exam.your-org.internal
-#   PUBLIC_WEB_ORIGIN=https://exam.your-org.internal
-#   POSTGRES_PASSWORD=<STRONG_DB_PASSWORD>   # must match DATABASE_URL
+#   POSTGRES_PASSWORD=<STRONG_DB_PASSWORD>   # REQUIRED (P6-007, no default)
+#   JWT_SECRET=<GENERATE_A_LONG_RANDOM_SECRET>      # REQUIRED
+#   CORS_ORIGIN=https://exam.your-org.internal      # REQUIRED
+#   PUBLIC_WEB_ORIGIN=https://exam.your-org.internal # REQUIRED
+#   (the bundled Compose composes DATABASE_URL from POSTGRES_*)
+#   (REDIS_URL is optional — leave unset to disable Redis; see §10)
 
 # 3. (Optional) Enable real Email delivery
 # EMAIL_ENABLED=true
@@ -140,23 +148,52 @@ cp .env.example .env
 # SMTP_USER=...
 # SMTP_PASSWORD=...
 
-# 4. Build and start the full stack (app + db + redis + email-worker)
+# 4. Build and start the default stack (app + db + email-worker).
+#    Redis is NOT started by default (P6-010); see §10 to enable it.
 docker compose up -d --build
 
-# 5. Watch the API come up (migration runs inside the container entrypoint)
-docker compose logs -f app
+# 5. Watch the API come up (migration runs inside the container entrypoint).
+#    Use the native --tail flag instead of a pipe so failure context is kept.
+docker compose logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
-# 6. Verify all four services are up
+# 6. Verify app + db are healthy. NOTE: the email-worker will be in a
+#    restart loop until step 7 (it cannot resolve the default organization
+#    on a fresh DB). This is expected — see the note below.
 docker compose ps
+# Expected: app (healthy), db (healthy), email-worker (restarting → healthy
+#           after step 7)
+
+# 7. Bootstrap the first Admin (production path — see §5). This also
+#    creates the internal default organization, which unblocks the worker.
+docker compose exec app \
+  node dist/scripts/bootstrap-admin.js \
+  --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
+  --name 'System Admin' --organization-name 'My Organization'
+
+# 8. After bootstrap, the worker's next restart resolves the org and enters
+#    its poll loop. Verify:
+docker compose logs --tail=20 email-worker
+# Look for: 'resolved default organization', 'starting poll loop'
 ```
+
+> **First-boot worker restart loop (expected):** on a fresh migrated
+> database the `email-worker` cannot resolve the internal default
+> organization until `bootstrap-admin` creates it. Until then the worker
+> logs `NotFoundError: No organization found` and exits; Compose
+> `restart: unless-stopped` restarts it. This is the documented
+> first-boot behavior, NOT a defect. Once bootstrap creates the org
+> (step 7), the worker's next restart succeeds and it enters its poll
+> loop. The `app` and `db` services are healthy regardless; only the
+> worker's first-boot startup is gated on the org existing.
 
 The Dockerfile builds the app + email-worker from the same image. The
 `docker-entrypoint.sh` runs `node dist/scripts/migrate.js` once on first
 boot of the `app` container, then `exec node dist/server.js`. The
 `email-worker` container runs `node dist/workers/emailDeliveryWorker.js`
-directly (the worker self-migrates at startup — idempotent via the drizzle
-journal).
+directly. The worker depends on `app: service_healthy`, so its startup
+self-migrate call is serialized strictly AFTER the app's migrate call
+(P6-009: the drizzle journal tracks state; it is NOT a concurrency lock).
 
 ---
 
@@ -170,20 +207,36 @@ run:
 2. By the `email-worker` container's startup (the worker calls
    `migratePostgres(db)` before its poll loop).
 
-Both paths are idempotent (drizzle journal gates concurrent invocations).
-Re-running migrations is safe and emits NOTICE messages about the journal
-schema already existing.
+**Migration ordering (P6-009):** the drizzle migration journal tracks
+applied state; it is NOT a distributed lock and does NOT serialize
+concurrent migration runners. To avoid racing the app container's migrate
+call, the `email-worker` service declares `depends_on: app: condition:
+service_healthy`, so the required startup sequence is:
+
+```text
+db healthy → app entrypoint migrates → API binds + becomes healthy
+           → email-worker starts → worker's migratePostgres re-run
+           → worker poll loop starts
+```
+
+Both paths are idempotent (re-running migrate emits a NOTICE that the
+journal schema already exists and exits 0), but the Compose dependency
+chain is what serializes them — not the journal.
 
 ```bash
 # Run migrations manually (rarely needed; containers do this automatically)
 docker compose exec app node dist/scripts/migrate.js
 
-# Inspect the drizzle journal
-docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -c "SELECT count(*) FROM drizzle.__drizzle_migrations;"
+# Inspect the drizzle journal. NOTE: $POSTGRES_USER / $POSTGRES_DB are
+# expanded INSIDE the db container (the postgres image exports them as
+# env vars), not by the host shell — so wrap the psql call in sh -c and
+# run it via 'docker compose exec db'.
+docker compose exec db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM drizzle.__drizzle_migrations;"'
 
 # Inspect table count
-docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"
+docker compose exec db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'
 ```
 
 **Failed migration recovery:** inspect the drizzle journal for the last
@@ -192,45 +245,90 @@ restore from the latest `pg_dump` backup (§11) and re-run migrate.
 
 ---
 
-## 5. Bootstrap admin
+## 5. Bootstrap admin (production)
 
-The first admin account is created by the baseline seed. The Compose
-entrypoint seeds when `RUN_SEED=1` is set (run once on first install, then
-unset for normal restarts).
+The first admin account is created by the **production bootstrap CLI**
+(`dist/scripts/bootstrap-admin.js`), NOT the baseline dev/test seed. The
+baseline seed (`packages/db/src/seed.ts`) ships known default credentials
+(admin/admin123, candidate/candidate123) and refuses to run when
+`APP_MODE=production` (P6-008). It must not be used as the production
+bootstrap path.
 
 ```bash
-# Option A: seed via the container entrypoint (set RUN_SEED=1 in .env, then
-# 'docker compose up -d app'; the entrypoint runs dist/seed.js). Unset
-# RUN_SEED afterward and restart app.
-RUN_SEED=1 docker compose up -d app
-docker compose logs app | tail -20   # look for 'Phase 1 dev/test seed credentials'
+# Production first-Admin bootstrap (P6-008). Run once against a fresh
+# migrated database. The password is ALWAYS explicitly supplied; there is
+# no default.
+docker compose exec app \
+  node dist/scripts/bootstrap-admin.js \
+  --username admin \
+  --password '<STRONG_OPERATOR_PASSWORD>' \
+  --name 'System Admin' \
+  --organization-name 'My Organization'
+```
 
-# Option B: run the seed script directly against the running stack
-docker compose exec app node dist/seed.js
+The bootstrap:
 
-# Option C: reset the admin password later without re-seeding
+1. locates the internal organization with slug `default`; if it does not
+   exist, creates it (using `--organization-name` or the documented
+   non-secret default `Default Organization`);
+2. creates the first Admin with the explicit `--password` (hashed; never
+   stored plaintext);
+3. creates the primary Admin role assignment;
+4. writes an `admin.bootstrap` audit row (actor `system`).
+
+Steps 1–4 run in **one transaction** (`bootstrapAdminOnFreshDb`): they
+commit atomically, so a failure in any step leaves no orphan org, user,
+assignment, or audit row. The bootstrap also:
+
+5. refuses a second active Admin unless `--force` is supplied.
+
+It does **not** create Candidate accounts. Candidates are created later by
+the Admin via `POST /api/admin/candidates`.
+
+### Optional CLI arguments
+
+```text
+--username <admin-username>             (required)
+--password '<strong-password>'          (required, never defaulted)
+--name '<display-name>'                 (required)
+--organization-name '<org-name>'        (optional; default 'Default Organization')
+--organization-display-name '<name>'    (optional; falls back to org name)
+--force                                 (allow a second active Admin)
+```
+
+### Reset admin password later (without re-seeding)
+
+```bash
 docker compose exec app node dist/scripts/reset-admin-password.js
 ```
 
-The seed creates authentication-only accounts. For full demo data (courses,
-questions, exams, attempts), use `pnpm db:seed:demo` against the dev DB only
-— never against the production DB.
+### Dev/test seed (NOT for production)
 
-> **Custom seed credentials** (optional): `SEED_ORG_NAME`,
+The baseline seed is dev/test infrastructure only. It is run by the
+Compose entrypoint when `RUN_SEED=1` (or `RUN_SEED=e2e` for the canonical
+E2E seed) is set **in the `.env` file** (per the shell > `.env.local` >
+`.env` precedence contract — do NOT pass it as a shell-only override, which
+would silently bypass the operator's `.env`). It refuses to run when
+`APP_MODE=production`. For full demo data (courses, questions, exams,
+attempts), use `pnpm db:seed:demo` against the dev DB only — never against
+the production DB.
+
+> **Custom seed credentials** (optional, dev/test only): `SEED_ORG_NAME`,
 > `SEED_ORG_DISPLAY_NAME`, `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`,
-> `SEED_CANDIDATE_*`. Set in `.env` before the first seed.
+> `SEED_CANDIDATE_*`. Set in `.env` before the first seed. These are
+> ignored in production (the seed refuses to run).
 
 ---
 
 ## 6. Start services
 
 ```bash
-# Normal start (all four services)
+# Normal start (default stack: app + db + email-worker; Redis is optional — §10)
 docker compose up -d
 
 # Verify
 docker compose ps
-# Expected: app (healthy), db (healthy), redis (healthy), email-worker (up)
+# Expected: app (healthy), db (healthy), email-worker (up)
 
 # API health (liveness — process alive)
 curl -s http://localhost:${APP_PORT:-3000}/api/health
@@ -243,11 +341,18 @@ curl -s -b "auth-token=<JWT>" http://localhost:${APP_PORT:-3000}/api/system/heal
 ```
 
 Service dependency ordering is enforced by Compose `depends_on` with
-`condition: service_healthy`:
+`condition: service_healthy`. Migration ordering (P6-009) is serialized by
+chaining these dependencies — the drizzle migration journal tracks state,
+it does NOT lock concurrent runners:
 
 ```text
-db (healthy) ← app, email-worker
-redis (healthy) ← app
+default topology:
+  db (healthy) ← app (healthy) ← email-worker
+                  ↑ app entrypoint runs migrate before binding
+
+optional redis profile (--profile redis):
+  db (healthy) ← app
+  redis (healthy)   # NOT a dependency of app (P6-010)
 ```
 
 The scanner (heartbeat + deadline) runs **in-process** inside the `app`
@@ -262,15 +367,40 @@ The implemented MVP separates **liveness** from **readiness**:
 
 | Endpoint | Auth | Purpose | What it checks |
 |---|---|---|---|
-| `GET /api/health` | none | Liveness probe (Compose healthcheck, container restart) | process alive only |
+| `GET /api/health` | none | Liveness probe (Compose healthcheck, dependency ordering) | process alive only |
 | `GET /api/system/health` | admin (`SystemHealthView`) | Readiness / DB availability | DB ping latency + CPU/memory |
 | `GET /api/system/diagnostics` | admin (`SystemDiagnosticsView`) | Operational diagnostics | DB latency, Redis (if configured), scanner metrics, email worker heartbeat, outbox backlog, oldest pending age, dead rows |
 | `GET /api/system/info` | none | Version + uptime | n/a |
 | `GET /api/system/public-config` | none | Public config (deployment mode, feature flags) | n/a |
 
 The Compose `app` healthcheck polls `GET /api/health` every 30s (5s timeout,
-3 retries, 30s start period). A failing healthcheck restarts the `app`
-container (`restart: unless-stopped`).
+3 retries, 30s start period). The healthcheck has two roles:
+
+```text
+healthcheck:
+  - marks the container healthy / unhealthy (visible via 'docker compose ps',
+    'docker inspect', and Compose UI);
+  - supports dependency ordering: services that declare
+    'depends_on: app: condition: service_healthy' (currently the
+    email-worker) wait for the app healthcheck to pass before starting.
+```
+
+A healthcheck does **not**, by itself, restart a still-running container.
+The `restart: unless-stopped` policy restarts the `app` container only when
+its process **exits**. These are independent mechanisms:
+
+```text
+healthcheck = marks container health + gates dependent startup
+restart     = restarts the container when the process exits, per policy
+```
+
+Do not conflate them. A container can be `unhealthy` and still running
+(restart policy does not fire); a container that exits is restarted per the
+policy regardless of its last health state. To force-restart an unhealthy
+container, an operator must `docker compose restart app` (or use an external
+watchdog that reads health state and restarts explicitly). The MVP ships no
+such watchdog — the runbook documents the manual `docker compose restart`
+recovery path.
 
 **Health does not claim `ready` when a required dependency is unusable:**
 `/api/system/health` reflects the DB ping, and the worker's `emailStatus`
@@ -287,8 +417,9 @@ The `email-worker` Compose service runs the resident Email delivery worker
 that `result_published` notifications write into.
 
 ```bash
-# The worker starts automatically with 'docker compose up -d'. Verify:
-docker compose logs email-worker | tail -20
+# The worker starts automatically with 'docker compose up -d'. Verify.
+# Use the native --tail flag (not a pipe) so failure context is preserved.
+docker compose logs --tail=20 email-worker
 # Look for:
 #   'email delivery worker starting'
 #   'resolved default organization'
@@ -347,7 +478,7 @@ Scanner tuning env vars: `HEARTBEAT_SCAN_INTERVAL_MS`,
 
 ---
 
-## 10. Redis requirement
+## 10. Redis (optional profile)
 
 **Redis is OPTIONAL** in the implemented MVP (`UNUSED_RESIDUE` classification
 per the P6 audit and ADR-001). No MVP business code reads from or writes to
@@ -358,11 +489,30 @@ Redis:
 - Admission queue / rate limiter = in-process / DB-backed (ADR-001).
 - Session/JWT = stateless cookie + JWT (no Redis session store).
 
-Leave `REDIS_URL` unset to disable Redis. The `redis` Compose service ships
-for forward-compatibility with the Phase 2 baseline (ADR-001) and is
-health-checked, but the API, worker, Inbox, and Email all function without
-it. Diagnostics reports `redisStatus.connected=false` when Redis is
+The default topology is `app + db + email-worker`. The `redis` Compose
+service is gated behind the `redis` profile (P6-010): a bare
+`docker compose up` does NOT start it, and the `app` service does NOT
+depend on redis health. The API defaults `REDIS_URL` to empty (disabled).
+Diagnostics reports `redisStatus.connected=false` when Redis is
 unconfigured — this is expected and does not degrade the MVP path.
+
+### Enabling the optional Redis profile
+
+```bash
+# 1. Set REDIS_URL on the app service (in .env):
+#    REDIS_URL=redis://redis:6379
+
+# 2. Start the stack with the redis profile:
+docker compose --profile redis up -d --build
+
+# 3. Verify all four services:
+docker compose ps
+# Expected: app (healthy), db (healthy), redis (healthy), email-worker (up)
+```
+
+The `redis` service exists for forward-compatibility with the Phase 2
+baseline (ADR-001). Enabling it does NOT move Inbox or Email queues to
+Redis — those remain PostgreSQL-backed (frozen by ADR-011).
 
 Redis becomes `REQUIRED` only when a documented, measured trigger is met
 (multi-instance, shared rate limit, distributed presence, cross-process
@@ -452,7 +602,8 @@ email-worker container (SIGTERM):
 docker compose restart app
 docker compose restart email-worker
 docker compose restart db
-docker compose restart redis       # optional; not required for MVP
+docker compose restart redis       # optional profile; not started by default
+                                    # (P6-010 / ADR-001)
 
 # Stuck Email processing recovery
 # The worker recovers abandoned rows at the top of every poll cycle after
@@ -460,19 +611,16 @@ docker compose restart redis       # optional; not required for MVP
 # restart the worker:
 docker compose restart email-worker
 
-# Dead Email inspection (admin-only via psql)
-docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -c "SELECT id, recipient_user_id, subject, attempt_count, last_error,
-             created_at, last_attempt_at
-      FROM email_outbox WHERE status = 'dead';"
+# Dead Email inspection (admin-only via psql). $POSTGRES_USER / $POSTGRES_DB
+# are expanded INSIDE the db container (postgres image env), not by the
+# host shell — wrap in sh -c.
+docker compose exec db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, recipient_user_id, subject, attempt_count, last_error, created_at, last_attempt_at FROM email_outbox WHERE status = '\''dead'\'';"'
 
 # Replay a dead Email (advanced — inspect last_error first)
 # ⚠️  This re-attempts delivery. Confirm the recipient and content first.
-docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -c "UPDATE email_outbox
-      SET status='pending', locked_at=NULL, locked_by=NULL,
-          next_attempt_at=now(), last_error=NULL
-      WHERE id = '<UUID>';"
+docker compose exec db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE email_outbox SET status='\''pending'\'', locked_at=NULL, locked_by=NULL, next_attempt_at=now(), last_error=NULL WHERE id = '\''<UUID>'\'';"'
 
 # Stale worker heartbeat
 # /api/system/diagnostics emailStatus.worker.status=degraded when
@@ -480,8 +628,9 @@ docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 # Restart the worker:
 docker compose restart email-worker
 
-# Failed migration
-docker compose logs app | grep -i migrat
+# Failed migration. Use the native --tail flag instead of a pipe so failure
+# context is preserved.
+docker compose logs --tail=100 app
 # Re-running migrate is idempotent:
 docker compose exec app node dist/scripts/migrate.js
 # If schema is corrupted, restore from backup (§11 backup/restore) and
@@ -601,18 +750,22 @@ and §24 (deferred capabilities). Highlights:
 The supported backup procedure is `pg_dump` against the `pgdata` volume.
 
 ```bash
-# Backup (online, consistent)
-docker compose exec -T db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  --no-owner --clean --if-exists \
+# Backup (online, consistent). $POSTGRES_USER / $POSTGRES_DB are expanded
+# INSIDE the db container (postgres image env), not by the host shell —
+# wrap pg_dump in sh -c. The dump stream is captured on the host.
+docker compose exec -T db sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean --if-exists' \
   > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Verify backup is non-empty and ends with completion
 ls -lh backup_*.sql
 tail -5 backup_*.sql   # should contain 'PostgreSQL database dump complete'
 
-# Restore (offline — stop API + worker first to avoid writes during restore)
+# Restore (offline — stop API + worker first to avoid writes during restore).
+# Feed the host-side dump file into the db container's psql.
 docker compose stop app email-worker
-docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
   < backup_YYYYMMDD_HHMMSS.sql
 docker compose up -d app email-worker
 ```
