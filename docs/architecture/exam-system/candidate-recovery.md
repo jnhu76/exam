@@ -148,19 +148,78 @@ sequenceDiagram
     C->>API: GET /candidate/attempts/:attemptId/take
     API->>DB: deadline reconciliation (may auto-submit if expired)
     API-->>C: snapshot (attemptStatus=disrupted, canResume=true)
-    C->>API: POST /attempts/:examId/start (or /restore)
+    Note over C: REC-I3 (implemented): capability field<br/>canResume drives the explicit restore action,<br/>NOT raw attemptStatus. The restoring UI overlay<br/>is shown while the command is in flight.
+    C->>API: POST /attempts/:attemptId/restore
     API->>DB: BEGIN + lock
+    API->>DB: ensureAttemptDeadlineReconciled (re-check before restore)
     API->>Engine: restoreAttempt
     Engine->>Engine: transition(disrupted, restore)
     Note over Engine: CURRENT_TRANSITIONAL: restoreAttempt currently<br/>computes disconnectedDuration AND adjusts deadlineAt<br/>in the same command. This is NOT the target contract.
     Engine->>Engine: compute disconnectedDuration
     Engine->>Engine: adjust deadlineAt (bounded by exam.closeAt)
-    Note over Engine: TARGET (REC-I3 + REC-I4):<br/>State restore and time compensation are separate.<br/>REC-I3: explicit restore command (lifecycle only).<br/>REC-I4: policy-driven compensation (strict/bounded_grace/operator_incident).
+    Note over Engine: TARGET (REC-I3 + REC-I4):<br/>State restore and time compensation are separate.<br/>REC-I3 (DONE): explicit restore command from Web client.<br/>REC-I4 (PENDING): policy-driven compensation (strict/bounded_grace/operator_incident).
     Engine->>DB: UPDATE status=in_progress, deadlineAt, lastActivityAt
     API->>DB: COMMIT
-    API-->>C: restored attempt response
-    C->>C: reload take snapshot
+    API-->>C: restore acknowledgement (legacy LoadAttemptResponse)
+    Note over C: REC-I3: the restore response is a command ack only.<br/>The page reloads the authoritative snapshot, NOT<br/>the restore response.
+    C->>API: GET /candidate/attempts/:attemptId/take (reload)
+    API-->>C: reloaded snapshot (in_progress OR terminal if deadline won)
+    Note over C: Branch on the reloaded snapshot only.<br/>No automatic restore loop. No invented in_progress.
 ```
+
+### Disrupted-Attempt Restore — Web Client Implementation Status (REC-I3)
+
+The Web recovery flow frozen by ADR-012 §Recovery Semantics is implemented in
+`apps/web/src/exam/useAttemptRestore.ts` and wired into
+`apps/web/src/pages/exam/TakeExamPage.tsx`. Behavior summary:
+
+```text
+GET /candidate/attempts/:attemptId/take (authoritative snapshot)
+  ↓
+IF snapshot.canResume == true:
+  → render restoring UI overlay
+  → POST /api/attempts/:attemptId/restore EXACTLY ONCE
+  → reload GET /candidate/attempts/:attemptId/take
+  → branch on the reloaded snapshot
+ELSE:
+  → initialize normally from the snapshot (existing flow)
+```
+
+Properties preserved by the implementation:
+
+- `CandidateTakeSnapshot` remains the page business truth source. The restore
+  POST response is treated only as a command acknowledgement.
+- `snapshot.canResume` — NOT raw `attemptStatus === "disrupted"` — governs
+  whether restore is attempted.
+- Restore fires at most once concurrently per mounted attempt. Guards:
+  in-flight promise ref + per-attempt identity ref + cancellation flag.
+  Verified by component tests against React Strict Mode effect replay and
+  snapshot re-renders.
+- User-triggered retry after a genuine failure is supported via a dedicated
+  "重试恢复" control (a fresh POST is allowed).
+- Route changes (attemptId change) reset the guards so the new attempt
+  initializes independently; stale async results from the old attempt cannot
+  overwrite the new page.
+- Deadline race: if the deadline wins between GET and POST restore, the
+  reloaded snapshot is terminal/non-resumable; the page renders the terminal
+  state and does NOT auto-loop restore.
+- Snapshot reload failure after a successful restore is treated as an
+  uncertain state; the page surfaces a reload/retry path rather than
+  inventing `in_progress` from the restore response.
+- Restore failure is NOT represented as a save failure and does NOT display
+  generic "时间到" / "正在自动交卷" copy merely because the disrupted
+  snapshot has `isEditable=false`.
+
+Telemetry: `restore_started` / `restore_succeeded` / `restore_failed` are
+emitted via the existing `trackExamEvent` helper, scoped to attemptId/examId
+with `durationMs` and `errorCode` only. No answer content is recorded.
+
+Deferred: REC-I4 (time-compensation policy) is NOT modified by REC-I3. The
+current `restoreAttempt` engine may still grant full disconnected-time
+compensation; the Web client deliberately uses neutral copy
+("服务器正在确认考试状态和剩余时间") and does not duplicate time logic.
+
+
 
 ### Server Outage
 

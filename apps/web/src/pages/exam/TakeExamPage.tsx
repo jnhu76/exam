@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Flag,
   Lock,
+  RotateCcw,
+  LoaderCircle,
   TimerOff,
   WifiOff,
 } from "lucide-react";
@@ -35,6 +37,9 @@ import type {
   CandidateTakeSnapshot,
   SaveAnswerResponseDTO,
 } from "@exam/contracts";
+// REC-I3: explicit disrupted-attempt direct restore (ADR-012). The hook owns
+// only the restore UI state; CandidateTakeSnapshot remains the page authority.
+import { useAttemptRestore } from "@/exam/useAttemptRestore";
 
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
@@ -234,6 +239,22 @@ export function TakeExamPage() {
     [snapshot],
   );
   viewRef.current = view;
+
+  // REC-I3: explicit restore for a disrupted-but-resumable attempt. The hook
+  // fires POST /api/attempts/:attemptId/restore exactly once when the
+  // authoritative snapshot reports canResume=true, then reloads the snapshot
+  // (which remains the page authority). Capability fields — NOT raw status —
+  // govern the action. See docs/adr/ADR-012-candidate-recovery-contract.md.
+  // REC-I3 connects the explicit restore workflow. REC-I4 owns compensation
+  // policy; do not duplicate time logic in the client.
+  const { restoreState, retryRestore } = useAttemptRestore({
+    attemptId,
+    examId: view?.examId,
+    canResume: Boolean(view?.canResume),
+    reloadSnapshot: loadSnapshot,
+  });
+  const isRestoring = restoreState === "restoring";
+  const restoreFailed = restoreState === "failed";
 
   const currentQuestionView = view?.questions[currentIndex] ?? null;
   const currentQuestionId = currentQuestionView?.id;
@@ -657,6 +678,73 @@ export function TakeExamPage() {
           message={loadError ?? t("candidateRuntime.errors.loadUnavailable")}
           onRetry={loadSnapshot}
         />
+      </div>
+    );
+  }
+
+  // REC-I3: while an explicit restore is in flight, render the restoring
+  // surface — NOT the editable exam and NOT the deadline/time-up overlay
+  // (which would otherwise appear merely because the disrupted snapshot has
+  // isEditable=false). The snapshot stays authoritative; this is a UI state.
+  if (isRestoring) {
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center"
+        data-testid="restore-restoring-surface"
+        role="status"
+        aria-live="polite"
+      >
+        <AppIcon
+          icon={LoaderCircle}
+          size="state"
+          className="animate-spin text-primary"
+        />
+        <h1 className="type-section-title">
+          {t("candidateRuntime.restore.restoringTitle")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t("candidateRuntime.restore.restoringDescription")}
+        </p>
+      </div>
+    );
+  }
+
+  // REC-I3: a restore network/server failure surfaces a dedicated recovery
+  // state. It MUST NOT be represented as a save failure, and it MUST NOT
+  // display deadline/time-up copy merely because the attempt is locked due
+  // to disruption. The candidate may retry (a fresh POST is allowed) or
+  // return to the exam list.
+  if (restoreFailed) {
+    return (
+      <div
+        className="mx-auto flex min-h-screen max-w-xl flex-col items-stretch justify-center gap-4 bg-background p-6"
+        data-testid="restore-failed-surface"
+        role="alert"
+        aria-live="assertive"
+      >
+        <Alert variant="destructive">
+          <AppIcon icon={WifiOff} size="inline" />
+          <AlertTitle>{t("candidateRuntime.restore.failedTitle")}</AlertTitle>
+          <AlertDescription>
+            {t("candidateRuntime.restore.failedDescription")}
+          </AlertDescription>
+        </Alert>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate(routes.exam.list)}
+            data-testid="restore-back-to-list"
+          >
+            {t("candidateRuntime.restore.backToList")}
+          </Button>
+          <Button
+            onClick={() => void retryRestore()}
+            data-testid="restore-retry-btn"
+          >
+            <AppIcon icon={RotateCcw} size="inline" />
+            {t("candidateRuntime.restore.retryRestore")}
+          </Button>
+        </div>
       </div>
     );
   }
