@@ -130,25 +130,45 @@ pnpm dev         # Start API + Web with hot reload
 
 ### Mode 2: Docker Compose (Full Stack)
 
-Production-like deployment. Builds the app image and starts both API and PostgreSQL in containers.
+Production-like deployment. Builds the app image and starts the full MVP
+topology in containers: API + PostgreSQL + Redis (optional baseline) +
+Email delivery worker. The worker is required to drain the PostgreSQL
+`email_outbox` table that `result_published` notifications write into
+(ADR-011). See
+[`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md)
+for the canonical deployment & operations runbook (prerequisites, env vars,
+first install, recovery, upgrade checklist, known limitations).
 
 ```bash
-docker compose up -d
+# Configure production-required env (copy template, edit):
+cp .env.example .env
+#   DATABASE_URL, JWT_SECRET, CORS_ORIGIN, PUBLIC_WEB_ORIGIN are required
+#   in production (APP_MODE=production); the API and worker fail fast at
+#   boot if any is missing or invalid.
+
+docker compose up -d --build    # build + start app, db, redis, email-worker
 docker compose logs -f app
+docker compose ps               # verify all four services are up
 docker compose down
-docker compose down -v   # remove database data
+docker compose down -v          # DANGEROUS: removes database data volumes
 ```
 
 - App: <http://localhost:3000>
 - Database: PostgreSQL (internal, not exposed to host)
-- Migrations run automatically on container start
+- Redis: optional baseline (unused by MVP business code — see ADR-001)
+- Email worker: drains `email_outbox` (resident process; see ADR-011)
+- Migrations run automatically on container start (app + worker both
+  self-migrate; idempotent via the drizzle journal)
+
+The scanner (heartbeat + deadline) runs **in-process** inside the `app`
+container — there is no separate scanner service.
 
 ## Docker Files Reference
 
 | File                      | Purpose                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `Dockerfile`              | Multi-stage build: base → builder → production runner                         |
-| `docker-compose.yml`      | Production: app + PostgreSQL 18 + Redis 7                                     |
+| `docker-compose.yml`      | Production: app + email-worker + PostgreSQL 18 + Redis 7 (optional baseline)  |
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
