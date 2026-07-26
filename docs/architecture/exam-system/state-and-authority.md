@@ -1,13 +1,15 @@
 # State and Authority Model
 
 > Normative description of the exam system's lifecycle states, sub-process states, policies, and fact timestamps.
+> Recovery semantics and the frozen recovery contract are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md) and described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
-Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+Last runtime verified against: bcf02847b0231e233dcb3ff98ec7ae681739b028
+Recovery contract updated in: PR #218
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+Runtime behavior verified against master after merged P5-0 / PR #210.
+Recovery back-reference added in PR #218.
 ```
 
 ## Why these must not be collapsed
