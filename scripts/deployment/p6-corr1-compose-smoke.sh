@@ -25,8 +25,18 @@ set -euo pipefail
 
 RUN_NUM="${1:-1}"
 PROJECT="p6corr1-smoke-${RUN_NUM}"
-REPO_ROOT="/home/hoo/Source/exam"
+
+SCRIPT_DIR="$(
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1
+  pwd
+)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+
+if [ ! -f "${COMPOSE_FILE}" ]; then
+  echo "FAIL: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
+  exit 1
+fi
 
 # Strong per-run credentials (test-only, isolated throwaway stack).
 PG_PASSWORD="p6-smoke-pass-${RUN_NUM}-$(date +%s)"
@@ -43,6 +53,38 @@ export CORS_ORIGIN="${ORIGIN}"
 export PUBLIC_WEB_ORIGIN="${ORIGIN}"
 
 echo "=== P6-CORR1 clean-volume smoke run #${RUN_NUM} (project: ${PROJECT}) ==="
+
+PSQL_QUERY_OUTPUT=""
+PSQL_QUERY_ERROR=""
+LAST_PENDING_QUERY_ERROR=""
+LAST_SUCCESS_INFO_VALUE=""
+LAST_SUCCESS_INFO_ERROR=""
+LAST_SUCCESS_COUNT_VALUE=""
+LAST_SUCCESS_COUNT_ERROR=""
+
+run_psql_query() {
+  local query="$1"
+  local output
+  local status
+
+  set +e
+  output=$(
+    docker exec "${PROJECT}-db-1" \
+      psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${query}" 2>&1
+  )
+  status=$?
+  set -e
+
+  if [ "${status}" -ne 0 ]; then
+    PSQL_QUERY_OUTPUT=""
+    PSQL_QUERY_ERROR="${output}"
+    return 1
+  fi
+
+  PSQL_QUERY_OUTPUT="${output}"
+  PSQL_QUERY_ERROR=""
+  return 0
+}
 
 cleanup() {
   echo "--- cleanup: tearing down isolated project ${PROJECT} ---"
@@ -138,23 +180,34 @@ fi
 PENDING_FOUND=0
 PENDING_INSTANCE_ID=""
 for i in $(seq 1 30); do
-  PENDING_INSTANCE_ID=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-    "SELECT worker_instance_id FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%' ORDER BY last_poll_at DESC LIMIT 1;" 2>/dev/null || true)
-  if [ -n "${PENDING_INSTANCE_ID}" ]; then
-    PENDING_FOUND=1
-    break
+  if run_psql_query "SELECT worker_instance_id FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%' ORDER BY last_poll_at DESC LIMIT 1;"; then
+    PENDING_INSTANCE_ID="${PSQL_QUERY_OUTPUT}"
+    if [ -n "${PENDING_INSTANCE_ID}" ]; then
+      PENDING_FOUND=1
+      break
+    fi
+  else
+    LAST_PENDING_QUERY_ERROR="${PSQL_QUERY_ERROR}"
   fi
   sleep 2
 done
 if [ "${PENDING_FOUND}" = "0" ]; then
   echo "  FAIL: no bootstrap_pending heartbeat found before bootstrap."
+  if [ -n "${LAST_PENDING_QUERY_ERROR}" ]; then
+    echo "  last query error: ${LAST_PENDING_QUERY_ERROR}"
+  fi
   docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
   exit 1
 fi
 echo "  PASS: bootstrap_pending heartbeat from instance ${PENDING_INSTANCE_ID}."
 
-PENDING_SUCCESS_AT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT COALESCE(last_success_at::text, '') FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}';" 2>/dev/null || true)
+if run_psql_query "SELECT COALESCE(last_success_at::text, '') FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}';"; then
+  PENDING_SUCCESS_AT="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not read last_success_at for bootstrap_pending heartbeat."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
 if [ -n "${PENDING_SUCCESS_AT}" ]; then
   echo "  FAIL: bootstrap_pending heartbeat already has last_success_at set."
   exit 1
@@ -178,8 +231,13 @@ echo "  PASS: worker is waiting and has not started sender/poll loop."
 
 # ── Test 6: 21 migrations applied exactly once ───────────────────────────
 echo "--- TEST 6: 21 migrations applied exactly once (P6-009 ordering proof) ---"
-MIG_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM drizzle.__drizzle_migrations;" 2>/dev/null || echo "0")
+if run_psql_query "SELECT count(*) FROM drizzle.__drizzle_migrations;"; then
+  MIG_COUNT="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not read migration count."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
 echo "  drizzle journal entries: ${MIG_COUNT}"
 if [ "${MIG_COUNT}" = "21" ]; then
   echo "  PASS: 21 migrations applied exactly once."
@@ -191,8 +249,13 @@ fi
 # ── Test 7: bootstrap_pending heartbeat present before bootstrap ─────────
 # Covered by Test 5b; keep a lightweight post-condition here for readability.
 echo "--- TEST 7: worker heartbeat row shows bootstrap_pending ---"
-HB=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%';" 2>/dev/null || echo "0")
+if run_psql_query "SELECT count(*) FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%';"; then
+  HB="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not query bootstrap_pending heartbeat count."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
 if [ "${HB}" -ge "1" ] 2>/dev/null; then
   echo "  PASS: bootstrap_pending heartbeat present."
 else
@@ -223,10 +286,24 @@ docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
 echo "--- TEST 9b: same worker transitions heartbeat to success after bootstrap ---"
 SUCCESS_OK=0
 for i in $(seq 1 40); do
-  SUCCESS_INFO=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-    "SELECT COALESCE(last_success_at::text, ''), COALESCE(last_error, '') FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}' ORDER BY last_poll_at DESC LIMIT 1;" 2>/dev/null || true)
-  SUCCESS_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-    "SELECT count(*) FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}' AND last_success_at IS NOT NULL AND last_error IS NULL;" 2>/dev/null || true)
+  if run_psql_query "SELECT COALESCE(last_success_at::text, ''), COALESCE(last_error, '') FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}' ORDER BY last_poll_at DESC LIMIT 1;"; then
+    SUCCESS_INFO="${PSQL_QUERY_OUTPUT}"
+    LAST_SUCCESS_INFO_VALUE="${SUCCESS_INFO}"
+    LAST_SUCCESS_INFO_ERROR=""
+  else
+    LAST_SUCCESS_INFO_VALUE="${SUCCESS_INFO:-}"
+    LAST_SUCCESS_INFO_ERROR="${PSQL_QUERY_ERROR}"
+  fi
+
+  if run_psql_query "SELECT count(*) FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}' AND last_success_at IS NOT NULL AND last_error IS NULL;"; then
+    SUCCESS_COUNT="${PSQL_QUERY_OUTPUT}"
+    LAST_SUCCESS_COUNT_VALUE="${SUCCESS_COUNT}"
+    LAST_SUCCESS_COUNT_ERROR=""
+  else
+    LAST_SUCCESS_COUNT_VALUE="${SUCCESS_COUNT:-}"
+    LAST_SUCCESS_COUNT_ERROR="${PSQL_QUERY_ERROR}"
+  fi
+
   if [ "${SUCCESS_COUNT}" = "1" ]; then
     SUCCESS_OK=1
     break
@@ -235,6 +312,10 @@ for i in $(seq 1 40); do
 done
 if [ "${SUCCESS_OK}" = "0" ]; then
   echo "  FAIL: worker did not transition heartbeat to success after bootstrap."
+  echo "  last heartbeat state: ${LAST_SUCCESS_INFO_VALUE:-<empty>}"
+  echo "  last SUCCESS_INFO query error: ${LAST_SUCCESS_INFO_ERROR:-<none>}"
+  echo "  last SUCCESS_COUNT value: ${LAST_SUCCESS_COUNT_VALUE:-<empty>}"
+  echo "  last SUCCESS_COUNT query error: ${LAST_SUCCESS_COUNT_ERROR:-<none>}"
   docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
   exit 1
 fi
@@ -271,12 +352,27 @@ echo "  PASS: worker logs show resolved organization, sender creation, and poll 
 
 # ── Test 10: no default Candidate accounts; exactly one Admin (P6-008) ───
 echo "--- TEST 10: no default Candidate accounts; exactly one Admin (P6-008) ---"
-CAND_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM users WHERE role = 'Candidate';" 2>/dev/null || echo "?")
-ADMIN_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM users WHERE role = 'Admin';" 2>/dev/null || echo "?")
-TOTAL_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM users;" 2>/dev/null || echo "?")
+if run_psql_query "SELECT count(*) FROM users WHERE role = 'Candidate';"; then
+  CAND_COUNT="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not query Candidate count."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
+if run_psql_query "SELECT count(*) FROM users WHERE role = 'Admin';"; then
+  ADMIN_COUNT="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not query Admin count."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
+if run_psql_query "SELECT count(*) FROM users;"; then
+  TOTAL_COUNT="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not query total user count."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
 echo "  users: total=${TOTAL_COUNT}, admin=${ADMIN_COUNT}, candidate=${CAND_COUNT}"
 [ "${CAND_COUNT}" = "0" ] && echo "  PASS: zero Candidate accounts." || {
   echo "  FAIL: ${CAND_COUNT} Candidate accounts exist (expected 0)."; exit 1; }
@@ -285,8 +381,13 @@ echo "  users: total=${TOTAL_COUNT}, admin=${ADMIN_COUNT}, candidate=${CAND_COUN
 
 # ── Test 11: admin.bootstrap audit row exists (P6-008) ───────────────────
 echo "--- TEST 11: admin.bootstrap audit evidence (P6-008) ---"
-AUDIT_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM audit_logs WHERE action = 'admin.bootstrap';" 2>/dev/null || echo "0")
+if run_psql_query "SELECT count(*) FROM audit_logs WHERE action = 'admin.bootstrap';"; then
+  AUDIT_COUNT="${PSQL_QUERY_OUTPUT}"
+else
+  echo "  FAIL: could not query admin.bootstrap audit count."
+  echo "  query error: ${PSQL_QUERY_ERROR}"
+  exit 1
+fi
 [ "${AUDIT_COUNT}" -ge "1" ] 2>/dev/null && echo "  PASS: ${AUDIT_COUNT} admin.bootstrap audit row(s)." || {
   echo "  FAIL: no admin.bootstrap audit row."; exit 1; }
 

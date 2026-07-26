@@ -5,11 +5,21 @@ import systemRoutes from "./system.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import { emailOutbox, workerHeartbeats } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
+import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
 
 async function cleanupWorkerHeartbeats(db: TestContext["db"]) {
   await db
     .delete(workerHeartbeats)
     .where(eq(workerHeartbeats.workerName, "email-delivery"));
+}
+
+function restoreEmailEnabled(prevEnabled: string | undefined) {
+  if (prevEnabled === undefined) {
+    delete process.env.EMAIL_ENABLED;
+  } else {
+    process.env.EMAIL_ENABLED = prevEnabled;
+  }
+  resetRuntimeConfigForTest();
 }
 
 describe("system routes", () => {
@@ -376,8 +386,7 @@ describe("system routes", () => {
         await ctx.db
           .delete(emailOutbox)
           .where(eq(emailOutbox.organizationId, orgId));
-        process.env.EMAIL_ENABLED = prevEnabled;
-        resetRuntimeConfigForTest();
+        restoreEmailEnabled(prevEnabled);
       }
     });
 
@@ -394,7 +403,7 @@ describe("system routes", () => {
           lastPollAt: new Date(),
           lastSuccessAt: null,
           lastErrorAt: null,
-          lastError: "bootstrap_pending: initial organization not initialized",
+          lastError: BOOTSTRAP_PENDING_MESSAGE,
         });
 
         const res = await ctx.app.inject({
@@ -413,8 +422,7 @@ describe("system routes", () => {
         expect(body.emailStatus.status).toBe("degraded");
       } finally {
         await cleanupWorkerHeartbeats(ctx.db);
-        process.env.EMAIL_ENABLED = prevEnabled;
-        resetRuntimeConfigForTest();
+        restoreEmailEnabled(prevEnabled);
       }
     });
 
@@ -449,9 +457,24 @@ describe("system routes", () => {
         expect(body.emailStatus.status).toBe("available");
       } finally {
         await cleanupWorkerHeartbeats(ctx.db);
-        process.env.EMAIL_ENABLED = prevEnabled;
-        resetRuntimeConfigForTest();
+        restoreEmailEnabled(prevEnabled);
       }
+    });
+
+    it("restores EMAIL_ENABLED correctly when it was initially absent", () => {
+      const original = process.env.EMAIL_ENABLED;
+      delete process.env.EMAIL_ENABLED;
+
+      process.env.EMAIL_ENABLED = "true";
+      resetRuntimeConfigForTest();
+      restoreEmailEnabled(undefined);
+
+      expect(process.env.EMAIL_ENABLED).toBeUndefined();
+
+      if (original !== undefined) {
+        process.env.EMAIL_ENABLED = original;
+      }
+      resetRuntimeConfigForTest();
     });
   });
 });

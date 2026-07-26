@@ -127,14 +127,20 @@ export async function waitForSingleOrganization(
       return organization;
     }
 
-    await deps.heartbeatRepo.upsert({
-      workerName: WORKER_NAME,
-      workerInstanceId: deps.workerInstanceId,
-      lastPollAt: new Date(),
-      lastSuccessAt: null,
-      lastErrorAt: null,
-      lastError: BOOTSTRAP_PENDING_MESSAGE,
-    });
+    try {
+      await deps.heartbeatRepo.upsert({
+        workerName: WORKER_NAME,
+        workerInstanceId: deps.workerInstanceId,
+        lastPollAt: new Date(),
+        lastSuccessAt: null,
+        lastErrorAt: null,
+        lastError: BOOTSTRAP_PENDING_MESSAGE,
+      });
+    } catch (err) {
+      deps.log("warn", "heartbeat write failed (non-fatal)", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     if (!pendingLogged) {
       deps.log("warn", "waiting for initial organization bootstrap");
@@ -202,7 +208,6 @@ export async function main(): Promise<void> {
 
     const organizationId = organization.id;
     const orgScope = { organizationId };
-    log("info", "resolved default organization", { organizationId });
 
     // 3. Build sender
     log("info", "creating email sender", {
@@ -327,20 +332,37 @@ export async function main(): Promise<void> {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    // Allow interruption on shutdown
-    const checkShutdown = setInterval(() => {
-      if (shuttingDown) {
-        clearInterval(checkShutdown);
-        clearTimeout(timer);
-        resolve();
-      }
+export function interruptibleSleep(
+  ms: number,
+  isShuttingDown: () => boolean,
+): Promise<void> {
+  return new Promise((resolvePromise) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let shutdownCheck: ReturnType<typeof setInterval> | undefined;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+
+      if (timer !== undefined) clearTimeout(timer);
+      if (shutdownCheck !== undefined) clearInterval(shutdownCheck);
+
+      resolvePromise();
+    };
+
+    timer = setTimeout(finish, ms);
+    shutdownCheck = setInterval(() => {
+      if (isShuttingDown()) finish();
     }, 200);
-    timer.unref();
-    checkShutdown.unref();
+
+    timer.unref?.();
+    shutdownCheck.unref?.();
   });
+}
+
+function sleep(ms: number): Promise<void> {
+  return interruptibleSleep(ms, () => shuttingDown);
 }
 
 // ── Entry ───────────────────────────────────────────────────────────

@@ -32,7 +32,7 @@
  *   - the `redis` service is NOT behind a profile (it must be optional) —
  *     P6-010.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname, "../..");
@@ -46,6 +46,32 @@ try {
 } catch {
   console.error("FAIL: docker-compose.yml is missing from repository root.");
   process.exit(1);
+}
+
+// P6-CORR2: deployment smoke scripts must not hard-code developer-specific
+// checkout paths. They must derive repo-root from the script location so the
+// smoke tests run from any clone directory (including relocated worktrees).
+const deploymentScriptsDir = join(ROOT, "scripts", "deployment");
+try {
+  const scriptFiles = readdirSync(deploymentScriptsDir).filter((f) =>
+    f.endsWith(".sh"),
+  );
+  const developerPathPatterns = [/\/home\/hoo\//, /\/Users\/\S+/];
+  for (const file of scriptFiles) {
+    const text = readFileSync(join(deploymentScriptsDir, file), "utf-8");
+    for (const pattern of developerPathPatterns) {
+      if (pattern.test(text)) {
+        errors.push(
+          `'scripts/deployment/${file}' contains a developer-specific absolute ` +
+            `path matching ${pattern.toString()}. Smoke scripts must derive ` +
+            "paths from their own location so they run from any checkout.",
+        );
+        break;
+      }
+    }
+  }
+} catch {
+  // If the directory is missing, there are no smoke scripts to validate.
 }
 
 // Minimal structural parse — we only need top-level service presence and

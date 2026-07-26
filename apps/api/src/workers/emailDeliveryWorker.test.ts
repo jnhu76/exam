@@ -1,4 +1,5 @@
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -9,6 +10,7 @@ import {
 import type { Organization } from "@exam/domain";
 import {
   BOOTSTRAP_PENDING_MESSAGE,
+  interruptibleSleep,
   waitForSingleOrganization,
   type LogFn,
 } from "./emailDeliveryWorker.js";
@@ -125,5 +127,91 @@ describe("waitForSingleOrganization", () => {
     expect(deps.orgRepo.resolveOptionalBrandingTenant).toHaveBeenCalledTimes(1);
     expect(deps.heartbeatRepo.upsert).toHaveBeenCalledTimes(1);
     expect(deps.sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it("continues waiting when bootstrap-pending heartbeat write is rejected", async () => {
+    const org: Organization = {
+      id: "org-1",
+      name: "Org",
+      displayName: "Org",
+      slug: "org",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    deps.orgRepo.resolveOptionalBrandingTenant
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(org);
+    deps.heartbeatRepo.upsert
+      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockResolvedValueOnce({});
+
+    const result = await waitForSingleOrganization(deps);
+
+    expect(result).toBe(org);
+    expect(deps.orgRepo.resolveOptionalBrandingTenant).toHaveBeenCalledTimes(2);
+    expect(deps.sleep).toHaveBeenCalledTimes(1);
+    expect(deps.heartbeatRepo.upsert).toHaveBeenCalledTimes(1);
+    expect(deps.log).toHaveBeenCalledWith(
+      "warn",
+      "heartbeat write failed (non-fatal)",
+      { error: "connection reset" },
+    );
+    expect(deps.log).toHaveBeenCalledWith(
+      "info",
+      "resolved default organization",
+      { organizationId: org.id },
+    );
+  });
+});
+
+describe("interruptibleSleep", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("clears both handles after normal timeout", async () => {
+    let shuttingDown = false;
+    const promise = interruptibleSleep(1000, () => shuttingDown);
+
+    expect(vi.getTimerCount()).toBe(2);
+
+    vi.advanceTimersByTime(1000);
+    await promise;
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("clears both handles when shutdown interrupts sleep", async () => {
+    let shuttingDown = false;
+    const promise = interruptibleSleep(1000, () => shuttingDown);
+
+    expect(vi.getTimerCount()).toBe(2);
+
+    shuttingDown = true;
+    vi.advanceTimersByTime(200);
+    await promise;
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("resolves exactly once when timeout and shutdown race", async () => {
+    let shuttingDown = false;
+    const promise = interruptibleSleep(200, () => shuttingDown);
+
+    let resolveCount = 0;
+    const tracked = promise.then(() => {
+      resolveCount++;
+    });
+
+    shuttingDown = true;
+    vi.advanceTimersByTime(200);
+    await tracked;
+
+    expect(resolveCount).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -46,9 +46,10 @@ COPY apps/ apps/
 
 RUN pnpm --reporter=append-only --filter @exam/domain build
 RUN pnpm --reporter=append-only --filter @exam/contracts build
+RUN pnpm --reporter=append-only --filter @exam/auth build
+RUN pnpm --reporter=append-only --filter @exam/authz build
 RUN pnpm --reporter=append-only --filter @exam/import-export build
 RUN pnpm --reporter=append-only --filter @exam/db build
-RUN pnpm --reporter=append-only --filter @exam/auth build
 RUN pnpm --reporter=append-only --filter @exam/exam-engine build
 RUN pnpm --reporter=append-only --filter @exam/web build
 RUN pnpm --reporter=append-only --filter @exam/api build

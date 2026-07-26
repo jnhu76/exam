@@ -38,10 +38,11 @@ const cookieAuth = [{ cookieAuth: [] }] as const;
  * - unavailable: enabled but the outbox query threw
  *
  * Worker status is derived from the PostgreSQL heartbeat record:
- * - available: heartbeat exists and lastPollAt is within the stale threshold
- * - degraded: heartbeat exists but lastPollAt is older than the threshold
- * - unknown: no heartbeat record found
  * - disabled: email is disabled
+ * - unknown: no heartbeat record found
+ * - available: heartbeat is fresh, lastSuccessAt is non-null, and lastError is null
+ * - degraded: heartbeat is stale, or no successful poll has occurred, or
+ *   lastError is non-null (including bootstrap_pending)
  */
 async function buildEmailStatus(
   config: ReturnType<typeof getRuntimeConfig>,
