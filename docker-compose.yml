@@ -89,27 +89,39 @@ services:
   # write into. Without this service, `docker compose up` would start the
   # API and DB but Email queued by the publication transaction would never
   # be sent. The worker is PostgreSQL-only (no Redis/Fastify); it
-  # self-migrates at startup (idempotent via the drizzle journal) and
-  # resolves the single internal default organization via the branding
-  # resolver. It is intentionally NOT wired to start when EMAIL_ENABLED is
-  # false at the Compose level: a stopped-but-restarted worker is harmless
-  # (it polls an empty outbox and writes a heartbeat). Disable Email
-  # delivery by setting EMAIL_ENABLED=false in the runtime env, not by
-  # removing this service.
+  # self-migrates at startup (idempotent via the drizzle journal, so it
+  # does not race the app container's migrate call) and resolves the single
+  # internal default organization via the branding resolver. It is
+  # intentionally NOT wired to start when EMAIL_ENABLED is false at the
+  # Compose level: a stopped-but-restarted worker is harmless (it polls an
+  # empty outbox and writes a heartbeat). Disable Email delivery by setting
+  # EMAIL_ENABLED=false in the runtime env, not by removing this service.
+  #
+  # The image's ENTRYPOINT is docker-entrypoint.sh, which hard-codes
+  # `exec node dist/server.js`. To run the worker instead, override the
+  # entrypoint to `node` and pass the worker entrypoint as the command.
+  # The worker self-migrates before its poll loop, so no migrate step is
+  # needed here.
   email-worker:
     build: .
-    command: ["node", "dist/workers/emailDeliveryWorker.js"]
+    entrypoint: ["node"]
+    command: ["dist/workers/emailDeliveryWorker.js"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam}
       # JWT_SECRET is required by the runtime config loader at worker boot
-      # (getRuntimeConfig fails fast in production without it). The worker
-      # itself never signs or verifies JWTs.
-      JWT_SECRET: ${JWT_SECRET}
+      # (getRuntimeConfig → resolveJwtSecret fails fast in production
+      # without it). The worker itself never signs or verifies JWTs.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
       NODE_ENV: production
       APP_MODE: production
       # PUBLIC_WEB_ORIGIN is validated at worker boot by runtimeConfig
       # (used to build Email action links).
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN is required for production}
+      # CORS_ORIGIN is validated at worker boot by runtimeConfig
+      # (resolveCorsOrigin fails fast in production without it). The worker
+      # itself never serves CORS-protected responses, but the config loader
+      # does not know that.
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required for production}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}

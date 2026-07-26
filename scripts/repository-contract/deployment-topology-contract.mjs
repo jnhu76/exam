@@ -58,51 +58,114 @@ if (!servicesBlock) {
     if (!workerBlock) {
       errors.push("'email-worker' service block could not be parsed.");
     } else {
+      // The image ENTRYPOINT is docker-entrypoint.sh which hard-codes
+      // `exec node dist/server.js`. The service MUST override the
+      // entrypoint so the command actually runs the worker (otherwise
+      // `docker compose up email-worker` silently starts the API server).
+      // The service key is indented under `services:`, so match with
+      // leading whitespace.
+      if (!/^\s*entrypoint:\s*\S/im.test(workerBlock)) {
+        errors.push(
+          "'email-worker' service must override entrypoint (the image " +
+            "ENTRYPOINT is docker-entrypoint.sh which hard-codes the API " +
+            "server; without an entrypoint override, command: is ignored " +
+            "and the worker never runs).",
+        );
+      }
+
+      // Worker must run the production worker entrypoint, not the dev tsx
+      // path and not the API server. Match either command: or entrypoint:
+      // lines (the worker entrypoint is the source of truth).
+      if (!/dist\/workers\/emailDeliveryWorker\.js/.test(workerBlock)) {
+        errors.push(
+          "'email-worker' command must run dist/workers/emailDeliveryWorker.js.",
+        );
+      }
+
       // Required env carried over from the worker entrypoint
-      // (apps/api/src/workers/emailDeliveryWorker.ts):
-      //   DATABASE_URL (db connection), JWT_SECRET (never used by worker
-      //   itself, but kept for env parity so a single image/runtime
-      //   contract is deployable), PUBLIC_WEB_ORIGIN (validated by
-      //   runtimeConfig at worker boot — worker calls getRuntimeConfig).
+      // (apps/api/src/workers/emailDeliveryWorker.ts → getRuntimeConfig).
+      // Every var here is fail-fast at boot in APP_MODE=production:
+      //   DATABASE_URL     — db connection
+      //   JWT_SECRET       — resolveJwtSecret throws if unset in prod
+      //   PUBLIC_WEB_ORIGIN — resolvePublicWebOrigin throws if unset
+      //   CORS_ORIGIN      — resolveCorsOrigin throws if unset (the worker
+      //                      never serves CORS-protected responses, but the
+      //                      shared config loader enforces it)
+      //   APP_MODE         — production mode gates the fail-fast behavior
+      //                      above; a missing APP_MODE falls back to dev
+      //                      and silently disables the safety checks.
       const requiredEnv = [
         "DATABASE_URL",
         "JWT_SECRET",
         "PUBLIC_WEB_ORIGIN",
+        "CORS_ORIGIN",
         "APP_MODE",
       ];
+      // Strip comment lines before substring matching so a comment like
+      // `# CORS_ORIGIN:` cannot satisfy the check.
+      const workerBlockNoComments = workerBlock
+        .split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
       for (const key of requiredEnv) {
-        if (!workerBlock.includes(`${key}:`)) {
+        if (
+          !new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\S`, "m").test(
+            workerBlockNoComments,
+          )
+        ) {
           errors.push(
-            `'email-worker' service must define environment variable '${key}'.`,
+            `'email-worker' service must define environment variable '${key}' ` +
+              `(fail-fast at worker boot in production).`,
+          );
+        }
+      }
+      // APP_MODE must specifically be production — the safety checks above
+      // only fire in production mode.
+      if (!/APP_MODE:\s*production\b/.test(workerBlockNoComments)) {
+        errors.push(
+          "'email-worker' APP_MODE must be 'production' (otherwise the " +
+            "config loader's production fail-fast checks are silently " +
+            "disabled).",
+        );
+      }
+
+      // Worker must depend on DB health specifically (not just any
+      // service_healthy). A future `depends_on: redis: service_healthy`
+      // would satisfy a loose check and let the worker start before the DB
+      // exists, producing a restart loop.
+      const dependsMatch = workerBlock.match(
+        /depends_on:\s*\n([\s\S]*?)(?=\n\S|\n\s{0,1}\S|\n$|$)/,
+      );
+      if (!dependsMatch) {
+        errors.push(
+          "'email-worker' service must declare depends_on with db: service_healthy.",
+        );
+      } else {
+        const depBlock = dependsMatch[1];
+        const hasDb =
+          /^\s{2,}db:\s*\n\s{4,}condition:\s*service_healthy\s*$/m.test(
+            "depends_on:\n" + depBlock,
+          );
+        if (!hasDb) {
+          errors.push(
+            "'email-worker' depends_on must specifically require " +
+              "'db: condition: service_healthy'.",
           );
         }
       }
 
-      // Worker must depend on DB health to avoid racing migrations against
-      // the app container (the worker also self-migrates; both are
-      // idempotent via the drizzle journal, but starting before DB health
-      // produces noisy retry logs and a slower first-poll).
-      if (!/depends_on:/.test(workerBlock)) {
+      // Worker must have a non-trivial restart policy — it is a required
+      // long-running process. `restart: "no"` is a valid Compose value
+      // but defeats the intent; pin to the allowed set.
+      if (
+        !/restart:\s*(unless-stopped|always|on-failure(:\d+)?)/.test(
+          workerBlock,
+        )
+      ) {
         errors.push(
-          "'email-worker' service must declare depends_on with db health.",
-        );
-      } else if (!/condition:\s*service_healthy/.test(workerBlock)) {
-        errors.push(
-          "'email-worker' depends_on must require db: service_healthy.",
-        );
-      }
-
-      // Worker must have a restart policy — it is a required long-running
-      // process, not a one-shot.
-      if (!/restart:\s*\S+/.test(workerBlock)) {
-        errors.push("'email-worker' service must define a restart policy.");
-      }
-
-      // Worker must run the production worker entrypoint, not the dev tsx
-      // path and not the API server.
-      if (!/dist\/workers\/emailDeliveryWorker\.js/.test(workerBlock)) {
-        errors.push(
-          "'email-worker' command must run dist/workers/emailDeliveryWorker.js.",
+          "'email-worker' service must define a restart policy of " +
+            'unless-stopped, always, or on-failure (restart: "no" or a ' +
+            "missing policy makes the worker a one-shot).",
         );
       }
     }

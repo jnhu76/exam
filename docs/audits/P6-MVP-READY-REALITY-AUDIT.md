@@ -246,31 +246,71 @@ notification access returns non-leaking 404. No default production secret.
 ### P1 — release blocker
 
 **P6-001 — Email delivery worker absent from production Compose topology.**
-Found, classified, corrected, and proven. See §10 and §21.
+Found, classified, corrected, and proven. See §10 and §21. The initial
+correction was reviewed multi-axis (see §27); the review caught a critical
+sub-defect (P6-001a, the entrypoint override) and a required-subdefect
+(P6-001b, missing `CORS_ORIGIN`), both corrected and proven before this
+audit was finalized.
 
 ```text
-Finding:    docker-compose.yml had no email-worker service; 'docker compose up'
-            started only app + db + redis. The PostgreSQL email_outbox rows
-            written by result_published publication would never be drained
-            under the documented production deployment path (README states
-            'docker compose up' is the production command).
-Authority:  ADR-011 (worker is a separate Node entrypoint; CI must verify the
-            artifact), P5-0 (resident worker is the supported Email drain).
-Severity:   P1 — required worker absent from supported deployment topology.
-Fix:        Added 'email-worker' Compose service that runs the production
-            worker entrypoint (node dist/workers/emailDeliveryWorker.js),
-            depends_on db:service_healthy, restart:unless-stopped, and
-            inherits the runtime env contract the worker resolves at boot.
+P6-001 (parent):
+  Finding:    docker-compose.yml had no email-worker service; 'docker compose
+              up' started only app + db + redis. The PostgreSQL email_outbox
+              rows written by result_published publication would never be
+              drained under the documented production deployment path.
+  Authority:  ADR-011 (worker is a separate Node entrypoint; CI must verify
+              the artifact), P5-0 (resident worker is the supported Email
+              drain).
+  Severity:   P1 — required worker absent from supported deployment topology.
+
+P6-001a (sub-defect, found in P6 code review — Critical if shipped):
+  Finding:    The image ENTRYPOINT is docker-entrypoint.sh, which hard-codes
+              `exec node dist/server.js`. The initial email-worker service
+              used `command:` only, which Compose passes as ARGS to the
+              entrypoint — the entrypoint ignored them and ran the API
+              server. `docker compose up email-worker` would silently start
+              the API server (not the worker); the outbox would never drain.
+  Severity:   Critical if shipped (the guard's structural check passed, but
+              the actual runtime behavior was wrong — a false-PASS).
+  Fix:        Added `entrypoint: ["node"]` to the email-worker service so
+              `command: ["dist/workers/emailDeliveryWorker.js"]` becomes the
+              actual process. The worker self-migrates before its poll loop,
+              so no migrate step is needed.
+  Strengthened the regression guard to assert `entrypoint:` is present on
+              the service (otherwise the same false-PASS recurs).
+
+P6-001b (sub-defect, found in P6 code review — Required):
+  Finding:    The worker's getRuntimeConfig() calls resolveCorsOrigin() which
+              fails fast in production without CORS_ORIGIN. The initial
+              email-worker env omitted CORS_ORIGIN, so the worker would
+              exit-loop on boot in production.
+  Severity:   Required (worker cannot boot in production without it).
+  Fix:        Added CORS_ORIGIN: ${CORS_ORIGIN:?...} to the email-worker
+              env. Strengthened the regression guard to require CORS_ORIGIN
+              (and APP_MODE: production specifically) in the env block.
+
 Regression guard:
-            scripts/repository-contract/deployment-topology-contract.mjs
-            (wired into lint:repo-contract, runs in verify:static) fails
-            fast if the production compose file loses the email-worker
-            service, its required env, its db-health ordering, its restart
-            policy, or its production entrypoint.
-Proof:      'docker compose config' lists 4 services (app, db, redis,
-            email-worker); worker runs end-to-end against an isolated clean
-            DB (migrates, resolves org, polls outbox, writes heartbeat,
-            graceful SIGTERM → exit 0).
+  scripts/repository-contract/deployment-topology-contract.mjs
+  (wired into lint:repo-contract, runs in verify:static). After the review
+  strengthenings the guard fails fast if the production compose file:
+    - loses the email-worker service;
+    - loses the entrypoint override (catches P6-001a);
+    - omits any required env (DATABASE_URL, JWT_SECRET, PUBLIC_WEB_ORIGIN,
+      CORS_ORIGIN, APP_MODE — catches P6-001b);
+    - sets APP_MODE to anything other than 'production';
+    - depends on anything other than db: service_healthy;
+    - sets restart to 'no' or omits it;
+    - runs anything other than dist/workers/emailDeliveryWorker.js.
+
+Proof:
+  - 'docker compose config' lists 4 services (app, db, redis, email-worker).
+  - 'docker run --entrypoint node exam-image dist/workers/emailDeliveryWorker.js'
+    boots the WORKER (not the API server): logs "email delivery worker
+    starting" → migrate → resolve default org → create sender → poll loop →
+    heartbeat row written → graceful SIGTERM → "shutdown complete" → exit 0.
+  - TDD proof of the guard: temporarily removing the entrypoint override
+    line causes the guard to fail with the P6-001a message; restoring it
+    makes the guard pass again.
 ```
 
 ### P2 — non-blocking closeout debt
@@ -949,10 +989,25 @@ README.md (sync: deployment commands + email-worker note)
 ## 22. Tests added or strengthened
 
 ```text
-scripts/repository-contract/deployment-topology-contract.mjs (NEW)
+scripts/repository-contract/deployment-topology-contract.mjs (NEW + strengthened)
   - Regression guard for the production deployment topology. Runs in
     lint:repo-contract (part of verify:static). Deterministic, no network,
     no DB. Re-uses structural YAML parsing (no new dependency).
+  - After the P6 multi-axis code review, the guard was strengthened to:
+      * assert the email-worker service overrides `entrypoint:` (catches
+        P6-001a — the image ENTRYPOINT hard-codes the API server);
+      * require CORS_ORIGIN in the env block and APP_MODE: production
+        specifically (catches P6-001b — the worker's config loader fails
+        fast in production without CORS_ORIGIN);
+      * assert depends_on specifically names db: service_healthy (not any
+        service_healthy);
+      * pin restart to the allowed set (unless-stopped / always /
+        on-failure) — rejects `restart: "no"`;
+      * strip comment lines before env-var substring matching (so a
+        comment like `# CORS_ORIGIN:` cannot satisfy the check).
+  - The guard's value was proven by TDD: removing the entrypoint override
+    line in docker-compose.yml causes the guard to fail with the P6-001a
+    message; restoring it makes the guard pass.
 ```
 
 Existing authoritative proofs re-run and re-verified (not modified):
