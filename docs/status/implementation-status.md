@@ -113,7 +113,7 @@ P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
-  → P6 (MVP ready closeout) 🔄 IN PROGRESS — REALITY AUDIT
+  → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
 ```
 
 | Job  | True dependency                                | What it adds                                                                                      |
@@ -122,7 +122,21 @@ P4 (RBAC MVP role switch) ✅ CLOSED
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. **CLOSED** (2026-07-25, PR #210). |
 | P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **CLOSED** (P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API, M9 Teacher all-view result, M12 Teacher browser E2E, M13 concurrent idempotency). See [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md). |
 | P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **CLOSED** (2026-07-25, PR #213 merged; final review corrective merged in the same PR). See [`docs/roadmap/P5-N1-notification-inbox-result-published-job-v2.md`](../roadmap/P5-N1-notification-inbox-result-published-job-v2.md) and [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md). |
-| P6   | Preceding MVP blockers closed                   | MVP ready closeout. **IN PROGRESS — REALITY AUDIT** (branch `feat/p6-mvp-ready-closeout`). See [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md). |
+| P6   | Preceding MVP blockers closed                   | MVP ready closeout. **CLOSED — implemented MVP subset release-ready** (2026-07-26, PR #215 merged; independent closeout PASS). See [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md). |
+
+**P6 release readiness:** the supported LAN/on-premise, single-organization
+MVP deployment now has:
+
+- production-safe required configuration;
+- clean database migration and first-Admin bootstrap;
+- app + PostgreSQL + Email worker default topology;
+- optional Redis;
+- serialized production migrations;
+- bootstrap-pending Email worker state;
+- PostgreSQL Inbox and Email outbox;
+- worker heartbeat and diagnostics;
+- clean production Docker build;
+- repeatable relocated clean-volume Compose smoke evidence.
 
 The ordering principle: define permissions first (P4), then harden the Email
 base (P5-0), then close out result publishing (P3), then attach the first
