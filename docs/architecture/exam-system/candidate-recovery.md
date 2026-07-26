@@ -65,7 +65,26 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     C->>API: GET /candidate/attempts/:attemptId/take
-    API-->>C: CandidateTakeSnapshot (server-confirmed answers + versions)
+    API-->>C: CandidateTakeSnapshot (status, canResume, canSave, answers, versions)
+
+    Note over C: Phase 1: Lifecycle reconciliation (MUST precede answer reconciliation)
+
+    alt attemptStatus=disrupted AND canResume=true
+        C->>API: POST /attempts/:examId/start (or /restore)
+        API-->>C: restored attempt
+        C->>API: GET /candidate/attempts/:attemptId/take (reload)
+        API-->>C: refreshed snapshot
+    end
+
+    alt snapshot.canSave=false (submitted / auto-submitted / voided)
+        C->>J: freeze journal (no new writes)
+        Note over C: retain journal per incident/cleanup policy only
+        C->>C: show terminal state to candidate
+        Note over C: STOP — no answer replay or operation creation
+    end
+
+    Note over C: Phase 2: Answer reconciliation (only when canSave=true)
+
     C->>J: listDrafts(scope)
     J-->>C: DurableAnswerDrafts (latest intent per question)
     C->>J: listOperations(scope)
@@ -114,7 +133,7 @@ sequenceDiagram
     else in_progress attempt exists
         API-->>New: existing attempt (server-confirmed answers only)
     end
-    Note over New: pending operations from original device are NOT recovered
+    Note over New: DurableAnswerDrafts and SaveOperationOutbox entries<br/>from the original device are NOT recovered
 ```
 
 ### Disrupted-Attempt Restore (CURRENT + TARGET)

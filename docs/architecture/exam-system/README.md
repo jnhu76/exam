@@ -4,7 +4,7 @@
 
 ```text
 Last runtime verified against: bcf02847b0231e233dcb3ff98ec7ae681739b028
-Recovery contract updated in: ccdf879e8f21d208c9d491f9a555ed07c5281b8f (PR #218)
+Recovery contract updated in: PR #218
 
 Verification scope:
 Runtime behavior verified against master after merged P5-0 / PR #210.

@@ -238,7 +238,7 @@ Limitations of the current identity:
   to reproduce the same `clientSeq` for replay.
 - There is no server-issued receipt identity separate from the composite key.
 
-### Target semantic identity (TARGET — OPEN_DECISION, owned by REC-I2)
+### Target semantic identity (TARGET — OPEN_DECISION, owned by REC-I2a)
 
 The target protocol requires:
 
@@ -248,14 +248,14 @@ operationId — stable identity for one logical answer update
 
 Whether the target uses an independent `operationId` wire field, or continues
 to use the existing `(attemptId, questionId, clientSeq)` composite identity
-with enhanced validation, is an **OPEN_DECISION** owned by REC-I2. REC-I1
+with enhanced validation, is an **OPEN_DECISION** owned by REC-I2a. REC-I1
 must NOT embed a specific operationId format into the IndexedDB schema before
 this decision is frozen.
 
 ### Operation fields (semantic model — NOT a wire format)
 
 ```text
-operationId       — TARGET semantic field; wire format undecided (REC-I2)
+operationId       — TARGET semantic field; wire format undecided (REC-I2a)
 attemptId
 questionId
 clientSeq         — per-question monotonic client sequence (CURRENT)
@@ -265,7 +265,7 @@ clientSavedAt     — client-observed changedAt (diagnostic only)
 ```
 
 These field names describe the semantic model. The concrete transport format
-(request body shape, header placement, field naming) is owned by REC-I2.
+(request body shape, header placement, field naming) is owned by REC-I2a.
 
 ### Server result fields (semantic model)
 
@@ -282,7 +282,7 @@ conflict reason   — when rejected
 **Stable operation identity (TARGET)**: Each logical answer update receives
 one stable identity. Retries of the same logical operation reuse the same
 identity. The mechanism (composite key vs standalone field) is decided by
-REC-I2.
+REC-I2a.
 
 **Idempotent replay (CURRENT_INVARIANT)**: Same identity + same semantic
 payload → return the original accepted result without another write.
@@ -306,9 +306,9 @@ semantic payload → reject as conflicting payload. Implemented via
 `currentVersion=2` is accepted. The request schema only validates
 `baseVersion >= 0`. This is a gap, not a designed behavior.
 
-**TARGET_INVARIANT (REC-I2)**: `baseVersion` must strictly equal
+**TARGET_INVARIANT (REC-I2a)**: `baseVersion` must strictly equal
 `currentVersion`. Future `baseVersion` (greater than current) must be
-rejected with an explicit error code. Runtime fix is owned by REC-I2 and
+rejected with an explicit error code. Runtime fix is owned by REC-I2a and
 must NOT be included in this documentation PR.
 
 **Server time authority (CURRENT_INVARIANT)**: The server controls `savedAt`,
@@ -378,10 +378,10 @@ If a previously sent operation is uncertain (response lost):
 - Unsent drafts are compressible: only the latest per question matters.
 - Sent-but-uncertain operations must be resolved before new operations for
   the same question are generated.
-- `supersedesOperationId` or equivalent may be added by REC-I2 if the
+- `supersedesOperationId` or equivalent may be added by REC-I2a if the
   outbox model requires explicit supersession tracking.
 
-This model must be validated and frozen by REC-I2 BEFORE REC-I1 implements
+This model must be validated and frozen by REC-I2a BEFORE REC-I1 implements
 the IndexedDB schema. REC-I1 stores the DurableAnswerDraft and
 SaveOperationOutbox as separate concerns, not a single flat operation list.
 
@@ -486,22 +486,48 @@ durability.
 
 ### Browser refresh or same-device restart (TARGET)
 
-Recovery must:
+Recovery must reconcile attempt lifecycle and deadline state BEFORE
+reconciling local answer state. A terminal attempt (submitted, auto-
+submitted by deadline, voided) must never trigger answer replay.
 
-1. load the authoritative server snapshot (confirmed answers + versions)
-2. load DurableAnswerDrafts for the same organization/user/attempt
-3. load SaveOperationOutbox entries (sent-but-uncertain operations)
-4. resolve sent-but-uncertain operations first (retry idempotent replay)
-5. update known serverVersion from acknowledgements
-6. compare each DurableAnswerDraft against server-confirmed answer
-7. for drafts that differ from server state: create new outbox operation
-   using current serverVersion as baseVersion
-8. send new operations; surface conflicts instead of silently overwriting
-9. enter the attempt only after recovery state is known
+```text
+1. GET authoritative server snapshot (confirmed answers + versions
+   + attemptStatus + canResume + canSave)
+
+2. Lifecycle reconciliation (MUST precede answer reconciliation):
+
+   IF attemptStatus=disrupted AND canResume=true:
+     → POST explicit restore command
+     → reload authoritative snapshot
+
+   IF snapshot.canSave=false:
+     → do NOT replay or create any save operation
+     → freeze local journal (no new writes)
+     → retain journal only per incident/cleanup policy
+     → show terminal state to candidate
+     → STOP (no further recovery steps)
+
+3. Answer reconciliation (only when canSave=true):
+
+   a. load DurableAnswerDrafts for the same organization/user/attempt
+   b. load SaveOperationOutbox entries (sent-but-uncertain operations)
+   c. resolve sent-but-uncertain operations first (retry idempotent replay)
+   d. update known serverVersion from acknowledgements
+   e. compare each DurableAnswerDraft against server-confirmed answer
+   f. for drafts that differ from server state: create new outbox operation
+      using current serverVersion as baseVersion
+   g. send new operations; surface conflicts instead of silently overwriting
+   h. enter the attempt only after recovery state is known
+```
 
 Note: after an offline session with no network, the latest answer may
 exist ONLY as a DurableAnswerDraft with no outbox entry. Recovery must
 handle this case — it is not an error.
+
+Note: the deadline may have triggered server-side auto-submission while
+the browser was closed. Step 2 detects this via `canSave=false` and
+prevents meaningless replay that would produce conflicts against a
+terminal attempt.
 
 ### Disrupted attempt
 
@@ -715,23 +741,38 @@ candidate reconnects
 
 ```text
 Before allowing submit:
-  client reconciles pending operations
 
-  IF no pending / uncertain / conflict operations remain:
-    → allow normal submit
+1. Compare every DurableAnswerDraft with the authoritative server answer.
+2. Resolve all SaveOperationOutbox entries
+   (pending / in-flight / uncertain / conflict).
 
-  IF unresolved operations exist:
-    → block submit by default
-    → display explicit warning with unresolved count
-    → offer destructive override option:
-      "Submit only server-confirmed answers"
-      (requires explicit secondary confirmation;
-       records incident metadata with unresolved count)
+3. Submit normally ONLY when BOTH conditions hold:
+   - no unsynchronized DurableAnswerDraft remains
+   - no pending / in-flight / uncertain / conflict SaveOperationOutbox
+     entry remains
+
+4. Otherwise:
+   → block submit by default
+   → display unsynchronized question count
+     ("N 题答案尚未同步到服务器")
+   → offer explicit destructive override option:
+     "仅提交服务器已确认的答案"
+     (requires explicit secondary confirmation;
+      records incident metadata with unsynchronized question count
+      and unresolved operation count)
 ```
 
-The server freezes only what it has confirmed. Local pending operations
-that never reached the server do NOT automatically enter the submitted
-answer set.
+The barrier checks TWO classes of unresolved state:
+
+- **Unsynchronized DurableAnswerDraft**: a local draft exists that
+  differs from the server-confirmed answer and has no corresponding
+  outbox entry yet (edit happened but sync was never attempted).
+- **Unresolved SaveOperationOutbox**: an operation was created and
+  possibly sent, but has not reached a terminal acknowledged state.
+
+The server freezes only what it has confirmed. Local drafts and pending
+operations that never reached the server do NOT automatically enter the
+submitted answer set.
 
 #### Deadline auto-submission (server-side)
 
