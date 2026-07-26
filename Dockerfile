@@ -34,6 +34,7 @@ COPY packages/domain/package.json packages/domain/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
 COPY packages/auth/package.json packages/auth/
+COPY packages/authz/package.json packages/authz/
 COPY packages/exam-engine/package.json packages/exam-engine/
 COPY packages/import-export/package.json packages/import-export/
 COPY apps/web/package.json apps/web/
