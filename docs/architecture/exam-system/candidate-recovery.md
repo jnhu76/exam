@@ -120,8 +120,10 @@ sequenceDiagram
     API->>DB: BEGIN + lock
     API->>Engine: restoreAttempt
     Engine->>Engine: transition(disrupted, restore)
+    Note over Engine: CURRENT_TRANSITIONAL: restoreAttempt currently<br/>computes disconnectedDuration AND adjusts deadlineAt<br/>in the same command. This is NOT the target contract.
     Engine->>Engine: compute disconnectedDuration
     Engine->>Engine: adjust deadlineAt (bounded by exam.closeAt)
+    Note over Engine: TARGET (REC-I3 + REC-I4):<br/>State restore and time compensation are separate.<br/>REC-I3: explicit restore command (lifecycle only).<br/>REC-I4: policy-driven compensation (strict/bounded_grace/operator_incident).
     Engine->>DB: UPDATE status=in_progress, deadlineAt, lastActivityAt
     API->>DB: COMMIT
     API-->>C: restored attempt response
@@ -136,17 +138,20 @@ sequenceDiagram
     participant J as Local Journal (TARGET)
     participant API as Fastify API (unavailable)
 
+    C->>J: persist latest DurableAnswerDraft [TARGET write-ahead]
+    J-->>C: durable acknowledgement
     C->>API: POST /answers (timeout)
     C->>C: detect network_offline
-    C->>J: put(pendingOperation) [TARGET]
-    C->>C: candidate continues answering locally
-    C->>J: put(pendingOperation2) [TARGET]
+    Note over C: OfflineAnswerPolicy governs behavior:<br/>continue_and_sync / bounded_window → allow editing<br/>lock_when_offline → lock new input<br/>operator_review → save locally, mark for review
+    C->>J: overwrite DurableAnswerDraft [TARGET]
+    C->>C: candidate continues answering (policy-permitted)
     Note over API: server outage interval
     Note over API: server restarts
     C->>API: GET /health (online)
     C->>C: detect network_online
-    C->>J: listForAttempt [TARGET]
-    C->>API: replay pending operations [TARGET]
+    C->>J: read latest drafts + pending outbox [TARGET]
+    C->>C: resolve uncertain in-flight operations first
+    C->>API: generate + send operations from latest drafts [TARGET]
     API-->>C: acknowledgements / conflicts
 ```
 
@@ -192,11 +197,12 @@ sequenceDiagram
 
 | Failure class | Server-confirmed answers | Pending local ops (TARGET) | Time compensation | Recovery path |
 |---|---|---|---|---|
-| A. Network interruption | Safe (server holds) | Journal holds; replay on reconnect | Policy-dependent (not auto-full) | Replay pending → reconcile |
+| A. Network interruption | Safe (server holds) | Journal holds; replay on reconnect | Policy-dependent (not auto-full); client-claimed duration NOT fully trusted | Replay pending → reconcile |
 | B. Client process interruption | Safe | Same device: journal survives; different: lost | Policy-dependent | Reload snapshot → replay journal |
 | C. Device loss/replacement | Safe | Lost (original device only) | None automatic | Server-confirmed state only |
-| D. Server-side outage | Safe (if committed before outage) | Journal holds; replay after recovery | Operator incident / system-wide | Replay pending → reconcile |
+| D. Server-side outage | Safe (if committed before outage) | Journal holds; replay after recovery | Operator incident / system-wide; server-observable interval | Replay pending → reconcile |
 | E. Concurrent client activity | Version protocol protects | Conflict surfaced to stale client | N/A | Stale client receives STALE_VERSION |
+| F. Client persistence failure | Safe (server holds) | Lost or corrupted; degrade to server-only | N/A | Server-confirmed state; warn candidate |
 
 ---
 
@@ -221,12 +227,40 @@ sequenceDiagram
 
 | Data | Retention trigger | Action |
 |---|---|---|
-| Pending journal entries | Authoritative submission | Clear attempt journal |
-| Pending journal entries | Attempt void/freeze | Clear (no longer editable) |
-| Pending journal entries | Secure logout | Policy-defined (do not silently delete unresolved) |
-| Pending journal entries | User identity change | Clear previous user's journal |
-| Pending journal entries | Retention expiry | Time-based cleanup |
-| Pending journal entries | Exam/attempt deletion signal | Clear |
+| Pending journal entries | Authoritative submission | Clear attempt journal (physical delete after reconciliation) |
+| Pending journal entries | Attempt void/freeze | Remove answer payload; retain operation count + sync state + event IDs for appeal |
+| Pending journal entries | Secure logout | Detach from active session; do NOT physically delete unresolved entries |
+| Pending journal entries | User B logs in on same device | User B can NEVER query or discover User A's journal |
+| Pending journal entries | User A re-logs in on same device | User A MAY rediscover their unresolved journal entries |
+| Pending journal entries | Retention expiry | Physical delete (time-based cleanup, policy-configured) |
+| Pending journal entries | Exam/attempt deletion signal | Physical delete |
+| Pending journal entries | Explicit user abandonment | Physical delete (user-initiated, confirmed) |
 | Server-confirmed answers | Permanent | PostgreSQL retention policy |
 | Submitted answer snapshot | Permanent | PostgreSQL retention policy |
 | Telemetry events | Configurable | No answer content; ids + counts only |
+
+### Logout and user-change semantics (frozen)
+
+```text
+Logout:
+  Journal entries are NOT physically deleted.
+  They are detached from the active session identity.
+
+User B login (same device):
+  User B can NEVER read, query, or recover User A's journal.
+  Isolation is enforced by scope key: organizationId + userId + attemptId.
+
+User A re-login (same device):
+  User A MAY rediscover unresolved journal entries for active attempts.
+
+Physical deletion occurs ONLY on:
+  - authoritative submission (after reconciliation)
+  - retention expiry (time-based, policy-configured)
+  - explicit user abandonment (confirmed)
+  - exam/attempt deletion signal
+  - lawful deletion request
+
+"Clear" in this document means "make inaccessible to the current user
+session", NOT "physically delete", unless the trigger explicitly states
+physical deletion.
+```

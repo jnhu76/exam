@@ -4,6 +4,16 @@
 
 Accepted
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| Date | 2026-07-26 |
+| Decision owners | jnhu76 |
+| Supersedes | — |
+| Superseded by | — |
+| Related decisions | ADR-004 (desktop, deferred), ADR-005 (exam operation state baseline), ADR-006 (exam time authority), ADR-008 (submit answer freeze barrier) |
+
 ## Context
 
 The exam platform implements a server-authoritative Answer Save Protocol
@@ -28,6 +38,11 @@ Current gaps identified by audit:
   permanent default.
 - No multi-tab or multi-device conflict detection exists beyond the
   server-side version protocol.
+- The version protocol does NOT reject `baseVersion > currentVersion`
+  (future version). A client sending `baseVersion=999` against
+  `currentVersion=2` is accepted. This is a known defect, not a design
+  choice. The TARGET_INVARIANT (strict equality) is frozen here; the
+  runtime fix is owned by REC-I2a.
 
 This ADR freezes the recovery contract, authority model, failure taxonomy,
 save-operation semantics, local journal abstraction, time-compensation policy
@@ -88,10 +103,31 @@ A candidate edit that:
 
 The target architecture must minimize or eliminate this state.
 
-### Authoritative answer
+### Authoritative answer — three-phase model
+
+**During attempt (draft authority)**:
 
 For each attempt question: the highest `serverVersion` accepted by the
-server under the save protocol.
+server under the save protocol in `exam_attempts.answers`.
+
+**At submission (freeze barrier)**:
+
+`submitAttempt` freezes the current draft answers into
+`exam_attempts.submitted_answers` within the submit transaction (ADR-008).
+The frozen snapshot is the exact answer set read under the row lock.
+
+**After submission (grading authority)**:
+
+`submitted_answers` and the grading workset derived from it are the sole
+scoring authority. Grading reads the frozen `submitted_answers` snapshot,
+NOT the mutable draft `answers` column. The draft `answers` column is
+immutable after submission (the save protocol rejects writes to
+submitted/grading/graded attempts).
+
+**Recovery constraint**:
+
+Recovery flows must NOT modify `answers`, `submitted_answers`, or the
+grading workset of a submitted/grading/graded attempt.
 
 Authority is NOT:
 
@@ -157,65 +193,199 @@ affecting the examination site.
 More than one tab, browser, process, or device attempts to edit the same
 attempt.
 
+### F. Client persistence failure (TARGET)
+
+The local journal storage itself becomes unavailable or unreliable.
+
+Examples: IndexedDB unavailable, `QuotaExceededError`, transaction abort,
+database corruption, private-browsing mode limitations, browser storage
+eviction, disk full.
+
+Frozen rules:
+
+- A journal write failure must NEVER result in a `saved_locally` UI state.
+- The system must either degrade to server-only mode with a persistent
+  warning, or (for exams requiring high durability assurance) prevent
+  starting or continuing the attempt.
+- Storage eviction by the browser is treated as data loss for unsynced
+  operations; server-confirmed state is unaffected.
+- REC-I1 must define detection, degradation, and user notification behavior.
+
 These failure classes are NOT equivalent and must not be treated as such.
 
 ---
 
 ## Save Operation Model
 
-### Operation fields
+### Current operation identity (CURRENT)
+
+The current implementation identifies a logical save operation by the
+composite key:
 
 ```text
-operationId       — stable identity for one logical answer update
+(attemptId, questionId, clientSeq)
+```
+
+`clientSeq` is a per-question client-assigned monotonic integer. The server
+persists `clientSeqHistory` for replay detection but does NOT independently
+validate monotonicity or assign a server-side operation identifier. The
+current response does not return a standalone `operationId` field.
+
+Limitations of the current identity:
+
+- The server does not verify that `clientSeq` is strictly monotonic.
+- After a browser crash with no durable journal, the client may not be able
+  to reproduce the same `clientSeq` for replay.
+- There is no server-issued receipt identity separate from the composite key.
+
+### Target semantic identity (TARGET — OPEN_DECISION, owned by REC-I2)
+
+The target protocol requires:
+
+```text
+operationId — stable identity for one logical answer update
+```
+
+Whether the target uses an independent `operationId` wire field, or continues
+to use the existing `(attemptId, questionId, clientSeq)` composite identity
+with enhanced validation, is an **OPEN_DECISION** owned by REC-I2. REC-I1
+must NOT embed a specific operationId format into the IndexedDB schema before
+this decision is frozen.
+
+### Operation fields (semantic model — NOT a wire format)
+
+```text
+operationId       — TARGET semantic field; wire format undecided (REC-I2)
 attemptId
 questionId
-clientSeq         — per-question monotonic client sequence
+clientSeq         — per-question monotonic client sequence (CURRENT)
 baseVersion       — expected current serverVersion
 answer payload
 clientSavedAt     — client-observed changedAt (diagnostic only)
 ```
 
-### Server result fields
+These field names describe the semantic model. The concrete transport format
+(request body shape, header placement, field naming) is owned by REC-I2.
+
+### Server result fields (semantic model)
 
 ```text
 accepted          — boolean
 serverVersion     — authoritative version after operation
 savedAt           — server acceptance timestamp
-operationId       — receipt identity (or equivalent)
+operationId       — TARGET receipt identity (wire format undecided)
 conflict reason   — when rejected
 ```
 
 ### Invariants
 
-**Stable operation identity**: Each logical answer update receives one
-stable `operationId`. Retries of the same logical operation reuse the same
-operationId.
+**Stable operation identity (TARGET)**: Each logical answer update receives
+one stable identity. Retries of the same logical operation reuse the same
+identity. The mechanism (composite key vs standalone field) is decided by
+REC-I2.
 
-**Idempotent replay**: Same operationId + same semantic payload → return
-the original accepted result without another write. (CURRENT_INVARIANT —
-implemented via `clientSeq` idempotency in `processSaveAnswer`.)
+**Idempotent replay (CURRENT_INVARIANT)**: Same identity + same semantic
+payload → return the original accepted result without another write.
+Implemented via `(questionId, clientSeq)` idempotency key and `answersEqual`
+comparison in `processSaveAnswer`.
 
-**Conflicting replay**: Same operationId + different semantic payload →
-reject as conflicting payload. (CURRENT_INVARIANT — implemented via
-`CONFLICTING_PAYLOAD` rejection.)
+**Conflicting replay (CURRENT_INVARIANT)**: Same identity + different
+semantic payload → reject as conflicting payload. Implemented via
+`CONFLICTING_PAYLOAD` rejection.
 
 **Version protection**:
 
-- `baseVersion == current serverVersion` → may be accepted
 - `baseVersion < current serverVersion` → reject as stale
-- `baseVersion > current serverVersion` → reject as invalid/future version
+  (CURRENT_INVARIANT — implemented via `STALE_VERSION` rejection.)
+- `baseVersion >= current serverVersion` → currently may be accepted
+  (CURRENT behavior — the server unconditionally assigns
+  `currentVersion + 1` without checking for future baseVersion.)
 
-(CURRENT_INVARIANT — implemented via `STALE_VERSION` rejection.)
+**KNOWN_DEFECT (FUTURE_BASEVERSION)**: The current protocol does NOT reject
+`baseVersion > currentVersion`. A request with `baseVersion=999` against
+`currentVersion=2` is accepted. The request schema only validates
+`baseVersion >= 0`. This is a gap, not a designed behavior.
 
-**Server time authority**: The server controls `savedAt`, deadline checks,
-lease expiry, submission validity, time compensation. Client timestamps are
-diagnostic only. (CURRENT_INVARIANT — ADR-006.)
+**TARGET_INVARIANT (REC-I2)**: `baseVersion` must strictly equal
+`currentVersion`. Future `baseVersion` (greater than current) must be
+rejected with an explicit error code. Runtime fix is owned by REC-I2 and
+must NOT be included in this documentation PR.
+
+**Server time authority (CURRENT_INVARIANT)**: The server controls `savedAt`,
+deadline checks, lease expiry, submission validity, time compensation. Client
+timestamps are diagnostic only. (ADR-006.)
 
 ---
 
 ## Local Journal Abstraction (TARGET)
 
-Implementation-neutral interface:
+### Offline multiple-edit semantics (TARGET — must be frozen before REC-I1)
+
+When a candidate edits the same question multiple times while offline, the
+system must NOT produce a chain of stale operations that replay incorrectly.
+
+**Problem**: If the journal stores every edit as an independent operation
+with the same `baseVersion`, sequential replay causes only the FIRST
+operation to succeed; the candidate's LATEST intent is rejected as stale.
+
+**Frozen model — DurableAnswerDraft + SaveOperationOutbox**:
+
+```text
+DurableAnswerDraft (per question):
+  Stores the candidate's latest intent.
+  Each edit overwrites the previous draft for that question.
+  Contains: questionId, latest answer payload, localChangedAt, draftSeq.
+
+SaveOperationOutbox (per operation):
+  Generated ONLY when preparing to send to the server.
+  Contains: operationId, baseVersion (from last known serverVersion),
+  answer payload (from current draft), sync state.
+  Once sent, operationId and baseVersion are immutable.
+```
+
+**Offline edit flow**:
+
+```text
+candidate edits question Q (offline)
+→ overwrite DurableAnswerDraft[Q] with latest answer
+→ no network operation is generated yet
+
+candidate edits question Q again (offline)
+→ overwrite DurableAnswerDraft[Q] again
+→ still no network operation
+
+candidate reconnects
+→ read server currentVersion for Q
+→ generate ONE SaveOperation from latest draft + current serverVersion
+→ send to server
+```
+
+**In-flight / uncertain operation handling**:
+
+```text
+If a previously sent operation is uncertain (response lost):
+→ retry with same operationId (idempotent replay)
+→ if accepted: acknowledge, update known serverVersion
+→ if conflict: mark conflict, fetch new serverVersion
+→ THEN generate a new operation from the latest draft if it differs
+  from the acknowledged server state
+```
+
+**Constraints**:
+
+- The journal must NOT store an append-only chain of all offline edits as
+  independent server-bound operations.
+- Unsent drafts are compressible: only the latest per question matters.
+- Sent-but-uncertain operations must be resolved before new operations for
+  the same question are generated.
+- `supersedesOperationId` or equivalent may be added by REC-I2 if the
+  outbox model requires explicit supersession tracking.
+
+This model must be validated and frozen by REC-I2 BEFORE REC-I1 implements
+the IndexedDB schema. REC-I1 stores the DurableAnswerDraft and
+SaveOperationOutbox as separate concerns, not a single flat operation list.
+
+### Implementation-neutral interface
 
 ```ts
 interface PendingAnswerJournal {
@@ -297,6 +467,17 @@ Recovery must:
 
 Recovery must be an explicit command.
 
+**CURRENT_TRANSITIONAL**: The current `restoreAttempt` command combines
+lifecycle restoration (disrupted → in_progress) AND full disconnected-time
+compensation in a single operation. This coupling is NOT the target contract.
+
+**TARGET**: State restoration and time compensation are independent decisions:
+
+```text
+restoreAttemptState()          — lifecycle transition only
+evaluateInterruptionTimePolicy() — compensation decision (REC-I4)
+```
+
 Preferred semantic flow:
 
 ```text
@@ -356,6 +537,25 @@ Full disconnect-time compensation is NOT a safe default.
 Where exact seconds are undecided, define named configuration and
 invariants, not magic numbers.
 
+### Trust distinction (frozen)
+
+```text
+Personal network interruption (Class A):
+  Disconnect duration is client-claimed, NOT fully trusted.
+  Does NOT automatically entitle the candidate to equivalent time.
+  Time policy (strict / bounded_grace) governs any compensation.
+
+Server-side outage (Class D):
+  Incident interval is server-observable and operator-confirmable.
+  May justify system-wide compensation or exam clock suspension.
+  Specific compensation algorithm is NOT frozen here;
+  owned by REC-I4 (policy) and REC-I6 (operator incident timeline).
+```
+
+REC-R1 freezes that these two classes are different and must not share
+the same compensation logic. The specific compensation algorithm is
+deferred.
+
 ### Deadline extension attribution (TARGET)
 
 Every future deadline extension must be attributable to: policy, incident,
@@ -371,10 +571,13 @@ applicable).
 
 ### Network-interruption trust boundaries
 
-For ordinary Web exams: local persistence can prove that this browser
-currently holds data. It CANNOT prove that the candidate did not use another
-device, another person, external materials, modified JavaScript, or modified
-local storage.
+For ordinary Web exams: local persistence can retain recovery data for the
+same browser profile. It does NOT provide trustworthy proof to the server
+that the data is authentic, complete, timely, or produced without external
+assistance.
+
+It CANNOT prove that the candidate did not use another device, another
+person, external materials, modified JavaScript, or modified local storage.
 
 Hash chains, local timestamps, IndexedDB, client signatures, and
 zero-knowledge proofs alone do NOT prove that no cheating occurred during
@@ -431,12 +634,20 @@ The later Web implementation should support a single active writer where
 practical. Potential adapters: Web Locks API, BroadcastChannel, server-side
 active session or lease, desktop single-instance lock.
 
+**Single-writer control is a cooperative UX mechanism, NOT a security
+boundary.** Web Locks and BroadcastChannel can be disabled or bypassed by
+a determined user. The server `baseVersion`/`serverVersion` check is the
+final integrity protection. Any client can call the API directly without
+acquiring a frontend lock; the server must independently reject stale writes.
+
 Frozen rules:
 
 - A second tab/device must not silently overwrite newer server state.
 - A stale client must receive a visible conflict result.
 - Device takeover must invalidate or supersede the previous active writer.
 - High-risk supervised device takeover may require operator approval.
+- Frontend lock mechanisms improve UX by reducing conflicts; they do not
+  replace server-side version enforcement.
 
 ---
 
@@ -457,6 +668,52 @@ candidate reconnects
 → submitted answers are not rebuilt differently
 → grading workset is not duplicated
 ```
+
+### Pre-submission barrier (TARGET)
+
+#### Candidate voluntary submission
+
+```text
+Before allowing submit:
+  client reconciles pending operations
+
+  IF no pending / uncertain / conflict operations remain:
+    → allow normal submit
+
+  IF unresolved operations exist:
+    → block submit by default
+    → display explicit warning with unresolved count
+    → offer destructive override option:
+      "Submit only server-confirmed answers"
+      (requires explicit secondary confirmation;
+       records incident metadata with unresolved count)
+```
+
+The server freezes only what it has confirmed. Local pending operations
+that never reached the server do NOT automatically enter the submitted
+answer set.
+
+#### Deadline auto-submission (server-side)
+
+```text
+Deadline arrives:
+  server freezes current confirmed draft answers
+  unresolved local pending data does NOT enter the submission
+  incident metadata records the existence of unresolved local state
+  (if known from last client telemetry)
+```
+
+The server cannot wait for the client. This is legitimate behavior.
+
+#### Admin/proctor force-submission
+
+```text
+Admin forces submit:
+  server freezes confirmed draft answers
+  records: operator identity, reason, unresolved pending count (if known)
+```
+
+### Post-submission journal handling
 
 After authoritative submission:
 
@@ -512,13 +769,19 @@ password, token, cookie, Authorization header, full request/response body.
 
 ## Consequences
 
-- REC-I1 through REC-V1 are governed by this contract.
+- REC-I3 through REC-V1 are governed by this contract.
 - The current full-compensation restore behavior is documented as
-  transitional, not permanent.
-- The explicit restore route is preserved for future frontend adoption.
-- Local journal implementation is authorized but not started.
-- Time-policy configuration is deferred to product decision.
-- Multi-tab conflict UX is deferred to implementation Jobs.
+  transitional, not permanent. REC-I4 owns the policy change.
+- The explicit restore route is preserved for future frontend adoption
+  (REC-I3).
+- Local journal implementation is authorized but must not begin before
+  REC-I2a freezes the data model (DurableAnswerDraft + SaveOperationOutbox).
+- Time-policy configuration is deferred to product decision (REC-I4).
+- Multi-tab conflict UX is deferred to REC-I2b.
+- The `baseVersion > currentVersion` known defect is documented; runtime
+  fix is owned by REC-I2a and is NOT part of this documentation PR.
+- `submitted_answers` is affirmed as the post-submission grading authority
+  per ADR-008; recovery flows must not modify it.
 
 ## Rejected Alternatives
 
@@ -537,12 +800,58 @@ password, token, cookie, Authorization header, full request/response body.
 
 ## Deferred Work
 
-| Job | Scope |
+| Job | Scope | Dependency |
+|---|---|---|
+| REC-I3 | Disrupted-attempt recovery UX (explicit frontend restore) | None — server route exists |
+| REC-I4 | Interruption and time-compensation policy | REC-I3 (restore must work before policy changes) |
+| REC-I2a | Protocol hardening: operation identity freeze, future baseVersion fix, replay receipt, offline supersession model | REC-I4 (time policy independent) |
+| REC-I1 | Web pending-answer journal (IndexedDB adapter): DurableAnswerDraft + SaveOperationOutbox + isolation + cleanup | REC-I2a (data model must be frozen first) |
+| REC-I2b | Recovery reconciliation, replay, and conflict UX | REC-I1 (journal must exist) |
+| REC-I5 | Recovery telemetry and correlation | REC-I2b |
+| REC-I6 | Operator incident timeline | REC-I4 |
+| REC-V1 | Crash/network verification | REC-I2b |
+
+### Job order rationale
+
+The order is risk-priority, not pure architecture-dependency:
+
+1. **REC-I3 first**: directly fixes "crashed candidate is locked out" (P1
+   user-facing blocker). Small scope — the server route already exists and
+   is tested; only a frontend caller is needed.
+2. **REC-I4 second**: removes the "restore = full compensation" permanent
+   semantic (P1 abuse vector). Independent of journal.
+3. **REC-I2a third**: freezes the data model (operation identity,
+   baseVersion strictness, offline supersession) so REC-I1 does not embed
+   an undecided schema.
+4. **REC-I1 fourth**: implements IndexedDB storage against a stable
+   semantic contract.
+5. **REC-I2b fifth**: completes the reconciliation and conflict UX on top
+   of the journal.
+
+REC-I3 and REC-I4 are independent of each other and may proceed in
+parallel. REC-I1 must NOT begin before REC-I2a freezes the storage model.
+
+## Related Decisions
+
+| ADR | Relationship |
 |---|---|
-| REC-I1 | Web pending-answer journal (IndexedDB adapter) |
-| REC-I2 | Save acknowledgement and replay reconciliation |
-| REC-I3 | Disrupted-attempt recovery UX |
-| REC-I4 | Interruption and time-compensation policy |
-| REC-I5 | Recovery telemetry and correlation |
-| REC-I6 | Operator incident timeline |
-| REC-V1 | Crash/network verification |
+| ADR-004 | Desktop/Electron deferred. ADR-012 preserves the decision; desktop reuses recovery contract adapters. |
+| ADR-005 | Exam operation state baseline. ADR-012 does not modify exam lifecycle states or transitions. |
+| ADR-006 | Exam time authority. ADR-012 reaffirms `fastify.now()` as sole clock; does not redefine `now`. |
+| ADR-008 | Submit answer freeze barrier. ADR-012 adopts ADR-008's `submitted_answers` as post-submission grading authority. |
+
+### Document authority boundaries
+
+```text
+candidate-recovery.md
+  Responsible for: recovery semantics, sequence diagrams, decision matrices.
+
+state-and-authority.md
+  Responsible for: lifecycle states, authority boundaries, state machines.
+
+ADR-012
+  Responsible for: design decisions, trade-offs, frozen contract.
+```
+
+In case of conflict, the ADR governs design decisions; the architecture
+documents govern descriptive state modeling.

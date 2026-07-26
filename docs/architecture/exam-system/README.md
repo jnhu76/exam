@@ -4,10 +4,10 @@
 
 ```text
 Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+56127371d7e65bf9332df0605e5f5ad766e026ee
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+Current master implementation after merged P5-0 / PR #210 + ADR-012 recovery contract (PR #218).
 ```
 
 ## Purpose

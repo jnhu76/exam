@@ -106,8 +106,13 @@ in-memory only.
 1. PostgreSQL is the sole authority for answers, lifecycle, deadline,
    submission, grading, and results.
 2. Local storage is recovery material only, never a second truth source.
-3. Save operations use stable operationId with idempotent replay semantics.
+3. Save operations require a stable operation identity with idempotent
+   replay semantics. Current implementation uses `(attemptId, questionId,
+   clientSeq)` composite key; whether the target introduces a standalone
+   `operationId` field is an OPEN_DECISION (REC-I2a).
 4. Stale clients cannot silently overwrite newer server answers.
+   KNOWN_DEFECT: future baseVersion (greater than current) is not yet
+   rejected; TARGET_INVARIANT requires strict equality (REC-I2a).
 5. Recovery and time compensation are separate concerns.
 6. Full disconnect-time compensation is NOT frozen as the permanent default.
 7. The explicit restore route is preserved; ordinary GETs do not restore.
@@ -120,6 +125,12 @@ in-memory only.
     (ADR-004).
 13. Ordinary Web exams are not lockdown exams.
 14. ZKP/attestation does not prove no cheating.
+15. Offline multiple-edit uses DurableAnswerDraft (latest intent per
+    question) + SaveOperationOutbox (server-bound operations). The journal
+    must NOT store an append-only chain of all offline edits as independent
+    operations.
+16. `submitted_answers` (frozen at submit per ADR-008) is the sole grading
+    authority after submission. Recovery must not modify it.
 
 ---
 
@@ -130,7 +141,7 @@ in-memory only.
 | CI-1 | Server-confirmed answer is authoritative over stale client state | `processSaveAnswer` STALE_VERSION rejection |
 | CI-2 | Same clientSeq + same payload is idempotent | `answersEqual` + idempotency key |
 | CI-3 | Same clientSeq + different payload conflicts | CONFLICTING_PAYLOAD rejection |
-| CI-4 | Stale baseVersion cannot overwrite newer answer | baseVersion < currentVersion → reject |
+| CI-4 | Stale baseVersion cannot overwrite newer answer | baseVersion < currentVersion → reject (NOTE: baseVersion > currentVersion is NOT rejected — KNOWN_DEFECT, see Limitations) |
 | CI-5 | Submitted attempt cannot return to in_progress | State machine: no `submitted:restore` transition |
 | CI-6 | Submit is idempotent (already-submitted returns existing) | submitAttempt idempotent path |
 | CI-7 | Server time is authoritative (ADR-006) | `fastify.now()` threaded; engine never reads wall clock |
@@ -173,14 +184,22 @@ in-memory only.
 ## Jobs Authorized Next
 
 ```text
-REC-I1 — Web pending-answer journal (IndexedDB adapter)
-REC-I2 — Save acknowledgement and replay reconciliation
-REC-I3 — Disrupted-attempt recovery UX
+REC-I3 — Disrupted-attempt recovery UX (explicit frontend restore)
 REC-I4 — Interruption and time-compensation policy
+REC-I2a — Protocol hardening: operation identity freeze, future baseVersion fix,
+           replay receipt, offline supersession model
+REC-I1 — Web pending-answer journal (IndexedDB adapter):
+           DurableAnswerDraft + SaveOperationOutbox + isolation + cleanup
+REC-I2b — Recovery reconciliation, replay, and conflict UX
 REC-I5 — Recovery telemetry and correlation
 REC-I6 — Operator incident timeline
 REC-V1 — Crash/network verification
 ```
+
+Order rationale: risk-priority. REC-I3 directly fixes the P1 "locked out
+after crash" blocker with minimal scope (server route exists). REC-I4 removes
+the P1 abuse vector. REC-I2a freezes the data model so REC-I1 does not embed
+an undecided schema. REC-I3 and REC-I4 may proceed in parallel.
 
 These Jobs are governed by ADR-012 and this contract. They must not
 contradict the frozen invariants.
@@ -198,11 +217,18 @@ git rev-parse HEAD
 
 ---
 
-## Test Results
+## Validation
 
-No runtime code was modified. Documentation-only changes.
+```bash
+pnpm verify:static   # prettier, lint, arch, copy, UI gates, ESLint, typecheck, openapi — all pass
+npx markdownlint-cli2 docs/adr/ADR-012-candidate-recovery-contract.md docs/architecture/exam-system/candidate-recovery.md docs/audits/REC-R1-REALITY-AND-CONTRACT.md  # clean
+git add -A && git commit  # pre-commit hooks pass (lint-staged + typecheck)
+git push origin docs/rec-r1-recovery-contract  # pre-push hooks pass
+gh pr create --title "docs(recovery): freeze candidate crash-recovery contract" --body "..."
+```
 
-Static verification: see validation section below.
+All static gates pass. No runtime code modified; integration/E2E tests
+require Docker/PostgreSQL and are not executed for documentation-only changes.
 
 ---
 
@@ -213,6 +239,16 @@ Static verification: see validation section below.
 2. Time-compensation numeric defaults are intentionally undecided pending
    product decision (REC-I4).
 3. Submission operationId model is specified directionally but not frozen
-   to a specific wire format — REC-I2 owns the detail.
+   to a specific wire format — REC-I2a owns the detail.
 4. Multi-tab lock mechanism (Web Locks vs BroadcastChannel vs server lease)
-   is not selected — REC-I2 owns the selection.
+   is not selected — REC-I2b owns the selection.
+5. `baseVersion > currentVersion` is a KNOWN_DEFECT in the current
+   implementation (not rejected). The TARGET_INVARIANT (strict equality)
+   is frozen but the runtime fix is owned by REC-I2a.
+6. The offline multiple-edit model (DurableAnswerDraft +
+   SaveOperationOutbox) is frozen directionally but requires REC-I2a
+   validation before REC-I1 embeds it in IndexedDB schema.
+7. The current operation identity `(attemptId, questionId, clientSeq)`
+   is NOT equivalent to the target `operationId` semantic field. Whether
+   the target introduces a standalone wire field or enhances the composite
+   key is an OPEN_DECISION owned by REC-I2a.
