@@ -122,6 +122,60 @@ else
   exit 1
 fi
 
+# ── Test 5b: worker stays Up with bootstrap_pending before bootstrap ─────
+echo "--- TEST 5b: worker stays Up with bootstrap_pending heartbeat ---"
+WORKER_RESTARTS_BEFORE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
+WORKER_CONTAINER_ID_BEFORE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.Id}}' 2>/dev/null || echo "unknown")
+if [ "${WORKER_RESTARTS_BEFORE}" != "0" ]; then
+  echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_BEFORE} before bootstrap (expected 0)."
+  exit 1
+fi
+if [ "${WORKER_CONTAINER_ID_BEFORE}" = "unknown" ]; then
+  echo "  FAIL: could not read email-worker container ID."
+  exit 1
+fi
+
+PENDING_FOUND=0
+PENDING_INSTANCE_ID=""
+for i in $(seq 1 30); do
+  PENDING_INSTANCE_ID=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
+    "SELECT worker_instance_id FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%' ORDER BY last_poll_at DESC LIMIT 1;" 2>/dev/null || true)
+  if [ -n "${PENDING_INSTANCE_ID}" ]; then
+    PENDING_FOUND=1
+    break
+  fi
+  sleep 2
+done
+if [ "${PENDING_FOUND}" = "0" ]; then
+  echo "  FAIL: no bootstrap_pending heartbeat found before bootstrap."
+  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
+  exit 1
+fi
+echo "  PASS: bootstrap_pending heartbeat from instance ${PENDING_INSTANCE_ID}."
+
+PENDING_SUCCESS_AT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
+  "SELECT COALESCE(last_success_at::text, '') FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}';" 2>/dev/null || true)
+if [ -n "${PENDING_SUCCESS_AT}" ]; then
+  echo "  FAIL: bootstrap_pending heartbeat already has last_success_at set."
+  exit 1
+fi
+echo "  PASS: bootstrap_pending heartbeat has no last_success_at."
+
+WORKER_LOGS_PENDING=$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=60 email-worker 2>&1 || true)
+if ! echo "${WORKER_LOGS_PENDING}" | grep -q "waiting for initial organization bootstrap"; then
+  echo "  FAIL: worker logs do not contain bootstrap wait message."
+  exit 1
+fi
+if echo "${WORKER_LOGS_PENDING}" | grep -q "creating email sender"; then
+  echo "  FAIL: worker created sender before organization existed."
+  exit 1
+fi
+if echo "${WORKER_LOGS_PENDING}" | grep -q "starting poll loop"; then
+  echo "  FAIL: worker started poll loop before organization existed."
+  exit 1
+fi
+echo "  PASS: worker is waiting and has not started sender/poll loop."
+
 # ── Test 6: 21 migrations applied exactly once ───────────────────────────
 echo "--- TEST 6: 21 migrations applied exactly once (P6-009 ordering proof) ---"
 MIG_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
@@ -134,20 +188,16 @@ else
   exit 1
 fi
 
-# ── Test 7: worker heartbeat appears ─────────────────────────────────────
-# NOTE: on a fresh DB the worker cannot resolve the default org and exits
-# (restart loop) UNTIL bootstrap creates the org (Test 9). So the heartbeat
-# is expected to be 0 here on first boot; it becomes ≥1 after bootstrap +
-# one worker restart cycle. We assert the post-bootstrap heartbeat in
-# Test 9b below.
-echo "--- TEST 7: worker heartbeat row written (may be 0 pre-bootstrap) ---"
+# ── Test 7: bootstrap_pending heartbeat present before bootstrap ─────────
+# Covered by Test 5b; keep a lightweight post-condition here for readability.
+echo "--- TEST 7: worker heartbeat row shows bootstrap_pending ---"
 HB=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-  "SELECT count(*) FROM worker_heartbeats;" 2>/dev/null || echo "0")
-echo "  worker_heartbeats (pre-bootstrap): ${HB}"
+  "SELECT count(*) FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%';" 2>/dev/null || echo "0")
 if [ "${HB}" -ge "1" ] 2>/dev/null; then
-  echo "  PASS: worker heartbeat present (unusual pre-bootstrap — org may already exist)."
+  echo "  PASS: bootstrap_pending heartbeat present."
 else
-  echo "  NOTE: 0 heartbeats pre-bootstrap is expected (worker waits for the org)."
+  echo "  FAIL: no bootstrap_pending heartbeat found."
+  exit 1
 fi
 
 # ── Test 8: API health endpoint ───────────────────────────────────────────
@@ -169,24 +219,55 @@ docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
   --username "${ADMIN_USER}" --password "${ADMIN_PASS}" \
   --name "${ADMIN_NAME}" --organization-name "${ORG_NAME}" 2>&1 | head -15
 
-# ── Test 9b: worker heartbeat appears AFTER bootstrap (org exists) ───────
-# The worker resolves the default org (now created by bootstrap) on its
-# next restart and enters the poll loop, writing a heartbeat row.
-echo "--- TEST 9b: worker heartbeat appears after bootstrap (org created) ---"
-HB_OK=0
+# ── Test 9b: same worker transitions to success AFTER bootstrap (org exists)
+echo "--- TEST 9b: same worker transitions heartbeat to success after bootstrap ---"
+SUCCESS_OK=0
 for i in $(seq 1 40); do
-  HB=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
-    "SELECT count(*) FROM worker_heartbeats;" 2>/dev/null || echo "0")
-  if [ "${HB}" -ge "1" ] 2>/dev/null; then
-    echo "  PASS: worker_heartbeats has ${HB} row(s) after ~$((i*2))s post-bootstrap."
-    HB_OK=1
+  SUCCESS_INFO=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
+    "SELECT COALESCE(last_success_at::text, ''), COALESCE(last_error, '') FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}' ORDER BY last_poll_at DESC LIMIT 1;" 2>/dev/null || true)
+  SUCCESS_COUNT=$(docker exec "${PROJECT}-db-1" psql -U exam -d exam -tAc \
+    "SELECT count(*) FROM worker_heartbeats WHERE worker_instance_id = '${PENDING_INSTANCE_ID}' AND last_success_at IS NOT NULL AND last_error IS NULL;" 2>/dev/null || true)
+  if [ "${SUCCESS_COUNT}" = "1" ]; then
+    SUCCESS_OK=1
     break
   fi
   sleep 2
 done
-if [ "${HB_OK}" = "0" ]; then
-  echo "  WARN: no worker heartbeat 80s after bootstrap (worker may need more time)."
+if [ "${SUCCESS_OK}" = "0" ]; then
+  echo "  FAIL: worker did not transition heartbeat to success after bootstrap."
+  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
+  exit 1
 fi
+echo "  PASS: heartbeat for instance ${PENDING_INSTANCE_ID} has last_success_at and no last_error."
+
+WORKER_CONTAINER_ID_AFTER=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.Id}}' 2>/dev/null || echo "unknown")
+if [ "${WORKER_CONTAINER_ID_BEFORE}" != "${WORKER_CONTAINER_ID_AFTER}" ]; then
+  echo "  FAIL: email-worker container changed across bootstrap (was ${WORKER_CONTAINER_ID_BEFORE}, now ${WORKER_CONTAINER_ID_AFTER})."
+  exit 1
+fi
+echo "  PASS: same email-worker container (${WORKER_CONTAINER_ID_AFTER}) across bootstrap."
+
+WORKER_RESTARTS_AFTER=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
+if [ "${WORKER_RESTARTS_AFTER}" != "0" ]; then
+  echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_AFTER} after bootstrap (expected 0)."
+  exit 1
+fi
+echo "  PASS: email-worker RestartCount remains 0 after bootstrap."
+
+WORKER_LOGS_RUNNING=$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=80 email-worker 2>&1 || true)
+if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "resolved default organization"; then
+  echo "  FAIL: worker logs do not show organization resolution."
+  exit 1
+fi
+if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "creating email sender"; then
+  echo "  FAIL: worker logs do not show sender creation."
+  exit 1
+fi
+if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "starting poll loop"; then
+  echo "  FAIL: worker logs do not show poll loop start."
+  exit 1
+fi
+echo "  PASS: worker logs show resolved organization, sender creation, and poll loop."
 
 # ── Test 10: no default Candidate accounts; exactly one Admin (P6-008) ───
 echo "--- TEST 10: no default Candidate accounts; exactly one Admin (P6-008) ---"
@@ -245,6 +326,23 @@ echo "${DUP_ERR}" | grep -q "active.*Admin.*exists" \
   && echo "  PASS: second Admin refused without --force." || {
     echo "  FAIL: second Admin was not refused.";
     echo "  output: ${DUP_ERR}"; exit 1; }
+
+# ── Test 15: SIGTERM shuts worker down cleanly ───────────────────────────
+echo "--- TEST 15: SIGTERM shuts down email-worker cleanly ---"
+docker stop "${PROJECT}-email-worker-1" >/dev/null 2>&1 || true
+
+EXIT_CODE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
+if [ "${EXIT_CODE}" != "0" ]; then
+  echo "  FAIL: email-worker exit code is ${EXIT_CODE} (expected 0)."
+  exit 1
+fi
+echo "  PASS: email-worker exited with code 0."
+
+if ! docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=20 email-worker 2>&1 | grep -q '"msg":"shutdown complete"'; then
+  echo "  FAIL: worker logs do not contain shutdown complete."
+  exit 1
+fi
+echo "  PASS: worker logs contain shutdown complete."
 
 echo ""
 echo "=== RUN #${RUN_NUM}: ALL CHECKS PASSED ==="

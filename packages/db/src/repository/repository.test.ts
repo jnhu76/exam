@@ -226,6 +226,68 @@ describe("repository tenant isolation", () => {
   });
 });
 
+describe("organizationRepo.resolveOptionalBrandingTenant", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  let organizationRepo: ReturnType<typeof createOrganizationRepo>;
+  const publicBrandingContext: PublicBrandingContext = {
+    purpose: "public_branding",
+  };
+  const rootContext = createContext("system", "Admin", "system");
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-repo-org-optional");
+    db = result.db;
+    cleanup = result.cleanup;
+    organizationRepo = createOrganizationRepo(db);
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  it("returns null when no organization exists", async () => {
+    const result = await organizationRepo.resolveOptionalBrandingTenant(
+      publicBrandingContext,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns the organization when exactly one exists", async () => {
+    const org = await organizationRepo.create(rootContext, {
+      name: "single",
+      displayName: "Single",
+      slug: `single-${randomUUID().slice(0, 8)}`,
+    });
+
+    const result = await organizationRepo.resolveOptionalBrandingTenant(
+      publicBrandingContext,
+    );
+
+    expect(result).toMatchObject({ id: org.id, slug: org.slug });
+  });
+
+  it("throws when multiple organizations exist", async () => {
+    const suffix = randomUUID().slice(0, 8);
+    await organizationRepo.create(rootContext, {
+      name: "multi-a",
+      displayName: "Multi A",
+      slug: `multi-a-${suffix}`,
+    });
+    await organizationRepo.create(rootContext, {
+      name: "multi-b",
+      displayName: "Multi B",
+      slug: `multi-b-${suffix}`,
+    });
+
+    await expect(
+      organizationRepo.resolveOptionalBrandingTenant(publicBrandingContext),
+    ).rejects.toThrow(
+      "Multiple organizations exist; organizationSlug is required",
+    );
+  });
+});
+
 describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
   let db: Database;
   let cleanup: () => Promise<void>;

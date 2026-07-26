@@ -105,7 +105,14 @@ async function buildEmailStatus(
       lastErrorAt = heartbeat.lastErrorAt?.toISOString() ?? null;
       lastError = heartbeat.lastError;
       const age = now.getTime() - heartbeat.lastPollAt.getTime();
-      workerStatus = age > staleThresholdMs ? "degraded" : "available";
+      const isFresh = age <= staleThresholdMs;
+      const hasSucceeded = heartbeat.lastSuccessAt !== null;
+      const hasCurrentProblem = heartbeat.lastError !== null;
+
+      workerStatus =
+        isFresh && hasSucceeded && !hasCurrentProblem
+          ? "available"
+          : "degraded";
     }
 
     // Read outbox counts

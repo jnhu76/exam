@@ -3,8 +3,14 @@ import type { TestContext } from "./testHelpers.js";
 import { buildTestApp } from "./testHelpers.js";
 import systemRoutes from "./system.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
-import { emailOutbox } from "@exam/db/src/schema/pg.js";
+import { emailOutbox, workerHeartbeats } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
+
+async function cleanupWorkerHeartbeats(db: TestContext["db"]) {
+  await db
+    .delete(workerHeartbeats)
+    .where(eq(workerHeartbeats.workerName, "email-delivery"));
+}
 
 describe("system routes", () => {
   let ctx: TestContext;
@@ -370,6 +376,79 @@ describe("system routes", () => {
         await ctx.db
           .delete(emailOutbox)
           .where(eq(emailOutbox.organizationId, orgId));
+        process.env.EMAIL_ENABLED = prevEnabled;
+        resetRuntimeConfigForTest();
+      }
+    });
+
+    it("reports degraded worker status when heartbeat shows bootstrap_pending", async () => {
+      const prevEnabled = process.env.EMAIL_ENABLED;
+      process.env.EMAIL_ENABLED = "true";
+      resetRuntimeConfigForTest();
+
+      try {
+        await ctx.db.insert(workerHeartbeats).values({
+          id: crypto.randomUUID(),
+          workerName: "email-delivery",
+          workerInstanceId: "bootstrap-pending-test",
+          lastPollAt: new Date(),
+          lastSuccessAt: null,
+          lastErrorAt: null,
+          lastError: "bootstrap_pending: initial organization not initialized",
+        });
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.emailStatus.enabled).toBe(true);
+        expect(body.emailStatus.worker.status).toBe("degraded");
+        expect(body.emailStatus.worker.lastError).toContain(
+          "bootstrap_pending",
+        );
+        expect(body.emailStatus.status).toBe("degraded");
+      } finally {
+        await cleanupWorkerHeartbeats(ctx.db);
+        process.env.EMAIL_ENABLED = prevEnabled;
+        resetRuntimeConfigForTest();
+      }
+    });
+
+    it("reports available worker status when heartbeat shows a recent success", async () => {
+      const prevEnabled = process.env.EMAIL_ENABLED;
+      process.env.EMAIL_ENABLED = "true";
+      resetRuntimeConfigForTest();
+
+      try {
+        const now = new Date();
+        await ctx.db.insert(workerHeartbeats).values({
+          id: crypto.randomUUID(),
+          workerName: "email-delivery",
+          workerInstanceId: "available-test",
+          lastPollAt: now,
+          lastSuccessAt: now,
+          lastErrorAt: null,
+          lastError: null,
+        });
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.emailStatus.enabled).toBe(true);
+        expect(body.emailStatus.worker.status).toBe("available");
+        expect(body.emailStatus.worker.lastError).toBeNull();
+        expect(body.emailStatus.status).toBe("available");
+      } finally {
+        await cleanupWorkerHeartbeats(ctx.db);
         process.env.EMAIL_ENABLED = prevEnabled;
         resetRuntimeConfigForTest();
       }

@@ -506,23 +506,28 @@ for the P6-CORR1 verification, each with its own project-namespaced
 8. second Admin refused
    without --force                — PASS (P6-008)
 9. login as bootstrapped Admin    — PASS (HTTP 200)
-10. worker heartbeat AFTER
-    bootstrap                     — PASS (worker resolves the org and enters
-                                     its poll loop, writing a heartbeat row)
-11. Redis startup                 — N/A per §11 classification
+10. worker bootstrap_pending    — PASS (worker stays Up with
+                                     bootstrap_pending heartbeat and
+                                     RestartCount=0 before bootstrap)
+11. worker heartbeat AFTER       — PASS (same container transitions to
+    bootstrap                     success heartbeat; no restart required)
+12. SIGTERM shutdown             — PASS (worker exits 0 with shutdown
+                                     complete logs)
+13. Redis startup                 — N/A per §11 classification
                                      (UNUSED_RESIDUE; profile-gated)
 ```
 
-> **First-boot worker ordering (documented, not a defect):** on a fresh
-> migrated DB the `email-worker` cannot resolve the internal default
-> organization until `bootstrap-admin` creates it. Until then it logs
-> `NotFoundError: No organization found` and exits; Compose
-> `restart: unless-stopped` restarts it. The `app` and `db` services are
-> healthy regardless. Once bootstrap creates the org (runbook §3 step 7),
-> the worker's next restart succeeds and it enters its poll loop. The P6
-> clean-DB evidence sequence above runs bootstrap before asserting the
-> worker heartbeat (step 6 → step 10). This matches the documented
-> runbook ordering.
+> **First-boot worker bootstrap-pending state (documented, not a defect):**
+> on a fresh migrated DB the `email-worker` cannot resolve the internal
+> default organization until `bootstrap-admin` creates it. Instead of
+> exiting and relying on Compose restart, the worker stays `Up`, writes a
+> `bootstrap_pending` heartbeat, and polls until the organization appears.
+> The `app` and `db` services are healthy regardless. Once bootstrap
+> creates the org (runbook §3 step 7), the same worker container resolves
+> it and enters its poll loop. The P6 clean-DB evidence sequence above
+> asserts the bootstrap_pending heartbeat before bootstrap (step 10) and
+> the success heartbeat after bootstrap (step 11). This matches the
+> documented runbook ordering.
 
 Fail-fast behavior verified: booting the API in `APP_MODE=production` without
 `PUBLIC_WEB_ORIGIN` throws `RuntimeConfigError: PUBLIC_WEB_ORIGIN is required

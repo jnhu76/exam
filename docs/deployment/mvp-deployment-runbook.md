@@ -157,12 +157,10 @@ docker compose up -d --build
 docker compose logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
-# 6. Verify app + db are healthy. NOTE: the email-worker will be in a
-#    restart loop until step 7 (it cannot resolve the default organization
-#    on a fresh DB). This is expected — see the note below.
+# 6. Verify app + db are healthy. The email-worker starts after app health
+#    and waits for the first organization to be bootstrapped (step 7).
 docker compose ps
-# Expected: app (healthy), db (healthy), email-worker (restarting → healthy
-#           after step 7)
+# Expected: app (healthy), db (healthy), email-worker (up)
 
 # 7. Bootstrap the first Admin (production path — see §5). This also
 #    creates the internal default organization, which unblocks the worker.
@@ -171,21 +169,21 @@ docker compose exec app \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
 
-# 8. After bootstrap, the worker's next restart resolves the org and enters
-#    its poll loop. Verify:
+# 8. The same worker container detects the new organization, resolves it,
+#    and enters its poll loop without restarting. Verify:
 docker compose logs --tail=20 email-worker
 # Look for: 'resolved default organization', 'starting poll loop'
 ```
 
-> **First-boot worker restart loop (expected):** on a fresh migrated
-> database the `email-worker` cannot resolve the internal default
-> organization until `bootstrap-admin` creates it. Until then the worker
-> logs `NotFoundError: No organization found` and exits; Compose
-> `restart: unless-stopped` restarts it. This is the documented
-> first-boot behavior, NOT a defect. Once bootstrap creates the org
-> (step 7), the worker's next restart succeeds and it enters its poll
-> loop. The `app` and `db` services are healthy regardless; only the
-> worker's first-boot startup is gated on the org existing.
+> **First-boot worker bootstrap-pending state (expected):** on a fresh
+> migrated database the `email-worker` cannot resolve the internal default
+> organization until `bootstrap-admin` creates it. Instead of exiting and
+> relying on Compose restart, the worker stays `Up`, writes a
+> `bootstrap_pending` heartbeat, and sleeps until the organization appears.
+> This is the documented first-boot behavior, NOT a defect. Once bootstrap
+> creates the org (step 7), the same worker container resolves it and
+> enters its poll loop. The `app` and `db` services are healthy regardless;
+> only the worker's ability to consume email is gated on the org existing.
 
 The Dockerfile builds the app + email-worker from the same image. The
 `docker-entrypoint.sh` runs `node dist/scripts/migrate.js` once on first
