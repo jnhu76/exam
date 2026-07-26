@@ -1,13 +1,19 @@
 # P6 — MVP Ready Closeout Reality Audit
 
-> **Status:** BLOCKED_BY_RELEASE_DEFECT — P6-CORR1 release defects found by
-> independent review and corrected; awaiting independent MVP-ready closeout
-> review. (Prior state: CONDITIONAL_PASS.)
+> **Status:** PASS — P6 CLOSED for the implemented MVP subset.
 >
 > **Branch:** `feat/p6-mvp-ready-closeout`
 >
 > **Starting master HEAD:** `13d94c2b53c215ec67488120b300418899caaf76`
 > (Merge PR #214: P5-N1 closeout roadmap sync)
+>
+> **Independently reviewed HEAD:** `a723cbaa3f1791cb7ad5babc5fbecdc73236fd18`
+>
+> **PR #215 merge commit:** `c1f8631729edbbe8e326758a70d3e47b609d8e01`
+>
+> **Post-merge master HEAD:** `c1f8631729edbbe8e326758a70d3e47b609d8e01`
+>
+> **Independent closeout verdict:** PASS
 >
 > **Audit base:** all commits on `feat/p6-mvp-ready-closeout`.
 >
@@ -19,26 +25,17 @@
 
 ## 1. Verdict
 
-**BLOCKED_BY_RELEASE_DEFECT → PASS (pending independent review).** The
-implemented MVP subset (single deployment / single default organization /
-Admin + Teacher + Candidate MVP roles / `timed_window` exams / objective +
-manual grading / result publication / Inbox + Email outbox / PostgreSQL
-worker / LAN/on-premise) is release-ready subject to independent closeout
-review, AFTER the P6-CORR1 corrections land.
+**PASS — P6 CLOSED for the implemented MVP subset.** The implemented MVP
+subset (single deployment / single default organization / Admin + Teacher +
+Candidate MVP roles / `timed_window` exams / objective + manual grading /
+result publication / Inbox + Email outbox / PostgreSQL worker /
+LAN/on-premise) is release-ready after independent closeout review.
 
-The first independent review verdict was `BLOCKED_BY_RELEASE_DEFECT`. Four
-release defects were identified and corrected within the authorized P6
-boundary (see §7 finding register):
-
-- **P6-007** — production Postgres default password (P0, corrected).
-- **P6-008** — unsafe production baseline-seed guidance (P0, corrected).
-- **P6-009** — concurrent production migration runners (P1, corrected).
-- **P6-010** — Redis classified optional but required by Compose (P1,
-  corrected).
-
-Plus the earlier P1 (P6-001 — Email delivery worker absent from production
-Compose topology), which was corrected before the review. No frozen product
-semantics were changed.
+The first independent review verdict was `BLOCKED_BY_RELEASE_DEFECT`. The
+P6-CORR1 release defects were corrected within the authorized P6 boundary,
+and a final closeout review confirmed the corrections and the additional
+lifecycle/smoke findings. All known P0/P1 release blockers are corrected
+(see §7 finding register). No frozen product semantics were changed.
 
 ---
 
@@ -231,12 +228,13 @@ Rows audited:        43
 PROVEN:              43
 PARTIAL:             0
 MISSING_PROOF:       0
-RELEASE_DEFECT:      0 (P6-001 + P6-CORR1 P6-007/008/009/010 were found and
-                       are now fixed; the fixes are proven by the
+RELEASE_DEFECT:      0 (P6-001, P6-CORR1 P6-007/008/009/010, and final
+                       closeout P6-011/012/013/014/015 were found and are
+                       now fixed; the fixes are proven by the
                        deployment-topology-contract.mjs guard, by
-                       bootstrap-admin.test.ts + seed.test.ts, and by
-                       'docker compose config' listing the default 3-service
-                       topology + the optional redis profile)
+                       bootstrap-admin.test.ts + seed.test.ts, by the
+                       relocated clean-volume Compose smoke, and by a clean
+                       production Docker build)
 ACCEPTED_DEFERRED:   0 in the matrix (deferred Phase 3+/4 capabilities are
                        out of the MVP boundary and listed in §24)
 DOCUMENTATION_DRIFT: 1 (status docs described P5-N1 as still in-progress
@@ -253,7 +251,9 @@ Four P0/P1 release defects were identified by the first independent review
 (`BLOCKED_BY_RELEASE_DEFECT`) and corrected within the authorized P6
 boundary. P6-007 and P6-008 are P0 (production security / unsafe
 bootstrap); P6-001 (prior), P6-009, and P6-010 are P1 (deployment topology
-correctness). None of the frozen MVP product semantics changed.
+correctness). The final independent closeout review also identified and
+confirmed five additional P1/lifecycle/smoke/build corrections
+(P6-011 through P6-015). None of the frozen MVP product semantics changed.
 
 ```text
 P6-007 — production Postgres default password (P0, corrected).
@@ -437,6 +437,100 @@ Proof:
     heartbeat row written → graceful SIGTERM → "shutdown complete" → exit 0.
   - TDD proof of each guard assertion: reverting the respective compose
     line fails the guard with the matching P6 message.
+```
+
+### P1 — release blocker (final closeout corrections)
+
+The final independent closeout review identified, classified, and verified
+five additional issues. All are corrected and proven in the merged master
+HEAD.
+
+```text
+P6-011 — Email worker restart loop before organization bootstrap (P1, corrected).
+  Observable failure:
+    On a freshly migrated database the email-worker exited because it could
+    not resolve the internal default organization (which bootstrap-admin has
+    not yet created). Compose restart policy would eventually succeed, but
+    the first-boot worker logged errors and required a container restart.
+  Root cause:
+    Worker boot assumed the default organization already existed.
+  Correction:
+    Introduced waitForSingleOrganization(): the worker stays Up, writes a
+    bootstrap_pending heartbeat, and polls until bootstrap-admin creates the
+    default organization. Signal handlers are registered before migration so
+    SIGTERM during the wait still exits cleanly. Diagnostics report
+    bootstrap_pending as degraded and success as available.
+  Evidence:
+    emailDeliveryWorker.test.ts, repository.test.ts, and the relocated
+    clean-volume Compose smoke assert RestartCount=0, same-container
+    transition, and SIGTERM exit 0.
+
+P6-012 — Email worker interruptible sleep leaked interval handles (P1, corrected).
+  Observable failure:
+    The worker's shutdown wait used an interval that could race with the
+    timeout callback, and the implementation did not robustly prevent
+    multiple resolves or leaked handles.
+  Root cause:
+    A hand-rolled sleep kept a 200 ms check interval alive until the full
+    poll interval elapsed, with no settlement guard.
+  Correction:
+    Replaced sleep() with interruptibleSleep(): a single settlement flag,
+    explicit cleanup of both the timeout and the shutdown-check interval,
+    unref() on both handles, and idempotent resolve.
+  Evidence:
+    Unit tests cover normal sleep, shutdown interruption, and idempotent
+    cleanup; the clean-volume Compose smoke verifies graceful SIGTERM exit 0.
+
+P6-013 — deployment smoke hard-coded a developer checkout path (P1, corrected).
+  Observable failure:
+    scripts/deployment/p6-corr1-compose-smoke.sh used a hard-coded
+    REPO_ROOT=/home/hoo/Source/exam, so the smoke could not run from any
+    other checkout directory.
+  Root cause:
+    Script derived the repository root from the developer's home path instead
+    of its own location.
+  Correction:
+    REPO_ROOT is now computed from BASH_SOURCE[0] (SCRIPT_DIR/../..), with a
+    fail-fast check that docker-compose.yml exists at the resolved path.
+  Evidence:
+    Relocated clean-volume Compose smoke passed 3/3 from a different working
+    directory.
+
+P6-014 — smoke PostgreSQL queries masked database errors (P1, corrected).
+  Observable failure:
+    Smoke tests used `2>/dev/null || true` around psql invocations, so
+    connection failures, SQL errors, or permission problems were silently
+    swallowed and reported as missing rows instead of real errors.
+  Root cause:
+    Error suppression was used to avoid failing while polling for rows.
+  Correction:
+    Added run_psql_query() helper with ON_ERROR_STOP=1 and explicit error
+    return; polling loops preserve retries while surfacing the last query
+    error on failure. All smoke assertions now exit with the actual error
+    message when the database cannot be queried.
+  Evidence:
+    Relocated clean-volume Compose smoke passed 3/3; deliberate psql failure
+    surfaces the underlying error.
+
+P6-015 — clean Docker image build used invalid workspace build order and
+  omitted @exam/authz (P1, corrected).
+  Observable failure:
+    A clean relocated Docker build failed before application startup because
+    workspace packages were built out of dependency order and @exam/authz was
+    never explicitly built.
+  Root cause:
+    Dockerfile built @exam/db before @exam/auth, did not build @exam/authz
+    at all, and relied on implicit/turbo behavior that did not hold in a
+    fresh builder context.
+  Correction:
+    Dependency-aware workspace build order:
+    domain → contracts → auth → authz → import-export → db → exam-engine →
+    web → api.
+  Evidence:
+    Relocated clean-volume Compose smoke passed 3/3 against an image built
+    from a fresh checkout volume; production artifacts (dist/server.js,
+    dist/workers/emailDeliveryWorker.js, dist/scripts/migrate.js) are
+    present and the worker boots correctly.
 ```
 
 ### P2 — non-blocking closeout debt
@@ -1200,8 +1294,8 @@ Documentation changes (§19 deliverables):
 ```text
 docs/audits/P6-MVP-READY-REALITY-AUDIT.md (NEW + P6-CORR1 corrections — this file)
 docs/deployment/mvp-deployment-runbook.md (NEW + P6-CORR1 corrections — canonical runbook)
-docs/roadmap/current.md (sync: P6 IN PROGRESS — REALITY AUDIT)
-docs/status/implementation-status.md (sync: P5-N1 CLOSED, P6 IN PROGRESS)
+docs/roadmap/current.md (sync: P6 CLOSED — implemented MVP subset release-ready)
+docs/status/implementation-status.md (sync: P5-N1 CLOSED, P6 CLOSED — implemented MVP subset release-ready)
 README.md (sync: deployment commands + email-worker note + P6-CORR1 corrections)
 .env.example (P6-CORR1: POSTGRES_PASSWORD required, bootstrap-admin note)
 ```
@@ -1385,11 +1479,12 @@ implemented MVP subset.
 
 ## 26. Release recommendation
 
-**PASS — awaiting independent MVP-ready closeout review.** The first
-independent review returned `BLOCKED_BY_RELEASE_DEFECT`; the four defects
-it identified (P6-007/008/009/010) are corrected and proven within this
-audit boundary. The MVP subset is release-ready subject to independent
-closeout review. P6 is **not** declared closed until that review signs off.
+**PASS — P6 CLOSED for the implemented MVP subset.** The first independent
+review returned `BLOCKED_BY_RELEASE_DEFECT`; the release defects it
+identified (P6-007/008/009/010) are corrected and proven within this audit
+boundary. The final independent closeout review also confirmed and
+verified the additional corrections (P6-011 through P6-015). The supported
+LAN/on-premise, single-organization MVP deployment is release-ready.
 
 ```text
 [ ] P4/P5-0/P3/P5-N1 merge ancestry verified         — DONE (§4: P4=#208, P3=#211)
@@ -1399,7 +1494,9 @@ closeout review. P6 is **not** declared closed until that review signs off.
 [ ] acceptance matrix covers every MVP capability      — DONE (§6, 43 PROVEN)
 [ ] every P0/P1 finding fixed or blocks the Job        — DONE (P6-001 fixed;
                                                          P6-007/008/009/010
-                                                         fixed in P6-CORR1; §7)
+                                                         fixed in P6-CORR1;
+                                                         P6-011/012/013/014/015
+                                                         fixed in final closeout; §7)
 [ ] no hidden product decision invented                — DONE (§21)
 [ ] empty-database migration passes                    — DONE (§9)
 [ ] bootstrap and seed pass (production bootstrap)     — DONE (§8, §5 runbook)
