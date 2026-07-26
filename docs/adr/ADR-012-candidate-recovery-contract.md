@@ -385,19 +385,35 @@ This model must be validated and frozen by REC-I2 BEFORE REC-I1 implements
 the IndexedDB schema. REC-I1 stores the DurableAnswerDraft and
 SaveOperationOutbox as separate concerns, not a single flat operation list.
 
-### Implementation-neutral interface
+### Directional interface (TARGET — semantic contract, not frozen TypeScript)
+
+The recovery store separates two concerns: **durable drafts** (candidate
+intent) and **operation outbox** (server-bound transport).
 
 ```ts
-interface PendingAnswerJournal {
-  put(entry: PendingAnswerEntry): Promise<void>;
-  listForAttempt(scope: AttemptJournalScope): Promise<PendingAnswerEntry[]>;
-  markInFlight(scope: AttemptJournalScope, operationId: string): Promise<void>;
-  acknowledge(scope: AttemptJournalScope, operationId: string, receipt: ServerSaveReceipt): Promise<void>;
-  markConflict(scope: AttemptJournalScope, operationId: string, conflict: SaveConflict): Promise<void>;
-  deleteAcknowledged(scope: AttemptJournalScope): Promise<void>;
-  clearAttempt(scope: AttemptJournalScope, reason: JournalClearReason): Promise<void>;
+interface AnswerRecoveryStore {
+  // --- DurableAnswerDraft concern ---
+  upsertDraft(scope: JournalScope, draft: DurableAnswerDraft): Promise<void>;
+  listDrafts(scope: JournalScope): Promise<DurableAnswerDraft[]>;
+  removeDraft(scope: JournalScope, questionId: string): Promise<void>;
+
+  // --- SaveOperationOutbox concern ---
+  enqueueOperation(scope: JournalScope, op: SaveOperationOutboxEntry): Promise<void>;
+  listOperations(scope: JournalScope): Promise<SaveOperationOutboxEntry[]>;
+  markOperationInFlight(scope: JournalScope, operationId: string): Promise<void>;
+  acknowledgeOperation(scope: JournalScope, operationId: string, receipt: ServerSaveReceipt): Promise<void>;
+  markOperationConflict(scope: JournalScope, operationId: string, conflict: SaveConflict): Promise<void>;
+  removeAcknowledged(scope: JournalScope): Promise<void>;
+
+  // --- Lifecycle ---
+  clearAttempt(scope: JournalScope, reason: JournalClearReason): Promise<void>;
 }
 ```
+
+This is a directional semantic contract. Exact TypeScript signatures, error
+handling, and transaction semantics are owned by REC-I1. The critical
+constraint is that **drafts and operations are separate method groups** —
+a single flat `put(PendingAnswerEntry)` is NOT acceptable.
 
 Journal scope must include: `organizationId`, `userId`, `examId`,
 `attemptId`.
@@ -407,8 +423,8 @@ A future desktop implementation may additionally include: `installationId`,
 
 Intended adapters:
 
-- Web: `IndexedDBPendingAnswerJournal`
-- Future desktop: `SQLitePendingAnswerJournal`
+- Web: `IndexedDBAnswerRecoveryStore`
+- Future desktop: `SQLiteAnswerRecoveryStore`
 
 Both must implement the same semantic contract. React component state is
 NOT part of the persistence abstraction.
@@ -417,17 +433,34 @@ NOT part of the persistence abstraction.
 
 ## Write Ordering (TARGET)
 
+### Local edit (offline or online)
+
 ```text
 candidate changes answer
-→ persist pending operation to local journal
-→ update or confirm UI state
-→ send operation to server
-→ receive authoritative acknowledgement
-→ mark operation acknowledged locally
-→ compact or remove acknowledged entry
+→ upsert DurableAnswerDraft (overwrite previous for same question)
+→ update UI as saved_locally
 ```
 
-The journal write must happen before relying on the network request.
+No server operation is generated at this point. The draft is the
+candidate's latest intent, not a transport message.
+
+### Synchronization (when allowed by network + policy)
+
+```text
+when synchronization is allowed:
+→ read server currentVersion for the question
+→ create immutable SaveOperationOutbox entry
+  (operationId, baseVersion = currentVersion, payload = latest draft)
+→ send operation to server
+→ receive authoritative acknowledgement
+→ update known serverVersion
+→ acknowledge + remove outbox entry
+→ mark draft as synchronized (or remove if matches server)
+```
+
+The draft upsert must happen before relying on the network request.
+The outbox entry is immutable once created: operationId and baseVersion
+must not change after send.
 
 A periodic synchronization loop may be added later as a repair mechanism,
 but periodic autosave must not be the only durability mechanism.
@@ -455,13 +488,20 @@ durability.
 
 Recovery must:
 
-1. load the authoritative server snapshot
-2. load pending local operations for the same organization/user/attempt
-3. compare operation receipts and server versions
-4. discard or acknowledge already-committed operations
-5. replay safe pending operations
-6. surface conflicts instead of silently overwriting
-7. enter the attempt only after recovery state is known
+1. load the authoritative server snapshot (confirmed answers + versions)
+2. load DurableAnswerDrafts for the same organization/user/attempt
+3. load SaveOperationOutbox entries (sent-but-uncertain operations)
+4. resolve sent-but-uncertain operations first (retry idempotent replay)
+5. update known serverVersion from acknowledgements
+6. compare each DurableAnswerDraft against server-confirmed answer
+7. for drafts that differ from server state: create new outbox operation
+   using current serverVersion as baseVersion
+8. send new operations; surface conflicts instead of silently overwriting
+9. enter the attempt only after recovery state is known
+
+Note: after an offline session with no network, the latest answer may
+exist ONLY as a DurableAnswerDraft with no outbox entry. Recovery must
+handle this case — it is not an error.
 
 ### Disrupted attempt
 
@@ -800,11 +840,11 @@ password, token, cookie, Authorization header, full request/response body.
 
 ## Deferred Work
 
-| Job | Scope | Dependency |
+| Job | Scope | Technical dependency |
 |---|---|---|
 | REC-I3 | Disrupted-attempt recovery UX (explicit frontend restore) | None — server route exists |
-| REC-I4 | Interruption and time-compensation policy | REC-I3 (restore must work before policy changes) |
-| REC-I2a | Protocol hardening: operation identity freeze, future baseVersion fix, replay receipt, offline supersession model | REC-I4 (time policy independent) |
+| REC-I4 | Interruption and time-compensation policy | None — independent of REC-I3 |
+| REC-I2a | Protocol hardening: operation identity freeze, future baseVersion fix, replay receipt, offline supersession model | None — but MUST complete before REC-I1 |
 | REC-I1 | Web pending-answer journal (IndexedDB adapter): DurableAnswerDraft + SaveOperationOutbox + isolation + cleanup | REC-I2a (data model must be frozen first) |
 | REC-I2b | Recovery reconciliation, replay, and conflict UX | REC-I1 (journal must exist) |
 | REC-I5 | Recovery telemetry and correlation | REC-I2b |
@@ -813,13 +853,19 @@ password, token, cookie, Authorization header, full request/response body.
 
 ### Job order rationale
 
-The order is risk-priority, not pure architecture-dependency:
+**Recommended execution order is risk-priority, NOT technical dependency.**
+
+The only hard technical dependency is: REC-I2a → REC-I1 → REC-I2b.
+REC-I3, REC-I4, and REC-I2a are technically independent and may all
+proceed in parallel.
+
+Recommended risk-priority order:
 
 1. **REC-I3 first**: directly fixes "crashed candidate is locked out" (P1
    user-facing blocker). Small scope — the server route already exists and
    is tested; only a frontend caller is needed.
 2. **REC-I4 second**: removes the "restore = full compensation" permanent
-   semantic (P1 abuse vector). Independent of journal.
+   semantic (P1 abuse vector). Independent of journal and of REC-I3.
 3. **REC-I2a third**: freezes the data model (operation identity,
    baseVersion strictness, offline supersession) so REC-I1 does not embed
    an undecided schema.
@@ -828,8 +874,9 @@ The order is risk-priority, not pure architecture-dependency:
 5. **REC-I2b fifth**: completes the reconciliation and conflict UX on top
    of the journal.
 
-REC-I3 and REC-I4 are independent of each other and may proceed in
-parallel. REC-I1 must NOT begin before REC-I2a freezes the storage model.
+REC-I3, REC-I4, and REC-I2a may proceed in parallel if resources allow.
+The recommended order above is a suggestion for sequential execution, not
+a gating constraint.
 
 ## Related Decisions
 

@@ -3,11 +3,12 @@
 > Normative architecture documentation for the exam platform's domain protocols, state machines, and data authority.
 
 ```text
-Last verified against commit:
-56127371d7e65bf9332df0605e5f5ad766e026ee
+Last runtime verified against: bcf02847b0231e233dcb3ff98ec7ae681739b028
+Recovery contract updated in: ccdf879e8f21d208c9d491f9a555ed07c5281b8f (PR #218)
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210 + ADR-012 recovery contract (PR #218).
+Runtime behavior verified against master after merged P5-0 / PR #210.
+Recovery contract documentation (ADR-012, candidate-recovery.md) updated in PR #218.
 ```
 
 ## Purpose

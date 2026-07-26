@@ -60,23 +60,36 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant C as Candidate Browser
-    participant J as Local Journal (IndexedDB)
+    participant J as AnswerRecoveryStore (IndexedDB)
     participant API as Fastify API
     participant DB as PostgreSQL
 
     C->>API: GET /candidate/attempts/:attemptId/take
-    API-->>C: CandidateTakeSnapshot (server-confirmed answers)
-    C->>J: listForAttempt(org, user, exam, attempt)
-    J-->>C: pending operations
-    C->>C: compare receipts vs server versions
-    alt operation already confirmed
-        C->>J: acknowledge + deleteAcknowledged
-    else operation pending and safe
-        C->>API: replay POST /answers (operationId, baseVersion)
+    API-->>C: CandidateTakeSnapshot (server-confirmed answers + versions)
+    C->>J: listDrafts(scope)
+    J-->>C: DurableAnswerDrafts (latest intent per question)
+    C->>J: listOperations(scope)
+    J-->>C: SaveOperationOutbox (sent-but-uncertain)
+    C->>C: resolve uncertain operations first (retry idempotent)
+    alt operation already confirmed by server
+        C->>J: acknowledgeOperation + removeAcknowledged
+    else operation still pending
+        C->>API: retry POST /answers (same operationId)
         alt accepted
-            C->>J: acknowledge
-        else conflict (stale version)
-            C->>J: markConflict
+            C->>J: acknowledgeOperation
+        else conflict
+            C->>J: markOperationConflict
+        end
+    end
+    C->>C: update known serverVersion per question
+    C->>C: compare each draft vs server-confirmed answer
+    alt draft differs from server
+        C->>J: enqueueOperation (new operation from latest draft)
+        C->>API: POST /answers (new operationId, current baseVersion)
+        alt accepted
+            C->>J: acknowledgeOperation
+        else conflict (stale)
+            C->>J: markOperationConflict
             C->>C: surface conflict to candidate
         end
     end
@@ -187,7 +200,8 @@ sequenceDiagram
 | Effective deadline | PostgreSQL | `min(exam.closeAt, attempt.deadlineAt)` | Yes |
 | Grading workset | PostgreSQL | `attempt_grading_entries` | Yes |
 | Final result | PostgreSQL | `exam_enrollments.finalScore/finalPassed` | Yes |
-| Pending local operation (TARGET) | Client journal | IndexedDB / SQLite | Same device only |
+| Durable local draft (TARGET) | Client recovery intent | IndexedDB / SQLite | Same device only |
+| Save operation outbox (TARGET) | Pending transport intent | IndexedDB / SQLite | Same device only |
 | In-memory edit (CURRENT) | Browser memory | React refs | No |
 | Client telemetry buffer | Browser memory | in-memory queue | No |
 

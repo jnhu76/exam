@@ -153,16 +153,18 @@ in-memory only.
 
 | ID | Invariant | Implementing Job |
 |---|---|---|
-| TI-1 | Pending operation is durably written before network reliance | REC-I1 |
+| TI-1 | DurableAnswerDraft is persisted before network reliance | REC-I1 |
 | TI-2 | Journal scope requires organization + user + attempt isolation | REC-I1 |
-| TI-3 | Recovery replays pending ops and surfaces conflicts | REC-I2 |
-| TI-4 | UI distinguishes saved_locally from saved_to_server | REC-I2 |
+| TI-3 | Operation identity and outbox semantics frozen (strict baseVersion, stable ID) | REC-I2a |
+| TI-4 | Recovery reconciliation and conflict UX (draft vs server comparison) | REC-I2b |
 | TI-5 | Disrupted-attempt restore is an explicit frontend command | REC-I3 |
 | TI-6 | Time compensation is policy-driven, not auto-full | REC-I4 |
 | TI-7 | Deadline extensions are attributable (policy/incident/operator) | REC-I4 |
 | TI-8 | Recovery telemetry emits structured events without answer content | REC-I5 |
-| TI-9 | Multi-tab conflict is detected and surfaced | REC-I2 |
+| TI-9 | Multi-tab conflict is detected and surfaced | REC-I2b |
 | TI-10 | Journal is cleared on authoritative submission | REC-I1 |
+| TI-11 | UI distinguishes saved_locally from saved_to_server | REC-I2b |
+| TI-12 | Offline multiple-edit uses draft overwrite, not append-only operations | REC-I1 |
 
 ---
 
