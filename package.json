@@ -14,7 +14,7 @@
     "lint:arch": "node scripts/check-architecture.mjs",
     "lint:db-config": "node scripts/check-db-config.mjs",
     "lint:env-contract": "node scripts/repository-contract/verify-static-includes-guards.mjs && node scripts/check-test-env-contract.mjs && node scripts/check-test-time-contract.mjs",
-    "lint:repo-contract": "node scripts/repository-contract/turbo-config-contract.mjs && node scripts/repository-contract/package-script-contract.mjs && node scripts/repository-contract/seed-authority-contract.mjs && node scripts/repository-contract/adr-status-contract.mjs",
+    "lint:repo-contract": "node scripts/repository-contract/turbo-config-contract.mjs && node scripts/repository-contract/package-script-contract.mjs && node scripts/repository-contract/seed-authority-contract.mjs && node scripts/repository-contract/adr-status-contract.mjs && node scripts/repository-contract/deployment-topology-contract.mjs",
     "lint:ui-gates": "node scripts/check-ant-residue.mjs && node scripts/check-token-bypass.mjs && node scripts/check-raw-color-usage.mjs && node scripts/check-high-font-weight.mjs && node scripts/check-row-action-icons.mjs && node scripts/check-stale-ui-docs.mjs",
     "lint:eslint": "pnpm --filter @exam/web lint:eslint",
     "lint:md": "markdownlint-cli2",

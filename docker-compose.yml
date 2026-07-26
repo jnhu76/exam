@@ -84,6 +84,59 @@ services:
       - exam-net
     restart: unless-stopped
 
+  # Email delivery worker (ADR-011). Required MVP process: drains the
+  # PostgreSQL `email_outbox` table that `result_published` notifications
+  # write into. Without this service, `docker compose up` would start the
+  # API and DB but Email queued by the publication transaction would never
+  # be sent. The worker is PostgreSQL-only (no Redis/Fastify); it
+  # self-migrates at startup (idempotent via the drizzle journal) and
+  # resolves the single internal default organization via the branding
+  # resolver. It is intentionally NOT wired to start when EMAIL_ENABLED is
+  # false at the Compose level: a stopped-but-restarted worker is harmless
+  # (it polls an empty outbox and writes a heartbeat). Disable Email
+  # delivery by setting EMAIL_ENABLED=false in the runtime env, not by
+  # removing this service.
+  email-worker:
+    build: .
+    command: ["node", "dist/workers/emailDeliveryWorker.js"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam}
+      # JWT_SECRET is required by the runtime config loader at worker boot
+      # (getRuntimeConfig fails fast in production without it). The worker
+      # itself never signs or verifies JWTs.
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: production
+      APP_MODE: production
+      # PUBLIC_WEB_ORIGIN is validated at worker boot by runtimeConfig
+      # (used to build Email action links).
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN is required for production}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+      TZ: ${TZ:-Asia/Shanghai}
+      # Email transport — defaults match the bare/test deployment (sends
+      # nothing). Set EMAIL_ENABLED=true + EMAIL_TRANSPORT=smtp + SMTP_* to
+      # enable real delivery. See docs/architecture/email-config.md.
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-fake}
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@example.local}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Exam Platform}
+      EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-3}
+      EMAIL_RETRY_BASE_SECONDS: ${EMAIL_RETRY_BASE_SECONDS:-60}
+      EMAIL_WORKER_POLL_INTERVAL_MS: ${EMAIL_WORKER_POLL_INTERVAL_MS:-5000}
+      EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-20}
+      EMAIL_WORKER_LOCK_TIMEOUT_MS: ${EMAIL_WORKER_LOCK_TIMEOUT_MS:-300000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - exam-net
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
