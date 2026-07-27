@@ -465,6 +465,16 @@ const zhCN = {
       submitting: "提交中...",
       submitAnyway: "仍然提交",
     },
+    // REC-I3: disrupted-attempt direct restore UX (ADR-012 §Recovery Semantics).
+    // Restore is an explicit command; the snapshot remains the page authority.
+    restore: {
+      restoringTitle: "正在恢复考试",
+      restoringDescription: "服务器正在确认考试状态和剩余时间，请勿关闭页面。",
+      failedTitle: "恢复考试失败",
+      failedDescription: "未能确认考试状态，请检查网络后重试。",
+      retryRestore: "重试恢复",
+      backToList: "返回考试列表",
+    },
   },
 
   /** Candidate result / attempt detail page copy. */

@@ -148,19 +148,120 @@ sequenceDiagram
     C->>API: GET /candidate/attempts/:attemptId/take
     API->>DB: deadline reconciliation (may auto-submit if expired)
     API-->>C: snapshot (attemptStatus=disrupted, canResume=true)
-    C->>API: POST /attempts/:examId/start (or /restore)
+    Note over C: REC-I3 (implemented): capability field<br/>canResume drives the explicit restore action,<br/>NOT raw attemptStatus. The restoring UI overlay<br/>is shown while the command is in flight.
+    C->>API: POST /attempts/:attemptId/restore
     API->>DB: BEGIN + lock
+    API->>DB: ensureAttemptDeadlineReconciled (re-check before restore)
     API->>Engine: restoreAttempt
     Engine->>Engine: transition(disrupted, restore)
     Note over Engine: CURRENT_TRANSITIONAL: restoreAttempt currently<br/>computes disconnectedDuration AND adjusts deadlineAt<br/>in the same command. This is NOT the target contract.
     Engine->>Engine: compute disconnectedDuration
     Engine->>Engine: adjust deadlineAt (bounded by exam.closeAt)
-    Note over Engine: TARGET (REC-I3 + REC-I4):<br/>State restore and time compensation are separate.<br/>REC-I3: explicit restore command (lifecycle only).<br/>REC-I4: policy-driven compensation (strict/bounded_grace/operator_incident).
+    Note over Engine: TARGET (REC-I3 + REC-I4):<br/>State restore and time compensation are separate.<br/>REC-I3 (DONE): explicit restore command from Web client.<br/>REC-I4 (PENDING): policy-driven compensation (strict/bounded_grace/operator_incident).
     Engine->>DB: UPDATE status=in_progress, deadlineAt, lastActivityAt
     API->>DB: COMMIT
-    API-->>C: restored attempt response
-    C->>C: reload take snapshot
+    API-->>C: restore acknowledgement (legacy LoadAttemptResponse)
+    Note over C: REC-I3: the restore response is a command ack only.<br/>The page reloads the authoritative snapshot, NOT<br/>the restore response.
+    C->>API: GET /candidate/attempts/:attemptId/take (reload)
+    API-->>C: reloaded snapshot (in_progress OR terminal if deadline won)
+    Note over C: Branch on the reloaded snapshot only.<br/>No automatic restore loop. No invented in_progress.
 ```
+
+### Disrupted-Attempt Restore — Web Client Implementation Status (REC-I3)
+
+The Web recovery flow frozen by ADR-012 §Recovery Semantics is implemented in
+`apps/web/src/exam/useAttemptRestore.ts` and wired into
+`apps/web/src/pages/exam/TakeExamPage.tsx`. Behavior summary:
+
+```text
+GET /candidate/attempts/:attemptId/take (authoritative snapshot)
+  ↓
+IF snapshot.canResume == true:
+  → render restoring UI overlay
+  → POST /api/attempts/:attemptId/restore EXACTLY ONCE
+  → reload GET /candidate/attempts/:attemptId/take
+  → branch on the reloaded snapshot
+ELSE:
+  → initialize normally from the snapshot (existing flow)
+```
+
+Properties preserved by the implementation:
+
+- `CandidateTakeSnapshot` remains the page business truth source. The restore
+  POST response is treated only as a command acknowledgement.
+- `snapshot.canResume` — NOT raw `attemptStatus === "disrupted"` — governs
+  whether restore is attempted.
+- Restore fires at most once concurrently per mounted attempt. Guards
+  (per `useAttemptRestore`):
+  - **`restoreInFlightRef` keyed by `attemptId`** (NOT a boolean): stores the
+    identity of the attempt that currently owns the in-flight POST/GET chain.
+    A route change to a NEW attempt while an OLD attempt's POST is still
+    pending is NOT a duplicate, so the new attempt's restore proceeds and
+    claims the slot; the old attempt's stale resolution only clears the slot
+    when it is STILL the owner.
+  - **`restoredForAttemptRef`** — per-attempt identity guard, committed INSIDE
+    `performRestore` after the in-flight guard passes (not pre-marked in the
+    auto-restore effect), so an effect whose `performRestore` was rejected by
+    the guard can still restore once the owner changes.
+  - **`generationRef` + `currentAttemptIdRef`** — monotonic generation token
+    and latest-bound `attemptId`. Both are captured at the start of each async
+    restore chain and re-checked after every await; a stale POST/GET from a
+    previous route cannot apply its snapshot or mutate UI state. The
+    generation is bumped ONLY on a real `attemptId` change (render-time
+    prev-value check), never on StrictMode re-mount of the same attempt.
+  This replaces the earlier shared-boolean `cancelledRef` cleanup flag, which
+  a new effect setup could reset before a stale async chain resumed. Verified
+  by component tests against React Strict Mode effect replay, snapshot
+  re-renders, and cross-attempt races (resumable→resumable, old GET late
+  success/failure).
+- The same generation discipline guards the PAGE's own `loadSnapshot`
+  (`loadGenerationRef` + `currentAttemptIdRef`): a late GET from a previous
+  route cannot overwrite the new route's snapshot or write `loadError` onto an
+  already-loaded page.
+- On a real route change ALL attempt-scoped page state is reset (snapshot,
+  loadError, isLoading, currentIndex, answers, save/submit/transient/flush
+  states, and the submit/deadline refs), so nothing from the previous attempt
+  can leak onto the new route — in particular, a retained `currentIndex` out
+  of range for the new exam cannot pin the page to the generic ErrorState.
+- **The answer-save queue is isolated per attempt.** Because `TakeExamPage`
+  reuses one instance across `:attemptId` route changes, `useSubmitFlush`
+  receives the route `attemptId` as a `scopeKey` and gives each scope its OWN
+  pending/inflight/status/generation maps (keyed by `questionId`). On a scope
+  change (`useLayoutEffect`, before paint): the old scope's pending debounce
+  timers are cancelled; the old scope object is retained so its
+  already-inflight saves settle without writing status; a brand-new scope
+  with empty maps is installed. Two scopes sharing a `questionId` do NOT
+  share a queue — the new scope's save never serializes behind the old
+  scope's inflight save. `flush()` binds its scope at call time and never
+  drains/awaits/count another scope's work. The page's `saveAnswer` closure
+  is stale-guarded on a scope-generation token (captured at schedule time,
+  re-checked before any read of page authority, after the `await`, and at
+  the top of `catch`) so an in-flight old-attempt save cannot mutate the new
+  page's state/refs. `loadGenerationRef` is bumped on EVERY `loadSnapshot`
+  call (not just route change) so two concurrent loads of the same attempt
+  cannot reorder (latest-GET-wins).
+- User-triggered retry after a genuine failure is supported via a dedicated
+  "重试恢复" control (a fresh POST is allowed).
+- Deadline race: if the deadline wins between GET and POST restore, the
+  reloaded snapshot is terminal/non-resumable; the page renders the terminal
+  state and does NOT auto-loop restore.
+- Snapshot reload failure after a successful restore is treated as an
+  uncertain state; the page surfaces a reload/retry path rather than
+  inventing `in_progress` from the restore response.
+- Restore failure is NOT represented as a save failure and does NOT display
+  generic "时间到" / "正在自动交卷" copy merely because the disrupted
+  snapshot has `isEditable=false`.
+
+Telemetry: `restore_started` / `restore_succeeded` / `restore_failed` are
+emitted via the existing `trackExamEvent` helper, scoped to attemptId/examId
+with `durationMs` and `errorCode` only. No answer content is recorded.
+
+Deferred: REC-I4 (time-compensation policy) is NOT modified by REC-I3. The
+current `restoreAttempt` engine may still grant full disconnected-time
+compensation; the Web client deliberately uses neutral copy
+("服务器正在确认考试状态和剩余时间") and does not duplicate time logic.
+
+
 
 ### Server Outage
 

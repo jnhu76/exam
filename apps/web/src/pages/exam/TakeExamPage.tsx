@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Flag,
   Lock,
+  RotateCcw,
+  LoaderCircle,
   TimerOff,
   WifiOff,
 } from "lucide-react";
@@ -35,6 +37,9 @@ import type {
   CandidateTakeSnapshot,
   SaveAnswerResponseDTO,
 } from "@exam/contracts";
+// REC-I3: explicit disrupted-attempt direct restore (ADR-012). The hook owns
+// only the restore UI state; CandidateTakeSnapshot remains the page authority.
+import { useAttemptRestore } from "@/exam/useAttemptRestore";
 
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
@@ -89,6 +94,61 @@ function getSaveRejectionDisplay(
 
 type QuestionState = "unanswered" | "answered" | "flagged";
 
+/**
+ * REC-I3 restore-failed recovery surface.
+ *
+ * Accessibility: the nested <Alert variant="destructive"> already carries
+ * role="alert" (see apps/web/src/components/ui/alert.tsx), so this wrapper
+ * does NOT duplicate role/aria-live on the outer div — a duplicate role would
+ * cause some screen readers to announce the same alert region twice. The
+ * retry button is auto-focused on mount so keyboard users land directly on
+ * the primary recovery action without an extra Tab through "返回考试列表".
+ */
+function RestoreFailedSurface({
+  onRetry,
+  onBackToList,
+}: {
+  onRetry: () => void;
+  onBackToList: () => void;
+}) {
+  const { t } = useTranslation();
+  const retryBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    retryBtnRef.current?.focus();
+  }, []);
+  return (
+    <div
+      className="mx-auto flex min-h-screen max-w-xl flex-col items-stretch justify-center gap-4 bg-background p-6"
+      data-testid="restore-failed-surface"
+    >
+      <Alert variant="destructive">
+        <AppIcon icon={WifiOff} size="inline" />
+        <AlertTitle>{t("candidateRuntime.restore.failedTitle")}</AlertTitle>
+        <AlertDescription>
+          {t("candidateRuntime.restore.failedDescription")}
+        </AlertDescription>
+      </Alert>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={onBackToList}
+          data-testid="restore-back-to-list"
+        >
+          {t("candidateRuntime.restore.backToList")}
+        </Button>
+        <Button
+          ref={retryBtnRef}
+          onClick={onRetry}
+          data-testid="restore-retry-btn"
+        >
+          <AppIcon icon={RotateCcw} size="inline" />
+          {t("candidateRuntime.restore.retryRestore")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Active exam-taking page. Reads the authoritative CandidateTakeSnapshot. */
 export function TakeExamPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
@@ -129,7 +189,16 @@ export function TakeExamPage() {
   // every successful beat.
   const heartbeatFailureRef = useRef(0);
   const heartbeatFailureReportedRef = useRef(false);
-  const { scheduleSave, flush } = useSubmitFlush();
+  // Load generation token — the page-level guard against a stale GET
+  // overwriting newer state. Bumped on EVERY loadSnapshot call (so two
+  // concurrent loads of the SAME attempt cannot reorder: latest wins) AND on
+  // a real route change (so a late GET from att-old cannot apply its snapshot
+  // or write loadError/isLoading over the att-new page). The restore hook
+  // already has its own generation guard; this one closes the page's own
+  // loader (initial load, retry, post-submit reload) and any concurrent GET.
+  const loadGenerationRef = useRef(0);
+  const currentAttemptIdRef = useRef<string | undefined>(attemptId);
+  const { scheduleSave, flush, getScopeGeneration } = useSubmitFlush(attemptId);
 
   /** Returns the current time adjusted by the server clock offset. */
   const nowByServerClock = useCallback(
@@ -138,60 +207,103 @@ export function TakeExamPage() {
   );
 
   /**
-   * Loads the authoritative CandidateTakeSnapshot from
+   * Fetches the authoritative CandidateTakeSnapshot from
    * GET /api/candidate/attempts/:attemptId/take (P3-PROTO-2).
+   *
+   * This is the THROWING primitive. It is shared by the page's own loader
+   * (which catches and sets `loadError`) and by the restore hook (which MUST
+   * observe real failures so it can surface a recovery state). Splitting
+   * fetch from apply is required because the previous monolithic loader
+   * swallowed its own error, making the hook's reload-failure branch
+   * unreachable (PR 219 review finding 4).
+   */
+  const fetchSnapshot = useCallback(
+    (id: string): Promise<CandidateTakeSnapshot> =>
+      api.get<CandidateTakeSnapshot>(`/api/candidate/attempts/${id}/take`),
+    [],
+  );
+
+  /**
+   * Applies an authoritative snapshot to page state. Pure state mutation —
+   * no network. Factored out so both the page loader and the restore hook
+   * route the authoritative snapshot through the SAME apply seam.
+   */
+  const applySnapshot = useCallback((data: CandidateTakeSnapshot) => {
+    if (data.serverNow) {
+      serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
+    }
+    setSnapshot(data);
+    trackExamEvent(
+      "exam_page_loaded",
+      { status: data.attemptStatus },
+      { attemptId: data.attemptId, examId: data.examId },
+    );
+
+    const answerMap = new Map<string, unknown>();
+    const versionMap = new Map<string, number>();
+    const clientSeqMap = new Map<string, number>();
+    for (const q of data.questions) {
+      if (q.answerValue != null) {
+        answerMap.set(q.id, q.answerValue);
+        // Restore server version and last clientSeq from snapshot so the
+        // first save after reload uses a correct baseVersion and a fresh
+        // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
+        versionMap.set(q.id, q.currentVersion ?? 0);
+        clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
+      }
+    }
+    setAnswers(answerMap);
+    versionsRef.current = versionMap;
+    clientSeqsRef.current = clientSeqMap;
+
+    const states: QuestionState[] = data.questions.map((q) =>
+      q.answerValue != null ? "answered" : "unanswered",
+    );
+    setQuestionStates(states);
+    setIsDisconnected(false);
+  }, []);
+
+  /**
+   * Page-level loader: fetch + apply, catching errors into `loadError` and
+   * toggling `isLoading`. Used for initial load, ErrorState retry, and the
+   * post-submit reload. The restore hook does NOT use this — it uses
+   * `fetchSnapshot` directly so a reload failure is observable.
+   *
+   * Stale-request safe: each call captures its own load generation and the
+   * attemptId it requested. After every await, both are re-checked — a late
+   * GET from a previous route (or a previous retry) cannot apply its snapshot
+   * or write loadError/isLoading onto the current page. This is the same
+   * generation-guard discipline the restore hook uses; before this guard a
+   * route change could leave the page pinned to an ErrorState when an OLD
+   * GET resolved AFTER the NEW GET had already succeeded.
    */
   const loadSnapshot = useCallback(async () => {
     if (!attemptId) return;
+    const requestedAttemptId = attemptId;
+    // Pre-increment: every loadSnapshot call gets a fresh generation. Two
+    // concurrent loads of the same attempt (StrictMode replay, retry during
+    // load, post-submit reload overlapping initial load) then cannot reorder
+    // — the later-issued load's result wins, and a late-resolving earlier
+    // load is rejected at apply/loadError/isLoading time.
+    const generation = ++loadGenerationRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await api.get<CandidateTakeSnapshot>(
-        `/api/candidate/attempts/${attemptId}/take`,
-      );
-      if (data.serverNow) {
-        serverOffsetRef.current =
-          new Date(data.serverNow).getTime() - Date.now();
+      const data = await fetchSnapshot(requestedAttemptId);
+      if (
+        generation !== loadGenerationRef.current ||
+        currentAttemptIdRef.current !== requestedAttemptId
+      ) {
+        return;
       }
-      setSnapshot(data);
-      // Auto-redirect only for terminal non-takeable states the snapshot
-      // reports — using the snapshot's derived canStart/canResume/canSubmit,
-      // not a local status check.
-      const takeable = data.isEditable || data.canResume || data.canSubmit;
-      if (!takeable && data.attemptStatus !== "in_progress") {
-        // Submitted/graded/voided: result page is the canonical destination.
-        // (Page still renders the locked take view if the candidate stays;
-        // this redirect is the legacy "exam over" UX path.)
-      }
-      trackExamEvent(
-        "exam_page_loaded",
-        { status: data.attemptStatus },
-        { attemptId, examId: data.examId },
-      );
-
-      const answerMap = new Map<string, unknown>();
-      const versionMap = new Map<string, number>();
-      const clientSeqMap = new Map<string, number>();
-      for (const q of data.questions) {
-        if (q.answerValue != null) {
-          answerMap.set(q.id, q.answerValue);
-          // Restore server version and last clientSeq from snapshot so the
-          // first save after reload uses a correct baseVersion and a fresh
-          // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
-          versionMap.set(q.id, q.currentVersion ?? 0);
-          clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
-        }
-      }
-      setAnswers(answerMap);
-      versionsRef.current = versionMap;
-      clientSeqsRef.current = clientSeqMap;
-
-      const states: QuestionState[] = data.questions.map((q) =>
-        q.answerValue != null ? "answered" : "unanswered",
-      );
-      setQuestionStates(states);
-      setIsDisconnected(false);
+      applySnapshot(data);
     } catch {
+      if (
+        generation !== loadGenerationRef.current ||
+        currentAttemptIdRef.current !== requestedAttemptId
+      ) {
+        return;
+      }
       trackExamEvent(
         "exam_page_loaded",
         { outcome: "failed" },
@@ -199,9 +311,14 @@ export function TakeExamPage() {
       );
       setLoadError(t("candidateRuntime.errors.loadFailed"));
     } finally {
-      setIsLoading(false);
+      if (
+        generation === loadGenerationRef.current &&
+        currentAttemptIdRef.current === requestedAttemptId
+      ) {
+        setIsLoading(false);
+      }
     }
-  }, [attemptId, t]);
+  }, [attemptId, fetchSnapshot, applySnapshot, t]);
 
   useEffect(() => {
     void loadSnapshot();
@@ -225,15 +342,96 @@ export function TakeExamPage() {
     [],
   );
 
+  // Route/snapshot binding (PR 219 review finding 1): the view MUST NOT be
+  // derived from a snapshot whose attemptId disagrees with the current route
+  // param. On a route change the old snapshot lingers for one render; if we
+  // derived the view unconditionally, the restore hook could be called with
+  // the OLD attempt's canResume against the NEW route's attemptId and POST
+  // restore to the wrong attempt. Gating on `snapshotMatchesRoute` makes the
+  // page render the initializing state until the new attempt's GET resolves.
+  const snapshotMatchesRoute = Boolean(
+    attemptId && snapshot?.attemptId === attemptId,
+  );
+
+  // Reset page state on a real route change so the previous attempt's view
+  // never flashes for the new route. Render-time prev-value check (not an
+  // effect): the reset must be visible in the same commit as the param
+  // change, before any child effect reads stale state.
+  //
+  // This resets ALL attempt-scoped state — not just snapshot/loadError/
+  // isLoading. A retained currentIndex (e.g. 9 from a 10-question exam)
+  // applied to a 5-question new exam would make currentQuestionView null and
+  // pin the page to the generic ErrorState, and Retry would not recover
+  // because the snapshot reload does not reset currentIndex either. The save/
+  // submit/transient/flush states and the submit/deadline refs are also
+  // attempt-scoped and must not leak across routes.
+  const prevAttemptIdRef = useRef<string | undefined>(attemptId);
+  if (prevAttemptIdRef.current !== attemptId) {
+    prevAttemptIdRef.current = attemptId;
+    currentAttemptIdRef.current = attemptId;
+    // Bump the load generation so any still-pending GET from the PREVIOUS
+    // attempt is rejected at apply/loadError/isLoading time. Without this, a
+    // late-resolving old GET could overwrite the new route's freshly-loaded
+    // snapshot (or write loadError onto an already-loaded page).
+    loadGenerationRef.current += 1;
+    // Intentionally set during render: this is the documented React pattern
+    // for "adjust state when a prop changes" (you may call setState during
+    // render if you bail out of the rest of the render immediately after).
+    setSnapshot(null);
+    setLoadError(null);
+    setIsLoading(true);
+    // Reset all attempt-scoped UI state so nothing from the previous attempt
+    // leaks onto the new route.
+    setCurrentIndex(0);
+    setQuestionStates([]);
+    setAnswers(new Map());
+    setSaveState("idle");
+    setSaveRejection(null);
+    setShowSubmitDialog(false);
+    setTransientState("idle");
+    setIsFlushing(false);
+    setFlushResult(null);
+    setAutoSubmitFailed(false);
+    setIsDisconnected(false);
+    // Reset attempt-scoped refs. versionsRef / clientSeqsRef will be rebuilt
+    // from the new attempt's snapshot by applySnapshot, but clearing them now
+    // avoids any window where stale save state could drive a save for the
+    // wrong attempt.
+    versionsRef.current = new Map();
+    clientSeqsRef.current = new Map();
+    submittingRef.current = false;
+    deadlineHandledRef.current = false;
+    heartbeatFailureRef.current = 0;
+    heartbeatFailureReportedRef.current = false;
+  }
+
   // P3-FSM-0: the view is derived PURELY from the authoritative snapshot.
   // This is the single business-view derivation seam (L0 §7.2). Every
   // business-derived UI decision must read from `view`, never reconstruct
   // isEditable/canSave/answerSource/lock/visibility from raw fields.
   const view = useMemo(
-    () => (snapshot ? deriveTakeExamView(snapshot) : null),
-    [snapshot],
+    () =>
+      snapshotMatchesRoute && snapshot ? deriveTakeExamView(snapshot) : null,
+    [snapshot, snapshotMatchesRoute],
   );
   viewRef.current = view;
+
+  // REC-I3: explicit restore for a disrupted-but-resumable attempt. The hook
+  // fires POST /api/attempts/:attemptId/restore exactly once when the
+  // authoritative snapshot reports canResume=true, then re-reads the snapshot
+  // (which remains the page authority). Capability fields — NOT raw status —
+  // govern the action, and the snapshot is bound to the route so a stale
+  // snapshot cannot drive a restore for the wrong attempt. See
+  // docs/adr/ADR-012-candidate-recovery-contract.md.
+  const { restoreState, retryRestore } = useAttemptRestore({
+    attemptId,
+    examId: snapshotMatchesRoute ? view?.examId : undefined,
+    canResume: Boolean(snapshotMatchesRoute && view?.canResume),
+    fetchSnapshot,
+    applySnapshot,
+  });
+  const isRestoring = restoreState === "restoring";
+  const restoreFailed = restoreState === "failed";
 
   const currentQuestionView = view?.questions[currentIndex] ?? null;
   const currentQuestionId = currentQuestionView?.id;
@@ -282,7 +480,25 @@ export function TakeExamPage() {
     setSaveState("saving");
     setTransientState((s) => transientReducer(s, { type: "SAVE_REQUEST" }));
 
+    // Capture the save-scope generation at SCHEDULE time. The save queue is
+    // attempt-scoped (useSubmitFlush(attemptId) installs a fresh scope per
+    // attempt). If the route changes before the debounce timer fires, the
+    // hook cancels the timer; but if the route changes while the network
+    // request is in flight, the fetch completes against the OLD attempt's
+    // URL (harmless) yet must NOT mutate THIS page's state/refs (which now
+    // reflect the NEW attempt). `stale()` is re-checked before every read
+    // of the current page authority and before every state/ref write.
+    const scopeGenAtSchedule = getScopeGeneration();
+    const saveStale = () => scopeGenAtSchedule !== getScopeGeneration();
+
     scheduleSave(questionId, async () => {
+      // Scope guard FIRST: a stale callback must not read the NEW attempt's
+      // authority (viewRef/versionsRef/clientSeqsRef) at all. This runs
+      // after the 1500ms debounce; if the route changed, bail before any
+      // read or write.
+      if (saveStale()) {
+        return;
+      }
       // P3-FSM-0: execution-time authority guard. The current view is read
       // from the ref so the latest snapshot (which may have been reloaded
       // during the debounce window) decides whether to save. This is the
@@ -310,6 +526,11 @@ export function TakeExamPage() {
             baseVersion,
           },
         );
+        // Scope guard again after the await: an in-flight save that settles
+        // after a route change must NOT write the NEW page's state/refs.
+        if (saveStale()) {
+          return;
+        }
 
         if (result.accepted) {
           versionsRef.current.set(questionId, result.serverVersion);
@@ -372,6 +593,14 @@ export function TakeExamPage() {
         );
         throw new Error("save rejected by server");
       } catch (err) {
+        // Scope guard at the TOP of catch: api.post() rejecting does NOT go
+        // through the post-await stale check above — without this guard a
+        // network failure on the OLD attempt's save would write saveState
+        // "error" / setIsDisconnected(true) / transient SAVE_FAILED onto the
+        // NEW page. A stale save's failure is not the new attempt's failure.
+        if (saveStale()) {
+          return;
+        }
         setSaveState("error");
         setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         if (!rejected) {
@@ -430,16 +659,36 @@ export function TakeExamPage() {
     }
   }, [attemptId, navigate, loadSnapshot, t]);
 
-  /** Flushes all pending answer saves and records the flush result. */
+  /**
+   * Flushes all pending answer saves and records the flush result.
+   *
+   * Stale-guarded: if the route changes while a flush is awaiting (the
+   * previous attempt's submit-flow flush, or a deadline auto-submit flush),
+   * the late-resolving flush must NOT write its result / clear isFlushing
+   * onto the NEW attempt's page. The hook's flush() is already scope-bound
+   * (it captured its own scope at call time), but the page-side setState
+   * here is a separate seam that needs its own guard.
+   */
   const runSubmitFlush = useCallback(async () => {
+    const attemptAtStart = attemptId;
+    const scopeGenAtStart = getScopeGeneration();
+    const stale = () =>
+      currentAttemptIdRef.current !== attemptAtStart ||
+      getScopeGeneration() !== scopeGenAtStart;
+
     setIsFlushing(true);
     setFlushResult(null);
     try {
-      setFlushResult(await flush());
+      const result = await flush();
+      if (!stale()) {
+        setFlushResult(result);
+      }
     } finally {
-      setIsFlushing(false);
+      if (!stale()) {
+        setIsFlushing(false);
+      }
     }
-  }, [flush]);
+  }, [attemptId, flush, getScopeGeneration]);
 
   /** Opens the submit confirmation dialog and triggers a pending-save flush. */
   const openSubmitDialog = useCallback(async () => {
@@ -658,6 +907,47 @@ export function TakeExamPage() {
           onRetry={loadSnapshot}
         />
       </div>
+    );
+  }
+
+  // REC-I3: while an explicit restore is in flight, render the restoring
+  // surface — NOT the editable exam and NOT the deadline/time-up overlay
+  // (which would otherwise appear merely because the disrupted snapshot has
+  // isEditable=false). The snapshot stays authoritative; this is a UI state.
+  if (isRestoring) {
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center"
+        data-testid="restore-restoring-surface"
+        role="status"
+        aria-live="polite"
+      >
+        <AppIcon
+          icon={LoaderCircle}
+          size="state"
+          className="animate-spin text-primary"
+        />
+        <h1 className="type-section-title">
+          {t("candidateRuntime.restore.restoringTitle")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t("candidateRuntime.restore.restoringDescription")}
+        </p>
+      </div>
+    );
+  }
+
+  // REC-I3: a restore network/server failure surfaces a dedicated recovery
+  // state. It MUST NOT be represented as a save failure, and it MUST NOT
+  // display deadline/time-up copy merely because the attempt is locked due
+  // to disruption. The candidate may retry (a fresh POST is allowed) or
+  // return to the exam list.
+  if (restoreFailed) {
+    return (
+      <RestoreFailedSurface
+        onRetry={() => retryRestore()}
+        onBackToList={() => navigate(routes.exam.list)}
+      />
     );
   }
 
