@@ -1,0 +1,26 @@
+# Generated TLC artifacts — never source authority, never committed.
+#
+# All TLC state, trace, checkpoint, coverage, dump, and temporary files
+# produced by model checking must land under .work/. The runner
+# (scripts/formal/run-recovery-tlc.mjs) points TLC's -metadir here.
+.work/
+
+# Defensive catch-alls for TLC-generated artifacts that might escape .work/
+# if a model is invoked manually without the runner.
+*.out
+*.st
+*.dot
+*.graph
+states/
+states-*/
+
+# Editor / Toolbox noise. The graphical TLA+ Toolbox may create this if
+# someone opens the model locally; it is not part of the reproducible
+# command-line verification path.
+.toolbox/
+metadir/
+
+# Never ignore source files (defensive — these are the formal model itself).
+!*.tla
+!*.cfg
+!*.md

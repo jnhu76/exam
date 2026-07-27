@@ -44,6 +44,10 @@
     "coverage:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
     "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
     "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check",
+    "formal:recovery:safety": "node scripts/formal/run-recovery-tlc.mjs safety",
+    "formal:recovery:liveness": "node scripts/formal/run-recovery-tlc.mjs liveness",
+    "formal:recovery:counterexamples": "node scripts/formal/run-recovery-tlc.mjs counterexamples",
+    "formal:recovery": "node scripts/formal/run-recovery-tlc.mjs all",
     "prepare": "husky"
   },
   "lint-staged": {

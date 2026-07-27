@@ -83,6 +83,12 @@ When documents conflict, higher precedence wins:
 See also the root [`DESIGN.md`](../DESIGN.md) (project-owned visual authority) and
 [`AGENTS.md`](../AGENTS.md) §"Frontend Visual Authority".
 
+### Formal executable models
+
+| Path | Purpose |
+| --- | --- |
+| [`../formal/README.md`](../formal/README.md) | TLA+ executable specifications and model-checking inputs (outside `docs/` — see `formal/README.md` for the storage rationale). The recovery protocol is model-checked under `formal/tla/recovery/`. |
+
 ### Historical material (not current guidance)
 
 [`docs/archive/`](archive/) holds plans, audits, reviews, implementation reports,
