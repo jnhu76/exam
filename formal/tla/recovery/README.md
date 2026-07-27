@@ -173,7 +173,7 @@ State-space statistics (TLC v2.19 / TLA+ v1.7.4, 1–2 workers):
 
 ```text
 CoreSafety       :   4,679 distinct states, depth 25 — PASS
-RouteSwitchSafety:  20,796 distinct states, depth 26 — PASS (includes NavigateTo)
+RouteSwitchSafety:  31,158 distinct states, depth 26 — PASS (includes NavigateTo)
 SubmissionSafety :  88,936 distinct states, depth 26 — PASS
 Liveness         :  14,653 distinct states         — PARTIAL (property violated)
 ```
@@ -181,10 +181,10 @@ Liveness         :  14,653 distinct states         — PARTIAL (property violate
 Counterexample reproduction (each produces the NAMED violation):
 
 ```text
-LegacyWrongAttemptRestore       :      6 distinct — NoWrongAttemptRestore violated
-LegacyGlobalInFlight            :    985 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT)
-LegacyStalePageLoad             :     44 distinct — NoStalePageLoadApply violated
-LegacyNoReloadAfterPostFailure :     92 distinct — PostOutcomeIsNotPageAuthority violated
+LegacyWrongAttemptRestore       :     10 distinct — NoWrongAttemptRestore violated
+LegacyGlobalInFlight            :  1,127 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT)
+LegacyStalePageLoad             :     63 distinct — NoStalePageLoadApply violated
+LegacyNoReloadAfterPostFailure :    100 distinct — PostOutcomeIsNotPageAuthority violated
 ```
 
 ---
@@ -217,16 +217,17 @@ violation / counterexample not reproduced / tool error → non-zero.
 
 ## Known runtime/model mismatches
 
-1. **REC-I4 (time-compensation) deferred.** `RestoreDoesNotDirectlyChangeDeadline`
-   is implied by `TimeGrantNeverDecreases` + the action model (`ProcessRestore`
-   leaves `timeGrant` unchanged). The runtime may still grant time inside
-   `restoreAttempt` — recorded, NOT modeled as target.
+1. **REC-I4 (time-compensation) deferred.** `ProcessRestore` leaves
+   `timeGrant` unchanged in the model (covered by `TimeGrantNeverDecreases`).
+   The runtime may still grant time inside `restoreAttempt` — recorded, NOT
+   modeled as target.
 2. **Liveness PARTIAL** — see above.
-3. `NavigateTo` clears in-flight REQUESTS for the old route (REC-I3
-   generationRef reset) but keeps pending DELIVERIES (so stale-apply is
-   still exercised at apply time). Under `LegacyGlobalInFlight`,
-   `NavigateTo` does NOT clear `restoreRequests` — modeling the legacy
-   client's failure to reset its global in-flight flag on navigation.
+3. `NavigateTo` preserves in-flight requests in both modes (the real
+   implementation does not cancel old POSTs). The generation token makes
+   old requests stale; they are rejected at apply time. The legacy-defect
+   switch affects ONLY the guard (`RestoreStartGuard`), not navigation
+   behavior — ensuring target and legacy face the same reachable state
+   and differ only in guard logic (clean A/B comparison).
 
 ---
 

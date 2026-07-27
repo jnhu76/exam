@@ -6,7 +6,7 @@ Runner: [`scripts/formal/run-recovery-tlc.mjs`](../../scripts/formal/run-recover
 
 ## Status
 
-`REC-F1 MODEL CHECKED — READY FOR HUMAN REVIEW` (revised after PR #220 review)
+`REC-F1 MODEL CHECKED — READY FOR HUMAN REVIEW`
 
 The model was rewritten to address the review's blocking findings. The
 current state:
@@ -26,29 +26,12 @@ current state:
 This is the "READY FOR HUMAN REVIEW" form, not "COMPLETE" — liveness is
 still PARTIAL, which disqualifies the strict "COMPLETE" bar.
 
-## Stacked-PR context
+## PR context
 
 ```text
-Stacked base branch : feat/rec-i3-disrupted-restore-ux
-Stacked base HEAD   : 9c955dd821da0ca16ff2a847e97800b74972dc30
-REC-F1 branch       : formal/rec-f1-recovery-protocol
-PR base branch      : feat/rec-i3-disrupted-restore-ux  (NOT master — stacked on PR #219)
-Dependency          : PR #219 (REC-I3) must merge first
-Required post-merge : rebase REC-F1 onto master and change the PR base to master
-Merge status        : NOT MERGED — STACKED ON PR #219
-```
-
-This is a **stacked PR** on top of PR #219 (REC-I3). Review only the
-formal-model changes relative to `feat/rec-i3-disrupted-restore-ux`. After
-PR #219 merges, this branch must be rebased onto the latest `master` and
-the PR base changed to `master` before REC-F1 is merged.
-
-## Base HEAD and branch
-
-```text
-BASE_BRANCH = feat/rec-i3-disrupted-restore-ux
-BASE_HEAD   = 9c955dd821da0ca16ff2a847e97800b74972dc30
-branch      = formal/rec-f1-recovery-protocol
+REC-F1 branch : formal/rec-f1-recovery-protocol
+PR base branch: master
+PR            : #221
 ```
 
 ## Purpose
@@ -195,7 +178,6 @@ TerminalNeverResurrects
 SubmittedSnapshotImmutable
 ServerVersionNeverDecreases
 NoCrossAttemptRestoreBlocking
-RestoreDoesNotDirectlyChangeDeadline
 PostOutcomeIsNotPageAuthority
 ```
 
@@ -205,7 +187,7 @@ PostOutcomeIsNotPageAuthority
 
 ```text
 CoreSpec        (RecoveryProtocolSafety.cfg)             :   4,679 distinct, depth 25 — PASS
-RouteSwitchSpec (RecoveryProtocolRouteSwitchSafety.cfg)  :  20,796 distinct, depth 26 — PASS (NavigateTo enabled)
+RouteSwitchSpec (RecoveryProtocolRouteSwitchSafety.cfg)  :  31,158 distinct, depth 26 — PASS (NavigateTo enabled)
 SubmissionSpec  (RecoveryProtocolSubmissionSafety.cfg)   :  88,936 distinct, depth 26 — PASS
 ```
 
@@ -244,9 +226,11 @@ WF_vars(ApplyAnyAuthoritativeReload)
 Plus the explicitly-documented environmental assumptions: network eventually
 stays available (`networkUp = TRUE`, NetworkDown/Up excluded); user does not
 navigate away (NavigateTo excluded from liveness Next); user does not unmount
-(Unmount excluded); environment eventually delivers a non-lost authoritative
-response (LoseResponse excluded from liveness Next — loss still verified for
-safety).
+(Unmount excluded). `LoseResponse` IS currently in `LivenessNext` — this is
+the root cause of the PARTIAL (it races with `ApplyAnyAuthoritativeReload`).
+The intended eventual-delivery assumption ("environment eventually delivers a
+non-lost response") is documented but NOT yet enforced; the fix is deferred to
+a follow-up (see README §Deferred work).
 
 ## Liveness result
 
@@ -273,10 +257,10 @@ safety default), configuration (target safety/liveness .cfg), tool version
 All four reproduce the named violation:
 
 ```text
-LegacyWrongAttemptRestore       —  6 distinct — NoWrongAttemptRestore violated        ✓
-LegacyGlobalInFlight            — 985 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT) ✓
-LegacyStalePageLoad             — 44 distinct — NoStalePageLoadApply violated          ✓
-LegacyNoReloadAfterPostFailure — 92 distinct — PostOutcomeIsNotPageAuthority violated ✓
+LegacyWrongAttemptRestore       —  10 distinct — NoWrongAttemptRestore violated        ✓
+LegacyGlobalInFlight            — 1,127 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT) ✓
+LegacyStalePageLoad             —  63 distinct — NoStalePageLoadApply violated          ✓
+LegacyNoReloadAfterPostFailure — 100 distinct — PostOutcomeIsNotPageAuthority violated ✓
 ```
 
 Each legacy flag changes ACTION behavior only (never a property). The buggy
@@ -301,7 +285,6 @@ bug class, runtime coverage). No raw TLC work directories are committed.
 | PostOutcomeIsNotPageAuthority | `TakeExamPage.restore.test.tsx` Cases 11 (409) and 12 (lost POST → GET wins) | TEST_PRESENT |
 | TerminalNeverResurrects | `TakeExamPage.restore.test.tsx` Case 6 (deadline wins → terminal snapshot honored) | TEST_PRESENT |
 | SubmittedSnapshotImmutable | ADR-008 engine tests (`submitAttempt` freeze barrier; `exam-engine` suite) | TEST_PRESENT_NOT_EXECUTED (not run in this PR — production code unchanged) |
-| RestoreDoesNotDirectlyChangeDeadline | REC-I4 target; runtime mismatch documented below | RUNTIME_MISMATCH / TARGET_ONLY |
 
 No tests were invented.
 
@@ -370,7 +353,7 @@ git status --short
 - `pnpm format:check`, `pnpm lint:md` on changed files, `git diff --check`:
   see "Static validation" below.
 
-### Runner exit-code policy (revised after PR #220 review)
+### Runner exit-code policy
 
 ```text
 formal:recovery:safety / :safety:route / :safety:submission
@@ -392,26 +375,21 @@ Failures are never wrapped as success.
 
 ## Deferred work
 
-1. Refine the deadline/restore UI interaction so liveness holds under
-   fairness (make `RejectRestoreDeadlineWon` transition `uiState` to a
-   state from which the reload GET provably fires; bound
-   `DeadlineReconcile` against repeated re-freezing).
-2. Reproduce the expected counterexamples mechanically — requires a bounded
-   `NavigateTo` (TLC symmetry sets over `Attempts`) or direct buggy-
-   transition modeling behind each legacy flag, or a separate smaller
-   counterexample-only model.
-3. Consider adding the formal check to CI as a follow-up decision after the
-   liveness and counterexample gaps are addressed.
+1. Close the liveness PARTIAL: define `LivenessNextEventuallyDelivered`
+   (excluding `LoseResponse`) or strengthen to
+   `SF_vars(ApplyAnyAuthoritativeReload)`. Document the eventual-delivery
+   environment assumption. Do NOT use `SF_vars(LoseResponse)`.
+2. Consider adding the formal check to CI as a follow-up decision after the
+   liveness gap is addressed.
 
 ## Next recommended Job
 
 REC-I4 (Interruption and time-compensation policy) remains the next
 runtime-authority Job. It is technically independent of REC-F1 and would
-close the `RestoreDoesNotDirectlyChangeDeadline` RUNTIME_MISMATCH documented
-above. A separate, smaller formal follow-up could address the liveness
-PARTIAL result and the counterexample reproduction gap; it should NOT be
-combined with REC-I4 (formal modeling and runtime remediation remain
-separate).
+close the `ProcessRestore` / `timeGrant` RUNTIME_MISMATCH documented above.
+A separate, smaller formal follow-up could address the liveness PARTIAL
+result; it should NOT be combined with REC-I4 (formal modeling and runtime
+remediation remain separate).
 
 ## Explicit non-goals (REC-F1)
 

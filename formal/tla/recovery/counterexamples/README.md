@@ -60,12 +60,19 @@ StartRestore with LegacyWrongAttemptCapability → snapshotAttempt = A, attemptI
 Intended normalized trace:
 
 ```text
-route = A; StartRestore for A (in flight)
-NavigateTo(B); B is resumable; clientSnapshotAttempt = B
-RestoreStartBaseConditions holds for B (per-route guard satisfied)
-But ENABLED StartRestore = FALSE (global guard ~AnyRestoreInFlight fails)
+route = A; StartRestore for A (request r0 in restoreRequests)
+NavigateTo(B)  [restoreRequests preserved: {r0, attemptId=A, gen=old}]
+B is resumable; page load for B applied; clientSnapshotAttempt = B
+RestoreStartBaseConditions holds for B:
+  ~RestoreInFlightForRoute = TRUE (r0 has attemptId=A, gen=old ≠ current)
+But ENABLED StartRestore = FALSE:
+  legacy guard ~AnyRestoreInFlight = FALSE (r0 still in restoreRequests)
 → NoCrossAttemptRestoreBlocking violated (invariant fails at this state)
 ```
+
+Note: NavigateTo preserves `restoreRequests` in BOTH target and legacy modes.
+The A/B comparison is clean: same reachable state, only the guard differs.
+Under target, `~RestoreInFlightForRoute = TRUE` → StartRestore ENABLED → PASS.
 
 ### LegacyStalePageLoad.cfg
 

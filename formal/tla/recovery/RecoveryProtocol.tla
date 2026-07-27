@@ -21,7 +21,8 @@
   Finiteness:
     All domains are small finite sets. Counters are bounded. NavigateTo is
     included (it is the core of the cross-attempt race being modeled) and
-    bounded via small RequestIds + on-navigation request clearing.
+    bounded via small RequestIds + server-side consumption (ProcessRestore /
+    ServerReturnSnapshot remove in-flight requests).
 
   Legacy-defect switches (CONSTANTS):
     Each switch changes ACTION behavior only — it NEVER appears in a property.
@@ -180,13 +181,13 @@ MakeDelivery(rid, r) ==
 \* Client / navigation actions
 \* =============================================================================
 
-\* NavigateTo bumps the generation token and clears in-flight REQUESTS for
-\* the old route (REC-I3 generationRef reset). Pending DELIVERIES are NOT
-\* cleared — a late stale delivery may still arrive and must be rejected at
-\* apply time. This is the cross-attempt race the model exists to verify.
-\* Under LegacyGlobalInFlight, restoreRequests are NOT cleared: the legacy
-\* client's global in-flight flag persists across navigation (the bug that
-\* NoCrossAttemptRestoreBlocking catches).
+\* NavigateTo bumps the generation token, making old requests stale. In-flight
+\* requests are NOT cleared: the real implementation does not cancel old POSTs;
+\* they may still settle on the server and the generation/route guard rejects
+\* them at apply time. This is the cross-attempt race the model exists to
+\* verify. The legacy-defect switch affects ONLY the guard (RestoreStartGuard),
+\* NOT navigation behavior — ensuring a clean A/B comparison where both models
+\* face the same reachable state and differ only in guard logic.
 NavigateTo(a) ==
   /\ a # routeAttempt
   /\ a \in Attempts
@@ -198,7 +199,7 @@ NavigateTo(a) ==
   /\ lastSnapshotViaGet' = FALSE
   /\ uiState' = "loading"
   /\ pageLoadRequests' = {}
-  /\ restoreRequests' = IF LegacyGlobalInFlight THEN restoreRequests ELSE {}
+  /\ restoreRequests' = restoreRequests
   /\ snapshotReloadRequests' = {}
   /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                  pendingDeliveries, networkUp, deadlinePassed, timeGrant>>
@@ -673,13 +674,15 @@ PostOutcomeIsNotPageAuthority ==
 
 \* Cross-attempt non-blocking (enabledness safety): when all per-route base
 \* conditions for starting a restore are satisfied, StartRestore must be
-\* ENABLED. Under target (per-attempt guard), the guard depends only on the
-\* route's own in-flight status — which is already FALSE per the base
-\* conditions — so the invariant holds universally. Under legacy (global
-\* guard), an in-flight restore for A makes ~AnyRestoreInFlight FALSE even
-\* when B's route has no in-flight restore, violating the invariant at that
-\* state. No fairness needed; no scheduler assumption; pure state predicate.
-\* Checked as INVARIANT in the route-switch safety config.
+\* ENABLED. NavigateTo preserves old in-flight requests in both modes, so the
+\* critical race state (route=B, A's restore still in-flight, B has none) is
+\* reachable under BOTH target and legacy. The A/B comparison is clean:
+\*   Target (per-attempt guard): A's stale request has attemptId=A, gen=old,
+\*     so RestoreInFlightForRoute=FALSE for B → guard passes → ENABLED.
+\*   Legacy (global guard): AnyRestoreInFlight=TRUE (A's request exists)
+\*     → guard fails → NOT ENABLED → invariant violated at that state.
+\* Same reachable state; only the guard differs. No fairness needed; pure
+\* state predicate. Checked as INVARIANT in the route-switch safety config.
 NoCrossAttemptRestoreBlocking ==
   RestoreStartBaseConditions => ENABLED StartRestore
 
