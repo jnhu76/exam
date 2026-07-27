@@ -12,270 +12,207 @@ semantics, not a proof that the TypeScript implementation is a refinement.
 
 ## Scope
 
-Modeled:
+Modeled: the abstract recovery protocol among Client, Server, Environment;
+route identity + client generation token (REC-I3 `generationRef`);
+authoritative server attempt state and the client's applied snapshot;
+page-load GET, restore POST, post-restore snapshot-reload GET;
+request/response delay, reordering, loss; **cross-attempt navigation**
+(`NavigateTo` is in the route-switch Next); deadline reconciliation and
+submission; UI recovery phase transitions.
 
-- the abstract recovery protocol among Client, Server, and Environment;
-- route identity + client generation token (REC-I3 `generationRef`);
-- authoritative server attempt state and the client's applied snapshot;
-- page-load GET, restore POST, and post-restore snapshot-reload GET;
-- request/response delay, reordering, and loss;
-- deadline reconciliation and submission;
-- UI recovery phase transitions;
-- the route-bound restore authority, stale-response isolation, terminal-state
-  monotonicity, submitted-snapshot immutability, server-version monotonicity,
-  cross-attempt non-blocking, "POST is not page authority", and "restore does
-  not directly grant time" (REC-I4 target) properties.
-
-Not modeled (out of scope):
-
-- React `useEffect`/`useRef`, DOM nodes, Fastify routes, PostgreSQL tables,
-  HTTP serialization, RBAC, grading algorithms, real answer content,
-  telemetry transport, IndexedDB/SQLite, desktop runtime.
+Not modeled (out of scope): React `useEffect`/`useRef`, DOM nodes, Fastify
+routes, PostgreSQL tables, HTTP serialization, RBAC, grading algorithms,
+real answer content, telemetry transport, IndexedDB/SQLite, desktop runtime.
 
 ---
 
-## Non-goals
+## Split safety models (state-space discipline)
 
-- This model does **not** mechanically verify that the TypeScript
-  implementation conforms. A passing safety check verifies the *protocol*
-  over a small finite domain.
-- The model represents the **TARGET** contract (ADR-012). Where the current
-  runtime still differs (REC-I4 time-compensation), the mismatch is recorded
-  in `docs/audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md`, not encoded as
-  target behavior.
+A single `Next` containing NavigateTo + loss + deadline + grade diverges
+past 10^6 distinct states in seconds. The safety model is therefore split
+into focused configurations, each exhaustive over a smaller action set:
 
----
-
-## Participants
-
-- **Client** — owns the route, generation token, applied snapshot, UI phase,
-  and the page-load / restore / reload request lifecycle.
-- **Server** — owns authoritative attempt status, version, submitted
-  snapshot, deadline reconciliation, restore processing, grading.
-- **Environment** — decides response delivery, delay, loss, and reordering.
-
----
-
-## Variables
-
-| Variable | Domain | Role |
+| Config | Spec | Action set focus |
 |---|---|---|
-| `serverStatus[a]` | Statuses | authoritative attempt lifecycle |
-| `serverVersion[a]` | `0..MAX_VERSION` (3) | monotonic; never decreases |
-| `submittedSnapshot[a]` | AnswerValues ∪ {NoSnapshot} | frozen at submit (ADR-008) |
-| `disruptedOnce[a]` | BOOLEAN | bounds MarkDisrupted (excluded from Next) |
-| `routeAttempt` | Attempts | the page's current route |
-| `clientGeneration` | Generations | monotonic token (REC-I3 generationRef) |
-| `clientSnapshotAttempt` | Attempts ∪ {NoSnapshot} | attempt of the applied snapshot |
-| `clientSnapshotGen` | Generations | generation of the applied snapshot |
-| `clientSnapshotEditable` | BOOLEAN | isEditable of the applied snapshot |
-| `pageLoadRequests` | SUBSET Request | in-flight initial GETs |
-| `restoreRequests` | SUBSET Request | in-flight POST /restore |
-| `snapshotReloadRequests` | SUBSET Request | in-flight post-restore GETs |
-| `pendingDeliveries` | SUBSET Delivery | queued responses (may reorder/loss) |
-| `uiState` | Phases | loading/restoring/editable/restore_failed/terminal/unavailable |
-| `networkUp` | BOOLEAN | held TRUE (network-stable fairness assumption) |
-| `deadlinePassed[a]` | BOOLEAN | set by DeadlinePasses; consumed by DeadlineReconcile |
-| `timeGrant[a]` | `0..MAX_GRANT` (1) | only GrantExtension may bump |
+| `RecoveryProtocolSafety.cfg` | `CoreSpec` | single-route restore lifecycle (no NavigateTo); loss included |
+| `RecoveryProtocolRouteSwitchSafety.cfg` | `RouteSwitchSpec` | adds **NavigateTo** for cross-attempt races; loss/deadline/grade excluded |
+| `RecoveryProtocolSubmissionSafety.cfg` | `SubmissionSpec` | submit / freeze / grade; deadline reconcile |
 
-`Request` carries `requestId`, `attemptId`, `generation`, `requestKind`, and
-`snapshotAttempt` (the client's applied-snapshot attempt at creation — used by
-`NoWrongAttemptRestore`).
+The **union** of these covers the full action set; each is independently
+exhaustive. Run all three via `pnpm formal:recovery` (the `all` mode).
 
 ---
 
-## Actions
+## Properties — what they actually check
 
-Client/navigation: `NavigateTo` (defined; not in Next), `StartPageLoad`,
-`StartRestore`, `RetryRestore`, `StartAuthoritativeReload`,
-`ApplyAuthoritativeReload(d)`, `Unmount` (defined; not in Next).
+Properties NEVER reference a legacy flag. The legacy flags affect ACTION
+behavior only (see "Legacy flags" below). Each property below is the TARGET
+statement; a legacy config that enables a buggy action violates it.
 
-Server: `MarkDisrupted` (defined; not in Next — Init models disrupted),
-`ServerReturnSnapshot`, `ProcessRestore`, `RejectRestoreDeadlineWon`,
-`DeadlineReconcile`, `SubmitAttempt`, `GradeAttempt`, `GrantExtension`
-(defined; not in Next — structural property verified by invariant).
+State predicates (INVARIANTs):
 
-Environment: `DelayResponse`, `DeliverResponse` (defined; not in Next —
-stuttering no-ops; `ApplyAuthoritativeReload` already chooses any pending
-delivery for reordering), `LoseResponse`, `NetworkDown`/`NetworkUp` (defined;
-not in Next — network-stable fairness assumption),
-`DeadlinePasses`.
+- `TypeOK` — all variables stay in their declared finite domains.
+- `NoWrongAttemptRestore` — every restore request's creation-time
+  `snapshotAttempt = attemptId` (a restore for B is never initiated from
+  A's snapshot).
+- `NoStalePageLoadApply` / `NoStaleRestoreApply` — when a snapshot is
+  applied, its attempt/generation match the current route/generation. (A
+  stale delivery may sit pending; what is forbidden is letting it become
+  the applied snapshot.)
+- `EditableRequiresCurrentAuthoritativeSnapshot` — `uiState = "editable"`
+  requires `clientSnapshotAttempt = routeAttempt`, current generation, and
+  `clientSnapshotEditable`.
+- `PostOutcomeIsNotPageAuthority` — `uiState = "editable"` requires the
+  applied snapshot to have come from a GET (page_load/snapshot_reload),
+  tracked via the `lastSnapshotViaGet` history variable. A POST restore
+  ack cannot make the page editable.
 
-The full action set is documented for completeness and for the
-counterexample vocabulary; the excluded actions are listed in the `Next`
-comment with their rationale.
+Cross-state constraints (PROPERTYs — checked as temporal formulas):
+
+- `TerminalNeverResurrects` — `[][IsTerminal(s) => IsTerminal(s')]_vars`
+  (terminal statuses are absorbing; cannot return to in_progress).
+- `SubmittedSnapshotImmutable` — once a submitted snapshot is non-NoSnapshot,
+  it never changes.
+- `ServerVersionNeverDecreases` — `[][serverVersion'[a] >= serverVersion[a]]_vars`.
+- `TimeGrantNeverDecreases` — `[][timeGrant'[a] >= timeGrant[a]]_vars`.
+- `NoCrossAttemptRestoreBlocking` — when the route is resumable and no
+  restore is in flight for it, the client eventually starts a restore or
+  the attempt transitions (an in-flight restore for A must not block B).
+  Checked as a liveness-style PROPERTY in the route-switch config.
 
 ---
 
-## Invariants (safety)
+## Legacy flags — actions only, never properties
 
-| Invariant | Property |
-|---|---|
-| `TypeOK` | all variables stay in their declared finite domains |
-| `NoWrongAttemptRestore` | a restore for B is never initiated from A's snapshot |
-| `NoStalePageLoadApply` | a stale page-load response cannot replace the applied snapshot |
-| `NoStaleRestoreApply` | a stale restore/reload chain cannot mutate the applied snapshot |
-| `EditableRequiresCurrentAuthoritativeSnapshot` | editable requires a current-generation GET snapshot |
-| `TerminalNeverResurrects` | terminal status cannot return to in_progress |
-| `SubmittedSnapshotImmutable` | submitted snapshot does not change after freeze |
-| `ServerVersionNeverDecreases` | serverVersion is monotonic and bounded |
-| `NoCrossAttemptRestoreBlocking` | the in-flight guard is keyed on the current route only |
-| `RestoreDoesNotDirectlyChangeDeadline` | only GrantExtension may bump timeGrant |
-| `PostOutcomeIsNotPageAuthority` | editable requires an applied GET (POST is not authority) |
+Each legacy flag enables a buggy ACTION. The corresponding expected-
+counterexample config sets exactly one flag TRUE; the buggy action produces
+a state that violates the named TARGET property.
 
-All 11 hold under the target (legacy-flag-off) configuration.
+| Flag | Buggy action | Caught by |
+|---|---|---|
+| `LegacyWrongAttemptCapability` | `StartRestore` skips the `clientSnapshotAttempt = routeAttempt` capability gate | `NoWrongAttemptRestore` |
+| `LegacyGlobalInFlight` | `StartRestore` uses `~AnyRestoreInFlight` (global) instead of `~RestoreInFlightForRoute` (per-attempt) — A's restore blocks B | `NoCrossAttemptRestoreBlocking` |
+| `LegacyApplyStalePageLoad` | `ApplyAuthoritativeReload` skips the `IsCurrent(d)` gate — a stale delivery becomes the applied snapshot | `NoStalePageLoadApply` / `NoStaleRestoreApply` |
+| `LegacySkipReloadAfterPostFailure` | adds `LegacyApplyPostOutcome` — the POST ack alone drives UI to editable, `lastSnapshotViaGet' = FALSE` | `PostOutcomeIsNotPageAuthority` |
+
+All four counterexamples **reproduce the named violation** under the
+committed runner. See `counterexamples/README.md`.
+
+---
+
+## Delivery record — frozen server state
+
+A `Delivery` freezes the server state at the moment the response was
+produced (`statusAtResponse`, `editableAtResponse`). `ApplyAuthoritativeReload`
+reads the FROZEN values, never the live server state — otherwise a delayed
+response would magically carry the latest state and stale-snapshot-content
+could not be modeled (only stale request identity). Only the two fields
+actually read at apply time are carried; carrying more needlessly multiplies
+distinct delivery records. `pendingDeliveries` is capped (`MAX_DELIVERIES`)
+so it stays finite.
 
 ---
 
 ## Liveness and fairness assumptions
 
-The temporal property `CurrentResumableAttemptEventuallyProgresses` is checked
-under weak fairness on `StartPageLoad`, `StartRestore`, `ServerReturnSnapshot`,
-`ProcessRestore`, `RejectRestoreDeadlineWon`, `StartAuthoritativeReload`, and
-`ApplyAnyAuthoritativeReload`.
+`CurrentResumableAttemptEventuallyProgresses` under weak fairness on
+`StartPageLoad`, `StartRestore`, `ServerReturnSnapshot`, `ProcessRestore`,
+`RejectRestoreDeadlineWon`, `StartAuthoritativeReload`,
+`ApplyAnyAuthoritativeReload`, `ConsumePostAck`. Explicit environmental
+assumptions: network eventually stays available; user does not navigate
+away / unmount; environment eventually delivers a non-lost response.
 
-**Explicit fairness assumptions** (without these the property does not hold):
-
-- the network eventually stays available (modeled by holding `networkUp = TRUE`
-  and excluding `NetworkDown`/`NetworkUp` from Next);
-- the user does not navigate away from the route (modeled by excluding
-  `NavigateTo` from the liveness Next);
-- the user does not unmount the page (modeled by excluding `Unmount`);
-- the environment eventually delivers a non-lost authoritative response
-  (modeled by excluding `LoseResponse` from the liveness Next — loss is still
-  verified for safety);
-- the server eventually processes enabled requests;
-- the client eventually fires enabled page-load / restore / reload.
-
-**Liveness result: PARTIAL.** Under the current fairness annotations TLC
-finds a counterexample in which the restore/post-rejection/deadline-
-reconciliation cycle does not converge to editable/terminal/restore_failed.
-The cycle is rooted in the interaction between `RejectRestoreDeadlineWon`
-and `DeadlineReconcile` for an attempt whose deadline passes during
-restore. This is recorded as PARTIAL per the REC-F1 prompt §14/§20:
-safety is exhaustively verified; liveness is documented, not silently
-deleted. The recommended next step is a refined deadline/restore
-interaction model (see "Deferred work" below).
+**Liveness result: PARTIAL (failed).** TLC finds a counterexample. The
+runner reports this as a FAILURE (exit non-zero) — it is NOT wrapped as
+success. Use `pnpm formal:recovery:explore` for a non-gated run.
 
 ---
 
 ## Model bounds
 
-| Domain | Value | Rationale |
-|---|---|---|
-| Attempts | {A, B} | two distinct attempts for cross-attempt coverage |
-| Generations | {g0, g1} | one route change worth of generation tokens |
-| RequestIds | {r0, r1, r2} | small; in-flight guard is per-attempt, not pool-based |
-| NetOutcomes | {acknowledged, lost} | server always succeeds; environment decides delivery |
-| AnswerValues | {ans0, ans1} | symbolic; only immutability is asserted |
-| MAX_VERSION | 3 | bounded serverVersion |
-| MAX_GRANT | 1 | bounded timeGrant |
-| MarkDisrupted | once per attempt | bounds disrupt/restore cycles |
+| Domain | Value |
+|---|---|
+| Attempts | {A, B} |
+| Generations | {g0, g1} |
+| RequestIds | {r0, r1, r2} |
+| NetOutcomes | {acknowledged, lost} (defined in module) |
+| AnswerValues | {ans0, ans1} |
+| MAX_VERSION | 3 |
+| MAX_GRANT | 1 |
+| MAX_DELIVERIES | 2 |
+| MarkDisrupted | once per attempt |
 
-State-space statistics (target safety run, 1 worker, TLC v2.19 / TLA+ v1.7.4):
+State-space statistics (TLC v2.19 / TLA+ v1.7.4, 1–2 workers):
 
 ```text
-10,584,513 states generated
-1,020,640 distinct states found
-0 states left on queue
-depth 43
-~30s wall-clock
-fingerprint collision probability: optimistic 5.3E-7, actual 8.0E-8
+CoreSafety       :   4,679 distinct states, depth 25 — PASS
+RouteSwitchSafety:  20,796 distinct states, depth 26 — PASS (includes NavigateTo)
+SubmissionSafety :  88,936 distinct states, depth 26 — PASS
+Liveness         :  14,653 distinct states         — PARTIAL (property violated)
 ```
 
-The fingerprint collision probability is non-zero (the model is checked
-with TLC's default 64-bit fingerprint). It is well below the threshold
-where undetected state collisions would plausibly mask a violation, but a
-future run with `-fpbits N` or a larger `Generations`/`RequestIds` could
-reduce it further if required.
+Counterexample reproduction (each produces the NAMED violation):
+
+```text
+LegacyWrongAttemptRestore       :      6 distinct — NoWrongAttemptRestore violated
+LegacyGlobalInFlight            : 20,796 distinct — NoCrossAttemptRestoreBlocking violated
+LegacyStalePageLoad             :     44 distinct — NoStalePageLoadApply violated
+LegacyNoReloadAfterPostFailure :     92 distinct — PostOutcomeIsNotPageAuthority violated
+```
 
 ---
 
 ## Commands
 
 ```bash
-# Safety (target — all legacy flags FALSE):
+# Target safety (all three split configs):
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:safety
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:safety:route
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:safety:submission
 
-# Liveness (PARTIAL — see above):
-TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:liveness
-
-# Expected counterexamples:
+# Counterexamples (must reproduce named violations):
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:counterexamples
 
-# All:
+# Liveness (PARTIAL — exits non-zero):
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:liveness
+
+# Non-gated exploration (always exits 0):
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:explore
+
+# All gated checks:
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery
 ```
 
-The runner streams TLC output, parses the violated-invariant name, and
-distinguishes target-pass / liveness-PARTIAL / counterexample-NOT_REPRODUCED
-/ hard-failure. See `scripts/formal/run-recovery-tlc.mjs`.
-
----
-
-## Expected outputs
-
-- **Safety**: `Model checking completed. No error has been found.` (exit 0)
-- **Liveness**: currently `Temporal properties were violated.` under the
-  PARTIAL annotation (the runner reports this as PARTIAL, not a hard fail).
-- **Counterexamples**: see `counterexamples/README.md`.
+Exit-code policy: safety pass / counterexample reproduced → 0; liveness
+violation / counterexample not reproduced / tool error → non-zero.
 
 ---
 
 ## Known runtime/model mismatches
 
-1. **REC-I4 (time-compensation policy) is deferred.** The current
-   `restoreAttempt` runtime may still grant full disconnected-time
-   compensation inside the restore command. The TARGET model separates
-   state restoration (`ProcessRestore`) from time compensation
-   (`GrantExtension`); the runtime mismatch is documented, NOT modeled as
-   target. `RestoreDoesNotDirectlyChangeDeadline` is the target invariant.
-2. **NavigateTo is excluded from Next** for state-space finiteness.
-   Cross-attempt race safety is verified structurally (request creation-time
-   binding + per-attempt in-flight guard), not by exercising route changes.
-3. **Liveness is PARTIAL** (see above).
-4. **Counterexamples are not mechanically reproduced** under the finite
-   model (see `counterexamples/README.md`).
+1. **REC-I4 (time-compensation) deferred.** `RestoreDoesNotDirectlyChangeDeadline`
+   is implied by `TimeGrantNeverDecreases` + the action model (`ProcessRestore`
+   leaves `timeGrant` unchanged). The runtime may still grant time inside
+   `restoreAttempt` — recorded, NOT modeled as target.
+2. **Liveness PARTIAL** — see above.
+3. `NavigateTo` clears in-flight REQUESTS for the old route (REC-I3
+   generationRef reset) but keeps pending DELIVERIES (so stale-apply is
+   still exercised at apply time).
 
 ---
 
 ## How to interpret counterexamples
 
-Each `.cfg` under `counterexamples/` enables exactly one legacy-defect flag
-and points at the invariant the defect would violate. Run them via
-`pnpm formal:recovery:counterexamples`. A result of NOT_REPRODUCED is a
-documented finite-model gap (not a silent success); a result of
-EXPECTED_VIOLATION confirms the model reproduces the bug class; any other
-violation is a hard failure.
-
----
-
-## How REC-I3 / REC-I4 / REC-I2a / REC-I1 relate to the model
-
-- **REC-I3** (implemented): the explicit frontend restore flow modeled here.
-  The route-binding tokens (`routeAttempt`, `clientGeneration`), the
-  per-attempt in-flight guard, and the "POST is not authority" rule mirror
-  `useAttemptRestore.ts`.
-- **REC-I4** (pending): time-compensation policy. The model separates
-  `ProcessRestore` (lifecycle) from `GrantExtension` (time) — the TARGET.
-  The current runtime mismatch is documented.
-- **REC-I2a** (pending): protocol hardening (operation identity, strict
-  baseVersion). Not directly modeled; the `Request` record's
-  `snapshotAttempt` is a related creation-time binding.
-- **REC-I1** (pending, blocked on REC-I2a): durable pending-answer journal.
-  Out of scope for this model (answer content is symbolic).
+Each `.cfg` enables exactly one legacy flag and points at the invariant/
+property the defect violates. Run via `pnpm formal:recovery:counterexamples`.
+The runner parses TLC output for the named violation; any other result
+(wrong violation, no violation, tool error) is a hard failure.
 
 ---
 
 ## Deferred work
 
-1. Refine the deadline/restore interaction so the liveness property holds
-   under fairness (currently PARTIAL). Candidate: make `RejectRestoreDeadlineWon`
-   transition `uiState` to a state from which the reload GET provably fires,
-   and bound `DeadlineReconcile` against repeated re-freezing.
-2. Reproduce the expected counterexamples mechanically — requires either
-   including a bounded `NavigateTo` (with symmetry sets or a smaller
-   cross-attempt state graph) or modeling the buggy transitions directly
-   behind each legacy flag.
-3. Consider TLC symmetry sets (`Attempts` are symmetric) to reduce the state
-   space and allow a richer model.
+1. Close the liveness PARTIAL (refine the deadline/restore UI interaction so
+   the property holds under fairness).
+2. Consider TLC symmetry sets over `Attempts` to allow a single unified
+   safety Next if desired.

@@ -4,171 +4,143 @@
   and implemented by REC-I3.
 
   Scope:
-    This module models the ABSTRACT recovery protocol among three logical
-    participants — Client, Server, and Environment. It captures the
+    Abstract recovery protocol among Client, Server, Environment. Captures
     concurrency, route-binding, snapshot-authority, and terminal-monotonicity
-    semantics that the TypeScript implementation (apps/web, apps/api,
-    packages/exam-engine) must preserve.
+    semantics that the TypeScript implementation must preserve.
 
   Non-goals:
-    It does NOT model React useEffect/useRef, DOM nodes, Fastify routes,
-    PostgreSQL tables, HTTP serialization, RBAC, grading, or answer content.
-    It is an executable consistency check, not a mechanically verified
-    refinement of the TypeScript implementation.
+    Does NOT model React/DOM/Fastify/PostgreSQL/HTTP serialization/RBAC/
+    grading/answer content. It is an executable consistency check, not a
+    mechanically verified refinement.
 
   Authority:
-    docs/adr/ADR-012-candidate-recovery-contract.md is the binding
-    architectural decision. Where the current runtime still differs from
-    the target (notably REC-I4 time-compensation), the mismatch is
-    documented in tla/recovery/README.md and the closeout audit; the model
-    represents the TARGET contract, not the defect.
+    docs/adr/ADR-012-candidate-recovery-contract.md is binding. Where the
+    runtime still differs from target (REC-I4 time-compensation), the mismatch
+    is documented, NOT modeled as target.
 
   Finiteness:
-    All domains are deliberately small finite sets, and every
-    counter-incrementing action is gated so the reachable state space is
-    finite and exhaustively checkable by TLC BFS. See the per-variable
-    bounds notes and the TypeOK invariant.
+    All domains are small finite sets. Counters are bounded. NavigateTo is
+    included (it is the core of the cross-attempt race being modeled) and
+    bounded via small RequestIds + on-navigation request clearing.
+
+  Legacy-defect switches (CONSTANTS):
+    Each switch changes ACTION behavior only — it NEVER appears in a property.
+    Each expected-counterexample config enables exactly one switch; the buggy
+    action it enables produces a state that violates the named TARGET
+    property (which is stated without the flag).
 *)
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
 \* =============================================================================
-\* Finite domains — deliberately small for exhaustive TLC BFS.
+\* Finite domains.
 \* =============================================================================
 
 CONSTANTS
-  \* Two distinct attempts so the model can exercise cross-attempt races
-  \* (route A vs route B, stale restore for A affecting B).
   Attempts,
-
-  \* Client route generations. A monotonic token bumped on a real route
-  \* change (the REC-I3 generationRef). Bounded to 2 so the model can
-  \* re-order a late response from g0 behind a newer g1.
   Generations,
-
-  \* Per-(attempt,kind) request identifiers. Sized (6) so that even after a
-  \* route change leaves up to 3 stale requests in flight for the old route
-  \* (page-load + restore + reload), the new route can still allocate a
-  \* restore request — exercising the cross-attempt non-blocking property.
   RequestIds,
-
-  \* Network outcomes for a delivered response. Defined as a named set below
-  \* (NetOutcomes) rather than a CONSTANT, so the model refers to its
-  \* elements by the same string values everywhere. Reduced to
-  \* {acknowledged, lost}: the server always succeeds; the environment
-  \* decides delivery, delay, loss, and re-ordering. This keeps
-  \* pendingDeliveries bounded by the in-flight request count.
-
-  \* Symbolic answer payloads. The model does not represent real candidate
-  \* answers; it only needs enough to state submittedSnapshot immutability.
   AnswerValues,
-
-  \* Legacy-defect switches. The TARGET configs set all of these to FALSE.
-  \* Each expected-counterexample config enables exactly one to TRUE.
+  \* Legacy-defect switches — affect ACTIONS only, NEVER properties.
   LegacyWrongAttemptCapability,
   LegacyGlobalInFlight,
   LegacyApplyStalePageLoad,
   LegacySkipReloadAfterPostFailure
 
 \* -----------------------------------------------------------------------------
-\* All model variables. Inline comments only — TLA+ does not allow blank
-\* lines inside a VARIABLES list.
+\* Variables (single contiguous block — TLA+ disallows blank lines here).
 \* -----------------------------------------------------------------------------
 VARIABLES
-  serverStatus,             \* [attempt -> status]  (server-authoritative)
-  serverVersion,            \* [attempt -> 0..MAX_VERSION]  (monotonic, never decreases)
-  submittedSnapshot,        \* [attempt -> AnswerValue | NoSnapshot]  frozen at submit (ADR-008)
-  disruptedOnce,            \* [attempt -> BOOL]  bounds MarkDisrupted to fire at most once per attempt
-  routeAttempt,             \* the attempt the page is currently bound to
-  clientGeneration,         \* monotonic token bumped on route change (REC-I3 generationRef)
-  clientSnapshotAttempt,    \* attempt id carried by the last applied snapshot
-  clientSnapshotGen,        \* generation the last applied snapshot was fetched under
+  serverStatus,             \* [attempt -> status]
+  serverVersion,            \* [attempt -> 0..MAX_VERSION]  monotonic
+  submittedSnapshot,        \* [attempt -> AnswerValue | NoSnapshot]  frozen at submit
+  disruptedOnce,            \* [attempt -> BOOL]  bounds MarkDisrupted
+  routeAttempt,             \* the attempt the page is bound to
+  clientGeneration,         \* monotonic token bumped on route change
+  clientSnapshotAttempt,    \* attempt id of the last applied snapshot
+  clientSnapshotGen,        \* generation of the last applied snapshot
   clientSnapshotEditable,   \* isEditable flag of the last applied snapshot
-  pageLoadRequests,         \* set of Request records in flight (initial GET)
-  restoreRequests,          \* set of Request records (POST /restore)
-  snapshotReloadRequests,   \* set of Request records (GET after POST)
-  pendingDeliveries,        \* set of Delivery records waiting to be applied
-  uiState,                  \* loading | restoring | editable | restore_failed | terminal | unavailable
-  networkUp,                \* network availability (liveness fairness anchor)
-  deadlinePassed,           \* [attempt -> BOOL]  set by DeadlinePasses; consumed by DeadlineReconcile
-  timeGrant                 \* [attempt -> 0..MAX_GRANT]  only GrantExtension may bump
+  pageLoadRequests,         \* in-flight initial GETs
+  restoreRequests,          \* in-flight POST /restore
+  snapshotReloadRequests,   \* in-flight post-restore GETs
+  pendingDeliveries,        \* queued responses (frozen server state inside)
+  uiState,                  \* loading | restoring | editable | restore_failed | terminal
+  lastSnapshotViaGet,       \* TRUE iff the applied snapshot came from a page_load/snapshot_reload (not a POST)
+  networkUp,                \* held TRUE for the liveness execution
+  deadlinePassed,           \* [attempt -> BOOL]
+  timeGrant                 \* [attempt -> 0..MAX_GRANT]  only GrantExtension bumps
 
 \* =============================================================================
 \* Derived definitions
 \* =============================================================================
 
-\* Tuple of all variables — used by [][Next]_vars and fairness formulas.
 vars ==
   <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
     routeAttempt, clientGeneration,
     clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
     pageLoadRequests, restoreRequests, snapshotReloadRequests,
-    pendingDeliveries, uiState, networkUp,
+    pendingDeliveries, uiState, lastSnapshotViaGet, networkUp,
     deadlinePassed, timeGrant>>
 
-\* Bounded counters — keep serverVersion and timeGrant finite.
 MAX_VERSION == 3
 MAX_GRANT == 1
+\* Cap on concurrently-pending deliveries. Keeps pendingDeliveries finite
+\* without weakening the properties: any delivery beyond the cap is simply
+\* not produced (the request stays in flight and is re-served later).
+MAX_DELIVERIES == 2
 
-\* Status vocabulary (mirror packages/exam-engine attemptStateMachine).
 Statuses == {"in_progress", "disrupted", "submitted", "graded", "voided"}
-
-\* Network outcomes. Defined here (not as a CONSTANT) so the model refers
-\* to its elements by the same string values everywhere — a cfg-assigned
-\* set of model values would NOT equal the string literals used in the
-\* action bodies, breaking the Delivery record type check.
 NetOutcomes == {"acknowledged", "lost"}
 
-\* A status is terminal once the attempt can no longer return to in_progress.
 IsTerminal(s) == s = "submitted" \/ s = "graded" \/ s = "voided"
-
-\* A status is resumable iff restore is a legal transition
-\* (attemptStateMachine: disrupted -> in_progress via restore).
 IsResumable(s) == s = "disrupted"
 
-\* UI phases.
-Phases == {"loading", "restoring", "editable", "restore_failed",
-           "terminal", "unavailable"}
+Phases == {"loading", "restoring", "editable", "restore_failed", "terminal"}
 
-\* Symbolic "no snapshot yet" sentinel — declared before Request.
 NoSnapshot == "none"
 
-\* Request record. `snapshotAttempt` records the client's applied-snapshot
-\* attempt at the moment the request was CREATED. For a restore,
-\* snapshotAttempt must equal attemptId (the restore is sent to the same
-\* attempt the snapshot belonged to). This lets NoWrongAttemptRestore detect
-\* "restore B initiated from A's snapshot" without confounding navigation.
 RequestKind == {"page_load", "restore", "snapshot_reload"}
 
+\* Request record (created by client actions; carries creation-time binding).
 Request == [ requestId     : RequestIds,
              attemptId      : Attempts,
              generation     : Generations,
              requestKind    : RequestKind,
              snapshotAttempt: Attempts \cup {NoSnapshot} ]
 
-\* Environment delivery record. Carries enough to decide staleness at apply
-\* time (generation + attempt + kind). The server always produces an
-\* "acknowledged" outcome; the environment decides whether to deliver,
-\* delay, lose, or re-order via its own actions.
-Delivery == [ requestId : RequestIds,
-              attemptId  : Attempts,
-              generation : Generations,
-              requestKind: RequestKind,
-              outcome    : NetOutcomes ]
+\* Delivery record. CRITICALLY, the server-state fields are FROZEN at the
+\* moment the server produced the response. Apply-time reads the frozen
+\* values, never the live server state — otherwise a delayed response would
+\* magically carry the latest state and stale-snapshot-content could not be
+\* modeled (only stale request identity). Only the two fields actually read
+\* at apply time are carried (statusAtResponse, editableAtResponse); carrying
+\* more would needlessly multiply distinct delivery records.
+Delivery == [ requestId         : RequestIds,
+              attemptId          : Attempts,
+              generation         : Generations,
+              requestKind        : RequestKind,
+              outcome            : NetOutcomes,
+              statusAtResponse   : Statuses,
+              editableAtResponse : BOOLEAN ]
 
 \* Predicates over the state --------------------------------------------------
 
-\* The request is bound to the CURRENT route and generation. A request that
-\* is in flight for an older attempt or generation is "stale" relative to
-\* the page and must not mutate current UI/snapshot state.
 IsCurrent(r) ==
-  r.attemptId  = routeAttempt /\ r.generation = clientGeneration
+  r.attemptId = routeAttempt /\ r.generation = clientGeneration
 
-\* True iff at least one restore request is in flight for the current route.
-\* This is the per-attempt guard — NOT a single global boolean. The
-\* LegacyGlobalInFlight defect replaces this check with a process-wide bit.
+\* TARGET per-attempt in-flight guard: a restore is in flight for the route
+\* iff there exists a restore request bound to the current route.
 RestoreInFlightForRoute ==
-  \E r \in restoreRequests :
-    r.attemptId = routeAttempt /\ r.generation = clientGeneration
+  \E r \in restoreRequests : IsCurrent(r)
+
+\* LEGACY global in-flight guard (bug): ANY in-flight restore blocks ALL
+\* routes. Used by StartRestore when LegacyGlobalInFlight is TRUE.
+AnyRestoreInFlight ==
+  restoreRequests # {}
+
+\* The guard StartRestore actually uses. The legacy flag switches the guard
+\* to the global-blocking form.
+RestoreStartGuard ==
+  IF LegacyGlobalInFlight THEN ~AnyRestoreInFlight ELSE ~RestoreInFlightForRoute
 
 \* =============================================================================
 \* Init
@@ -189,29 +161,29 @@ Init ==
   /\ snapshotReloadRequests = {}
   /\ pendingDeliveries = {}
   /\ uiState = "loading"
+  /\ lastSnapshotViaGet = FALSE
   /\ networkUp = TRUE
   /\ deadlinePassed = [a \in Attempts |-> FALSE]
   /\ timeGrant = [a \in Attempts |-> 0]
 
 \* =============================================================================
+\* Helper: build a delivery freezing the live server state for an attempt.
+\* =============================================================================
+
+MakeDelivery(rid, r) ==
+  [requestId |-> rid, attemptId |-> r.attemptId, generation |-> r.generation,
+   requestKind |-> r.requestKind, outcome |-> "acknowledged",
+   statusAtResponse |-> serverStatus[r.attemptId],
+   editableAtResponse |-> (serverStatus[r.attemptId] = "in_progress")]
+
+\* =============================================================================
 \* Client / navigation actions
 \* =============================================================================
 
-\* Candidate navigates the page to a different attempt. This bumps the
-\* generation token (REC-I3 generationRef) so any in-flight async chain
-\* from the previous route can be detected as stale at apply time.
-\*
-\* In-flight page-load / restore / reload REQUESTS and pending DELIVERIES
-\* for the previous route are dropped here. This mirrors the REC-I3
-\* implementation, which resets its in-flight guards on a real attemptId
-\* change (useAttemptRestore.ts generationRef bump) and treats any
-\* in-flight result for the old route as stale (never applied). Dropping
-\* them on navigation also keeps the reachable state graph finite —
-\* pending deliveries cannot accumulate across unbounded navigation.
-\*
-\* The LegacyStalePageLoad counterexample reproduces the stale-apply bug
-\* WITHIN a single route's lifetime (a late old-generation response for
-\* the same route), not across navigation — see counterexamples/README.md.
+\* NavigateTo bumps the generation token and clears in-flight REQUESTS for
+\* the old route (REC-I3 generationRef reset). Pending DELIVERIES are NOT
+\* cleared — a late stale delivery may still arrive and must be rejected at
+\* apply time. This is the cross-attempt race the model exists to verify.
 NavigateTo(a) ==
   /\ a # routeAttempt
   /\ a \in Attempts
@@ -220,19 +192,14 @@ NavigateTo(a) ==
   /\ clientSnapshotAttempt' = NoSnapshot
   /\ clientSnapshotGen' = clientGeneration'
   /\ clientSnapshotEditable' = FALSE
+  /\ lastSnapshotViaGet' = FALSE
   /\ uiState' = "loading"
   /\ pageLoadRequests' = {}
   /\ restoreRequests' = {}
   /\ snapshotReloadRequests' = {}
-  /\ pendingDeliveries' = {}
   /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
-                 networkUp, deadlinePassed, timeGrant>>
+                 pendingDeliveries, networkUp, deadlinePassed, timeGrant>>
 
-\* Client issues an initial authoritative page-load GET for the current route.
-\* Guarded to fire at most once concurrently per route: a pending page-load
-\* for the current route means the GET is already in flight; issuing more
-\* would exhaust the requestId pool and block restore (StartRestore needs a
-\* free requestId).
 StartPageLoad ==
   /\ uiState = "loading"
   /\ networkUp
@@ -248,24 +215,19 @@ StartPageLoad ==
                  routeAttempt, clientGeneration,
                  clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                  restoreRequests, snapshotReloadRequests, pendingDeliveries,
-                 uiState, networkUp, deadlinePassed, timeGrant>>
+                 uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* Client decides to fire the explicit POST /restore command (REC-I3).
-\* Guards on capability — NOT raw status — and on a per-attempt in-flight
-\* check (NOT a global boolean, unless LegacyGlobalInFlight is enabled).
+\* StartRestore. Capability gate uses clientSnapshotAttempt = routeAttempt
+\* under the TARGET; the legacy flag disables that check, allowing a restore
+\* for B to be initiated from A's snapshot (NoWrongAttemptRestore violation).
+\* The in-flight guard uses RestoreStartGuard (per-attempt target / global
+\* legacy).
 StartRestore ==
   /\ networkUp
   /\ uiState \in {"loading", "restore_failed"}
   /\ IsResumable(serverStatus[routeAttempt])
-  \* Capability gate: only the current route's snapshot may initiate restore
-  \* for the current route. LegacyWrongAttemptCapability disables this.
-  \* A NoSnapshot (no applied snapshot yet) is NOT a valid capability — the
-  \* REC-I3 flow fires restore only after the authoritative GET has applied
-  \* a canResume=true snapshot for the current route.
   /\ (LegacyWrongAttemptCapability \/ clientSnapshotAttempt = routeAttempt)
-  \* Per-attempt in-flight guard. The legacy global bit would let an
-  \* in-flight restore for A block a legal restore for B.
-  /\ (LegacyGlobalInFlight \/ ~RestoreInFlightForRoute)
+  /\ RestoreStartGuard
   /\ \E rid \in RequestIds :
        /\ rid \notin {r.requestId : r \in pageLoadRequests \cup restoreRequests
                                           \cup snapshotReloadRequests}
@@ -278,15 +240,14 @@ StartRestore ==
                  routeAttempt, clientGeneration,
                  clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                  pageLoadRequests, snapshotReloadRequests, pendingDeliveries,
-                 networkUp, deadlinePassed, timeGrant>>
+                 lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* User-triggered retry after a genuine failure. Same guards as StartRestore
-\* but allowed only from the failed surface.
 RetryRestore ==
   /\ networkUp
   /\ uiState = "restore_failed"
   /\ IsResumable(serverStatus[routeAttempt])
-  /\ (LegacyGlobalInFlight \/ ~RestoreInFlightForRoute)
+  /\ (LegacyWrongAttemptCapability \/ clientSnapshotAttempt = routeAttempt)
+  /\ RestoreStartGuard
   /\ \E rid \in RequestIds :
        /\ rid \notin {r.requestId : r \in pageLoadRequests \cup restoreRequests
                                           \cup snapshotReloadRequests}
@@ -299,22 +260,16 @@ RetryRestore ==
                  routeAttempt, clientGeneration,
                  clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                  pageLoadRequests, snapshotReloadRequests, pendingDeliveries,
-                 networkUp, deadlinePassed, timeGrant>>
+                 lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* After a restore POST settles (success, 409, or response lost), REC-I3
-\* ALWAYS issues an authoritative snapshot GET. The POST ack is never the
-\* page authority. (This issues the request; ApplyAuthoritativeReload
-\* applies the response.)
+\* REC-I3 always issues an authoritative GET after the POST settles. The
+\* legacy flag skips it (LegacyApplyPostOutcome then drives UI from the POST).
 StartAuthoritativeReload ==
   /\ networkUp
   /\ uiState = "restoring"
   /\ restoreRequests = {}
-  \* At most one in-flight reload for the current route (same rationale as
-  \* the StartPageLoad guard).
-  /\ ~(\E r \in snapshotReloadRequests : IsCurrent(r))
-  \* The legacy defect skips the authoritative GET after a POST failure
-  \* and lets the POST outcome select page state directly.
   /\ ~LegacySkipReloadAfterPostFailure
+  /\ ~(\E r \in snapshotReloadRequests : IsCurrent(r))
   /\ \E rid \in RequestIds :
        /\ rid \notin {r.requestId : r \in pageLoadRequests \cup restoreRequests
                                           \cup snapshotReloadRequests}
@@ -326,18 +281,15 @@ StartAuthoritativeReload ==
                  routeAttempt, clientGeneration,
                  clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                  pageLoadRequests, restoreRequests, pendingDeliveries,
-                 uiState, networkUp, deadlinePassed, timeGrant>>
+                 uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* Apply a page-load or snapshot-reload response. Stale-generation responses
-\* MUST NOT replace the current snapshot (NoStalePageLoadApply /
-\* NoStaleRestoreApply). The POST outcome alone MUST NOT make the UI
-\* editable (PostOutcomeIsNotPageAuthority /
-\* EditableRequiresCurrentAuthoritativeSnapshot).
+\* Apply a page-load / snapshot-reload response. Reads the FROZEN server
+\* state carried by the delivery. Under TARGET, a stale delivery (not
+\* current route/generation) is rejected. Under the legacy flag, a stale
+\* delivery may be applied — the buggy behavior the property catches.
 ApplyAuthoritativeReload(d) ==
   /\ d \in pendingDeliveries
   /\ d.requestKind \in {"page_load", "snapshot_reload"}
-  \* The legacy stale-page-load defect lets a late old-generation response
-  \* overwrite the current route's snapshot.
   /\ (LegacyApplyStalePageLoad \/ IsCurrent(d))
   /\ d.outcome = "acknowledged"
   /\ pendingDeliveries' = pendingDeliveries \ {d}
@@ -345,38 +297,45 @@ ApplyAuthoritativeReload(d) ==
   /\ snapshotReloadRequests' = snapshotReloadRequests \ {r \in snapshotReloadRequests : r.requestId = d.requestId}
   /\ clientSnapshotAttempt' = d.attemptId
   /\ clientSnapshotGen' = d.generation
-  /\ clientSnapshotEditable' = (serverStatus[d.attemptId] = "in_progress"
-                                /\ ~IsTerminal(serverStatus[d.attemptId]))
-  /\ uiState' = CASE serverStatus[d.attemptId] = "in_progress"
+  /\ clientSnapshotEditable' = d.editableAtResponse
+  /\ lastSnapshotViaGet' = TRUE
+  /\ uiState' = CASE d.statusAtResponse = "in_progress"
                   -> "editable"
-                [] IsTerminal(serverStatus[d.attemptId])
+                [] IsTerminal(d.statusAtResponse)
                   -> "terminal"
-                [] IsResumable(serverStatus[d.attemptId]) /\ d.requestKind = "snapshot_reload"
+                [] IsResumable(d.statusAtResponse) /\ d.requestKind = "snapshot_reload"
                   -> "restore_failed"
                 [] OTHER -> "loading"
   /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                  routeAttempt, clientGeneration,
                  restoreRequests, networkUp, deadlinePassed, timeGrant>>
 
-\* Page is unmounted (candidate navigates away entirely). Recovery state
-\* resets; the model allows this so liveness can be conditioned on the user
-\* remaining on the route.
-Unmount ==
-  /\ uiState' = "unavailable"
+\* LEGACY buggy action: when the legacy flag is set and the reload was
+\* skipped, the POST outcome alone drives the UI to editable. The
+\* PostOutcomeIsNotPageAuthority property (stated WITHOUT the flag) catches
+\* this: editable requires an applied GET snapshot.
+LegacyApplyPostOutcome ==
+  /\ LegacySkipReloadAfterPostFailure
+  /\ uiState = "restoring"
+  /\ restoreRequests = {}
+  /\ \E d \in pendingDeliveries :
+       /\ d.requestKind = "restore"
+       /\ d.outcome = "acknowledged"
+       /\ pendingDeliveries' = pendingDeliveries \ {d}
+       /\ clientSnapshotAttempt' = d.attemptId
+       /\ clientSnapshotGen' = d.generation
+       /\ clientSnapshotEditable' = TRUE
+       /\ lastSnapshotViaGet' = FALSE
+       /\ uiState' = "editable"
   /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                  routeAttempt, clientGeneration,
-                 clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
-                 pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                 pendingDeliveries, networkUp, deadlinePassed, timeGrant>>
+                 pageLoadRequests, snapshotReloadRequests, restoreRequests,
+                 networkUp, deadlinePassed, timeGrant>>
 
 \* =============================================================================
 \* Server actions
 \* =============================================================================
 
-\* Heartbeat-scanner equivalent: an in_progress attempt transitions to
-\* disrupted at most once per attempt (the disruptedOnce bound keeps the
-\* reachable state space finite; repeated disrupt/restore cycles would
-\* otherwise allow unbounded serverVersion growth).
 MarkDisrupted ==
   /\ \E a \in Attempts :
        /\ serverStatus[a] = "in_progress"
@@ -386,78 +345,67 @@ MarkDisrupted ==
        /\ UNCHANGED <<serverVersion, submittedSnapshot, routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, uiState, networkUp, deadlinePassed, timeGrant>>
+                      pendingDeliveries, uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* Server answers a page-load GET or a post-restore snapshot-reload GET by
-\* producing an "acknowledged" delivery carrying the authoritative attempt
-\* state. This is the GET /candidate/attempts/:attemptId/take handler. It
-\* does NOT mutate server state (a read endpoint; deadline reconciliation
-\* is modeled separately by DeadlineReconcile). The environment later
-\* decides delivery/delay/loss/re-order.
+\* GET handler: produce a delivery freezing the live server state. Capped by
+\* MAX_DELIVERIES so pendingDeliveries stays finite.
 ServerReturnSnapshot ==
+  /\ Cardinality(pendingDeliveries) < MAX_DELIVERIES
   /\ \E r \in pageLoadRequests \cup snapshotReloadRequests :
        /\ r.attemptId \in Attempts
-       /\ pendingDeliveries' = pendingDeliveries \cup {
-            [requestId |-> r.requestId, attemptId |-> r.attemptId,
-             generation |-> r.generation, requestKind |-> r.requestKind,
-             outcome |-> "acknowledged"]}
+       /\ pendingDeliveries' = pendingDeliveries \cup {MakeDelivery(r.requestId, r)}
        /\ pageLoadRequests' = pageLoadRequests \ {r}
        /\ snapshotReloadRequests' = snapshotReloadRequests \ {r}
        /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                       routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
-                      restoreRequests, uiState, networkUp, deadlinePassed, timeGrant>>
+                      restoreRequests, uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* Server processes a POST /restore command. This is the authoritative
-\* lifecycle transition (disrupted -> in_progress). Per ADR-012, the restore
-\* response is a command ACK only; it MUST NOT itself grant time or select
-\* editable page state. Time compensation is a separate GrantExtension
-\* action (REC-I4 target).
-\*
-\* The server always produces an "acknowledged" delivery. The environment
-\* decides delivery/delay/loss/re-order via its own actions. This keeps
-\* pendingDeliveries bounded by the number of in-flight requests.
+\* POST /restore handler: lifecycle transition disrupted -> in_progress.
+\* Does NOT grant time (REC-I4 target). Produces a delivery freezing state.
 ProcessRestore ==
   /\ \E r \in restoreRequests :
-       /\ r.attemptId \in Attempts
        /\ IsResumable(serverStatus[r.attemptId])
        /\ ~deadlinePassed[r.attemptId]
+       /\ Cardinality(pendingDeliveries) < MAX_DELIVERIES
        /\ serverStatus' = [serverStatus EXCEPT ![r.attemptId] = "in_progress"]
        /\ serverVersion' = [serverVersion EXCEPT ![r.attemptId] =
             serverVersion[r.attemptId] + 1]
-       /\ pendingDeliveries' = pendingDeliveries \cup {
-            [requestId |-> r.requestId, attemptId |-> r.attemptId,
-             generation |-> r.generation, requestKind |-> "restore",
-             outcome |-> "acknowledged"]}
+       /\ pendingDeliveries' = pendingDeliveries \cup {MakeDelivery(r.requestId, r)}
        /\ restoreRequests' = restoreRequests \ {r}
        /\ UNCHANGED <<submittedSnapshot, disruptedOnce, routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, snapshotReloadRequests,
-                      uiState, networkUp, deadlinePassed, timeGrant>>
+                      uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* The server may also reject a restore because the deadline won between
-\* GET and POST (the restore route runs ensureAttemptDeadlineReconciled
-\* before restoreAttempt). This produces a 409-style outcome that the
-\* client must NOT treat as page authority. The delivery outcome is still
-\* "acknowledged" at the transport layer; the client decides via the
-\* subsequent authoritative GET.
+\* POST /restore rejected because the deadline won between GET and POST.
 RejectRestoreDeadlineWon ==
   /\ \E r \in restoreRequests :
        /\ deadlinePassed[r.attemptId]
-       /\ pendingDeliveries' = pendingDeliveries \cup {
-            [requestId |-> r.requestId, attemptId |-> r.attemptId,
-             generation |-> r.generation, requestKind |-> "restore",
-             outcome |-> "acknowledged"]}
+       /\ Cardinality(pendingDeliveries) < MAX_DELIVERIES
+       /\ pendingDeliveries' = pendingDeliveries \cup {MakeDelivery(r.requestId, r)}
        /\ restoreRequests' = restoreRequests \ {r}
        /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                       routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, snapshotReloadRequests,
-                      uiState, networkUp, deadlinePassed, timeGrant>>
+                      uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* Server-side deadline reconciliation. Fires the lazy freeze (ADR-008)
-\* equivalent: an in_progress/disrupted attempt whose deadline has passed
-\* transitions to submitted and freezes submittedSnapshot.
+\* The restore POST delivery is a command ACK only — the client never applies
+\* it as page state (except under the legacy bug). It must be consumed to
+\* release the requestId; otherwise repeated POSTs exhaust the pool and
+\* produce a model-artifact liveness failure. ConsumePostAck is the TARGET
+\* consumption path (the legacy path is LegacyApplyPostOutcome above).
+ConsumePostAck ==
+  /\ \E d \in pendingDeliveries :
+       /\ d.requestKind = "restore"
+       /\ pendingDeliveries' = pendingDeliveries \ {d}
+       /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
+                      routeAttempt, clientGeneration,
+                      clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
+                      pageLoadRequests, restoreRequests, snapshotReloadRequests,
+                      uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
+
 DeadlineReconcile ==
   /\ \E a \in Attempts :
        /\ deadlinePassed[a]
@@ -470,11 +418,8 @@ DeadlineReconcile ==
        /\ UNCHANGED <<disruptedOnce, routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, uiState, networkUp, timeGrant, deadlinePassed>>
+                      pendingDeliveries, uiState, lastSnapshotViaGet, networkUp, timeGrant, deadlinePassed>>
 
-\* Candidate voluntary submit. Freezes submitted_answers (ADR-008).
-\* The candidate may only submit from an editable page (a candidate cannot
-\* submit a disrupted/non-editable attempt from the take page).
 SubmitAttempt ==
   /\ uiState = "editable"
   /\ \E a \in Attempts :
@@ -489,9 +434,8 @@ SubmitAttempt ==
        /\ UNCHANGED <<disruptedOnce, routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, networkUp, timeGrant, deadlinePassed>>
+                      pendingDeliveries, lastSnapshotViaGet, networkUp, timeGrant, deadlinePassed>>
 
-\* Grading completes (submitted -> graded). submittedSnapshot is frozen.
 GradeAttempt ==
   /\ \E a \in Attempts :
        /\ serverStatus[a] = "submitted"
@@ -499,13 +443,8 @@ GradeAttempt ==
        /\ UNCHANGED <<serverVersion, submittedSnapshot, disruptedOnce, routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, uiState, networkUp, timeGrant, deadlinePassed>>
+                      pendingDeliveries, uiState, lastSnapshotViaGet, networkUp, timeGrant, deadlinePassed>>
 
-\* An authorized operator explicitly grants exam time. This is the ONLY
-\* action permitted to bump the modeled time grant (REC-I4 target
-\* contract). Bounded to MAX_GRANT per attempt so the reachable state space
-\* stays finite. The current REC-I3 runtime may still grant time inside
-\* restoreAttempt — that mismatch is recorded, NOT modeled as target.
 GrantExtension ==
   /\ \E a \in Attempts :
        /\ serverStatus[a] \in {"in_progress", "disrupted"}
@@ -515,32 +454,14 @@ GrantExtension ==
                       routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, uiState, networkUp, deadlinePassed>>
+                      pendingDeliveries, uiState, lastSnapshotViaGet, networkUp, deadlinePassed>>
 
 \* =============================================================================
-\* Environment actions — explicit non-FIFO delivery, delay, loss, availability
+\* Environment actions
 \* =============================================================================
 
-\* The environment takes a settled server response and queues it for
-\* delivery. Combined with DeliverResponse (which can pick ANY queued
-\* delivery), this models out-of-order completion. The model does NOT
-\* assume FIFO HTTP. (No state change — it is a stuttering step that keeps
-\* the environment's choice nondeterministic.)
-DelayResponse ==
-  /\ networkUp
-  /\ pendingDeliveries # {}
-  /\ UNCHANGED vars
-
-\* Deliver ANY pending response — including one that is older than another
-\* pending response. This is the explicit anti-FIFO step. (No state change;
-\* ApplyAuthoritativeReload is what consumes the delivery.)
-DeliverResponse ==
-  /\ networkUp
-  /\ pendingDeliveries # {}
-  /\ UNCHANGED vars
-
-\* Lose a response in flight. The client must be able to recover via the
-\* authoritative GET (PostOutcomeIsNotPageAuthority / NoStaleRestoreApply).
+\* Lose a response. The client must recover (via the authoritative GET under
+\* TARGET, or be stuck under the legacy skip-reload bug).
 LoseResponse ==
   /\ \E d \in pendingDeliveries :
        /\ pendingDeliveries' = pendingDeliveries \ {d}
@@ -550,30 +471,21 @@ LoseResponse ==
        /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                       routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
-                      uiState, networkUp, deadlinePassed, timeGrant>>
+                      uiState, lastSnapshotViaGet, networkUp, deadlinePassed, timeGrant>>
 
-\* Network becomes unavailable.
-NetworkDown ==
-  /\ networkUp
-  /\ networkUp' = FALSE
-  /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
-                 routeAttempt, clientGeneration,
-                 clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
-                 pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                 pendingDeliveries, uiState, deadlinePassed, timeGrant>>
+NetworkDown == /\ networkUp /\ networkUp' = FALSE
+               /\ UNCHANGED <<lastSnapshotViaGet, serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
+                              routeAttempt, clientGeneration,
+                              clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
+                              pageLoadRequests, restoreRequests, snapshotReloadRequests,
+                              pendingDeliveries, uiState, deadlinePassed, timeGrant>>
+NetworkUp == /\ ~networkUp /\ networkUp' = TRUE
+             /\ UNCHANGED <<lastSnapshotViaGet, serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
+                            routeAttempt, clientGeneration,
+                            clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
+                            pageLoadRequests, restoreRequests, snapshotReloadRequests,
+                            pendingDeliveries, uiState, deadlinePassed, timeGrant>>
 
-\* Network becomes available again (liveness anchor).
-NetworkUp ==
-  /\ ~networkUp
-  /\ networkUp' = TRUE
-  /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
-                 routeAttempt, clientGeneration,
-                 clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
-                 pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                 pendingDeliveries, uiState, deadlinePassed, timeGrant>>
-
-\* The deadline for an attempt passes. Abstract time event — no real ms.
-\* (DeadlineReconcile is the server's reaction; this is the wall-clock tick.)
 DeadlinePasses ==
   /\ \E a \in Attempts :
        /\ ~deadlinePassed[a]
@@ -582,42 +494,76 @@ DeadlinePasses ==
                       routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, uiState, networkUp, timeGrant>>
+                      pendingDeliveries, uiState, lastSnapshotViaGet, networkUp, timeGrant>>
 
 \* =============================================================================
-\* Next — disjunction of all actions. Stuttering is allowed via [][Next]_vars
-\* (the prime form), which is the standard TLA+ way to permit environment
-\* inaction without deadlock.
+\* Next variants. The safety model is SPLIT into focused configurations to
+\* keep each reachable state graph finite (a single Next with NavigateTo +
+\* loss + deadline + grade diverges past 10^6 states in seconds). Each
+\* variant includes only the actions relevant to a property family:
+\*   - CoreNext      : single-route restore lifecycle (no NavigateTo).
+\*   - RouteSwitchNext: adds NavigateTo for the cross-attempt race properties.
+\*                     Excludes loss/deadline/grade (which combinatorially
+\*                     explode against route changes).
+\*   - SubmissionNext: single-route submit/freeze/grade (no NavigateTo).
+\* The UNION of these covers the full action set; each is independently
+\* exhaustive. See formal/tla/recovery/README.md §"Split safety models".
 \* =============================================================================
 
-\* SAFETY Next. NavigateTo is deliberately EXCLUDED from Next to keep the
-\* reachable state graph finite and exhaustively checkable (an included
-\* NavigateTo caused the state space to exceed 10^6 distinct states within
-\* seconds, even with stale requests/deliveries cleared on navigation).
-\* The cross-attempt race properties are verified STRUCTURALLY via the
-\* request's creation-time binding:
-\*   - every request record carries snapshotAttempt / generation / attemptId
-\*     captured at creation;
-\*   - NoWrongAttemptRestore checks snapshotAttempt = attemptId at creation;
-\*   - NoCrossAttemptRestoreBlocking checks the in-flight guard is keyed on
-\*     the current route only.
-\* A route change does not create new violations of these — the binding is
-\* fixed at request creation. The cross-attempt counterexample configs
-\* (LegacyGlobalInFlight, LegacyWrongAttemptRestore) are preserved as
-\* expected-negative models; see counterexamples/README.md for the
-\* state-space constraint that currently prevents their mechanical
-\* reproduction and the recommended next step (TLC symmetry sets or a
-\* NavigateTo-bounded variant).
-\* MarkDisrupted (Init models disrupted), GrantExtension (structural
-\* property via RestoreDoesNotDirectlyChangeDeadline), DelayResponse /
-\* DeliverResponse (stuttering no-ops; ApplyAuthoritativeReload already
-\* chooses any pending delivery for reordering) are also excluded.
-Next ==
+\* Core restore lifecycle on a single route.
+CoreNext ==
   \/ StartPageLoad
   \/ StartRestore
   \/ RetryRestore
   \/ StartAuthoritativeReload
+  \/ LegacyApplyPostOutcome
   \/ (\E d \in pendingDeliveries : ApplyAuthoritativeReload(d))
+  \/ ConsumePostAck
+  \/ ServerReturnSnapshot
+  \/ ProcessRestore
+  \/ RejectRestoreDeadlineWon
+  \/ LoseResponse
+
+\* Cross-attempt races: includes NavigateTo. Excludes loss/deadline/grade to
+\* stay finite — those are covered by CoreNext and SubmissionNext.
+RouteSwitchNext ==
+  \/ (\E a \in Attempts : NavigateTo(a))
+  \/ StartPageLoad
+  \/ StartRestore
+  \/ RetryRestore
+  \/ StartAuthoritativeReload
+  \/ LegacyApplyPostOutcome
+  \/ (\E d \in pendingDeliveries : ApplyAuthoritativeReload(d))
+  \/ ConsumePostAck
+  \/ ServerReturnSnapshot
+  \/ ProcessRestore
+
+\* Submission / freeze / grade lifecycle on a single route.
+SubmissionNext ==
+  \/ StartPageLoad
+  \/ StartRestore
+  \/ StartAuthoritativeReload
+  \/ (\E d \in pendingDeliveries : ApplyAuthoritativeReload(d))
+  \/ ConsumePostAck
+  \/ ServerReturnSnapshot
+  \/ ProcessRestore
+  \/ DeadlinePasses
+  \/ DeadlineReconcile
+  \/ SubmitAttempt
+  \/ GradeAttempt
+
+\* Full Next — the union. Used only for the explore mode; NOT for the gated
+\* safety configs (it diverges). Kept for completeness so the action surface
+\* is documented in one place.
+Next ==
+  \/ (\E a \in Attempts : NavigateTo(a))
+  \/ StartPageLoad
+  \/ StartRestore
+  \/ RetryRestore
+  \/ StartAuthoritativeReload
+  \/ LegacyApplyPostOutcome
+  \/ (\E d \in pendingDeliveries : ApplyAuthoritativeReload(d))
+  \/ ConsumePostAck
   \/ ServerReturnSnapshot
   \/ ProcessRestore
   \/ RejectRestoreDeadlineWon
@@ -627,55 +573,34 @@ Next ==
   \/ LoseResponse
   \/ DeadlinePasses
 
-\* LIVENESS Next — same as the safety Next EXCEPT LoseResponse is excluded.
-\* The fairness assumption "the environment eventually delivers a non-lost
-\* authoritative response" is modeled by not allowing infinite loss in the
-\* liveness execution. (LoseResponse is still in the SAFETY Next, so
-\* loss-tolerance is verified structurally — the client recovers via the
-\* authoritative GET after a lost POST.) The other fairness assumptions
-\* ("network eventually stays available", "user does not navigate away /
-\* unmount") are modeled by the always-excluded actions (NavigateTo,
-\* Unmount, NetworkDown/NetworkUp).
+\* Liveness Next — excludes NavigateTo / NetworkDown / NetworkUp (fairness
+\* assumptions: user stays on route; network eventually stays available).
 LivenessNext ==
   \/ StartPageLoad
   \/ StartRestore
   \/ RetryRestore
   \/ StartAuthoritativeReload
   \/ (\E d \in pendingDeliveries : ApplyAuthoritativeReload(d))
+  \/ ConsumePostAck
   \/ ServerReturnSnapshot
   \/ ProcessRestore
   \/ RejectRestoreDeadlineWon
   \/ DeadlineReconcile
   \/ SubmitAttempt
   \/ GradeAttempt
+  \/ LoseResponse
   \/ DeadlinePasses
-  \* NOTE: NavigateTo, NetworkDown/NetworkUp, and Unmount are defined as
-  \* actions (they remain part of the documented failure/race vocabulary)
-  \* but are deliberately NOT included in either Next. The fairness
-  \* assumptions "the network eventually stays available", "the user does
-  \* not navigate away from the route", and "the user does not unmount the
-  \* page" are modeled by holding networkUp = TRUE, excluding Unmount, and
-  \* (for liveness only) excluding NavigateTo. Total network unavailability
-  \* and user abandonment are out of scope for this finite liveness model;
-  \* delay/loss/reorder (DelayResponse, DeliverResponse, LoseResponse)
-  \* cover the relevant failure classes.
-  \* See tla/recovery/README.md §Fairness assumptions.
-
-\* =============================================================================
-\* Spec — safety uses Next (includes NavigateTo for cross-attempt coverage);
-\* no fairness. FairSpec uses LivenessNext (no NavigateTo) + weak fairness.
-\* =============================================================================
 
 Spec == Init /\ [][Next]_vars
+CoreSpec == Init /\ [][CoreNext]_vars
+RouteSwitchSpec == Init /\ [][RouteSwitchNext]_vars
+SubmissionSpec == Init /\ [][SubmissionNext]_vars
 LiveSpec == Init /\ [][LivenessNext]_vars
 
 \* =============================================================================
-\* Safety invariants
+\* SAFETY INVARIANTS — state predicates. NO legacy flag is referenced.
 \* =============================================================================
 
-\* --- Type correctness: all variables stay in their declared finite domains.
-\*     Includes the bounded-counter invariants for serverVersion / timeGrant
-\*     so an out-of-bound increment is caught as a TypeOK violation.
 TypeOK ==
   /\ serverStatus \in [Attempts -> Statuses]
   /\ serverVersion \in [Attempts -> 0..MAX_VERSION]
@@ -691,181 +616,97 @@ TypeOK ==
   /\ snapshotReloadRequests \in SUBSET Request
   /\ pendingDeliveries \in SUBSET Delivery
   /\ uiState \in Phases
+  /\ lastSnapshotViaGet \in BOOLEAN
   /\ networkUp \in BOOLEAN
   /\ deadlinePassed \in [Attempts -> BOOLEAN]
   /\ timeGrant \in [Attempts -> 0..MAX_GRANT]
 
-\* --- Route-bound restore authority:
-\* A restore command for attempt B must never be initiated solely from a
-\* snapshot belonging to attempt A. We capture the snapshot-attempt that
-\* was applied to the page at request creation (r.snapshotAttempt) and
-\* require it to equal the attempt the restore was sent to (r.attemptId).
-\* This catches "snapshot for A drives restore of B" without confounding
-\* legal navigation: an in-flight restore created while routeAttempt=A
-\* legitimately persists with attemptId=A after a later NavigateTo(B).
-\* The capability gate in StartRestore (clientSnapshotAttempt = routeAttempt)
-\* enforces r.snapshotAttempt = r.attemptId at creation when the legacy
-\* flag is off; LegacyWrongAttemptCapability lets them diverge.
+\* A restore for B must never be initiated from A's snapshot. Stated over the
+\* creation-time binding captured in the request record.
 NoWrongAttemptRestore ==
-  \A r \in restoreRequests :
-    LegacyWrongAttemptCapability \/ r.snapshotAttempt = r.attemptId
+  \A r \in restoreRequests : r.snapshotAttempt = r.attemptId
 
-\* --- Stale page-load isolation:
-\* A page-load response from an older route generation must never REPLACE
-\* the snapshot currently applied to the page. Stated over the APPLIED
-\* snapshot (clientSnapshotAttempt/Gen), not over pendingDeliveries — a
-\* stale delivery may legitimately sit pending until it is dropped or
-\* lost; what matters is that it never becomes the page's applied snapshot.
-\* ApplyAuthoritativeReload gates on IsCurrent(d), so a violation is only
-\* reachable when the legacy stale-page-load flag is enabled.
+\* A stale page-load/restore/reload response cannot become the page's applied
+\* snapshot. Stated over the APPLIED snapshot: when one is applied, it must
+\* match the current route + generation. (A pending stale delivery is allowed;
+\* what is forbidden is letting it become the applied snapshot.)
 NoStalePageLoadApply ==
-  (clientSnapshotAttempt # NoSnapshot /\ ~LegacyApplyStalePageLoad)
-  => (clientSnapshotAttempt = routeAttempt
-      /\ clientSnapshotGen = clientGeneration)
+  (clientSnapshotAttempt # NoSnapshot) =>
+    (clientSnapshotAttempt = routeAttempt /\ clientSnapshotGen = clientGeneration)
 
-\* --- Stale restore isolation:
-\* A POST/reload chain from an older attempt or generation must never
-\* mutate the page's applied snapshot. Same formulation as
-\* NoStalePageLoadApply; the two invariants are kept separate so a failure
-\* names the specific defect class (page GET vs restore/reload chain).
 NoStaleRestoreApply ==
-  (clientSnapshotAttempt # NoSnapshot /\ ~LegacyApplyStalePageLoad)
-  => (clientSnapshotAttempt = routeAttempt
-      /\ clientSnapshotGen = clientGeneration)
+  (clientSnapshotAttempt # NoSnapshot) =>
+    (clientSnapshotAttempt = routeAttempt /\ clientSnapshotGen = clientGeneration)
 
-\* --- Authoritative editable state:
-\* The UI may enter 'editable' only from a current-generation authoritative
-\* GET snapshot for the current route. A restore POST acknowledgement
-\* alone must never cause editable state.
+\* Editable requires a current-generation authoritative GET snapshot for the
+\* current route. A POST ack alone (or a stale apply) cannot make it editable.
 EditableRequiresCurrentAuthoritativeSnapshot ==
   (uiState = "editable") =>
     (clientSnapshotAttempt = routeAttempt
      /\ clientSnapshotGen = clientGeneration
      /\ clientSnapshotEditable = TRUE)
 
-\* --- Terminal-state monotonicity:
-\* Once an attempt is submitted/graded/voided, restore cannot return it to
-\* in_progress.
-TerminalNeverResurrects ==
-  \A a \in Attempts :
-    IsTerminal(serverStatus[a]) => (serverStatus[a] # "in_progress")
-
-\* --- Submitted snapshot immutability (ADR-008):
-\* Once frozen, the submitted answer snapshot does not change. Stated as a
-\* state invariant: a frozen snapshot is never overwritten by a different
-\* value (the only writers set it from NoSnapshot).
-SubmittedSnapshotImmutable ==
-  \A a \in Attempts :
-    submittedSnapshot[a] # NoSnapshot =>
-      submittedSnapshot[a] = submittedSnapshot[a]
-
-\* --- Server-version monotonicity:
-\* serverVersion never decreases and stays within the finite bound.
-ServerVersionNeverDecreases ==
-  \A a \in Attempts :
-    serverVersion[a] \in 0..MAX_VERSION
-
-\* --- No cross-attempt restore blocking:
-\* An in-flight restore for attempt A must not disable the ability to begin
-\* a legal restore for current-route attempt B. The PR #219 bug class
-\* collapsed the per-attempt in-flight guard into a single global boolean,
-\* so A's in-flight restore blocked B. The target model's guard
-\* (RestoreInFlightForRoute) keys on the CURRENT route only:
-\*   \E r \in restoreRequests : r.attemptId = routeAttempt /\ ...
-\* so a restore in flight for a DIFFERENT attempt never makes the guard
-\* true for this route. This invariant asserts exactly that structural
-\* property: RestoreInFlightForRoute is non-empty ONLY because of a restore
-\* whose attemptId equals routeAttempt. (Under LegacyGlobalInFlight the
-\* guard would key on a global bit instead, and this invariant would fail.)
-\*
-\* NOTE on the requestId pool: this invariant deliberately does NOT depend
-\* on "a free requestId exists". The finite RequestIds set is a modeling
-\* device to bound the state space, not a real protocol resource (the
-\* TypeScript implementation does not allocate from a fixed request-id
-\* pool). Bounding requestIds smaller than the worst-case stale-request
-\* count would produce a false failure unrelated to the cross-attempt
-\* guard; the property verified here is the guard logic itself.
-NoCrossAttemptRestoreBlocking ==
-  RestoreInFlightForRoute =>
-    \E r \in restoreRequests :
-      r.attemptId = routeAttempt /\ r.generation = clientGeneration
-
-\* --- Restore does not directly grant time (REC-I4 target):
-\* Only an explicit GrantExtension action may change the modeled deadline
-\* or remaining-time grant. ProcessRestore leaves timeGrant unchanged.
-RestoreDoesNotDirectlyChangeDeadline ==
-  \A a \in Attempts :
-    timeGrant[a] \in 0..MAX_GRANT
-
-\* --- POST outcome is not page authority:
-\* A POST success, 409-like result, timeout, or lost response cannot
-\* directly select editable/terminal page state. A subsequent
-\* authoritative snapshot read must decide.
-\*
-\* In this model there is NO action that applies a `restore` delivery to the
-\* page — ApplyAuthoritativeReload only consumes page_load / snapshot_reload
-\* deliveries. So a POST acknowledgement can never, by construction, set
-\* uiState. The property is therefore enforced structurally; this invariant
-\* re-states it as: if the page is editable, an authoritative GET snapshot
-\* for the current route has been applied (the GET, not the POST, is the
-\* authority). A restore delivery may legitimately sit pending while the
-\* page is editable (the reload GET already applied); that is not a
-\* violation.
+\* POST outcome is not page authority: editable requires the applied snapshot
+\* to have come from a GET (page_load / snapshot_reload), not from a POST
+\* restore ack. Tracked via the lastSnapshotViaGet history variable, which
+\* ApplyAuthoritativeReload sets TRUE and LegacyApplyPostOutcome sets FALSE.
 PostOutcomeIsNotPageAuthority ==
-  (uiState = "editable") =>
-    (clientSnapshotAttempt = routeAttempt
-     /\ clientSnapshotGen = clientGeneration
-     /\ clientSnapshotEditable = TRUE)
+  (uiState = "editable") => lastSnapshotViaGet
 
 \* =============================================================================
-\* Temporal / liveness property (checked separately, under fairness)
-\*
-\* FAIRNESS ASSUMPTIONS (made explicit — without these the property does
-\* not hold):
-\*   - the network eventually becomes and stays available
-\*     (modeled as: networkUp holds infinitely often AND the environment
-\*      eventually stops toggling it down — see the FairSpec annotations
-\*      and the README fairness section);
-\*   - the server eventually processes any enabled restore request;
-\*   - the environment eventually delivers a non-lost authoritative
-\*     response for the current route;
-\*   - the user does not navigate away from the route.
-\*
-\* Under these assumptions: if the current-route attempt remains legally
-\* resumable, the network is up, and the page is in a recovery phase, then
-\* the client eventually:
-\*   - becomes editable,
-\*   - reaches a terminal authoritative state, or
-\*   - exposes a retryable failure state.
-\* It must not remain forever stuck solely because another attempt has an
-\* older in-flight request.
-\*
-\* The property is conditioned on `networkUp` in the antecedent so that a
-\* network-down interval does not count as a liveness violation; the
-\* fairness assumption (network eventually stays up) is what converts
-\* "eventually up" into progress.
+\* TEMPORAL SAFETY PROPERTIES — cross-state constraints. These MUST be checked
+\* via PROPERTY (not INVARIANT) in the .cfg. NO legacy flag is referenced.
 \* =============================================================================
+
+\* Once submitted/graded/voided, an attempt cannot return to a non-terminal
+\* state (terminal statuses are absorbing). Stated as a transition constraint:
+\* if it is terminal now, it must remain terminal in the next state.
+TerminalNeverResurrects ==
+  [][\A a \in Attempts :
+       IsTerminal(serverStatus[a]) => IsTerminal(serverStatus'[a])]_vars
+
+\* Once a submitted snapshot is frozen, it never changes.
+SubmittedSnapshotImmutable ==
+  [][\A a \in Attempts :
+       submittedSnapshot[a] # NoSnapshot => submittedSnapshot'[a] = submittedSnapshot[a]]_vars
+
+\* serverVersion never decreases.
+ServerVersionNeverDecreases ==
+  [][\A a \in Attempts : serverVersion'[a] >= serverVersion[a]]_vars
+
+\* timeGrant never decreases (only GrantExtension may bump it).
+TimeGrantNeverDecreases ==
+  [][\A a \in Attempts : timeGrant'[a] >= timeGrant[a]]_vars
+
+\* Cross-attempt non-blocking: if route B is resumable and the client has
+\* applied B's snapshot, then an in-flight restore for A must not prevent a
+\* restore for B. Stated as: when no restore is in flight for the route, the
+\* client's ability to start one for B is not gated on A. Modeled as an
+\* enabledness assertion: the StartRestore guard for the route, under target,
+\* depends only on the route's own in-flight status.
+NoCrossAttemptRestoreBlocking ==
+  []((IsResumable(serverStatus[routeAttempt])
+       /\ clientSnapshotAttempt = routeAttempt
+       /\ ~RestoreInFlightForRoute)
+      => <>(RestoreInFlightForRoute
+            \/ serverStatus[routeAttempt] = "in_progress"
+            \/ IsTerminal(serverStatus[routeAttempt])))
+
+\* =============================================================================
+\* Liveness property (PROPERTY, under fairness).
+\* =============================================================================
+
 CurrentResumableAttemptEventuallyProgresses ==
   []((networkUp /\ IsResumable(serverStatus[routeAttempt])
        /\ uiState \in {"loading", "restoring"})
       => <>(uiState \in {"editable", "terminal", "restore_failed"}))
 
-\* Non-parameterized wrapper: applies ANY applicable authoritative reload
-\* delivery. Used as the fairness unit (TLC cannot take WF over a
-\* parameterized action via a CHOOSE argument when the domain may be empty).
-ApplyAnyAuthoritativeReload ==
-  \E d \in pendingDeliveries : ApplyAuthoritativeReload(d)
+\* =============================================================================
+\* Fairness
+\* =============================================================================
 
-\* =============================================================================
-\* Fairness annotations (referenced by the liveness .cfg via SPECIFICATION
-\* FairSpec). Weak fairness on the actions the liveness argument relies on:
-\* the client eventually fires restore, the server eventually processes it,
-\* and the environment eventually delivers a non-lost response.
-\*
-\* The network-availability fairness assumption ("the network eventually
-\* stays available") is modeled by holding networkUp = TRUE for the whole
-\* execution (NetworkDown/NetworkUp are excluded from Next — see above).
-\* =============================================================================
+ApplyAnyAuthoritativeReload == \E d \in pendingDeliveries : ApplyAuthoritativeReload(d)
+
 FairSpec ==
   /\ LiveSpec
   /\ WF_vars(StartPageLoad)
@@ -875,6 +716,7 @@ FairSpec ==
   /\ WF_vars(RejectRestoreDeadlineWon)
   /\ WF_vars(StartAuthoritativeReload)
   /\ WF_vars(ApplyAnyAuthoritativeReload)
+  /\ WF_vars(ConsumePostAck)
 
 =============================================================================
 \* ==EOF==

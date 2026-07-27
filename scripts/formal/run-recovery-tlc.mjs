@@ -66,7 +66,15 @@ const COUNTEREXAMPLES = [
   },
 ];
 
-const MODES = new Set(["safety", "liveness", "counterexamples", "all"]);
+const MODES = new Set([
+  "safety",
+  "safety:route",
+  "safety:submission",
+  "liveness",
+  "counterexamples",
+  "explore",
+  "all",
+]);
 
 function fail(msg) {
   console.error(`formal:recovery: ERROR — ${msg}`);
@@ -222,23 +230,31 @@ function runTlc({ javaBin, jar, configFile, metadir, label, workers }) {
 }
 
 /**
- * Parses TLC output for a named invariant violation. Returns the matched
- * invariant name or null. Robust to the "Invariant <Name> is violated."
- * line that TLC prints on a property failure.
+ * Parses TLC output for a named invariant or property violation, or a
+ * generic temporal-properties violation. Returns the matched name or null.
+ * Robust to the TLC lines:
+ *   "Invariant <Name> is violated."
+ *   "<Name> is violated." (property)
+ *   "Temporal properties were violated." (when TLC does not name the property)
  */
 function parseViolation(output, expectedName) {
   const lines = output.split(/\r?\n/);
   for (const line of lines) {
-    // Match "Error: Invariant NoWrongAttemptRestore is violated."
     const m = line.match(/Invariant\s+(\w+)\s+is\s+violated/i);
-    if (m && m[1]) {
-      return m[1];
-    }
+    if (m && m[1]) return m[1];
   }
-  // Some versions print "Invariant ... violated" without "Error:" prefix.
   for (const line of lines) {
     const m = line.match(/Invariant\s+(\w+)\s+violated/i);
     if (m && m[1]) return m[1];
+  }
+  for (const line of lines) {
+    const m = line.match(/^\s*Error:\s*(\w+)\s+is\s+violated/i);
+    if (m && m[1]) return m[1];
+  }
+  if (/Temporal properties were violated/i.test(output)) {
+    // TLC prints the generic temporal-violation line; for PROPERTY checks
+    // the name is in the .cfg, so return the expected name if provided.
+    return expectedName ?? "__temporal__";
   }
   return null;
 }
@@ -262,39 +278,40 @@ function detectToolError(output) {
   return null;
 }
 
-async function runSafety(javaBin, jar) {
+async function runSafetyConfig(javaBin, jar, cfgFile, label) {
   const res = await runTlc({
     javaBin,
     jar,
-    configFile: "RecoveryProtocolSafety.cfg",
-    metadir: join(WORK_ROOT, "safety"),
-    label: "safety",
-    // Safety may use multiple workers; reproducibility is not weakened for
-    // invariant checking (liveness is the worker-sensitive mode).
+    configFile: cfgFile,
+    metadir: join(WORK_ROOT, label),
+    label,
     workers: Number(process.env.FORMAL_WORKERS ?? 2),
   });
   const toolErr = detectToolError(res.output);
   if (toolErr) {
-    info(`safety: FAILED — tool error (${toolErr}). Not a property result.`);
-    return { mode: "safety", ok: false, reason: toolErr, code: res.code };
+    info(`${label}: FAILED — tool error (${toolErr}). Not a property result.`);
+    return { mode: label, ok: false, reason: toolErr, code: res.code };
   }
   if (res.code === 0) {
-    info("safety: PASS — no invariant violation, no unexpected deadlock.");
-    return { mode: "safety", ok: true, code: res.code };
+    info(`${label}: PASS — no invariant/property violation, no unexpected deadlock.`);
+    return { mode: label, ok: true, code: res.code };
   }
-  // Non-zero with no tool error: an invariant was violated.
   const violated = parseViolation(res.output, null);
   const vname = violated ?? "<unknown>";
   info(
-    `safety: FAILED — invariant ${vname} was violated. ` +
+    `${label}: FAILED — ${vname} was violated. ` +
       `(A target safety violation is never an expected outcome.)`,
   );
   return {
-    mode: "safety",
+    mode: label,
     ok: false,
-    reason: `invariant ${violated ?? "<unknown>"} violated`,
+    reason: `${violated ?? "<unknown>"} violated`,
     code: res.code,
   };
+}
+
+async function runSafety(javaBin, jar) {
+  return runSafetyConfig(javaBin, jar, "RecoveryProtocolSafety.cfg", "safety");
 }
 
 async function runLiveness(javaBin, jar) {
@@ -313,20 +330,25 @@ async function runLiveness(javaBin, jar) {
     info(`liveness: FAILED — tool error (${toolErr}). Not a property result.`);
     return { mode: "liveness", ok: false, reason: toolErr, code: res.code };
   }
-  // Liveness is currently PARTIAL — see formal/tla/recovery/README.md and
-  // docs/audits/REC-F1-*.md. The runner reports the TLC result but does not
-  // gate the overall suite on liveness. It DOES surface a violation plainly.
+  // Liveness is a REQUIRED check: a property violation is a failure (exit
+  // non-zero). It is NOT wrapped as success. The current model has a known
+  // PARTIAL status (see formal/tla/recovery/README.md §Liveness), so this
+  // mode currently fails — that is the honest signal. Use
+  // formal:recovery:explore for a non-gated run that does not fail the suite.
   if (res.code === 0) {
-    info("liveness: PASS — temporal property holds under the stated fairness.");
-    return { mode: "liveness", ok: true, code: res.code, partial: false };
+    info("liveness: PASS — temporal properties hold under the stated fairness.");
+    return { mode: "liveness", ok: true, code: res.code };
   }
   info(
-    "liveness: PARTIAL — temporal property violated under current fairness " +
-      "(documented; not a target-safety regression). See README §Liveness.",
+    "liveness: FAILED — temporal property violated under current fairness. " +
+      "This is the known PARTIAL status (documented), but it is NOT wrapped " +
+      "as success. See formal/tla/recovery/README.md §Liveness and the " +
+      "closeout audit. Use formal:recovery:explore for a non-gated run.",
   );
   return {
     mode: "liveness",
-    ok: true, // does not fail the suite — PARTIAL is the documented state
+    ok: false,
+    reason: "temporal property violated (documented PARTIAL)",
     partial: true,
     code: res.code,
   };
@@ -359,19 +381,20 @@ async function runCounterexamples(javaBin, jar) {
       continue;
     }
     if (res.code === 0) {
-      // No violation — the expected counterexample was NOT reproduced.
-      // This is a documented limitation (state-space constraint), not a
-      // silent success. Mark not-ok and surface it.
+      // No violation — the expected counterexample was NOT reproduced. This
+      // is a FAILURE: per the REC-F1 acceptance bar, each expected-negative
+      // config must produce the named violation. The runner does NOT wrap
+      // it as success.
       info(
-        `counterexample:${ce.config}: NOT REPRODUCED — TLC found no ` +
-          `violation of ${ce.expectedViolation} under the finite model ` +
-          `(NavigateTo excluded → cross-attempt race unreachable). ` +
-          `See counterexamples/README.md. Treated as a documented gap, ` +
-          `not a suite failure, but reported plainly.`,
+        `counterexample:${ce.config}: FAILED — TLC found NO violation of ` +
+          `${ce.expectedViolation}. An expected-negative config MUST ` +
+          `produce the named violation; absence is failure, not success. ` +
+          `See formal/tla/recovery/counterexamples/README.md.`,
       );
       results.push({
         config: ce.config,
-        ok: true, // documented gap — does not fail the suite
+        ok: false,
+        reason: `expected violation ${ce.expectedViolation} not reproduced`,
         reproduced: false,
         expected: ce.expectedViolation,
         code: res.code,
@@ -430,12 +453,36 @@ async function main() {
   info(`model dir : ${MODEL_DIR}`);
 
   const summary = [];
+  const isExplore = mode === "explore";
   if (mode === "safety" || mode === "all")
     summary.push(await runSafety(javaBin, jar));
+  if (mode === "safety:route" || mode === "all")
+    summary.push(
+      await runSafetyConfig(
+        javaBin,
+        jar,
+        "RecoveryProtocolRouteSwitchSafety.cfg",
+        "safety:route",
+      ),
+    );
+  if (mode === "safety:submission" || mode === "all")
+    summary.push(
+      await runSafetyConfig(
+        javaBin,
+        jar,
+        "RecoveryProtocolSubmissionSafety.cfg",
+        "safety:submission",
+      ),
+    );
   if (mode === "liveness" || mode === "all")
     summary.push(await runLiveness(javaBin, jar));
   if (mode === "counterexamples" || mode === "all")
     summary.push(await runCounterexamples(javaBin, jar));
+  if (isExplore) {
+    // Explore runs the liveness model without gating — it always exits 0 so
+    // a human can inspect PARTIAL / open-question results without CI failing.
+    summary.push(await runLiveness(javaBin, jar));
+  }
 
   info("---- summary ----");
   for (const s of summary) {
@@ -443,8 +490,8 @@ async function main() {
       for (const r of s.results) {
         const tag = r.reproduced
           ? `EXPECTED_VIOLATION(${r.violated})`
-          : r.reproduced === false
-            ? "NOT_REPRODUCED(documented gap)"
+          : r.ok
+            ? "OK"
             : "FAILED";
         info(`  counterexample ${r.config}: ${tag}`);
       }
@@ -454,10 +501,15 @@ async function main() {
     }
   }
 
-  // The suite fails only on a genuine error: a target safety violation, a
-  // tool error, or an expected-counterexample producing the WRONG violation.
-  // Liveness PARTIAL and counterexample NOT_REPRODUCED (documented gaps) do
-  // NOT fail the suite — they are reported plainly for human review.
+  // Acceptance bar:
+  //   safety / safety:route / safety:submission PASS  → ok
+  //   liveness violation                                → FAIL (PARTIAL is a real fail)
+  //   counterexample NOT reproduced / wrong violation   → FAIL
+  // 'explore' is non-gated and always exits 0.
+  if (isExplore) {
+    info("suite (explore): non-gated — always exits 0. Review output above.");
+    process.exit(0);
+  }
   const hardFail = summary.some((s) => {
     if (s.mode === "counterexamples") {
       return s.results.some((r) => r.ok === false);
@@ -468,7 +520,7 @@ async function main() {
     info("suite: FAILED — see above. A required check did not pass.");
     process.exit(1);
   }
-  info("suite: completed — review PARTIAL / NOT_REPRODUCED entries above.");
+  info("suite: PASS — all required checks satisfied.");
   process.exit(0);
 }
 
