@@ -45,8 +45,11 @@
     "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
     "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check",
     "formal:recovery:safety": "node scripts/formal/run-recovery-tlc.mjs safety",
+    "formal:recovery:safety:route": "node scripts/formal/run-recovery-tlc.mjs safety:route",
+    "formal:recovery:safety:submission": "node scripts/formal/run-recovery-tlc.mjs safety:submission",
     "formal:recovery:liveness": "node scripts/formal/run-recovery-tlc.mjs liveness",
     "formal:recovery:counterexamples": "node scripts/formal/run-recovery-tlc.mjs counterexamples",
+    "formal:recovery:explore": "node scripts/formal/run-recovery-tlc.mjs explore",
     "formal:recovery": "node scripts/formal/run-recovery-tlc.mjs all",
     "prepare": "husky"
   },

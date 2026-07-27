@@ -6,15 +6,25 @@ Runner: [`scripts/formal/run-recovery-tlc.mjs`](../../scripts/formal/run-recover
 
 ## Status
 
-`REC-F1 MODEL CHECKED — READY FOR HUMAN REVIEW`
+`REC-F1 MODEL CHECKED — READY FOR HUMAN REVIEW` (revised after PR #220 review)
 
-Safety is exhaustively model-checked and passes. Liveness is PARTIAL
-(documented, not silently deleted). Expected-counterexample configurations
-are preserved; under the current finite model they are NOT REPRODUCED
-(documented state-space gap, reported plainly by the runner). This label is
-intentionally the REC-F1 prompt's "READY FOR HUMAN REVIEW" form, not
-"COMPLETE" — liveness PARTIAL and the counterexample gap disqualify the
-strict "COMPLETE" bar.
+The model was rewritten to address the review's blocking findings. The
+current state:
+
+- **Safety**: the three split target configs (`CoreSpec`, `RouteSwitchSpec`,
+  `SubmissionSpec`) all PASS exhaustively. Properties are real cross-state
+  constraints (no tautologies, no legacy-flag exemptions). `NavigateTo` IS
+  in the route-switch Next (the cross-attempt race is exercised). Delivery
+  records freeze server state at response time.
+- **Counterexamples**: all 4 expected-negative configs reproduce the NAMED
+  violation (legacy flags affect actions only; the buggy action violates
+  the TARGET property).
+- **Liveness**: PARTIAL (failed). The runner reports this as a FAILURE
+  (exit non-zero); it is NOT wrapped as success. `formal:recovery:explore`
+  provides a non-gated run.
+
+This is the "READY FOR HUMAN REVIEW" form, not "COMPLETE" — liveness is
+still PARTIAL, which disqualifies the strict "COMPLETE" bar.
 
 ## Stacked-PR context
 
@@ -191,17 +201,26 @@ PostOutcomeIsNotPageAuthority
 
 ## Safety result
 
-`MODEL_CHECKED` — exhaustively verified, all 11 invariants hold.
+`MODEL_CHECKED` — three split target configs, all exhaustively verified.
 
 ```text
-Model checking completed. No error has been found.
-10,584,513 states generated
-1,020,640 distinct states found
-0 states left on queue
-depth 43
-~30s wall-clock, 1 worker (runner defaults to 2 for safety)
-fingerprint collision: optimistic 5.3E-7, actual 8.0E-8
+CoreSpec        (RecoveryProtocolSafety.cfg)             :   4,679 distinct, depth 25 — PASS
+RouteSwitchSpec (RecoveryProtocolRouteSwitchSafety.cfg)  :  20,796 distinct, depth 26 — PASS (NavigateTo enabled)
+SubmissionSpec  (RecoveryProtocolSubmissionSafety.cfg)   :  88,936 distinct, depth 26 — PASS
 ```
+
+Properties are real cross-state constraints:
+
+- `TerminalNeverResurrects`, `SubmittedSnapshotImmutable`,
+  `ServerVersionNeverDecreases`, `TimeGrantNeverDecreases` are PROPERTYs
+  (transition constraints `[][...]_vars`), not state predicates — they
+  verify future behavior, not just the current state.
+- `NoCrossAttemptRestoreBlocking` is a liveness-style PROPERTY checked in
+  the route-switch config.
+- `PostOutcomeIsNotPageAuthority` uses a `lastSnapshotViaGet` history
+  variable so it actually distinguishes "editable via GET" from "editable
+  via POST ack".
+- No property references a legacy flag.
 
 ## Liveness properties checked
 
@@ -230,21 +249,14 @@ safety).
 
 ## Liveness result
 
-`PARTIAL` — `BLOCKED_BY_MODEL_INTERACTION` (not state-space).
+`PARTIAL` — `FAILED` (runner exit non-zero).
 
-Under the current fairness annotations, TLC finds a counterexample in which
-the restore/post-rejection/deadline-reconciliation cycle does not converge
-to editable/terminal/restore_failed. The root is the interaction between
-`RejectRestoreDeadlineWon` (which clears the restore request but leaves
-`uiState = "restoring"`) and `DeadlineReconcile` for an attempt whose
-deadline passes during restore — the page can loop without reaching a
-terminal UI state. This is documented per the REC-F1 prompt §14/§20: the
-property is not silently deleted, the safety model passes, and liveness is
-marked PARTIAL. The recommended fix is a refined deadline/restore UI
-transition (see "Deferred work").
+The runner reports liveness violation as FAILURE (not wrapped as success).
+Under the current fairness TLC finds a counterexample. Use
+`pnpm formal:recovery:explore` for a non-gated run.
 
 ```text
-Liveness run: 102,841 states generated, 33,665 distinct, depth ~16, ~3s.
+Liveness run: 14,653 distinct states — temporal property violated.
 ```
 
 ## State-space statistics
@@ -257,22 +269,19 @@ safety default), configuration (target safety/liveness .cfg), tool version
 
 ## Expected-counterexample results
 
+All four reproduce the named violation:
+
 ```text
-LegacyWrongAttemptRestore        — NOT REPRODUCED (documented finite-model gap)
-LegacyGlobalInFlight             — NOT REPRODUCED (documented finite-model gap)
-LegacyStalePageLoad              — NOT REPRODUCED (documented finite-model gap)
-LegacyNoReloadAfterPostFailure   — NOT REPRODUCED (documented finite-model gap)
+LegacyWrongAttemptRestore       —  6 distinct — NoWrongAttemptRestore violated        ✓
+LegacyGlobalInFlight            — 20,796 distinct — NoCrossAttemptRestoreBlocking violated ✓
+LegacyStalePageLoad             — 44 distinct — NoStalePageLoadApply violated          ✓
+LegacyNoReloadAfterPostFailure — 92 distinct — PostOutcomeIsNotPageAuthority violated ✓
 ```
 
-All four configs are preserved as expected-negative models. They currently
-return NOT_REPRODUCED because the cross-attempt race requires `NavigateTo`,
-which is excluded from `Next` for state-space finiteness (including it
-caused the state space to exceed 10^6 distinct states within seconds even
-with stale requests/deliveries cleared on navigation), and because the model
-encodes the TARGET behavior behind each legacy flag rather than the buggy
-transition. The runner reports NOT_REPRODUCED plainly; it never treats an
-arbitrary non-zero exit as expected success. See
-`formal/tla/recovery/counterexamples/README.md`.
+Each legacy flag changes ACTION behavior only (never a property). The buggy
+action it enables produces a state that violates the TARGET property. See
+`formal/tla/recovery/counterexamples/README.md` for the per-defect record
+and normalized traces.
 
 ## Counterexample summaries
 
@@ -301,20 +310,14 @@ No tests were invented.
    current `restoreAttempt` (`packages/exam-engine/src/attemptCommands.ts`)
    computes `disconnectedDuration` and adjusts `deadlineAt` inside the
    restore command. The TARGET model separates `ProcessRestore` (lifecycle
-   only) from `GrantExtension` (time). `RestoreDoesNotDirectlyChangeDeadline`
-   is a target invariant; the current runtime violates it. This is the
-   REC-I4 boundary, NOT a REC-F1 finding and NOT fixed here (production code
-   is out of scope). The client (`useAttemptRestore.ts`) deliberately uses
-   neutral copy and does not duplicate time logic.
-2. **NavigateTo excluded from Next — MODEL_ABSTRACTION.** Cross-attempt race
-   safety is verified structurally (request creation-time binding +
-   per-attempt in-flight guard) rather than by exercising route changes.
-   This is a state-space-driven modeling choice, not a runtime property gap.
-3. **Liveness PARTIAL — OPEN_QUESTION.** See above.
-4. **Counterexamples NOT_REPRODUCED — BLOCKED_BY_ENVIRONMENT** (the finite
-   model's state-space constraint). See above.
+   only) from `GrantExtension` (time); `TimeGrantNeverDecreases` plus the
+   action model imply `ProcessRestore` does not change `timeGrant`. The
+   current runtime violates this. This is the REC-I4 boundary, NOT a REC-F1
+   finding and NOT fixed here (production code is out of scope).
+2. **Liveness PARTIAL — OPEN_QUESTION.** See "Liveness result".
 
-No NEW runtime defect was discovered by the model.
+NavigateTo IS now in the route-switch Next (the prior "NavigateTo excluded"
+abstraction has been removed). Counterexamples now reproduce.
 
 ## Limitations
 
@@ -356,13 +359,35 @@ git status --short
 
 ## Validation results
 
-- `pnpm formal:recovery:safety` — PASS (exit 0; 11/11 invariants).
-- `pnpm formal:recovery:liveness` — PARTIAL (exit 0 from the runner;
-  property violated under current fairness; reported plainly).
-- `pnpm formal:recovery:counterexamples` — completed (exit 0; 4 ×
-  NOT_REPRODUCED, documented gap; no hard failure).
+- `pnpm formal:recovery:safety` — PASS (exit 0; CoreSpec).
+- `pnpm formal:recovery:safety:route` — PASS (exit 0; RouteSwitchSpec, NavigateTo enabled).
+- `pnpm formal:recovery:safety:submission` — PASS (exit 0; SubmissionSpec).
+- `pnpm formal:recovery:counterexamples` — PASS (exit 0; 4/4 EXPECTED_VIOLATION).
+- `pnpm formal:recovery:liveness` — FAILED (exit 1; PARTIAL — property violated,
+  reported as failure, NOT wrapped as success).
+- `pnpm formal:recovery:explore` — exit 0 (non-gated; for inspecting PARTIAL).
 - `pnpm format:check`, `pnpm lint:md` on changed files, `git diff --check`:
   see "Static validation" below.
+
+### Runner exit-code policy (revised after PR #220 review)
+
+```text
+formal:recovery:safety / :safety:route / :safety:submission
+  target config pass                → 0
+  target config violation / tool err → non-zero
+formal:recovery:liveness
+  property holds                    → 0
+  property violated (PARTIAL)       → non-zero
+formal:recovery:counterexamples
+  every config reproduces the named → 0
+  any config missing/wrong violation → non-zero
+formal:recovery
+  any required check unsatisfied    → non-zero
+formal:recovery:explore
+  non-gated                         → always 0
+```
+
+Failures are never wrapped as success.
 
 ## Deferred work
 
