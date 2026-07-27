@@ -184,6 +184,9 @@ MakeDelivery(rid, r) ==
 \* the old route (REC-I3 generationRef reset). Pending DELIVERIES are NOT
 \* cleared — a late stale delivery may still arrive and must be rejected at
 \* apply time. This is the cross-attempt race the model exists to verify.
+\* Under LegacyGlobalInFlight, restoreRequests are NOT cleared: the legacy
+\* client's global in-flight flag persists across navigation (the bug that
+\* NoCrossAttemptRestoreBlocking catches).
 NavigateTo(a) ==
   /\ a # routeAttempt
   /\ a \in Attempts
@@ -195,7 +198,7 @@ NavigateTo(a) ==
   /\ lastSnapshotViaGet' = FALSE
   /\ uiState' = "loading"
   /\ pageLoadRequests' = {}
-  /\ restoreRequests' = {}
+  /\ restoreRequests' = IF LegacyGlobalInFlight THEN restoreRequests ELSE {}
   /\ snapshotReloadRequests' = {}
   /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot, disruptedOnce,
                  pendingDeliveries, networkUp, deadlinePassed, timeGrant>>
@@ -601,6 +604,21 @@ LiveSpec == Init /\ [][LivenessNext]_vars
 \* SAFETY INVARIANTS — state predicates. NO legacy flag is referenced.
 \* =============================================================================
 
+\* Helper: the set of request IDs currently consumed by any in-flight request.
+UsedRequestIds ==
+  {r.requestId : r \in pageLoadRequests \cup restoreRequests \cup snapshotReloadRequests}
+
+\* Helper: the base conditions under which a restore for the current route
+\* SHOULD be startable. These are the per-route, per-client preconditions that
+\* are independent of the in-flight guard implementation (target vs legacy).
+RestoreStartBaseConditions ==
+  /\ networkUp
+  /\ uiState \in {"loading", "restore_failed"}
+  /\ IsResumable(serverStatus[routeAttempt])
+  /\ clientSnapshotAttempt = routeAttempt
+  /\ ~RestoreInFlightForRoute
+  /\ \E rid \in RequestIds : rid \notin UsedRequestIds
+
 TypeOK ==
   /\ serverStatus \in [Attempts -> Statuses]
   /\ serverVersion \in [Attempts -> 0..MAX_VERSION]
@@ -653,6 +671,18 @@ EditableRequiresCurrentAuthoritativeSnapshot ==
 PostOutcomeIsNotPageAuthority ==
   (uiState = "editable") => lastSnapshotViaGet
 
+\* Cross-attempt non-blocking (enabledness safety): when all per-route base
+\* conditions for starting a restore are satisfied, StartRestore must be
+\* ENABLED. Under target (per-attempt guard), the guard depends only on the
+\* route's own in-flight status — which is already FALSE per the base
+\* conditions — so the invariant holds universally. Under legacy (global
+\* guard), an in-flight restore for A makes ~AnyRestoreInFlight FALSE even
+\* when B's route has no in-flight restore, violating the invariant at that
+\* state. No fairness needed; no scheduler assumption; pure state predicate.
+\* Checked as INVARIANT in the route-switch safety config.
+NoCrossAttemptRestoreBlocking ==
+  RestoreStartBaseConditions => ENABLED StartRestore
+
 \* =============================================================================
 \* TEMPORAL SAFETY PROPERTIES — cross-state constraints. These MUST be checked
 \* via PROPERTY (not INVARIANT) in the .cfg. NO legacy flag is referenced.
@@ -677,20 +707,6 @@ ServerVersionNeverDecreases ==
 \* timeGrant never decreases (only GrantExtension may bump it).
 TimeGrantNeverDecreases ==
   [][\A a \in Attempts : timeGrant'[a] >= timeGrant[a]]_vars
-
-\* Cross-attempt non-blocking: if route B is resumable and the client has
-\* applied B's snapshot, then an in-flight restore for A must not prevent a
-\* restore for B. Stated as: when no restore is in flight for the route, the
-\* client's ability to start one for B is not gated on A. Modeled as an
-\* enabledness assertion: the StartRestore guard for the route, under target,
-\* depends only on the route's own in-flight status.
-NoCrossAttemptRestoreBlocking ==
-  []((IsResumable(serverStatus[routeAttempt])
-       /\ clientSnapshotAttempt = routeAttempt
-       /\ ~RestoreInFlightForRoute)
-      => <>(RestoreInFlightForRoute
-            \/ serverStatus[routeAttempt] = "in_progress"
-            \/ IsTerminal(serverStatus[routeAttempt])))
 
 \* =============================================================================
 \* Liveness property (PROPERTY, under fairness).

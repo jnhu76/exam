@@ -215,8 +215,9 @@ Properties are real cross-state constraints:
   `ServerVersionNeverDecreases`, `TimeGrantNeverDecreases` are PROPERTYs
   (transition constraints `[][...]_vars`), not state predicates — they
   verify future behavior, not just the current state.
-- `NoCrossAttemptRestoreBlocking` is a liveness-style PROPERTY checked in
-  the route-switch config.
+- `NoCrossAttemptRestoreBlocking` is an enabledness INVARIANT checked in
+  the route-switch safety config: when per-route base conditions hold,
+  `StartRestore` must be `ENABLED`. No fairness needed.
 - `PostOutcomeIsNotPageAuthority` uses a `lastSnapshotViaGet` history
   variable so it actually distinguishes "editable via GET" from "editable
   via POST ack".
@@ -273,7 +274,7 @@ All four reproduce the named violation:
 
 ```text
 LegacyWrongAttemptRestore       —  6 distinct — NoWrongAttemptRestore violated        ✓
-LegacyGlobalInFlight            — 20,796 distinct — NoCrossAttemptRestoreBlocking violated ✓
+LegacyGlobalInFlight            — 985 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT) ✓
 LegacyStalePageLoad             — 44 distinct — NoStalePageLoadApply violated          ✓
 LegacyNoReloadAfterPostFailure — 92 distinct — PostOutcomeIsNotPageAuthority violated ✓
 ```

@@ -53,7 +53,7 @@ StartRestore with LegacyWrongAttemptCapability → snapshotAttempt = A, attemptI
 - **Buggy action**: `StartRestore` uses `RestoreStartGuard = ~AnyRestoreInFlight`
   (global) instead of `~RestoreInFlightForRoute` (per-attempt). An in-flight
   restore for A blocks a legal restore for B.
-- **Caught by**: `NoCrossAttemptRestoreBlocking` (PROPERTY — temporal)
+- **Caught by**: `NoCrossAttemptRestoreBlocking` (INVARIANT — enabledness safety)
 - **Runtime coverage**: `TakeExamPage.restore.test.tsx` Case 8 + the
   generation-token fix in `useAttemptRestore.ts`.
 
@@ -62,8 +62,9 @@ Intended normalized trace:
 ```text
 route = A; StartRestore for A (in flight)
 NavigateTo(B); B is resumable; clientSnapshotAttempt = B
-StartRestore for B blocked (AnyRestoreInFlight TRUE from A)
-→ NoCrossAttemptRestoreBlocking violated (B never starts restore)
+RestoreStartBaseConditions holds for B (per-route guard satisfied)
+But ENABLED StartRestore = FALSE (global guard ~AnyRestoreInFlight fails)
+→ NoCrossAttemptRestoreBlocking violated (invariant fails at this state)
 ```
 
 ### LegacyStalePageLoad.cfg

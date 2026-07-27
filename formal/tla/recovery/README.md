@@ -66,6 +66,13 @@ State predicates (INVARIANTs):
   applied snapshot to have come from a GET (page_load/snapshot_reload),
   tracked via the `lastSnapshotViaGet` history variable. A POST restore
   ack cannot make the page editable.
+- `NoCrossAttemptRestoreBlocking` — enabledness safety: when all per-route
+  base conditions for starting a restore hold (`RestoreStartBaseConditions`),
+  `StartRestore` must be `ENABLED`. Under target (per-attempt guard) this
+  holds universally; under legacy (global guard) an in-flight restore for A
+  disables `StartRestore` for B, violating the invariant at that state. No
+  fairness or scheduler assumption needed. Checked as INVARIANT in the
+  route-switch safety config.
 
 Cross-state constraints (PROPERTYs — checked as temporal formulas):
 
@@ -75,10 +82,6 @@ Cross-state constraints (PROPERTYs — checked as temporal formulas):
   it never changes.
 - `ServerVersionNeverDecreases` — `[][serverVersion'[a] >= serverVersion[a]]_vars`.
 - `TimeGrantNeverDecreases` — `[][timeGrant'[a] >= timeGrant[a]]_vars`.
-- `NoCrossAttemptRestoreBlocking` — when the route is resumable and no
-  restore is in flight for it, the client eventually starts a restore or
-  the attempt transitions (an in-flight restore for A must not block B).
-  Checked as a liveness-style PROPERTY in the route-switch config.
 
 ---
 
@@ -91,7 +94,7 @@ a state that violates the named TARGET property.
 | Flag | Buggy action | Caught by |
 |---|---|---|
 | `LegacyWrongAttemptCapability` | `StartRestore` skips the `clientSnapshotAttempt = routeAttempt` capability gate | `NoWrongAttemptRestore` |
-| `LegacyGlobalInFlight` | `StartRestore` uses `~AnyRestoreInFlight` (global) instead of `~RestoreInFlightForRoute` (per-attempt) — A's restore blocks B | `NoCrossAttemptRestoreBlocking` |
+| `LegacyGlobalInFlight` | `StartRestore` uses `~AnyRestoreInFlight` (global) instead of `~RestoreInFlightForRoute` (per-attempt) — A's restore blocks B | `NoCrossAttemptRestoreBlocking` (INVARIANT) |
 | `LegacyApplyStalePageLoad` | `ApplyAuthoritativeReload` skips the `IsCurrent(d)` gate — a stale delivery becomes the applied snapshot | `NoStalePageLoadApply` / `NoStaleRestoreApply` |
 | `LegacySkipReloadAfterPostFailure` | adds `LegacyApplyPostOutcome` — the POST ack alone drives UI to editable, `lastSnapshotViaGet' = FALSE` | `PostOutcomeIsNotPageAuthority` |
 
@@ -126,6 +129,30 @@ away / unmount; environment eventually delivers a non-lost response.
 runner reports this as a FAILURE (exit non-zero) — it is NOT wrapped as
 success. Use `pnpm formal:recovery:explore` for a non-gated run.
 
+**Root cause of the PARTIAL:** `LoseResponse` is in `LivenessNext` and can
+race with `ApplyAnyAuthoritativeReload`. The environment produces a response,
+`Apply` becomes briefly enabled, `LoseResponse` fires first (disabling
+`Apply`), and the cycle repeats indefinitely. Weak fairness on `Apply` cannot
+resolve this because `Apply` is not *continuously* enabled — it is repeatedly
+enabled then disabled by loss. This is an environment-fairness gap, not a
+protocol defect.
+
+**NOT a fix:** `SF_vars(LoseResponse)` would *strengthen* loss (require it to
+fire whenever repeatedly enabled), making the problem worse. The correct
+resolution is one of:
+
+1. **Minimal:** define a `LivenessNextEventuallyDelivered` that excludes
+   `LoseResponse`, documenting that liveness holds under the assumption
+   "the environment eventually delivers a non-lost response". Response loss
+   remains covered by the safety configs.
+2. **Refined:** strengthen to `SF_vars(ApplyAnyAuthoritativeReload)` — if an
+   applicable authoritative response appears infinitely often, at least one
+   is eventually applied. This is a stronger (but still reasonable)
+   environment assumption.
+
+Both are deferred to a follow-up. The safety model (which covers the
+protocol's correctness guarantees) is unaffected.
+
 ---
 
 ## Model bounds
@@ -155,7 +182,7 @@ Counterexample reproduction (each produces the NAMED violation):
 
 ```text
 LegacyWrongAttemptRestore       :      6 distinct — NoWrongAttemptRestore violated
-LegacyGlobalInFlight            : 20,796 distinct — NoCrossAttemptRestoreBlocking violated
+LegacyGlobalInFlight            :    985 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT)
 LegacyStalePageLoad             :     44 distinct — NoStalePageLoadApply violated
 LegacyNoReloadAfterPostFailure :     92 distinct — PostOutcomeIsNotPageAuthority violated
 ```
@@ -197,7 +224,9 @@ violation / counterexample not reproduced / tool error → non-zero.
 2. **Liveness PARTIAL** — see above.
 3. `NavigateTo` clears in-flight REQUESTS for the old route (REC-I3
    generationRef reset) but keeps pending DELIVERIES (so stale-apply is
-   still exercised at apply time).
+   still exercised at apply time). Under `LegacyGlobalInFlight`,
+   `NavigateTo` does NOT clear `restoreRequests` — modeling the legacy
+   client's failure to reset its global in-flight flag on navigation.
 
 ---
 
@@ -212,7 +241,9 @@ The runner parses TLC output for the named violation; any other result
 
 ## Deferred work
 
-1. Close the liveness PARTIAL (refine the deadline/restore UI interaction so
-   the property holds under fairness).
+1. Close the liveness PARTIAL: define `LivenessNextEventuallyDelivered`
+   (excluding `LoseResponse`) or strengthen to
+   `SF_vars(ApplyAnyAuthoritativeReload)`. Document the eventual-delivery
+   environment assumption. Do NOT use `SF_vars(LoseResponse)`.
 2. Consider TLC symmetry sets over `Attempts` to allow a single unified
    safety Next if desired.
