@@ -421,13 +421,24 @@ describe("useSubmitFlush", () => {
     // fire IMMEDIATELY (not serialized behind att-old) and att-old's late
     // resolution must not mark att-new's q-shared as saved/failed.
     let resolveOld!: () => void;
+    let resolveNew!: () => void;
     const saveOld = vi.fn(
       () =>
         new Promise<void>((resolve) => {
           resolveOld = resolve;
         }),
     );
-    const saveNew = vi.fn().mockResolvedValue(undefined);
+    // saveNew is ALSO deferred: its inflight status must be observable both
+    // before and after att-old's stale save resolves, so the test can prove
+    // att-old's late settle does not flip att-new's status. If saveNew
+    // resolved immediately, the status would already be "saved" before
+    // resolveOld ran and the isolation assertion would prove nothing.
+    const saveNew = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveNew = resolve;
+        }),
+    );
 
     const { result, rerender } = renderHook(
       ({ scope }: { scope: string }) => useSubmitFlush(scope),
@@ -457,19 +468,25 @@ describe("useSubmitFlush", () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
     expect(saveNew).toHaveBeenCalledTimes(1);
+    // att-new's save is inflight (pending on resolveNew).
+    expect(result.current.getQuestionStatus("q-shared")).toBe("inflight");
 
     // Now resolve att-old's stale inflight save. It must NOT overwrite
-    // att-new's status for q-shared (would otherwise flip it to "saved").
+    // att-new's status for q-shared (would otherwise flip it). att-new's
+    // status stays "inflight" — att-old's settle wrote only to att-old's
+    // (now-unreachable) scope.
     await act(async () => {
       resolveOld();
       await Promise.resolve();
     });
-    expect(result.current.getQuestionStatus("q-shared")).toBe("saved");
+    expect(result.current.getQuestionStatus("q-shared")).toBe("inflight");
 
-    // Resolve att-new's save so the test tears down cleanly.
+    // Resolve att-new's own save; now its status becomes "saved".
     await act(async () => {
+      resolveNew();
       await Promise.resolve();
     });
+    expect(result.current.getQuestionStatus("q-shared")).toBe("saved");
   });
 
   it("an old-scope flush does not consume, await, or count the new scope's work", async () => {

@@ -132,14 +132,16 @@ own container:
   scopes that happen to share a `questionId` do NOT share a queue: scope
   B/q1 never serializes behind scope A/q1.
 - **Scope captured at `scheduleSave` time.** The active scope is captured
-  into the `PendingEntry`, so a late-firing debounce timer (after a scope
+  lexically (read from `activeScopeRef.current` at schedule time and reused
+  by the debounce-timer callback), so a late-firing timer (after a scope
   change) can only touch its own scope — never the newly-active one.
-- **Scope switch (`useLayoutEffect([scopeKey]`)** runs synchronously before
-  paint: clears the old scope's pending timers (cancelling pending saves),
-  retains the old scope object so its already-inflight saves settle without
-  writing status, and installs a brand-new scope with empty maps. Resets
-  `failedQuestionIds`. `useLayoutEffect` (not `useEffect`) closes the narrow
-  window where an old timer could fire between commit and a passive cleanup.
+- **Scope switch via `useLayoutEffect` keyed on `[scopeKey]`** runs
+  synchronously before paint: clears the old scope's pending timers
+  (cancelling pending saves), retains the old scope object so its
+  already-inflight saves settle without writing status, and installs a
+  brand-new scope with empty maps. Resets `failedQuestionIds`.
+  `useLayoutEffect` (not `useEffect`) closes the narrow window where an old
+  timer could fire between commit and a passive cleanup.
 - **`flush()` binds its scope at call time.** The entire flush lifecycle —
   drain, await, count — reads ONLY the scope captured when flush started. An
   old-scope flush that is still awaiting when the scope changes cannot
@@ -366,10 +368,12 @@ pnpm verify:static
 ```
 
 Coverage was NOT collected for the focused restore run: the targeted command
-uses `--no-coverage` to keep iteration fast. `pnpm --filter @exam/web test`
-re-runs the same file under the workspace coverage config, so the per-file
-coverage report is available from that invocation if a human reviewer needs
-it; this audit does not record a measured percentage.
+uses `--no-coverage` to keep iteration fast. The web package's `test` script
+runs the full `@exam/web` suite under coverage (`vitest run --coverage`), not
+the targeted file, so a per-file coverage figure is not directly produced by
+either command in this run; a human reviewer can run
+`pnpm --filter @exam/web exec vitest run --coverage <file>` to obtain one.
+This audit does not record a measured percentage.
 
 ## Test results
 

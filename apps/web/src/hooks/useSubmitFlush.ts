@@ -26,9 +26,6 @@ interface PendingEntry {
   timer: ReturnType<typeof setTimeout>;
   save: () => Promise<void>;
   questionGeneration: number;
-  /** The scope this pending entry belongs to. Captured at schedule time so a
-   * late-firing timer (after a scope change) can only touch its own scope. */
-  scope: SaveScopeState;
 }
 
 /**
@@ -209,7 +206,6 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
         timer,
         save,
         questionGeneration,
-        scope,
       });
     },
     [runSave, setStatus],
@@ -314,11 +310,14 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
   }, [scopeKey, tick]);
 
   // Mount flag + unmount cleanup: clear the active scope's pending timers.
+  // The scope is read INSIDE the returned cleanup (not captured at mount) so
+  // that if the scope changed during the component's life, unmount clears the
+  // CURRENTLY-active scope's timers, not the original one.
   useEffect(() => {
     mountedRef.current = true;
-    const scope = activeScopeRef.current;
     return () => {
       mountedRef.current = false;
+      const scope = activeScopeRef.current;
       for (const entry of scope.pending.values()) clearTimeout(entry.timer);
       scope.pending.clear();
     };

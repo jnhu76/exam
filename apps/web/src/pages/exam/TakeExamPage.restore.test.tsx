@@ -1006,7 +1006,7 @@ describe("REC-I3 — disrupted direct restore", () => {
     let resolveOldGet: ((v: unknown) => void) | null = null;
     apiGet.mockImplementation(
       (path: string) =>
-        new Promise((resolve) => {
+        new Promise((resolve, reject) => {
           if (
             typeof path === "string" &&
             path.includes("/candidate/attempts/")
@@ -1021,7 +1021,7 @@ describe("REC-I3 — disrupted direct restore", () => {
               return;
             }
           }
-          resolve(new Error(`unexpected GET ${path}`));
+          reject(new Error(`unexpected GET ${path}`));
         }),
     );
     apiPost.mockImplementation(async (path: string) => {
@@ -1176,16 +1176,14 @@ describe("REC-I3 — disrupted direct restore", () => {
 
     // Wait for att-old to load, then advance to its last question (index 9).
     await screen.findByText("旧题 1");
-    await act(async () => {
-      // Drive currentIndex to 9 via repeated Next clicks (uses the in-page
-      // footer control). This is what makes the test prove the reset path:
-      // without the reset, the retained index 9 would break att-new.
-      const user = userEvent.setup();
-      for (let i = 0; i < 9; i++) {
-        const nextBtn = await screen.findByRole("button", { name: /下一题/ });
-        await user.click(nextBtn);
-      }
-    });
+    // Drive currentIndex to 9 via repeated Next clicks (uses the in-page
+    // footer control). This is what makes the test prove the reset path:
+    // without the reset, the retained index 9 would break att-new.
+    const user = userEvent.setup();
+    for (let i = 0; i < 9; i++) {
+      const nextBtn = await screen.findByRole("button", { name: /下一题/ });
+      await user.click(nextBtn);
+    }
     // Sanity: we are now on the old exam's last question.
     expect(await screen.findByText("旧题 10")).toBeInTheDocument();
 
@@ -1330,7 +1328,7 @@ describe("REC-I3 — disrupted direct restore", () => {
     let resolveOldSave: ((v: unknown) => void) | null = null;
     apiPost.mockImplementation(
       async (path: string) =>
-        new Promise((resolve) => {
+        new Promise((resolve, reject) => {
           if (typeof path === "string" && path.includes("/answers/")) {
             if (path.includes("/att-old/")) {
               resolveOldSave = resolve;
@@ -1344,7 +1342,7 @@ describe("REC-I3 — disrupted direct restore", () => {
             resolve({ ok: true, serverNow: NOW });
             return;
           }
-          resolve(new Error(`unexpected POST ${path}`));
+          reject(new Error(`unexpected POST ${path}`));
         }),
     );
 
@@ -1465,7 +1463,7 @@ describe("REC-I3 — disrupted direct restore", () => {
     let getCall = 0;
     apiGet.mockImplementation(
       (path: string) =>
-        new Promise((resolve) => {
+        new Promise((resolve, reject) => {
           if (
             typeof path === "string" &&
             path.includes("/candidate/attempts/")
@@ -1480,7 +1478,7 @@ describe("REC-I3 — disrupted direct restore", () => {
             resolve(snapshotV2);
             return;
           }
-          resolve(new Error(`unexpected GET ${path}`));
+          reject(new Error(`unexpected GET ${path}`));
         }),
     );
     apiPost.mockImplementation(async (path: string) => {
