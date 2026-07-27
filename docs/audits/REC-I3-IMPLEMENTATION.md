@@ -78,20 +78,39 @@ explicit-restore command lifecycle.
 
 ## Race and duplicate-request handling
 
-Verified by component tests (Cases 1, 6, 7, 8):
+Verified by component tests (Cases 1, 6, 7, 8, and the cross-attempt race
+tests added in this revision):
 
-- `restoreInFlightRef` — synchronous deduplication guard. At most one
-  concurrent restore POST per mounted attempt. Resistant to React Strict Mode
-  effect replay, snapshot re-renders, and translation re-renders.
-- `restoreAttemptIdRef` — per-attempt identity guard. A snapshot update for
-  the same attempt does not re-fire auto-restore.
-- `cancelledRef` — boolean cleanup flag (proven by Context7 for React 19
-  effect patterns). Stale async results after route change or unmount are
-  discarded; they cannot overwrite the new attempt page.
-- When `attemptId` changes, the guards reset and the new attempt initializes
-  independently.
+- `restoreInFlightRef` — synchronous deduplication guard. Keyed by
+  **attemptId** (NOT a boolean): it stores the identity of the attempt that
+  currently owns the in-flight POST/GET chain. This is what makes the
+  cross-attempt race safe — a route change to a new attempt while the OLD
+  attempt's POST is still pending is NOT a duplicate, so the new attempt's
+  `performRestore` proceeds and claims the slot; the old attempt's stale
+  resolution only clears the slot when it is STILL the owner.
+- `restoredForAttemptRef` — per-attempt identity guard. Committed INSIDE
+  `performRestore` AFTER the in-flight guard passes (NOT pre-marked in the
+  auto-restore effect), so an effect whose `performRestore` was rejected by
+  the guard can still restore once the owner changes.
+- `generationRef` + `currentAttemptIdRef` — monotonic generation token and
+  latest-bound attemptId. Both are captured at the start of each async
+  restore chain and re-checked after every await; a stale POST/GET from a
+  previous route cannot apply its snapshot or mutate UI state. The
+  generation is bumped ONLY on a real attemptId change (render-time
+  prev-value check), never on StrictMode re-mount.
+- `loadGenerationRef` + `currentAttemptIdRef` (in `TakeExamPage`) — the
+  same generation discipline applied to the PAGE's own `loadSnapshot`
+  (initial load, retry, post-submit reload). Without this guard a late
+  GET from the previous route could overwrite the new route's snapshot or
+  write `loadError` onto an already-loaded page.
+- On a real route change ALL attempt-scoped page state is reset
+  (snapshot, loadError, isLoading, currentIndex, answers, save/submit/
+  transient/flush states, and the submit/deadline refs), so nothing from
+  the previous attempt can leak onto the new route (in particular, a
+  retained `currentIndex` out of range for the new exam cannot pin the
+  page to the generic ErrorState).
 - A user-triggered retry after a genuine failure issues a fresh POST
-  (`performRestore({ isRetry: true })`).
+  (`retryRestore()` → `performRestore({ isRetry: true })`).
 
 ## Deadline and terminal race handling
 
@@ -213,9 +232,9 @@ Confirmed source facts (§7 of the prompt):
 ## Files changed
 
 ```text
-apps/web/src/exam/useAttemptRestore.ts               (new, 200 LOC)
-apps/web/src/pages/exam/TakeExamPage.tsx             (modified — wiring + restore/failed UI)
-apps/web/src/pages/exam/TakeExamPage.restore.test.tsx (new, 12 test cases)
+apps/web/src/exam/useAttemptRestore.ts               (new; revised — per-attempt in-flight, finally reset)
+apps/web/src/pages/exam/TakeExamPage.tsx             (modified — wiring + restore/failed UI, stale-GET guard, full attempt-scoped reset)
+apps/web/src/pages/exam/TakeExamPage.restore.test.tsx (new, 18 test cases)
 apps/web/src/i18n/locales/zh-CN.ts                   (modified — restore key group)
 docs/architecture/exam-system/candidate-recovery.md  (modified — diagram + status section)
 docs/audits/REC-I3-IMPLEMENTATION.md                 (new — this closeout)
@@ -223,7 +242,7 @@ docs/audits/REC-I3-IMPLEMENTATION.md                 (new — this closeout)
 
 ## Tests added
 
-`apps/web/src/pages/exam/TakeExamPage.restore.test.tsx` — 12 component /
+`apps/web/src/pages/exam/TakeExamPage.restore.test.tsx` — 18 component /
 integration cases, all on the authoritative snapshot read path:
 
 | # | Case | Behavior asserted |
@@ -238,6 +257,12 @@ integration cases, all on the authoritative snapshot read path:
 | 8 | attemptId change | New attempt's restore is never fired by stale results |
 | 9 | Snapshot reload fails after restore | No invented in_progress; reload/retry path |
 | 10 | Existing editable flow (regression) | Saves still flow via the existing path |
+| 11 | POST 409 server-already-submitted | Terminal snapshot wins, not a failure |
+| 12 | POST response lost, server restored | GET in_progress wins, not a failure |
+| 13 | Cross-attempt race: resumable → resumable | New attempt restores even while old POST is in flight |
+| 14 | Cross-attempt race: old GET late success | Old GET does not overwrite new route snapshot |
+| 15 | Cross-attempt race: old GET late failure | Old GET does not write loadError onto new page |
+| 16 | Cross-attempt race: short new exam after long old exam | currentIndex reset; no ErrorState from out-of-range index |
 | UX-A | Restoring UI | Accessible surface; no editable controls while pending |
 | UX-B | Failure affordances | "重试恢复" + "返回考试列表" both reachable |
 
@@ -249,9 +274,16 @@ sleeps.
 ## Context7 documentation consulted
 
 - **React 19** (`/reactjs/react.dev`): `useEffect` cleanup patterns for async
-  initialization; confirmed the `let ignore = false` boolean cleanup flag as
-  the canonical Strict Mode race guard. Confirmed Strict Mode runs an extra
-  setup+cleanup cycle on the first mount.
+  initialization, and the documented React pattern for "adjust state when a
+  prop changes" (setState during render with an immediate bail-out), which is
+  how the hook bumps its generation token at render time on a real
+  `attemptId` change. The earlier shared-boolean `let ignore = false` cleanup
+  flag was found insufficient for the cross-attempt race (a new effect setup
+  could reset the shared boolean before a stale async chain resumed); the
+  monotonic generation token + `currentAttemptIdRef` re-checked after every
+  await is the actual race guard, and it survives Strict Mode's extra
+  setup→cleanup→setup cycle because the token is bumped ONLY on a real
+  `attemptId` change, never on re-mount of the same attempt.
 - **Testing Library** (`/testing-library/testing-library-docs`): `waitFor`
   and `findBy*` retry semantics; confirmed `findByRole`/`findByTestId`
   accept `{ timeout }` and that assertions inside `waitFor` must throw to
@@ -275,14 +307,20 @@ pnpm lint:arch
 pnpm verify:static
 ```
 
+Coverage was NOT collected for the focused restore run: the targeted command
+uses `--no-coverage` to keep iteration fast. `pnpm --filter @exam/web test`
+re-runs the same file under the workspace coverage config, so the per-file
+coverage report is available from that invocation if a human reviewer needs
+it; this audit does not record a measured percentage.
+
 ## Test results
 
 ```text
 apps/web/src/pages/exam/TakeExamPage.restore.test.tsx
-  12 passed
+  18 passed
 
 apps/web full suite
-  1246 passed (12 new + 1234 existing — no regressions)
+  1252 passed (18 in the focused restore spec + 1234 existing — no regressions)
 ```
 
 ## Static verification results
@@ -338,10 +376,15 @@ offline answer acceptance policy / ZKP / WebAuthn / TPM / TEE / attestation
   Final human review should additionally run the E2E happy path
   (`candidate-happy-path`, `resume-attempt`, `submit-flush`) on a runner with
   Docker/PostgreSQL before merge.
-- **Strict Mode under React 19 + Suspense.** The boolean cleanup flag is the
-  proven guard; if a future React feature causes effects to re-run without
-  unmounting, the in-flight ref still prevents concurrent duplicates, but
-  human E2E review is advisable.
+- **Strict Mode under React 19 + Suspense.** The race guard is the monotonic
+  `generationRef` + `currentAttemptIdRef`, re-checked after every await and
+  bumped ONLY on a real `attemptId` change — it is intentionally NOT bumped on
+  StrictMode re-mount of the same attempt (which would falsely cancel a
+  legitimate in-flight restore). The `attemptId`-keyed `restoreInFlightRef`
+  still prevents concurrent duplicates for the same attempt within that
+  generation. If a future React feature causes effects to re-run without a
+  real prop change, the in-flight owner ref plus the generation token remain
+  the guard; human E2E review is advisable for any such change.
 
 ## Next authorized Job
 

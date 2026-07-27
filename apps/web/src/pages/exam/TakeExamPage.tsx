@@ -94,6 +94,61 @@ function getSaveRejectionDisplay(
 
 type QuestionState = "unanswered" | "answered" | "flagged";
 
+/**
+ * REC-I3 restore-failed recovery surface.
+ *
+ * Accessibility: the nested <Alert variant="destructive"> already carries
+ * role="alert" (see apps/web/src/components/ui/alert.tsx), so this wrapper
+ * does NOT duplicate role/aria-live on the outer div — a duplicate role would
+ * cause some screen readers to announce the same alert region twice. The
+ * retry button is auto-focused on mount so keyboard users land directly on
+ * the primary recovery action without an extra Tab through "返回考试列表".
+ */
+function RestoreFailedSurface({
+  onRetry,
+  onBackToList,
+}: {
+  onRetry: () => void;
+  onBackToList: () => void;
+}) {
+  const { t } = useTranslation();
+  const retryBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    retryBtnRef.current?.focus();
+  }, []);
+  return (
+    <div
+      className="mx-auto flex min-h-screen max-w-xl flex-col items-stretch justify-center gap-4 bg-background p-6"
+      data-testid="restore-failed-surface"
+    >
+      <Alert variant="destructive">
+        <AppIcon icon={WifiOff} size="inline" />
+        <AlertTitle>{t("candidateRuntime.restore.failedTitle")}</AlertTitle>
+        <AlertDescription>
+          {t("candidateRuntime.restore.failedDescription")}
+        </AlertDescription>
+      </Alert>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={onBackToList}
+          data-testid="restore-back-to-list"
+        >
+          {t("candidateRuntime.restore.backToList")}
+        </Button>
+        <Button
+          ref={retryBtnRef}
+          onClick={onRetry}
+          data-testid="restore-retry-btn"
+        >
+          <AppIcon icon={RotateCcw} size="inline" />
+          {t("candidateRuntime.restore.retryRestore")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Active exam-taking page. Reads the authoritative CandidateTakeSnapshot. */
 export function TakeExamPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
@@ -134,6 +189,14 @@ export function TakeExamPage() {
   // every successful beat.
   const heartbeatFailureRef = useRef(0);
   const heartbeatFailureReportedRef = useRef(false);
+  // Load generation token — the page-level guard against a stale GET
+  // overwriting newer state. Bumped on every real route change AND on every
+  // loadSnapshot call, so a late-resolving GET from att-old cannot apply its
+  // snapshot or write loadError/isLoading over the att-new page. The restore
+  // hook already has its own generation guard; this one closes the page's own
+  // loader (initial load, retry, post-submit reload) and any concurrent GET.
+  const loadGenerationRef = useRef(0);
+  const currentAttemptIdRef = useRef<string | undefined>(attemptId);
   const { scheduleSave, flush } = useSubmitFlush();
 
   /** Returns the current time adjusted by the server clock offset. */
@@ -204,15 +267,37 @@ export function TakeExamPage() {
    * toggling `isLoading`. Used for initial load, ErrorState retry, and the
    * post-submit reload. The restore hook does NOT use this — it uses
    * `fetchSnapshot` directly so a reload failure is observable.
+   *
+   * Stale-request safe: each call captures its own load generation and the
+   * attemptId it requested. After every await, both are re-checked — a late
+   * GET from a previous route (or a previous retry) cannot apply its snapshot
+   * or write loadError/isLoading onto the current page. This is the same
+   * generation-guard discipline the restore hook uses; before this guard a
+   * route change could leave the page pinned to an ErrorState when an OLD
+   * GET resolved AFTER the NEW GET had already succeeded.
    */
   const loadSnapshot = useCallback(async () => {
     if (!attemptId) return;
+    const requestedAttemptId = attemptId;
+    const generation = loadGenerationRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await fetchSnapshot(attemptId);
+      const data = await fetchSnapshot(requestedAttemptId);
+      if (
+        generation !== loadGenerationRef.current ||
+        currentAttemptIdRef.current !== requestedAttemptId
+      ) {
+        return;
+      }
       applySnapshot(data);
     } catch {
+      if (
+        generation !== loadGenerationRef.current ||
+        currentAttemptIdRef.current !== requestedAttemptId
+      ) {
+        return;
+      }
       trackExamEvent(
         "exam_page_loaded",
         { outcome: "failed" },
@@ -220,7 +305,12 @@ export function TakeExamPage() {
       );
       setLoadError(t("candidateRuntime.errors.loadFailed"));
     } finally {
-      setIsLoading(false);
+      if (
+        generation === loadGenerationRef.current &&
+        currentAttemptIdRef.current === requestedAttemptId
+      ) {
+        setIsLoading(false);
+      }
     }
   }, [attemptId, fetchSnapshot, applySnapshot, t]);
 
@@ -261,15 +351,52 @@ export function TakeExamPage() {
   // never flashes for the new route. Render-time prev-value check (not an
   // effect): the reset must be visible in the same commit as the param
   // change, before any child effect reads stale state.
+  //
+  // This resets ALL attempt-scoped state — not just snapshot/loadError/
+  // isLoading. A retained currentIndex (e.g. 9 from a 10-question exam)
+  // applied to a 5-question new exam would make currentQuestionView null and
+  // pin the page to the generic ErrorState, and Retry would not recover
+  // because the snapshot reload does not reset currentIndex either. The save/
+  // submit/transient/flush states and the submit/deadline refs are also
+  // attempt-scoped and must not leak across routes.
   const prevAttemptIdRef = useRef<string | undefined>(attemptId);
   if (prevAttemptIdRef.current !== attemptId) {
     prevAttemptIdRef.current = attemptId;
+    currentAttemptIdRef.current = attemptId;
+    // Bump the load generation so any still-pending GET from the PREVIOUS
+    // attempt is rejected at apply/loadError/isLoading time. Without this, a
+    // late-resolving old GET could overwrite the new route's freshly-loaded
+    // snapshot (or write loadError onto an already-loaded page).
+    loadGenerationRef.current += 1;
     // Intentionally set during render: this is the documented React pattern
     // for "adjust state when a prop changes" (you may call setState during
     // render if you bail out of the rest of the render immediately after).
     setSnapshot(null);
     setLoadError(null);
     setIsLoading(true);
+    // Reset all attempt-scoped UI state so nothing from the previous attempt
+    // leaks onto the new route.
+    setCurrentIndex(0);
+    setQuestionStates([]);
+    setAnswers(new Map());
+    setSaveState("idle");
+    setSaveRejection(null);
+    setShowSubmitDialog(false);
+    setTransientState("idle");
+    setIsFlushing(false);
+    setFlushResult(null);
+    setAutoSubmitFailed(false);
+    setIsDisconnected(false);
+    // Reset attempt-scoped refs. versionsRef / clientSeqsRef will be rebuilt
+    // from the new attempt's snapshot by applySnapshot, but clearing them now
+    // avoids any window where stale save state could drive a save for the
+    // wrong attempt.
+    versionsRef.current = new Map();
+    clientSeqsRef.current = new Map();
+    submittingRef.current = false;
+    deadlineHandledRef.current = false;
+    heartbeatFailureRef.current = 0;
+    heartbeatFailureReportedRef.current = false;
   }
 
   // P3-FSM-0: the view is derived PURELY from the authoritative snapshot.
@@ -760,36 +887,10 @@ export function TakeExamPage() {
   // return to the exam list.
   if (restoreFailed) {
     return (
-      <div
-        className="mx-auto flex min-h-screen max-w-xl flex-col items-stretch justify-center gap-4 bg-background p-6"
-        data-testid="restore-failed-surface"
-        role="alert"
-        aria-live="assertive"
-      >
-        <Alert variant="destructive">
-          <AppIcon icon={WifiOff} size="inline" />
-          <AlertTitle>{t("candidateRuntime.restore.failedTitle")}</AlertTitle>
-          <AlertDescription>
-            {t("candidateRuntime.restore.failedDescription")}
-          </AlertDescription>
-        </Alert>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={() => navigate(routes.exam.list)}
-            data-testid="restore-back-to-list"
-          >
-            {t("candidateRuntime.restore.backToList")}
-          </Button>
-          <Button
-            onClick={() => void retryRestore()}
-            data-testid="restore-retry-btn"
-          >
-            <AppIcon icon={RotateCcw} size="inline" />
-            {t("candidateRuntime.restore.retryRestore")}
-          </Button>
-        </div>
-      </div>
+      <RestoreFailedSurface
+        onRetry={() => retryRestore()}
+        onBackToList={() => navigate(routes.exam.list)}
+      />
     );
   }
 

@@ -840,6 +840,361 @@ describe("REC-I3 — disrupted direct restore", () => {
       screen.queryByTestId("restore-failed-surface"),
     ).not.toBeInTheDocument();
   });
+
+  it("Case 13: cross-attempt race — resumable → resumable, new attempt restores despite old POST in flight", async () => {
+    // Both attempts are disrupted + resumable. att-old's restore POST is held
+    // pending; the test navigates to att-new and asserts that att-new's own
+    // restore POST fires even before att-old's stale POST resolves.
+    const disruptedOld = buildSnapshot({
+      attemptId: "att-old",
+      attemptStatus: "disrupted",
+      isEditable: false,
+      canResume: true,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "disrupted",
+    });
+    const disruptedNew = buildSnapshot({
+      attemptId: "att-new",
+      examId: "exam-new",
+      attemptStatus: "disrupted",
+      isEditable: false,
+      canResume: true,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "disrupted",
+    });
+
+    // Per-attempt snapshots: GET att-old/.../take → disruptedOld; GET att-new →
+    // disruptedNew on the FIRST call (so canResume surfaces), restored on later
+    // calls (so att-new's restore chain reaches the editable view).
+    let newTakeCall = 0;
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        if (path.includes("/att-old/")) return disruptedOld;
+        if (path.includes("/att-new/")) {
+          newTakeCall += 1;
+          // First GET for att-new: disrupted (drives auto-restore trigger).
+          // Subsequent GETs (post-restore reload): editable.
+          return newTakeCall === 1
+            ? disruptedNew
+            : buildSnapshot({
+                attemptId: "att-new",
+                examId: "exam-new",
+                attemptStatus: "in_progress",
+                isEditable: true,
+                canResume: false,
+                canSave: true,
+                canSubmit: true,
+              });
+        }
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    let resolveRestoreOld: ((v: unknown) => void) | null = null;
+    apiPost.mockImplementation(
+      async (path: string) =>
+        new Promise((resolve) => {
+          if (typeof path === "string" && path.endsWith("/att-old/restore")) {
+            resolveRestoreOld = resolve;
+            return;
+          }
+          if (typeof path === "string" && path.endsWith("/att-new/restore")) {
+            resolve({ id: "att-new", status: "in_progress" });
+            return;
+          }
+          resolve({ ok: true, serverNow: NOW });
+        }),
+    );
+
+    const { navigate } = renderPage("att-old");
+
+    // att-old's restore POST is on the wire and pending.
+    await waitFor(
+      () => {
+        const restores = apiPost.mock.calls.filter(
+          ([p]) =>
+            typeof p === "string" && (p as string).includes("/att-old/restore"),
+        );
+        expect(restores.length).toBeGreaterThanOrEqual(1);
+      },
+      { timeout: 4000 },
+    );
+
+    // Navigate to the new attempt while att-old's POST is STILL pending.
+    await act(async () => {
+      navigate("/exam/exam-new/take/att-new");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // KEY ASSERTION: att-new's restore POST fires even though att-old's POST
+    // is still in flight. This is the cross-attempt race the previous
+    // boolean in-flight guard dropped.
+    await waitFor(
+      () => {
+        const restoresForNew = apiPost.mock.calls.filter(
+          ([p]) =>
+            typeof p === "string" && (p as string).includes("/att-new/restore"),
+        );
+        expect(restoresForNew.length).toBe(1);
+      },
+      { timeout: 4000 },
+    );
+
+    // att-new reaches the editable exam (its restore chain completed; the
+    // stale att-old POST did NOT block it).
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+
+    // Now resolve the stale att-old POST. It must NOT affect att-new's page
+    // (no overwrite of snapshot, no restore UI flicker).
+    await act(async () => {
+      resolveRestoreOld?.({ id: "att-old", status: "in_progress" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // att-new still rendered, exactly one restore per attempt.
+    expect(
+      screen.queryByTestId("restore-restoring-surface"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
+    const oldRestores = apiPost.mock.calls.filter(
+      ([p]) =>
+        typeof p === "string" && (p as string).includes("/att-old/restore"),
+    );
+    const newRestores = apiPost.mock.calls.filter(
+      ([p]) =>
+        typeof p === "string" && (p as string).includes("/att-new/restore"),
+    );
+    expect(oldRestores).toHaveLength(1);
+    expect(newRestores).toHaveLength(1);
+  });
+
+  it("Case 14: cross-attempt race — old GET resolves AFTER new GET, old snapshot does not overwrite new page", async () => {
+    // Initial att-old snapshot is editable (no restore). The test deliberately
+    // stalls the att-old GET so it resolves AFTER the att-new GET, then asserts
+    // att-old's snapshot is NOT applied to the att-new page.
+    const editableOld = buildSnapshot({
+      attemptId: "att-old",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+    const editableNew = buildSnapshot({
+      attemptId: "att-new",
+      examId: "exam-new",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+
+    let resolveOldGet: ((v: unknown) => void) | null = null;
+    apiGet.mockImplementation(
+      (path: string) =>
+        new Promise((resolve) => {
+          if (
+            typeof path === "string" &&
+            path.includes("/candidate/attempts/")
+          ) {
+            if (path.includes("/att-old/")) {
+              // Hold the old GET pending so it resolves AFTER navigation.
+              resolveOldGet = resolve;
+              return;
+            }
+            if (path.includes("/att-new/")) {
+              resolve(editableNew);
+              return;
+            }
+          }
+          resolve(new Error(`unexpected GET ${path}`));
+        }),
+    );
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    const { navigate } = renderPage("att-old");
+
+    // Navigate to att-new before att-old's GET resolves.
+    await act(async () => {
+      navigate("/exam/exam-new/take/att-new");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // att-new's editable exam renders.
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+
+    // Now resolve the late att-old GET with att-old's snapshot. The stale-GET
+    // guard must reject it; att-new's page must remain intact.
+    await act(async () => {
+      resolveOldGet?.(editableOld);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // att-new's page is still correct — no ErrorState, no flash of att-old.
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "A" })).toBeInTheDocument();
+  });
+
+  it("Case 15: cross-attempt race — old GET fails AFTER new GET succeeded, old failure does not write loadError", async () => {
+    const editableNew = buildSnapshot({
+      attemptId: "att-new",
+      examId: "exam-new",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+
+    let rejectOldGet: ((e: unknown) => void) | null = null;
+    apiGet.mockImplementation(
+      (path: string) =>
+        new Promise((resolve, reject) => {
+          if (
+            typeof path === "string" &&
+            path.includes("/candidate/attempts/")
+          ) {
+            if (path.includes("/att-old/")) {
+              // Hold the old GET pending so its FAILURE resolves after nav.
+              rejectOldGet = reject;
+              return;
+            }
+            if (path.includes("/att-new/")) {
+              resolve(editableNew);
+              return;
+            }
+          }
+          reject(new Error(`unexpected GET ${path}`));
+        }),
+    );
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    const { navigate } = renderPage("att-old");
+
+    await act(async () => {
+      navigate("/exam/exam-new/take/att-new");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // att-new's editable exam renders.
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+
+    // Now the late att-old GET fails. The stale guard must reject its
+    // loadError / isLoading write — att-new's page stays usable.
+    await act(async () => {
+      rejectOldGet?.(new Error("att-old GET failed late"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "A" })).toBeInTheDocument();
+  });
+
+  it("Case 16: cross-attempt race — currentIndex from a long old exam does not pin short new exam to ErrorState", async () => {
+    // Old exam has 10 questions and the candidate was on the last one.
+    // New exam has 1 question. Without attempt-scoped reset, currentIndex=9
+    // would make view.questions[9] undefined → currentQuestionView=null →
+    // generic ErrorState, even after the new snapshot loaded successfully.
+    const tenQuestionOld = buildSnapshot({
+      attemptId: "att-old",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+      questions: Array.from({ length: 10 }, (_, i) => ({
+        id: `q-old-${i}`,
+        type: "single_choice" as const,
+        prompt: `旧题 ${i + 1}`,
+        options: [
+          { id: `opt-old-a-${i}`, content: "A" },
+          { id: `opt-old-b-${i}`, content: "B" },
+        ],
+        inputMode: "choice" as const,
+        maxScore: 10,
+        answerValue: null,
+        answerSource: "none" as const,
+      })),
+    });
+    const oneQuestionNew = buildSnapshot({
+      attemptId: "att-new",
+      examId: "exam-new",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        if (path.includes("/att-old/")) return tenQuestionOld;
+        if (path.includes("/att-new/")) return oneQuestionNew;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    const { navigate } = renderPage("att-old");
+
+    // Wait for att-old to load, then advance to its last question (index 9).
+    await screen.findByText("旧题 1");
+    await act(async () => {
+      // Drive currentIndex to 9 via repeated Next clicks (uses the in-page
+      // footer control). This is what makes the test prove the reset path:
+      // without the reset, the retained index 9 would break att-new.
+      const user = userEvent.setup();
+      for (let i = 0; i < 9; i++) {
+        const nextBtn = await screen.findByRole("button", { name: /下一题/ });
+        await user.click(nextBtn);
+      }
+    });
+    // Sanity: we are now on the old exam's last question.
+    expect(await screen.findByText("旧题 10")).toBeInTheDocument();
+
+    // Navigate to the short new exam.
+    await act(async () => {
+      navigate("/exam/exam-new/take/att-new");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The new exam's single question renders — NOT the generic ErrorState.
+    // This is the regression assertion: a retained out-of-range currentIndex
+    // would otherwise have driven the page into ErrorState.
+    expect(await screen.findByText("选择一项")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "A" })).not.toBeDisabled();
+  });
 });
 
 describe("REC-I3 — restoring UX and accessibility", () => {

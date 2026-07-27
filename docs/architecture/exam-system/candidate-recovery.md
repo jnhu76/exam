@@ -191,15 +191,40 @@ Properties preserved by the implementation:
   POST response is treated only as a command acknowledgement.
 - `snapshot.canResume` — NOT raw `attemptStatus === "disrupted"` — governs
   whether restore is attempted.
-- Restore fires at most once concurrently per mounted attempt. Guards:
-  in-flight promise ref + per-attempt identity ref + cancellation flag.
-  Verified by component tests against React Strict Mode effect replay and
-  snapshot re-renders.
+- Restore fires at most once concurrently per mounted attempt. Guards
+  (per `useAttemptRestore`):
+  - **`restoreInFlightRef` keyed by `attemptId`** (NOT a boolean): stores the
+    identity of the attempt that currently owns the in-flight POST/GET chain.
+    A route change to a NEW attempt while an OLD attempt's POST is still
+    pending is NOT a duplicate, so the new attempt's restore proceeds and
+    claims the slot; the old attempt's stale resolution only clears the slot
+    when it is STILL the owner.
+  - **`restoredForAttemptRef`** — per-attempt identity guard, committed INSIDE
+    `performRestore` after the in-flight guard passes (not pre-marked in the
+    auto-restore effect), so an effect whose `performRestore` was rejected by
+    the guard can still restore once the owner changes.
+  - **`generationRef` + `currentAttemptIdRef`** — monotonic generation token
+    and latest-bound `attemptId`. Both are captured at the start of each async
+    restore chain and re-checked after every await; a stale POST/GET from a
+    previous route cannot apply its snapshot or mutate UI state. The
+    generation is bumped ONLY on a real `attemptId` change (render-time
+    prev-value check), never on StrictMode re-mount of the same attempt.
+  This replaces the earlier shared-boolean `cancelledRef` cleanup flag, which
+  a new effect setup could reset before a stale async chain resumed. Verified
+  by component tests against React Strict Mode effect replay, snapshot
+  re-renders, and cross-attempt races (resumable→resumable, old GET late
+  success/failure).
+- The same generation discipline guards the PAGE's own `loadSnapshot`
+  (`loadGenerationRef` + `currentAttemptIdRef`): a late GET from a previous
+  route cannot overwrite the new route's snapshot or write `loadError` onto an
+  already-loaded page.
+- On a real route change ALL attempt-scoped page state is reset (snapshot,
+  loadError, isLoading, currentIndex, answers, save/submit/transient/flush
+  states, and the submit/deadline refs), so nothing from the previous attempt
+  can leak onto the new route — in particular, a retained `currentIndex` out
+  of range for the new exam cannot pin the page to the generic ErrorState.
 - User-triggered retry after a genuine failure is supported via a dedicated
   "重试恢复" control (a fresh POST is allowed).
-- Route changes (attemptId change) reset the guards so the new attempt
-  initializes independently; stale async results from the old attempt cannot
-  overwrite the new page.
 - Deadline race: if the deadline wins between GET and POST restore, the
   reloaded snapshot is terminal/non-resumable; the page renders the terminal
   state and does NOT auto-loop restore.

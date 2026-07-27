@@ -48,6 +48,29 @@ type RestoreOutcome =
   | { kind: "still_resumable"; snapshot: CandidateTakeSnapshot }
   | { kind: "unavailable"; errorCode: string };
 
+/**
+ * Classifies a POST restore failure into a stable error code for telemetry
+ * and the unavailable-branch UI. Only stringifies an object's `code` when it
+ * is a defined, non-empty value — `String(undefined)` would produce the
+ * useless literal "undefined". Falls back to NETWORK for ordinary Error
+ * instances with a message, and UNKNOWN for everything else.
+ */
+function classifyPostErrorCode(err: unknown): string {
+  if (
+    err &&
+    typeof err === "object" &&
+    "code" in err &&
+    (err as { code?: unknown }).code != null &&
+    (err as { code?: unknown }).code !== ""
+  ) {
+    return String((err as { code?: unknown }).code);
+  }
+  if (err instanceof Error && err.message) {
+    return "NETWORK";
+  }
+  return "UNKNOWN";
+}
+
 export interface UseAttemptRestoreOptions {
   attemptId: string | undefined;
   examId: string | undefined;
@@ -91,13 +114,18 @@ export function useAttemptRestore({
   // Latest attemptId this hook is bound to. Compared at async-resolution time
   // so a stale POST/GET chain from a previous route cannot mutate state.
   const currentAttemptIdRef = useRef<string | undefined>(attemptId);
-  // In-flight promise ref — the synchronous guard against duplicate concurrent
-  // requests from Strict Mode effect re-execution, snapshot updates, or a
-  // user double-clicking retry.
-  const restoreInFlightRef = useRef(false);
-  // Identity of the attempt for which auto-restore has already fired, so a
-  // snapshot update (e.g. a successful reload) does not re-trigger restore for
-  // the same attempt.
+  // In-flight owner ref — the synchronous guard against duplicate concurrent
+  // requests. Stores the attemptId that currently owns the in-flight POST/GET
+  // chain, NOT a boolean. This is what makes cross-attempt races safe: a new
+  // attempt's performRestore, on a route change while the old attempt's POST
+  // is still pending, sees a DIFFERENT owner and proceeds (overwriting the
+  // slot). The previous attempt's stale resolution only clears the slot when
+  // it is STILL the owner — never the new attempt's slot.
+  const restoreInFlightRef = useRef<string | undefined>(undefined);
+  // Identity of the attempt for which auto-restore has actually STARTED (not
+  // merely been scheduled). Committed inside performRestore AFTER the in-flight
+  // guard passes, so an attempt whose performRestore was rejected by the guard
+  // can still be restored once the in-flight owner changes.
   const restoredForAttemptRef = useRef<string | undefined>(undefined);
 
   // Bump the generation on a genuine attemptId change. Done at render time
@@ -116,9 +144,10 @@ export function useAttemptRestore({
     // the PREVIOUS attempt does not leak onto the new route. The new attempt's
     // authoritative snapshot + auto-restore effect drive the correct UI.
     setRestoreState("idle");
-    // Do NOT reset restoreInFlightRef here — the previous attempt's POST may
-    // still be settling; it checks generation/identity before touching state.
-    // The new attempt's performRestore will set it when it starts.
+    // restoreInFlightRef is intentionally keyed by attemptId (not reset here):
+    // the previous attempt's POST may still be settling, and it will clear its
+    // own slot only if it is still the owner. The new attempt's performRestore
+    // takes ownership unconditionally when the route has changed.
   }
 
   /**
@@ -143,17 +172,27 @@ export function useAttemptRestore({
       if (!attemptId) {
         return;
       }
+      const restoringAttemptId = attemptId;
       // Synchronous deduplication guard — at most one concurrent restore per
-      // mounted attempt. A `disabled` flag alone is not a sufficient guard
-      // (ADR-012 §11).
-      if (restoreInFlightRef.current) {
+      // mounted ATTEMPT (keyed by attemptId, not a boolean). A route change to
+      // a NEW attempt while an OLD attempt's POST is in flight is NOT a
+      // duplicate: the new attempt must be allowed to restore. We only bail
+      // when WE already own the in-flight slot (StrictMode replay, double
+      // retry click, snapshot re-render of the same attempt). A `disabled`
+      // flag alone is not a sufficient guard (ADR-012 §11).
+      const existingOwner = restoreInFlightRef.current;
+      if (existingOwner === restoringAttemptId) {
         return;
       }
+      restoreInFlightRef.current = restoringAttemptId;
 
       const generation = generationRef.current;
-      const restoringAttemptId = attemptId;
-      restoreInFlightRef.current = true;
       setRestoreState("restoring");
+      // Commit the auto-restore identity AFTER the in-flight guard passes.
+      // Scheduling the effect is not enough — an effect that scheduled a
+      // restore only to be rejected by the in-flight guard must remain
+      // eligible to retry once the owner changes.
+      restoredForAttemptRef.current = restoringAttemptId;
 
       const startedAt = Date.now();
       trackExamEvent(
@@ -162,124 +201,131 @@ export function useAttemptRestore({
         { attemptId, examId },
       );
 
-      // POST /api/attempts/:attemptId/restore is a command acknowledgement.
-      // Per ADR-012, the restore response is NOT the canonical take-page
-      // state — the reloaded snapshot is. We swallow ANY post error and let
-      // the authoritative GET decide: a 409 may mean the server already
-      // reconciled (deadline won); a network failure may mean the response
-      // was lost even though the server restored successfully.
-      let postErrorCode: string | undefined;
+      // Helper: release the in-flight slot ONLY if this call still owns it.
+      // After a route change a new attempt may have claimed the slot; clearing
+      // it here would let a third caller jump the queue.
+      const releaseInFlightIfOwner = () => {
+        if (restoreInFlightRef.current === restoringAttemptId) {
+          restoreInFlightRef.current = undefined;
+        }
+      };
+
       try {
-        await api.post(`/api/attempts/${restoringAttemptId}/restore`);
-      } catch (err) {
-        if (isStale(generation, restoringAttemptId)) {
-          restoreInFlightRef.current = false;
-          return;
+        // POST /api/attempts/:attemptId/restore is a command acknowledgement.
+        // Per ADR-012, the restore response is NOT the canonical take-page
+        // state — the reloaded snapshot is. We swallow ANY post error and let
+        // the authoritative GET decide: a 409 may mean the server already
+        // reconciled (deadline won); a network failure may mean the response
+        // was lost even though the server restored successfully.
+        let postErrorCode: string | undefined;
+        try {
+          await api.post(`/api/attempts/${restoringAttemptId}/restore`);
+        } catch (err) {
+          if (isStale(generation, restoringAttemptId)) {
+            return;
+          }
+          postErrorCode = classifyPostErrorCode(err);
         }
-        postErrorCode =
-          err && typeof err === "object" && "code" in err
-            ? String((err as { code?: unknown }).code)
-            : err instanceof Error && err.message
-              ? "NETWORK"
-              : "UNKNOWN";
-      }
 
-      // Always re-read the authoritative snapshot — the POST ack is never the
-      // page authority, and a POST failure may be ambiguous (deadline won,
-      // response lost). `fetchSnapshot` MUST throw on failure.
-      let outcome: RestoreOutcome;
-      try {
-        const snapshot = await fetchSnapshot(restoringAttemptId);
-        if (isStale(generation, restoringAttemptId)) {
-          restoreInFlightRef.current = false;
-          return;
+        // Always re-read the authoritative snapshot — the POST ack is never
+        // the page authority, and a POST failure may be ambiguous (deadline
+        // won, response lost). `fetchSnapshot` MUST throw on failure.
+        let outcome: RestoreOutcome;
+        try {
+          const snapshot = await fetchSnapshot(restoringAttemptId);
+          if (isStale(generation, restoringAttemptId)) {
+            return;
+          }
+          if (snapshot.attemptId !== restoringAttemptId) {
+            // Defensive: the GET returned a snapshot for a different attempt
+            // (should not happen with a correct backend). Treat as an
+            // unavailable recovery — do NOT leave the user pinned to the
+            // "restoring" surface with no retry, and do NOT silently apply a
+            // snapshot for the wrong attempt.
+            outcome = {
+              kind: "unavailable",
+              errorCode: "SNAPSHOT_ATTEMPT_MISMATCH",
+            };
+          } else if (snapshot.isEditable) {
+            outcome = { kind: "restored", snapshot };
+          } else if (!snapshot.canResume) {
+            // Terminal: deadline won during restore, or already submitted. The
+            // terminal snapshot is the correct outcome — not a failure.
+            outcome = { kind: "terminal", snapshot };
+          } else {
+            // Still resumable + non-editable: the restore did not take effect.
+            // Keep the existing disrupted snapshot; surface a recovery failure.
+            outcome = { kind: "still_resumable", snapshot };
+          }
+        } catch {
+          if (isStale(generation, restoringAttemptId)) {
+            return;
+          }
+          outcome = {
+            kind: "unavailable",
+            errorCode: postErrorCode ?? "RELOAD_FAILED",
+          };
         }
-        if (snapshot.attemptId !== restoringAttemptId) {
-          // Defensive: the GET returned a snapshot for a different attempt
-          // (should not happen with a correct backend). Treat as stale.
-          restoreInFlightRef.current = false;
-          return;
-        }
-        if (snapshot.isEditable) {
-          outcome = { kind: "restored", snapshot };
-        } else if (!snapshot.canResume) {
-          // Terminal: deadline won during restore, or already submitted. The
-          // terminal snapshot is the correct outcome — not a failure.
-          outcome = { kind: "terminal", snapshot };
-        } else {
-          // Still resumable + non-editable: the restore did not take effect.
-          // Keep the existing disrupted snapshot; surface a recovery failure.
-          outcome = { kind: "still_resumable", snapshot };
-        }
-      } catch {
-        if (isStale(generation, restoringAttemptId)) {
-          restoreInFlightRef.current = false;
-          return;
-        }
-        outcome = {
-          kind: "unavailable",
-          errorCode: postErrorCode ?? "RELOAD_FAILED",
-        };
-      }
 
-      // Final stale check before mutating page state.
-      if (isStale(generation, restoringAttemptId)) {
-        restoreInFlightRef.current = false;
-        return;
-      }
+        // Final stale check before mutating page state.
+        if (isStale(generation, restoringAttemptId)) {
+          return;
+        }
 
-      const durationMs = Date.now() - startedAt;
-      switch (outcome.kind) {
-        case "restored":
-          applySnapshot(outcome.snapshot);
-          trackExamEvent(
-            "restore_succeeded",
-            { durationMs },
-            { attemptId, examId },
-          );
-          setRestoreState("idle");
-          break;
-        case "terminal":
-          // Terminal snapshot wins. The recovery completed correctly — the
-          // server-side deadline reconciliation / submit is the authoritative
-          // outcome. Apply the terminal snapshot and clear restore UI.
-          applySnapshot(outcome.snapshot);
-          trackExamEvent(
-            "restore_succeeded",
-            { durationMs, outcome: "terminal" },
-            { attemptId, examId },
-          );
-          setRestoreState("idle");
-          break;
-        case "still_resumable":
-          // Restore did not take effect — keep the existing disrupted snapshot
-          // (do NOT apply the still-disrupted one; it is identical anyway) and
-          // surface a recovery failure so the candidate can retry.
-          trackExamEvent(
-            "restore_failed",
-            {
-              durationMs,
-              errorCode: postErrorCode ?? "STILL_RESUMABLE",
-              attempt: opts?.isRetry ? "retry" : "initial",
-            },
-            { attemptId, examId, level: "warn" },
-          );
-          setRestoreState("failed");
-          break;
-        case "unavailable":
-          trackExamEvent(
-            "restore_failed",
-            {
-              durationMs,
-              errorCode: outcome.errorCode,
-              attempt: opts?.isRetry ? "retry" : "initial",
-            },
-            { attemptId, examId, level: "warn" },
-          );
-          setRestoreState("failed");
-          break;
+        const durationMs = Date.now() - startedAt;
+        switch (outcome.kind) {
+          case "restored":
+            applySnapshot(outcome.snapshot);
+            trackExamEvent(
+              "restore_succeeded",
+              { durationMs },
+              { attemptId, examId },
+            );
+            setRestoreState("idle");
+            break;
+          case "terminal":
+            // Terminal snapshot wins. The recovery completed correctly — the
+            // server-side deadline reconciliation / submit is the authoritative
+            // outcome. Apply the terminal snapshot and clear restore UI.
+            applySnapshot(outcome.snapshot);
+            trackExamEvent(
+              "restore_succeeded",
+              { durationMs, outcome: "terminal" },
+              { attemptId, examId },
+            );
+            setRestoreState("idle");
+            break;
+          case "still_resumable":
+            // Restore did not take effect — keep the existing disrupted snapshot
+            // (do NOT apply the still-disrupted one; it is identical anyway) and
+            // surface a recovery failure so the candidate can retry.
+            trackExamEvent(
+              "restore_failed",
+              {
+                durationMs,
+                errorCode: postErrorCode ?? "STILL_RESUMABLE",
+                attempt: opts?.isRetry ? "retry" : "initial",
+              },
+              { attemptId, examId, level: "warn" },
+            );
+            setRestoreState("failed");
+            break;
+          case "unavailable":
+            trackExamEvent(
+              "restore_failed",
+              {
+                durationMs,
+                errorCode: outcome.errorCode,
+                attempt: opts?.isRetry ? "retry" : "initial",
+              },
+              { attemptId, examId, level: "warn" },
+            );
+            setRestoreState("failed");
+            break;
+        }
+      } finally {
+        releaseInFlightIfOwner();
       }
-      restoreInFlightRef.current = false;
     },
     [attemptId, examId, fetchSnapshot, applySnapshot, isStale],
   );
@@ -294,11 +340,15 @@ export function useAttemptRestore({
       return;
     }
     // Only the FIRST authoritative snapshot for this attempt drives the
-    // auto-restore. A genuine retry is an explicit user action.
+    // auto-restore. A genuine retry is an explicit user action. The
+    // restoredForAttemptRef identity is committed INSIDE performRestore —
+    // AFTER the in-flight guard passes — so an effect that scheduled a
+    // restore only to be rejected by the guard (because a previous attempt's
+    // POST was still in flight) is NOT recorded as "already restored" and can
+    // proceed once performRestore actually starts for this attempt.
     if (restoredForAttemptRef.current === attemptId) {
       return;
     }
-    restoredForAttemptRef.current = attemptId;
     // Fire-and-forget: the hook surfaces success/failure via restoreState.
     void performRestore();
     // NOTE: no cleanup function. The previous implementation's `cancelledRef`
@@ -311,10 +361,17 @@ export function useAttemptRestore({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptId, canResume]);
 
-  /** User-triggered retry after a genuine failure. */
-  const retryRestore = useCallback(async () => {
-    void performRestore({ isRetry: true });
-  }, [performRestore]);
+  /**
+   * User-triggered retry after a genuine failure. Synchronous wrapper around
+   * performRestore — does not return a promise the caller can await, because
+   * retry outcomes are surfaced through restoreState, not a returned value.
+   */
+  const retryRestore = useCallback(
+    (opts?: { isRetry?: boolean }) => {
+      void performRestore({ isRetry: opts?.isRetry ?? true });
+    },
+    [performRestore],
+  );
 
   return { restoreState, retryRestore };
 }
