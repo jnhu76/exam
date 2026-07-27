@@ -143,59 +143,75 @@ export function TakeExamPage() {
   );
 
   /**
-   * Loads the authoritative CandidateTakeSnapshot from
+   * Fetches the authoritative CandidateTakeSnapshot from
    * GET /api/candidate/attempts/:attemptId/take (P3-PROTO-2).
+   *
+   * This is the THROWING primitive. It is shared by the page's own loader
+   * (which catches and sets `loadError`) and by the restore hook (which MUST
+   * observe real failures so it can surface a recovery state). Splitting
+   * fetch from apply is required because the previous monolithic loader
+   * swallowed its own error, making the hook's reload-failure branch
+   * unreachable (PR 219 review finding 4).
+   */
+  const fetchSnapshot = useCallback(
+    (id: string): Promise<CandidateTakeSnapshot> =>
+      api.get<CandidateTakeSnapshot>(`/api/candidate/attempts/${id}/take`),
+    [],
+  );
+
+  /**
+   * Applies an authoritative snapshot to page state. Pure state mutation —
+   * no network. Factored out so both the page loader and the restore hook
+   * route the authoritative snapshot through the SAME apply seam.
+   */
+  const applySnapshot = useCallback((data: CandidateTakeSnapshot) => {
+    if (data.serverNow) {
+      serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
+    }
+    setSnapshot(data);
+    trackExamEvent(
+      "exam_page_loaded",
+      { status: data.attemptStatus },
+      { attemptId: data.attemptId, examId: data.examId },
+    );
+
+    const answerMap = new Map<string, unknown>();
+    const versionMap = new Map<string, number>();
+    const clientSeqMap = new Map<string, number>();
+    for (const q of data.questions) {
+      if (q.answerValue != null) {
+        answerMap.set(q.id, q.answerValue);
+        // Restore server version and last clientSeq from snapshot so the
+        // first save after reload uses a correct baseVersion and a fresh
+        // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
+        versionMap.set(q.id, q.currentVersion ?? 0);
+        clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
+      }
+    }
+    setAnswers(answerMap);
+    versionsRef.current = versionMap;
+    clientSeqsRef.current = clientSeqMap;
+
+    const states: QuestionState[] = data.questions.map((q) =>
+      q.answerValue != null ? "answered" : "unanswered",
+    );
+    setQuestionStates(states);
+    setIsDisconnected(false);
+  }, []);
+
+  /**
+   * Page-level loader: fetch + apply, catching errors into `loadError` and
+   * toggling `isLoading`. Used for initial load, ErrorState retry, and the
+   * post-submit reload. The restore hook does NOT use this — it uses
+   * `fetchSnapshot` directly so a reload failure is observable.
    */
   const loadSnapshot = useCallback(async () => {
     if (!attemptId) return;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await api.get<CandidateTakeSnapshot>(
-        `/api/candidate/attempts/${attemptId}/take`,
-      );
-      if (data.serverNow) {
-        serverOffsetRef.current =
-          new Date(data.serverNow).getTime() - Date.now();
-      }
-      setSnapshot(data);
-      // Auto-redirect only for terminal non-takeable states the snapshot
-      // reports — using the snapshot's derived canStart/canResume/canSubmit,
-      // not a local status check.
-      const takeable = data.isEditable || data.canResume || data.canSubmit;
-      if (!takeable && data.attemptStatus !== "in_progress") {
-        // Submitted/graded/voided: result page is the canonical destination.
-        // (Page still renders the locked take view if the candidate stays;
-        // this redirect is the legacy "exam over" UX path.)
-      }
-      trackExamEvent(
-        "exam_page_loaded",
-        { status: data.attemptStatus },
-        { attemptId, examId: data.examId },
-      );
-
-      const answerMap = new Map<string, unknown>();
-      const versionMap = new Map<string, number>();
-      const clientSeqMap = new Map<string, number>();
-      for (const q of data.questions) {
-        if (q.answerValue != null) {
-          answerMap.set(q.id, q.answerValue);
-          // Restore server version and last clientSeq from snapshot so the
-          // first save after reload uses a correct baseVersion and a fresh
-          // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
-          versionMap.set(q.id, q.currentVersion ?? 0);
-          clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
-        }
-      }
-      setAnswers(answerMap);
-      versionsRef.current = versionMap;
-      clientSeqsRef.current = clientSeqMap;
-
-      const states: QuestionState[] = data.questions.map((q) =>
-        q.answerValue != null ? "answered" : "unanswered",
-      );
-      setQuestionStates(states);
-      setIsDisconnected(false);
+      const data = await fetchSnapshot(attemptId);
+      applySnapshot(data);
     } catch {
       trackExamEvent(
         "exam_page_loaded",
@@ -206,7 +222,7 @@ export function TakeExamPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [attemptId, t]);
+  }, [attemptId, fetchSnapshot, applySnapshot, t]);
 
   useEffect(() => {
     void loadSnapshot();
@@ -230,28 +246,56 @@ export function TakeExamPage() {
     [],
   );
 
+  // Route/snapshot binding (PR 219 review finding 1): the view MUST NOT be
+  // derived from a snapshot whose attemptId disagrees with the current route
+  // param. On a route change the old snapshot lingers for one render; if we
+  // derived the view unconditionally, the restore hook could be called with
+  // the OLD attempt's canResume against the NEW route's attemptId and POST
+  // restore to the wrong attempt. Gating on `snapshotMatchesRoute` makes the
+  // page render the initializing state until the new attempt's GET resolves.
+  const snapshotMatchesRoute = Boolean(
+    attemptId && snapshot?.attemptId === attemptId,
+  );
+
+  // Reset page state on a real route change so the previous attempt's view
+  // never flashes for the new route. Render-time prev-value check (not an
+  // effect): the reset must be visible in the same commit as the param
+  // change, before any child effect reads stale state.
+  const prevAttemptIdRef = useRef<string | undefined>(attemptId);
+  if (prevAttemptIdRef.current !== attemptId) {
+    prevAttemptIdRef.current = attemptId;
+    // Intentionally set during render: this is the documented React pattern
+    // for "adjust state when a prop changes" (you may call setState during
+    // render if you bail out of the rest of the render immediately after).
+    setSnapshot(null);
+    setLoadError(null);
+    setIsLoading(true);
+  }
+
   // P3-FSM-0: the view is derived PURELY from the authoritative snapshot.
   // This is the single business-view derivation seam (L0 §7.2). Every
   // business-derived UI decision must read from `view`, never reconstruct
   // isEditable/canSave/answerSource/lock/visibility from raw fields.
   const view = useMemo(
-    () => (snapshot ? deriveTakeExamView(snapshot) : null),
-    [snapshot],
+    () =>
+      snapshotMatchesRoute && snapshot ? deriveTakeExamView(snapshot) : null,
+    [snapshot, snapshotMatchesRoute],
   );
   viewRef.current = view;
 
   // REC-I3: explicit restore for a disrupted-but-resumable attempt. The hook
   // fires POST /api/attempts/:attemptId/restore exactly once when the
-  // authoritative snapshot reports canResume=true, then reloads the snapshot
+  // authoritative snapshot reports canResume=true, then re-reads the snapshot
   // (which remains the page authority). Capability fields — NOT raw status —
-  // govern the action. See docs/adr/ADR-012-candidate-recovery-contract.md.
-  // REC-I3 connects the explicit restore workflow. REC-I4 owns compensation
-  // policy; do not duplicate time logic in the client.
+  // govern the action, and the snapshot is bound to the route so a stale
+  // snapshot cannot drive a restore for the wrong attempt. See
+  // docs/adr/ADR-012-candidate-recovery-contract.md.
   const { restoreState, retryRestore } = useAttemptRestore({
     attemptId,
-    examId: view?.examId,
-    canResume: Boolean(view?.canResume),
-    reloadSnapshot: loadSnapshot,
+    examId: snapshotMatchesRoute ? view?.examId : undefined,
+    canResume: Boolean(snapshotMatchesRoute && view?.canResume),
+    fetchSnapshot,
+    applySnapshot,
   });
   const isRestoring = restoreState === "restoring";
   const restoreFailed = restoreState === "failed";

@@ -1,6 +1,13 @@
 import { render, screen, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -16,7 +23,7 @@ import type { CandidateTakeSnapshot } from "@exam/contracts";
  *   - restore must be an EXPLICIT command (POST /api/attempts/:attemptId/restore)
  *   - GET /candidate/attempts/:attemptId/take is the authoritative snapshot
  *   - capability fields (canResume) govern the restore action, not raw status
- *   - after restore, the snapshot MUST be reloaded
+ *   - after restore, the snapshot MUST be re-read — the POST ack is NOT authority
  *
  * These tests assert the user-visible behavior and the API calls made; they
  * do NOT assert implementation details (refs/state). Mocks intercept only the
@@ -108,8 +115,25 @@ function LocationProbe() {
   return <span data-testid="current-path">{location.pathname}</span>;
 }
 
-function renderPage(attemptId = "att-1") {
-  return render(
+/**
+ * Renders the page and exposes the router's navigate() to the test via the
+ * returned object. Used by the route-change test to perform a REAL in-router
+ * navigation (not a mock flip), exercising the page's attemptId-change path.
+ */
+function NavigateProbe({
+  register,
+}: {
+  register: (nav: (to: string) => void) => void;
+}) {
+  register(useNavigate());
+  return null;
+}
+
+function renderPage(attemptId = "att-1", opts: { strictMode?: boolean } = {}) {
+  const navigateRef: { current: ((to: string) => void) | null } = {
+    current: null,
+  };
+  const tree = (
     <MemoryRouter initialEntries={[`/exam/exam-1/take/${attemptId}`]}>
       <AuthProvider
         initialUser={{
@@ -122,6 +146,9 @@ function renderPage(attemptId = "att-1") {
         }}
       >
         <BrandProvider>
+          {/* Probe is a sibling of Routes so it is always mounted inside the
+              router and can hand navigate() back to the test. */}
+          <NavigateProbe register={(n) => (navigateRef.current = n)} />
           <Routes>
             <Route
               path="/exam/:examId/take/:attemptId"
@@ -132,8 +159,20 @@ function renderPage(attemptId = "att-1") {
           </Routes>
         </BrandProvider>
       </AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const utils = opts.strictMode
+    ? render(<StrictMode>{tree}</StrictMode>)
+    : render(tree);
+  return {
+    ...utils,
+    navigate: (to: string) => {
+      if (!navigateRef.current) {
+        throw new Error("navigate not registered (probe did not mount)");
+      }
+      navigateRef.current(to);
+    },
+  };
 }
 
 /** Routes GETs: take endpoint → snapshot. Other GETs throw. */
@@ -311,7 +350,7 @@ describe("REC-I3 — disrupted direct restore", () => {
     expect(screen.queryByText(/系统正在自动提交/)).not.toBeInTheDocument();
   });
 
-  it("Case 5: retry after restore failure succeeds and renders editable exam", async () => {
+  it("Case 5: retry after a genuine restore failure succeeds and renders editable exam", async () => {
     const disrupted = buildSnapshot({
       attemptStatus: "disrupted",
       isEditable: false,
@@ -321,9 +360,24 @@ describe("REC-I3 — disrupted direct restore", () => {
       lockReason: "disrupted",
     });
     const restored = buildSnapshot();
-    routeTakeSequence(disrupted, restored);
 
+    // Sequence: initial GET → disrupted. After the failed POST, the GET
+    // still reports disrupted (the server did NOT restore — a genuine
+    // failure). Only after the retry's POST does the GET report restored.
+    // This is what surfaces the restore-failed UI between attempts: under
+    // the new model a POST failure is always followed by an authoritative
+    // GET, and only a still-disrupted GET yields the failed state.
+    let takeIndex = 0;
     let restoreAttempt = 0;
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeIndex += 1;
+        // take 1: initial disrupted; take 2 (after failed POST): still
+        // disrupted (genuine failure); take 3 (after retry): restored.
+        return takeIndex <= 2 ? disrupted : restored;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.endsWith("/restore")) {
         restoreAttempt += 1;
@@ -337,9 +391,11 @@ describe("REC-I3 — disrupted direct restore", () => {
 
     renderPage();
 
+    // First restore attempt already fired automatically; it failed and the
+    // authoritative GET confirmed the attempt is still disrupted+resumable,
+    // so the restore-failed surface appears with a retry control.
     const retryBtn = await screen.findByRole("button", { name: "重试恢复" });
 
-    // First restore attempt already fired automatically; it failed.
     await waitFor(() => {
       const restores = apiPost.mock.calls.filter(
         ([p]) => typeof p === "string" && (p as string).endsWith("/restore"),
@@ -400,20 +456,26 @@ describe("REC-I3 — disrupted direct restore", () => {
       { timeout: 4000 },
     );
 
-    // Wait a bit more to ensure no automatic restore loop fires.
-    await new Promise((r) => setTimeout(r, 300));
-
-    const restoresFinal = apiPost.mock.calls.filter(
-      ([p]) => typeof p === "string" && (p as string).endsWith("/restore"),
-    );
-    expect(restoresFinal).toHaveLength(1);
-
-    // The terminal snapshot is honored — the page must NOT show a network
-    // error or a restore-in-progress view.
+    // The terminal snapshot is honored — disabled controls appear, and the
+    // page must NOT show a network error or a restore-in-progress view. No
+    // arbitrary sleep: a deterministic waitFor on the terminal controls is
+    // both faster and a real assertion of outcome.
+    expect((await screen.findAllByRole("radio"))[0]).toBeDisabled();
     expect(
       screen.queryByRole("heading", { name: "恢复考试失败" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/正在恢复考试/)).not.toBeInTheDocument();
+
+    // After settling, no further restore may fire. We re-check via a final
+    // microtask flush (deterministic) rather than an arbitrary sleep.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const restoresFinal = apiPost.mock.calls.filter(
+      ([p]) => typeof p === "string" && (p as string).endsWith("/restore"),
+    );
+    expect(restoresFinal).toHaveLength(1);
   });
 
   it("Case 7: Strict Mode effect replay issues only one concurrent restore", async () => {
@@ -425,7 +487,12 @@ describe("REC-I3 — disrupted direct restore", () => {
       canSubmit: false,
       lockReason: "disrupted",
     });
-    routeTakeSequence(disrupted, buildSnapshot());
+    // StrictMode double-invokes the loadSnapshot effect too (it does a
+    // mount → simulated unmount → simulated remount in dev), so the page
+    // will GET the take endpoint more than once. We serve disrupted on
+    // every call so the snapshot stays resumable; the auto-restore guard
+    // under test is "only one concurrent POST", not a snapshot transition.
+    routeTakeOnly(disrupted);
 
     // Deterministic deferred promise: the restore POST stays pending until
     // the test resolves it. This is how we observe "only one concurrent
@@ -442,9 +509,13 @@ describe("REC-I3 — disrupted direct restore", () => {
         }),
     );
 
-    renderPage();
+    // REAL Strict Mode: the page mounts under <StrictMode>, which in React
+    // 18/19 dev mode double-invokes effects (setup → cleanup → setup). The
+    // previous test used an empty act() and proved nothing.
+    renderPage("att-1", { strictMode: true });
 
-    // First restore fires.
+    // First restore fires. The in-flight ref + restoredForAttempt guard must
+    // prevent StrictMode's second effect invocation from issuing a second POST.
     await waitFor(
       () => {
         const restores = apiPost.mock.calls.filter(
@@ -455,31 +526,44 @@ describe("REC-I3 — disrupted direct restore", () => {
       { timeout: 4000 },
     );
 
-    // Simulate Strict Mode by wrapping a no-op re-render in act, which can
-    // re-fire effects. While the first restore is still in flight, exactly
-    // one restore may be on the wire.
+    // While the first restore is STILL pending, exactly one restore POST is
+    // on the wire. No arbitrary sleep: we flush microtasks deterministically
+    // so any pending effect re-run has had a chance to execute.
     await act(async () => {
-      // Trigger a re-render of the same mounted page without changing the
-      // attemptId. Effects may re-run but must not duplicate the request.
-      // (Stable refs/deduplication is what we are exercising.)
+      await Promise.resolve();
+      await Promise.resolve();
     });
-
-    await new Promise((r) => setTimeout(r, 50));
 
     const restoresWhilePending = apiPost.mock.calls.filter(
       ([p]) => typeof p === "string" && (p as string).endsWith("/restore"),
     );
     expect(restoresWhilePending.length).toBe(1);
 
+    // Sanity check that StrictMode actually double-invoked effects here (so the
+    // single-restore assertion above is meaningful, not a no-op). Under
+    // StrictMode the page's loadSnapshot effect re-runs, producing >1 GET to
+    // the take endpoint. If this ever drops to 1, the StrictMode wrapper is no
+    // longer exercising the double-invoke path and the test stops proving
+    // anything about effect replay.
+    await waitFor(() => {
+      const takeGets = apiGet.mock.calls.filter(
+        ([p]) =>
+          typeof p === "string" &&
+          (p as string).includes("/candidate/attempts/"),
+      );
+      expect(takeGets.length).toBeGreaterThan(1);
+    });
+
     // Resolve the in-flight restore so the page can complete and tests
     // tear down cleanly.
     await act(async () => {
       resolveRestore({ id: "att-1", status: "in_progress" });
-      await new Promise((r) => setTimeout(r, 50));
+      await Promise.resolve();
+      await Promise.resolve();
     });
   });
 
-  it("Case 8: attemptId change does not allow stale async result to overwrite new page", async () => {
+  it("Case 8: real router navigation — stale att-old restore does not affect att-new page", async () => {
     // Initial attempt: disrupted + resumable.
     const disruptedOld = buildSnapshot({
       attemptId: "att-old",
@@ -490,8 +574,11 @@ describe("REC-I3 — disrupted direct restore", () => {
       canSubmit: false,
       lockReason: "disrupted",
     });
+    // The new attempt is editable (e.g. one already in progress), so it must
+    // NOT trigger a restore (canResume=false).
     const editableNew = buildSnapshot({
       attemptId: "att-new",
+      examId: "exam-new",
       attemptStatus: "in_progress",
       isEditable: true,
       canResume: false,
@@ -499,31 +586,36 @@ describe("REC-I3 — disrupted direct restore", () => {
       canSubmit: true,
     });
 
-    // First GET returns disrupted for att-old; once the route changes,
-    // subsequent GETs return the editable new attempt.
-    let switchedToNew = false;
+    // GET serves per-attempt snapshots: att-old → disrupted, att-new → editable.
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
-        return switchedToNew ? editableNew : disruptedOld;
+        if (path.includes("/att-old/")) return disruptedOld;
+        if (path.includes("/att-new/")) return editableNew;
       }
       throw new Error(`unexpected GET ${path}`);
     });
 
-    // The restore POST stays pending so its eventual resolution races the
-    // route change.
-    let _resolveRestore: ((v: unknown) => void) | null = null;
+    // The att-old restore POST stays pending so its eventual resolution races
+    // the route change. att-new must never receive a restore POST.
+    let resolveRestoreOld: ((v: unknown) => void) | null = null;
     apiPost.mockImplementation(
       async (path: string) =>
         new Promise((resolve) => {
-          if (typeof path === "string" && path.endsWith("/restore")) {
-            _resolveRestore = resolve;
+          if (typeof path === "string" && path.endsWith("/att-old/restore")) {
+            resolveRestoreOld = resolve;
+            return;
+          }
+          if (typeof path === "string" && path.endsWith("/att-new/restore")) {
+            // The new attempt must never be restored; if this fires the test
+            // will fail on the assertion below.
+            resolve({ id: "att-new", status: "in_progress" });
             return;
           }
           resolve({ ok: true, serverNow: NOW });
         }),
     );
 
-    renderPage("att-old");
+    const { navigate } = renderPage("att-old");
 
     // Wait for the restore to start for att-old.
     await waitFor(
@@ -537,32 +629,45 @@ describe("REC-I3 — disrupted direct restore", () => {
       { timeout: 4000 },
     );
 
-    // Switch the mock so the next load returns the new attempt's snapshot.
-    switchedToNew = true;
-
-    // Resolve the stale in-flight restore of att-old. The cancelledRef guard
-    // must prevent att-old's snapshot reload from firing against a new page,
-    // and the in-flight guard prevents re-firing.
+    // Perform a REAL router navigation to the new attempt. React Router
+    // reuses the same element instance (only the :attemptId param changes),
+    // which is exactly the race the PR #219 review flagged: the old
+    // in-flight restore must not apply to the new page.
     await act(async () => {
-      _resolveRestore?.({ id: "att-old", status: "in_progress" });
-      // Microtask flush: the stale promise chain must complete without
-      // affecting any new page.
+      navigate("/exam/exam-new/take/att-new");
+      // Flush microtasks so the param change propagates through render.
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    // The att-old restore path may have triggered its own snapshot reload
-    // (which would have served the new attempt's snapshot, since we flipped
-    // the mock). That is acceptable per ADR-012 — what is unacceptable is
-    // the page re-firing restore or the stale snapshot overwriting a
-    // freshly-loaded new attempt. We assert the negative: no restore POST
-    // was issued against the new attempt's path (the new attempt is not
-    // resumable, so it must never invoke restore).
+    // Now resolve att-old's stale restore. Its GET reload would serve the
+    // att-old disrupted snapshot again (per the per-attempt mock), which must
+    // NOT be applied to the att-new page. The page must still render att-new's
+    // editable content.
+    await act(async () => {
+      resolveRestoreOld?.({ id: "att-old", status: "in_progress" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // (a) No restore POST was ever issued against att-new (canResume=false).
     const restoresForNew = apiPost.mock.calls.filter(
       ([p]) =>
         typeof p === "string" && (p as string).includes("/att-new/restore"),
     );
     expect(restoresForNew).toHaveLength(0);
+
+    // (b) The att-new editable exam rendered (att-old's stale reload did not
+    // overwrite it). We assert the new attempt's radio is present and enabled.
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+
+    // (c) No restoring/failed UI leaked from att-old into att-new.
+    expect(
+      screen.queryByTestId("restore-restoring-surface"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
   });
 
   it("Case 9: snapshot reload fails after a successful restore shows reload/retry path", async () => {
@@ -574,24 +679,29 @@ describe("REC-I3 — disrupted direct restore", () => {
       canSubmit: false,
       lockReason: "disrupted",
     });
-    routeTakeSequence(disrupted);
-    // Reload after restore throws — page must NOT invent an in_progress state.
+    // First GET returns disrupted; the post-restore reload GET throws. The
+    // page must surface the dedicated restore-failed surface (NOT invent an
+    // editable state from the POST ack, and NOT silently render loadError
+    // only).
+    let takeCallCount = 0;
     apiGet.mockImplementation(async (path: string) => {
       if (
         typeof path === "string" &&
-        path.endsWith("/att-1/take") &&
-        apiGet.mock.calls.length >= 2
+        path.includes("/candidate/attempts/att-1/take")
       ) {
-        throw new Error("reload failed");
+        takeCallCount += 1;
+        if (takeCallCount >= 2) {
+          throw new Error("reload failed");
+        }
+        return disrupted;
       }
-      return disrupted;
+      throw new Error(`unexpected GET ${path}`);
     });
     postRestoreOk();
 
     renderPage();
 
-    // Restore fired, reload failed, and the page presents an uncertain /
-    // reload-retry path rather than pretending the exam is editable.
+    // Restore fired exactly once.
     await waitFor(
       () => {
         const restores = apiPost.mock.calls.filter(
@@ -602,8 +712,133 @@ describe("REC-I3 — disrupted direct restore", () => {
       { timeout: 4000 },
     );
 
+    // The dedicated restore-failed surface appears (reload/retry path), with
+    // the retry control reachable. This is the positive assertion the
+    // previous test was missing.
+    const failedSurface = await screen.findByTestId("restore-failed-surface");
+    expect(
+      within(failedSurface).getByRole("button", { name: "重试恢复" }),
+    ).toBeInTheDocument();
+
     // The page must not invent editable controls from the restore response.
     expect(screen.queryByRole("radio", { name: "A" })).not.toBeInTheDocument();
+  });
+
+  it("Case 11: POST restore 409 (server already submitted) → terminal snapshot wins, not a failure", async () => {
+    const disrupted = buildSnapshot({
+      attemptStatus: "disrupted",
+      isEditable: false,
+      canResume: true,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "disrupted",
+    });
+    // The server reconciled the deadline during the POST: restore returns
+    // 409 (already in a terminal state), and the authoritative GET reports
+    // submitted. The terminal snapshot must win — this is NOT a restore
+    // failure.
+    const submitted = buildSnapshot({
+      attemptStatus: "submitted",
+      isEditable: false,
+      canResume: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "submitted",
+      submittedAt: NOW,
+    });
+    routeTakeSequence(disrupted, submitted);
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.endsWith("/restore")) {
+        throw new ApiError(
+          409,
+          "Attempt already submitted",
+          "ATTEMPT_ALREADY_SUBMITTED",
+        );
+      }
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    renderPage();
+
+    // Exactly one restore POST fired (the 409), then the GET re-read the
+    // authoritative terminal snapshot.
+    await waitFor(
+      () => {
+        const restores = apiPost.mock.calls.filter(
+          ([p]) => typeof p === "string" && (p as string).endsWith("/restore"),
+        );
+        expect(restores).toHaveLength(1);
+      },
+      { timeout: 4000 },
+    );
+
+    // Terminal controls render (disabled radios), and crucially the restore-
+    // failed surface does NOT appear — the recovery succeeded in the sense
+    // that the authoritative terminal state was reached.
+    expect((await screen.findAllByRole("radio"))[0]).toBeDisabled();
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("restore-restoring-surface"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Case 12: POST response lost but server restored → GET in_progress wins, not a failure", async () => {
+    const disrupted = buildSnapshot({
+      attemptStatus: "disrupted",
+      isEditable: false,
+      canResume: true,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "disrupted",
+    });
+    // The restore POST response was lost (network failure thrown), but the
+    // server actually restored successfully — the authoritative GET reports
+    // an editable in_progress attempt. The page MUST trust the GET, not the
+    // POST failure, so it renders the editable exam.
+    const restored = buildSnapshot({
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+    routeTakeSequence(disrupted, restored);
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.endsWith("/restore")) {
+        // Response lost — simulate a network failure.
+        throw new ApiError(0, "Network request failed");
+      }
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    renderPage();
+
+    // Exactly one restore POST fired (the lost one), then the GET re-read the
+    // authoritative restored snapshot.
+    await waitFor(
+      () => {
+        const restores = apiPost.mock.calls.filter(
+          ([p]) => typeof p === "string" && (p as string).endsWith("/restore"),
+        );
+        expect(restores).toHaveLength(1);
+      },
+      { timeout: 4000 },
+    );
+
+    // The editable exam renders — the POST failure did NOT pin the page to a
+    // restore-failed state, because the authoritative GET reported success.
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -642,10 +877,12 @@ describe("REC-I3 — restoring UX and accessibility", () => {
     // No editable radio while restoring.
     expect(screen.queryByRole("radio", { name: "A" })).not.toBeInTheDocument();
 
-    // Let the in-flight restore resolve so the test can tear down.
+    // Let the in-flight restore resolve so the test can tear down. Deterministic
+    // microtask flush instead of an arbitrary sleep.
     await act(async () => {
       _resolveRestore?.({ id: "att-1", status: "in_progress" });
-      await new Promise((r) => setTimeout(r, 50));
+      await Promise.resolve();
+      await Promise.resolve();
     });
   });
 
