@@ -18,7 +18,7 @@ describe("useSubmitFlush", () => {
     const save = vi.fn().mockImplementation(async () => {
       callOrder.push("save");
     });
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
@@ -51,7 +51,7 @@ describe("useSubmitFlush", () => {
   it("flush() returns three independent buckets when all saves succeed", async () => {
     const saveA = vi.fn().mockResolvedValue(undefined);
     const saveB = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", saveA);
@@ -73,7 +73,7 @@ describe("useSubmitFlush", () => {
   it("flush() reports failed question ids separately from pendingCount", async () => {
     const saveOk = vi.fn().mockResolvedValue(undefined);
     const saveFail = vi.fn().mockRejectedValue(new Error("network"));
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", saveOk);
@@ -94,7 +94,7 @@ describe("useSubmitFlush", () => {
     const slowSave = vi.fn(
       () => new Promise<void>((resolve) => setTimeout(resolve, 30_000)),
     );
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", slowSave);
@@ -119,7 +119,7 @@ describe("useSubmitFlush", () => {
 
   it("scheduleSave debounces rapid changes to the same question", async () => {
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
@@ -151,7 +151,7 @@ describe("useSubmitFlush", () => {
           resolveSave = resolve;
         }),
     );
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
@@ -181,7 +181,7 @@ describe("useSubmitFlush", () => {
     );
     const lateSave = vi.fn().mockResolvedValue(undefined);
 
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", firstSave);
@@ -220,7 +220,7 @@ describe("useSubmitFlush", () => {
   // ====== Reviewer C2 (Critical) ======
   it("on unmount, pending debounced timers do NOT fire save()", async () => {
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result, unmount } = renderHook(() => useSubmitFlush());
+    const { result, unmount } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
@@ -248,7 +248,7 @@ describe("useSubmitFlush", () => {
           };
         }),
     );
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
@@ -287,7 +287,7 @@ describe("useSubmitFlush", () => {
           StrictMode,
           null,
           createElement(() => {
-            hook = useSubmitFlush();
+            hook = useSubmitFlush("att-1");
             return null;
           }),
         ),
@@ -325,7 +325,7 @@ describe("useSubmitFlush", () => {
           resolveSecond = resolve;
         }),
     );
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", firstSave);
@@ -371,7 +371,7 @@ describe("useSubmitFlush", () => {
 
   it("clears the flush timeout when saves settle first", async () => {
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useSubmitFlush());
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
@@ -382,5 +382,154 @@ describe("useSubmitFlush", () => {
     });
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // ====== Scope isolation: cross-attempt save queue ======
+
+  it("scope change cancels pending saves of the previous scope", async () => {
+    const saveA = vi.fn().mockResolvedValue(undefined);
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useSubmitFlush(scope),
+      { initialProps: { scope: "att-old" } },
+    );
+
+    act(() => {
+      result.current.scheduleSave("q1", saveA);
+    });
+    // q1 is pending under att-old (debounce timer armed, not yet fired).
+    expect(result.current.getQuestionStatus("q1")).toBe("pending");
+    expect(saveA).not.toHaveBeenCalled();
+
+    // Switch scope to att-new. The layout effect cancels att-old's pending
+    // timer and installs a fresh, empty scope.
+    rerender({ scope: "att-new" });
+
+    // Advance PAST the debounce window. saveA must NOT fire — its timer was
+    // cleared, and even if it had fired it would only touch the old scope.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(saveA).not.toHaveBeenCalled();
+
+    // The new scope starts clean: q1 is unknown (idle), not inherited.
+    expect(result.current.getQuestionStatus("q1")).toBe("idle");
+  });
+
+  it("scope change isolates inflight saves — same questionId does not queue behind the old scope", async () => {
+    // Both scopes use questionId "q-shared". The critical race: att-old's
+    // q-shared save is inflight and pending; att-new's q-shared save must
+    // fire IMMEDIATELY (not serialized behind att-old) and att-old's late
+    // resolution must not mark att-new's q-shared as saved/failed.
+    let resolveOld!: () => void;
+    const saveOld = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    const saveNew = vi.fn().mockResolvedValue(undefined);
+
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useSubmitFlush(scope),
+      { initialProps: { scope: "att-old" } },
+    );
+
+    act(() => {
+      result.current.scheduleSave("q-shared", saveOld);
+    });
+    // Fire the debounce so saveOld is inflight (pending on resolveOld).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(saveOld).toHaveBeenCalledTimes(1);
+    expect(result.current.getQuestionStatus("q-shared")).toBe("inflight");
+
+    // Switch scope to att-new and schedule its q-shared save.
+    rerender({ scope: "att-new" });
+    act(() => {
+      result.current.scheduleSave("q-shared", saveNew);
+    });
+
+    // KEY: att-new's q-shared fires without waiting for att-old's inflight
+    // save to settle. If the scopes shared one inflight map, att-new would
+    // queue behind att-old and saveNew would not yet have run here.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(saveNew).toHaveBeenCalledTimes(1);
+
+    // Now resolve att-old's stale inflight save. It must NOT overwrite
+    // att-new's status for q-shared (would otherwise flip it to "saved").
+    await act(async () => {
+      resolveOld();
+      await Promise.resolve();
+    });
+    expect(result.current.getQuestionStatus("q-shared")).toBe("saved");
+
+    // Resolve att-new's save so the test tears down cleanly.
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+
+  it("an old-scope flush does not consume, await, or count the new scope's work", async () => {
+    // att-old starts a flush that is awaiting its inflight save. While it
+    // waits, the scope switches to att-new and att-new schedules a save.
+    // att-old's flush must NOT drain/await/count att-new's save — it only
+    // ever sees its own (captured) scope.
+    let resolveOld!: () => void;
+    const saveOld = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    const saveNew = vi.fn().mockResolvedValue(undefined);
+
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useSubmitFlush(scope),
+      { initialProps: { scope: "att-old" } },
+    );
+
+    act(() => {
+      result.current.scheduleSave("q1", saveOld);
+    });
+    let flushPromise!: ReturnType<typeof result.current.flush>;
+    act(() => {
+      flushPromise = result.current.flush();
+    });
+    // Flush has drained q1 (saveOld now inflight, awaiting resolveOld).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(saveOld).toHaveBeenCalledTimes(1);
+
+    // Switch scope and schedule a NEW save under att-new while att-old's
+    // flush is still awaiting.
+    rerender({ scope: "att-new" });
+    act(() => {
+      result.current.scheduleSave("q2", saveNew);
+    });
+
+    // Resolve att-old's inflight save so its flush can complete.
+    let flushResult!: Awaited<ReturnType<typeof result.current.flush>>;
+    await act(async () => {
+      resolveOld();
+      flushResult = await flushPromise;
+    });
+
+    // att-old's flush saw ONLY att-old's q1 — it never drained att-new's q2.
+    // saveNew has not been force-fired by the old flush (it is still pending
+    // under att-new's own debounce timer, untouched).
+    expect(saveNew).not.toHaveBeenCalled();
+    // And the old flush's result reflects only att-old's work (q1 saved).
+    expect(flushResult.failedQuestionIds).toEqual([]);
+    expect(flushResult.pendingCount).toBe(0);
+
+    // Let att-new's pending timer settle so the test tears down cleanly.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(saveNew).toHaveBeenCalledTimes(1);
   });
 });

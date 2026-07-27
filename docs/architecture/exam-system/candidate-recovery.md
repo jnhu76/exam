@@ -223,6 +223,23 @@ Properties preserved by the implementation:
   states, and the submit/deadline refs), so nothing from the previous attempt
   can leak onto the new route — in particular, a retained `currentIndex` out
   of range for the new exam cannot pin the page to the generic ErrorState.
+- **The answer-save queue is isolated per attempt.** Because `TakeExamPage`
+  reuses one instance across `:attemptId` route changes, `useSubmitFlush`
+  receives the route `attemptId` as a `scopeKey` and gives each scope its OWN
+  pending/inflight/status/generation maps (keyed by `questionId`). On a scope
+  change (`useLayoutEffect`, before paint): the old scope's pending debounce
+  timers are cancelled; the old scope object is retained so its
+  already-inflight saves settle without writing status; a brand-new scope
+  with empty maps is installed. Two scopes sharing a `questionId` do NOT
+  share a queue — the new scope's save never serializes behind the old
+  scope's inflight save. `flush()` binds its scope at call time and never
+  drains/awaits/count another scope's work. The page's `saveAnswer` closure
+  is stale-guarded on a scope-generation token (captured at schedule time,
+  re-checked before any read of page authority, after the `await`, and at
+  the top of `catch`) so an in-flight old-attempt save cannot mutate the new
+  page's state/refs. `loadGenerationRef` is bumped on EVERY `loadSnapshot`
+  call (not just route change) so two concurrent loads of the same attempt
+  cannot reorder (latest-GET-wins).
 - User-triggered retry after a genuine failure is supported via a dedicated
   "重试恢复" control (a fresh POST is allowed).
 - Deadline race: if the deadline wins between GET and POST restore, the

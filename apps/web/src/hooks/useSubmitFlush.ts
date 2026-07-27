@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 /** Debounce delay before a pending save is sent to the server. */
 const DEBOUNCE_MS = 1500;
@@ -19,7 +25,43 @@ export interface FlushResult {
 interface PendingEntry {
   timer: ReturnType<typeof setTimeout>;
   save: () => Promise<void>;
+  questionGeneration: number;
+  /** The scope this pending entry belongs to. Captured at schedule time so a
+   * late-firing timer (after a scope change) can only touch its own scope. */
+  scope: SaveScopeState;
+}
+
+/**
+ * A fully isolated per-scope container. Each scope (e.g. one attemptId) owns
+ * its OWN pending/inflight/status/generation maps — they are NEVER shared
+ * across scopes, even when two scopes happen to use the same questionId.
+ *
+ * On a scope change the previous scope object is retained (not mutated) so
+ * its already-started inflight saves can settle naturally; only its pending
+ * timers are cleared. The new scope gets fresh, empty maps.
+ */
+interface SaveScopeState {
+  key: string | undefined;
+  /** Monotonic across the lifetime of the component, even as scopes change. */
   generation: number;
+  pending: Map<string, PendingEntry>;
+  inflight: Map<string, Promise<void>>;
+  statuses: Map<string, SaveStatus>;
+  questionGenerations: Map<string, number>;
+}
+
+function createScopeState(
+  key: string | undefined,
+  generation: number,
+): SaveScopeState {
+  return {
+    key,
+    generation,
+    pending: new Map(),
+    inflight: new Map(),
+    statuses: new Map(),
+    questionGenerations: new Map(),
+  };
 }
 
 /** Public interface of the useSubmitFlush hook. */
@@ -27,18 +69,26 @@ export interface UseSubmitFlush {
   scheduleSave: (questionId: string, save: () => Promise<void>) => void;
   flush: () => Promise<FlushResult>;
   getQuestionStatus: (questionId: string) => SaveStatus;
+  /** Monotonic scope-generation token. Bumps on every real scope change. */
+  getScopeGeneration: () => number;
   failedQuestionIds: string[];
 }
 
 /**
  * Manages debounced, per-question answer saves with generation-based
  * cancellation, status tracking, and a flush-all method for exam submission.
+ *
+ * `scopeKey` isolates the entire save queue (pending timers, inflight
+ * promises, statuses, per-question generations) per scope — typically the
+ * route `attemptId`. When `scopeKey` changes, the previous scope's pending
+ * timers are cancelled and a brand-new set of empty maps is created for the
+ * new scope; the previous scope's already-inflight saves are allowed to
+ * settle but can no longer write status. This is what makes the save queue
+ * safe when `TakeExamPage` reuses one component instance across attempts.
  */
-export function useSubmitFlush(): UseSubmitFlush {
-  const pendingRef = useRef(new Map<string, PendingEntry>());
-  const inflightRef = useRef(new Map<string, Promise<void>>());
-  const statusRef = useRef(new Map<string, SaveStatus>());
-  const generationRef = useRef(new Map<string, number>());
+export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
+  // The currently-active scope. Replaced (not mutated) on a scope change.
+  const activeScopeRef = useRef<SaveScopeState>(createScopeState(scopeKey, 0));
   const mountedRef = useRef(true);
   const [failedQuestionIds, setFailedQuestionIds] = useState<string[]>([]);
   const [, forceTick] = useState(0);
@@ -48,10 +98,21 @@ export function useSubmitFlush(): UseSubmitFlush {
     forceTick((n) => n + 1);
   }, []);
 
+  /**
+   * Sets a question's status within a SPECIFIC scope. A status write is only
+   * applied when the scope is still current — a stale scope's inflight save
+   * that settles after a scope change must not pollute the new scope's
+   * status map or the public failedQuestionIds list.
+   */
   const setStatus = useCallback(
-    (questionId: string, status: SaveStatus) => {
-      statusRef.current.set(questionId, status);
+    (scope: SaveScopeState, questionId: string, status: SaveStatus) => {
+      scope.statuses.set(questionId, status);
       if (!mountedRef.current) return;
+      // Only the ACTIVE scope may mutate the public failedQuestionIds state.
+      // A settling stale scope's status write is recorded on its own map
+      // (harmless; the map is unreachable once superseded) but does not leak
+      // to the new scope's UI.
+      if (activeScopeRef.current !== scope) return;
       if (status === "failed") {
         setFailedQuestionIds((prev) =>
           prev.includes(questionId) ? prev : [...prev, questionId],
@@ -64,16 +125,22 @@ export function useSubmitFlush(): UseSubmitFlush {
     [tick],
   );
 
+  /**
+   * Runs a save against a SPECIFIC scope's inflight queue. Same-question
+   * serialization is per-scope: scope B/q1 never waits behind scope A/q1,
+   * because each scope has its own inflight map.
+   */
   const runSave = useCallback(
     (
+      scope: SaveScopeState,
       questionId: string,
       save: () => Promise<void>,
-      generation: number,
+      questionGeneration: number,
     ): Promise<void> => {
-      const previous = inflightRef.current.get(questionId);
+      const previous = scope.inflight.get(questionId);
       const execute = () => {
-        if (generationRef.current.get(questionId) === generation) {
-          setStatus(questionId, "inflight");
+        if (scope.questionGenerations.get(questionId) === questionGeneration) {
+          setStatus(scope, questionId, "inflight");
         }
         try {
           return save();
@@ -84,62 +151,85 @@ export function useSubmitFlush(): UseSubmitFlush {
       const operation = previous ? previous.then(execute) : execute();
       const promise = operation
         .then(() => {
-          if (generationRef.current.get(questionId) === generation) {
-            setStatus(questionId, "saved");
+          if (
+            scope.questionGenerations.get(questionId) === questionGeneration
+          ) {
+            setStatus(scope, questionId, "saved");
           }
         })
         .catch(() => {
-          if (generationRef.current.get(questionId) === generation) {
-            setStatus(questionId, "failed");
+          if (
+            scope.questionGenerations.get(questionId) === questionGeneration
+          ) {
+            setStatus(scope, questionId, "failed");
           }
         })
         .finally(() => {
-          if (inflightRef.current.get(questionId) === promise) {
-            inflightRef.current.delete(questionId);
+          if (scope.inflight.get(questionId) === promise) {
+            scope.inflight.delete(questionId);
           }
         });
-      inflightRef.current.set(questionId, promise);
+      scope.inflight.set(questionId, promise);
       return promise;
     },
     [setStatus],
   );
 
-  const drainPending = useCallback(() => {
-    for (const [questionId, entry] of pendingRef.current.entries()) {
-      clearTimeout(entry.timer);
-      pendingRef.current.delete(questionId);
-      void runSave(questionId, entry.save, entry.generation);
-    }
-  }, [runSave]);
+  const drainPending = useCallback(
+    (scope: SaveScopeState) => {
+      for (const [questionId, entry] of scope.pending.entries()) {
+        clearTimeout(entry.timer);
+        scope.pending.delete(questionId);
+        void runSave(scope, questionId, entry.save, entry.questionGeneration);
+      }
+    },
+    [runSave],
+  );
 
   const scheduleSave = useCallback(
     (questionId: string, save: () => Promise<void>) => {
-      const existing = pendingRef.current.get(questionId);
+      // Capture the ACTIVE scope at schedule time. A late-firing timer reads
+      // only this captured scope — never a scope that became active later.
+      const scope = activeScopeRef.current;
+      const existing = scope.pending.get(questionId);
       if (existing) clearTimeout(existing.timer);
 
-      const generation = (generationRef.current.get(questionId) ?? 0) + 1;
-      generationRef.current.set(questionId, generation);
-      setStatus(questionId, "pending");
+      const questionGeneration =
+        (scope.questionGenerations.get(questionId) ?? 0) + 1;
+      scope.questionGenerations.set(questionId, questionGeneration);
+      setStatus(scope, questionId, "pending");
 
       const timer = setTimeout(() => {
         if (!mountedRef.current) return;
-        pendingRef.current.delete(questionId);
-        void runSave(questionId, save, generation);
+        scope.pending.delete(questionId);
+        void runSave(scope, questionId, save, questionGeneration);
       }, DEBOUNCE_MS);
 
-      pendingRef.current.set(questionId, { timer, save, generation });
+      scope.pending.set(questionId, {
+        timer,
+        save,
+        questionGeneration,
+        scope,
+      });
     },
     [runSave, setStatus],
   );
 
+  /**
+   * Flushes the save queue. The scope is captured at call time and the entire
+   * flush lifecycle reads ONLY that scope — an old-scope flush that is still
+   * awaiting when the scope changes cannot drain, await, or count the new
+   * scope's work.
+   */
   const flush = useCallback(async (): Promise<FlushResult> => {
+    const scope = activeScopeRef.current;
     const start = Date.now();
     let timedOut = false;
 
     while (true) {
-      drainPending();
+      drainPending(scope);
 
-      if (inflightRef.current.size === 0 && pendingRef.current.size === 0) {
+      if (scope.inflight.size === 0 && scope.pending.size === 0) {
         break;
       }
 
@@ -149,7 +239,7 @@ export function useSubmitFlush(): UseSubmitFlush {
         break;
       }
 
-      const inflightPromises = Array.from(inflightRef.current.values());
+      const inflightPromises = Array.from(scope.inflight.values());
       const settledRound = Promise.allSettled(inflightPromises);
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<"timeout">((resolve) => {
@@ -171,12 +261,12 @@ export function useSubmitFlush(): UseSubmitFlush {
     const failed: string[] = [];
     let pendingCount = 0;
     const allTouchedIds = new Set<string>([
-      ...statusRef.current.keys(),
-      ...inflightRef.current.keys(),
-      ...pendingRef.current.keys(),
+      ...scope.statuses.keys(),
+      ...scope.inflight.keys(),
+      ...scope.pending.keys(),
     ]);
     for (const id of allTouchedIds) {
-      const status = statusRef.current.get(id);
+      const status = scope.statuses.get(id);
       if (status === "failed") {
         failed.push(id);
       } else if (status === "inflight" || status === "pending") {
@@ -189,19 +279,56 @@ export function useSubmitFlush(): UseSubmitFlush {
 
   const getQuestionStatus = useCallback(
     (questionId: string): SaveStatus =>
-      statusRef.current.get(questionId) ?? "idle",
+      activeScopeRef.current.statuses.get(questionId) ?? "idle",
     [],
   );
 
+  const getScopeGeneration = useCallback(
+    () => activeScopeRef.current.generation,
+    [],
+  );
+
+  // Scope switch. useLayoutEffect (not useEffect): runs synchronously before
+  // paint, closing the narrow window where an old debounce timer could fire
+  // between commit and a passive effect cleanup. On a real scope change we
+  // (1) clear the old scope's pending timers, (2) retain the old scope object
+  // so its inflight saves settle without writing status, and (3) install a
+  // brand-new scope with empty maps for the new scope's exclusive use.
+  useLayoutEffect(() => {
+    const oldScope = activeScopeRef.current;
+    if (oldScope.key === scopeKey) {
+      return;
+    }
+    for (const entry of oldScope.pending.values()) {
+      clearTimeout(entry.timer);
+    }
+    oldScope.pending.clear();
+
+    activeScopeRef.current = createScopeState(
+      scopeKey,
+      oldScope.generation + 1,
+    );
+
+    setFailedQuestionIds([]);
+    tick();
+  }, [scopeKey, tick]);
+
+  // Mount flag + unmount cleanup: clear the active scope's pending timers.
   useEffect(() => {
     mountedRef.current = true;
-    const pending = pendingRef.current;
+    const scope = activeScopeRef.current;
     return () => {
       mountedRef.current = false;
-      for (const entry of pending.values()) clearTimeout(entry.timer);
-      pending.clear();
+      for (const entry of scope.pending.values()) clearTimeout(entry.timer);
+      scope.pending.clear();
     };
   }, []);
 
-  return { scheduleSave, flush, getQuestionStatus, failedQuestionIds };
+  return {
+    scheduleSave,
+    flush,
+    getQuestionStatus,
+    getScopeGeneration,
+    failedQuestionIds,
+  };
 }

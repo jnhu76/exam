@@ -190,14 +190,15 @@ export function TakeExamPage() {
   const heartbeatFailureRef = useRef(0);
   const heartbeatFailureReportedRef = useRef(false);
   // Load generation token — the page-level guard against a stale GET
-  // overwriting newer state. Bumped on every real route change AND on every
-  // loadSnapshot call, so a late-resolving GET from att-old cannot apply its
-  // snapshot or write loadError/isLoading over the att-new page. The restore
-  // hook already has its own generation guard; this one closes the page's own
+  // overwriting newer state. Bumped on EVERY loadSnapshot call (so two
+  // concurrent loads of the SAME attempt cannot reorder: latest wins) AND on
+  // a real route change (so a late GET from att-old cannot apply its snapshot
+  // or write loadError/isLoading over the att-new page). The restore hook
+  // already has its own generation guard; this one closes the page's own
   // loader (initial load, retry, post-submit reload) and any concurrent GET.
   const loadGenerationRef = useRef(0);
   const currentAttemptIdRef = useRef<string | undefined>(attemptId);
-  const { scheduleSave, flush } = useSubmitFlush();
+  const { scheduleSave, flush, getScopeGeneration } = useSubmitFlush(attemptId);
 
   /** Returns the current time adjusted by the server clock offset. */
   const nowByServerClock = useCallback(
@@ -279,7 +280,12 @@ export function TakeExamPage() {
   const loadSnapshot = useCallback(async () => {
     if (!attemptId) return;
     const requestedAttemptId = attemptId;
-    const generation = loadGenerationRef.current;
+    // Pre-increment: every loadSnapshot call gets a fresh generation. Two
+    // concurrent loads of the same attempt (StrictMode replay, retry during
+    // load, post-submit reload overlapping initial load) then cannot reorder
+    // — the later-issued load's result wins, and a late-resolving earlier
+    // load is rejected at apply/loadError/isLoading time.
+    const generation = ++loadGenerationRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -474,7 +480,25 @@ export function TakeExamPage() {
     setSaveState("saving");
     setTransientState((s) => transientReducer(s, { type: "SAVE_REQUEST" }));
 
+    // Capture the save-scope generation at SCHEDULE time. The save queue is
+    // attempt-scoped (useSubmitFlush(attemptId) installs a fresh scope per
+    // attempt). If the route changes before the debounce timer fires, the
+    // hook cancels the timer; but if the route changes while the network
+    // request is in flight, the fetch completes against the OLD attempt's
+    // URL (harmless) yet must NOT mutate THIS page's state/refs (which now
+    // reflect the NEW attempt). `stale()` is re-checked before every read
+    // of the current page authority and before every state/ref write.
+    const scopeGenAtSchedule = getScopeGeneration();
+    const saveStale = () => scopeGenAtSchedule !== getScopeGeneration();
+
     scheduleSave(questionId, async () => {
+      // Scope guard FIRST: a stale callback must not read the NEW attempt's
+      // authority (viewRef/versionsRef/clientSeqsRef) at all. This runs
+      // after the 1500ms debounce; if the route changed, bail before any
+      // read or write.
+      if (saveStale()) {
+        return;
+      }
       // P3-FSM-0: execution-time authority guard. The current view is read
       // from the ref so the latest snapshot (which may have been reloaded
       // during the debounce window) decides whether to save. This is the
@@ -502,6 +526,11 @@ export function TakeExamPage() {
             baseVersion,
           },
         );
+        // Scope guard again after the await: an in-flight save that settles
+        // after a route change must NOT write the NEW page's state/refs.
+        if (saveStale()) {
+          return;
+        }
 
         if (result.accepted) {
           versionsRef.current.set(questionId, result.serverVersion);
@@ -564,6 +593,14 @@ export function TakeExamPage() {
         );
         throw new Error("save rejected by server");
       } catch (err) {
+        // Scope guard at the TOP of catch: api.post() rejecting does NOT go
+        // through the post-await stale check above — without this guard a
+        // network failure on the OLD attempt's save would write saveState
+        // "error" / setIsDisconnected(true) / transient SAVE_FAILED onto the
+        // NEW page. A stale save's failure is not the new attempt's failure.
+        if (saveStale()) {
+          return;
+        }
         setSaveState("error");
         setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         if (!rejected) {
@@ -622,16 +659,36 @@ export function TakeExamPage() {
     }
   }, [attemptId, navigate, loadSnapshot, t]);
 
-  /** Flushes all pending answer saves and records the flush result. */
+  /**
+   * Flushes all pending answer saves and records the flush result.
+   *
+   * Stale-guarded: if the route changes while a flush is awaiting (the
+   * previous attempt's submit-flow flush, or a deadline auto-submit flush),
+   * the late-resolving flush must NOT write its result / clear isFlushing
+   * onto the NEW attempt's page. The hook's flush() is already scope-bound
+   * (it captured its own scope at call time), but the page-side setState
+   * here is a separate seam that needs its own guard.
+   */
   const runSubmitFlush = useCallback(async () => {
+    const attemptAtStart = attemptId;
+    const scopeGenAtStart = getScopeGeneration();
+    const stale = () =>
+      currentAttemptIdRef.current !== attemptAtStart ||
+      getScopeGeneration() !== scopeGenAtStart;
+
     setIsFlushing(true);
     setFlushResult(null);
     try {
-      setFlushResult(await flush());
+      const result = await flush();
+      if (!stale()) {
+        setFlushResult(result);
+      }
     } finally {
-      setIsFlushing(false);
+      if (!stale()) {
+        setIsFlushing(false);
+      }
     }
-  }, [flush]);
+  }, [attemptId, flush, getScopeGeneration]);
 
   /** Opens the submit confirmation dialog and triggers a pending-save flush. */
   const openSubmitDialog = useCallback(async () => {

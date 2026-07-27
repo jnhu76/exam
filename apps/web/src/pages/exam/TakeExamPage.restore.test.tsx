@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  act,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   MemoryRouter,
@@ -1194,6 +1201,363 @@ describe("REC-I3 — disrupted direct restore", () => {
     // would otherwise have driven the page into ErrorState.
     expect(await screen.findByText("选择一项")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "A" })).not.toBeDisabled();
+  });
+
+  // ====== Cross-attempt save-queue isolation ======
+
+  it("Case 17: pending save cross-attempt — old debounce timer is cancelled, never fires against old URL", async () => {
+    // att-old is editable; the candidate types an answer (schedules a 1500ms
+    // debounce timer) and immediately navigates to att-new BEFORE the timer
+    // fires. The hook's scope switch must cancel att-old's pending timer, so
+    // no POST to att-old's answers URL ever issues, and att-new is untouched.
+    const editableOld = buildSnapshot({
+      attemptId: "att-old",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+    const editableNew = buildSnapshot({
+      attemptId: "att-new",
+      examId: "exam-new",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        if (path.includes("/att-old/")) return editableOld;
+        if (path.includes("/att-new/")) return editableNew;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return { accepted: true, serverVersion: 1, savedAt: NOW };
+      }
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    // Fake timers for THIS case only, so we can deterministically cross the
+    // 1500ms debounce window and prove the timer was cancelled (not merely
+    // unobserved). Restored in finally.
+    const { navigate } = renderPage("att-old");
+    // Load att-old's editable exam under REAL timers (findBy polls via real
+    // setTimeout; switching to fake timers first would freeze the poll).
+    const oldRadio = await screen.findByRole("radio", { name: "A" });
+
+    vi.useFakeTimers();
+    try {
+      // Schedule a save under att-old. The 1500ms debounce timer is armed.
+      // fireEvent.click is synchronous (no internal pointer-event timing),
+      // so it is safe under fake timers where userEvent would stall.
+      await act(async () => {
+        fireEvent.click(oldRadio);
+      });
+
+      // Navigate to att-new BEFORE the debounce fires. The scope switch
+      // (useLayoutEffect keyed on attemptId) cancels att-old's pending timer.
+      await act(async () => {
+        navigate("/exam/exam-new/take/att-new");
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Cross the full debounce window. saveAnswer's timer was cancelled, so
+      // no POST to att-old's answers URL should ever issue.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+
+      const oldAnswerPosts = apiPost.mock.calls.filter(
+        ([p]) =>
+          typeof p === "string" &&
+          (p as string).includes("/att-old/") &&
+          (p as string).includes("/answers/"),
+      );
+      expect(oldAnswerPosts).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Back under real timers: att-new renders its own editable content; no
+    // leaked save UI.
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+  });
+
+  it("Case 18: in-flight save cross-attempt — shared questionId, new save not blocked by old; old late-resolve does not pollute new page", async () => {
+    // Both attempts use questionId "q1" (the buildSnapshot default). The
+    // critical race: att-old's q1 save is IN-FLIGHT (POST on the wire, held
+    // pending); the candidate navigates to att-new; att-new's q1 save must
+    // fire IMMEDIATELY (not serialized behind att-old, proving per-scope
+    // inflight maps), and att-old's late resolve must NOT mark att-new's
+    // save state/version.
+    const editableOld = buildSnapshot({
+      attemptId: "att-old",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+    const editableNew = buildSnapshot({
+      attemptId: "att-new",
+      examId: "exam-new",
+      attemptStatus: "in_progress",
+      isEditable: true,
+      canResume: false,
+      canSave: true,
+      canSubmit: true,
+    });
+
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        if (path.includes("/att-old/")) return editableOld;
+        if (path.includes("/att-new/")) return editableNew;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    // att-old's answers POST stays pending (deferred); att-new's resolves
+    // immediately with serverVersion 1.
+    let resolveOldSave: ((v: unknown) => void) | null = null;
+    apiPost.mockImplementation(
+      async (path: string) =>
+        new Promise((resolve) => {
+          if (typeof path === "string" && path.includes("/answers/")) {
+            if (path.includes("/att-old/")) {
+              resolveOldSave = resolve;
+              return;
+            }
+            // att-new: resolve immediately.
+            resolve({ accepted: true, serverVersion: 1, savedAt: NOW });
+            return;
+          }
+          if (typeof path === "string" && path.includes("/heartbeat")) {
+            resolve({ ok: true, serverNow: NOW });
+            return;
+          }
+          resolve(new Error(`unexpected POST ${path}`));
+        }),
+    );
+
+    const { navigate } = renderPage("att-old");
+
+    // Type an answer on att-old and let its debounce fire so the POST is
+    // in-flight (pending on resolveOldSave).
+    const oldRadio = await screen.findByRole("radio", { name: "A" });
+    const user = userEvent.setup();
+    await user.click(oldRadio);
+    await waitFor(
+      () => {
+        const oldPosts = apiPost.mock.calls.filter(
+          ([p]) =>
+            typeof p === "string" &&
+            (p as string).includes("/att-old/") &&
+            (p as string).includes("/answers/"),
+        );
+        expect(oldPosts.length).toBe(1);
+      },
+      { timeout: 3000 },
+    );
+
+    // Navigate to att-new (att-old's save still in flight).
+    await act(async () => {
+      navigate("/exam/exam-new/take/att-new");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Type an answer on att-new. Its save must NOT wait behind att-old's
+    // in-flight save (per-scope inflight map). Assert the att-new POST body
+    // carries baseVersion 0 — att-old's save result (serverVersion 1) was
+    // NOT written to the new page's versionsRef.
+    const newRadio = await screen.findByRole("radio", { name: "A" });
+    await user.click(newRadio);
+    await waitFor(
+      () => {
+        const newPosts = apiPost.mock.calls.filter(
+          ([p]) =>
+            typeof p === "string" &&
+            (p as string).includes("/att-new/") &&
+            (p as string).includes("/answers/"),
+        );
+        expect(newPosts.length).toBe(1);
+      },
+      { timeout: 3000 },
+    );
+    const newPostCall = apiPost.mock.calls.find(
+      ([p]) =>
+        typeof p === "string" &&
+        (p as string).includes("/att-new/") &&
+        (p as string).includes("/answers/"),
+    );
+    const newPostBody = newPostCall?.[1] as
+      | { baseVersion?: number }
+      | undefined;
+    expect(newPostBody?.baseVersion).toBe(0);
+
+    // Now resolve att-old's stale in-flight save. It must NOT pollute the
+    // new page: no flipped save indicator, no error surface. The page stays
+    // on att-new's editable content.
+    await act(async () => {
+      resolveOldSave?.({ accepted: true, serverVersion: 1, savedAt: NOW });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId("restore-failed-surface"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "A" })).not.toBeDisabled();
+  });
+
+  // ====== Per-call load generation (latest-GET-wins within one attempt) ======
+
+  it("Case 19: same-attempt GET reorder (StrictMode) — late old success does not overwrite newer snapshot", async () => {
+    // StrictMode double-invokes the load effect: GET-1 then GET-2 for the
+    // SAME attempt. Hold GET-1 pending; let GET-2 return a snapshot whose
+    // prompt is "新题目 v2"; then resolve GET-1 with an OLDER snapshot whose
+    // prompt is "旧题目 v1". The per-call load-generation bump must reject
+    // GET-1's late success — the page shows v2, not v1.
+    const snapshotV2 = buildSnapshot({
+      questions: [
+        {
+          id: "q1",
+          type: "single_choice",
+          prompt: "新题目 v2",
+          options: [
+            { id: "opt-a", content: "A" },
+            { id: "opt-b", content: "B" },
+          ],
+          inputMode: "choice",
+          maxScore: 10,
+          answerValue: null,
+          answerSource: "none",
+        },
+      ],
+    });
+    const snapshotV1Full = buildSnapshot({
+      questions: [
+        {
+          id: "q1",
+          type: "single_choice",
+          prompt: "旧题目 v1",
+          options: [
+            { id: "opt-a", content: "A" },
+            { id: "opt-b", content: "B" },
+          ],
+          inputMode: "choice",
+          maxScore: 10,
+          answerValue: null,
+          answerSource: "none",
+        },
+      ],
+    });
+
+    let resolveGet1: ((v: unknown) => void) | null = null;
+    let getCall = 0;
+    apiGet.mockImplementation(
+      (path: string) =>
+        new Promise((resolve) => {
+          if (
+            typeof path === "string" &&
+            path.includes("/candidate/attempts/")
+          ) {
+            getCall += 1;
+            if (getCall === 1) {
+              // GET-1: hold pending so it resolves AFTER GET-2.
+              resolveGet1 = resolve;
+              return;
+            }
+            // GET-2 (and any later): the newer snapshot.
+            resolve(snapshotV2);
+            return;
+          }
+          resolve(new Error(`unexpected GET ${path}`));
+        }),
+    );
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    renderPage("att-1", { strictMode: true });
+
+    // GET-2 wins and renders v2.
+    expect(await screen.findByText("新题目 v2")).toBeInTheDocument();
+
+    // Now resolve GET-1 with the OLDER v1 snapshot. The per-call generation
+    // bump must reject it — the page stays on v2.
+    await act(async () => {
+      resolveGet1?.(snapshotV1Full);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("新题目 v2")).toBeInTheDocument();
+    expect(screen.queryByText("旧题目 v1")).not.toBeInTheDocument();
+  });
+
+  it("Case 20: same-attempt GET reorder (StrictMode) — late old failure does not write loadError onto loaded page", async () => {
+    // Symmetric with Case 19 but GET-1 FAILS late. StrictMode issues GET-1
+    // then GET-2 for the same attempt; hold GET-1 pending; let GET-2 succeed
+    // and render; then reject GET-1. The per-call generation bump must
+    // reject GET-1's late failure — no loadError / ErrorState appears.
+    const snapshotOk = buildSnapshot();
+
+    let rejectGet1: ((e: unknown) => void) | null = null;
+    let getCall = 0;
+    apiGet.mockImplementation(
+      (path: string) =>
+        new Promise((resolve, reject) => {
+          if (
+            typeof path === "string" &&
+            path.includes("/candidate/attempts/")
+          ) {
+            getCall += 1;
+            if (getCall === 1) {
+              rejectGet1 = reject;
+              return;
+            }
+            resolve(snapshotOk);
+            return;
+          }
+          reject(new Error(`unexpected GET ${path}`));
+        }),
+    );
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return { ok: true, serverNow: NOW };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+
+    renderPage("att-1", { strictMode: true });
+
+    // GET-2 succeeds and renders the editable exam.
+    expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+
+    // Now reject GET-1. The late failure must NOT write loadError / surface
+    // the generic ErrorState.
+    await act(async () => {
+      rejectGet1?.(new Error("att-1 GET-1 failed late"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("radio", { name: "A" })).toBeInTheDocument();
+    // The generic load-error ErrorState surfaces a Retry button; it must not
+    // appear (the page is still the loaded editable exam).
+    expect(
+      screen.queryByRole("button", { name: /重试|Retry/ }),
+    ).not.toBeInTheDocument();
   });
 });
 

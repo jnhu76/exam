@@ -99,10 +99,14 @@ tests added in this revision):
   generation is bumped ONLY on a real attemptId change (render-time
   prev-value check), never on StrictMode re-mount.
 - `loadGenerationRef` + `currentAttemptIdRef` (in `TakeExamPage`) — the
-  same generation discipline applied to the PAGE's own `loadSnapshot`
-  (initial load, retry, post-submit reload). Without this guard a late
-  GET from the previous route could overwrite the new route's snapshot or
-  write `loadError` onto an already-loaded page.
+  same generation discipline applied to the PAGE's own `loadSnapshot`.
+  The generation is bumped on EVERY `loadSnapshot` call (pre-increment) AND
+  on a real route change. This is a two-layer invalidation: a route change
+  invalidates ALL of the old route's GETs at once; and within one attempt,
+  each new `loadSnapshot` invalidates the previous one (latest-GET-wins), so
+  two concurrent loads of the same attempt (StrictMode replay, retry during
+  load, post-submit reload overlapping the initial load) cannot reorder — a
+  late-resolving earlier GET is rejected at apply/loadError/isLoading time.
 - On a real route change ALL attempt-scoped page state is reset
   (snapshot, loadError, isLoading, currentIndex, answers, save/submit/
   transient/flush states, and the submit/deadline refs), so nothing from
@@ -111,6 +115,46 @@ tests added in this revision):
   page to the generic ErrorState).
 - A user-triggered retry after a genuine failure issues a fresh POST
   (`retryRestore()` → `performRestore({ isRetry: true })`).
+
+## Save-queue scope isolation
+
+`TakeExamPage` reuses one component instance across `:attemptId` route
+changes, so the answer-save queue must be isolated per attempt — not just
+the snapshot and restore UI. A generation guard alone is insufficient: it
+blocks result pollution but cannot stop queueing, serialization, flush
+drainage, or same-questionId cross-talk between two attempts sharing one
+hook instance. `useSubmitFlush(scopeKey)` therefore gives each scope its
+own container:
+
+- **Per-scope `SaveScopeState`.** Each scope (the route `attemptId`) owns a
+  PRIVATE set of maps — `pending` (debounce timers), `inflight` (in-flight
+  promises), `statuses`, `questionGenerations` — keyed by `questionId`. Two
+  scopes that happen to share a `questionId` do NOT share a queue: scope
+  B/q1 never serializes behind scope A/q1.
+- **Scope captured at `scheduleSave` time.** The active scope is captured
+  into the `PendingEntry`, so a late-firing debounce timer (after a scope
+  change) can only touch its own scope — never the newly-active one.
+- **Scope switch (`useLayoutEffect([scopeKey]`)** runs synchronously before
+  paint: clears the old scope's pending timers (cancelling pending saves),
+  retains the old scope object so its already-inflight saves settle without
+  writing status, and installs a brand-new scope with empty maps. Resets
+  `failedQuestionIds`. `useLayoutEffect` (not `useEffect`) closes the narrow
+  window where an old timer could fire between commit and a passive cleanup.
+- **`flush()` binds its scope at call time.** The entire flush lifecycle —
+  drain, await, count — reads ONLY the scope captured when flush started. An
+  old-scope flush that is still awaiting when the scope changes cannot
+  drain, await, or count the new scope's work.
+- **Page-side `saveAnswer` closure is stale-guarded** with a scope-generation
+  token captured at schedule time: the guard runs BEFORE any read of the
+  current page authority (`viewRef`/`versionsRef`/`clientSeqsRef`), again
+  after the `await api.post`, and at the TOP of the `catch` (an `api.post`
+  rejection bypasses the post-await guard and would otherwise write
+  `saveState "error"` / `setIsDisconnected(true)` onto the new page).
+- **`runSubmitFlush` is stale-guarded** on attemptId + scope-generation: a
+  late-resolving flush cannot write `flushResult` / clear `isFlushing` onto a
+  page whose attempt has since changed.
+
+Verified by the 3 new `useSubmitFlush` scope-isolation tests and Cases 17-18.
 
 ## Deadline and terminal race handling
 
@@ -233,8 +277,10 @@ Confirmed source facts (§7 of the prompt):
 
 ```text
 apps/web/src/exam/useAttemptRestore.ts               (new; revised — per-attempt in-flight, finally reset)
-apps/web/src/pages/exam/TakeExamPage.tsx             (modified — wiring + restore/failed UI, stale-GET guard, full attempt-scoped reset)
-apps/web/src/pages/exam/TakeExamPage.restore.test.tsx (new, 18 test cases)
+apps/web/src/hooks/useSubmitFlush.ts                 (modified — per-scope SaveScopeState containers, scopeKey param, scope-bound flush, getScopeGeneration)
+apps/web/src/hooks/useSubmitFlush.test.ts            (modified — 12 existing + 3 new scope-isolation cases = 15)
+apps/web/src/pages/exam/TakeExamPage.tsx             (modified — wiring + restore/failed UI, save-queue scope isolation, stale-GET guard, full attempt-scoped reset, per-call load generation)
+apps/web/src/pages/exam/TakeExamPage.restore.test.tsx (new, 22 test cases)
 apps/web/src/i18n/locales/zh-CN.ts                   (modified — restore key group)
 docs/architecture/exam-system/candidate-recovery.md  (modified — diagram + status section)
 docs/audits/REC-I3-IMPLEMENTATION.md                 (new — this closeout)
@@ -242,7 +288,7 @@ docs/audits/REC-I3-IMPLEMENTATION.md                 (new — this closeout)
 
 ## Tests added
 
-`apps/web/src/pages/exam/TakeExamPage.restore.test.tsx` — 18 component /
+`apps/web/src/pages/exam/TakeExamPage.restore.test.tsx` — 22 component /
 integration cases, all on the authoritative snapshot read path:
 
 | # | Case | Behavior asserted |
@@ -263,8 +309,20 @@ integration cases, all on the authoritative snapshot read path:
 | 14 | Cross-attempt race: old GET late success | Old GET does not overwrite new route snapshot |
 | 15 | Cross-attempt race: old GET late failure | Old GET does not write loadError onto new page |
 | 16 | Cross-attempt race: short new exam after long old exam | currentIndex reset; no ErrorState from out-of-range index |
+| 17 | Pending save cross-attempt | Old debounce timer cancelled on scope change; no POST to old URL; new page untouched |
+| 18 | In-flight save cross-attempt (shared questionId) | New save not serialized behind old in-flight; new baseVersion=0; old late-resolve does not pollute new page |
+| 19 | Same-attempt GET reorder (late success) | StrictMode: late old GET does not overwrite newer snapshot |
+| 20 | Same-attempt GET reorder (late failure) | StrictMode: late old GET failure does not write loadError onto loaded page |
 | UX-A | Restoring UI | Accessible surface; no editable controls while pending |
 | UX-B | Failure affordances | "重试恢复" + "返回考试列表" both reachable |
+
+`apps/web/src/hooks/useSubmitFlush.test.ts` — 3 new scope-isolation cases:
+
+| # | Case | Behavior asserted |
+|---|---|---|
+| S1 | Scope change cancels pending saves | Old pending timer cleared; save never fires; new scope status is idle |
+| S2 | Scope isolates inflight (same questionId) | New scope's q-shared fires without waiting behind old; old late-resolve does not flip new status |
+| S3 | Old-scope flush does not consume new scope's work | Flush captured at call time; never drains/awaits/count new scope's saves |
 
 Test quality: assertions are user-visible behavior and API calls (POST
 count, snapshot reload count, control reachability). Deterministic deferred
@@ -316,11 +374,12 @@ it; this audit does not record a measured percentage.
 ## Test results
 
 ```text
-apps/web/src/pages/exam/TakeExamPage.restore.test.tsx
-  18 passed
+apps/web/src/hooks/useSubmitFlush.test.ts            15/15
+apps/web/src/pages/exam/TakeExamPage.restore.test.tsx 22/22
+  focused total                                       37/37
 
 apps/web full suite
-  1252 passed (18 in the focused restore spec + 1234 existing — no regressions)
+  1259 passed (37 focused + 1222 existing — no regressions)
 ```
 
 ## Static verification results
