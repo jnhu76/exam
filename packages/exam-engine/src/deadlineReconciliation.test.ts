@@ -161,9 +161,17 @@ function makeRepos(
       attemptStore[idx] = { ...attemptStore[idx]!, ...data };
       return attemptStore[idx]!;
     },
+    refreshLastActivityIfInProgress: async (id, now) => {
+      const idx = attemptStore.findIndex((a) => a.id === id);
+      if (idx === -1) return null;
+      if (attemptStore[idx]!.status !== "in_progress") return null;
+      attemptStore[idx] = { ...attemptStore[idx]!, lastActivityAt: now };
+      return attemptStore[idx]!;
+    },
   };
   const examRepo: ExamRepository = {
     findById: (id) => examStore.find((e) => e.id === id) ?? null,
+    findByIdForUpdate: (id) => examStore.find((e) => e.id === id) ?? null,
     update: (id, data) => {
       const idx = examStore.findIndex((e) => e.id === id);
       if (idx === -1) return null;

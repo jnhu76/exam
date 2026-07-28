@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AttemptInterruptionEvent, RequestContext } from "@exam/domain";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { attemptInterruptionEvents } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
@@ -116,11 +116,50 @@ export function createAttemptInterruptionEventRepo(db: Database) {
       );
   }
 
+  /**
+   * Returns the latest outcome event (restored|terminalized) across all of an
+   * attempt's episodes, ordered deterministically by
+   * (occurredAt DESC, createdAt DESC, id DESC) so the result is stable even
+   * when multiple outcomes share the same occurredAt timestamp.
+   *
+   * Used by restore idempotency reconstruction to locate the most recent
+   * committed outcome and validate its identity against the latest episode.
+   */
+  async function findLatestOutcomeByAttempt(
+    ctx: TenantContext | RequestContext,
+    attemptId: string,
+  ): Promise<AttemptInterruptionEventRow | null> {
+    const rows = await db
+      .select()
+      .from(attemptInterruptionEvents)
+      .where(
+        and(
+          eq(
+            attemptInterruptionEvents.organizationId,
+            resolveOrganizationId(ctx),
+          ),
+          eq(attemptInterruptionEvents.attemptId, attemptId),
+          inArray(attemptInterruptionEvents.eventType, [
+            "restored",
+            "terminalized",
+          ]),
+        ),
+      )
+      .orderBy(
+        desc(attemptInterruptionEvents.occurredAt),
+        desc(attemptInterruptionEvents.createdAt),
+        desc(attemptInterruptionEvents.id),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   return {
     insert,
     findDetected,
     findOutcome,
     listByInterruption,
     listByAttempt,
+    findLatestOutcomeByAttempt,
   };
 }

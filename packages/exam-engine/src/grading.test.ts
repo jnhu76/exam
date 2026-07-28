@@ -134,6 +134,7 @@ function makeRepos(
   let storedEnrollment = enrollment;
   const examRepo: ExamRepository = {
     findById: () => exam,
+    findByIdForUpdate: () => exam,
     update: () => exam,
   };
   const attemptRepo: AttemptRepository = {
@@ -146,6 +147,7 @@ function makeRepos(
       storedAttempt = { ...storedAttempt, ...data };
       return storedAttempt;
     },
+    refreshLastActivityIfInProgress: () => storedAttempt,
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,
@@ -334,6 +336,7 @@ describe("gradeAttempt", () => {
     const enrollment = makeEnrollment();
     const examRepo: ExamRepository = {
       findById: () => exam,
+      findByIdForUpdate: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -343,6 +346,7 @@ describe("gradeAttempt", () => {
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
       update: () => null,
+      refreshLastActivityIfInProgress: () => attempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -405,6 +409,7 @@ describe("gradeAttempt", () => {
     let attemptCallCount = 0;
     const examRepo: ExamRepository = {
       findById: () => exam,
+      findByIdForUpdate: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -418,6 +423,7 @@ describe("gradeAttempt", () => {
         if (attemptCallCount === 1) return gradingAttempt;
         return gradedAttempt;
       },
+      refreshLastActivityIfInProgress: () => attempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -635,6 +641,7 @@ function makeTransactionalRepos(
   let committedEnrollment = enrollment;
   const examRepo: ExamRepository = {
     findById: () => exam,
+    findByIdForUpdate: () => exam,
     update: () => exam,
   };
 
@@ -654,6 +661,10 @@ function makeTransactionalRepos(
         Object.assign(stagedAttempt, data);
         return { ...committedAttempt, ...stagedAttempt };
       },
+      refreshLastActivityIfInProgress: () => ({
+        ...committedAttempt,
+        ...stagedAttempt,
+      }),
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => ({

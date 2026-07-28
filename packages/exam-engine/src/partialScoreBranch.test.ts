@@ -184,6 +184,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
     let updateCalls = 0;
     const examRepo: ExamRepository = {
       findById: () => exam,
+      findByIdForUpdate: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -197,6 +198,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
         storedAttempt = { ...storedAttempt, ...data };
         return storedAttempt;
       },
+      refreshLastActivityIfInProgress: () => storedAttempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -278,6 +280,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
     let updateCalls = 0;
     const examRepo: ExamRepository = {
       findById: () => exam,
+      findByIdForUpdate: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -291,6 +294,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
         storedAttempt = { ...storedAttempt, ...data };
         return storedAttempt;
       },
+      refreshLastActivityIfInProgress: () => storedAttempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => makeEnrollment(),

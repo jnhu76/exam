@@ -208,6 +208,7 @@ function makeRepos(
   let storedEnrollment = enrollment;
   const examRepo: ExamRepository = {
     findById: () => exam,
+    findByIdForUpdate: () => exam,
     update: () => exam,
   };
   const attemptRepo: AttemptRepository = {
@@ -220,6 +221,7 @@ function makeRepos(
       storedAttempt = { ...storedAttempt, ...data };
       return storedAttempt;
     },
+    refreshLastActivityIfInProgress: () => storedAttempt,
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,

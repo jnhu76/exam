@@ -188,6 +188,13 @@ export function makeAttemptRepo(attempts: ExamAttempt[]): AttemptRepository & {
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+    refreshLastActivityIfInProgress(id, now) {
+      const idx = store.findIndex((a) => a.id === id);
+      if (idx === -1) return null;
+      if (store[idx]!.status !== "in_progress") return null;
+      store[idx] = { ...store[idx]!, lastActivityAt: now };
+      return store[idx]!;
+    },
     updateCalls,
     get(id: string): ExamAttempt {
       const found = store.find((a) => a.id === id);
@@ -240,6 +247,9 @@ export function makeExamRepo(exams: Exam[]): ExamRepository {
   const store = [...exams];
   return {
     findById(examId) {
+      return store.find((e) => e.id === examId) ?? null;
+    },
+    findByIdForUpdate(examId) {
       return store.find((e) => e.id === examId) ?? null;
     },
     update() {

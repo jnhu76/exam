@@ -206,6 +206,7 @@ function makeAttemptRepo(attempt: ExamAttempt): AttemptRepository {
       stored = { ...stored, ...data };
       return stored;
     },
+    refreshLastActivityIfInProgress: () => stored,
   };
 }
 

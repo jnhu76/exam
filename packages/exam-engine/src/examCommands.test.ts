@@ -92,6 +92,9 @@ function makeRepo(initial: Exam): ExamRepository {
     findById(id: string) {
       return id === current.id ? current : null;
     },
+    findByIdForUpdate(id: string) {
+      return id === current.id ? current : null;
+    },
     update(_id: string, data: Partial<Exam>) {
       current = { ...current, ...data };
       return current;

@@ -57,6 +57,17 @@ export interface AttemptRepository {
     attemptId: string,
     data: Partial<ExamAttempt>,
   ): Promise<ExamAttempt | null> | ExamAttempt | null;
+  /**
+   * Atomic status-qualified heartbeat write. Updates `lastActivityAt`
+   * iff the row is still `in_progress`, returning the updated row or null
+   * (zero rows). This is the write-time predicate that closes the
+   * heartbeat/scanner TOCTOU: a `disrupted` or terminal row updates zero
+   * rows and cannot produce heartbeat success.
+   */
+  refreshLastActivityIfInProgress(
+    attemptId: string,
+    now: Date,
+  ): Promise<ExamAttempt | null> | ExamAttempt | null;
 }
 
 /** Repository interface for persisting exam enrollment records. */
@@ -446,6 +457,71 @@ export async function restoreAttempt(
   const restored = await attemptRepo.update(attemptId, updateData);
   if (!restored) throw new ValidationError("Attempt not found after update");
   return restored;
+}
+
+/**
+ * Lifecycle outcome of {@link restoreAttemptState}. The composed restore
+ * command interprets these to build its internal result.
+ */
+export type RestoreLifecycleOutcome =
+  | "restored"
+  | "already_in_progress"
+  | "terminal";
+
+/**
+ * Performs the lifecycle-only portion of an interrupted-attempt restore
+ * (ADR-013 §6, R7).
+ *
+ * This function consumes the **already-locked** attempt (the composed
+ * command owns all locking). It ONLY performs the `disrupted → in_progress`
+ * transition plus the `lastActivityAt` refresh and active-pointer/interrupted
+ * mirror clearing. It MUST NOT:
+ *   - read `lastActivityAt` to compute compensation;
+ *   - read the Exam policy;
+ *   - mutate the deadline;
+ *   - insert a time-adjustment ledger row;
+ *   - decide bounded caps.
+ *
+ * Compensation is the separate {@link evaluateInterruptionTimePolicy}
+ * concern, composed in one transaction by {@link restoreInterruptedAttempt}.
+ *
+ * Returns:
+ *   - `"already_in_progress"` when the locked attempt is already in_progress;
+ *   - `"terminal"` when it is in a terminal (submitted|grading|graded|voided)
+ *     state;
+ *   - `"restored"` after a successful disrupted → in_progress transition.
+ *
+ * Non-disrupted, non-terminal states (not_started|queued) fail closed.
+ */
+export async function restoreAttemptState(
+  attempt: ExamAttempt,
+  attemptRepo: AttemptRepository,
+  now: Date,
+): Promise<{ outcome: RestoreLifecycleOutcome; attempt: ExamAttempt }> {
+  if (attempt.status === "in_progress") {
+    return { outcome: "already_in_progress", attempt };
+  }
+  if (
+    attempt.status === "submitted" ||
+    attempt.status === "grading" ||
+    attempt.status === "graded" ||
+    attempt.status === "voided"
+  ) {
+    return { outcome: "terminal", attempt };
+  }
+  if (attempt.status !== "disrupted") {
+    throw new InvalidStateTransitionError(
+      `Cannot restore attempt from ${attempt.status} state`,
+    );
+  }
+  const restored = await attemptRepo.update(attempt.id, {
+    status: "in_progress",
+    lastActivityAt: now,
+    currentInterruptionId: null,
+    interruptedAt: null,
+  });
+  if (!restored) throw new ValidationError("Attempt not found after update");
+  return { outcome: "restored", attempt: restored };
 }
 
 /**
