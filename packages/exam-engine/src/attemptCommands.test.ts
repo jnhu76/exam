@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   startAttempt,
+  startOrRestoreAttempt,
   submitAttempt,
   markDisrupted,
   restoreAttempt,
@@ -32,6 +33,7 @@ import { MisconductSeverity } from "@exam/domain";
 import type {
   InterruptionEpisodeRepository,
   InterruptionEventRepository,
+  TimeAdjustmentRepository,
 } from "./interruptionRepositories.js";
 
 function makeSnapshot(): QuestionSnapshot[] {
@@ -339,6 +341,16 @@ function makeEnrollmentRepo(
 const fixedNow = new Date("2025-01-01T10:30:00Z");
 const fixedStart = new Date("2025-01-01T10:30:00Z");
 
+function makeGradingWorksetRepo(): GradingWorksetRepository {
+  return {
+    findByAttempt: async () => [],
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
+  };
+}
+
 describe("attemptCommands", () => {
   describe("startAttempt", () => {
     it("creates new attempt for candidate with enrollment", async () => {
@@ -480,6 +492,13 @@ describe("attemptCommands", () => {
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const disruptedAttempt = makeAttempt({
         status: "disrupted",
+        currentInterruptionId: "ep-1",
+        interruptionTimingPolicySnapshot: {
+          schemaVersion: 1,
+          policy: "strict",
+          perIncidentCapSeconds: null,
+          perAttemptAggregateCapSeconds: null,
+        },
         answers: [
           {
             questionId: "q1",
@@ -496,19 +515,61 @@ describe("attemptCommands", () => {
       };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([disruptedAttempt]);
+      const episodeRepo: InterruptionEpisodeRepository = {
+        create: async () => ({ id: "ep-1" }) as AttemptInterruption,
+        findById: async () => null,
+        findByAttemptForUpdate: async () => null,
+        findLatestByAttempt: async () => null,
+      };
+      const eventRepo: InterruptionEventRepository = {
+        insert: async () => ({ id: "evt-1" }) as AttemptInterruptionEvent,
+        findDetected: async () =>
+          ({
+            id: "evt-detected",
+            organizationId: "org-1",
+            attemptId: "attempt-1",
+            interruptionId: "ep-1",
+            eventType: "detected",
+            occurredAt: new Date("2025-01-01T10:00:00Z"),
+            observedLastActivityAt: new Date("2025-01-01T10:00:00Z"),
+            detectionSource: "heartbeat_timeout",
+            timeoutSeconds: 60,
+            policy: "strict",
+            eligibleSeconds: null,
+            timeAdjustmentId: null,
+            actorId: null,
+            reasonCode: "heartbeat_timeout",
+            createdAt: new Date("2025-01-01T10:00:00Z"),
+          }) as AttemptInterruptionEvent,
+        findOutcome: async () => null,
+        findLatestOutcomeByAttempt: async () => null,
+      };
+      const adjustmentRepo: TimeAdjustmentRepository = {
+        insert: async () => ({ id: "adj-1" }) as any,
+        findById: async () => null,
+        findBoundedByInterruption: async () => null,
+        sumBoundedGraceSeconds: async () => 0,
+      };
+      const gradingWorksetRepo = makeGradingWorksetRepo();
 
-      const result = await startAttempt(
+      const result = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        {
+          episodeRepo,
+          eventRepo,
+          adjustmentRepo,
+          gradingWorksetRepo,
+        },
       );
 
-      expect(result.id).toBe("attempt-1");
-      expect(result.status).toBe("in_progress");
-      expect(result.answers).toHaveLength(1);
+      expect(result.attempt.id).toBe("attempt-1");
+      expect(result.attempt.status).toBe("in_progress");
+      expect(result.attempt.answers).toHaveLength(1);
     });
 
     it("returns existing in_progress attempt even after max attempts are exhausted", async () => {

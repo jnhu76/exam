@@ -37,9 +37,18 @@ import {
 import type {
   InterruptionEpisodeRepository,
   InterruptionEventRepository,
+  TimeAdjustmentRepository,
 } from "./interruptionRepositories.js";
 import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
-import { resolveActiveInterruptionOnTerminalization } from "./restoreInterruption.js";
+import {
+  resolveActiveInterruptionOnTerminalization,
+  restoreInterruptedAttempt,
+} from "./restoreInterruption.js";
+import { resolveAttemptTimingPolicySnapshotFromExam } from "./interruptionPolicy.js";
+import {
+  lockEnrollmentAndActiveAttempt,
+  type EnrollmentActiveAttemptLock,
+} from "./lockSeam.js";
 
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
@@ -138,9 +147,17 @@ export interface StartAttemptOptions {
 /**
  * Starts or restores an exam attempt for the given candidate.
  *
- * If an active in-progress attempt exists, returns it directly.
- * If a disrupted attempt exists, restores it to in_progress.
- * Otherwise, validates eligibility and creates a new attempt.
+ * Uses the canonical Enrollment→active-Attempt lock seam (R3/R8). If an
+ * active in-progress attempt exists, returns it directly. If a disrupted
+ * attempt exists, restores it via the composed restore command. Otherwise,
+ * validates eligibility and creates a new attempt with the interruption
+ * timing policy snapshot.
+ *
+ * The extended signature accepts interruption and grading repos so the
+ * disrupted→restore path is fully wired. When called without interruption
+ * repos (legacy `startAttempt` wrapper), the disrupted path is skipped and
+ * an in-progress attempt is returned directly (the caller is responsible
+ * for providing the full set when restore is needed).
  */
 export async function startOrRestoreAttempt(
   examRepo: ExamRepository,
@@ -149,7 +166,12 @@ export async function startOrRestoreAttempt(
   examId: string,
   candidateId: string,
   now: Date,
-  options: StartAttemptOptions = {},
+  options: StartAttemptOptions & {
+    episodeRepo?: InterruptionEpisodeRepository;
+    eventRepo?: InterruptionEventRepository;
+    adjustmentRepo?: TimeAdjustmentRepository;
+    gradingWorksetRepo?: GradingWorksetRepository;
+  } = {},
 ): Promise<StartAttemptResult> {
   const exam = await examRepo.findById(examId);
   if (!exam) {
@@ -164,6 +186,56 @@ export async function startOrRestoreAttempt(
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
+  // Use the canonical Enrollment→active-Attempt lock seam (R3).
+  let lockResult: EnrollmentActiveAttemptLock;
+  try {
+    lockResult = await lockEnrollmentAndActiveAttempt(
+      enrollmentRepo,
+      attemptRepo,
+      examId,
+      candidateId,
+    );
+  } catch (err) {
+    // Convert NotFoundError from the seam to the caller's expected error type.
+    if (err instanceof NotFoundError) {
+      throw options.unassignedErrorFactory
+        ? options.unassignedErrorFactory(NOT_ENROLLED_MESSAGE)
+        : new ValidationError(NOT_ENROLLED_MESSAGE);
+    }
+    throw err;
+  }
+
+  if (lockResult.activeAttempt) {
+    if (lockResult.activeAttempt.status === "in_progress") {
+      return { attempt: lockResult.activeAttempt, isNew: false };
+    }
+    if (
+      lockResult.activeAttempt.status === "disrupted" &&
+      options.episodeRepo &&
+      options.eventRepo &&
+      options.adjustmentRepo &&
+      options.gradingWorksetRepo &&
+      lockResult.capability
+    ) {
+      const result = await restoreInterruptedAttempt(
+        examRepo,
+        attemptRepo,
+        enrollmentRepo,
+        options.episodeRepo,
+        options.eventRepo,
+        options.adjustmentRepo,
+        options.gradingWorksetRepo,
+        lockResult.capability,
+        now,
+      );
+      return { attempt: result.attempt, isNew: false };
+    }
+    // Disrupted but no restore repos available → return as-is (legacy path).
+    return { attempt: lockResult.activeAttempt, isNew: false };
+  }
+
+  // No active attempt — validate and create a new one.
+  // The seam already locked the enrollment; re-read its data.
   const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
     examId,
     candidateId,
@@ -172,20 +244,6 @@ export async function startOrRestoreAttempt(
     throw options.unassignedErrorFactory
       ? options.unassignedErrorFactory(NOT_ENROLLED_MESSAGE)
       : new ValidationError(NOT_ENROLLED_MESSAGE);
-  }
-
-  const activeAttempt = await attemptRepo.findActiveByEnrollment(enrollment.id);
-  if (activeAttempt) {
-    if (activeAttempt.status === "disrupted") {
-      const restored = await restoreAttempt(
-        examRepo,
-        attemptRepo,
-        activeAttempt.id,
-        now,
-      );
-      return { attempt: restored, isNew: false };
-    }
-    return { attempt: activeAttempt, isNew: false };
   }
 
   if (
@@ -202,8 +260,7 @@ export async function startOrRestoreAttempt(
     throw new ExamAlreadyPassedError("Already passed this exam");
   }
 
-  // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only. resume/
-  // restore (handled above) never hits this. latestStartAt = openAt + offset.
+  // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only.
   if (exam.latestStartOffsetMinutes != null) {
     const latestStartAt = new Date(
       exam.openAt.getTime() + exam.latestStartOffsetMinutes * 60_000,
@@ -215,6 +272,9 @@ export async function startOrRestoreAttempt(
 
   const attemptNo = enrollment.attemptCount + 1;
   const deadlineAt = calculateDeadlineAt(now, exam.durationMinutes);
+
+  // Resolve the timing policy snapshot for the new attempt.
+  const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);
 
   const attempt = await attemptRepo.create({
     organizationId: exam.organizationId,
@@ -228,6 +288,7 @@ export async function startOrRestoreAttempt(
     startedAt: now,
     deadlineAt,
     lastActivityAt: now,
+    interruptionTimingPolicySnapshot: snapshot,
   });
 
   if (enrollment.status !== "started") {

@@ -1,4 +1,5 @@
 import { NotFoundError, ValidationError } from "@exam/domain";
+import type { ExamAttempt } from "@exam/domain";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -150,4 +151,85 @@ export function assertCapabilityFor(
         "consuming it. Re-mint via lockEnrollmentAndAttempt in this transaction.",
     );
   }
+}
+
+/**
+ * Result of the canonical Enrollment→active-Attempt lock acquisition for
+ * the `/start` route (R3/R8). The lock order is Enrollment FOR UPDATE first,
+ * then the active attempt (if any) FOR UPDATE.
+ *
+ * - `activeAttempt` is present when the candidate has an `in_progress` or
+ *   `disrupted` attempt. The caller branches on `activeAttempt.status` to
+ *   decide whether to restore (disrupted) or resume (in_progress).
+ * - `activeAttempt` is `null` when no active attempt exists; the caller
+ *   creates a new attempt.
+ * - `capability` is present only when an active attempt was found and locked.
+ */
+export interface EnrollmentActiveAttemptLock {
+  enrollmentId: string;
+  activeAttempt: ExamAttempt | null;
+  capability: LockedEnrollmentAttemptIdentity | null;
+}
+
+/**
+ * Acquires the Enrollment row lock before the active Attempt row lock (R3),
+ * for the `/start` route. Unlike {@link lockEnrollmentAndAttempt}, this seam
+ * starts from the Enrollment identity (examId + candidateId) rather than a
+ * known attemptId, because the caller may not yet have an active attempt.
+ *
+ * Protocol (DO NOT REORDER):
+ *   1. Enrollment FOR UPDATE via (examId, candidateId).
+ *   2. Locate the active attempt (in_progress or disrupted) via the
+ *      enrollment id.
+ *   3. If an active attempt exists, Attempt FOR UPDATE + identity
+ *      revalidation.
+ *   4. Mint the capability, capturing the exact repo object references.
+ *
+ * @throws {NotFoundError} enrollment not found.
+ */
+export async function lockEnrollmentAndActiveAttempt(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  examId: string,
+  candidateId: string,
+): Promise<EnrollmentActiveAttemptLock> {
+  // 1. Enrollment FOR UPDATE — first row lock.
+  const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
+    examId,
+    candidateId,
+  );
+  if (!enrollment) {
+    throw new NotFoundError("Enrollment not found");
+  }
+
+  // 2. Locate the active attempt (in_progress or disrupted).
+  const activeAttempt = await attemptRepo.findActiveByEnrollment(enrollment.id);
+
+  if (activeAttempt) {
+    // 3a. Attempt FOR UPDATE — second row lock, strictly after Enrollment.
+    const locked = await attemptRepo.findByIdForUpdate(activeAttempt.id);
+    if (!locked) {
+      throw new NotFoundError("Active attempt not found under lock");
+    }
+
+    // 3b. Identity revalidation.
+    if (locked.enrollmentId !== enrollment.id) {
+      throw new ValidationError(
+        "Active attempt enrollment mismatch — data integrity violation",
+      );
+    }
+
+    // 4. Mint with the locked attempt's identity.
+    const capability: LockedEnrollmentAttemptIdentity = {
+      enrollmentId: enrollment.id,
+      attemptId: locked.id,
+      [LOCK_TOKEN]: LOCK_TOKEN,
+      [TX_AFFINITY_TOKEN]: { enrollmentRepo, attemptRepo },
+    };
+
+    return { enrollmentId: enrollment.id, activeAttempt: locked, capability };
+  }
+
+  // No active attempt — no capability to mint.
+  return { enrollmentId: enrollment.id, activeAttempt: null, capability: null };
 }
