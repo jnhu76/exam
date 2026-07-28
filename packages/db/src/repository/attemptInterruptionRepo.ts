@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { attemptInterruptions } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
@@ -85,10 +85,37 @@ export function createAttemptInterruptionRepo(db: Database) {
     return rows[0] ?? null;
   }
 
+  /**
+   * Returns the most recent episode for an attempt by deterministic order
+   * (createdAt DESC, id DESC). Used by restore idempotency reconstruction to
+   * locate the latest resolved episode and validate its outcome identity.
+   */
+  async function findLatestByAttempt(
+    ctx: TenantContext | RequestContext,
+    attemptId: string,
+  ): Promise<AttemptInterruptionRow | null> {
+    const rows = await db
+      .select()
+      .from(attemptInterruptions)
+      .where(
+        and(
+          eq(attemptInterruptions.organizationId, resolveOrganizationId(ctx)),
+          eq(attemptInterruptions.attemptId, attemptId),
+        ),
+      )
+      .orderBy(
+        desc(attemptInterruptions.createdAt),
+        desc(attemptInterruptions.id),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   return {
     create,
     findById,
     findByAttempt,
     findByAttemptForUpdate,
+    findLatestByAttempt,
   };
 }

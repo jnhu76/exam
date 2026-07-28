@@ -17,6 +17,7 @@ import {
   assertCapabilityFor,
   type LockedEnrollmentAttemptIdentity,
 } from "./lockSeam.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
 
 // ── Mutation context authority (EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0) ──
 //
@@ -140,7 +141,7 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  * because every ordinary production active-Attempt writer
  * (`startOrRestoreAttempt` via `calculateDeadlineAt`, `extendAttemptTime`)
  * writes a non-null `deadlineAt`, and no transition into `in_progress`/
- * `disrupted` introduces NULL (`restoreAttempt` only preserves it). The
+ * `disrupted` introduces NULL (`restoreInterruptedAttempt` only preserves it). The
  * fallback therefore covers schema-admissible but protocol-unreachable
  * legacy / corrupt / historical NULL rows; it does not declare NULL a valid
  * protocol timing state. See `docs/architecture/exam-runtime.md` §5.1 for the
@@ -222,6 +223,7 @@ export async function ensureAttemptDeadlineReconciled(
   gradingWorksetRepo: GradingWorksetRepository,
   capability: LockedEnrollmentAttemptIdentity,
   now: Date,
+  resolution: SubmitInterruptionResolution,
 ): Promise<ExamAttempt> {
   const { attemptId } = capability;
   const attempt = await attemptRepo.findById(attemptId);
@@ -272,6 +274,7 @@ export async function ensureAttemptDeadlineReconciled(
     {
       source: "deadline_scanner",
       submissionReason: "deadline",
+      resolution,
     },
   );
 
@@ -361,6 +364,7 @@ export async function prepareReconciledAttemptMutation(
   gradingWorksetRepo: GradingWorksetRepository,
   capability: LockedEnrollmentAttemptIdentity,
   now: Date,
+  resolution: SubmitInterruptionResolution,
 ): Promise<PreparedAttemptMutation> {
   // 1. Verify the EA capability against the exact repo objects BEFORE any
   //    further use. This mechanically proves the caller minted the capability
@@ -378,6 +382,7 @@ export async function prepareReconciledAttemptMutation(
     gradingWorksetRepo,
     capability,
     now,
+    resolution,
   );
 
   // 3. Load the Exam state required for the canonical effective deadline.

@@ -16,6 +16,29 @@ import { submitAttempt } from "./attemptCommands.js";
 import { computeGradingResult } from "./grading.js";
 import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import { gradeQuestion, type GradeQuestionResult } from "./manualGrading.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
+
+const stubEpisodeRepo: InterruptionEpisodeRepository = {
+  create: async () => ({ id: "stub" }) as never,
+  findById: async () => null,
+  findByAttemptForUpdate: async () => null,
+  findLatestByAttempt: async () => null,
+};
+const stubEventRepo: InterruptionEventRepository = {
+  insert: async (input) => ({ id: "stub-event", ...input }) as never,
+  findDetected: async () => null,
+  findOutcome: async () => null,
+  findLatestOutcomeByAttempt: async () => null,
+};
+const noneResolution: SubmitInterruptionResolution = {
+  mode: "none",
+  episodeRepo: stubEpisodeRepo,
+  eventRepo: stubEventRepo,
+};
 
 /**
  * P3-L0-2D — Manual-Grading Completion Integrity Closure (RED→GREEN).
@@ -208,6 +231,7 @@ function makeRepos(
   let storedEnrollment = enrollment;
   const examRepo: ExamRepository = {
     findById: () => exam,
+    findByIdForUpdate: () => exam,
     update: () => exam,
   };
   const attemptRepo: AttemptRepository = {
@@ -218,6 +242,11 @@ function makeRepos(
     create: () => storedAttempt,
     update: (_id, data) => {
       storedAttempt = { ...storedAttempt, ...data };
+      return storedAttempt;
+    },
+    refreshLastActivityIfInProgress: (_id, now) => {
+      if (storedAttempt.status !== "in_progress") return null;
+      storedAttempt = { ...storedAttempt, lastActivityAt: now };
       return storedAttempt;
     },
   };
@@ -344,7 +373,7 @@ async function runMixedLifecycle(input: {
     repos.gradingWorksetRepo,
     "attempt-1",
     NOW,
-    { source: "candidate" },
+    { source: "candidate", resolution: noneResolution },
   );
 
   // 2. The candidate-submit orchestrator path computes the objective result
@@ -481,7 +510,7 @@ describe("P3-L0-2D B/C: text_response with non-null standardAnswer", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
 
     expect(submitted.status).toBe("submitted");
@@ -555,7 +584,7 @@ describe("P3-L0-2D D: multi-manual partial completion", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
 
     const cap2 = await mintCap(
@@ -622,7 +651,7 @@ describe("P3-L0-2D F: pure-objective auto grading preserved", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
 
     expect(repos.getAttempt().gradingStatus).toBe("auto_graded");
@@ -713,7 +742,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap3 = await mintCap(
       repos.enrollmentRepo,
@@ -773,7 +802,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap4 = await mintCap(
       repos.enrollmentRepo,
@@ -812,7 +841,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos2.gradingWorksetRepo,
       "attempt-2",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap5 = await mintCap(
       repos2.enrollmentRepo,
@@ -865,7 +894,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap6 = await mintCap(
       repos.enrollmentRepo,
@@ -900,7 +929,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos2.gradingWorksetRepo,
       "attempt-2",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap7 = await mintCap(
       repos2.enrollmentRepo,
@@ -950,7 +979,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap8 = await mintCap(
       repos.enrollmentRepo,
@@ -999,7 +1028,7 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const cap9 = await mintCap(
       repos.enrollmentRepo,

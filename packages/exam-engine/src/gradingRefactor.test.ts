@@ -177,6 +177,7 @@ function makeRepos(
   let storedEnrollment = enrollment;
   const examRepo: ExamRepository = {
     findById: () => exam,
+    findByIdForUpdate: () => exam,
     update: () => exam,
   };
   const attemptRepo: AttemptRepository = {
@@ -189,6 +190,7 @@ function makeRepos(
       storedAttempt = { ...storedAttempt, ...data };
       return storedAttempt;
     },
+    refreshLastActivityIfInProgress: () => storedAttempt,
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,
@@ -264,9 +266,14 @@ describe("readGradingSnapshot", () => {
       findByEnrollmentAndAttemptNo: () => null,
       create: () => makeAttempt(),
       update: () => null,
+      refreshLastActivityIfInProgress: () => null,
     };
     const snapshot = await readGradingSnapshot(
-      { findById: () => makeExam(), update: () => makeExam() },
+      {
+        findById: () => makeExam(),
+        findByIdForUpdate: () => makeExam(),
+        update: () => makeExam(),
+      },
       {
         findByExamAndCandidate: () => makeEnrollment(),
         findByExamAndCandidateForUpdate: () => makeEnrollment(),

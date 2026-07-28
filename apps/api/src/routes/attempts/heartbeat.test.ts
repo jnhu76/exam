@@ -15,6 +15,7 @@ import {
   buildExamPayload,
   enrollCandidateForExam,
   buildSharedAttemptFixture,
+  disruptAttempt,
 } from "./attempts.testHelpers.js";
 
 const HEARTBEAT_SCANNER_TEST_PREFIX = "heartbeat-scanner-test-";
@@ -88,7 +89,7 @@ describe("attempt routes", () => {
       const result = await scanDatabaseForDisruptedAttempts(
         ctx.app,
         new Date(Date.now() + 61_000),
-        60_000,
+        60,
       );
       const candidateCtx = {
         actorId: ctx.candidate.id,
@@ -392,7 +393,7 @@ describe("attempt routes", () => {
       );
       await backdateHeartbeat(attemptId);
 
-      await scanDatabaseForDisruptedAttempts(ctx.app, new Date(), 60_000);
+      await scanDatabaseForDisruptedAttempts(ctx.app, new Date(), 60);
 
       const auditRows = await ctx.db
         .select()
@@ -417,13 +418,9 @@ describe("attempt routes", () => {
         "Heartbeat Disrupted Race Exam",
       );
       await backdateHeartbeat(attemptId);
-      // Simulate a concurrent disruption landing just before the scanner's lock.
-      await ctx.db
-        .update(schema.examAttempts)
-        .set({ status: "disrupted" })
-        .where(eq(schema.examAttempts.id, attemptId));
+      await disruptAttempt(ctx.db, t.orgId, attemptId);
 
-      await scanDatabaseForDisruptedAttempts(ctx.app, new Date(), 60_000);
+      await scanDatabaseForDisruptedAttempts(ctx.app, new Date(), 60);
 
       const auditRows = await ctx.db
         .select()
@@ -459,7 +456,7 @@ describe("attempt routes", () => {
       const first = await scanDatabaseForDisruptedAttempts(
         ctx.app,
         new Date(),
-        999_999,
+        999,
       );
       expect(first.markedCount).toBe(0);
 
@@ -473,7 +470,7 @@ describe("attempt routes", () => {
       const second = await scanDatabaseForDisruptedAttempts(
         ctx.app,
         new Date(),
-        60_000,
+        60,
       );
       expect(second.markedCount).toBeGreaterThanOrEqual(1);
 

@@ -13,6 +13,29 @@ import type {
 import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { submitAttempt } from "./attemptCommands.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
+
+const stubEpisodeRepo: InterruptionEpisodeRepository = {
+  create: async () => ({ id: "stub" }) as never,
+  findById: async () => null,
+  findByAttemptForUpdate: async () => null,
+  findLatestByAttempt: async () => null,
+};
+const stubEventRepo: InterruptionEventRepository = {
+  insert: async (input) => ({ id: "stub-event", ...input }) as never,
+  findDetected: async () => null,
+  findOutcome: async () => null,
+  findLatestOutcomeByAttempt: async () => null,
+};
+const noneResolution: SubmitInterruptionResolution = {
+  mode: "none",
+  episodeRepo: stubEpisodeRepo,
+  eventRepo: stubEventRepo,
+};
 import {
   finalizeGrading,
   gradeAttempt,
@@ -184,6 +207,7 @@ function makeRepos(
   let storedEnrollment = enrollment;
   const examRepo: ExamRepository = {
     findById: () => exam,
+    findByIdForUpdate: () => exam,
     update: () => exam,
   };
   const attemptRepo: AttemptRepository = {
@@ -194,6 +218,11 @@ function makeRepos(
     create: () => storedAttempt,
     update: (_id, data) => {
       storedAttempt = { ...storedAttempt, ...data };
+      return storedAttempt;
+    },
+    refreshLastActivityIfInProgress: (_id, now) => {
+      if (storedAttempt.status !== "in_progress") return null;
+      storedAttempt = { ...storedAttempt, lastActivityAt: now };
       return storedAttempt;
     },
   };
@@ -319,7 +348,7 @@ describe("P3-L0-2C: mixed objective + text_response submit hold", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
 
     // Protocol §4.2 step 6/8: submit freeze barrier sets BOTH the lifecycle
@@ -355,7 +384,7 @@ describe("P3-L0-2C: mixed objective + text_response submit hold", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
 
     // After submit, the attempt MUST rest at submitted + pending_manual.
@@ -387,7 +416,7 @@ describe("P3-L0-2C: pure text_response submit hold", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
 
     expect(submitted.status).toBe("submitted");
@@ -412,7 +441,7 @@ describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
       repos.gradingWorksetRepo,
       "attempt-1",
       NOW,
-      { source: "candidate" },
+      { source: "candidate", resolution: noneResolution },
     );
     const result = computeGradingResult(repos.getAttempt(), makeExam(), NOW);
     const cap = await mintCap(

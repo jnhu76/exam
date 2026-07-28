@@ -7,6 +7,8 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import {
   submitAttempt,
   readGradingSnapshot,
@@ -14,9 +16,12 @@ import {
   ensureAttemptDeadlineReconciled,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
+import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 
@@ -103,6 +108,41 @@ export async function submitAndGradeAttempt(
         ctx,
       );
 
+      // R1/R9: build interruption repos for resolution. These are needed for
+      // both reconciliation and submit terminalization.
+      const episodeRepo = createInterruptionEpisodeRepoAdapter(
+        createAttemptInterruptionRepo(tx),
+        ctx,
+      );
+      const eventRepo = createInterruptionEventRepoAdapter(
+        createAttemptInterruptionEventRepo(tx),
+        ctx,
+      );
+
+      // Build the resolution based on the locked attempt's status.
+      // For disrupted: active_interruption with candidate_submit_terminalization.
+      // For in_progress: mode none (no active interruption).
+      const buildResolution = (
+        attemptStatus: ExamAttempt["status"],
+      ): SubmitInterruptionResolution => {
+        if (attemptStatus === "disrupted") {
+          return {
+            mode: "active_interruption",
+            episodeRepo,
+            eventRepo,
+            hint: {
+              policy:
+                lockedAttempt.interruptionTimingPolicySnapshot?.policy ??
+                "strict",
+              eligibleSeconds: null,
+              adjustmentId: null,
+              reasonCode: "candidate_submit_terminalization",
+            },
+          };
+        }
+        return { mode: "none", episodeRepo, eventRepo };
+      };
+
       // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
       // is past its effective deadline, freeze it as deadline-submitted
       // (submittedAt = effectiveDeadline, submissionReason='deadline') and
@@ -122,6 +162,7 @@ export async function submitAndGradeAttempt(
           gradingWorksetRepo,
           cap,
           now,
+          buildResolution(status),
         );
         const reconciledStatus = reconciled.status;
         // If reconciliation already froze the attempt, skip the remaining
@@ -150,6 +191,7 @@ export async function submitAndGradeAttempt(
           minSubmitAfterStartMinutes:
             (await exams.findById(lockedAttempt.examId))
               ?.minSubmitAfterStartMinutes ?? null,
+          resolution: buildResolution(currentStatus),
         });
         if (audit) {
           await recordAtomicHttpAudit(tx, audit.request, ctx, {

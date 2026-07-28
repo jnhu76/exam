@@ -1057,6 +1057,8 @@ export async function seedDemo(
       submittedAt?: Date;
       gradedAt?: Date;
       lastActivityAt?: Date;
+      currentInterruptionId?: string | null;
+      interruptedAt?: Date;
     },
   ): Promise<string> {
     // Invariant: a graded attempt MUST carry a non-empty gradingResult that is
@@ -1085,9 +1087,13 @@ export async function seedDemo(
         ),
       );
     if (existing.length > 0) {
+      const pointerClear =
+        data.status !== "disrupted"
+          ? { currentInterruptionId: null, interruptedAt: null }
+          : {};
       await db
         .update(schema.examAttempts)
-        .set({ ...data, updatedAt: ts() })
+        .set({ ...data, ...pointerClear, updatedAt: ts() })
         .where(eq(schema.examAttempts.id, existing[0]!.id));
       return existing[0]!.id;
     }
@@ -1139,8 +1145,10 @@ export async function seedDemo(
   });
   ids.attempts["open-c1-inprogress"] = openAttempt1Id;
 
+  const disruptedEpisodeId = uuid("episode");
+  const disruptedDetectedAt = ts(-8 * 60_000);
   const openAttempt3Id = await upsertAttempt(enrollOpen3, c3, exam1Id, 1, {
-    status: "disrupted",
+    status: "in_progress",
     questionSnapshot: exam1Snapshot,
     answers: [
       {
@@ -1160,6 +1168,36 @@ export async function seedDemo(
     lastActivityAt: ts(-8 * 60_000),
   });
   ids.attempts["open-c3-disrupted"] = openAttempt3Id;
+
+  await db.insert(schema.attemptInterruptions).values({
+    id: disruptedEpisodeId,
+    organizationId: ids.orgId,
+    attemptId: openAttempt3Id,
+    createdAt: disruptedDetectedAt,
+  });
+  await db.insert(schema.attemptInterruptionEvents).values({
+    id: uuid("event"),
+    organizationId: ids.orgId,
+    attemptId: openAttempt3Id,
+    interruptionId: disruptedEpisodeId,
+    eventType: "detected",
+    occurredAt: disruptedDetectedAt,
+    observedLastActivityAt: ts(-8 * 60_000),
+    detectionSource: "heartbeat_timeout",
+    timeoutSeconds: 60,
+    policy: "strict",
+    reasonCode: "heartbeat_timeout",
+    createdAt: disruptedDetectedAt,
+  });
+  await db
+    .update(schema.examAttempts)
+    .set({
+      status: "disrupted",
+      currentInterruptionId: disruptedEpisodeId,
+      interruptedAt: disruptedDetectedAt,
+      updatedAt: ts(),
+    })
+    .where(eq(schema.examAttempts.id, openAttempt3Id));
 
   const openC4Answers: AnswerRecord[] = exam1Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,

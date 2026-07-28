@@ -104,6 +104,9 @@ function makeRecordingRepos(opts: {
     update: () => {
       throw new Error("not used");
     },
+    refreshLastActivityIfInProgress: () => {
+      throw new Error("not used");
+    },
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => null,
@@ -273,6 +276,9 @@ describe("assertCapabilityFor (J2 affinity)", () => {
       update: () => {
         throw new Error("not used");
       },
+      refreshLastActivityIfInProgress: () => {
+        throw new Error("not used");
+      },
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -360,6 +366,7 @@ describe("retry remint semantics (J5)", () => {
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
       update: () => attempt,
+      refreshLastActivityIfInProgress: () => attempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -437,6 +444,7 @@ describe("ended-transaction composite safety (J4 consumer-level)", () => {
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
       update: () => attempt,
+      refreshLastActivityIfInProgress: () => attempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,

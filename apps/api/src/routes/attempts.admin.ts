@@ -23,17 +23,22 @@ import {
   extendAttemptTime,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
+import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import {
   createAttemptRepoAdapter,
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
@@ -216,8 +221,37 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           // guard (source = "proctor" — the SubmitSource for admin/proctor
           // intervention; "admin" is not a valid SubmitSource value).
           // P3-L0-2E: submitAttempt owns grading workset materialization.
+
+          // For disrupted→submitted, build the interruption resolution (R1).
+          // For in_progress, mode=none (no active interruption).
+          const episodeRepo = createInterruptionEpisodeRepoAdapter(
+            createAttemptInterruptionRepo(tx),
+            ctx,
+          );
+          const eventRepo = createInterruptionEventRepoAdapter(
+            createAttemptInterruptionEventRepo(tx),
+            ctx,
+          );
+          const resolution: SubmitInterruptionResolution =
+            locked.status === "disrupted"
+              ? {
+                  mode: "active_interruption",
+                  episodeRepo,
+                  eventRepo,
+                  hint: {
+                    policy:
+                      locked.interruptionTimingPolicySnapshot?.policy ??
+                      "strict",
+                    eligibleSeconds: null,
+                    adjustmentId: null,
+                    reasonCode: "admin_force_submit_terminalization",
+                  },
+                }
+              : { mode: "none", episodeRepo, eventRepo };
+
           await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
             source: "proctor",
+            resolution,
           });
         }
 

@@ -116,6 +116,8 @@ export interface FeaturesConfig {
 export interface HeartbeatConfig {
   scanIntervalMs: number;
   timeoutMs: number;
+  /** Whole seconds derived from timeoutMs; heartbeat/scanner use this. */
+  heartbeatTimeoutSeconds: number;
 }
 
 /** Email transport selection (M3 — Email Outbox). */
@@ -651,6 +653,12 @@ export function loadRuntimeConfig(
   const timeoutMs = positiveIntSchema.parse(
     env.HEARTBEAT_TIMEOUT_MS ?? "60000",
   );
+  if (timeoutMs % 1000 !== 0) {
+    throw new RuntimeConfigError(
+      `HEARTBEAT_TIMEOUT_MS must be a multiple of 1000, got ${timeoutMs}`,
+    );
+  }
+  const heartbeatTimeoutSeconds = Math.floor(timeoutMs / 1000);
 
   const redisUrl = resolveRedisUrl(env);
   const redisEnabled = redisUrl !== null;
@@ -676,7 +684,7 @@ export function loadRuntimeConfig(
       manualExamOpenClose: isTruthy(env.FEATURE_MANUAL_EXAM_OPEN_CLOSE),
       liveScoreList: isTruthy(env.FEATURE_LIVE_SCORE_LIST),
     },
-    heartbeat: { scanIntervalMs, timeoutMs },
+    heartbeat: { scanIntervalMs, timeoutMs, heartbeatTimeoutSeconds },
     apiReference: {
       enabled: apiReferenceEnabled,
       uiPath: "/_dev/api-reference",

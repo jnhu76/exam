@@ -97,6 +97,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
       "Uses baseRepo now() for email_outbox createdAt/updatedAt storage stamps only (non-business). Retry/sent instants are passed in explicitly by EmailOutboxService, which owns the injected clock; the repo never reads the wall clock for outbox lifecycle decisions.",
   },
   {
+    path: "packages/db/src/repository/attemptRepo.ts",
+    reason:
+      "refreshLastActivityIfInProgress uses SQL now() for updatedAt storage stamp only; the business-time lastActivityAt uses the caller-supplied now param (ADR-006 compliant).",
+  },
+  {
     path: "apps/api/src/routes/export.ts",
     reason:
       "Date.now() is used only to generate a unique CSV download filename suffix (cache-busting); not an exam business-time decision.",

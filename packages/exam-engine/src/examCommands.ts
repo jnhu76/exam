@@ -36,6 +36,13 @@ function isEmptyOrPlaceholder(value: unknown): boolean {
 /** Repository interface for persisting exam records. */
 export interface ExamRepository {
   findById(examId: string): Promise<Exam | null> | Exam | null;
+  /**
+   * Loads an exam under the caller's row lock (FOR UPDATE). Required by
+   * interruption restore/bounded-grace evaluation to serialize the
+   * authoritative `closeAt` read against exam-window changes. Lock order
+   * Enrollment → Attempt → Exam must be preserved; no Exam → Attempt path.
+   */
+  findByIdForUpdate(examId: string): Promise<Exam | null> | Exam | null;
   update(
     examId: string,
     data: Partial<Exam>,

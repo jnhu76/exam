@@ -45,16 +45,26 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
-import { startOrRestoreAttempt, restoreAttempt } from "@exam/exam-engine";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
+import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
+import {
+  startOrRestoreAttempt,
+  restoreInterruptedAttempt,
+} from "@exam/exam-engine";
 import { saveAnswer } from "@exam/exam-engine";
 import {
   ensureAttemptDeadlineReconciled,
   lockEnrollmentAndAttempt,
   prepareReconciledAttemptMutation,
 } from "@exam/exam-engine";
+import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
+  createTimeAdjustmentRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { formatZodError, getRequestContext } from "./helpers.js";
@@ -571,10 +581,13 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
 
+      // ADR-006: one operation now, captured once at the route entry.
+      const now = fastify.now();
+
       const statusResult = await reconcileExamForRead(
         fastify.db,
         examId,
-        fastify.now(),
+        now,
         ctx,
       );
       if (!statusResult) {
@@ -583,7 +596,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const { exam } = statusResult;
       if (
         exam.controlFlags.requireQueue &&
-        getQueueStatus(exam, candidateId, fastify.now()).status !== "ready"
+        getQueueStatus(exam, candidateId, now).status !== "ready"
       ) {
         throw new ConflictError(
           "Queue admission required before starting this exam",
@@ -602,16 +615,38 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             ctx,
           );
 
+          // Build interruption repos for the full restore path.
+          const episodeRepo = createInterruptionEpisodeRepoAdapter(
+            createAttemptInterruptionRepo(tx),
+            ctx,
+          );
+          const eventRepo = createInterruptionEventRepoAdapter(
+            createAttemptInterruptionEventRepo(tx),
+            ctx,
+          );
+          const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+            createAttemptTimeAdjustmentRepo(tx),
+            ctx,
+          );
+          const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+            createAttemptGradingEntryRepo(tx),
+            ctx,
+          );
+
           const started = await startOrRestoreAttempt(
             exams,
             enrollments,
             attempts,
             examId,
             candidateId,
-            fastify.now(),
+            now,
             {
               unassignedErrorFactory: (message) =>
                 new PermissionDeniedError(message),
+              episodeRepo,
+              eventRepo,
+              adjustmentRepo,
+              gradingWorksetRepo,
             },
           );
           return started;
@@ -630,7 +665,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           .code(201)
           .send(
             LoadAttemptResponseSchema.parse(
-              toCandidateAttemptResponse(attempt, fastify.now()),
+              toCandidateAttemptResponse(attempt, now),
             ),
           );
       }
@@ -638,7 +673,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         .code(200)
         .send(
           LoadAttemptResponseSchema.parse(
-            toCandidateAttemptResponse(attempt, fastify.now()),
+            toCandidateAttemptResponse(attempt, now),
           ),
         );
     },
@@ -734,12 +769,31 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           attempts,
           parsed.data.attemptId,
         );
-        // ensureAttemptDeadlineReconciled performs its own findByIdForUpdate
-        // internally and returns the (possibly reconciled) attempt. Verify
-        // ownership on that returned object instead of a separate locked read,
-        // avoiding a redundant DB query. Reconcile is idempotent, so running
-        // it before the ownership check is safe even for non-owners (we throw
-        // before returning any data).
+        const preRead = await attempts.findById(parsed.data.attemptId);
+        const episodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const eventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
+        const resolution: SubmitInterruptionResolution =
+          preRead?.status === "disrupted"
+            ? {
+                mode: "active_interruption",
+                episodeRepo,
+                eventRepo,
+                hint: {
+                  policy:
+                    preRead.interruptionTimingPolicySnapshot?.policy ??
+                    "strict",
+                  eligibleSeconds: null,
+                  adjustmentId: null,
+                  reasonCode: "deadline_terminalization",
+                },
+              }
+            : { mode: "none", episodeRepo, eventRepo };
         const reconciled = await ensureAttemptDeadlineReconciled(
           exams,
           enrollments,
@@ -750,6 +804,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           ),
           cap,
           fastify.now(),
+          resolution,
         );
         if (reconciled.candidateId !== candidateProfile.id) {
           throw new NotFoundError("Attempt not found");
@@ -858,6 +913,35 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         // route no longer owns question-membership legality, effective-deadline
         // computation, or attempt.deadlineAt read-for-save — those live in
         // saveAnswer / the preparation seam.
+        const preAttempt = await attempts.findById(attemptId);
+        const saveEpisodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const saveEventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
+        const saveResolution: SubmitInterruptionResolution =
+          preAttempt?.status === "disrupted"
+            ? {
+                mode: "active_interruption",
+                episodeRepo: saveEpisodeRepo,
+                eventRepo: saveEventRepo,
+                hint: {
+                  policy:
+                    preAttempt.interruptionTimingPolicySnapshot?.policy ??
+                    "strict",
+                  eligibleSeconds: null,
+                  adjustmentId: null,
+                  reasonCode: "deadline_terminalization",
+                },
+              }
+            : {
+                mode: "none",
+                episodeRepo: saveEpisodeRepo,
+                eventRepo: saveEventRepo,
+              };
         const { attempt: currentAttempt, mutationContext } =
           await prepareReconciledAttemptMutation(
             exams,
@@ -869,6 +953,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             ),
             cap,
             now,
+            saveResolution,
           );
         if (currentAttempt.candidateId !== candidateProfile.id) {
           throw new NotFoundError("尝试不存在");
@@ -953,17 +1038,18 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Candidate profile not found");
       }
 
+      const now = fastify.now();
       const { attempt } = await submitAndGradeAttempt(
         fastify.db,
         ctx,
         attemptId,
         candidateProfile.id,
-        fastify.now(),
+        now,
         { request },
       );
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt, fastify.now()),
+        toCandidateAttemptResponse(attempt, now),
       );
     },
   );
@@ -1000,16 +1086,25 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // lastActivityAt stamp and the returned serverNow so they cannot drift.
       const now = fastify.now();
       const attemptRepo = createAttemptRepo(fastify.db);
-      const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
-      if (attempt.status !== "in_progress") {
+
+      // Ownership gate: verify the candidate owns this attempt (projection
+      // read, not FOR UPDATE). The actual write is done via the atomic
+      // status-qualified refreshLastActivityIfInProgress.
+      await getOwnedAttempt(fastify, ctx, attemptId);
+
+      // Atomic status-qualified heartbeat write: updates lastActivityAt iff
+      // the row is still in_progress. Returns null when the status has
+      // changed (disrupted/submitted/etc.) under the row lock.
+      const updated = await attemptRepo.refreshLastActivityIfInProgress(
+        ctx,
+        attemptId,
+        now,
+      );
+      if (!updated) {
         throw new InvalidStateTransitionError(
-          `Cannot heartbeat attempt in ${attempt.status} state`,
+          "Cannot heartbeat attempt: status changed or attempt not found",
         );
       }
-
-      await attemptRepo.update(ctx, attemptId, {
-        lastActivityAt: now,
-      } as Parameters<typeof attemptRepo.update>[2]);
 
       return { ok: true, serverNow: now.toISOString() };
     },
@@ -1046,8 +1141,12 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const { attemptId } = parsed.data;
       await getOwnedAttempt(fastify, ctx, attemptId);
 
-      const attempt = await executeInTransaction(fastify.db, async (tx) => {
-        const { exams, enrollments, attempts } = createExamEngineRepos(
+      // ADR-006: one operation now, captured once at the route entry and
+      // threaded through the entire restore transaction.
+      const now = fastify.now();
+
+      const result = await executeInTransaction(fastify.db, async (tx) => {
+        const { exams, attempts, enrollments } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
             attemptRepo: createAttemptRepo(tx),
@@ -1055,40 +1154,52 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
-        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam and
-        // thread it (plus the same repo pair) into the reconciliation path.
+        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(tx),
+          ctx,
+        );
+
+        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam.
         const cap = await lockEnrollmentAndAttempt(
           enrollments,
           attempts,
           attemptId,
         );
 
-        // P3-L0-3: lazy deadline reconciliation at restore entry point. If the
-        // disrupted attempt is past its deadline, freeze it now; restoreAttempt
-        // below then sees a submitted/graded status and the candidate gets the
-        // frozen result instead of resurrecting an expired attempt.
-        await ensureAttemptDeadlineReconciled(
-          exams,
-          enrollments,
-          attempts,
-          createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          ),
-          cap,
-          fastify.now(),
+        // Build interruption repos (R12: restore uses EA seam, these are
+        // the additional repos needed by restoreInterruptedAttempt).
+        const episodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const eventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
+        const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+          createAttemptTimeAdjustmentRepo(tx),
+          ctx,
         );
 
-        const restored = await restoreAttempt(
+        // Composed restore: handles policy evaluation, deadline
+        // reconciliation, time grant (bounded_grace), and lifecycle.
+        const restoreResult = await restoreInterruptedAttempt(
           exams,
           attempts,
-          attemptId,
-          fastify.now(),
+          enrollments,
+          episodeRepo,
+          eventRepo,
+          adjustmentRepo,
+          gradingWorksetRepo,
+          cap,
+          now,
         );
-        return restored;
+
+        return restoreResult.attempt;
       });
+
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt, fastify.now()),
+        toCandidateAttemptResponse(result, now),
       );
     },
   );

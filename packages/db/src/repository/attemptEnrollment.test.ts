@@ -113,6 +113,60 @@ function makeIds(): SeedIds {
   };
 }
 
+async function createDisruptedAttempt(
+  db: Database,
+  repo: ReturnType<typeof createAttemptRepo>,
+  ctx: RequestContext,
+  data: {
+    examId: string;
+    enrollmentId: string;
+    candidateId: string;
+    attemptNo: number;
+    startedAt: Date;
+    deadlineAt: Date;
+    lastActivityAt: Date;
+  },
+): Promise<ReturnType<typeof repo.create>> {
+  const attempt = await repo.create(ctx, {
+    ...data,
+    status: "in_progress",
+    questionSnapshot: [],
+    answers: [],
+  });
+  const episodeId = randomUUID();
+  const now = new Date();
+  await db.insert(schema.attemptInterruptions).values({
+    id: episodeId,
+    organizationId: ctx.organizationId,
+    attemptId: attempt.id,
+    createdAt: now,
+  });
+  await db.insert(schema.attemptInterruptionEvents).values({
+    id: randomUUID(),
+    organizationId: ctx.organizationId,
+    attemptId: attempt.id,
+    interruptionId: episodeId,
+    eventType: "detected",
+    occurredAt: now,
+    observedLastActivityAt: data.lastActivityAt,
+    detectionSource: "heartbeat_timeout",
+    timeoutSeconds: 60,
+    policy: "strict",
+    reasonCode: "heartbeat_timeout",
+    createdAt: now,
+  });
+  await db
+    .update(schema.examAttempts)
+    .set({
+      status: "disrupted",
+      currentInterruptionId: episodeId,
+      interruptedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(schema.examAttempts.id, attempt.id));
+  return { ...attempt, status: "disrupted" } as never;
+}
+
 describe("attemptRepo custom methods", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
@@ -177,14 +231,11 @@ describe("attemptRepo custom methods", () => {
       status: "started",
       attemptCount: 1,
     });
-    await attemptRepo.create(ctxD, {
+    await createDisruptedAttempt(db, attemptRepo, ctxD, {
       examId: idsD.examId,
       enrollmentId: enrD.id,
       candidateId: idsD.candidateId,
       attemptNo: 1,
-      status: "disrupted",
-      questionSnapshot: [],
-      answers: [],
       startedAt: new Date(),
       deadlineAt: new Date(Date.now() + 3600000),
       lastActivityAt: new Date(),
@@ -285,14 +336,11 @@ describe("attemptRepo custom methods", () => {
         status: "started",
         attemptCount: 1,
       });
-      await attemptRepo.create(ctxD, {
+      await createDisruptedAttempt(db, attemptRepo, ctxD, {
         examId: idsD.examId,
         enrollmentId: enrD.id,
         candidateId: idsD.candidateId,
         attemptNo: 1,
-        status: "disrupted",
-        questionSnapshot: [],
-        answers: [],
         startedAt: new Date(Date.now() - 3600_000),
         deadlineAt: new Date(Date.now() - 60_000),
         lastActivityAt: new Date(),
@@ -577,6 +625,17 @@ describe("attemptRepo custom methods", () => {
           status: "started",
           attemptCount: attemptNo,
         });
+        if (status === "disrupted") {
+          return createDisruptedAttempt(db, attemptRepo, ctxU, {
+            examId,
+            enrollmentId: enr.id,
+            candidateId: candId,
+            attemptNo,
+            startedAt: new Date(),
+            deadlineAt: new Date(Date.now() + 3600_000),
+            lastActivityAt: new Date(),
+          });
+        }
         return attemptRepo.create(ctxU, {
           examId,
           enrollmentId: enr.id,

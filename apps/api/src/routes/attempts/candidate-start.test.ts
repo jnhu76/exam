@@ -9,6 +9,7 @@ import {
   DEFAULT_CONTROL_FLAGS,
   enrollCandidateForExam,
   buildSharedAttemptFixture,
+  disruptAttempt,
 } from "./attempts.testHelpers.js";
 
 describe("attempt routes", () => {
@@ -298,17 +299,7 @@ describe("attempt routes", () => {
         url: `/api/attempts/${disruptedExamId}/start`,
         cookies: { "auth-token": ctx.candidateToken },
       });
-      const candidateCtx = {
-        actorId: ctx.candidate.id,
-        organizationId: ctx.org.id,
-        role: "Candidate" as const,
-        permissions: [] as import("@exam/domain").Permission[],
-        sessionId: "test",
-        targetOrganizationId: ctx.org.id,
-      };
-      await createAttemptRepo(ctx.db).update(candidateCtx, startRes.json().id, {
-        status: "disrupted",
-      });
+      await disruptAttempt(ctx.db, ctx.org.id, startRes.json().id);
       const target = await getSummary(disruptedExamId);
       expect(target.availabilityStatus).toBe("resumable");
       expect(target.primaryAction).toBe("resume");

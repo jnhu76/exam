@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  startAttempt,
+  startOrRestoreAttempt,
   submitAttempt,
   markDisrupted,
-  restoreAttempt,
+  restoreAttemptState,
   flagMisconduct,
   extendAttemptTime,
   type AttemptRepository,
@@ -14,6 +14,9 @@ import type {
   Exam,
   ExamAttempt,
   ExamEnrollment,
+  AttemptInterruption,
+  AttemptInterruptionEvent,
+  AttemptTimeAdjustment,
   QuestionSnapshot,
   RequestContext,
 } from "@exam/domain";
@@ -26,6 +29,50 @@ import {
   MaxAttemptsReachedError,
 } from "@exam/domain";
 import { MisconductSeverity } from "@exam/domain";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+  TimeAdjustmentRepository,
+} from "./interruptionRepositories.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+
+const stubEpisodeRepo: InterruptionEpisodeRepository = {
+  create: async () => ({ id: "stub" }) as never,
+  findById: async () => null,
+  findByAttemptForUpdate: async () => null,
+  findLatestByAttempt: async () => null,
+};
+const stubEventRepo: InterruptionEventRepository = {
+  insert: async (input) => ({ id: "stub-event", ...input }) as never,
+  findDetected: async () => null,
+  findOutcome: async () => null,
+  findLatestOutcomeByAttempt: async () => null,
+};
+const noneResolution: SubmitInterruptionResolution = {
+  mode: "none",
+  episodeRepo: stubEpisodeRepo,
+  eventRepo: stubEventRepo,
+};
+
+const stubAdjustmentRepo: TimeAdjustmentRepository = {
+  insert: async (input) => ({ id: "stub-adj", ...input }) as never,
+  findById: async () => null,
+  findBoundedByInterruption: async () => null,
+  sumBoundedGraceSeconds: async () => 0,
+};
+const stubGradingWorksetRepo: GradingWorksetRepository = {
+  findByAttempt: async () => [],
+  findByAttemptAndQuestion: async () => null,
+  bulkCreate: async () => {},
+  completeManualEntry: async () => null,
+  countPendingManualForAttempt: async () => 0,
+};
+const startDeps = {
+  episodeRepo: stubEpisodeRepo,
+  eventRepo: stubEventRepo,
+  adjustmentRepo: stubAdjustmentRepo,
+  gradingWorksetRepo: stubGradingWorksetRepo,
+};
 
 function makeSnapshot(): QuestionSnapshot[] {
   return [
@@ -188,6 +235,13 @@ function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+    refreshLastActivityIfInProgress(id, now) {
+      const idx = store.findIndex((a) => a.id === id);
+      if (idx === -1) return null;
+      if (store[idx]!.status !== "in_progress") return null;
+      store[idx] = { ...store[idx]!, lastActivityAt: now };
+      return store[idx]!;
+    },
   };
 }
 
@@ -325,22 +379,37 @@ function makeEnrollmentRepo(
 const fixedNow = new Date("2025-01-01T10:30:00Z");
 const fixedStart = new Date("2025-01-01T10:30:00Z");
 
+function makeGradingWorksetRepo(): GradingWorksetRepository {
+  return {
+    findByAttempt: async () => [],
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
+  };
+}
+
 describe("attemptCommands", () => {
-  describe("startAttempt", () => {
+  describe("startOrRestoreAttempt", () => {
     it("creates new attempt for candidate with enrollment", async () => {
       const exam = makeExam();
       const enrollment = makeEnrollment();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.status).toBe("in_progress");
@@ -358,12 +427,24 @@ describe("attemptCommands", () => {
       // openAt=09:00, offset=60min -> latestStartAt=10:00; now=10:30 > 10:00.
       const exam = makeExam({ latestStartOffsetMinutes: 60 });
       const enrollment = makeEnrollment();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
       ).rejects.toThrow(/late entry/i);
     });
 
@@ -371,17 +452,22 @@ describe("attemptCommands", () => {
       // openAt=09:00, offset=120min -> latestStartAt=11:00; now=10:30 < 11:00.
       const exam = makeExam({ latestStartOffsetMinutes: 120 });
       const enrollment = makeEnrollment();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
       expect(result.status).toBe("in_progress");
     });
@@ -391,29 +477,46 @@ describe("attemptCommands", () => {
       const exam = makeExam({ latestStartOffsetMinutes: 60 });
       const enrollment = makeEnrollment();
       const active = makeAttempt({ status: "in_progress" });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([active]);
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
       expect(result.status).toBe("in_progress");
     });
 
     it("rejects when no enrollment exists (Phase 1 requires explicit assignment)", async () => {
       const exam = makeExam();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -421,17 +524,22 @@ describe("attemptCommands", () => {
       const exam = makeExam();
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const existingAttempt = makeAttempt();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([existingAttempt]);
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.id).toBe("attempt-1");
@@ -440,8 +548,17 @@ describe("attemptCommands", () => {
     it("restores disrupted attempt instead of creating new", async () => {
       const exam = makeExam();
       const enrollment = makeEnrollment({ attemptCount: 1 });
+      const detectedAt = new Date("2025-01-01T10:00:00Z");
       const disruptedAttempt = makeAttempt({
         status: "disrupted",
+        currentInterruptionId: "ep-1",
+        interruptedAt: detectedAt,
+        interruptionTimingPolicySnapshot: {
+          schemaVersion: 1,
+          policy: "strict",
+          perIncidentCapSeconds: null,
+          perAttemptAggregateCapSeconds: null,
+        },
         answers: [
           {
             questionId: "q1",
@@ -451,22 +568,97 @@ describe("attemptCommands", () => {
           },
         ],
       });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([disruptedAttempt]);
+      const episodeRepo: InterruptionEpisodeRepository = {
+        create: async () => ({ id: "ep-1" }) as AttemptInterruption,
+        findById: async () => null,
+        findByAttemptForUpdate: async (
+          attemptId: string,
+          interruptionId: string,
+        ) =>
+          attemptId === "attempt-1" && interruptionId === "ep-1"
+            ? ({
+                id: "ep-1",
+                attemptId: "attempt-1",
+                organizationId: "org-1",
+                createdAt: detectedAt,
+              } as AttemptInterruption)
+            : null,
+        findLatestByAttempt: async () => null,
+      };
+      const eventRepo: InterruptionEventRepository = {
+        insert: async () => ({ id: "evt-1" }) as AttemptInterruptionEvent,
+        findDetected: async () =>
+          ({
+            id: "evt-detected",
+            organizationId: "org-1",
+            attemptId: "attempt-1",
+            interruptionId: "ep-1",
+            eventType: "detected",
+            occurredAt: detectedAt,
+            observedLastActivityAt: new Date("2025-01-01T10:00:00Z"),
+            detectionSource: "heartbeat_timeout",
+            timeoutSeconds: 60,
+            policy: "strict",
+            eligibleSeconds: null,
+            timeAdjustmentId: null,
+            actorId: null,
+            reasonCode: "heartbeat_timeout",
+            createdAt: new Date("2025-01-01T10:00:00Z"),
+          }) as AttemptInterruptionEvent,
+        findOutcome: async () => null,
+        findLatestOutcomeByAttempt: async () => null,
+      };
+      const adjustmentRepo: TimeAdjustmentRepository = {
+        insert: async () =>
+          ({
+            id: "adj-1",
+            operationId: "op-1",
+            organizationId: "org-1",
+            attemptId: "attempt-1",
+            interruptionId: null,
+            incidentId: null,
+            policy: "strict",
+            source: "operator",
+            beforeDeadline: new Date("2025-01-01T10:00:00Z"),
+            afterDeadline: new Date("2025-01-01T10:00:00Z"),
+            addedSeconds: 0,
+            eligibleSeconds: 0,
+            reasonCode: "strict_zero_grant",
+            reasonText: null,
+            actorId: null,
+            createdAt: new Date("2025-01-01T10:00:00Z"),
+          }) as AttemptTimeAdjustment,
+        findById: async () => null,
+        findBoundedByInterruption: async () => null,
+        sumBoundedGraceSeconds: async () => 0,
+      };
+      const gradingWorksetRepo = makeGradingWorksetRepo();
 
-      const result = await startAttempt(
+      const result = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        {
+          episodeRepo,
+          eventRepo,
+          adjustmentRepo,
+          gradingWorksetRepo,
+        },
       );
 
-      expect(result.id).toBe("attempt-1");
-      expect(result.status).toBe("in_progress");
-      expect(result.answers).toHaveLength(1);
+      expect(result.attempt.id).toBe("attempt-1");
+      expect(result.attempt.status).toBe("in_progress");
+      expect(result.attempt.answers).toHaveLength(1);
     });
 
     it("returns existing in_progress attempt even after max attempts are exhausted", async () => {
@@ -478,17 +670,22 @@ describe("attemptCommands", () => {
       });
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const existingAttempt = makeAttempt();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([existingAttempt]);
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.id).toBe("attempt-1");
@@ -497,39 +694,68 @@ describe("attemptCommands", () => {
 
     it("throws ExamNotOpenError when exam is not open", async () => {
       const exam = makeExam({ status: "draft" });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
       ).rejects.toThrow(ExamNotOpenError);
     });
 
     it("throws ExamNotOpenError when exam is closed", async () => {
       const exam = makeExam({ status: "closed" });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
       ).rejects.toThrow(ExamNotOpenError);
     });
 
     it("throws ValidationError when exam not found", async () => {
-      const examRepo = { findById: () => null, update: () => null };
+      const examRepo = {
+        findById: () => null,
+        findByIdForUpdate: () => null,
+        update: () => null,
+      };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(
+        startOrRestoreAttempt(
           examRepo,
           enrRepo,
           attRepo,
           "nonexistent",
           "cand-1",
           fixedNow,
+          startDeps,
         ),
       ).rejects.toThrow(ValidationError);
     });
@@ -539,18 +765,23 @@ describe("attemptCommands", () => {
         openAt: new Date("2025-01-01T12:00:00Z"),
         closeAt: new Date("2025-01-01T14:00:00Z"),
       });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(
+        startOrRestoreAttempt(
           examRepo,
           enrRepo,
           attRepo,
           "exam-1",
           "cand-1",
           new Date("2025-01-01T11:00:00Z"),
+          startDeps,
         ),
       ).rejects.toThrow(ExamNotOpenError);
     });
@@ -560,18 +791,23 @@ describe("attemptCommands", () => {
         openAt: new Date("2025-01-01T09:00:00Z"),
         closeAt: new Date("2025-01-01T10:00:00Z"),
       });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(
+        startOrRestoreAttempt(
           examRepo,
           enrRepo,
           attRepo,
           "exam-1",
           "cand-1",
           new Date("2025-01-01T10:30:00Z"),
+          startDeps,
         ),
       ).rejects.toThrow(ExamNotOpenError);
     });
@@ -584,12 +820,24 @@ describe("attemptCommands", () => {
         minSubmitAfterStartMinutes: null,
       });
       const enrollment = makeEnrollment({ attemptCount: 1 });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
       await expect(
-        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
       ).rejects.toThrow(MaxAttemptsReachedError);
     });
 
@@ -600,17 +848,22 @@ describe("attemptCommands", () => {
         status: "submitted",
         attemptNo: 1,
       });
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([prevAttempt]);
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.attemptNo).toBe(2);
@@ -620,17 +873,22 @@ describe("attemptCommands", () => {
       const snapshot = makeSnapshot();
       const exam = makeExam({ questionSnapshot: snapshot });
       const enrollment = makeEnrollment();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.questionSnapshot).toEqual(snapshot);
@@ -639,7 +897,11 @@ describe("attemptCommands", () => {
     it("uses findByExamAndCandidateForUpdate for enrollment lookup (transaction-safe)", async () => {
       const exam = makeExam();
       const enrollment = makeEnrollment();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const attRepo = makeAttemptRepo();
 
       const enrRepo: EnrollmentRepository = {
@@ -658,13 +920,14 @@ describe("attemptCommands", () => {
         update: (_id, data) => ({ ...enrollment, ...data }) as ExamEnrollment,
       };
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.status).toBe("in_progress");
@@ -675,7 +938,11 @@ describe("attemptCommands", () => {
       const exam = makeExam();
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const existingAttempt = makeAttempt();
-      const examRepo = { findById: () => exam, update: () => exam };
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
       const attRepo = makeAttemptRepo([existingAttempt]);
 
       const enrRepo: EnrollmentRepository = {
@@ -694,13 +961,14 @@ describe("attemptCommands", () => {
         update: (_id, data) => ({ ...enrollment, ...data }) as ExamEnrollment,
       };
 
-      const result = await startAttempt(
+      const { attempt: result } = await startOrRestoreAttempt(
         examRepo,
         enrRepo,
         attRepo,
         "exam-1",
         "cand-1",
         fixedNow,
+        startDeps,
       );
 
       expect(result.id).toBe("attempt-1");
@@ -718,6 +986,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
+        { resolution: noneResolution },
       );
 
       expect(result.status).toBe("submitted");
@@ -741,6 +1010,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
+        { resolution: noneResolution },
       );
 
       expect(result.status).toBe("submitted");
@@ -760,6 +1030,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
+        { resolution: noneResolution },
       );
 
       expect(result.status).toBe("graded");
@@ -780,6 +1051,7 @@ describe("attemptCommands", () => {
           {
             source: "candidate",
             minSubmitAfterStartMinutes: 30,
+            resolution: noneResolution,
           },
         ),
       ).rejects.toThrow(/too early/i);
@@ -796,7 +1068,11 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         new Date("2025-01-01T10:31:00Z"),
-        { source: "candidate", minSubmitAfterStartMinutes: 30 },
+        {
+          source: "candidate",
+          minSubmitAfterStartMinutes: 30,
+          resolution: noneResolution,
+        },
       );
 
       expect(result.status).toBe("submitted");
@@ -813,7 +1089,11 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         new Date("2025-01-01T10:01:00Z"),
-        { source: "deadline_scanner", minSubmitAfterStartMinutes: 30 },
+        {
+          source: "deadline_scanner",
+          minSubmitAfterStartMinutes: 30,
+          resolution: noneResolution,
+        },
       );
 
       expect(result.status).toBe("submitted");
@@ -824,7 +1104,9 @@ describe("attemptCommands", () => {
       const wsRepo = makeWorksetRepo();
 
       await expect(
-        submitAttempt(attRepo, wsRepo, "nonexistent", fixedNow),
+        submitAttempt(attRepo, wsRepo, "nonexistent", fixedNow, {
+          resolution: noneResolution,
+        }),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -840,6 +1122,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         new Date("2025-01-01T11:00:00Z"),
+        { resolution: noneResolution },
       );
 
       expect(result.status).toBe("submitted");
@@ -854,11 +1137,14 @@ describe("attemptCommands", () => {
         findByEnrollmentAndAttemptNo: () => null,
         create: () => attempt,
         update: () => null,
+        refreshLastActivityIfInProgress: () => attempt,
       };
       const wsRepo = makeWorksetRepo();
 
       await expect(
-        submitAttempt(attRepo, wsRepo, "attempt-1", fixedNow),
+        submitAttempt(attRepo, wsRepo, "attempt-1", fixedNow, {
+          resolution: noneResolution,
+        }),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -876,12 +1162,15 @@ describe("attemptCommands", () => {
         findByEnrollmentAndAttemptNo: () => null,
         create: () => attempt,
         update: (id, data) => ({ ...attempt, id, ...data }),
+        refreshLastActivityIfInProgress: () => attempt,
       };
       const findByIdSpy = vi.spyOn(attRepo, "findById");
       const findForUpdateSpy = vi.spyOn(attRepo, "findByIdForUpdate");
       const wsRepo = makeWorksetRepo();
 
-      await submitAttempt(attRepo, wsRepo, "attempt-1", fixedNow);
+      await submitAttempt(attRepo, wsRepo, "attempt-1", fixedNow, {
+        resolution: noneResolution,
+      });
 
       expect(findForUpdateSpy).toHaveBeenCalledTimes(1);
       expect(findForUpdateSpy).toHaveBeenCalledWith("attempt-1");
@@ -920,6 +1209,13 @@ describe("attemptCommands", () => {
           store[idx] = { ...store[idx]!, ...data };
           return store[idx]!;
         },
+        refreshLastActivityIfInProgress: (id, now) => {
+          const idx = store.findIndex((a) => a.id === id);
+          if (idx === -1) return null;
+          if (store[idx]!.status !== "in_progress") return null;
+          store[idx] = { ...store[idx]!, lastActivityAt: now };
+          return store[idx]!;
+        },
       };
       const updateSpy = vi.spyOn(attRepo, "update");
       const wsRepo = makeWorksetRepo();
@@ -933,14 +1229,14 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         candidateNow,
-        { source: "candidate" },
+        { source: "candidate", resolution: noneResolution },
       );
       const second = await submitAttempt(
         attRepo,
         wsRepo,
         "attempt-1",
         scannerNow,
-        { source: "deadline_scanner" },
+        { source: "deadline_scanner", resolution: noneResolution },
       );
 
       expect(first.status).toBe("submitted");
@@ -994,6 +1290,13 @@ describe("attemptCommands", () => {
           store[idx] = { ...store[idx]!, ...data };
           return store[idx]!;
         },
+        refreshLastActivityIfInProgress: (id, now) => {
+          const idx = store.findIndex((a) => a.id === id);
+          if (idx === -1) return null;
+          if (store[idx]!.status !== "in_progress") return null;
+          store[idx] = { ...store[idx]!, lastActivityAt: now };
+          return store[idx]!;
+        },
       };
       const updateSpy = vi.spyOn(attRepo, "update");
       const wsRepo = makeWorksetRepo([q1AutoEntry("attempt-1", 0)]);
@@ -1003,7 +1306,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         new Date("2025-01-01T12:00:00Z"),
-        { source: "candidate" },
+        { source: "candidate", resolution: noneResolution },
       );
 
       expect(result.status).toBe("graded");
@@ -1036,6 +1339,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
+        { resolution: noneResolution },
       );
 
       expect(result.submittedAnswers).toEqual({
@@ -1054,6 +1358,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
+        { resolution: noneResolution },
       );
 
       expect(result.submissionReason).toBe("manual");
@@ -1069,7 +1374,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
-        { submissionReason: "deadline" },
+        { submissionReason: "deadline", resolution: noneResolution },
       );
 
       expect(result.submissionReason).toBe("deadline");
@@ -1097,6 +1402,7 @@ describe("attemptCommands", () => {
         wsRepo,
         "attempt-1",
         fixedNow,
+        { resolution: noneResolution },
       );
 
       // Idempotent: existing frozen snapshot + reason + submittedAt preserved.
@@ -1107,166 +1413,220 @@ describe("attemptCommands", () => {
   });
 
   describe("markDisrupted", () => {
-    it("transitions in_progress → disrupted", async () => {
-      const attempt = makeAttempt();
+    function makeInterruptionRepos(): {
+      episodeRepo: InterruptionEpisodeRepository;
+      eventRepo: InterruptionEventRepository;
+    } {
+      let episodeIdCounter = 0;
+      return {
+        episodeRepo: {
+          create: async () => {
+            episodeIdCounter++;
+            return {
+              id: `episode-${episodeIdCounter}`,
+              organizationId: "org-1",
+              attemptId: "attempt-1",
+              createdAt: new Date("2025-01-01T10:05:00Z"),
+            } as AttemptInterruption;
+          },
+          findById: async () => null,
+          findByAttemptForUpdate: async () => null,
+          findLatestByAttempt: async () => null,
+        },
+        eventRepo: {
+          insert: async () => ({ id: "evt-1" }) as AttemptInterruptionEvent,
+          findDetected: async () => null,
+          findOutcome: async () => null,
+          findLatestOutcomeByAttempt: async () => null,
+        },
+      };
+    }
+
+    it("transitions in_progress → disrupted with episode + detected event", async () => {
+      const attempt = makeAttempt({
+        lastActivityAt: new Date("2025-01-01T09:55:00Z"),
+        interruptionTimingPolicySnapshot: {
+          schemaVersion: 1,
+          policy: "strict",
+          perIncidentCapSeconds: null,
+          perAttemptAggregateCapSeconds: null,
+        },
+      });
       const attRepo = makeAttemptRepo([attempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
 
-      const result = await markDisrupted(attRepo, "attempt-1");
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
+      );
 
-      expect(result.status).toBe("disrupted");
+      expect(result.outcome).toBe("marked");
+      if (result.outcome === "marked") {
+        expect(result.attempt.status).toBe("disrupted");
+        expect(result.attempt.currentInterruptionId).toBe("episode-1");
+        expect(result.attempt.interruptedAt).toEqual(scannerTickNow);
+      }
     });
 
-    it("throws for non in_progress attempt", async () => {
+    it("returns fresh_under_lock when lastActivityAt is recent enough", async () => {
+      const attempt = makeAttempt({
+        lastActivityAt: new Date("2025-01-01T10:04:30Z"), // 30s ago, < 60s timeout
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
+      );
+
+      expect(result.outcome).toBe("fresh_under_lock");
+    });
+
+    it("returns fresh_under_lock when lastActivityAt is null", async () => {
+      const attempt = makeAttempt();
+      // The attempt must have no lastActivityAt to simulate a null value.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { lastActivityAt: _omit, ...rest } = attempt;
+      const attRepo = makeAttemptRepo([rest as ExamAttempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
+      );
+
+      expect(result.outcome).toBe("fresh_under_lock");
+    });
+
+    it("returns state_changed_before_lock for non in_progress attempt", async () => {
       const attempt = makeAttempt({ status: "submitted" });
       const attRepo = makeAttemptRepo([attempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
 
-      await expect(markDisrupted(attRepo, "attempt-1")).rejects.toThrow(
-        InvalidStateTransitionError,
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
       );
+
+      expect(result.outcome).toBe("state_changed_before_lock");
+    });
+
+    it("returns missing when attempt not found", async () => {
+      const attRepo = makeAttemptRepo([]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "nonexistent",
+        scannerTickNow,
+        60,
+      );
+
+      expect(result.outcome).toBe("missing");
     });
   });
 
-  describe("restoreAttempt", () => {
-    it("transitions disrupted → in_progress and preserves answers + remaining time", async () => {
+  describe("restoreAttemptState (lifecycle-only)", () => {
+    const restoreNow = new Date("2025-01-01T10:30:00Z");
+
+    it("transitions disrupted → in_progress, refreshes lastActivityAt, clears pointer/mirror", async () => {
       const attempt = makeAttempt({
         status: "disrupted",
-        answers: [
-          {
-            questionId: "q1",
-            answer: "a",
-            version: 1,
-            savedAt: new Date("2025-01-01T10:15:00Z"),
-          },
-        ],
         deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
+        lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+        currentInterruptionId: "int-1",
+        interruptedAt: new Date("2025-01-01T10:05:00Z"),
       });
-      const exam = makeExam();
-      const examRepo = { findById: () => exam, update: () => exam };
       const attRepo = makeAttemptRepo([attempt]);
-
-      const restoreNow = new Date("2025-01-01T10:30:00Z");
-      const result = await restoreAttempt(
-        examRepo,
+      const { outcome, attempt: restored } = await restoreAttemptState(
+        attempt,
         attRepo,
-        "attempt-1",
         restoreNow,
       );
-
-      expect(result.status).toBe("in_progress");
-      expect(result.answers).toHaveLength(1);
-      expect(result.answers[0]!.answer).toBe("a");
-      expect(result.deadlineAt).toBeDefined();
-      expect(result.lastActivityAt).toEqual(restoreNow);
+      expect(outcome).toBe("restored");
+      expect(restored.status).toBe("in_progress");
+      expect(restored.lastActivityAt).toEqual(restoreNow);
+      expect(restored.currentInterruptionId).toBeNull();
+      expect(restored.interruptedAt).toBeNull();
     });
 
-    it("returns attempt directly when already in_progress", async () => {
+    it("does NOT mutate the deadline (lifecycle-only, no compensation)", async () => {
+      const deadline = new Date("2025-01-01T11:00:00Z");
+      const attempt = makeAttempt({
+        status: "disrupted",
+        deadlineAt: deadline,
+        lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const { attempt: restored } = await restoreAttemptState(
+        attempt,
+        attRepo,
+        restoreNow,
+      );
+      expect(restored.deadlineAt).toEqual(deadline);
+    });
+
+    it("returns already_in_progress when the locked attempt is in_progress", async () => {
       const attempt = makeAttempt({ status: "in_progress" });
-      const exam = makeExam();
-      const examRepo = { findById: () => exam, update: () => exam };
       const attRepo = makeAttemptRepo([attempt]);
-
-      const result = await restoreAttempt(
-        examRepo,
+      const { outcome } = await restoreAttemptState(
+        attempt,
         attRepo,
-        "attempt-1",
-        fixedNow,
-      );
-
-      expect(result.status).toBe("in_progress");
-      expect(result.id).toBe("attempt-1");
-    });
-
-    it("throws for non-existent attempt", async () => {
-      const exam = makeExam();
-      const examRepo = { findById: () => exam, update: () => exam };
-      const attRepo = makeAttemptRepo();
-
-      await expect(
-        restoreAttempt(examRepo, attRepo, "nonexistent", fixedNow),
-      ).rejects.toThrow(ValidationError);
-    });
-
-    it("adjusts deadlineAt by the time spent disconnected", async () => {
-      const attempt = makeAttempt({
-        status: "disrupted",
-        startedAt: new Date("2025-01-01T10:00:00Z"),
-        deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
-      });
-      const exam = makeExam();
-      const examRepo = { findById: () => exam, update: () => exam };
-      const attRepo = makeAttemptRepo([attempt]);
-
-      const restoreNow = new Date("2025-01-01T10:30:00Z");
-      const result = await restoreAttempt(
-        examRepo,
-        attRepo,
-        "attempt-1",
         restoreNow,
       );
-
-      const disconnectedMs =
-        restoreNow.getTime() - attempt.lastActivityAt!.getTime();
-      const expectedDeadline = new Date(
-        attempt.deadlineAt!.getTime() + disconnectedMs,
-      );
-      expect(result.deadlineAt).toEqual(expectedDeadline);
+      expect(outcome).toBe("already_in_progress");
     });
 
-    it("caps new deadlineAt at exam.closeAt when disconnected time pushes past it", async () => {
-      const attempt = makeAttempt({
-        status: "disrupted",
-        startedAt: new Date("2025-01-01T10:00:00Z"),
-        deadlineAt: new Date("2025-01-01T11:50:00Z"),
-        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
-      });
-      const exam = makeExam({
-        closeAt: new Date("2025-01-01T12:00:00Z"),
-      });
-      const examRepo = { findById: () => exam, update: () => exam };
-      const attRepo = makeAttemptRepo([attempt]);
-
-      const restoreNow = new Date("2025-01-01T11:55:00Z");
-      const result = await restoreAttempt(
-        examRepo,
-        attRepo,
-        "attempt-1",
-        restoreNow,
-      );
-
-      expect(result.deadlineAt).toEqual(new Date("2025-01-01T12:00:00Z"));
+    it("returns terminal when the locked attempt is submitted/grading/graded/voided", async () => {
+      for (const status of [
+        "submitted",
+        "grading",
+        "graded",
+        "voided",
+      ] as const) {
+        const attempt = makeAttempt({ status });
+        const attRepo = makeAttemptRepo([attempt]);
+        const { outcome } = await restoreAttemptState(
+          attempt,
+          attRepo,
+          restoreNow,
+        );
+        expect(outcome).toBe("terminal");
+      }
     });
 
-    it("does not double-apply deadline adjustment when called twice (idempotent)", async () => {
-      const attempt = makeAttempt({
-        status: "disrupted",
-        startedAt: new Date("2025-01-01T10:00:00Z"),
-        deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
-      });
-      const exam = makeExam();
-      const examRepo = { findById: () => exam, update: () => exam };
-      const attRepo = makeAttemptRepo([attempt]);
-
-      const restoreNow = new Date("2025-01-01T10:30:00Z");
-      const first = await restoreAttempt(
-        examRepo,
-        attRepo,
-        "attempt-1",
-        restoreNow,
-      );
-
-      const secondRestoreNow = new Date("2025-01-01T10:35:00Z");
-      const second = await restoreAttempt(
-        examRepo,
-        attRepo,
-        "attempt-1",
-        secondRestoreNow,
-      );
-
-      expect(second.deadlineAt).toEqual(first.deadlineAt);
-      expect(second.status).toBe("in_progress");
+    it("fails closed for not_started/queued", async () => {
+      for (const status of ["not_started", "queued"] as const) {
+        const attempt = makeAttempt({ status });
+        const attRepo = makeAttemptRepo([attempt]);
+        await expect(
+          restoreAttemptState(attempt, attRepo, restoreNow),
+        ).rejects.toThrow();
+      }
     });
   });
 
@@ -1363,7 +1723,11 @@ describe("attemptCommands", () => {
         deadlineAt: new Date("2025-01-01T11:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+      const examRepo = {
+        findById: () => makeExam(),
+        findByIdForUpdate: () => makeExam(),
+        update: () => makeExam(),
+      };
 
       const result = await extendAttemptTime(
         examRepo,
@@ -1384,7 +1748,11 @@ describe("attemptCommands", () => {
         deadlineAt: new Date("2025-01-01T11:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+      const examRepo = {
+        findById: () => makeExam(),
+        findByIdForUpdate: () => makeExam(),
+        update: () => makeExam(),
+      };
 
       const result = await extendAttemptTime(
         examRepo,
@@ -1403,7 +1771,11 @@ describe("attemptCommands", () => {
         deadlineAt: new Date("2025-01-01T11:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+      const examRepo = {
+        findById: () => makeExam(),
+        findByIdForUpdate: () => makeExam(),
+        update: () => makeExam(),
+      };
 
       // 11:00 + 120min = 13:00 > exam closeAt 12:00.
       await expect(
@@ -1417,7 +1789,11 @@ describe("attemptCommands", () => {
 
     it("throws InvalidStateTransitionError for submitted/graded/voided attempts", async () => {
       const attRepo = makeAttemptRepo([makeAttempt({ status: "submitted" })]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+      const examRepo = {
+        findById: () => makeExam(),
+        findByIdForUpdate: () => makeExam(),
+        update: () => makeExam(),
+      };
 
       await expect(
         extendAttemptTime(examRepo, attRepo, "attempt-1", 10, fixedNow),
@@ -1426,7 +1802,11 @@ describe("attemptCommands", () => {
 
     it("throws ValidationError for non-positive or non-integer additionalMinutes", async () => {
       const attRepo = makeAttemptRepo([makeAttempt()]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+      const examRepo = {
+        findById: () => makeExam(),
+        findByIdForUpdate: () => makeExam(),
+        update: () => makeExam(),
+      };
 
       await expect(
         extendAttemptTime(examRepo, attRepo, "attempt-1", 0, fixedNow),

@@ -16,6 +16,11 @@ import {
   prepareReconciledAttemptMutation,
   type PreparedAttemptMutation,
 } from "./deadlineReconciliation.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
 
 // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — shared in-memory test harness for the
 // canonical Save Answer action and its preparation seam. Used by both the
@@ -188,6 +193,13 @@ export function makeAttemptRepo(attempts: ExamAttempt[]): AttemptRepository & {
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+    refreshLastActivityIfInProgress(id, now) {
+      const idx = store.findIndex((a) => a.id === id);
+      if (idx === -1) return null;
+      if (store[idx]!.status !== "in_progress") return null;
+      store[idx] = { ...store[idx]!, lastActivityAt: now };
+      return store[idx]!;
+    },
     updateCalls,
     get(id: string): ExamAttempt {
       const found = store.find((a) => a.id === id);
@@ -242,6 +254,9 @@ export function makeExamRepo(exams: Exam[]): ExamRepository {
     findById(examId) {
       return store.find((e) => e.id === examId) ?? null;
     },
+    findByIdForUpdate(examId) {
+      return store.find((e) => e.id === examId) ?? null;
+    },
     update() {
       throw new Error("not used");
     },
@@ -255,6 +270,32 @@ export function makeGradingWorksetRepo(): GradingWorksetRepository {
     bulkCreate: async () => {},
     completeManualEntry: async () => null,
     countPendingManualForAttempt: async () => 0,
+  };
+}
+
+function makeStubEpisodeRepo(): InterruptionEpisodeRepository {
+  return {
+    create: async () => ({ id: "stub" }) as never,
+    findById: async () => null,
+    findByAttemptForUpdate: async () => null,
+    findLatestByAttempt: async () => null,
+  };
+}
+
+function makeStubEventRepo(): InterruptionEventRepository {
+  return {
+    insert: async (input) => ({ id: "stub-event", ...input }) as never,
+    findDetected: async () => null,
+    findOutcome: async () => null,
+    findLatestOutcomeByAttempt: async () => null,
+  };
+}
+
+export function makeNoneResolution(): SubmitInterruptionResolution {
+  return {
+    mode: "none",
+    episodeRepo: makeStubEpisodeRepo(),
+    eventRepo: makeStubEventRepo(),
   };
 }
 
@@ -293,6 +334,7 @@ export async function prepare(
       gradingWorksetRepo,
       cap,
       now,
+      makeNoneResolution(),
     );
   return {
     attemptRepo,

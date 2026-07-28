@@ -60,7 +60,15 @@ async function deleteExamBusinessData(
     .where(eq(schema.attemptTimeAdjustments.organizationId, organizationId));
   await tx
     .update(schema.examAttempts)
-    .set({ currentInterruptionId: null, interruptedAt: null })
+    .set({
+      currentInterruptionId: null,
+      interruptedAt: null,
+      // The 0022 status/pointer CHECK requires non-disrupted status when
+      // the pointer is null. Transition disrupted rows to voided so the
+      // nulling UPDATE is accepted — the rows are about to be deleted in
+      // the next step regardless of the status value.
+      status: "voided",
+    })
     .where(eq(schema.examAttempts.organizationId, organizationId));
   await tx
     .delete(schema.attemptInterruptions)

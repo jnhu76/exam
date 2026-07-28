@@ -206,6 +206,40 @@ export function createAttemptRepo(db: Database) {
       return (rows[0] as AttemptSelect | undefined) ?? null;
     },
     /**
+     * Atomic status-qualified heartbeat write (ADR-013 §4 scanner/heartbeat
+     * serialization). Updates `last_activity_at` (and `updated_at`) iff the
+     * row is still `in_progress`, returning the updated row or null when zero
+     * rows matched. This is the write-time predicate that closes the
+     * heartbeat/scanner TOCTOU: a `disrupted` or terminal row updates zero
+     * rows and cannot produce heartbeat success or mutate `lastActivityAt`.
+     *
+     * The caller-supplied `now` is the single ADR-006 business-time sample
+     * for the heartbeat; `updated_at` uses the DB `now()` so the row's
+     * storage stamp is independent of the business clock.
+     */
+    async refreshLastActivityIfInProgress(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+      now: Date,
+    ): Promise<AttemptSelect | null> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .update(examAttempts)
+        .set({
+          lastActivityAt: now,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.id, attemptId),
+            eq(examAttempts.status, "in_progress"),
+          ),
+        )
+        .returning();
+      return (rows[0] as AttemptSelect | undefined) ?? null;
+    },
+    /**
      * Finds the most recent active attempt (in_progress or disrupted) for a
      * given enrollment, scoped to the tenant.
      */

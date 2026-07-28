@@ -304,7 +304,11 @@ describe("interruption persistence foundation", () => {
     await expect(
       db
         .update(schema.examAttempts)
-        .set({ currentInterruptionId: episode.id, interruptedAt })
+        .set({
+          status: "disrupted",
+          currentInterruptionId: episode.id,
+          interruptedAt,
+        })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
     ).resolves.not.toThrow();
     await expect(
@@ -322,9 +326,13 @@ describe("interruption persistence foundation", () => {
     await expect(
       db
         .update(schema.examAttempts)
-        .set({ currentInterruptionId: null, interruptedAt })
+        .set({
+          currentInterruptionId: null,
+          interruptedAt: null,
+          status: "in_progress",
+        })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
-    ).rejects.toThrow();
+    ).resolves.not.toThrow();
   });
 
   it("round-trips tenant-scoped append-only repositories", async () => {

@@ -34,12 +34,17 @@ Phase 2+ hardening.
 - ✅ Exam lifecycle: `draft → published → open → closed → archived` (+ `canceled`);
   all transitions via command functions.
 - ✅ Disrupted attempt recovery (backend: heartbeat scanner writes `disrupted`
-  on timeout; `restoreAttempt` route; REC-I3 Web direct-entry restore flow).
-  REC-I4-I1 implements the ADR-013 Domain and PostgreSQL persistence
-  foundation, including strict policy/snapshot defaults, durable interruption
-  identity, append-only event/adjustment ledgers, conservative backfill, and
-  tenant-scoped repositories. The time-compensation runtime remains
-  transitional until REC-I4-I2 connects the engine policy seam.
+  on timeout; restore via the composed `restoreInterruptedAttempt` command —
+  the legacy `restoreAttempt` route is no longer used in production; REC-I3 Web
+  direct-entry restore flow). REC-I4-I1 implements the ADR-013 Domain and
+  PostgreSQL persistence foundation, including strict policy/snapshot defaults,
+  durable interruption identity, append-only event/adjustment ledgers,
+  conservative backfill, and tenant-scoped repositories. REC-I4-I2 (Engine
+  Policy Seam) completes the runtime: atomic scanner disruption with episode
+  creation, pure policy evaluator (strict/bounded_grace/operator_incident),
+  lifecycle-only restore helper, composed restore command with deadline
+  reconciliation, and a
+  phased fail-closed migration (0022) with status/pointer CHECK constraint.
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
@@ -163,13 +168,15 @@ audit, external log shipping. All Phase 4; none started.
 ## Known limitations
 
 - **Interruption time compensation**: REC-I3 implements candidate direct-entry
-  restore, but the backend `restoreAttempt` still grants the full interval
-  since `lastActivityAt`, capped only by `exam.closeAt`. ADR-013 freezes
-  `strict` as the future default, explicit bounded caps, operator attribution,
-  episode identity, and an append-only adjustment ledger. REC-I4-I1 now
-  implements that persistence foundation, but does not change restore,
-  heartbeat, scanner, or deadline reconciliation; REC-I4-I2 remains required
-  for runtime compliance. A dedicated proctor recovery/incident UI also
+  restore. REC-I4-I1 implemented the persistence foundation (ADR-013 `strict`
+  default, explicit bounded caps, operator attribution, episode identity,
+  append-only adjustment ledger). REC-I4-I2 (Engine Policy Seam) now delivers
+  runtime compliance: restore goes through the composed
+  `restoreInterruptedAttempt` command (the legacy `restoreAttempt` route is no
+  longer used in production), and the heartbeat scanner, deadline scanner, and
+  candidate/admin submit paths all thread a `SubmitInterruptionResolution` so
+  every `disrupted → submitted` terminalization appends a `terminalized` event
+  with a context-specific reason code. A dedicated proctor recovery/incident UI
   remains deferred.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`

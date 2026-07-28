@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { TestContext } from "../testHelpers.js";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
@@ -232,4 +233,56 @@ export async function buildSharedAttemptFixture(): Promise<SharedAttemptFixture>
     fillBlankQuestionId,
     candidateProfileId,
   };
+}
+
+/**
+ * Properly transitions an in_progress attempt to disrupted by creating the
+ * interruption episode + detected event + setting the active pointer, as
+ * required by the exam_attempts_status_pointer_check CHECK constraint.
+ */
+export async function disruptAttempt(
+  db: TestContext["db"],
+  organizationId: string,
+  attemptId: string,
+  overrides: {
+    interruptedAt?: Date;
+    lastActivityAt?: Date;
+    policy?: "strict" | "bounded_grace" | "operator_incident";
+  } = {},
+): Promise<void> {
+  const episodeId = randomUUID();
+  const now = overrides.interruptedAt ?? new Date();
+  const policy = overrides.policy ?? "strict";
+  await db.insert(schema.attemptInterruptions).values({
+    id: episodeId,
+    organizationId,
+    attemptId,
+    createdAt: now,
+  });
+  await db.insert(schema.attemptInterruptionEvents).values({
+    id: randomUUID(),
+    organizationId,
+    attemptId,
+    interruptionId: episodeId,
+    eventType: "detected",
+    occurredAt: now,
+    observedLastActivityAt: overrides.lastActivityAt ?? now,
+    detectionSource: "heartbeat_timeout",
+    timeoutSeconds: 60,
+    policy,
+    reasonCode: "heartbeat_timeout",
+    createdAt: now,
+  });
+  await db
+    .update(schema.examAttempts)
+    .set({
+      status: "disrupted",
+      currentInterruptionId: episodeId,
+      interruptedAt: now,
+      updatedAt: now,
+      ...(overrides.lastActivityAt && {
+        lastActivityAt: overrides.lastActivityAt,
+      }),
+    })
+    .where(eq(schema.examAttempts.id, attemptId));
 }

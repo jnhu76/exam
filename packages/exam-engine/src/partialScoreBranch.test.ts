@@ -184,6 +184,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
     let updateCalls = 0;
     const examRepo: ExamRepository = {
       findById: () => exam,
+      findByIdForUpdate: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -195,6 +196,11 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
       update: (_id, data) => {
         updateCalls++;
         storedAttempt = { ...storedAttempt, ...data };
+        return storedAttempt;
+      },
+      refreshLastActivityIfInProgress: (_id, now) => {
+        if (storedAttempt.status !== "in_progress") return null;
+        storedAttempt = { ...storedAttempt, lastActivityAt: now };
         return storedAttempt;
       },
     };
@@ -278,6 +284,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
     let updateCalls = 0;
     const examRepo: ExamRepository = {
       findById: () => exam,
+      findByIdForUpdate: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -289,6 +296,11 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
       update: (_id, data) => {
         updateCalls++;
         storedAttempt = { ...storedAttempt, ...data };
+        return storedAttempt;
+      },
+      refreshLastActivityIfInProgress: (_id, now) => {
+        if (storedAttempt.status !== "in_progress") return null;
+        storedAttempt = { ...storedAttempt, lastActivityAt: now };
         return storedAttempt;
       },
     };

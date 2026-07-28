@@ -336,16 +336,13 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
     );
     expect(body, "startOrRestoreAttempt body not found").not.toBeNull();
     const b = body!;
-    const enrIdx = b.indexOf("findByExamAndCandidateForUpdate");
-    const attIdx = b.indexOf("findActiveByEnrollment");
-    expect(enrIdx).toBeGreaterThanOrEqual(0);
-    expect(attIdx).toBeGreaterThanOrEqual(0);
-    expect(attIdx).toBeGreaterThan(enrIdx);
-    expect(b).not.toMatch(/lockEnrollmentAndAttempt/);
+    // The EA lock order is now delegated to the canonical seam.
+    expect(b).toMatch(/lockEnrollmentAndActiveAttempt/);
+    expect(b).not.toMatch(/lockEnrollmentAndAttempt\b/);
   });
 
-  it("single-lock Attempt paths (extendAttemptTime, restoreAttempt) remain legal without the seam", () => {
-    for (const fn of ["extendAttemptTime", "restoreAttempt"]) {
+  it("single-lock Attempt paths (extendAttemptTime) remain legal without the seam", () => {
+    for (const fn of ["extendAttemptTime"]) {
       const body = functionBody(
         "packages/exam-engine/src/attemptCommands.ts",
         fn,

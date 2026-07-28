@@ -5,6 +5,8 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -13,11 +15,14 @@ import {
   isAttemptDeadlineExpired,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
+import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
@@ -197,9 +202,52 @@ export async function autoSubmitAndGrade(
       createAttemptGradingEntryRepo(tx),
       ctx,
     );
+
+    // R1/R9: build the interruption resolution based on the locked attempt's
+    // status. The deadline scanner handles both in_progress and disrupted
+    // attempts. For disrupted attempts, the resolution terminalizes the active
+    // interruption episode with a deadline_terminalization reason code.
+    const episodeRepo = createInterruptionEpisodeRepoAdapter(
+      createAttemptInterruptionRepo(tx),
+      ctx,
+    );
+    const eventRepo = createInterruptionEventRepoAdapter(
+      createAttemptInterruptionEventRepo(tx),
+      ctx,
+    );
+
+    let resolution: SubmitInterruptionResolution;
+    if (locked.status === "disrupted") {
+      // Disrupted: terminalize with the attempt's policy snapshot.
+      // eligibleSeconds is null because the scanner does not make a
+      // compensation decision — it directly terminalizes.
+      const policy =
+        (locked as ExamAttempt).interruptionTimingPolicySnapshot?.policy ??
+        "strict";
+      resolution = {
+        mode: "active_interruption",
+        episodeRepo,
+        eventRepo,
+        hint: {
+          policy,
+          eligibleSeconds: null,
+          adjustmentId: null,
+          reasonCode: "deadline_terminalization",
+        },
+      };
+    } else {
+      // in_progress: no active interruption to resolve.
+      resolution = {
+        mode: "none",
+        episodeRepo,
+        eventRepo,
+      };
+    }
+
     await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
       source: "deadline_scanner",
       submissionReason: "deadline",
+      resolution,
     });
 
     // Slice 4: gradeAttemptIdempotent now takes the tx-scoped workset repo so
