@@ -219,7 +219,9 @@ describe("interruption persistence foundation", () => {
           interruptionGracePerAttemptSeconds: null,
         })
         .where(eq(schema.exams.id, alpha.examId)),
-    ).rejects.toThrow(/exams_interruption_policy_caps_check/);
+    ).rejects.toMatchObject({
+      constraint: "exams_interruption_policy_caps_check",
+    });
     await expect(
       db
         .update(schema.exams)
@@ -229,7 +231,9 @@ describe("interruption persistence foundation", () => {
           interruptionGracePerAttemptSeconds: 180,
         })
         .where(eq(schema.exams.id, alpha.examId)),
-    ).rejects.toThrow(/exams_interruption_policy_caps_check/);
+    ).rejects.toMatchObject({
+      constraint: "exams_interruption_policy_caps_check",
+    });
     await expect(
       db
         .update(schema.exams)
@@ -239,13 +243,17 @@ describe("interruption persistence foundation", () => {
           interruptionGracePerAttemptSeconds: 180,
         })
         .where(eq(schema.exams.id, alpha.examId)),
-    ).rejects.toThrow(/exams_interruption_policy_caps_check/);
+    ).rejects.toMatchObject({
+      constraint: "exams_interruption_policy_caps_check",
+    });
     await expect(
       db
         .update(schema.exams)
         .set({ interruptionTimePolicy: "unknown" as never })
         .where(eq(schema.exams.id, alpha.examId)),
-    ).rejects.toThrow(/exams_interruption_time_policy_check/);
+    ).rejects.toMatchObject({
+      constraint: "exams_interruption_time_policy_check",
+    });
     await expect(
       db
         .update(schema.exams)
@@ -255,7 +263,9 @@ describe("interruption persistence foundation", () => {
           interruptionGracePerAttemptSeconds: null,
         })
         .where(eq(schema.exams.id, alpha.examId)),
-    ).rejects.toThrow(/exams_interruption_policy_caps_check/);
+    ).rejects.toMatchObject({
+      constraint: "exams_interruption_policy_caps_check",
+    });
     await expect(
       db
         .update(schema.exams)
@@ -265,13 +275,17 @@ describe("interruption persistence foundation", () => {
           interruptionGracePerAttemptSeconds: 180,
         })
         .where(eq(schema.exams.id, alpha.examId)),
-    ).rejects.toThrow(/exams_interruption_policy_caps_check/);
+    ).rejects.toMatchObject({
+      constraint: "exams_interruption_policy_caps_check",
+    });
     await expect(
       db
         .update(schema.examAttempts)
         .set({ interruptionPolicySnapshotVersion: 2 })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
-    ).rejects.toThrow(/exam_attempts_interruption_snapshot_version_check/);
+    ).rejects.toMatchObject({
+      constraint: "exam_attempts_interruption_snapshot_version_check",
+    });
     await expect(
       db
         .update(schema.examAttempts)
@@ -281,7 +295,9 @@ describe("interruption persistence foundation", () => {
           interruptionGracePerAttemptSecondsSnapshot: 10,
         })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
-    ).rejects.toThrow(/exam_attempts_interruption_snapshot_caps_check/);
+    ).rejects.toMatchObject({
+      constraint: "exam_attempts_interruption_snapshot_caps_check",
+    });
     await expect(
       db
         .update(schema.examAttempts)
@@ -312,19 +328,25 @@ describe("interruption persistence foundation", () => {
         .update(schema.examAttempts)
         .set({ currentInterruptionId: randomUUID(), interruptedAt })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
-    ).rejects.toThrow(/exam_attempts_current_interruption_fk/);
+    ).rejects.toMatchObject({
+      constraint: "exam_attempts_current_interruption_fk",
+    });
     await expect(
       db
         .update(schema.examAttempts)
         .set({ currentInterruptionId: episode.id, interruptedAt })
         .where(eq(schema.examAttempts.id, beta.attemptId)),
-    ).rejects.toThrow(/exam_attempts_current_interruption_fk/);
+    ).rejects.toMatchObject({
+      constraint: "exam_attempts_current_interruption_fk",
+    });
     await expect(
       db
         .update(schema.examAttempts)
         .set({ currentInterruptionId: null, interruptedAt })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
-    ).rejects.toThrow(/exam_attempts_current_interruption_pair_check/);
+    ).rejects.toMatchObject({
+      constraint: "exam_attempts_current_interruption_pair_check",
+    });
   });
 
   it("round-trips tenant-scoped append-only repositories", async () => {
@@ -442,7 +464,9 @@ describe("interruption persistence foundation", () => {
         timeoutSeconds: null,
         reasonCode: "migration_backfill_unknown_detected_at",
       }),
-    ).rejects.toThrow(/attempt_interruption_events_detected_unique/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_interruption_events_detected_unique",
+    });
     await eventRepo.insert(alpha.ctx, {
       ...base,
       eventType: "terminalized",
@@ -460,7 +484,9 @@ describe("interruption persistence foundation", () => {
         timeoutSeconds: null,
         reasonCode: "restored",
       }),
-    ).rejects.toThrow(/attempt_interruption_events_outcome_unique/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_interruption_events_outcome_unique",
+    });
     const heartbeatEpisode = await interruptionRepo.create(alpha.ctx, {
       attemptId: alpha.attemptId,
     });
@@ -474,7 +500,9 @@ describe("interruption persistence foundation", () => {
         timeoutSeconds: 60,
         reasonCode: "heartbeat_timeout",
       }),
-    ).rejects.toThrow(/attempt_interruption_events_shape_check/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_interruption_events_shape_check",
+    });
     await expect(
       eventRepo.insert(alpha.ctx, {
         ...base,
@@ -485,7 +513,9 @@ describe("interruption persistence foundation", () => {
         timeoutSeconds: 0,
         reasonCode: "heartbeat_timeout",
       }),
-    ).rejects.toThrow(/attempt_interruption_events_shape_check/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_interruption_events_shape_check",
+    });
   });
 
   it("enforces adjustment identity, delta, source shape and bounded uniqueness", async () => {
@@ -519,7 +549,9 @@ describe("interruption persistence foundation", () => {
         ...valid,
         interruptionId: secondEpisode.id,
       }),
-    ).rejects.toThrow(/attempt_time_adjustments_org_operation_unique/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_org_operation_unique",
+    });
     const betaEpisode = await interruptionRepo.create(beta.ctx, {
       attemptId: beta.attemptId,
     });
@@ -536,17 +568,23 @@ describe("interruption persistence foundation", () => {
         operationId: randomUUID(),
         interruptionId: betaEpisode.id,
       }),
-    ).rejects.toThrow(/attempt_time_adjustments_org_interruption_fk/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_org_interruption_fk",
+    });
     await expect(
       adjustmentRepo.insert(alpha.ctx, { ...valid, operationId: randomUUID() }),
-    ).rejects.toThrow(/attempt_time_adjustments_bounded_interruption_unique/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_bounded_interruption_unique",
+    });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
         ...valid,
         operationId: randomUUID(),
         interruptionId: null,
       }),
-    ).rejects.toThrow(/attempt_time_adjustments_source_shape_check/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_source_shape_check",
+    });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
         ...valid,
@@ -559,7 +597,9 @@ describe("interruption persistence foundation", () => {
         addedSeconds: 0,
         afterDeadline: valid.beforeDeadline,
       }),
-    ).rejects.toThrow(/attempt_time_adjustments_added_seconds_check/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_added_seconds_check",
+    });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
         ...valid,
@@ -571,7 +611,9 @@ describe("interruption persistence foundation", () => {
         ).id,
         afterDeadline: new Date("2026-01-01T01:00:11.000Z"),
       }),
-    ).rejects.toThrow(/attempt_time_adjustments_deadline_delta_check/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_deadline_delta_check",
+    });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
         ...valid,
@@ -583,6 +625,8 @@ describe("interruption persistence foundation", () => {
         actorId: null,
         reasonText: null,
       }),
-    ).rejects.toThrow(/attempt_time_adjustments_source_shape_check/);
+    ).rejects.toMatchObject({
+      constraint: "attempt_time_adjustments_source_shape_check",
+    });
   });
 });
