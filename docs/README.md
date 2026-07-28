@@ -37,6 +37,8 @@ When documents conflict, higher precedence wins:
 | --- | --- |
 | [`architecture/authorization.md`](architecture/authorization.md) | Capability-based authorization model (implemented) |
 | [`architecture/exam-runtime.md`](architecture/exam-runtime.md) | Exam protocol foundation — Exam/Attempt/Answer/Submit/Grading/Result visibility |
+| [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences, interruption policy, and authority boundaries |
+| [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
 | [`architecture/email-config.md`](architecture/email-config.md) | Email outbox/SMTP config (operator reference) |
 
 ### Contracts (behavior code must preserve)
@@ -55,7 +57,17 @@ When documents conflict, higher precedence wins:
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-010-scoped-rbac-architecture.md`](adr/ADR-010-scoped-rbac-architecture.md) | 10 formal ADRs |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-013-interruption-time-compensation-policy.md`](adr/ADR-013-interruption-time-compensation-policy.md) | 13 formal ADRs |
+
+Recovery authority:
+
+- [`adr/ADR-012-candidate-recovery-contract.md`](adr/ADR-012-candidate-recovery-contract.md)
+  freezes candidate recovery and answer authority.
+- [`adr/ADR-013-interruption-time-compensation-policy.md`](adr/ADR-013-interruption-time-compensation-policy.md)
+  freezes interruption evidence, compensation policy, deadline ordering, and
+  the future PostgreSQL episode/ledger model.
+- [`audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md`](audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md)
+  records the source-proven runtime reality at the REC-I4-R0 baseline.
 
 ### Standards (constraints on future work)
 

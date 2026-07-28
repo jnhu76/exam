@@ -34,8 +34,9 @@ Phase 2+ hardening.
 - ✅ Exam lifecycle: `draft → published → open → closed → archived` (+ `canceled`);
   all transitions via command functions.
 - ✅ Disrupted attempt recovery (backend: heartbeat scanner writes `disrupted`
-  on timeout; `restoreAttempt` route). **Frontend self-service restore entry +
-  proctor recovery UI are NOT productized** — see Known limitations.
+  on timeout; `restoreAttempt` route; REC-I3 Web direct-entry restore flow).
+  The time-compensation runtime remains transitional: ADR-013 is frozen, but
+  REC-I4-I1+ is not implemented.
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
@@ -158,11 +159,13 @@ audit, external log shipping. All Phase 4; none started.
 
 ## Known limitations
 
-- **Disrupted recovery UI**: once an attempt is `disrupted`, the frontend has no
-  self-service restore button and no proctor recovery panel — it jumps to the
-  result page with an "answering interrupted" message. Backend capability
-  exists; productization of frontend restore UI, heartbeat tuning, and proctor
-  intervention is deferred to Phase 2+ hardening.
+- **Interruption time compensation**: REC-I3 implements candidate direct-entry
+  restore, but the backend `restoreAttempt` still grants the full interval
+  since `lastActivityAt`, capped only by `exam.closeAt`. ADR-013 freezes
+  `strict` as the future default, explicit bounded caps, operator attribution,
+  episode identity, and an append-only adjustment ledger. REC-I4-I1+ remains
+  unimplemented. A dedicated proctor recovery/incident UI also remains
+  deferred.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
