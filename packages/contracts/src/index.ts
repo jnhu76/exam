@@ -20,3 +20,4 @@ export * from "./proctorMonitoring.js";
 export * from "./email.js";
 export * from "./emailField.js";
 export * from "./notification.js";
+export * from "./interruption.js";

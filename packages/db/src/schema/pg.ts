@@ -15,11 +15,15 @@ import type {
   QuestionSnapshot,
   ResultPublicationMode,
   SubmittedAnswersSnapshot,
+  AttemptInterruptionEvent,
+  AttemptTimeAdjustment,
+  InterruptionTimePolicy,
 } from "@exam/domain";
 import {
   boolean,
   check,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -27,6 +31,8 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -254,6 +260,16 @@ export const exams = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    interruptionTimePolicy: text("interruption_time_policy")
+      .$type<InterruptionTimePolicy>()
+      .notNull()
+      .default("strict"),
+    interruptionGracePerIncidentSeconds: integer(
+      "interruption_grace_per_incident_seconds",
+    ),
+    interruptionGracePerAttemptSeconds: integer(
+      "interruption_grace_per_attempt_seconds",
+    ),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -271,6 +287,29 @@ export const exams = pgTable(
     check(
       "exams_passing_score_max_check",
       sql`${table.passingScore} <= ${table.totalScore}`,
+    ),
+    check(
+      "exams_interruption_time_policy_check",
+      sql`${table.interruptionTimePolicy} IN ('strict', 'bounded_grace', 'operator_incident')`,
+    ),
+    check(
+      "exams_interruption_policy_caps_check",
+      sql`
+        (
+          ${table.interruptionTimePolicy} IN ('strict', 'operator_incident')
+          AND ${table.interruptionGracePerIncidentSeconds} IS NULL
+          AND ${table.interruptionGracePerAttemptSeconds} IS NULL
+        )
+        OR
+        (
+          ${table.interruptionTimePolicy} = 'bounded_grace'
+          AND ${table.interruptionGracePerIncidentSeconds} IS NOT NULL
+          AND ${table.interruptionGracePerAttemptSeconds} IS NOT NULL
+          AND ${table.interruptionGracePerIncidentSeconds} > 0
+          AND ${table.interruptionGracePerAttemptSeconds} > 0
+          AND ${table.interruptionGracePerIncidentSeconds} <= ${table.interruptionGracePerAttemptSeconds}
+        )
+      `,
     ),
   ],
 );
@@ -354,6 +393,26 @@ export const examAttempts = pgTable(
     // Null for legacy rows (treated as unknown). New submit paths must
     // populate this; backfill of historical rows is out of scope (P3-L0-4).
     submissionReason: text("submission_reason"),
+    interruptionPolicySnapshotVersion: integer(
+      "interruption_policy_snapshot_version",
+    )
+      .notNull()
+      .default(1),
+    interruptionTimePolicySnapshot: text("interruption_time_policy_snapshot")
+      .$type<InterruptionTimePolicy>()
+      .notNull()
+      .default("strict"),
+    interruptionGracePerIncidentSecondsSnapshot: integer(
+      "interruption_grace_per_incident_seconds_snapshot",
+    ),
+    interruptionGracePerAttemptSecondsSnapshot: integer(
+      "interruption_grace_per_attempt_seconds_snapshot",
+    ),
+    currentInterruptionId: uuid("current_interruption_id"),
+    interruptedAt: timestamp("interrupted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -363,6 +422,286 @@ export const examAttempts = pgTable(
       table.enrollmentId,
       table.attemptNo,
     ),
+    uniqueIndex("exam_attempts_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    check(
+      "exam_attempts_interruption_snapshot_version_check",
+      sql`${table.interruptionPolicySnapshotVersion} = 1`,
+    ),
+    check(
+      "exam_attempts_interruption_snapshot_policy_check",
+      sql`${table.interruptionTimePolicySnapshot} IN ('strict', 'bounded_grace', 'operator_incident')`,
+    ),
+    check(
+      "exam_attempts_interruption_snapshot_caps_check",
+      sql`
+        (
+          ${table.interruptionTimePolicySnapshot} IN ('strict', 'operator_incident')
+          AND ${table.interruptionGracePerIncidentSecondsSnapshot} IS NULL
+          AND ${table.interruptionGracePerAttemptSecondsSnapshot} IS NULL
+        )
+        OR
+        (
+          ${table.interruptionTimePolicySnapshot} = 'bounded_grace'
+          AND ${table.interruptionGracePerIncidentSecondsSnapshot} IS NOT NULL
+          AND ${table.interruptionGracePerAttemptSecondsSnapshot} IS NOT NULL
+          AND ${table.interruptionGracePerIncidentSecondsSnapshot} > 0
+          AND ${table.interruptionGracePerAttemptSecondsSnapshot} > 0
+          AND ${table.interruptionGracePerIncidentSecondsSnapshot} <= ${table.interruptionGracePerAttemptSecondsSnapshot}
+        )
+      `,
+    ),
+    check(
+      "exam_attempts_current_interruption_pair_check",
+      sql`
+        (${table.currentInterruptionId} IS NULL AND ${table.interruptedAt} IS NULL)
+        OR
+        (${table.currentInterruptionId} IS NOT NULL AND ${table.interruptedAt} IS NOT NULL)
+      `,
+    ),
+  ],
+);
+
+/** Stable parent identity for one interruption episode on an attempt. */
+export const attemptInterruptions = pgTable(
+  "attempt_interruptions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: organizationId().references(() => organizations.id),
+    attemptId: text("attempt_id")
+      .notNull()
+      .references(() => examAttempts.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("attempt_interruptions_org_attempt_id_unique").on(
+      table.organizationId,
+      table.attemptId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "attempt_interruptions_org_attempt_fk",
+    }),
+  ],
+);
+
+/** Append-only ledger of positive deadline adjustments. */
+export const attemptTimeAdjustments = pgTable(
+  "attempt_time_adjustments",
+  {
+    id: id(),
+    operationId: uuid("operation_id").notNull(),
+    organizationId: organizationId().references(() => organizations.id),
+    attemptId: text("attempt_id")
+      .notNull()
+      .references(() => examAttempts.id),
+    interruptionId: uuid("interruption_id"),
+    incidentId: uuid("incident_id"),
+    policy: text("policy").$type<InterruptionTimePolicy>().notNull(),
+    source: text("source").$type<AttemptTimeAdjustment["source"]>().notNull(),
+    beforeDeadline: timestamp("before_deadline", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    afterDeadline: timestamp("after_deadline", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    addedSeconds: integer("added_seconds").notNull(),
+    eligibleSeconds: integer("eligible_seconds"),
+    reasonCode: varchar("reason_code", { length: 100 }).notNull(),
+    reasonText: text("reason_text"),
+    actorId: text("actor_id").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("attempt_time_adjustments_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    uniqueIndex("attempt_time_adjustments_bounded_interruption_unique")
+      .on(table.interruptionId)
+      .where(sql`${table.source} = 'bounded_grace'`),
+    index("attempt_time_adjustments_org_attempt_created_idx").on(
+      table.organizationId,
+      table.attemptId,
+      table.createdAt,
+    ),
+    check(
+      "attempt_time_adjustments_policy_check",
+      sql`${table.policy} IN ('strict', 'bounded_grace', 'operator_incident')`,
+    ),
+    check(
+      "attempt_time_adjustments_source_check",
+      sql`${table.source} IN ('bounded_grace', 'operator', 'system_incident', 'administrative_correction')`,
+    ),
+    check(
+      "attempt_time_adjustments_added_seconds_check",
+      sql`${table.addedSeconds} > 0`,
+    ),
+    check(
+      "attempt_time_adjustments_deadline_order_check",
+      sql`${table.afterDeadline} > ${table.beforeDeadline}`,
+    ),
+    check(
+      "attempt_time_adjustments_deadline_delta_check",
+      sql`${table.afterDeadline} = ${table.beforeDeadline} + (${table.addedSeconds} * interval '1 second')`,
+    ),
+    check(
+      "attempt_time_adjustments_eligible_seconds_check",
+      sql`${table.eligibleSeconds} IS NULL OR ${table.eligibleSeconds} >= 0`,
+    ),
+    check(
+      "attempt_time_adjustments_reason_code_check",
+      sql`length(btrim(${table.reasonCode})) > 0`,
+    ),
+    check(
+      "attempt_time_adjustments_source_shape_check",
+      sql`
+        (
+          ${table.source} = 'bounded_grace'
+          AND ${table.policy} = 'bounded_grace'
+          AND ${table.interruptionId} IS NOT NULL
+          AND ${table.eligibleSeconds} IS NOT NULL
+          AND ${table.actorId} IS NULL
+        )
+        OR
+        (
+          ${table.source} IN ('operator', 'administrative_correction')
+          AND ${table.actorId} IS NOT NULL
+          AND ${table.reasonText} IS NOT NULL
+          AND length(btrim(${table.reasonText})) > 0
+        )
+        OR ${table.source} = 'system_incident'
+      `,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "attempt_time_adjustments_org_attempt_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId, table.interruptionId],
+      foreignColumns: [
+        attemptInterruptions.organizationId,
+        attemptInterruptions.attemptId,
+        attemptInterruptions.id,
+      ],
+      name: "attempt_time_adjustments_org_interruption_fk",
+    }),
+  ],
+);
+
+/** Append-only evidence and outcome ledger for interruption episodes. */
+export const attemptInterruptionEvents = pgTable(
+  "attempt_interruption_events",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    attemptId: text("attempt_id")
+      .notNull()
+      .references(() => examAttempts.id),
+    interruptionId: uuid("interruption_id").notNull(),
+    eventType: text("event_type")
+      .$type<AttemptInterruptionEvent["eventType"]>()
+      .notNull(),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    observedLastActivityAt: timestamp("observed_last_activity_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    detectionSource:
+      text("detection_source").$type<
+        AttemptInterruptionEvent["detectionSource"]
+      >(),
+    timeoutSeconds: integer("timeout_seconds"),
+    policy: text("policy").$type<InterruptionTimePolicy>().notNull(),
+    eligibleSeconds: integer("eligible_seconds"),
+    timeAdjustmentId: text("time_adjustment_id"),
+    actorId: text("actor_id").references(() => users.id),
+    reasonCode: varchar("reason_code", { length: 100 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("attempt_interruption_events_detected_unique")
+      .on(table.interruptionId)
+      .where(sql`${table.eventType} = 'detected'`),
+    uniqueIndex("attempt_interruption_events_outcome_unique")
+      .on(table.interruptionId)
+      .where(sql`${table.eventType} IN ('restored', 'terminalized')`),
+    index("attempt_interruption_events_org_attempt_created_idx").on(
+      table.organizationId,
+      table.attemptId,
+      table.createdAt,
+    ),
+    check(
+      "attempt_interruption_events_type_check",
+      sql`${table.eventType} IN ('detected', 'restored', 'terminalized')`,
+    ),
+    check(
+      "attempt_interruption_events_policy_check",
+      sql`${table.policy} IN ('strict', 'bounded_grace', 'operator_incident')`,
+    ),
+    check(
+      "attempt_interruption_events_reason_code_check",
+      sql`length(btrim(${table.reasonCode})) > 0`,
+    ),
+    check(
+      "attempt_interruption_events_eligible_seconds_check",
+      sql`${table.eligibleSeconds} IS NULL OR ${table.eligibleSeconds} >= 0`,
+    ),
+    check(
+      "attempt_interruption_events_shape_check",
+      sql`
+        (
+          ${table.eventType} = 'detected'
+          AND ${table.detectionSource} IS NOT NULL
+          AND ${table.timeAdjustmentId} IS NULL
+          AND (
+            (
+              ${table.detectionSource} = 'heartbeat_timeout'
+              AND ${table.observedLastActivityAt} IS NOT NULL
+              AND ${table.timeoutSeconds} IS NOT NULL
+              AND ${table.timeoutSeconds} > 0
+            )
+            OR
+            (
+              ${table.detectionSource} = 'migration_backfill'
+              AND ${table.timeoutSeconds} IS NULL
+              AND ${table.reasonCode} = 'migration_backfill_unknown_detected_at'
+            )
+          )
+        )
+        OR
+        (
+          ${table.eventType} IN ('restored', 'terminalized')
+          AND ${table.detectionSource} IS NULL
+          AND ${table.timeoutSeconds} IS NULL
+          AND ${table.observedLastActivityAt} IS NULL
+        )
+      `,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId, table.interruptionId],
+      foreignColumns: [
+        attemptInterruptions.organizationId,
+        attemptInterruptions.attemptId,
+        attemptInterruptions.id,
+      ],
+      name: "attempt_interruption_events_org_interruption_fk",
+    }),
+    foreignKey({
+      columns: [table.timeAdjustmentId],
+      foreignColumns: [attemptTimeAdjustments.id],
+      name: "attempt_interruption_events_adjustment_fk",
+    }),
   ],
 );
 
@@ -866,6 +1205,9 @@ export const schema = {
   exams,
   examEnrollments,
   examAttempts,
+  attemptInterruptions,
+  attemptTimeAdjustments,
+  attemptInterruptionEvents,
   attemptGradingEntries,
   auditLogs,
   clientEvents,

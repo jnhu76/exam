@@ -53,6 +53,19 @@ async function deleteExamBusinessData(
     .delete(schema.attemptGradingEntries)
     .where(eq(schema.attemptGradingEntries.organizationId, organizationId));
   await tx
+    .delete(schema.attemptInterruptionEvents)
+    .where(eq(schema.attemptInterruptionEvents.organizationId, organizationId));
+  await tx
+    .delete(schema.attemptTimeAdjustments)
+    .where(eq(schema.attemptTimeAdjustments.organizationId, organizationId));
+  await tx
+    .update(schema.examAttempts)
+    .set({ currentInterruptionId: null, interruptedAt: null })
+    .where(eq(schema.examAttempts.organizationId, organizationId));
+  await tx
+    .delete(schema.attemptInterruptions)
+    .where(eq(schema.attemptInterruptions.organizationId, organizationId));
+  await tx
     .delete(schema.examAttempts)
     .where(eq(schema.examAttempts.organizationId, organizationId));
   await tx

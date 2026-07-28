@@ -1,5 +1,9 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type { Permission, Role } from "@exam/domain";
+import type {
+  AttemptTimingPolicySnapshot,
+  Permission,
+  Role,
+} from "@exam/domain";
 import type { schema } from "./schema/pg.js";
 
 /** Drizzle database type bound to the application schema. */
@@ -57,6 +61,25 @@ export function isPlatformContext(ctx: RepoContext): ctx is PlatformContext {
 export function pgNum(val: unknown, fallback = 0): number {
   const n = Number(val);
   return Number.isFinite(n) ? n : fallback;
+}
+
+/** Projects the four explicit attempt snapshot columns into the domain value. */
+export function projectAttemptTimingPolicySnapshot(input: {
+  interruptionPolicySnapshotVersion: number;
+  interruptionTimePolicySnapshot:
+    | "strict"
+    | "bounded_grace"
+    | "operator_incident";
+  interruptionGracePerIncidentSecondsSnapshot: number | null;
+  interruptionGracePerAttemptSecondsSnapshot: number | null;
+}): AttemptTimingPolicySnapshot {
+  return {
+    schemaVersion: 1,
+    policy: input.interruptionTimePolicySnapshot,
+    perIncidentCapSeconds: input.interruptionGracePerIncidentSecondsSnapshot,
+    perAttemptAggregateCapSeconds:
+      input.interruptionGracePerAttemptSecondsSnapshot,
+  };
 }
 
 /** PostgreSQL retryable error codes (transient concurrency failures only). */

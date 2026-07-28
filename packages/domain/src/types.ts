@@ -265,6 +265,9 @@ export interface Exam {
   // for a manual-mode exam. Null until the first publish-results call; once
   // set, it is never updated (idempotent re-publish is a no-op on this field).
   resultsPublishedAt: Date | null;
+  interruptionTimePolicy?: InterruptionTimePolicy;
+  interruptionGracePerIncidentSeconds?: number | null;
+  interruptionGracePerAttemptSeconds?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -293,6 +296,82 @@ export interface ExamEnrollment {
 
 // ── Exam Attempt (§2.2) ──────────────────────────────────────────
 
+/** Governs whether and how interruption time may produce a deadline grant. */
+export type InterruptionTimePolicy =
+  | "strict"
+  | "bounded_grace"
+  | "operator_incident";
+
+/** Lifecycle event recorded for one durable interruption episode. */
+export type InterruptionEventType = "detected" | "restored" | "terminalized";
+
+/** Server-side evidence source used when detecting an interruption episode. */
+export type InterruptionDetectionSource =
+  | "heartbeat_timeout"
+  | "migration_backfill";
+
+/** Authority that produced a positive deadline adjustment. */
+export type TimeAdjustmentSource =
+  | "bounded_grace"
+  | "operator"
+  | "system_incident"
+  | "administrative_correction";
+
+/** Immutable interruption policy copied from the Exam when an attempt starts. */
+export interface AttemptTimingPolicySnapshot {
+  schemaVersion: 1;
+  policy: InterruptionTimePolicy;
+  perIncidentCapSeconds: number | null;
+  perAttemptAggregateCapSeconds: number | null;
+}
+
+/** Stable identity for one interruption episode on an attempt. */
+export interface AttemptInterruption {
+  id: string;
+  organizationId: string;
+  attemptId: string;
+  createdAt: Date;
+}
+
+/** Append-only evidence and outcome event for an interruption episode. */
+export interface AttemptInterruptionEvent {
+  id: string;
+  organizationId: string;
+  attemptId: string;
+  interruptionId: string;
+  eventType: InterruptionEventType;
+  occurredAt: Date;
+  observedLastActivityAt: Date | null;
+  detectionSource: InterruptionDetectionSource | null;
+  timeoutSeconds: number | null;
+  policy: InterruptionTimePolicy;
+  eligibleSeconds: number | null;
+  timeAdjustmentId: string | null;
+  actorId: string | null;
+  reasonCode: string;
+  createdAt: Date;
+}
+
+/** Append-only record of one positive deadline adjustment. */
+export interface AttemptTimeAdjustment {
+  id: string;
+  operationId: string;
+  organizationId: string;
+  attemptId: string;
+  interruptionId: string | null;
+  incidentId: string | null;
+  policy: InterruptionTimePolicy;
+  source: TimeAdjustmentSource;
+  beforeDeadline: Date;
+  afterDeadline: Date;
+  addedSeconds: number;
+  eligibleSeconds: number | null;
+  reasonCode: string;
+  reasonText: string | null;
+  actorId: string | null;
+  createdAt: Date;
+}
+
 /**
  * A single attempt by a candidate to take an exam.
  *
@@ -318,6 +397,9 @@ export interface ExamAttempt {
   gradedAt?: Date;
   deadlineAt?: Date;
   lastActivityAt?: Date;
+  interruptionTimingPolicySnapshot?: AttemptTimingPolicySnapshot;
+  currentInterruptionId?: string | null;
+  interruptedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   /**

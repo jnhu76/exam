@@ -21,3 +21,6 @@ export * from "./repository/gradingQueueRepo.js";
 export * from "./repository/attemptGradingEntryRepo.js";
 export * from "./repository/emailOutboxRepo.js";
 export * from "./repository/workerHeartbeatRepo.js";
+export * from "./repository/attemptInterruptionRepo.js";
+export * from "./repository/attemptInterruptionEventRepo.js";
+export * from "./repository/attemptTimeAdjustmentRepo.js";
