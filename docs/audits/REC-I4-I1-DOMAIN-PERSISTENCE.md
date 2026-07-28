@@ -2,11 +2,17 @@
 
 ## Status
 
-IMPLEMENTED — DATABASE VERIFICATION BLOCKED BY LOCAL ENVIRONMENT
+IMPLEMENTED — POSTGRESQL VERIFICATION PASSING
 
 The implementation and static verification are complete. PostgreSQL-backed
-tests and full `pnpm verify` require the repository database on
-`127.0.0.1:15432`; Docker Desktop was unavailable during this run.
+tests run against the repository database on `127.0.0.1:15432`; the real
+0020 → 0021 upgrade migration test
+(`packages/db/src/migrations/0021-interruption-backfill.test.ts`) and the
+interruption persistence test
+(`packages/db/src/repository/interruptionPersistence.test.ts`) pass. The
+"BLOCKED BY LOCAL ENVIRONMENT" note below referred to an earlier run in which
+Docker Desktop was unavailable; the database is now reachable and verification
+has been executed.
 
 ## Base HEAD
 
