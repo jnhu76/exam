@@ -184,7 +184,7 @@ ALTER TABLE "attempt_interruption_events"
   FOREIGN KEY ("attempt_id") REFERENCES "exam_attempts"("id");
 --> statement-breakpoint
 ALTER TABLE "attempt_interruption_events"
-  ADD CONSTRAINT "attempt_interruption_events_time_adjustment_id_attempt_time_adjustments_id_fk"
+  ADD CONSTRAINT "attempt_interruption_events_adjustment_fk"
   FOREIGN KEY ("time_adjustment_id") REFERENCES "attempt_time_adjustments"("id");
 --> statement-breakpoint
 ALTER TABLE "attempt_interruption_events"

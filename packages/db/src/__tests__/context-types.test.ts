@@ -284,3 +284,91 @@ describe("A01: resolveOrganizationId / resolveOptionalOrganizationId", () => {
     expect(resolveOptionalOrganizationId(ctx)).toBe("org-1");
   });
 });
+
+describe("projectAttemptTimingPolicySnapshot", () => {
+  it("projects a strict snapshot", async () => {
+    const { projectAttemptTimingPolicySnapshot } = await import("../types.js");
+    expect(
+      projectAttemptTimingPolicySnapshot({
+        interruptionPolicySnapshotVersion: 1,
+        interruptionTimePolicySnapshot: "strict",
+        interruptionGracePerIncidentSecondsSnapshot: null,
+        interruptionGracePerAttemptSecondsSnapshot: null,
+      }),
+    ).toEqual({
+      schemaVersion: 1,
+      policy: "strict",
+      perIncidentCapSeconds: null,
+      perAttemptAggregateCapSeconds: null,
+    });
+  });
+
+  it("projects a bounded_grace snapshot", async () => {
+    const { projectAttemptTimingPolicySnapshot } = await import("../types.js");
+    expect(
+      projectAttemptTimingPolicySnapshot({
+        interruptionPolicySnapshotVersion: 1,
+        interruptionTimePolicySnapshot: "bounded_grace",
+        interruptionGracePerIncidentSecondsSnapshot: 60,
+        interruptionGracePerAttemptSecondsSnapshot: 180,
+      }),
+    ).toEqual({
+      schemaVersion: 1,
+      policy: "bounded_grace",
+      perIncidentCapSeconds: 60,
+      perAttemptAggregateCapSeconds: 180,
+    });
+  });
+
+  it("projects an operator_incident snapshot", async () => {
+    const { projectAttemptTimingPolicySnapshot } = await import("../types.js");
+    expect(
+      projectAttemptTimingPolicySnapshot({
+        interruptionPolicySnapshotVersion: 1,
+        interruptionTimePolicySnapshot: "operator_incident",
+        interruptionGracePerIncidentSecondsSnapshot: null,
+        interruptionGracePerAttemptSecondsSnapshot: null,
+      }),
+    ).toEqual({
+      schemaVersion: 1,
+      policy: "operator_incident",
+      perIncidentCapSeconds: null,
+      perAttemptAggregateCapSeconds: null,
+    });
+  });
+
+  it("preserves null caps", async () => {
+    const { projectAttemptTimingPolicySnapshot } = await import("../types.js");
+    const result = projectAttemptTimingPolicySnapshot({
+      interruptionPolicySnapshotVersion: 1,
+      interruptionTimePolicySnapshot: "strict",
+      interruptionGracePerIncidentSecondsSnapshot: null,
+      interruptionGracePerAttemptSecondsSnapshot: null,
+    });
+    expect(result.perIncidentCapSeconds).toBeNull();
+    expect(result.perAttemptAggregateCapSeconds).toBeNull();
+  });
+
+  it("preserves non-null caps", async () => {
+    const { projectAttemptTimingPolicySnapshot } = await import("../types.js");
+    const result = projectAttemptTimingPolicySnapshot({
+      interruptionPolicySnapshotVersion: 1,
+      interruptionTimePolicySnapshot: "bounded_grace",
+      interruptionGracePerIncidentSecondsSnapshot: 120,
+      interruptionGracePerAttemptSecondsSnapshot: 300,
+    });
+    expect(result.perIncidentCapSeconds).toBe(120);
+    expect(result.perAttemptAggregateCapSeconds).toBe(300);
+  });
+
+  it("always sets schemaVersion to 1", async () => {
+    const { projectAttemptTimingPolicySnapshot } = await import("../types.js");
+    const result = projectAttemptTimingPolicySnapshot({
+      interruptionPolicySnapshotVersion: 1,
+      interruptionTimePolicySnapshot: "strict",
+      interruptionGracePerIncidentSecondsSnapshot: null,
+      interruptionGracePerAttemptSecondsSnapshot: null,
+    });
+    expect(result.schemaVersion).toBe(1);
+  });
+});

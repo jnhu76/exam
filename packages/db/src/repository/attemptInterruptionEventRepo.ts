@@ -3,7 +3,7 @@ import type { AttemptInterruptionEvent, RequestContext } from "@exam/domain";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { attemptInterruptionEvents } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
-import { now, resolveOrganizationId } from "./baseRepo.js";
+import { resolveOrganizationId } from "./baseRepo.js";
 
 export type AttemptInterruptionEventRow =
   typeof attemptInterruptionEvents.$inferSelect;
@@ -24,7 +24,6 @@ export function createAttemptInterruptionEventRepo(db: Database) {
         ...event,
         id: randomUUID(),
         organizationId: resolveOrganizationId(ctx),
-        createdAt: now(),
       })
       .returning();
     return rows[0]!;

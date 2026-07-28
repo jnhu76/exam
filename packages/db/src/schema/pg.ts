@@ -624,9 +624,7 @@ export const attemptInterruptionEvents = pgTable(
     timeoutSeconds: integer("timeout_seconds"),
     policy: text("policy").$type<InterruptionTimePolicy>().notNull(),
     eligibleSeconds: integer("eligible_seconds"),
-    timeAdjustmentId: text("time_adjustment_id").references(
-      () => attemptTimeAdjustments.id,
-    ),
+    timeAdjustmentId: text("time_adjustment_id"),
     actorId: text("actor_id").references(() => users.id),
     reasonCode: varchar("reason_code", { length: 100 }).notNull(),
     createdAt: createdAt(),
@@ -698,6 +696,11 @@ export const attemptInterruptionEvents = pgTable(
         attemptInterruptions.id,
       ],
       name: "attempt_interruption_events_org_interruption_fk",
+    }),
+    foreignKey({
+      columns: [table.timeAdjustmentId],
+      foreignColumns: [attemptTimeAdjustments.id],
+      name: "attempt_interruption_events_adjustment_fk",
     }),
   ],
 );

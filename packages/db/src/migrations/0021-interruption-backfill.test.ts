@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../database.js";
 import { schema } from "../schema/pg.js";
@@ -31,6 +31,160 @@ async function applyMigrationsThrough0020(
       await sql.unsafe(statement);
     }
   }
+}
+
+/** Raw SQL helper: insert pre-0021 exam rows without the 0021 columns. */
+async function insertPre0021Exam(
+  conn: Awaited<ReturnType<typeof createDatabase>>,
+  values: {
+    id: string;
+    organizationId: string;
+    title: string;
+    description: string;
+    courseId: string;
+    status: string;
+    timingMode: string;
+    durationMinutes: number;
+    openAt: Date;
+    closeAt: Date;
+    passingScore: number;
+    totalScore: number;
+    questionSelectionMode: string;
+    questionIds: string[];
+    questionSnapshot: string;
+    controlFlags: Record<string, unknown>;
+    retakePolicy: string;
+    scoreStrategy: string;
+    maxAttempts: number;
+    latestStartOffsetMinutes: number | null;
+    minSubmitAfterStartMinutes: number | null;
+    resultPublicationMode: string;
+    resultsPublishedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+): Promise<void> {
+  await conn.sql.unsafe(
+    `INSERT INTO exams (
+      id, organization_id, title, description, course_id,
+      status, timing_mode, duration_minutes, open_at, close_at,
+      passing_score, total_score, question_selection_mode,
+      question_ids, question_snapshot, control_flags,
+      retake_policy, score_strategy, max_attempts,
+      latest_start_offset_minutes, min_submit_after_start_minutes,
+      result_publication_mode, results_published_at,
+      created_at, updated_at
+    ) VALUES (
+      $1, $2, $3, $4, $5,
+      $6, $7, $8, $9, $10,
+      $11, $12, $13,
+      $14, $15, $16,
+      $17, $18, $19,
+      $20, $21,
+      $22, $23,
+      $24, $25
+    )`,
+    [
+      values.id,
+      values.organizationId,
+      values.title,
+      values.description,
+      values.courseId,
+      values.status,
+      values.timingMode,
+      values.durationMinutes,
+      values.openAt,
+      values.closeAt,
+      values.passingScore,
+      values.totalScore,
+      values.questionSelectionMode,
+      JSON.stringify(values.questionIds),
+      values.questionSnapshot,
+      JSON.stringify(values.controlFlags),
+      values.retakePolicy,
+      values.scoreStrategy,
+      values.maxAttempts,
+      values.latestStartOffsetMinutes,
+      values.minSubmitAfterStartMinutes,
+      values.resultPublicationMode,
+      values.resultsPublishedAt,
+      values.createdAt,
+      values.updatedAt,
+    ],
+  );
+}
+
+/** Raw SQL helper: insert pre-0021 exam_attempt rows without the 0021 columns. */
+async function insertPre0021Attempt(
+  conn: Awaited<ReturnType<typeof createDatabase>>,
+  values: {
+    id: string;
+    organizationId: string;
+    examId: string;
+    enrollmentId: string;
+    candidateId: string;
+    attemptNo: number;
+    status: string;
+    questionSnapshot: string;
+    answers: string;
+    gradingResult: string | null;
+    score: number | null;
+    passed: boolean | null;
+    startedAt: Date | null;
+    deadlineAt: Date | null;
+    submittedAt: Date | null;
+    gradedAt: Date | null;
+    lastActivityAt: Date | null;
+    misconduct: string | null;
+    gradingStatus: string | null;
+    submittedAnswers: string | null;
+    submissionReason: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+): Promise<void> {
+  await conn.sql.unsafe(
+    `INSERT INTO exam_attempts (
+      id, organization_id, exam_id, enrollment_id, candidate_id,
+      attempt_no, status, question_snapshot, answers,
+      grading_result, total_score, passed,
+      started_at, deadline_at, submitted_at, graded_at, last_activity_at,
+      misconduct, grading_status, submitted_answers, submission_reason,
+      created_at, updated_at
+    ) VALUES (
+      $1, $2, $3, $4, $5,
+      $6, $7, $8, $9,
+      $10, $11, $12,
+      $13, $14, $15, $16, $17,
+      $18, $19, $20, $21,
+      $22, $23
+    )`,
+    [
+      values.id,
+      values.organizationId,
+      values.examId,
+      values.enrollmentId,
+      values.candidateId,
+      values.attemptNo,
+      values.status,
+      values.questionSnapshot,
+      values.answers,
+      values.gradingResult,
+      values.score,
+      values.passed,
+      values.startedAt,
+      values.deadlineAt,
+      values.submittedAt,
+      values.gradedAt,
+      values.lastActivityAt,
+      values.misconduct,
+      values.gradingStatus,
+      values.submittedAnswers,
+      values.submissionReason,
+      values.createdAt,
+      values.updatedAt,
+    ],
+  );
 }
 
 describe("0021 interruption policy migration backfill", () => {
@@ -62,6 +216,9 @@ describe("0021 interruption policy migration backfill", () => {
 
     const createdAt = new Date("2025-12-31T00:00:00.000Z");
     const lastActivityAt = new Date("2025-12-31T23:00:00.000Z");
+
+    // Pre-0021 fixtures: use raw SQL to avoid referencing columns that
+    // migration 0021 adds. Tables not touched by 0021 may use Drizzle.
     await conn.db.insert(schema.organizations).values({
       id: organizationId,
       name: "Migration Org",
@@ -98,7 +255,9 @@ describe("0021 interruption policy migration backfill", () => {
       createdAt,
       updatedAt: createdAt,
     });
-    await conn.db.insert(schema.exams).values({
+
+    // exams and exam_attempts are modified by 0021 — use pre-0021 raw SQL
+    await insertPre0021Exam(conn, {
       id: examId,
       organizationId,
       title: "Historical Exam",
@@ -113,7 +272,7 @@ describe("0021 interruption policy migration backfill", () => {
       totalScore: 100,
       questionSelectionMode: "manual",
       questionIds: [],
-      questionSnapshot: [],
+      questionSnapshot: "[]",
       controlFlags: {
         shuffleQuestions: false,
         shuffleOptions: false,
@@ -129,9 +288,14 @@ describe("0021 interruption policy migration backfill", () => {
       retakePolicy: "unlimited",
       scoreStrategy: "highest",
       maxAttempts: 4,
+      latestStartOffsetMinutes: null,
+      minSubmitAfterStartMinutes: null,
+      resultPublicationMode: "immediate",
+      resultsPublishedAt: null,
       createdAt,
       updatedAt: createdAt,
     });
+
     await conn.db.insert(schema.examEnrollments).values({
       id: enrollmentId,
       organizationId,
@@ -142,69 +306,107 @@ describe("0021 interruption policy migration backfill", () => {
       createdAt,
       updatedAt: createdAt,
     });
-    await conn.db.insert(schema.examAttempts).values([
-      {
-        id: attemptIds.inProgress,
-        organizationId,
-        examId,
-        enrollmentId,
-        candidateId,
-        attemptNo: 1,
-        status: "in_progress",
-        questionSnapshot: [],
-        answers: [],
-        deadlineAt: deadlines.inProgress,
-        lastActivityAt,
-        createdAt,
-        updatedAt: createdAt,
-      },
-      {
-        id: attemptIds.disruptedA,
-        organizationId,
-        examId,
-        enrollmentId,
-        candidateId,
-        attemptNo: 2,
-        status: "disrupted",
-        questionSnapshot: [],
-        answers: [],
-        deadlineAt: deadlines.disruptedA,
-        lastActivityAt,
-        createdAt,
-        updatedAt: createdAt,
-      },
-      {
-        id: attemptIds.disruptedB,
-        organizationId,
-        examId,
-        enrollmentId,
-        candidateId,
-        attemptNo: 3,
-        status: "disrupted",
-        questionSnapshot: [],
-        answers: [],
-        deadlineAt: deadlines.disruptedB,
-        lastActivityAt,
-        createdAt,
-        updatedAt: createdAt,
-      },
-      {
-        id: attemptIds.submitted,
-        organizationId,
-        examId,
-        enrollmentId,
-        candidateId,
-        attemptNo: 4,
-        status: "submitted",
-        questionSnapshot: [],
-        answers: [],
-        deadlineAt: deadlines.submitted,
-        submittedAt: new Date("2026-01-01T00:30:00.000Z"),
-        submissionReason: "manual",
-        createdAt,
-        updatedAt: createdAt,
-      },
-    ]);
+
+    await insertPre0021Attempt(conn, {
+      id: attemptIds.inProgress,
+      organizationId,
+      examId,
+      enrollmentId,
+      candidateId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: "[]",
+      answers: "[]",
+      gradingResult: null,
+      score: null,
+      passed: null,
+      startedAt: null,
+      deadlineAt: deadlines.inProgress,
+      submittedAt: null,
+      gradedAt: null,
+      lastActivityAt,
+      misconduct: null,
+      gradingStatus: null,
+      submittedAnswers: null,
+      submissionReason: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await insertPre0021Attempt(conn, {
+      id: attemptIds.disruptedA,
+      organizationId,
+      examId,
+      enrollmentId,
+      candidateId,
+      attemptNo: 2,
+      status: "disrupted",
+      questionSnapshot: "[]",
+      answers: "[]",
+      gradingResult: null,
+      score: null,
+      passed: null,
+      startedAt: null,
+      deadlineAt: deadlines.disruptedA,
+      submittedAt: null,
+      gradedAt: null,
+      lastActivityAt,
+      misconduct: null,
+      gradingStatus: null,
+      submittedAnswers: null,
+      submissionReason: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await insertPre0021Attempt(conn, {
+      id: attemptIds.disruptedB,
+      organizationId,
+      examId,
+      enrollmentId,
+      candidateId,
+      attemptNo: 3,
+      status: "disrupted",
+      questionSnapshot: "[]",
+      answers: "[]",
+      gradingResult: null,
+      score: null,
+      passed: null,
+      startedAt: null,
+      deadlineAt: deadlines.disruptedB,
+      submittedAt: null,
+      gradedAt: null,
+      lastActivityAt,
+      misconduct: null,
+      gradingStatus: null,
+      submittedAnswers: null,
+      submissionReason: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await insertPre0021Attempt(conn, {
+      id: attemptIds.submitted,
+      organizationId,
+      examId,
+      enrollmentId,
+      candidateId,
+      attemptNo: 4,
+      status: "submitted",
+      questionSnapshot: "[]",
+      answers: "[]",
+      gradingResult: null,
+      score: null,
+      passed: null,
+      startedAt: null,
+      deadlineAt: deadlines.submitted,
+      submittedAt: new Date("2026-01-01T00:30:00.000Z"),
+      gradedAt: null,
+      lastActivityAt,
+      misconduct: null,
+      gradingStatus: null,
+      submittedAnswers: null,
+      submissionReason: "manual",
+      createdAt,
+      updatedAt: createdAt,
+    });
 
     const file = readdirSync(migrationsDir).find((name) =>
       name.startsWith("0021_"),

@@ -3,7 +3,7 @@ import type { AttemptTimeAdjustment, RequestContext } from "@exam/domain";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { attemptTimeAdjustments } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
-import { now, resolveOrganizationId } from "./baseRepo.js";
+import { resolveOrganizationId } from "./baseRepo.js";
 
 export type AttemptTimeAdjustmentRow =
   typeof attemptTimeAdjustments.$inferSelect;
@@ -24,7 +24,6 @@ export function createAttemptTimeAdjustmentRepo(db: Database) {
         ...adjustment,
         id: randomUUID(),
         organizationId: resolveOrganizationId(ctx),
-        createdAt: now(),
       })
       .returning();
     return rows[0]!;
