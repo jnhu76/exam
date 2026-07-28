@@ -194,9 +194,18 @@ SubmissionSpec  (RecoveryProtocolSubmissionSafety.cfg)   :  88,936 distinct, dep
 Properties are real cross-state constraints:
 
 - `TerminalNeverResurrects`, `SubmittedSnapshotImmutable`,
-  `ServerVersionNeverDecreases`, `TimeGrantNeverDecreases` are PROPERTYs
+  `ServerVersionNeverDecreases` are PROPERTYs
   (transition constraints `[][...]_vars`), not state predicates — they
   verify future behavior, not just the current state.
+- `TimeGrantNeverDecreases` is also a PROPERTY (same form), but in REC-F1
+  it is **target-only and currently vacuous**: `GrantExtension` (the only
+  action that bumps `timeGrant`) is intentionally excluded from every gated
+  `Next`, so `timeGrant` stays at its initial value across all reachable
+  states. It is retained as a PROPERTY — not demoted to an invariant — so
+  that once REC-I4 introduces a reachable time-compensation action into a
+  gated `Next`, this same property becomes a meaningful cross-state check
+  with no config change. REC-F1 does not widen scope to implement that
+  action.
 - `NoCrossAttemptRestoreBlocking` is an enabledness INVARIANT checked in
   the route-switch safety config: when per-route base conditions hold,
   `StartRestore` must be `ENABLED`. No fairness needed.

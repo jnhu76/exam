@@ -708,6 +708,12 @@ ServerVersionNeverDecreases ==
   [][\A a \in Attempts : serverVersion'[a] >= serverVersion[a]]_vars
 
 \* timeGrant never decreases (only GrantExtension may bump it).
+\* REC-F1 NOTE: target-only and currently vacuous. GrantExtension is defined
+\* here for completeness but is intentionally NOT in any gated Next variant,
+\* so timeGrant stays at its initial value across all reachable states. The
+\* property is retained as a PROPERTY so that once REC-I4 introduces a
+\* reachable time-compensation action into a gated Next, this same property
+\* becomes a meaningful cross-state check unchanged.
 TimeGrantNeverDecreases ==
   [][\A a \in Attempts : timeGrant'[a] >= timeGrant[a]]_vars
 

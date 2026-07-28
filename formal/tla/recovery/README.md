@@ -82,6 +82,15 @@ Cross-state constraints (PROPERTYs — checked as temporal formulas):
   it never changes.
 - `ServerVersionNeverDecreases` — `[][serverVersion'[a] >= serverVersion[a]]_vars`.
 - `TimeGrantNeverDecreases` — `[][timeGrant'[a] >= timeGrant[a]]_vars`.
+  **Currently vacuous in REC-F1:** `GrantExtension` (the only action that
+  mutates `timeGrant`) is intentionally NOT in any gated `Next` variant —
+  target-only time-compensation is deferred to REC-I4. `timeGrant` therefore
+  stays at its initial value across all reachable states, so the property
+  holds trivially. It is retained as a PROPERTY (not demoted to an
+  invariant) so that, once REC-I4 introduces a reachable time-compensation
+  action into a gated `Next`, this same property becomes a meaningful
+  cross-state check with no config surgery. See "Known runtime/model
+  mismatches" §1.
 
 ---
 
@@ -218,9 +227,15 @@ violation / counterexample not reproduced / tool error → non-zero.
 ## Known runtime/model mismatches
 
 1. **REC-I4 (time-compensation) deferred.** `ProcessRestore` leaves
-   `timeGrant` unchanged in the model (covered by `TimeGrantNeverDecreases`).
-   The runtime may still grant time inside `restoreAttempt` — recorded, NOT
-   modeled as target.
+   `timeGrant` unchanged in the model. The runtime may still grant time
+   inside `restoreAttempt`; the TARGET model separates `ProcessRestore` from
+   `GrantExtension` and intentionally keeps `GrantExtension` OUT of every
+   gated `Next`. As a result `TimeGrantNeverDecreases` is **target-only and
+   currently vacuous** — `timeGrant` is constant at its initial value across
+   all reachable states. The property is retained as a PROPERTY precisely so
+   it becomes a meaningful cross-state check once REC-I4 introduces a
+   reachable time-compensation action; no REC-F1 widening of scope is
+   implied. Recorded, NOT modeled as target.
 2. **Liveness PARTIAL** — see above.
 3. `NavigateTo` preserves in-flight requests in both modes (the real
    implementation does not cancel old POSTs). The generation token makes

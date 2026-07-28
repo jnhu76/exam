@@ -11,7 +11,7 @@ It is reproducibility evidence, not installation prose.
 | TLA+ release name | The Xenophanes release |
 | TLA+ release tag | `v1.7.4` |
 | Release date | 2024-08-05 (published), 2024-08-08 (assets uploaded) |
-| TLC version string | `TLC2 Version 2.19 of 08 August 2024 (rev: 5a47803)` |
+| TLC version string | `TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)` |
 | Asset | `tla2tools.jar` |
 | Asset size | 2,274,532 bytes |
 
@@ -77,7 +77,7 @@ Do not represent it as a publisher value.
 # Print the TLC version banner (TLC prints it on every invocation):
 java -cp "$TLA2TOOLS_JAR" tlc2.TLC -help 2>&1 | head -5
 # Expected first line:
-#   TLC2 Version 2.19 of 08 August 2024 (rev: 5a47803)
+#   TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
 
 # Print the full option list (confirms -config/-metadir/-workers/-deadlock/-cleanup):
 java -cp "$TLA2TOOLS_JAR" tlc2.TLC -help
