@@ -28,12 +28,16 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import {
   createAttemptRepoAdapter,
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
@@ -216,8 +220,34 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           // guard (source = "proctor" — the SubmitSource for admin/proctor
           // intervention; "admin" is not a valid SubmitSource value).
           // P3-L0-2E: submitAttempt owns grading workset materialization.
+
+          // For disrupted→submitted, build the interruption resolution (R1).
+          const resolution =
+            locked.status === "disrupted"
+              ? {
+                  mode: "active_interruption" as const,
+                  episodeRepo: createInterruptionEpisodeRepoAdapter(
+                    createAttemptInterruptionRepo(tx),
+                    ctx,
+                  ),
+                  eventRepo: createInterruptionEventRepoAdapter(
+                    createAttemptInterruptionEventRepo(tx),
+                    ctx,
+                  ),
+                  hint: {
+                    policy:
+                      locked.interruptionTimingPolicySnapshot?.policy ??
+                      "strict",
+                    eligibleSeconds: 0,
+                    adjustmentId: null,
+                    reasonCode: "strict_zero_grant",
+                  },
+                }
+              : undefined;
+
           await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
             source: "proctor",
+            ...(resolution !== undefined && { resolution }),
           });
         }
 

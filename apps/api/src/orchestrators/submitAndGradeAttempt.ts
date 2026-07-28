@@ -7,6 +7,8 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import {
   submitAttempt,
   readGradingSnapshot,
@@ -17,6 +19,8 @@ import {
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 
@@ -145,11 +149,39 @@ export async function submitAndGradeAttempt(
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
         // P3-L0-2E: submitAttempt owns grading workset materialization.
+
+        // For disrupted→submitted, build the interruption resolution (R1).
+        // The resolution ensures the terminalized event is appended and the
+        // active interruption pointer is cleared.
+        const resolution =
+          currentStatus === "disrupted"
+            ? {
+                mode: "active_interruption" as const,
+                episodeRepo: createInterruptionEpisodeRepoAdapter(
+                  createAttemptInterruptionRepo(tx),
+                  ctx,
+                ),
+                eventRepo: createInterruptionEventRepoAdapter(
+                  createAttemptInterruptionEventRepo(tx),
+                  ctx,
+                ),
+                hint: {
+                  policy:
+                    lockedAttempt.interruptionTimingPolicySnapshot?.policy ??
+                    "strict",
+                  eligibleSeconds: 0,
+                  adjustmentId: null,
+                  reasonCode: "strict_zero_grant",
+                },
+              }
+            : undefined;
+
         await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
           source: "candidate",
           minSubmitAfterStartMinutes:
             (await exams.findById(lockedAttempt.examId))
               ?.minSubmitAfterStartMinutes ?? null,
+          ...(resolution !== undefined && { resolution }),
         });
         if (audit) {
           await recordAtomicHttpAudit(tx, audit.request, ctx, {
