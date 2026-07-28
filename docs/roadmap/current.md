@@ -18,15 +18,15 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
-- **Recovery hardening — REC-I4-I1 persistence foundation is implemented.**
-  ADR-013 and the REC-I4-R0 reality audit freeze `strict` as the default
-  interruption-time policy, separate lifecycle restore from compensation,
-  and define bounded-grace caps and ordering. REC-I4-I1 adds the Domain,
-  contract, PostgreSQL episode/event/adjustment ledgers, conservative strict
-  backfill, and tenant-scoped repositories. The current runtime still has
-  transitional full-disconnection compensation; I1 does not connect the
-  scanner or restore flow. The next authorized recovery Job is
-  **REC-I4-I2 — Engine Policy Seam**. REC-I4 does not introduce Redis.
+- **Recovery hardening — REC-I4-I2 Engine Policy Seam is implemented.**
+  ADR-013 and the REC-I4-R0 reality audit defines strict/bounded_grace/
+  operator_incident policies, lifecycle-only restore, and pure policy
+  evaluation. REC-I4-I1 adds the Domain, contract, PostgreSQL persistence
+  ledger. REC-I4-I2 completes the runtime: atomic scanner disruption with
+  episode creation, pure policy evaluator, composed restore command with
+  deadline reconciliation, and a phased fail-closed migration (0022) with
+  status/pointer CHECK constraint. The next authorized recovery Job is
+  **REC-I4-I3**. REC-I4 does not introduce Redis.
 
 - **Phase 3, Module P6 — MVP ready closeout is CLOSED.**
   All Phase 3 MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0

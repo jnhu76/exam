@@ -38,8 +38,11 @@ Phase 2+ hardening.
   REC-I4-I1 implements the ADR-013 Domain and PostgreSQL persistence
   foundation, including strict policy/snapshot defaults, durable interruption
   identity, append-only event/adjustment ledgers, conservative backfill, and
-  tenant-scoped repositories. The time-compensation runtime remains
-  transitional until REC-I4-I2 connects the engine policy seam.
+  tenant-scoped repositories. REC-I4-I2 (Engine Policy Seam) completes the
+  runtime: atomic scanner disruption with episode creation, pure policy
+  evaluator (strict/bounded_grace/operator_incident), lifecycle-only restore
+  helper, composed restore command with deadline reconciliation, and a
+  phased fail-closed migration (0022) with status/pointer CHECK constraint.
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
