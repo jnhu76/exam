@@ -1,11 +1,22 @@
 import type { ExamAttempt, InterruptionTimePolicy } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
-import type { RestoreLifecycleOutcome } from "./attemptCommands.js";
+import { NotFoundError, ValidationError } from "@exam/domain";
+import type {
+  AttemptRepository,
+  EnrollmentRepository,
+  RestoreLifecycleOutcome,
+} from "./attemptCommands.js";
+import { restoreAttemptState } from "./attemptCommands.js";
+import type { ExamRepository } from "./examCommands.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import type {
   InterruptionEpisodeRepository,
   InterruptionEventRepository,
   TimeAdjustmentRepository,
 } from "./interruptionRepositories.js";
+import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
+import { ensureAttemptDeadlineReconciled } from "./deadlineReconciliation.js";
+import { evaluateInterruptionTimePolicy } from "./interruptionPolicy.js";
+import type { EvaluateInterruptionPolicyInput } from "./interruptionPolicy.js";
 
 /**
  * Threaded through the submit terminalization chain (R2/R9). Carries the
@@ -123,4 +134,267 @@ export async function resolveActiveInterruptionOnTerminalization(
     actorId: null,
     reasonCode: resolution.hint.reasonCode,
   });
+}
+
+/**
+ * Composed restore command for a disrupted attempt. Handles the full
+ * lifecycle: policy evaluation, time grant (bounded_grace), deadline
+ * reconciliation, and idempotency reconstruction (R10).
+ *
+ * Lock protocol: the caller must have already acquired the Enrollment lock
+ * and hold the EA capability. This function acquires the Exam lock
+ * internally.
+ *
+ * @param examRepo - Exam repository (FOR UPDATE capable).
+ * @param attemptRepo - Attempt repository (FOR UPDATE capable).
+ * @param enrollmentRepo - Enrollment repository.
+ * @param episodeRepo - Interruption episode repository.
+ * @param eventRepo - Interruption event repository.
+ * @param adjustmentRepo - Time adjustment repository.
+ * @param gradingWorksetRepo - Grading workset repository.
+ * @param capability - EA lock capability from the canonical seam.
+ * @param now - The single authoritative restore timestamp.
+ * @returns The restore result with lifecycle outcome and compensation.
+ */
+export async function restoreInterruptedAttempt(
+  examRepo: ExamRepository,
+  attemptRepo: AttemptRepository,
+  enrollmentRepo: EnrollmentRepository,
+  episodeRepo: InterruptionEpisodeRepository,
+  eventRepo: InterruptionEventRepository,
+  adjustmentRepo: TimeAdjustmentRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
+  capability: LockedEnrollmentAttemptIdentity,
+  now: Date,
+): Promise<RestoreInterruptionResult> {
+  // 1. Lock the attempt row.
+  const attempt = await attemptRepo.findByIdForUpdate(capability.attemptId);
+  if (!attempt) {
+    throw new NotFoundError("Attempt not found");
+  }
+
+  // 2. Lock the exam row.
+  const exam = await examRepo.findByIdForUpdate(attempt.examId);
+  if (!exam) {
+    throw new NotFoundError("Exam not found");
+  }
+
+  // 3. If the attempt is already in_progress, return immediately.
+  if (attempt.status === "in_progress") {
+    return {
+      attempt,
+      lifecycle: "already_in_progress",
+      compensation: {
+        policy: attempt.interruptionTimingPolicySnapshot?.policy ?? "strict",
+        interruptionId: null,
+        eligibleSeconds: 0,
+        addedSeconds: 0,
+        adjustmentId: null,
+      },
+    };
+  }
+
+  // 4. If the attempt is already terminal, reconstruct via idempotency (R10).
+  if (
+    attempt.status === "submitted" ||
+    attempt.status === "grading" ||
+    attempt.status === "graded"
+  ) {
+    return reconstructTerminalOutcome(attempt, eventRepo, adjustmentRepo);
+  }
+
+  // 5. If the attempt is not disrupted, fail closed.
+  if (attempt.status !== "disrupted") {
+    throw new ValidationError(
+      `Cannot restore attempt in ${attempt.status} state`,
+    );
+  }
+
+  // 6. Validate the active interruption pointer.
+  if (!attempt.currentInterruptionId) {
+    throw new ValidationError(
+      "Disrupted attempt has no active interruption pointer",
+    );
+  }
+  const interruptionId = attempt.currentInterruptionId;
+
+  // 7. Resolve the policy snapshot.
+  const snapshot = attempt.interruptionTimingPolicySnapshot;
+  if (!snapshot) {
+    throw new ValidationError(
+      "Disrupted attempt has no interruption timing policy snapshot",
+    );
+  }
+
+  // 8. Evaluate the policy decision.
+  const detectedEvent = await eventRepo.findDetected(interruptionId);
+  if (!detectedEvent) {
+    throw new ValidationError(
+      "No detected event found for the active interruption",
+    );
+  }
+  const detectedAt = detectedEvent.occurredAt;
+
+  let addedSeconds = 0;
+  let adjustmentId: string | null = null;
+  let eligibleSeconds = 0;
+  let reasonCode = "";
+
+  if (snapshot.policy === "strict" || snapshot.policy === "operator_incident") {
+    eligibleSeconds = 0;
+    addedSeconds = 0;
+    reasonCode =
+      snapshot.policy === "strict"
+        ? "strict_zero_grant"
+        : "operator_incident_candidate_restore_zero_grant";
+  } else if (snapshot.policy === "bounded_grace") {
+    const priorBoundedGraceSeconds =
+      await adjustmentRepo.sumBoundedGraceSeconds(attempt.id);
+
+    const policyInput: EvaluateInterruptionPolicyInput = {
+      snapshot,
+      detectedAt,
+      decisionNow: now,
+      beforeDeadline: attempt.deadlineAt ?? null,
+      examCloseAt: exam.closeAt,
+      priorBoundedGraceAddedSeconds: priorBoundedGraceSeconds,
+    };
+
+    const decision = evaluateInterruptionTimePolicy(policyInput);
+    eligibleSeconds = decision.eligibleSeconds;
+    addedSeconds = decision.addedSeconds;
+    reasonCode = decision.reasonCode;
+
+    if (addedSeconds > 0) {
+      if (!attempt.deadlineAt) {
+        throw new ValidationError(
+          "Cannot grant bounded_grace time without a deadline",
+        );
+      }
+      const adjustment = await adjustmentRepo.insert({
+        operationId: `restore-${interruptionId}-${now.getTime()}`,
+        attemptId: attempt.id,
+        interruptionId,
+        incidentId: null,
+        policy: "bounded_grace",
+        source: "bounded_grace",
+        beforeDeadline: attempt.deadlineAt,
+        afterDeadline: decision.afterDeadline!,
+        addedSeconds,
+        eligibleSeconds,
+        reasonCode,
+        reasonText: null,
+        actorId: null,
+      });
+      adjustmentId = adjustment.id;
+
+      // Update the deadline within the same tx.
+      await attemptRepo.update(attempt.id, {
+        deadlineAt: decision.afterDeadline!,
+      });
+    }
+  }
+
+  // 9. Build the resolution for deadline reconciliation.
+  const resolution: SubmitInterruptionResolution = {
+    mode: "active_interruption",
+    episodeRepo,
+    eventRepo,
+    hint: {
+      policy: snapshot.policy,
+      eligibleSeconds,
+      adjustmentId,
+      reasonCode,
+    },
+  };
+
+  // 10. Reconcile deadline (may submit if expired). The resolution ensures
+  //     proper terminalization if the deadline has passed.
+  const reconciled = await ensureAttemptDeadlineReconciled(
+    examRepo,
+    enrollmentRepo,
+    attemptRepo,
+    gradingWorksetRepo,
+    capability,
+    now,
+    resolution,
+  );
+
+  // 11. If the deadline reconciliation submitted the attempt, return terminal.
+  if (
+    reconciled.status === "submitted" ||
+    reconciled.status === "grading" ||
+    reconciled.status === "graded"
+  ) {
+    return reconstructTerminalOutcome(reconciled, eventRepo, adjustmentRepo);
+  }
+
+  // 12. Restore the attempt lifecycle.
+  const lifecycleResult = await restoreAttemptState(attempt, attemptRepo, now);
+
+  // 13. Re-read the attempt after restore.
+  const restoredAttempt = await attemptRepo.findById(attempt.id);
+  if (!restoredAttempt) {
+    throw new NotFoundError("Attempt not found after restore");
+  }
+
+  return {
+    attempt: restoredAttempt,
+    lifecycle: lifecycleResult.outcome,
+    compensation: {
+      policy: snapshot.policy,
+      interruptionId,
+      eligibleSeconds,
+      addedSeconds,
+      adjustmentId,
+    },
+  };
+}
+
+/**
+ * Reconstructs a terminal outcome from the latest terminalized event (R10).
+ * Used when the attempt is already submitted/grading/graded on entry.
+ */
+async function reconstructTerminalOutcome(
+  attempt: ExamAttempt,
+  eventRepo: InterruptionEventRepository,
+  adjustmentRepo: TimeAdjustmentRepository,
+): Promise<RestoreInterruptionResult> {
+  const latestOutcome = await eventRepo.findLatestOutcomeByAttempt(attempt.id);
+  if (latestOutcome && latestOutcome.eventType === "terminalized") {
+    let adjustmentId: string | null = latestOutcome.timeAdjustmentId ?? null;
+    if (adjustmentId) {
+      const adjustment = await adjustmentRepo.findById(adjustmentId);
+      if (
+        !adjustment ||
+        adjustment.attemptId !== attempt.id ||
+        adjustment.interruptionId !== latestOutcome.interruptionId
+      ) {
+        adjustmentId = null;
+      }
+    }
+    return {
+      attempt,
+      lifecycle: "terminal",
+      compensation: {
+        policy: latestOutcome.policy,
+        interruptionId: latestOutcome.interruptionId,
+        eligibleSeconds: latestOutcome.eligibleSeconds ?? 0,
+        addedSeconds: 0,
+        adjustmentId,
+      },
+    };
+  }
+  // Terminal without a terminalized event → plain terminal, no compensation.
+  return {
+    attempt,
+    lifecycle: "terminal",
+    compensation: {
+      policy: attempt.interruptionTimingPolicySnapshot?.policy ?? "strict",
+      interruptionId: null,
+      eligibleSeconds: 0,
+      addedSeconds: 0,
+      adjustmentId: null,
+    },
+  };
 }
