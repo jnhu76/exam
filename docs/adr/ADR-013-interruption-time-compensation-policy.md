@@ -167,12 +167,33 @@ currentInterruptionId: UUID | null
 interruptedAt: server timestamp | null
 ```
 
-A durable append-only `attempt_interruption_events` ledger preserves the
-episode:
+`attempt_interruptions` is the FK parent for an episode:
+
+```text
+id                 UUID primary key; interruptionId
+organizationId
+attemptId
+createdAt
+```
+
+It has a unique key on `(organizationId, attemptId, id)`. The Attempt pointer
+uses the composite foreign key:
+
+```text
+exam_attempts(organizationId, id, currentInterruptionId)
+  → attempt_interruptions(organizationId, attemptId, id)
+```
+
+This prevents a pointer from naming a missing episode, another Attempt's
+episode, or another organization's episode. `currentInterruptionId = null`
+means there is no active episode. Parent `createdAt` is row metadata; it is not
+the policy's `detectedAt` authority.
+
+A durable append-only `attempt_interruption_events` ledger references the
+episode parent and preserves its evidence:
 
 ```text
 id
-operationId
 organizationId
 attemptId
 interruptionId
@@ -191,20 +212,33 @@ createdAt
 
 Rules:
 
-- the scanner creates the episode and changes the attempt status in the same
-  transaction;
-- after locking the Attempt, the scanner rechecks both
-  `status === in_progress` and staleness from the locked `lastActivityAt`
-  using the tick's captured `now` and timeout; a stale discovery read alone
-  cannot create an episode;
-- `detectedAt` and `interruptedAt` use the same captured server `now`;
+- the scanner creates the episode parent, inserts its `detected` event, sets
+  the Attempt pointer/mirror, and changes status in the same transaction;
+- one episode has exactly one `detected` event and at most one outcome event:
+  either `restored` or `terminalized`;
+- a partial unique index on `interruptionId` where
+  `eventType = 'detected'` enforces at most one detected event;
+- a partial unique index on `interruptionId` where
+  `eventType IN ('restored', 'terminalized')` enforces at most one outcome
+  across both outcome types;
+- the transaction that creates the episode guarantees existence of the one
+  required detected event; partial uniqueness alone can enforce only
+  at-most-one, not existence;
+- interruption events do not have `operationId`. Detection idempotency is
+  identified by the active pointer and `interruptionId`; outcome idempotency
+  is identified by `interruptionId` plus the one-outcome partial unique
+  constraint. `operationId` is reserved for time-adjustment commands;
+- `detectedAt` is defined as the unique detected event's `occurredAt`;
+- while the episode is active,
+  `exam_attempts.interruptedAt = detectedEvent.occurredAt`;
+- `interruptedAt` is a fast-access mirror, not an independent clock;
+- after pointer clearing, the append-only detected event remains the permanent
+  authority for `detectedAt`;
 - the episode records the `lastActivityAt` and timeout used by that scan;
 - one attempt has at most one unresolved episode;
 - rescanning the same `disrupted` state does not create another episode;
 - restore, policy evaluation, adjustment, and telemetry use the same
   `interruptionId`;
-- there is exactly one `detected` event and at most one outcome event
-  (`restored` or `terminalized`) for an episode;
 - events are insert-only and are never deleted or reused;
 - restoring or terminally reconciling the attempt clears the active pointer
   and `interruptedAt`, while the events and any adjustment row remain;
@@ -215,6 +249,49 @@ Rules:
 The dedicated episode event ledger is required because `strict` and
 `operator_incident` candidate restore create no positive adjustment ledger
 row, but their interruption evidence must still survive pointer clearing.
+
+#### Scanner/heartbeat concurrency protocol
+
+Discovery reads identify candidates only. Before committing
+`in_progress -> disrupted`, the scanner must hold the Attempt row lock and
+recheck all of:
+
+```text
+locked.status === "in_progress"
+locked.lastActivityAt is not null
+scannerTickNow - locked.lastActivityAt >= heartbeatTimeout
+```
+
+`scannerTickNow` is captured once for the tick and reused for candidate
+discovery, locked freshness recheck, status transition, `detected` event
+`occurredAt`, and the active `interruptedAt` mirror. A discovery-stage
+`lastActivityAt` value never authorizes the transition.
+
+Heartbeat status validation and `lastActivityAt` refresh are one atomic write
+decision. An allowed implementation is:
+
+```sql
+UPDATE exam_attempts
+SET last_activity_at = :now
+WHERE id = :attemptId
+  AND status = 'in_progress'
+RETURNING ...;
+```
+
+An equivalent transaction may take `FOR UPDATE` and recheck status under the
+lock. In either form:
+
+- a `disrupted` or terminal row is not updated;
+- zero updated rows cannot produce heartbeat success;
+- if heartbeat commits first, the later locked scanner sees the refreshed
+  `lastActivityAt` and does not disrupt unless it is stale at the captured
+  scanner tick time;
+- if scanner commits first, the later heartbeat predicate observes
+  `disrupted`, updates zero rows, and cannot report success;
+- a heartbeat that read `in_progress` before waiting on the scanner is still
+  governed by the write-time predicate or locked recheck.
+
+Both commit orders require PostgreSQL concurrency tests in REC-I4-V1.
 
 ### 5. Policy semantics
 
@@ -234,9 +311,22 @@ This policy is valid only when selected explicitly on the Exam and frozen in
 the Attempt snapshot.
 
 The server-observed eligible interval begins at the committed scanner
-transition time (`episode.detectedAt`), not at the last client timestamp and
-not at `lastActivityAt`. Silence before the timeout and scanner transition is
-evidence used to detect disruption, but is not automatically grantable time.
+transition time:
+
+```text
+detectedAt =
+  the unique detected event for interruptionId .occurredAt
+```
+
+While active, `attempt.interruptedAt` must equal that value, but policy
+evaluation loads the authoritative detected event. After the active mirror is
+cleared, the event remains the permanent authority. The interval is never
+reconstructed from `lastActivityAt`, a client timestamp, or a guessed
+historical instant. A migration-labelled detected event may use its explicitly
+recorded migration instant; it must not claim an earlier time.
+
+Silence before the timeout and scanner transition is evidence used to detect
+disruption, but is not automatically grantable time.
 
 At restore, with one captured server `now`:
 
@@ -434,11 +524,11 @@ administrative_correction
 Ledger invariants:
 
 - rows are insert-only; normal application APIs expose no update or delete;
-- `(organizationId, operationId)` is unique;
 - `addedSeconds > 0`;
 - `afterDeadline > beforeDeadline`;
 - `afterDeadline = beforeDeadline + addedSeconds seconds`;
-- `afterDeadline <= exam.closeAt`;
+- `afterDeadline <= exam.closeAt`, enforced by the locked transaction because
+  `exam.closeAt` is on another table;
 - `bounded_grace` requires `interruptionId`, `eligibleSeconds`, and a null
   human actor;
 - an automatic bounded grant has at most one row per `interruptionId`;
@@ -471,6 +561,53 @@ manual extension for one attempt. The Exam lock serializes the authoritative
 `closeAt` read against exam-window changes. All implementation paths that take
 both Attempt and Exam locks must use the same order; no
 `Exam → Attempt` path may be introduced.
+
+#### Database-enforced constraints
+
+Ordinary PostgreSQL `CHECK` constraints may refer only to the row being
+checked. REC-I4-I1 must use same-table `CHECK`, `UNIQUE`, partial unique
+indexes, and foreign keys for:
+
+- Exam and Attempt-snapshot caps are null for `strict` and
+  `operator_incident`;
+- both `bounded_grace` caps are positive and
+  `perIncidentCapSeconds <= perAttemptAggregateCapSeconds`;
+- adjustment `addedSeconds > 0`;
+- adjustment `afterDeadline > beforeDeadline`;
+- adjustment `afterDeadline = beforeDeadline + addedSeconds seconds`;
+- policy/source-dependent required or null fields, including actor, reason,
+  interruption, and eligible seconds;
+- at most one `bounded_grace` adjustment per `interruptionId`, using a partial
+  unique index;
+- unique adjustment `(organizationId, operationId)`;
+- at most one detected event and at most one outcome event per interruption,
+  using the two partial unique indexes defined above;
+- episode, event, adjustment, and active-pointer references, including the
+  composite active-pointer FK to `attempt_interruptions`.
+
+#### Transaction- and test-enforced invariants
+
+The following span tables or require atomic ordering and therefore cannot be
+claimed as ordinary `CHECK` constraints:
+
+- `afterDeadline <= locked exam.closeAt`;
+- deadline update and adjustment-ledger insert commit atomically;
+- episode parent creation, exactly-one detected event existence, active
+  pointer assignment, `interruptedAt` mirror, and disrupted transition commit
+  atomically;
+- while active, `attempt.interruptedAt` equals the authoritative detected
+  event `occurredAt`;
+- bounded aggregate usage is calculated from authoritative adjustment rows
+  while the Attempt is locked;
+- Exam, Attempt, interruption, event, and adjustment organization/identity
+  relationships remain consistent beyond what their explicit FKs cover;
+- scanner and heartbeat honor both serialized commit orders;
+- restore outcome append and active-pointer clearing commit with lifecycle and
+  policy results.
+
+REC-I4-I1 must not implement a PostgreSQL `CHECK` that queries `exams`,
+`attempt_interruptions`, or any other table. Repository commands and
+PostgreSQL concurrency/integration tests own these cross-table invariants.
 
 Idempotency rules:
 
@@ -552,15 +689,17 @@ REC-I4-I1 must:
 - backfill every historical Exam to `strict` with null caps;
 - add non-null Attempt snapshot fields;
 - backfill every historical Attempt snapshot to `strict` with null caps;
-- add interruption identity fields as null for non-disrupted attempts;
+- add the `attempt_interruptions` parent table, append-only event table,
+  composite active-pointer FK, and interruption identity fields as null for
+  non-disrupted attempts;
 - for each historical `disrupted` Attempt, create one migration-labelled
   interruption UUID, set its active pointer, and insert a `detected` event
   whose reason explicitly says the original detection instant is unknown;
 - use one captured migration instant for that backfilled `interruptedAt`; do
   not reinterpret it as historical outage duration;
 - create the adjustment table empty;
-- add cross-field CHECK constraints and the bounded-grant uniqueness
-  constraint;
+- add same-table cross-field CHECK constraints, event/adjustment partial
+  uniqueness, adjustment operation uniqueness, and explicit FKs;
 - avoid synthesizing historical grants or a precise historical duration from
   `lastActivityAt`;
 - preserve every existing deadline exactly during the foundation migration.
@@ -616,8 +755,10 @@ attribution, scoped permission enforcement, OpenAPI, and admin/proctor tests.
 ### REC-I4-V1 — Verification closeout
 
 PostgreSQL concurrency tests for duplicate restore, deadline/scanner races,
-aggregate cap, `exam.closeAt` cap, lost-response retry, E2E, and a formal-model
-update if the changed reachable actions require it.
+heartbeat-commits-first and scanner-commits-first ordering, locked
+`lastActivityAt` freshness, aggregate cap, `exam.closeAt` cap, lost-response
+retry, E2E, and a formal-model update if the changed reachable actions require
+it.
 
 ## Explicit non-goals
 
