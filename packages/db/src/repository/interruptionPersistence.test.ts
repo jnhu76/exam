@@ -220,7 +220,7 @@ describe("interruption persistence foundation", () => {
         })
         .where(eq(schema.exams.id, alpha.examId)),
     ).rejects.toMatchObject({
-      constraint: "exams_interruption_policy_caps_check",
+      cause: { constraint_name: "exams_interruption_policy_caps_check" },
     });
     await expect(
       db
@@ -232,7 +232,7 @@ describe("interruption persistence foundation", () => {
         })
         .where(eq(schema.exams.id, alpha.examId)),
     ).rejects.toMatchObject({
-      constraint: "exams_interruption_policy_caps_check",
+      cause: { constraint_name: "exams_interruption_policy_caps_check" },
     });
     await expect(
       db
@@ -244,7 +244,7 @@ describe("interruption persistence foundation", () => {
         })
         .where(eq(schema.exams.id, alpha.examId)),
     ).rejects.toMatchObject({
-      constraint: "exams_interruption_policy_caps_check",
+      cause: { constraint_name: "exams_interruption_policy_caps_check" },
     });
     await expect(
       db
@@ -252,7 +252,7 @@ describe("interruption persistence foundation", () => {
         .set({ interruptionTimePolicy: "unknown" as never })
         .where(eq(schema.exams.id, alpha.examId)),
     ).rejects.toMatchObject({
-      constraint: "exams_interruption_time_policy_check",
+      cause: { constraint_name: "exams_interruption_time_policy_check" },
     });
     await expect(
       db
@@ -264,7 +264,7 @@ describe("interruption persistence foundation", () => {
         })
         .where(eq(schema.exams.id, alpha.examId)),
     ).rejects.toMatchObject({
-      constraint: "exams_interruption_policy_caps_check",
+      cause: { constraint_name: "exams_interruption_policy_caps_check" },
     });
     await expect(
       db
@@ -276,7 +276,7 @@ describe("interruption persistence foundation", () => {
         })
         .where(eq(schema.exams.id, alpha.examId)),
     ).rejects.toMatchObject({
-      constraint: "exams_interruption_policy_caps_check",
+      cause: { constraint_name: "exams_interruption_policy_caps_check" },
     });
     await expect(
       db
@@ -284,7 +284,9 @@ describe("interruption persistence foundation", () => {
         .set({ interruptionPolicySnapshotVersion: 2 })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
     ).rejects.toMatchObject({
-      constraint: "exam_attempts_interruption_snapshot_version_check",
+      cause: {
+        constraint_name: "exam_attempts_interruption_snapshot_version_check",
+      },
     });
     await expect(
       db
@@ -296,7 +298,9 @@ describe("interruption persistence foundation", () => {
         })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
     ).rejects.toMatchObject({
-      constraint: "exam_attempts_interruption_snapshot_caps_check",
+      cause: {
+        constraint_name: "exam_attempts_interruption_snapshot_caps_check",
+      },
     });
     await expect(
       db
@@ -329,7 +333,7 @@ describe("interruption persistence foundation", () => {
         .set({ currentInterruptionId: randomUUID(), interruptedAt })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
     ).rejects.toMatchObject({
-      constraint: "exam_attempts_current_interruption_fk",
+      cause: { constraint_name: "exam_attempts_current_interruption_fk" },
     });
     await expect(
       db
@@ -337,7 +341,7 @@ describe("interruption persistence foundation", () => {
         .set({ currentInterruptionId: episode.id, interruptedAt })
         .where(eq(schema.examAttempts.id, beta.attemptId)),
     ).rejects.toMatchObject({
-      constraint: "exam_attempts_current_interruption_fk",
+      cause: { constraint_name: "exam_attempts_current_interruption_fk" },
     });
     await expect(
       db
@@ -345,7 +349,9 @@ describe("interruption persistence foundation", () => {
         .set({ currentInterruptionId: null, interruptedAt })
         .where(eq(schema.examAttempts.id, alpha.attemptId)),
     ).rejects.toMatchObject({
-      constraint: "exam_attempts_current_interruption_pair_check",
+      cause: {
+        constraint_name: "exam_attempts_current_interruption_pair_check",
+      },
     });
   });
 
@@ -465,7 +471,7 @@ describe("interruption persistence foundation", () => {
         reasonCode: "migration_backfill_unknown_detected_at",
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_interruption_events_detected_unique",
+      cause: { constraint_name: "attempt_interruption_events_detected_unique" },
     });
     await eventRepo.insert(alpha.ctx, {
       ...base,
@@ -485,7 +491,7 @@ describe("interruption persistence foundation", () => {
         reasonCode: "restored",
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_interruption_events_outcome_unique",
+      cause: { constraint_name: "attempt_interruption_events_outcome_unique" },
     });
     const heartbeatEpisode = await interruptionRepo.create(alpha.ctx, {
       attemptId: alpha.attemptId,
@@ -501,7 +507,7 @@ describe("interruption persistence foundation", () => {
         reasonCode: "heartbeat_timeout",
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_interruption_events_shape_check",
+      cause: { constraint_name: "attempt_interruption_events_shape_check" },
     });
     await expect(
       eventRepo.insert(alpha.ctx, {
@@ -514,7 +520,7 @@ describe("interruption persistence foundation", () => {
         reasonCode: "heartbeat_timeout",
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_interruption_events_shape_check",
+      cause: { constraint_name: "attempt_interruption_events_shape_check" },
     });
   });
 
@@ -550,7 +556,9 @@ describe("interruption persistence foundation", () => {
         interruptionId: secondEpisode.id,
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_org_operation_unique",
+      cause: {
+        constraint_name: "attempt_time_adjustments_org_operation_unique",
+      },
     });
     const betaEpisode = await interruptionRepo.create(beta.ctx, {
       attemptId: beta.attemptId,
@@ -569,12 +577,16 @@ describe("interruption persistence foundation", () => {
         interruptionId: betaEpisode.id,
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_org_interruption_fk",
+      cause: {
+        constraint_name: "attempt_time_adjustments_org_interruption_fk",
+      },
     });
     await expect(
       adjustmentRepo.insert(alpha.ctx, { ...valid, operationId: randomUUID() }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_bounded_interruption_unique",
+      cause: {
+        constraint_name: "attempt_time_adjustments_bounded_interruption_unique",
+      },
     });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
@@ -583,7 +595,7 @@ describe("interruption persistence foundation", () => {
         interruptionId: null,
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_source_shape_check",
+      cause: { constraint_name: "attempt_time_adjustments_source_shape_check" },
     });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
@@ -598,7 +610,9 @@ describe("interruption persistence foundation", () => {
         afterDeadline: valid.beforeDeadline,
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_added_seconds_check",
+      cause: {
+        constraint_name: "attempt_time_adjustments_added_seconds_check",
+      },
     });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
@@ -612,7 +626,9 @@ describe("interruption persistence foundation", () => {
         afterDeadline: new Date("2026-01-01T01:00:11.000Z"),
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_deadline_delta_check",
+      cause: {
+        constraint_name: "attempt_time_adjustments_deadline_delta_check",
+      },
     });
     await expect(
       adjustmentRepo.insert(alpha.ctx, {
@@ -626,7 +642,7 @@ describe("interruption persistence foundation", () => {
         reasonText: null,
       }),
     ).rejects.toMatchObject({
-      constraint: "attempt_time_adjustments_source_shape_check",
+      cause: { constraint_name: "attempt_time_adjustments_source_shape_check" },
     });
   });
 });
