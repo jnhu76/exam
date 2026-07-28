@@ -5,6 +5,26 @@ and decision matrices for the candidate exam recovery contract.
 
 ---
 
+## Formal model
+
+The selected recovery protocol is model-checked under
+[`formal/tla/recovery/`](../../../formal/tla/recovery/). The executable
+TLA+ specification (`RecoveryProtocol.tla`) and its safety / liveness /
+expected-counterexample configurations are run via
+`pnpm formal:recovery:*` (see `formal/README.md`).
+
+ADR-012 remains the binding architectural decision. The formal model
+verifies selected concurrency and recovery properties (route-bound restore
+authority, stale-response isolation, terminal-state monotonicity,
+submitted-snapshot immutability, server-version monotonicity, cross-attempt
+non-blocking, "POST is not page authority", "restore does not directly
+grant time"). It is **not** a proof that the TypeScript implementation is
+a refinement. Safety is exhaustively model-checked; liveness is currently
+PARTIAL; known runtime/model mismatches (notably REC-I4) are documented in
+`docs/audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md`.
+
+---
+
 ## Sequence Diagrams
 
 ### Normal Answer Save (CURRENT)

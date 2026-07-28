@@ -9,3 +9,4 @@ coverage/
 .venv/
 .mcp.json
 opencode.jsonc
+formal/
