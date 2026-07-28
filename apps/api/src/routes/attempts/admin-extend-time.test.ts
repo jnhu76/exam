@@ -10,7 +10,7 @@ import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
-import { buildExamPayload } from "./attempts.testHelpers.js";
+import { buildExamPayload, disruptAttempt } from "./attempts.testHelpers.js";
 
 const EXTEND_TIME_TEST_PREFIX = "extend-time-test-";
 
@@ -327,10 +327,7 @@ describe("attempt routes", () => {
         attemptId,
       );
       const beforeDeadline = before!.deadlineAt!;
-      await ctx.db
-        .update(schema.examAttempts)
-        .set({ status: "disrupted" })
-        .where(eq(schema.examAttempts.id, attemptId));
+      await disruptAttempt(ctx.db, t.orgId, attemptId);
 
       const res = await ctx.app.inject({
         method: "POST",
