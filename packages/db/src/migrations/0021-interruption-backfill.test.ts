@@ -35,6 +35,7 @@ function migrationStatements(fileName: string): string[] {
  */
 async function applyMigrationsThrough0020(
   db: Awaited<ReturnType<typeof createDatabase>>["db"],
+  schemaName: string,
 ): Promise<void> {
   const journalPath = resolve(migrationsDir, "meta/_journal.json");
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
@@ -83,7 +84,10 @@ async function applyMigrationsThrough0020(
       }
     }
 
-    await migrate(db, { migrationsFolder: tmpMigrationsDir });
+    await migrate(db, {
+      migrationsFolder: tmpMigrationsDir,
+      migrationsSchema: schemaName,
+    });
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -268,7 +272,7 @@ describe("0021 interruption policy migration backfill", () => {
   beforeAll(async () => {
     iso = await setupIsolatedTestDb({ namespace: "mig0021" });
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-    await applyMigrationsThrough0020(conn.db);
+    await applyMigrationsThrough0020(conn.db, iso.schemaName);
 
     const createdAt = new Date("2025-12-31T00:00:00.000Z");
     const lastActivityAt = new Date("2025-12-31T23:00:00.000Z");
