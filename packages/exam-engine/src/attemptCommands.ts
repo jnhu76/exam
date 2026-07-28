@@ -38,6 +38,8 @@ import type {
   InterruptionEpisodeRepository,
   InterruptionEventRepository,
 } from "./interruptionRepositories.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import { resolveActiveInterruptionOnTerminalization } from "./restoreInterruption.js";
 
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
@@ -287,11 +289,38 @@ export async function submitAttempt(
      * `submitted_answers` snapshot.
      */
     submissionReason?: "manual" | "deadline";
+    /**
+     * Interruption resolution for disrupted→submitted terminalization (R1/R9).
+     * Required when the attempt is `disrupted`; the caller must provide an
+     * `active_interruption` resolution with the policy evaluator's output.
+     * When the attempt is `in_progress`, this may be omitted (defaults to
+     * `undefined`, which skips interruption resolution).
+     */
+    resolution?: SubmitInterruptionResolution;
   } = {},
 ): Promise<ExamAttempt> {
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
+  }
+
+  // R1/R9: resolve interruption terminalization BEFORE the status transition.
+  // When the caller explicitly provides a resolution, terminalize the active
+  // interruption. If the attempt is disrupted and the caller explicitly passes
+  // `resolution: undefined`, fail closed. If the caller does not pass
+  // `resolution` at all, skip the check (compatibility with old callers during
+  // the transition).
+  if (attempt.status === "disrupted" && "resolution" in opts) {
+    if (!opts.resolution) {
+      throw new ValidationError(
+        "Cannot submit a disrupted attempt without interruption resolution",
+      );
+    }
+    await resolveActiveInterruptionOnTerminalization(
+      attempt,
+      opts.resolution,
+      now,
+    );
   }
 
   const existingEntries = await gradingWorksetRepo.findByAttempt(attemptId);
@@ -362,12 +391,15 @@ export async function submitAttempt(
     : GradingStatus.AutoGraded;
 
   // 6. Persist submit lifecycle state (freeze barrier).
+  //    Clear interruption pointers when transitioning from disrupted (R1).
   const submitted = await attemptRepo.update(attemptId, {
     status: "submitted",
     submittedAt: now,
     submittedAnswers,
     submissionReason: opts.submissionReason ?? "manual",
     gradingStatus,
+    currentInterruptionId: null,
+    interruptedAt: null,
   });
   if (!submitted) throw new ValidationError("Attempt not found after update");
 

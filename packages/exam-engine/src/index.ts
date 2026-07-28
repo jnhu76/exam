@@ -20,5 +20,6 @@ export * from "./gradingWorkset.js";
 export * from "./deadlineReconciliation.js";
 export * from "./interruptionRepositories.js";
 export * from "./interruptionPolicy.js";
+export * from "./restoreInterruption.js";
 export * from "./lockSeam.js";
 export * from "./systemMonitor.js";
