@@ -1,15 +1,15 @@
 # State and Authority Model
 
 > Normative description of the exam system's lifecycle states, sub-process states, policies, and fact timestamps.
-> Recovery semantics and the frozen recovery contract are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md) and described in [candidate-recovery.md](./candidate-recovery.md).
+> Recovery semantics are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md). Interruption detection and time compensation are governed by [ADR-013](../../adr/ADR-013-interruption-time-compensation-policy.md). Both are described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
-Last runtime verified against: bcf02847b0231e233dcb3ff98ec7ae681739b028
-Recovery contract updated in: PR #218
+Last runtime verified against: 1f337bf87ea667278ceaac10b5068956cd65f324
+Recovery contract updated in: PR #218 / ADR-013 (REC-I4-R0)
 
 Verification scope:
-Runtime behavior verified against master after merged P5-0 / PR #210.
-Recovery back-reference added in PR #218.
+Runtime behavior verified after merged PRs #218, #219, and #221.
+ADR-013 is a target contract; REC-I4-I1+ runtime work is not implemented.
 ```
 
 ## Why these must not be collapsed
@@ -21,6 +21,15 @@ The system has **five orthogonal state dimensions**:
 3. **Attempt grading status** — the scoring pipeline state, orthogonal to attempt lifecycle.
 4. **Enrollment status** — the candidate's overall qualification state for an exam.
 5. **Email outbox status** — the delivery lifecycle of an email record.
+
+ADR-013 adds two persistent recovery evidence concepts without collapsing
+them into attempt lifecycle:
+
+1. **Interruption episode** — one server-detected interruption of one Attempt.
+2. **Time adjustment** — one positive, attributable deadline change.
+
+Items 6–7 are a frozen target contract and are not present in the current
+schema at REC-I4-R0.
 
 Collapsing these into one enum would create a combinatorial explosion and make it impossible to reason about one dimension independently.
 
@@ -168,6 +177,7 @@ stateDiagram-v2
 ### Orthogonality to Attempt Status
 
 `gradingStatus` is **orthogonal** to `attemptStatus`. An attempt may be:
+
 - `submitted` + `pending_manual` (awaiting manual scoring)
 - `graded` + `auto_graded` (pure-objective, graded at submit)
 - `graded` + `fully_graded` (manual scoring complete)
@@ -288,9 +298,58 @@ stateDiagram-v2
 | `attempt.lastActivityAt` | Heartbeat field | `saveAnswer()` / heartbeat route / `restoreAttempt()` | Updated on activity |
 | `emailOutbox.sentAt` | When the email was delivered | `markSent()` | Write-once |
 
+Current transitional behavior still lets `restoreAttempt()` modify
+`deadlineAt`. ADR-013 requires REC-I4-I2 to replace that coupling with
+`restoreAttemptState()` plus an independent policy decision.
+
+### Target interruption and adjustment facts (ADR-013)
+
+| Field | Meaning | Set by | Writable? |
+| --- | --- | --- | --- |
+| `attempt.currentInterruptionId` | Active interruption episode pointer | Heartbeat disrupted scanner | Cleared on restore/terminal resolution |
+| `attempt.interruptedAt` | Server instant when disrupted transition committed | Heartbeat disrupted scanner | Cleared with active pointer |
+| `interruption.detected.occurredAt` | Durable detection instant | Heartbeat disrupted scanner | Append-only event |
+| `interruption.detected.observedLastActivityAt` | `lastActivityAt` observed by the scanner | Heartbeat disrupted scanner | Append-only event |
+| `interruption.outcome.occurredAt` | Restore or terminal resolution instant | Composed restore command | Append-only event |
+| `adjustment.beforeDeadline` | Deadline before a positive grant | Adjustment command | Write-once |
+| `adjustment.afterDeadline` | Deadline after a positive grant | Adjustment command | Write-once |
+| `adjustment.createdAt` | Server adjustment decision instant | Adjustment command | Write-once |
+
+## 8. Interruption-Time Policy (target)
+
+### Policy states
+
+| Policy | Candidate restore | Automatic grant |
+| --- | --- | --- |
+| `strict` | Lifecycle restore after deadline reconciliation | 0 |
+| `bounded_grace` | Policy evaluation precedes final reconciliation | Explicitly capped |
+| `operator_incident` | Same as strict | 0; separate operator command |
+
+`strict` is the default and migration backfill. `bounded_grace` requires
+explicit positive per-incident and per-attempt aggregate caps. The policy and
+caps are copied to an immutable Attempt snapshot at creation.
+
+### Authority boundaries
+
+| Fact or decision | Authority |
+| --- | --- |
+| Recent qualifying activity | PostgreSQL `lastActivityAt` |
+| Disrupted lifecycle state | PostgreSQL Attempt row |
+| One interruption identity | PostgreSQL interruption episode + Attempt pointer |
+| Effective deadline | `min(exam.closeAt, attempt.deadlineAt)` after any committed adjustment |
+| Automatic aggregate already granted | Sum of committed `bounded_grace` ledger rows |
+| Positive time grant attribution | PostgreSQL append-only time-adjustment ledger |
+| Client offline duration | Diagnostic only; never authority |
+| Redis presence/TTL | Optional cache evidence only; never authority |
+
+The supported current single-app scanner remains an in-process Fastify
+interval. A future multi-instance scanner may coordinate leadership with a
+PostgreSQL advisory lock. Redis is not introduced by REC-I4 and cannot own a
+deadline or irreversible attempt transition.
+
 ---
 
-## 8. Summary: State Machine Independence
+## 9. Summary: State Machine Independence
 
 | Dimension | States | Independent? |
 |-----------|--------|--------------|
@@ -299,3 +358,5 @@ stateDiagram-v2
 | Grading status | 3 | Yes — orthogonal to attempt lifecycle |
 | Enrollment status | 4 | Yes — describes candidate qualification |
 | Email outbox status | 5 | Yes — describes delivery progress |
+| Interruption episode (target) | active/resolved evidence | Yes — identity and evidence, not lifecycle entitlement |
+| Time adjustment (target) | append-only positive facts | Yes — deadline provenance, not attempt status |

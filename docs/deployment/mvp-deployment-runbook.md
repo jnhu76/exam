@@ -7,6 +7,7 @@
 > Email worker / LAN-on-premise).
 >
 > **Companion documents:**
+>
 > - [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md)
 >   — release-readiness audit (acceptance matrix, finding register, evidence).
 > - [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md)
@@ -96,7 +97,7 @@ if any is unset. There is NO default database password in production
 | `EMAIL_ENABLED` | false | master switch; false → DisabledEmailSender drains outbox to 'sent' |
 | `EMAIL_TRANSPORT` | fake | `fake` or `smtp`; `smtp` is force-overridden to `fake` in test/e2e/ci |
 | `EMAIL_FAKE_MODE` | success | `success` or `failure` (fake transport only) |
-| `EMAIL_FROM` | no-reply@example.local | Email From header |
+| `EMAIL_FROM` | `no-reply@example.local` | Email From header |
 | `EMAIL_FROM_NAME` | Exam Platform | Email From name |
 | `EMAIL_MAX_ATTEMPTS` | 3 | worker max attempts before `dead` |
 | `EMAIL_RETRY_BASE_SECONDS` | 60 | exponential backoff base (base * 2^(attempts-1)) |
@@ -276,9 +277,8 @@ The bootstrap:
 
 Steps 1–4 run in **one transaction** (`bootstrapAdminOnFreshDb`): they
 commit atomically, so a failure in any step leaves no orphan org, user,
-assignment, or audit row. The bootstrap also:
-
-5. refuses a second active Admin unless `--force` is supplied.
+assignment, or audit row. The bootstrap also refuses a second active Admin
+unless `--force` is supplied.
 
 It does **not** create Candidate accounts. Candidates are created later by
 the Admin via `POST /api/admin/candidates`.
@@ -434,6 +434,7 @@ curl -s -b "auth-token=<JWT>" http://localhost:${APP_PORT:-3000}/api/system/diag
 ```
 
 The worker:
+
 - polls every `EMAIL_WORKER_POLL_INTERVAL_MS` (default 5s),
 - claims up to `EMAIL_WORKER_BATCH_SIZE` rows atomically
   (`SELECT … FOR UPDATE SKIP LOCKED` + `UPDATE … RETURNING`),
@@ -638,9 +639,11 @@ docker compose exec app node dist/scripts/migrate.js
 docker compose exec app node dist/scripts/reset-admin-password.js
 
 # Candidate interrupted attempt
-# The backend restoreAttempt route exists; the frontend self-service
-# restore UI is deferred (Phase 2+). Current behavior: a disrupted attempt
-# jumps to the result page with an 'answering interrupted' message.
+# REC-I3 implements direct-entry candidate restore: the Web client calls the
+# explicit restore command and reloads the authoritative take snapshot.
+# If confirmation fails, use the candidate retry control and inspect app logs
+# by requestId. ADR-013 is contract-only at this baseline: the backend still
+# has transitional full-gap compensation until REC-I4-I2/I3.
 
 # Log / requestId investigation
 docker compose logs app | jq 'select(.reqId == "<REQ_ID>")'

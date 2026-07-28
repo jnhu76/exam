@@ -18,6 +18,15 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
+- **Recovery hardening — REC-I4-R0 contract freeze is complete.**
+  ADR-013 and the REC-I4-R0 reality audit freeze `strict` as the default
+  interruption-time policy, separate lifecycle restore from compensation,
+  define bounded-grace caps and ordering, and reserve PostgreSQL interruption
+  episode / append-only adjustment evidence. This is documentation only; the
+  current runtime still has transitional full-disconnection compensation.
+  The next authorized recovery Job is **REC-I4-I1 — Domain and persistence
+  foundation**. REC-I4 does not introduce Redis.
+
 - **Phase 3, Module P6 — MVP ready closeout is CLOSED.**
   All Phase 3 MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0
   (Email delivery runtime hardening, PR #210), P3 (result publishing closeout,

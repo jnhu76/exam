@@ -1,7 +1,8 @@
 # Candidate Recovery Architecture
 
-Authority: ADR-012. This document provides sequence diagrams, state tables,
-and decision matrices for the candidate exam recovery contract.
+Authority: ADR-012 for candidate recovery and ADR-013 for interruption-time
+policy. This document provides sequence diagrams, state tables, and decision
+matrices for those contracts.
 
 ---
 
@@ -20,7 +21,8 @@ submitted-snapshot immutability, server-version monotonicity, cross-attempt
 non-blocking, "POST is not page authority", "restore does not directly
 grant time"). It is **not** a proof that the TypeScript implementation is
 a refinement. Safety is exhaustively model-checked; liveness is currently
-PARTIAL; known runtime/model mismatches (notably REC-I4) are documented in
+PARTIAL; known runtime/model mismatches (notably the REC-I4 runtime
+implementation) are documented in
 `docs/audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md`.
 
 ---
@@ -177,7 +179,7 @@ sequenceDiagram
     Note over Engine: CURRENT_TRANSITIONAL: restoreAttempt currently<br/>computes disconnectedDuration AND adjusts deadlineAt<br/>in the same command. This is NOT the target contract.
     Engine->>Engine: compute disconnectedDuration
     Engine->>Engine: adjust deadlineAt (bounded by exam.closeAt)
-    Note over Engine: TARGET (REC-I3 + REC-I4):<br/>State restore and time compensation are separate.<br/>REC-I3 (DONE): explicit restore command from Web client.<br/>REC-I4 (PENDING): policy-driven compensation (strict/bounded_grace/operator_incident).
+    Note over Engine: TARGET (ADR-013):<br/>State restore and time compensation are separate.<br/>REC-I3 (DONE): explicit restore command from Web client.<br/>REC-I4-R0 (DONE): policy contract frozen.<br/>REC-I4-I1+ (PENDING): runtime implementation.
     Engine->>DB: UPDATE status=in_progress, deadlineAt, lastActivityAt
     API->>DB: COMMIT
     API-->>C: restore acknowledgement (legacy LoadAttemptResponse)
@@ -276,12 +278,108 @@ Telemetry: `restore_started` / `restore_succeeded` / `restore_failed` are
 emitted via the existing `trackExamEvent` helper, scoped to attemptId/examId
 with `durationMs` and `errorCode` only. No answer content is recorded.
 
-Deferred: REC-I4 (time-compensation policy) is NOT modified by REC-I3. The
-current `restoreAttempt` engine may still grant full disconnected-time
-compensation; the Web client deliberately uses neutral copy
+Deferred from REC-I3: the time-compensation runtime is NOT modified. ADR-013
+now freezes the REC-I4 policy, but the current `restoreAttempt` engine may
+still grant full disconnected-time compensation until REC-I4-I2/I3. The Web
+client deliberately uses neutral copy
 ("服务器正在确认考试状态和剩余时间") and does not duplicate time logic.
 
+### Interruption-Time Policy (FROZEN TARGET, NOT YET IMPLEMENTED)
 
+ADR-013 freezes:
+
+```text
+strict            (default) → restore lifecycle, automatic grant 0
+bounded_grace               → explicit Exam caps + Attempt snapshot
+operator_incident           → candidate restore grants 0; operator command only
+```
+
+Detection and entitlement are different:
+
+```text
+heartbeat timeout
+  → server evidence that qualifying activity has not recently been observed
+  → may create a disrupted state and interruption episode
+
+heartbeat timeout
+  ↛ proof that now - lastActivityAt seconds must be returned
+```
+
+The target persistence model keeps:
+
+- an active `currentInterruptionId` / `interruptedAt` pointer on the Attempt;
+- an append-only interruption event history for every
+  `in_progress → disrupted` episode and its outcome;
+- a frozen interruption-policy snapshot on the Attempt;
+- an append-only ledger for positive deadline adjustments.
+
+The episode UUID is per Attempt interruption. A future `incidentId` is a
+different identity for one service incident affecting multiple attempts.
+
+#### Strict restore ordering
+
+```mermaid
+sequenceDiagram
+    participant API as Candidate Restore API
+    participant DB as PostgreSQL
+    participant Engine as exam-engine
+
+    API->>DB: BEGIN + lock Enrollment → Attempt → Exam
+    API->>Engine: reconcile authoritative deadline
+    alt reconciliation is terminal
+        Engine-->>API: terminal
+        API->>DB: resolve episode terminal + clear active pointer
+    else attempt remains disrupted
+        API->>Engine: restoreAttemptState()
+        Engine-->>API: lifecycle restored
+        API->>DB: resolve episode restored + clear active pointer
+        Note over API,DB: automatic addedSeconds = 0
+    end
+    API->>DB: COMMIT
+```
+
+The current route does not yet satisfy this result-handling contract: it calls
+reconciliation and then calls `restoreAttempt` unconditionally. If
+reconciliation made the Attempt terminal, the later restore error can roll
+back the same transaction. REC-I4-I2 must return the terminal reconciliation
+result without invoking lifecycle restore.
+
+#### Bounded-grace restore ordering
+
+```mermaid
+sequenceDiagram
+    participant API as Candidate Restore API
+    participant DB as PostgreSQL
+    participant Policy as Interruption Policy
+    participant Recon as Deadline Reconciliation
+
+    API->>DB: BEGIN + lock Enrollment → Attempt → Exam
+    API->>DB: reject/return already-terminal; load active episode + policy snapshot
+    API->>Policy: evaluate server-observed eligible seconds and all caps
+    Policy-->>API: idempotent adjustment decision
+    alt addedSeconds > 0
+        API->>DB: INSERT adjustment ledger + UPDATE deadlineAt
+    end
+    API->>Recon: reconcile using adjusted authoritative deadline
+    alt still resumable
+        API->>DB: disrupted → in_progress; resolve episode restored
+    else adjusted deadline still expired
+        API->>DB: terminal wins; resolve episode terminal
+    end
+    API->>DB: clear active interruption pointer + COMMIT
+```
+
+The eligible interval begins at the committed server detection time, not a
+client timestamp. The grant is the minimum of eligible seconds, the
+per-incident cap, the remaining automatic aggregate cap, and room before
+`exam.closeAt`.
+
+#### Operator-incident ordering
+
+Candidate restore uses the strict ordering and adds zero. An authorized
+operator may run a separately attributable, reason-required grant command
+only while the Attempt is `in_progress | disrupted`. Ordinary time extension
+does not reopen a submitted, grading, graded, or voided Attempt.
 
 ### Server Outage
 
