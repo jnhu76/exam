@@ -4,8 +4,9 @@
 
 **REC-I4-I2 IMPLEMENTED — READY FOR HUMAN REVIEW**
 
-All engine, API, and migration changes are implemented. All 434 engine tests
-pass. All monorepo typechecks pass. `pnpm verify:static` passes.
+All engine, API, and migration changes are implemented. All monorepo
+typechecks pass. `pnpm verify:static` and the full `pnpm verify` gate
+(workspace coverage + build) pass.
 
 ## Base HEAD
 
@@ -58,8 +59,11 @@ branch = feat/rec-i4-i2-engine-policy-seam
 |------|--------|
 | `adapters/repoAdapters.ts` | **EDITED** — 3 interruption adapters, flatten helper, RestoreEngineRepos bundler |
 | `plugins/heartbeat.ts` | **EDITED** — `markAttemptDisrupted` thin wrapper (R12), fixed second `fastify.now()` |
+| `plugins/deadlineScanner.ts` | **EDITED** — builds `active_interruption` (`deadline_terminalization`) vs `none` resolution from the locked attempt status before `submitAttempt` |
 | `config/runtimeConfig.ts` | **EDITED** — validate `timeoutMs % 1000 === 0`, add `heartbeatTimeoutSeconds` |
+| `orchestrators/submitAndGradeAttempt.ts` | **EDITED** — builds the submit resolution (`candidate_submit_terminalization` for disrupted, `none` for in_progress) and threads it through reconcile + submit |
 | `routes/attempts.candidate.ts` | **EDITED** — heartbeat uses `refreshLastActivityIfInProgress`, restore uses `restoreInterruptedAttempt`, start wires interruption repos |
+| `routes/attempts.admin.ts` | **EDITED** — force-submit builds the resolution (`admin_force_submit_terminalization` for disrupted) and threads it through the submit path |
 
 ## Commits
 
@@ -100,12 +104,8 @@ c4784557 feat(recovery): add lockEnrollmentAndActiveAttempt seam and rewrite sta
 
 ## Known limitations
 
-1. **Part I deferred** — `submitAndGradeAttempt` and `deadlineScanner` do not yet pass `SubmitInterruptionResolution` through to `submitAttempt`. The `disrupted → submitted` path works (status transition succeeds) but does not append a terminalized event. This is safe because:
-   - The I1 transitional state already permitted `disrupted + null pointer` combinations.
-   - The 0022 migration validates and resolves these states.
-   - The full terminalization audit trail will be wired when the `restoreInterruptedAttempt` path is the sole entry point for disrupted→submitted.
-2. **No integration tests** — The engine mock tests (434) pass, but no PostgreSQL-backed integration tests exist for the new restore flow, heartbeat scanner order, or API regression.
-3. **Old `restoreAttempt` retained** — The legacy `restoreAttempt` function (with `disconnectedDuration` deadline compensation) is still present in `attemptCommands.ts` but is no longer imported by any production route. It is kept for reference and will be removed in a follow-up cleanup.
+1. **Terminalization fully wired** — `submitAndGradeAttempt`, `deadlineScanner`, the candidate submit/restore routes, and the admin force-submit route all build and thread a `SubmitInterruptionResolution` through `submitAttempt`. Every `disrupted → submitted` terminalization appends a `terminalized` event with a context-specific reason code (`candidate_submit_terminalization`, `admin_force_submit_terminalization`, `deadline_terminalization`); `resolveActiveInterruptionOnTerminalization` fails closed on `disrupted + mode=none`.
+2. **Old `restoreAttempt` retained** — The legacy `restoreAttempt` function (with `disconnectedDuration` deadline compensation) is still present in `attemptCommands.ts` but is no longer imported by any production route. It is kept for reference and will be removed in a follow-up cleanup.
 
 ## Verification
 
@@ -120,9 +120,12 @@ pnpm lint:eslint
 pnpm lint:arch
 pnpm lint:copy
 pnpm verify:static
+pnpm verify
 ```
 
-All pass. 434 engine tests pass.
+All pass. `pnpm verify` (full gate: `verify:static` + workspace coverage + build) is green.
+Coverage summary at audit time: exam-engine 443 tests (25 files), db 341 tests (29 files),
+api 1628 passed / 5 skipped (129 files), web 1259 tests (97 files).
 
 ## Next Job
 

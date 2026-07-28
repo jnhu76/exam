@@ -198,7 +198,11 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
         storedAttempt = { ...storedAttempt, ...data };
         return storedAttempt;
       },
-      refreshLastActivityIfInProgress: () => storedAttempt,
+      refreshLastActivityIfInProgress: (_id, now) => {
+        if (storedAttempt.status !== "in_progress") return null;
+        storedAttempt = { ...storedAttempt, lastActivityAt: now };
+        return storedAttempt;
+      },
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -294,7 +298,11 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
         storedAttempt = { ...storedAttempt, ...data };
         return storedAttempt;
       },
-      refreshLastActivityIfInProgress: () => storedAttempt,
+      refreshLastActivityIfInProgress: (_id, now) => {
+        if (storedAttempt.status !== "in_progress") return null;
+        storedAttempt = { ...storedAttempt, lastActivityAt: now };
+        return storedAttempt;
+      },
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => makeEnrollment(),

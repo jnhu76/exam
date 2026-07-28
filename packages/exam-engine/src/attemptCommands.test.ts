@@ -16,6 +16,7 @@ import type {
   ExamEnrollment,
   AttemptInterruption,
   AttemptInterruptionEvent,
+  AttemptTimeAdjustment,
   QuestionSnapshot,
   RequestContext,
 } from "@exam/domain";
@@ -615,7 +616,25 @@ describe("attemptCommands", () => {
         findLatestOutcomeByAttempt: async () => null,
       };
       const adjustmentRepo: TimeAdjustmentRepository = {
-        insert: async () => ({ id: "adj-1" }) as any,
+        insert: async () =>
+          ({
+            id: "adj-1",
+            operationId: "op-1",
+            organizationId: "org-1",
+            attemptId: "attempt-1",
+            interruptionId: null,
+            incidentId: null,
+            policy: "strict",
+            source: "operator",
+            beforeDeadline: new Date("2025-01-01T10:00:00Z"),
+            afterDeadline: new Date("2025-01-01T10:00:00Z"),
+            addedSeconds: 0,
+            eligibleSeconds: 0,
+            reasonCode: "strict_zero_grant",
+            reasonText: null,
+            actorId: null,
+            createdAt: new Date("2025-01-01T10:00:00Z"),
+          }) as AttemptTimeAdjustment,
         findById: async () => null,
         findBoundedByInterruption: async () => null,
         sumBoundedGraceSeconds: async () => 0,

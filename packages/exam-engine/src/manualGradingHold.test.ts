@@ -220,7 +220,11 @@ function makeRepos(
       storedAttempt = { ...storedAttempt, ...data };
       return storedAttempt;
     },
-    refreshLastActivityIfInProgress: () => storedAttempt,
+    refreshLastActivityIfInProgress: (_id, now) => {
+      if (storedAttempt.status !== "in_progress") return null;
+      storedAttempt = { ...storedAttempt, lastActivityAt: now };
+      return storedAttempt;
+    },
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,

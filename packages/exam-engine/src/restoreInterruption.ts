@@ -320,19 +320,20 @@ export async function restoreInterruptedAttempt(
   const detectedAt = detectedEvent.occurredAt;
 
   // 8. Evaluate the policy decision.
+  // The policy evaluator (interruptionPolicy.ts) is the single source of truth
+  // for reason-code strings and zero-grant outcomes across strict /
+  // operator_incident / bounded_grace. Routing all three policies through it
+  // (instead of hand-duplicating the strict/operator_incident reason codes here)
+  // keeps the persisted ledger reason codes consistent with the canonical
+  // STRICT_ZERO_GRANT_REASON / OPERATOR_INCIDENT_ZERO_GRANT_REASON constants.
   let addedSeconds = 0;
   let adjustmentId: string | null = null;
   let eligibleSeconds = 0;
   let reasonCode = "";
 
-  if (snapshot.policy === "strict" || snapshot.policy === "operator_incident") {
-    eligibleSeconds = 0;
-    addedSeconds = 0;
-    reasonCode =
-      snapshot.policy === "strict"
-        ? "strict_zero_grant"
-        : "operator_incident_candidate_restore_zero_grant";
-  } else if (snapshot.policy === "bounded_grace") {
+  // bounded_grace is the only policy that can carry a durable time adjustment,
+  // so it is the only one that participates in idempotent adjustment reuse.
+  if (snapshot.policy === "bounded_grace") {
     // #8: Check idempotency before evaluating.
     const existingAdjustment =
       await adjustmentRepo.findBoundedByInterruption(interruptionId);
@@ -399,6 +400,21 @@ export async function restoreInterruptedAttempt(
         });
       }
     }
+  } else {
+    // strict / operator_incident: zero grant, no adjustment. Evaluate via the
+    // canonical policy evaluator so the reason code is sourced from the same
+    // constants as bounded_grace rather than hand-duplicated here.
+    const decision = evaluateInterruptionTimePolicy({
+      snapshot,
+      detectedAt,
+      decisionNow: now,
+      beforeDeadline: attempt.deadlineAt ?? null,
+      examCloseAt: exam.closeAt,
+      priorBoundedGraceAddedSeconds: 0,
+    });
+    eligibleSeconds = decision.eligibleSeconds;
+    addedSeconds = decision.addedSeconds;
+    reasonCode = decision.reasonCode;
   }
 
   // 9. Build the resolution for deadline reconciliation.
