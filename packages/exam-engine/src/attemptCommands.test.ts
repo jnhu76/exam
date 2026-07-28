@@ -15,6 +15,8 @@ import type {
   Exam,
   ExamAttempt,
   ExamEnrollment,
+  AttemptInterruption,
+  AttemptInterruptionEvent,
   QuestionSnapshot,
   RequestContext,
 } from "@exam/domain";
@@ -27,6 +29,10 @@ import {
   MaxAttemptsReachedError,
 } from "@exam/domain";
 import { MisconductSeverity } from "@exam/domain";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
 
 function makeSnapshot(): QuestionSnapshot[] {
   return [
@@ -1203,22 +1209,134 @@ describe("attemptCommands", () => {
   });
 
   describe("markDisrupted", () => {
-    it("transitions in_progress → disrupted", async () => {
-      const attempt = makeAttempt();
+    function makeInterruptionRepos(): {
+      episodeRepo: InterruptionEpisodeRepository;
+      eventRepo: InterruptionEventRepository;
+    } {
+      let episodeIdCounter = 0;
+      return {
+        episodeRepo: {
+          create: async () => {
+            episodeIdCounter++;
+            return {
+              id: `episode-${episodeIdCounter}`,
+              organizationId: "org-1",
+              attemptId: "attempt-1",
+              createdAt: new Date("2025-01-01T10:05:00Z"),
+            } as AttemptInterruption;
+          },
+          findById: async () => null,
+          findByAttemptForUpdate: async () => null,
+          findLatestByAttempt: async () => null,
+        },
+        eventRepo: {
+          insert: async () => ({ id: "evt-1" }) as AttemptInterruptionEvent,
+          findDetected: async () => null,
+          findOutcome: async () => null,
+          findLatestOutcomeByAttempt: async () => null,
+        },
+      };
+    }
+
+    it("transitions in_progress → disrupted with episode + detected event", async () => {
+      const attempt = makeAttempt({
+        lastActivityAt: new Date("2025-01-01T09:55:00Z"),
+      });
       const attRepo = makeAttemptRepo([attempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
 
-      const result = await markDisrupted(attRepo, "attempt-1");
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
+      );
 
-      expect(result.status).toBe("disrupted");
+      expect(result.outcome).toBe("marked");
+      if (result.outcome === "marked") {
+        expect(result.attempt.status).toBe("disrupted");
+        expect(result.attempt.currentInterruptionId).toBe("episode-1");
+        expect(result.attempt.interruptedAt).toEqual(scannerTickNow);
+      }
     });
 
-    it("throws for non in_progress attempt", async () => {
+    it("returns fresh_under_lock when lastActivityAt is recent enough", async () => {
+      const attempt = makeAttempt({
+        lastActivityAt: new Date("2025-01-01T10:04:30Z"), // 30s ago, < 60s timeout
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
+      );
+
+      expect(result.outcome).toBe("fresh_under_lock");
+    });
+
+    it("returns fresh_under_lock when lastActivityAt is null", async () => {
+      const attempt = makeAttempt();
+      // The attempt must have no lastActivityAt to simulate a null value.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { lastActivityAt: _omit, ...rest } = attempt;
+      const attRepo = makeAttemptRepo([rest as ExamAttempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
+      );
+
+      expect(result.outcome).toBe("fresh_under_lock");
+    });
+
+    it("returns state_changed_before_lock for non in_progress attempt", async () => {
       const attempt = makeAttempt({ status: "submitted" });
       const attRepo = makeAttemptRepo([attempt]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
 
-      await expect(markDisrupted(attRepo, "attempt-1")).rejects.toThrow(
-        InvalidStateTransitionError,
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        scannerTickNow,
+        60,
       );
+
+      expect(result.outcome).toBe("state_changed_before_lock");
+    });
+
+    it("returns missing when attempt not found", async () => {
+      const attRepo = makeAttemptRepo([]);
+      const { episodeRepo, eventRepo } = makeInterruptionRepos();
+      const scannerTickNow = new Date("2025-01-01T10:05:00Z");
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "nonexistent",
+        scannerTickNow,
+        60,
+      );
+
+      expect(result.outcome).toBe("missing");
     });
   });
 

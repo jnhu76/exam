@@ -34,6 +34,10 @@ import {
   materializeGradingWorkset,
   validateGradingWorksetConsistency,
 } from "./gradingWorkset.js";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
 
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
@@ -376,30 +380,103 @@ export async function submitAttempt(
 }
 
 /**
- * Marks an attempt as disrupted (e.g., client heartbeat timeout).
- * Only applies to in_progress attempts.
+ * Outcome of the scanner's attempt to mark an attempt as disrupted.
+ *
+ * - `marked`: the attempt was successfully transitioned to `disrupted` with a
+ *   new episode + detected event.
+ * - `fresh_under_lock`: under the row lock the attempt was still `in_progress`
+ *   but its `lastActivityAt` was recent enough that no disruption was needed
+ *   (race between the scan and a heartbeat refresh).
+ * - `state_changed_before_lock`: by the time the row lock was acquired the
+ *   attempt was no longer `in_progress` (concurrent submit/restore/etc.).
+ * - `missing`: no row exists for the given id.
+ */
+export type ScannerDisruptResult =
+  | { outcome: "marked"; attempt: ExamAttempt }
+  | { outcome: "fresh_under_lock" }
+  | { outcome: "state_changed_before_lock" }
+  | { outcome: "missing" };
+
+/**
+ * Marks an attempt as disrupted due to heartbeat timeout.
+ *
+ * Owns the authoritative staleness decision under the attempt row lock
+ * (Attempt-only locking protocol, R12). Creates the interruption episode
+ * parent, inserts a `detected` event, and transitions the attempt to
+ * `disrupted` with the active pointer in one atomic unit.
+ *
+ * @param attemptRepo - Attempt repository (must support FOR UPDATE).
+ * @param episodeRepo - Interruption episode repository.
+ * @param eventRepo - Interruption event repository.
+ * @param attemptId - The attempt to disrupt.
+ * @param scannerTickNow - The scanner's single authoritative tick timestamp.
+ * @param heartbeatTimeoutSeconds - Staleness threshold in whole seconds.
+ * @returns The disruption outcome (see {@link ScannerDisruptResult}).
  */
 export async function markDisrupted(
   attemptRepo: AttemptRepository,
+  episodeRepo: InterruptionEpisodeRepository,
+  eventRepo: InterruptionEventRepository,
   attemptId: string,
-): Promise<ExamAttempt> {
-  const attempt = await attemptRepo.findById(attemptId);
+  scannerTickNow: Date,
+  heartbeatTimeoutSeconds: number,
+): Promise<ScannerDisruptResult> {
+  // 1. Lock the attempt row (Attempt-only, R12).
+  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
-    throw new ValidationError("Attempt not found");
+    return { outcome: "missing" };
   }
 
-  const result = transition(attempt.status, "disrupt" as AttemptCommand);
-  if (!isTransitionOk(result)) {
-    throw new InvalidStateTransitionError(
-      `Cannot mark disrupted from ${attempt.status} state`,
-    );
+  // 2. Recheck status under the row lock.
+  if (attempt.status !== "in_progress") {
+    return { outcome: "state_changed_before_lock" };
   }
 
-  const disrupted = await attemptRepo.update(attemptId, {
-    status: "disrupted",
+  // 3. Recheck staleness under the row lock. A concurrent heartbeat refresh
+  //    may have pushed lastActivityAt past the threshold between the scan and
+  //    the row lock.
+  if (
+    !attempt.lastActivityAt ||
+    scannerTickNow.getTime() - attempt.lastActivityAt.getTime() <
+      heartbeatTimeoutSeconds * 1000
+  ) {
+    return { outcome: "fresh_under_lock" };
+  }
+
+  // 4. Resolve the policy snapshot for the detected event. The snapshot must
+  //    exist for I2+ attempts; fall back to "strict" defensively.
+  const policy = attempt.interruptionTimingPolicySnapshot?.policy ?? "strict";
+
+  // 5. Create the episode parent.
+  const episode = await episodeRepo.create(attemptId);
+
+  // 6. Insert the detected event.
+  await eventRepo.insert({
+    attemptId,
+    interruptionId: episode.id,
+    eventType: "detected",
+    occurredAt: scannerTickNow,
+    observedLastActivityAt: attempt.lastActivityAt,
+    detectionSource: "heartbeat_timeout",
+    timeoutSeconds: heartbeatTimeoutSeconds,
+    policy,
+    eligibleSeconds: null,
+    timeAdjustmentId: null,
+    actorId: null,
+    reasonCode: "heartbeat_timeout",
   });
-  if (!disrupted) throw new ValidationError("Attempt not found after update");
-  return disrupted;
+
+  // 7. Transition the attempt to disrupted, set the active pointer.
+  const updated = await attemptRepo.update(attemptId, {
+    status: "disrupted",
+    currentInterruptionId: episode.id,
+    interruptedAt: scannerTickNow,
+  });
+  if (!updated) {
+    return { outcome: "missing" };
+  }
+
+  return { outcome: "marked", attempt: updated };
 }
 
 /**

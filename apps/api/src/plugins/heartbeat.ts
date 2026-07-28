@@ -2,12 +2,18 @@ import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { markDisrupted } from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
-import { createAttemptRepoAdapter } from "../adapters/repoAdapters.js";
+import {
+  createAttemptRepoAdapter,
+  createInterruptionEpisodeRepoAdapter,
+  createInterruptionEventRepoAdapter,
+} from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
@@ -104,37 +110,44 @@ function createSystemContext(organizationId: string): RequestContext {
 }
 
 /**
- * Marks a single attempt as disrupted inside a transaction with a
- * `FOR UPDATE` row lock and writes its audit entry in that transaction.
- * Mirrors the deadline scanner's `autoSubmitAndGrade` shape.
+ * Marks a single attempt as disrupted inside a transaction using the
+ * Attempt-only locking protocol (R12). Creates the interruption episode
+ * parent, inserts a `detected` event, and transitions the attempt to
+ * `disrupted` with the active pointer atomically.
+ *
+ * Only the attempt + interruption repos are constructed — no enrollment or
+ * exam repos (R12). The heartbeat timeout in whole seconds is read from
+ * runtime config.
  *
  * @returns `true` when the attempt was transitioned `in_progress` →
- *   `disrupted`; `false` for a no-op race (the locked row was no longer
- *   `in_progress`, or it vanished).
+ *   `disrupted`; `false` for a no-op (fresh under lock, state changed before
+ *   lock, or missing).
  */
 export async function markAttemptDisrupted(
   db: Database,
   ctx: RequestContext,
   attemptId: string,
+  heartbeatTimeoutSeconds: number,
+  now: Date,
 ): Promise<boolean> {
-  const stateChanged = await executeInTransaction(db, async (tx) => {
+  const result = await executeInTransaction(db, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
-    const locked = await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
-    if (!locked) return false;
-    // Re-check under the row lock: a concurrent submit/restore/grade may
-    // have moved the row out of in_progress between the scan and the lock.
-    if (locked.status !== "in_progress") return false;
+    const txInterruptionRepo = createAttemptInterruptionRepo(tx);
+    const txEventRepo = createAttemptInterruptionEventRepo(tx);
 
-    await markDisrupted(
+    const disruptionResult = await markDisrupted(
       createAttemptRepoAdapter(txAttemptRepo, ctx),
+      createInterruptionEpisodeRepoAdapter(txInterruptionRepo, ctx),
+      createInterruptionEventRepoAdapter(txEventRepo, ctx),
       attemptId,
+      now,
+      heartbeatTimeoutSeconds,
     );
-    return true;
+
+    return disruptionResult.outcome === "marked";
   });
 
-  if (!stateChanged) return false;
-
-  return true;
+  return result;
 }
 
 /**
@@ -172,7 +185,13 @@ export async function scanDatabaseForDisruptedAttempts(
       now,
       heartbeatTimeoutMs,
       async (attemptId) => {
-        return markAttemptDisrupted(db, ctx, attemptId);
+        return markAttemptDisrupted(
+          db,
+          ctx,
+          attemptId,
+          Math.floor(heartbeatTimeoutMs / 1000),
+          now,
+        );
       },
       {
         onError: (attemptId, err) => {
@@ -211,12 +230,13 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
     activeScan = (async () => {
       try {
         // ADR-006: one operation now per tick, from the time authority.
+        const tickNow = fastify.now();
         const result = await scanDatabaseForDisruptedAttempts(
           fastify,
-          fastify.now(),
+          tickNow,
           heartbeatTimeoutMs,
         );
-        heartbeatMetrics.lastScanAt = fastify.now();
+        heartbeatMetrics.lastScanAt = tickNow;
         heartbeatMetrics.disruptedCount += result.markedCount;
         if (result.markedCount > 0) {
           fastify.log.info(
