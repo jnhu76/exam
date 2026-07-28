@@ -135,7 +135,7 @@ test.describe("disconnect → disrupted → restore (P2A-J5)", () => {
   // value with safe headroom over the deterministic floor.
   test.setTimeout(60_000);
 
-  test("saved answer preserved and deadlineAt extended after disconnect/restore", async ({
+  test("saved answer preserved and deadlineAt unchanged after disconnect/restore (strict policy)", async ({
     browser,
     request,
   }) => {
@@ -169,7 +169,6 @@ test.describe("disconnect → disrupted → restore (P2A-J5)", () => {
     const deadlineBeforeMs = new Date(before.deadlineAt!).getTime();
 
     // Phase 2 — crash: close page+context, wait for heartbeat scanner.
-    const disconnectStart = Date.now();
     await page.close();
     await ctx.close();
     await waitForResumable(request, tokenV1, seeded.examId);
@@ -184,7 +183,8 @@ test.describe("disconnect → disrupted → restore (P2A-J5)", () => {
       .waitFor({ state: "visible" });
     await expect(page2.getByTestId("true-false-true")).toBeChecked();
 
-    // Phase 4 — deadlineAt must have been extended forward.
+    // Phase 4 — deadlineAt: with the default strict interruption policy the
+    // restore grants zero time, so the deadline is preserved (not extended).
     const tokenV2 = await candidateLoginByApi(
       request,
       seeded.candidate.username,
@@ -194,13 +194,9 @@ test.describe("disconnect → disrupted → restore (P2A-J5)", () => {
     expect(after.status).toBe("in_progress");
     expect(after.deadlineAt).toBeTruthy();
     const deadlineAfterMs = new Date(after.deadlineAt!).getTime();
-    const disconnectedMs = Date.now() - disconnectStart;
 
-    expect(deadlineAfterMs).toBeGreaterThan(deadlineBeforeMs);
-    const slackMs = 15_000;
-    expect(deadlineAfterMs - deadlineBeforeMs).toBeLessThanOrEqual(
-      disconnectedMs + slackMs,
-    );
+    // Strict policy = zero grant: the deadline must be unchanged.
+    expect(deadlineAfterMs).toBe(deadlineBeforeMs);
 
     expect(after.answers.length).toBe(1);
     expect(after.answers[0]!.answer).toBe(true);
