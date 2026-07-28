@@ -1,16 +1,8 @@
 import { randomUUID } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { asc, eq } from "drizzle-orm";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { asc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../database.js";
 import { schema } from "../schema/pg.js";
@@ -29,67 +21,44 @@ function migrationStatements(fileName: string): string[] {
 }
 
 /**
- * Apply migrations up to 0020 by creating a temporary journal that excludes
- * the 0021 entry, then using Drizzle's migrate function. This correctly
- * handles the full migration lifecycle including drizzle schema tracking.
+ * Apply the 0021 backfill in a transaction, inserting parent episodes,
+ * setting active pointers, and creating detected events for disrupted
+ * attempts that existed before the migration. The pre-0021 fixtures
+ * are inserted using raw SQL that omits the 0021 columns.
  */
-async function applyMigrationsThrough0020(
-  db: Awaited<ReturnType<typeof createDatabase>>["db"],
-  schemaName: string,
+async function apply0021Backfill(
+  conn: Awaited<ReturnType<typeof createDatabase>>,
 ): Promise<void> {
-  const journalPath = resolve(migrationsDir, "meta/_journal.json");
-  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
-    version: string;
-    dialect: string;
-    entries: Array<{
-      idx: number;
-      version: string;
-      when: number;
-      tag: string;
-      breakpoints: boolean;
-    }>;
-  };
-  const tmpDir = mkdtempSync("mig-0021-");
-  const tmpMigrationsDir = resolve(tmpDir, "migrations");
-  const tmpMetaDir = resolve(tmpMigrationsDir, "meta");
+  const file = readdirSync(migrationsDir).find((name) =>
+    name.startsWith("0021_"),
+  );
+  if (!file) throw new Error("0021 migration file not found");
 
-  try {
-    mkdirSync(tmpMetaDir, { recursive: true });
-    // Copy all migration SQL files up to 0020 to temp dir
-    const files = readdirSync(migrationsDir).filter(
-      (f) => f.endsWith(".sql") && f < "0021_",
-    );
-    for (const f of files) {
-      writeFileSync(
-        resolve(tmpMigrationsDir, f),
-        readFileSync(resolve(migrationsDir, f)),
-      );
-    }
-    // Write journal with only 0000-0020 entries
-    journal.entries = journal.entries.filter((e) => e.idx <= 20);
-    writeFileSync(
-      resolve(tmpMetaDir, "_journal.json"),
-      JSON.stringify(journal, null, 2),
-    );
-    // Copy snapshot files for 0000-0020
-    for (let i = 0; i <= 20; i++) {
-      const candidates = readdirSync(resolve(migrationsDir, "meta")).filter(
-        (f) => f.startsWith(`${String(i).padStart(4, "0")}_`),
-      );
-      for (const c of candidates) {
-        writeFileSync(
-          resolve(tmpMetaDir, c),
-          readFileSync(resolve(migrationsDir, "meta", c)),
-        );
-      }
-    }
+  // Extract only the backfill statements from the 0021 migration
+  const allStatements = migrationStatements(file);
+  const backfillStart = allStatements.findIndex((s) =>
+    s.includes("BEGIN 0021_INTERRUPTION_BACKFILL"),
+  );
+  const backfillEnd = allStatements.findIndex((s) =>
+    s.includes("END 0021_INTERRUPTION_BACKFILL"),
+  );
 
-    await migrate(db, {
-      migrationsFolder: tmpMigrationsDir,
-      migrationsSchema: schemaName,
-    });
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
+  if (backfillStart === -1 || backfillEnd === -1) {
+    throw new Error("Could not find backfill section in 0021 migration");
+  }
+
+  // The backfill section is a single statement with BEGIN/END markers
+  // Extract the actual SQL statements between the markers
+  for (let i = backfillStart; i <= backfillEnd; i++) {
+    const stmt = allStatements[i]!;
+    // Remove the marker comments
+    const clean = stmt
+      .replace(/^--\s*BEGIN\s+0021_INTERRUPTION_BACKFILL\s*$/m, "")
+      .replace(/^--\s*END\s+0021_INTERRUPTION_BACKFILL\s*$/m, "")
+      .trim();
+    if (clean.length > 0) {
+      await conn.sql.unsafe(clean);
+    }
   }
 }
 
@@ -272,7 +241,16 @@ describe("0021 interruption policy migration backfill", () => {
   beforeAll(async () => {
     iso = await setupIsolatedTestDb({ namespace: "mig0021" });
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-    await applyMigrationsThrough0020(conn.db, iso.schemaName);
+
+    // Apply pre-0021 migrations using raw SQL
+    const files = readdirSync(migrationsDir)
+      .filter((file) => /^\d{4}_.+\.sql$/.test(file) && file < "0021_")
+      .sort();
+    for (const file of files) {
+      for (const statement of migrationStatements(file)) {
+        await conn.sql.unsafe(statement);
+      }
+    }
 
     const createdAt = new Date("2025-12-31T00:00:00.000Z");
     const lastActivityAt = new Date("2025-12-31T23:00:00.000Z");
@@ -468,13 +446,43 @@ describe("0021 interruption policy migration backfill", () => {
       updatedAt: createdAt,
     });
 
+    // Apply the 0021 migration: first the schema changes, then the backfill
     const file = readdirSync(migrationsDir).find((name) =>
       name.startsWith("0021_"),
     );
     if (!file) throw new Error("0021 migration file not found");
+    const allStatements = migrationStatements(file);
+
+    // Split into schema-change statements (before backfill) and backfill
+    const backfillIdx = allStatements.findIndex((s) =>
+      s.includes("0021_INTERRUPTION_BACKFILL"),
+    );
+    const schemaStatements = allStatements.filter(
+      (_, i) => i < backfillIdx || i > backfillIdx,
+    );
+    const backfillStatement = allStatements[backfillIdx]!;
+
+    // Apply schema changes (ALTER TABLE, CREATE TABLE, etc.)
     await conn.sql.begin(async (transaction) => {
-      for (const statement of migrationStatements(file)) {
-        await transaction.unsafe(statement);
+      for (const statement of schemaStatements) {
+        const clean = statement
+          .replace(/^--\s*BEGIN\s+0021_INTERRUPTION_BACKFILL\s*$/m, "")
+          .replace(/^--\s*END\s+0021_INTERRUPTION_BACKFILL\s*$/m, "")
+          .trim();
+        if (clean.length > 0) {
+          await transaction.unsafe(clean);
+        }
+      }
+    });
+
+    // Apply backfill (INSERT parent episodes, SET pointers, INSERT events)
+    await conn.sql.begin(async (transaction) => {
+      const clean = backfillStatement
+        .replace(/^--\s*BEGIN\s+0021_INTERRUPTION_BACKFILL\s*$/m, "")
+        .replace(/^--\s*END\s+0021_INTERRUPTION_BACKFILL\s*$/m, "")
+        .trim();
+      if (clean.length > 0) {
+        await transaction.unsafe(clean);
       }
     });
   });
