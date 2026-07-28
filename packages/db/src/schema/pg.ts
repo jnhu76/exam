@@ -461,6 +461,14 @@ export const examAttempts = pgTable(
         (${table.currentInterruptionId} IS NOT NULL AND ${table.interruptedAt} IS NOT NULL)
       `,
     ),
+    check(
+      "exam_attempts_status_pointer_check",
+      sql`
+        (${table.status} = 'disrupted' AND ${table.currentInterruptionId} IS NOT NULL AND ${table.interruptedAt} IS NOT NULL)
+        OR
+        (${table.status} != 'disrupted' AND ${table.currentInterruptionId} IS NULL AND ${table.interruptedAt} IS NULL)
+      `,
+    ),
   ],
 );
 
