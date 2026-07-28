@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../database.js";
 import { schema } from "../schema/pg.js";
@@ -20,16 +28,64 @@ function migrationStatements(fileName: string): string[] {
     .filter((statement) => statement.length > 0);
 }
 
+/**
+ * Apply migrations up to 0020 by creating a temporary journal that excludes
+ * the 0021 entry, then using Drizzle's migrate function. This correctly
+ * handles the full migration lifecycle including drizzle schema tracking.
+ */
 async function applyMigrationsThrough0020(
-  sql: Awaited<ReturnType<typeof createDatabase>>["sql"],
+  db: Awaited<ReturnType<typeof createDatabase>>["db"],
 ): Promise<void> {
-  const files = readdirSync(migrationsDir)
-    .filter((file) => /^\d{4}_.+\.sql$/.test(file) && file < "0021_")
-    .sort();
-  for (const file of files) {
-    for (const statement of migrationStatements(file)) {
-      await sql.unsafe(statement);
+  const journalPath = resolve(migrationsDir, "meta/_journal.json");
+  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+    version: string;
+    dialect: string;
+    entries: Array<{
+      idx: number;
+      version: string;
+      when: number;
+      tag: string;
+      breakpoints: boolean;
+    }>;
+  };
+  const tmpDir = mkdtempSync("mig-0021-");
+  const tmpMigrationsDir = resolve(tmpDir, "migrations");
+  const tmpMetaDir = resolve(tmpMigrationsDir, "meta");
+
+  try {
+    mkdirSync(tmpMetaDir, { recursive: true });
+    // Copy all migration SQL files up to 0020 to temp dir
+    const files = readdirSync(migrationsDir).filter(
+      (f) => f.endsWith(".sql") && f < "0021_",
+    );
+    for (const f of files) {
+      writeFileSync(
+        resolve(tmpMigrationsDir, f),
+        readFileSync(resolve(migrationsDir, f)),
+      );
     }
+    // Write journal with only 0000-0020 entries
+    journal.entries = journal.entries.filter((e) => e.idx <= 20);
+    writeFileSync(
+      resolve(tmpMetaDir, "_journal.json"),
+      JSON.stringify(journal, null, 2),
+    );
+    // Copy snapshot files for 0000-0020
+    for (let i = 0; i <= 20; i++) {
+      const candidates = readdirSync(resolve(migrationsDir, "meta")).filter(
+        (f) => f.startsWith(`${String(i).padStart(4, "0")}_`),
+      );
+      for (const c of candidates) {
+        writeFileSync(
+          resolve(tmpMetaDir, c),
+          readFileSync(resolve(migrationsDir, "meta", c)),
+        );
+      }
+    }
+
+    await migrate(db, { migrationsFolder: tmpMigrationsDir });
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
@@ -212,7 +268,7 @@ describe("0021 interruption policy migration backfill", () => {
   beforeAll(async () => {
     iso = await setupIsolatedTestDb({ namespace: "mig0021" });
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-    await applyMigrationsThrough0020(conn.sql);
+    await applyMigrationsThrough0020(conn.db);
 
     const createdAt = new Date("2025-12-31T00:00:00.000Z");
     const lastActivityAt = new Date("2025-12-31T23:00:00.000Z");
