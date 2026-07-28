@@ -5,7 +5,8 @@
 
 ```text
 Last runtime verified against: 1f337bf87ea667278ceaac10b5068956cd65f324
-Recovery contract updated in: PR #218 / ADR-013 (REC-I4-R0)
+Recovery contract authority: PR #218 / ADR-012
+Interruption-policy freeze: ADR-013 / REC-I4-R0
 
 Verification scope:
 Runtime behavior verified after merged PRs #218, #219, and #221.

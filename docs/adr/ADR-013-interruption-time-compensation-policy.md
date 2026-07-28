@@ -635,10 +635,10 @@ Idempotency rules:
 - Operator grants require a new sensitive `Permission.AttemptTimeGrant`
   (`attempt.time.grant`) at the target attempt's scope, enforced through the
   scoped resolver.
-- The built-in Admin compatibility role may hold this permission.
-- A Proctor may hold it only when the Proctor product role is activated and an
-  assignment authorizes the target Exam/Attempt scope; Proctor may create only
-  `source=operator` rows.
+- In Phase 1.x, only Admin may hold and invoke this operator-grant permission.
+- Teacher-like, Proctor, and Grader product roles remain outside Phase 1.x.
+  Binding this permission to a future scoped role is a separate Phase 3
+  decision and is not authorized by REC-I4.
 - `source=administrative_correction` additionally requires the Admin role and
   a narrower `attempt.time.correct` permission.
 - `source=system_incident` remains disabled until REC-I6 defines a System-only
@@ -750,7 +750,8 @@ insert, atomic deadline update, deadline ordering, and engine tests.
 ### REC-I4-I3 — API and authoring surfaces
 
 Candidate restore wiring, Exam create/edit configuration, operator reason and
-attribution, scoped permission enforcement, OpenAPI, and admin/proctor tests.
+attribution, scoped permission enforcement, OpenAPI, and Admin/Candidate
+authorization tests. REC-I4-I3 does not expose a Proctor product surface.
 
 ### REC-I4-V1 — Verification closeout
 

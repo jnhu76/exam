@@ -508,8 +508,9 @@ for a later operator command, but its public contract is insufficient:
   administrative correction.
 
 I3 must either wrap or replace this command behind a policy-aware operator
-grant seam. It must not silently reinterpret every existing manual extension
-as an interruption incident.
+grant seam and replace the flat `requireCapability` check with
+`requireScopedCapability` for the new grant authority. It must not silently
+reinterpret every existing manual extension as an interruption incident.
 
 ## Threat/abuse cases
 
@@ -956,9 +957,10 @@ replacement for the attempt row lock and state re-check.
   `bounded_grace`; it must not masquerade as a human Admin.
 - Operator grant requires the dedicated sensitive permission
   `attempt.time.grant`, resolved against the attempt/exam scope.
-- Admin may hold the permission as compatibility superset.
-- Proctor may hold it only within assigned exam scope and may create only
-  `source=operator` rows.
+- In Phase 1.x, only Admin may hold and invoke the operator-grant permission.
+- Teacher-like, Proctor, and Grader product roles remain deferred. A future
+  Phase 3 decision may bind the permission to a scoped role; REC-I4 does not
+  authorize or expose that product surface.
 - `administrative_correction` is Admin-only and additionally requires
   `attempt.time.correct`.
 - `system_incident` grant remains disabled until REC-I6 defines incident
@@ -1010,7 +1012,7 @@ only in I2 after old rows are safely backfilled.
 | Aggregate | Multiple episodes consume remaining cap exactly; zero remaining gives zero grant/event only. |
 | Deadline ordering | Old deadline expired but terminal transition uncommitted; bounded policy may apply first; already-terminal always rejects restore. |
 | Races | Heartbeat scanner vs submit; heartbeat scanner vs deadline scanner; manual grant vs bounded grant; exam close/update vs adjustment. |
-| Operator | Required reason/actor/operationId; same replay; conflicting payload; scoped Proctor; cross-scope denial; Candidate denial. |
+| Operator | Required reason/actor/operationId; same replay; conflicting payload; Admin grant; Candidate denial; no Phase 1.x Proctor surface. |
 | Ledger constraints | Append-only API; positive seconds; before/after equality; close cap; organization isolation. |
 | Infrastructure | Two scanners with advisory-lock leader experiment; Redis absent/down has no semantic effect. |
 | E2E | Strict default recovery; configured bounded recovery; terminal race; operator grant attribution. |
@@ -1052,7 +1054,8 @@ candidate restore wiring
 Exam create/edit policy config
 operator grant reason + operation identity + attribution
 resource-scoped permissions and OpenAPI
-Admin/Proctor/API tests
+Admin/Candidate/API authorization tests
+no Proctor product surface
 ```
 
 ### REC-I4-V1 — Verification closeout
@@ -1079,17 +1082,47 @@ implementation PR is not authorized.
 
 The docs-only closeout gates passed on 2026-07-28:
 
+### Modified files
+
+```text
+docs/README.md
+docs/adr/ADR-013-interruption-time-compensation-policy.md
+docs/adr/README.md
+docs/architecture/exam-system/candidate-recovery.md
+docs/architecture/exam-system/state-and-authority.md
+docs/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md
+docs/deployment/mvp-deployment-runbook.md
+docs/roadmap/current.md
+docs/status/implementation-status.md
+```
+
+### Markdown verification
+
+```bash
+pnpm exec markdownlint-cli2 --no-globs \
+  :docs/README.md \
+  :docs/adr/README.md \
+  :docs/adr/ADR-013-interruption-time-compensation-policy.md \
+  :docs/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md \
+  :docs/architecture/exam-system/candidate-recovery.md \
+  :docs/architecture/exam-system/state-and-authority.md \
+  :docs/deployment/mvp-deployment-runbook.md \
+  :docs/roadmap/current.md \
+  :docs/status/implementation-status.md
+```
+
 | Command | Result |
 | --- | --- |
 | `pnpm format:check` | PASS — all matched files use Prettier formatting. |
 | `pnpm lint:copy` | PASS — no hardcoded business copy found. |
 | `pnpm lint:arch` | PASS — architecture checks passed. |
 | `pnpm verify:static` | PASS — code-quality, DB/environment/repository/UI guards, ESLint, TypeScript, and OpenAPI checks passed. |
-| `pnpm exec markdownlint-cli2 --no-globs :<each changed Markdown path>` | PASS — nine changed Markdown files, zero issues. |
+| Changed-file Markdown command above | PASS — nine changed Markdown files, zero issues. |
+| `pnpm verify` | PASS — static checks, workspace coverage, and production build completed successfully. |
 | `git diff --check` | PASS — no whitespace errors. |
 
-No runtime test or coverage command was required for this docs-only Job.
-No tests were added or modified.
+No tests were added or modified. The full `pnpm verify` command covers static
+checks, coverage, and build without expanding this docs-only change scope.
 
 ## Explicit non-goals
 
