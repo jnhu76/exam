@@ -1,8 +1,10 @@
 import type {
   AttemptGradingEntry,
+  AttemptTimingPolicySnapshot,
   Exam,
   ExamAttempt,
   ExamEnrollment,
+  InterruptionTimePolicy,
   RequestContext,
 } from "@exam/domain";
 import type { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -76,6 +78,35 @@ function flattenInterruptionSnapshotForCreate(
 }
 
 /**
+ * Reconstructs the nested {@link ExamAttempt.interruptionTimingPolicySnapshot}
+ * domain projection from the flat DB snapshot columns on read. The DB stores
+ * four columns (`interruption_policy_snapshot_version`,
+ * `interruption_time_policy_snapshot`,
+ * `interruption_grace_per_incident_seconds_snapshot`,
+ * `interruption_grace_per_attempt_seconds_snapshot`); the engine command layer
+ * expects the single nested object.
+ */
+function hydrateAttemptFromDb(row: unknown): ExamAttempt {
+  const r = row as Record<string, unknown>;
+  const policy = r.interruptionTimePolicySnapshot as
+    | InterruptionTimePolicy
+    | undefined;
+  const snapshot: AttemptTimingPolicySnapshot | undefined = policy
+    ? {
+        schemaVersion: 1,
+        policy,
+        perIncidentCapSeconds:
+          (r.interruptionGracePerIncidentSecondsSnapshot as number | null) ??
+          null,
+        perAttemptAggregateCapSeconds:
+          (r.interruptionGracePerAttemptSecondsSnapshot as number | null) ??
+          null,
+      }
+    : undefined;
+  return { ...r, interruptionTimingPolicySnapshot: snapshot } as ExamAttempt;
+}
+
+/**
  * Adapts the DB attempt repo to the AttemptRepository interface expected by
  * the exam-engine command functions, binding the request context.
  */
@@ -84,40 +115,47 @@ export function createAttemptRepoAdapter(
   ctx: RequestContext,
 ): AttemptRepository {
   return {
-    findById: async (id) =>
-      (await repo.findById(ctx, id)) as ExamAttempt | null,
-    findByIdForUpdate: async (id) =>
-      (await repo.findByIdForUpdate(ctx, id)) as ExamAttempt | null,
-    findActiveByEnrollment: async (enrollmentId) =>
-      (await repo.findActiveByEnrollment(
-        ctx,
-        enrollmentId,
-      )) as ExamAttempt | null,
-    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) =>
-      (await repo.findByEnrollmentAndAttemptNo(
+    findById: async (id) => {
+      const row = await repo.findById(ctx, id);
+      return row ? hydrateAttemptFromDb(row) : null;
+    },
+    findByIdForUpdate: async (id) => {
+      const row = await repo.findByIdForUpdate(ctx, id);
+      return row ? hydrateAttemptFromDb(row) : null;
+    },
+    findActiveByEnrollment: async (enrollmentId) => {
+      const row = await repo.findActiveByEnrollment(ctx, enrollmentId);
+      return row ? hydrateAttemptFromDb(row) : null;
+    },
+    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) => {
+      const row = await repo.findByEnrollmentAndAttemptNo(
         ctx,
         enrollmentId,
         attemptNo,
-      )) as ExamAttempt | null,
+      );
+      return row ? hydrateAttemptFromDb(row) : null;
+    },
     create: async (input) =>
-      (await repo.create(
-        ctx,
-        flattenInterruptionSnapshotForCreate(input) as Parameters<
-          typeof repo.create
-        >[1],
-      )) as ExamAttempt,
-    update: async (id, data) =>
-      (await repo.update(
+      hydrateAttemptFromDb(
+        await repo.create(
+          ctx,
+          flattenInterruptionSnapshotForCreate(input) as Parameters<
+            typeof repo.create
+          >[1],
+        ),
+      ),
+    update: async (id, data) => {
+      const row = await repo.update(
         ctx,
         id,
         data as Parameters<typeof repo.update>[2],
-      )) as ExamAttempt | null,
-    refreshLastActivityIfInProgress: async (id, now) =>
-      (await repo.refreshLastActivityIfInProgress(
-        ctx,
-        id,
-        now,
-      )) as ExamAttempt | null,
+      );
+      return row ? hydrateAttemptFromDb(row) : null;
+    },
+    refreshLastActivityIfInProgress: async (id, now) => {
+      const row = await repo.refreshLastActivityIfInProgress(ctx, id, now);
+      return row ? hydrateAttemptFromDb(row) : null;
+    },
   };
 }
 

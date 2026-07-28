@@ -16,6 +16,7 @@ import {
   ensureAttemptDeadlineReconciled,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
+import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
@@ -107,6 +108,41 @@ export async function submitAndGradeAttempt(
         ctx,
       );
 
+      // R1/R9: build interruption repos for resolution. These are needed for
+      // both reconciliation and submit terminalization.
+      const episodeRepo = createInterruptionEpisodeRepoAdapter(
+        createAttemptInterruptionRepo(tx),
+        ctx,
+      );
+      const eventRepo = createInterruptionEventRepoAdapter(
+        createAttemptInterruptionEventRepo(tx),
+        ctx,
+      );
+
+      // Build the resolution based on the locked attempt's status.
+      // For disrupted: active_interruption with candidate_submit_terminalization.
+      // For in_progress: mode none (no active interruption).
+      const buildResolution = (
+        attemptStatus: ExamAttempt["status"],
+      ): SubmitInterruptionResolution => {
+        if (attemptStatus === "disrupted") {
+          return {
+            mode: "active_interruption",
+            episodeRepo,
+            eventRepo,
+            hint: {
+              policy:
+                lockedAttempt.interruptionTimingPolicySnapshot?.policy ??
+                "strict",
+              eligibleSeconds: null,
+              adjustmentId: null,
+              reasonCode: "candidate_submit_terminalization",
+            },
+          };
+        }
+        return { mode: "none", episodeRepo, eventRepo };
+      };
+
       // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
       // is past its effective deadline, freeze it as deadline-submitted
       // (submittedAt = effectiveDeadline, submissionReason='deadline') and
@@ -126,6 +162,7 @@ export async function submitAndGradeAttempt(
           gradingWorksetRepo,
           cap,
           now,
+          buildResolution(status),
         );
         const reconciledStatus = reconciled.status;
         // If reconciliation already froze the attempt, skip the remaining
@@ -149,39 +186,12 @@ export async function submitAndGradeAttempt(
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
         // P3-L0-2E: submitAttempt owns grading workset materialization.
-
-        // For disrupted→submitted, build the interruption resolution (R1).
-        // The resolution ensures the terminalized event is appended and the
-        // active interruption pointer is cleared.
-        const resolution =
-          currentStatus === "disrupted"
-            ? {
-                mode: "active_interruption" as const,
-                episodeRepo: createInterruptionEpisodeRepoAdapter(
-                  createAttemptInterruptionRepo(tx),
-                  ctx,
-                ),
-                eventRepo: createInterruptionEventRepoAdapter(
-                  createAttemptInterruptionEventRepo(tx),
-                  ctx,
-                ),
-                hint: {
-                  policy:
-                    lockedAttempt.interruptionTimingPolicySnapshot?.policy ??
-                    "strict",
-                  eligibleSeconds: 0,
-                  adjustmentId: null,
-                  reasonCode: "strict_zero_grant",
-                },
-              }
-            : undefined;
-
         await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
           source: "candidate",
           minSubmitAfterStartMinutes:
             (await exams.findById(lockedAttempt.examId))
               ?.minSubmitAfterStartMinutes ?? null,
-          ...(resolution !== undefined && { resolution }),
+          resolution: buildResolution(currentStatus),
         });
         if (audit) {
           await recordAtomicHttpAudit(tx, audit.request, ctx, {

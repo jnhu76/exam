@@ -10,8 +10,8 @@ export type AttemptTimeAdjustmentRow =
 
 export type InsertAttemptTimeAdjustmentInput = Omit<
   AttemptTimeAdjustment,
-  "id" | "organizationId" | "createdAt"
->;
+  "id" | "organizationId" | "createdAt" | "operationId"
+> & { operationId?: string };
 
 export function createAttemptTimeAdjustmentRepo(db: Database) {
   async function insert(
@@ -23,6 +23,7 @@ export function createAttemptTimeAdjustmentRepo(db: Database) {
       .values({
         ...adjustment,
         id: randomUUID(),
+        operationId: adjustment.operationId ?? randomUUID(),
         organizationId: resolveOrganizationId(ctx),
       })
       .returning();

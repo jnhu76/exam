@@ -113,26 +113,6 @@ const OPEN_STATUSES: Set<string> = new Set(["published", "open"]);
 const NOT_ENROLLED_MESSAGE =
   "Candidate is not enrolled in this exam. An Admin must assign the candidate first.";
 
-/** Starts a new attempt or restores a disrupted attempt for the given candidate. */
-export async function startAttempt(
-  examRepo: ExamRepository,
-  enrollmentRepo: EnrollmentRepository,
-  attemptRepo: AttemptRepository,
-  examId: string,
-  candidateId: string,
-  now: Date,
-): Promise<ExamAttempt> {
-  const { attempt } = await startOrRestoreAttempt(
-    examRepo,
-    enrollmentRepo,
-    attemptRepo,
-    examId,
-    candidateId,
-    now,
-  );
-  return attempt;
-}
-
 /** Result returned when starting or restoring an attempt. */
 export interface StartAttemptResult {
   attempt: ExamAttempt;
@@ -144,6 +124,14 @@ export interface StartAttemptOptions {
   unassignedErrorFactory?: (message: string) => Error;
 }
 
+/** Required interruption/grading dependencies for the restore path. */
+export interface StartOrRestoreDependencies {
+  episodeRepo: InterruptionEpisodeRepository;
+  eventRepo: InterruptionEventRepository;
+  adjustmentRepo: TimeAdjustmentRepository;
+  gradingWorksetRepo: GradingWorksetRepository;
+}
+
 /**
  * Starts or restores an exam attempt for the given candidate.
  *
@@ -153,11 +141,8 @@ export interface StartAttemptOptions {
  * validates eligibility and creates a new attempt with the interruption
  * timing policy snapshot.
  *
- * The extended signature accepts interruption and grading repos so the
- * disrupted→restore path is fully wired. When called without interruption
- * repos (legacy `startAttempt` wrapper), the disrupted path is skipped and
- * an in-progress attempt is returned directly (the caller is responsible
- * for providing the full set when restore is needed).
+ * All interruption and grading repos are REQUIRED — there is no valid
+ * production or test invocation that omits them.
  */
 export async function startOrRestoreAttempt(
   examRepo: ExamRepository,
@@ -166,12 +151,7 @@ export async function startOrRestoreAttempt(
   examId: string,
   candidateId: string,
   now: Date,
-  options: StartAttemptOptions & {
-    episodeRepo?: InterruptionEpisodeRepository;
-    eventRepo?: InterruptionEventRepository;
-    adjustmentRepo?: TimeAdjustmentRepository;
-    gradingWorksetRepo?: GradingWorksetRepository;
-  } = {},
+  options: StartAttemptOptions & StartOrRestoreDependencies,
 ): Promise<StartAttemptResult> {
   const exam = await examRepo.findById(examId);
   if (!exam) {
@@ -211,10 +191,6 @@ export async function startOrRestoreAttempt(
     }
     if (
       lockResult.activeAttempt.status === "disrupted" &&
-      options.episodeRepo &&
-      options.eventRepo &&
-      options.adjustmentRepo &&
-      options.gradingWorksetRepo &&
       lockResult.capability
     ) {
       const result = await restoreInterruptedAttempt(
@@ -230,21 +206,14 @@ export async function startOrRestoreAttempt(
       );
       return { attempt: result.attempt, isNew: false };
     }
-    // Disrupted but no restore repos available → return as-is (legacy path).
-    return { attempt: lockResult.activeAttempt, isNew: false };
+    throw new ValidationError(
+      `Cannot start: active attempt in unexpected state ${lockResult.activeAttempt.status}`,
+    );
   }
 
   // No active attempt — validate and create a new one.
-  // The seam already locked the enrollment; re-read its data.
-  const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
-    examId,
-    candidateId,
-  );
-  if (!enrollment) {
-    throw options.unassignedErrorFactory
-      ? options.unassignedErrorFactory(NOT_ENROLLED_MESSAGE)
-      : new ValidationError(NOT_ENROLLED_MESSAGE);
-  }
+  // The seam already locked the enrollment; use it directly.
+  const enrollment = lockResult.enrollment;
 
   if (
     exam.retakePolicy === "max_attempts" &&
@@ -351,14 +320,18 @@ export async function submitAttempt(
      */
     submissionReason?: "manual" | "deadline";
     /**
-     * Interruption resolution for disrupted→submitted terminalization (R1/R9).
-     * Required when the attempt is `disrupted`; the caller must provide an
-     * `active_interruption` resolution with the policy evaluator's output.
-     * When the attempt is `in_progress`, this may be omitted (defaults to
-     * `undefined`, which skips interruption resolution).
+     * Interruption resolution for submit terminalization (R1/R9).
+     * REQUIRED for every submit call. The caller must provide:
+     * - `mode: "none"` when the attempt is `in_progress` (no active interruption).
+     * - `mode: "active_interruption"` when the attempt is `disrupted`, with the
+     *   policy evaluator's output hint.
+     *
+     * Under-lock enforcement:
+     * - `disrupted + mode=none` → fail closed.
+     * - `in_progress + mode=active_interruption` → fail closed.
      */
-    resolution?: SubmitInterruptionResolution;
-  } = {},
+    resolution: SubmitInterruptionResolution;
+  },
 ): Promise<ExamAttempt> {
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
@@ -366,23 +339,13 @@ export async function submitAttempt(
   }
 
   // R1/R9: resolve interruption terminalization BEFORE the status transition.
-  // When the caller explicitly provides a resolution, terminalize the active
-  // interruption. If the attempt is disrupted and the caller explicitly passes
-  // `resolution: undefined`, fail closed. If the caller does not pass
-  // `resolution` at all, skip the check (compatibility with old callers during
-  // the transition).
-  if (attempt.status === "disrupted" && "resolution" in opts) {
-    if (!opts.resolution) {
-      throw new ValidationError(
-        "Cannot submit a disrupted attempt without interruption resolution",
-      );
-    }
-    await resolveActiveInterruptionOnTerminalization(
-      attempt,
-      opts.resolution,
-      now,
-    );
-  }
+  // Every submit call provides an explicit resolution. The resolution function
+  // enforces the under-lock status/mode consistency rules.
+  await resolveActiveInterruptionOnTerminalization(
+    attempt,
+    opts.resolution,
+    now,
+  );
 
   const existingEntries = await gradingWorksetRepo.findByAttempt(attemptId);
 
@@ -536,9 +499,14 @@ export async function markDisrupted(
     return { outcome: "fresh_under_lock" };
   }
 
-  // 4. Resolve the policy snapshot for the detected event. The snapshot must
-  //    exist for I2+ attempts; fall back to "strict" defensively.
-  const policy = attempt.interruptionTimingPolicySnapshot?.policy ?? "strict";
+  // 4. Resolve the policy snapshot for the detected event. Post-I2 migration,
+  //    every active attempt MUST have a snapshot; fail closed if missing.
+  if (!attempt.interruptionTimingPolicySnapshot) {
+    throw new ValidationError(
+      "Cannot disrupt attempt: missing interruption timing policy snapshot",
+    );
+  }
+  const policy = attempt.interruptionTimingPolicySnapshot.policy;
 
   // 5. Create the episode parent.
   const episode = await episodeRepo.create(attemptId);
@@ -570,63 +538,6 @@ export async function markDisrupted(
   }
 
   return { outcome: "marked", attempt: updated };
-}
-
-/**
- * Restores a disrupted attempt to in_progress state, refreshing the last activity timestamp
- * and adjusting the deadline to compensate for time spent disconnected.
- * Uses row-level locking to prevent concurrent restore double-applying the adjustment.
- */
-export async function restoreAttempt(
-  examRepo: ExamRepository,
-  attemptRepo: AttemptRepository,
-  attemptId: string,
-  now: Date,
-): Promise<ExamAttempt> {
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
-  if (!attempt) {
-    throw new ValidationError("Attempt not found");
-  }
-
-  if (attempt.status === "in_progress") {
-    return attempt;
-  }
-
-  const result = transition(attempt.status, "restore" as AttemptCommand);
-  if (!isTransitionOk(result)) {
-    throw new InvalidStateTransitionError(
-      `Cannot restore attempt from ${attempt.status} state`,
-    );
-  }
-
-  const exam = await examRepo.findById(attempt.examId);
-  if (!exam) {
-    throw new ValidationError("Exam not found");
-  }
-
-  const disconnectedDuration = Math.max(
-    0,
-    now.getTime() - (attempt.lastActivityAt?.getTime() ?? now.getTime()),
-  );
-
-  let updatedDeadline: Date | undefined;
-  if (attempt.deadlineAt) {
-    const adjustedDeadline =
-      attempt.deadlineAt.getTime() + disconnectedDuration;
-    updatedDeadline = exam.closeAt
-      ? new Date(Math.min(adjustedDeadline, exam.closeAt.getTime()))
-      : new Date(adjustedDeadline);
-  }
-
-  const updateData: Partial<ExamAttempt> = {
-    status: "in_progress",
-    lastActivityAt: now,
-    ...(updatedDeadline !== undefined && { deadlineAt: updatedDeadline }),
-  };
-
-  const restored = await attemptRepo.update(attemptId, updateData);
-  if (!restored) throw new ValidationError("Attempt not found after update");
-  return restored;
 }
 
 /**
@@ -739,7 +650,7 @@ export async function flagMisconduct(
 /**
  * Extends an attempt's deadline by a positive number of minutes (admin
  * intervention). Allowed for in_progress/disrupted attempts only. Unlike
- * `restoreAttempt`, the extension is REJECTED (not clamped) when the new
+ * `restoreInterruptedAttempt`, the extension is REJECTED (not clamped) when the new
  * deadline would exceed `exam.closeAt`.
  *
  * P2C-J3 §16/§17: no state transition — only `deadlineAt` is updated. The

@@ -506,17 +506,10 @@ describe("0021 interruption policy migration — real 0020 → 0021 upgrade", ()
 });
 
 /**
- * Guard test: a disrupted attempt that appears AFTER the 0021 migration (i.e.
- * produced by the new scanner/runtime) is a DISTINCT population from the
- * historical backfilled rows. Per the brief, I1 permits the new scanner to
- * produce `disrupted + null pointer` rows after migration — that is a
- * runtime-created row, NOT a historical row, and is therefore NOT backfilled.
- *
- * This test documents that boundary without depending on a real scanner: it
- * creates a bare disrupted attempt via the repository's normal insert path on
- * a fully-migrated schema and confirms the migration did NOT retroactively
- * populate its interruption pointer/parent/event (the migration only ever ran
- * once, against pre-existing historical rows).
+ * Guard test: after migration 0022 adds the status-pointer CHECK constraint,
+ * a disrupted attempt WITHOUT a valid interruption pointer is rejected by the
+ * database. The scanner must atomically create episode + event + set pointer
+ * in the same transaction that flips status to disrupted.
  */
 describe("0021 — post-migration disrupted rows are a distinct population", () => {
   let iso: IsolatedTestDb;
@@ -621,13 +614,32 @@ describe("0021 — post-migration disrupted rows are a distinct population", () 
     if (iso) await iso.cleanup();
   });
 
-  it("a disrupted attempt created after migration has a null interruption pointer until the scanner runs", async () => {
+  it("CHECK constraint rejects a disrupted attempt without interruption pointer", async () => {
     const attemptId = randomUUID();
     const now = new Date("2026-03-01T00:00:00.000Z");
-    // Insert a bare, post-migration disrupted attempt WITHOUT going through
-    // any scanner / repository interruption-create path. This mirrors the I1
-    // runtime scenario where the scanner has flagged the row disrupted but the
-    // pointer has not yet been populated.
+    await expect(
+      conn.db.insert(schema.examAttempts).values({
+        id: attemptId,
+        organizationId,
+        examId,
+        enrollmentId,
+        candidateId,
+        attemptNo: 1,
+        status: "disrupted",
+        questionSnapshot: [],
+        answers: [],
+        deadlineAt: new Date("2026-04-01T00:00:00.000Z"),
+        lastActivityAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("scanner-pattern: in_progress → episode + event + pointer → disrupted succeeds", async () => {
+    const attemptId = randomUUID();
+    const episodeId = randomUUID();
+    const now = new Date("2026-03-01T00:00:00.000Z");
     await conn.db.insert(schema.examAttempts).values({
       id: attemptId,
       organizationId,
@@ -635,7 +647,7 @@ describe("0021 — post-migration disrupted rows are a distinct population", () 
       enrollmentId,
       candidateId,
       attemptNo: 1,
-      status: "disrupted",
+      status: "in_progress",
       questionSnapshot: [],
       answers: [],
       deadlineAt: new Date("2026-04-01T00:00:00.000Z"),
@@ -643,25 +655,42 @@ describe("0021 — post-migration disrupted rows are a distinct population", () 
       createdAt: now,
       updatedAt: now,
     });
+    await conn.db.insert(schema.attemptInterruptions).values({
+      id: episodeId,
+      organizationId,
+      attemptId,
+      createdAt: now,
+    });
+    await conn.db.insert(schema.attemptInterruptionEvents).values({
+      id: randomUUID(),
+      organizationId,
+      attemptId,
+      interruptionId: episodeId,
+      eventType: "detected",
+      occurredAt: now,
+      observedLastActivityAt: now,
+      detectionSource: "heartbeat_timeout",
+      timeoutSeconds: 60,
+      policy: "strict",
+      reasonCode: "heartbeat_timeout",
+      createdAt: now,
+    });
+    await conn.db
+      .update(schema.examAttempts)
+      .set({
+        status: "disrupted",
+        currentInterruptionId: episodeId,
+        interruptedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(schema.examAttempts.id, attemptId));
 
     const attempt = await conn.db
       .select()
       .from(schema.examAttempts)
       .where(eq(schema.examAttempts.id, attemptId));
-    // Post-migration runtime rows are NOT backfilled by the 0021 migration —
-    // the migration only ever ran once, against pre-existing historical rows.
-    expect(attempt[0]!.currentInterruptionId).toBeNull();
-    expect(attempt[0]!.interruptedAt).toBeNull();
-
-    const parents = await conn.db
-      .select()
-      .from(schema.attemptInterruptions)
-      .where(eq(schema.attemptInterruptions.attemptId, attemptId));
-    expect(parents).toEqual([]);
-    const events = await conn.db
-      .select()
-      .from(schema.attemptInterruptionEvents)
-      .where(eq(schema.attemptInterruptionEvents.attemptId, attemptId));
-    expect(events).toEqual([]);
+    expect(attempt[0]!.status).toBe("disrupted");
+    expect(attempt[0]!.currentInterruptionId).toBe(episodeId);
+    expect(attempt[0]!.interruptedAt).toEqual(now);
   });
 });

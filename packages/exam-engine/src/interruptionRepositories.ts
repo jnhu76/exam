@@ -37,7 +37,7 @@ export interface InsertInterruptionEventInput {
  * identity/timestamp fields.
  */
 export interface InsertTimeAdjustmentInput {
-  operationId: string;
+  operationId?: string;
   attemptId: string;
   interruptionId: string | null;
   incidentId: string | null;

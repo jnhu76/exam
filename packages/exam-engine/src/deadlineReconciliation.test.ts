@@ -18,6 +18,11 @@ import {
   computeEffectiveDeadline,
   isAttemptDeadlineExpired,
 } from "./deadlineReconciliation.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
 
 async function mintCap(
   enrollmentRepo: EnrollmentRepository,
@@ -25,6 +30,74 @@ async function mintCap(
   attemptId: string,
 ) {
   return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
+
+function makeStubEpisodeRepo(
+  episode?: { id: string; attemptId: string } | null,
+): InterruptionEpisodeRepository {
+  return {
+    create: async () => ({ id: "stub" }) as never,
+    findById: async (id: string) =>
+      episode && episode.id === id ? (episode as never) : null,
+    findByAttemptForUpdate: async (
+      attemptId: string,
+      interruptionId: string,
+    ) =>
+      episode &&
+      episode.id === interruptionId &&
+      episode.attemptId === attemptId
+        ? (episode as never)
+        : null,
+    findLatestByAttempt: async () => null,
+  };
+}
+
+function makeStubEventRepo(
+  detected?: {
+    interruptionId: string;
+    attemptId: string;
+    occurredAt: Date;
+  } | null,
+): InterruptionEventRepository {
+  return {
+    insert: async (input) => ({ id: "stub-event", ...input }) as never,
+    findDetected: async (interruptionId: string) =>
+      detected && detected.interruptionId === interruptionId
+        ? (detected as never)
+        : null,
+    findOutcome: async () => null,
+    findLatestOutcomeByAttempt: async () => null,
+  };
+}
+
+function makeResolution(attempt: ExamAttempt): SubmitInterruptionResolution {
+  if (attempt.status === "disrupted") {
+    const interruptedAt = attempt.interruptedAt ?? new Date();
+    const episodeId = attempt.currentInterruptionId ?? "int-1";
+    const episodeRepo = makeStubEpisodeRepo({
+      id: episodeId,
+      attemptId: attempt.id,
+    });
+    const eventRepo = makeStubEventRepo({
+      interruptionId: episodeId,
+      attemptId: attempt.id,
+      occurredAt: interruptedAt,
+    });
+    return {
+      mode: "active_interruption",
+      episodeRepo,
+      eventRepo,
+      hint: {
+        policy: attempt.interruptionTimingPolicySnapshot?.policy ?? "strict",
+        eligibleSeconds: null,
+        adjustmentId: null,
+        reasonCode: "deadline_terminalization",
+      },
+    };
+  }
+  const episodeRepo = makeStubEpisodeRepo(null);
+  const eventRepo = makeStubEventRepo(null);
+  return { mode: "none", episodeRepo, eventRepo };
 }
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
@@ -292,6 +365,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(attempt),
     );
 
     expect(result.status).toBe("graded");
@@ -320,6 +394,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(attempt),
     );
 
     // effectiveDeadline = min(exam.closeAt 12:00, attempt.deadlineAt 10:30) = 10:30
@@ -340,6 +415,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(attempt),
     );
 
     expect(result.status).toBe("in_progress");
@@ -369,6 +445,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(attempt),
     );
 
     // Idempotent: existing frozen snapshot + submittedAt preserved.
@@ -391,6 +468,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
         gradingWorksetRepo,
         cap,
         now,
+        makeResolution(attempt),
       );
       expect(result.status).toBe(status);
       expect(result.submittedAnswers).toBeUndefined();
@@ -399,7 +477,18 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
 
   it("reconciles a disrupted attempt (disrupted is auto-submittable)", async () => {
     const now = new Date("2025-01-01T11:30:00Z");
-    const attempt = makeAttempt({ status: "disrupted" });
+    const interruptedAt = new Date("2025-01-01T10:30:00Z");
+    const attempt = makeAttempt({
+      status: "disrupted",
+      currentInterruptionId: "int-1",
+      interruptedAt,
+      interruptionTimingPolicySnapshot: {
+        schemaVersion: 1,
+        policy: "strict",
+        perIncidentCapSeconds: null,
+        perAttemptAggregateCapSeconds: null,
+      },
+    });
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
@@ -411,6 +500,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(attempt),
     );
 
     expect(result.status).toBe("graded");
@@ -465,6 +555,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(textAttempt),
     );
 
     expect(result.status).toBe("submitted");
@@ -540,6 +631,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(mixedAttempt),
     );
 
     expect(result.status).toBe("submitted");
@@ -563,6 +655,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
       gradingWorksetRepo,
       cap,
       now,
+      makeResolution(attempt),
     );
 
     expect(result.status).toBe("graded");

@@ -14,6 +14,7 @@ import type {
   TimeAdjustmentRepository,
 } from "./interruptionRepositories.js";
 import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
+import { assertCapabilityFor } from "./lockSeam.js";
 import { ensureAttemptDeadlineReconciled } from "./deadlineReconciliation.js";
 import { evaluateInterruptionTimePolicy } from "./interruptionPolicy.js";
 import type { EvaluateInterruptionPolicyInput } from "./interruptionPolicy.js";
@@ -45,7 +46,7 @@ export type SubmitInterruptionResolution =
       eventRepo: InterruptionEventRepository;
       hint: {
         policy: InterruptionTimePolicy;
-        eligibleSeconds: number;
+        eligibleSeconds: number | null;
         adjustmentId: string | null;
         reasonCode: string;
       };
@@ -117,12 +118,59 @@ export async function resolveActiveInterruptionOnTerminalization(
       "Disrupted attempt has no active interruption pointer",
     );
   }
+  if (!lockedAttempt.interruptedAt) {
+    throw new ValidationError(
+      "Disrupted attempt has no interruptedAt timestamp",
+    );
+  }
+
+  const interruptionId = lockedAttempt.currentInterruptionId;
+
+  // #5: Validate episode identity before inserting terminalized event.
+  const episode = await resolution.episodeRepo.findByAttemptForUpdate(
+    lockedAttempt.id,
+    interruptionId,
+  );
+  if (!episode) {
+    throw new ValidationError(
+      "Interruption episode not found for the active pointer",
+    );
+  }
+  if (episode.attemptId !== lockedAttempt.id) {
+    throw new ValidationError("Interruption episode attemptId mismatch");
+  }
+
+  const detected = await resolution.eventRepo.findDetected(interruptionId);
+  if (!detected) {
+    throw new ValidationError(
+      "No detected event found for the active interruption",
+    );
+  }
+  if (detected.attemptId !== lockedAttempt.id) {
+    throw new ValidationError("Detected event attemptId mismatch");
+  }
+  if (detected.interruptionId !== interruptionId) {
+    throw new ValidationError("Detected event interruptionId mismatch");
+  }
+  if (detected.occurredAt.getTime() !== lockedAttempt.interruptedAt.getTime()) {
+    throw new ValidationError(
+      "Detected event occurredAt does not match attempt interruptedAt",
+    );
+  }
+
+  const existingOutcome =
+    await resolution.eventRepo.findOutcome(interruptionId);
+  if (existingOutcome) {
+    throw new ValidationError(
+      "Interruption episode already has an outcome event",
+    );
+  }
 
   // Append the terminalized event. The pointer is cleared by submitAttempt's
   // own update (currentInterruptionId=null, interruptedAt=null).
   await resolution.eventRepo.insert({
     attemptId: lockedAttempt.id,
-    interruptionId: lockedAttempt.currentInterruptionId,
+    interruptionId,
     eventType: "terminalized",
     occurredAt: now,
     observedLastActivityAt: null,
@@ -167,6 +215,9 @@ export async function restoreInterruptedAttempt(
   capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<RestoreInterruptionResult> {
+  // #6: Assert capability affinity at the start.
+  assertCapabilityFor(capability, enrollmentRepo, attemptRepo);
+
   // 1. Lock the attempt row.
   const attempt = await attemptRepo.findByIdForUpdate(capability.attemptId);
   if (!attempt) {
@@ -179,26 +230,22 @@ export async function restoreInterruptedAttempt(
     throw new NotFoundError("Exam not found");
   }
 
-  // 3. If the attempt is already in_progress, return immediately.
+  // 3. If the attempt is already in_progress, reconstruct from latest outcome.
   if (attempt.status === "in_progress") {
-    return {
+    return reconstructInProgressOutcome(
       attempt,
-      lifecycle: "already_in_progress",
-      compensation: {
-        policy: attempt.interruptionTimingPolicySnapshot?.policy ?? "strict",
-        interruptionId: null,
-        eligibleSeconds: 0,
-        addedSeconds: 0,
-        adjustmentId: null,
-      },
-    };
+      episodeRepo,
+      eventRepo,
+      adjustmentRepo,
+    );
   }
 
   // 4. If the attempt is already terminal, reconstruct via idempotency (R10).
   if (
     attempt.status === "submitted" ||
     attempt.status === "grading" ||
-    attempt.status === "graded"
+    attempt.status === "graded" ||
+    attempt.status === "voided"
   ) {
     return reconstructTerminalOutcome(attempt, eventRepo, adjustmentRepo);
   }
@@ -216,6 +263,11 @@ export async function restoreInterruptedAttempt(
       "Disrupted attempt has no active interruption pointer",
     );
   }
+  if (!attempt.interruptedAt) {
+    throw new ValidationError(
+      "Disrupted attempt has no interruptedAt timestamp",
+    );
+  }
   const interruptionId = attempt.currentInterruptionId;
 
   // 7. Resolve the policy snapshot.
@@ -226,15 +278,48 @@ export async function restoreInterruptedAttempt(
     );
   }
 
-  // 8. Evaluate the policy decision.
+  // #6: Full episode identity validation.
+  const episode = await episodeRepo.findByAttemptForUpdate(
+    attempt.id,
+    interruptionId,
+  );
+  if (!episode) {
+    throw new ValidationError(
+      "Interruption episode not found for the active pointer",
+    );
+  }
+  if (episode.attemptId !== attempt.id) {
+    throw new ValidationError("Interruption episode attemptId mismatch");
+  }
+
   const detectedEvent = await eventRepo.findDetected(interruptionId);
   if (!detectedEvent) {
     throw new ValidationError(
       "No detected event found for the active interruption",
     );
   }
+  if (detectedEvent.attemptId !== attempt.id) {
+    throw new ValidationError("Detected event attemptId mismatch");
+  }
+  if (detectedEvent.interruptionId !== interruptionId) {
+    throw new ValidationError("Detected event interruptionId mismatch");
+  }
+  if (detectedEvent.occurredAt.getTime() !== attempt.interruptedAt.getTime()) {
+    throw new ValidationError(
+      "Detected event occurredAt does not match attempt interruptedAt",
+    );
+  }
+
+  const existingOutcome = await eventRepo.findOutcome(interruptionId);
+  if (existingOutcome) {
+    throw new ValidationError(
+      "Interruption episode already has an outcome event",
+    );
+  }
+
   const detectedAt = detectedEvent.occurredAt;
 
+  // 8. Evaluate the policy decision.
   let addedSeconds = 0;
   let adjustmentId: string | null = null;
   let eligibleSeconds = 0;
@@ -248,50 +333,71 @@ export async function restoreInterruptedAttempt(
         ? "strict_zero_grant"
         : "operator_incident_candidate_restore_zero_grant";
   } else if (snapshot.policy === "bounded_grace") {
-    const priorBoundedGraceSeconds =
-      await adjustmentRepo.sumBoundedGraceSeconds(attempt.id);
+    // #8: Check idempotency before evaluating.
+    const existingAdjustment =
+      await adjustmentRepo.findBoundedByInterruption(interruptionId);
 
-    const policyInput: EvaluateInterruptionPolicyInput = {
-      snapshot,
-      detectedAt,
-      decisionNow: now,
-      beforeDeadline: attempt.deadlineAt ?? null,
-      examCloseAt: exam.closeAt,
-      priorBoundedGraceAddedSeconds: priorBoundedGraceSeconds,
-    };
-
-    const decision = evaluateInterruptionTimePolicy(policyInput);
-    eligibleSeconds = decision.eligibleSeconds;
-    addedSeconds = decision.addedSeconds;
-    reasonCode = decision.reasonCode;
-
-    if (addedSeconds > 0) {
-      if (!attempt.deadlineAt) {
+    if (existingAdjustment) {
+      // Reuse existing adjustment.
+      if (
+        existingAdjustment.attemptId !== attempt.id ||
+        existingAdjustment.interruptionId !== interruptionId ||
+        existingAdjustment.source !== "bounded_grace" ||
+        existingAdjustment.policy !== "bounded_grace" ||
+        existingAdjustment.addedSeconds <= 0
+      ) {
         throw new ValidationError(
-          "Cannot grant bounded_grace time without a deadline",
+          "Existing bounded_grace adjustment failed identity validation",
         );
       }
-      const adjustment = await adjustmentRepo.insert({
-        operationId: `restore-${interruptionId}-${now.getTime()}`,
-        attemptId: attempt.id,
-        interruptionId,
-        incidentId: null,
-        policy: "bounded_grace",
-        source: "bounded_grace",
-        beforeDeadline: attempt.deadlineAt,
-        afterDeadline: decision.afterDeadline!,
-        addedSeconds,
-        eligibleSeconds,
-        reasonCode,
-        reasonText: null,
-        actorId: null,
-      });
-      adjustmentId = adjustment.id;
+      adjustmentId = existingAdjustment.id;
+      eligibleSeconds = existingAdjustment.eligibleSeconds ?? 0;
+      addedSeconds = existingAdjustment.addedSeconds;
+      reasonCode = existingAdjustment.reasonCode;
+    } else {
+      const priorBoundedGraceSeconds =
+        await adjustmentRepo.sumBoundedGraceSeconds(attempt.id);
 
-      // Update the deadline within the same tx.
-      await attemptRepo.update(attempt.id, {
-        deadlineAt: decision.afterDeadline!,
-      });
+      const policyInput: EvaluateInterruptionPolicyInput = {
+        snapshot,
+        detectedAt,
+        decisionNow: now,
+        beforeDeadline: attempt.deadlineAt ?? null,
+        examCloseAt: exam.closeAt,
+        priorBoundedGraceAddedSeconds: priorBoundedGraceSeconds,
+      };
+
+      const decision = evaluateInterruptionTimePolicy(policyInput);
+      eligibleSeconds = decision.eligibleSeconds;
+      addedSeconds = decision.addedSeconds;
+      reasonCode = decision.reasonCode;
+
+      if (addedSeconds > 0) {
+        if (!attempt.deadlineAt) {
+          throw new ValidationError(
+            "Cannot grant bounded_grace time without a deadline",
+          );
+        }
+        const adjustment = await adjustmentRepo.insert({
+          attemptId: attempt.id,
+          interruptionId,
+          incidentId: null,
+          policy: "bounded_grace",
+          source: "bounded_grace",
+          beforeDeadline: attempt.deadlineAt,
+          afterDeadline: decision.afterDeadline!,
+          addedSeconds,
+          eligibleSeconds,
+          reasonCode,
+          reasonText: null,
+          actorId: null,
+        });
+        adjustmentId = adjustment.id;
+
+        await attemptRepo.update(attempt.id, {
+          deadlineAt: decision.afterDeadline!,
+        });
+      }
     }
   }
 
@@ -308,8 +414,7 @@ export async function restoreInterruptedAttempt(
     },
   };
 
-  // 10. Reconcile deadline (may submit if expired). The resolution ensures
-  //     proper terminalization if the deadline has passed.
+  // 10. Reconcile deadline (may submit if expired).
   const reconciled = await ensureAttemptDeadlineReconciled(
     examRepo,
     enrollmentRepo,
@@ -332,6 +437,22 @@ export async function restoreInterruptedAttempt(
   // 12. Restore the attempt lifecycle.
   const lifecycleResult = await restoreAttemptState(attempt, attemptRepo, now);
 
+  // #7: Write the restored outcome event.
+  await eventRepo.insert({
+    attemptId: attempt.id,
+    interruptionId,
+    eventType: "restored",
+    occurredAt: now,
+    observedLastActivityAt: null,
+    detectionSource: null,
+    timeoutSeconds: null,
+    policy: snapshot.policy,
+    eligibleSeconds,
+    timeAdjustmentId: adjustmentId,
+    actorId: null,
+    reasonCode,
+  });
+
   // 13. Re-read the attempt after restore.
   const restoredAttempt = await attemptRepo.findById(attempt.id);
   if (!restoredAttempt) {
@@ -352,8 +473,87 @@ export async function restoreInterruptedAttempt(
 }
 
 /**
- * Reconstructs a terminal outcome from the latest terminalized event (R10).
- * Used when the attempt is already submitted/grading/graded on entry.
+ * #9: Reconstructs the outcome for an already in_progress attempt.
+ * Checks the latest episode and outcome to return proper compensation.
+ */
+async function reconstructInProgressOutcome(
+  attempt: ExamAttempt,
+  episodeRepo: InterruptionEpisodeRepository,
+  eventRepo: InterruptionEventRepository,
+  adjustmentRepo: TimeAdjustmentRepository,
+): Promise<RestoreInterruptionResult> {
+  const latestEpisode = await episodeRepo.findLatestByAttempt(attempt.id);
+  const latestOutcome = await eventRepo.findLatestOutcomeByAttempt(attempt.id);
+
+  if (!latestOutcome) {
+    return {
+      attempt,
+      lifecycle: "already_in_progress",
+      compensation: {
+        policy: attempt.interruptionTimingPolicySnapshot?.policy ?? "strict",
+        interruptionId: null,
+        eligibleSeconds: 0,
+        addedSeconds: 0,
+        adjustmentId: null,
+      },
+    };
+  }
+
+  if (latestOutcome.eventType === "terminalized") {
+    throw new ValidationError(
+      "Attempt is in_progress but latest outcome is terminalized (identity violation)",
+    );
+  }
+
+  // latestOutcome.eventType === "restored"
+  if (latestEpisode && latestOutcome.interruptionId !== latestEpisode.id) {
+    throw new ValidationError(
+      "Latest outcome interruptionId does not match latest episode",
+    );
+  }
+  if (latestOutcome.attemptId !== attempt.id) {
+    throw new ValidationError("Latest outcome attemptId mismatch");
+  }
+
+  let adjustmentId: string | null = latestOutcome.timeAdjustmentId ?? null;
+  let addedSeconds = 0;
+  let eligibleSeconds = latestOutcome.eligibleSeconds ?? 0;
+
+  if (adjustmentId) {
+    const adjustment = await adjustmentRepo.findById(adjustmentId);
+    if (
+      !adjustment ||
+      adjustment.attemptId !== attempt.id ||
+      adjustment.interruptionId !== latestOutcome.interruptionId ||
+      adjustment.id !== adjustmentId ||
+      adjustment.source !== "bounded_grace" ||
+      adjustment.policy !== "bounded_grace"
+    ) {
+      throw new ValidationError(
+        "Restored outcome adjustment failed identity validation",
+      );
+    }
+    addedSeconds = adjustment.addedSeconds;
+    eligibleSeconds = adjustment.eligibleSeconds ?? 0;
+  }
+
+  return {
+    attempt,
+    lifecycle: "already_in_progress",
+    compensation: {
+      policy: latestOutcome.policy,
+      interruptionId: latestOutcome.interruptionId,
+      eligibleSeconds,
+      addedSeconds,
+      adjustmentId,
+    },
+  };
+}
+
+/**
+ * #9: Reconstructs a terminal outcome from the latest terminalized event (R10).
+ * Used when the attempt is already submitted/grading/graded/voided on entry.
+ * Fails closed on adjustment identity mismatch.
  */
 async function reconstructTerminalOutcome(
   attempt: ExamAttempt,
@@ -362,30 +562,41 @@ async function reconstructTerminalOutcome(
 ): Promise<RestoreInterruptionResult> {
   const latestOutcome = await eventRepo.findLatestOutcomeByAttempt(attempt.id);
   if (latestOutcome && latestOutcome.eventType === "terminalized") {
-    let adjustmentId: string | null = latestOutcome.timeAdjustmentId ?? null;
+    const adjustmentId: string | null = latestOutcome.timeAdjustmentId ?? null;
+    let addedSeconds = 0;
+    let eligibleSeconds = latestOutcome.eligibleSeconds ?? 0;
+
     if (adjustmentId) {
       const adjustment = await adjustmentRepo.findById(adjustmentId);
       if (
         !adjustment ||
         adjustment.attemptId !== attempt.id ||
-        adjustment.interruptionId !== latestOutcome.interruptionId
+        adjustment.interruptionId !== latestOutcome.interruptionId ||
+        adjustment.source !== "bounded_grace" ||
+        adjustment.policy !== "bounded_grace"
       ) {
-        adjustmentId = null;
+        throw new ValidationError(
+          "Terminalized outcome adjustment failed identity validation",
+        );
       }
+      addedSeconds = adjustment.addedSeconds;
+      eligibleSeconds = adjustment.eligibleSeconds ?? 0;
     }
+
     return {
       attempt,
       lifecycle: "terminal",
       compensation: {
         policy: latestOutcome.policy,
         interruptionId: latestOutcome.interruptionId,
-        eligibleSeconds: latestOutcome.eligibleSeconds ?? 0,
-        addedSeconds: 0,
+        eligibleSeconds,
+        addedSeconds,
         adjustmentId,
       },
     };
   }
-  // Terminal without a terminalized event → plain terminal, no compensation.
+  // Terminal without a terminalized event, or latest outcome is restored
+  // → plain terminal, no compensation.
   return {
     attempt,
     lifecycle: "terminal",

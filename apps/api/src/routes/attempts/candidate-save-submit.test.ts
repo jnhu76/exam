@@ -15,6 +15,7 @@ import {
   buildExamPayload,
   enrollCandidateForExam,
   buildSharedAttemptFixture,
+  disruptAttempt,
 } from "./attempts.testHelpers.js";
 
 async function installSubmitAuditFailure(
@@ -1234,18 +1235,7 @@ describe("attempt routes", () => {
       });
       attemptId = startRes.json().id;
 
-      const attemptRepo = createAttemptRepo(ctx.db);
-      const candidateCtx = {
-        actorId: ctx.candidate.id,
-        organizationId: ctx.org.id,
-        role: "Candidate" as const,
-        permissions: [] as import("@exam/domain").Permission[],
-        sessionId: "test",
-        targetOrganizationId: ctx.org.id,
-      };
-      await attemptRepo.update(candidateCtx, attemptId, {
-        status: "disrupted",
-      });
+      await disruptAttempt(ctx.db, ctx.org.id, attemptId);
     });
 
     it("restores disrupted attempt to in_progress", async () => {
@@ -1287,21 +1277,23 @@ describe("attempt routes", () => {
       const attId = startRes.json().id;
       const originalDeadline = new Date(startRes.json().deadlineAt);
 
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({
+          interruptionPolicySnapshotVersion: 1,
+          interruptionTimePolicySnapshot: "bounded_grace",
+          interruptionGracePerIncidentSecondsSnapshot: 300,
+          interruptionGracePerAttemptSecondsSnapshot: 600,
+        })
+        .where(eq(schema.examAttempts.id, attId));
+
       const fixedNow = new Date(Date.now());
       ctx.setNow(fixedNow);
       const lastActivity = new Date(fixedNow.getTime() - 5 * 60_000);
-      const attemptRepo = createAttemptRepo(ctx.db);
-      const candidateCtxVal = {
-        actorId: ctx.candidate.id,
-        organizationId: ctx.org.id,
-        role: "Candidate" as const,
-        permissions: [] as import("@exam/domain").Permission[],
-        sessionId: "test",
-        targetOrganizationId: ctx.org.id,
-      };
-      await attemptRepo.update(candidateCtxVal, attId, {
-        status: "disrupted",
+      await disruptAttempt(ctx.db, ctx.org.id, attId, {
+        interruptedAt: lastActivity,
         lastActivityAt: lastActivity,
+        policy: "bounded_grace",
       });
 
       const res = await ctx.app.inject({

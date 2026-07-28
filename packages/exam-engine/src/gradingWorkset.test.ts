@@ -12,6 +12,29 @@ import {
   type GradingWorksetRepository,
 } from "./gradingWorkset.js";
 import { submitAttempt, type AttemptRepository } from "./attemptCommands.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import type {
+  InterruptionEpisodeRepository,
+  InterruptionEventRepository,
+} from "./interruptionRepositories.js";
+
+const stubEpisodeRepo: InterruptionEpisodeRepository = {
+  create: async () => ({ id: "stub" }) as never,
+  findById: async () => null,
+  findByAttemptForUpdate: async () => null,
+  findLatestByAttempt: async () => null,
+};
+const stubEventRepo: InterruptionEventRepository = {
+  insert: async (input) => ({ id: "stub-event", ...input }) as never,
+  findDetected: async () => null,
+  findOutcome: async () => null,
+  findLatestOutcomeByAttempt: async () => null,
+};
+const noneResolution: SubmitInterruptionResolution = {
+  mode: "none",
+  episodeRepo: stubEpisodeRepo,
+  eventRepo: stubEventRepo,
+};
 
 const NOW = new Date("2026-06-01T12:00:00Z");
 
@@ -414,7 +437,9 @@ describe("submitAttempt grading workset ownership", () => {
     const attRepo = makeAttemptRepo(attempt);
     const { repo, created } = makeWorksetRepo();
 
-    await submitAttempt(attRepo, repo, "attempt-1", NOW);
+    await submitAttempt(attRepo, repo, "attempt-1", NOW, {
+      resolution: noneResolution,
+    });
 
     expect(created).toHaveLength(2);
     const obj = created.find((e) => e.questionId === "q-obj")!;
@@ -443,7 +468,9 @@ describe("submitAttempt grading workset ownership", () => {
     const attRepo = makeAttemptRepo(attempt);
     const { repo, created } = makeWorksetRepo();
 
-    await submitAttempt(attRepo, repo, "attempt-1", NOW);
+    await submitAttempt(attRepo, repo, "attempt-1", NOW, {
+      resolution: noneResolution,
+    });
 
     expect(created).toHaveLength(1);
     expect(created[0]!.gradingMode).toBe("manual");
@@ -466,7 +493,9 @@ describe("submitAttempt grading workset ownership", () => {
     const attRepo = makeAttemptRepo(attempt);
     const { repo, created } = makeWorksetRepo();
 
-    await submitAttempt(attRepo, repo, "attempt-1", NOW);
+    await submitAttempt(attRepo, repo, "attempt-1", NOW, {
+      resolution: noneResolution,
+    });
 
     expect(created).toHaveLength(2);
     const e1 = created.find((e) => e.questionId === "q-obj-1")!;
@@ -520,7 +549,9 @@ describe("submitAttempt idempotent workset validation", () => {
     ];
     const { repo, created } = makeWorksetRepo(existing);
 
-    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW);
+    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW, {
+      resolution: noneResolution,
+    });
 
     expect(result.status).toBe("submitted");
     expect(created).toHaveLength(0);
@@ -558,7 +589,9 @@ describe("submitAttempt idempotent workset validation", () => {
     const { repo } = makeWorksetRepo(existing);
 
     await expect(
-      submitAttempt(attRepo, repo, "attempt-1", NOW),
+      submitAttempt(attRepo, repo, "attempt-1", NOW, {
+        resolution: noneResolution,
+      }),
     ).rejects.toThrow(/inconsistency/i);
   });
 
@@ -608,7 +641,9 @@ describe("submitAttempt idempotent workset validation", () => {
     const { repo } = makeWorksetRepo(existing);
 
     await expect(
-      submitAttempt(attRepo, repo, "attempt-1", NOW),
+      submitAttempt(attRepo, repo, "attempt-1", NOW, {
+        resolution: noneResolution,
+      }),
     ).rejects.toThrow(/inconsistency/i);
   });
 
@@ -636,7 +671,9 @@ describe("submitAttempt idempotent workset validation", () => {
     const { repo } = makeWorksetRepo(existing);
 
     await expect(
-      submitAttempt(attRepo, repo, "attempt-1", NOW),
+      submitAttempt(attRepo, repo, "attempt-1", NOW, {
+        resolution: noneResolution,
+      }),
     ).rejects.toThrow(/gradingMode.*!=.*expected/i);
   });
 
@@ -665,7 +702,9 @@ describe("submitAttempt idempotent workset validation", () => {
     const { repo } = makeWorksetRepo(existing);
 
     await expect(
-      submitAttempt(attRepo, repo, "attempt-1", NOW),
+      submitAttempt(attRepo, repo, "attempt-1", NOW, {
+        resolution: noneResolution,
+      }),
     ).rejects.toThrow(/maxScore.*!=.*expected/i);
   });
 
@@ -695,7 +734,9 @@ describe("submitAttempt idempotent workset validation", () => {
     const { repo } = makeWorksetRepo(existing);
 
     await expect(
-      submitAttempt(attRepo, repo, "attempt-1", NOW),
+      submitAttempt(attRepo, repo, "attempt-1", NOW, {
+        resolution: noneResolution,
+      }),
     ).rejects.toThrow(/earnedScore.*!=.*expected/i);
   });
 
@@ -723,7 +764,9 @@ describe("submitAttempt idempotent workset validation", () => {
     ];
     const { repo, created } = makeWorksetRepo(existing);
 
-    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW);
+    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW, {
+      resolution: noneResolution,
+    });
 
     expect(result.status).toBe("submitted");
     expect(created).toHaveLength(0);
@@ -756,7 +799,9 @@ describe("submitAttempt idempotent workset validation", () => {
     ];
     const { repo, created } = makeWorksetRepo(existing);
 
-    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW);
+    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW, {
+      resolution: noneResolution,
+    });
 
     expect(result.status).toBe("graded");
     expect(created).toHaveLength(0);
@@ -780,7 +825,9 @@ describe("submitAttempt idempotent workset validation", () => {
     const { repo } = makeWorksetRepo(existing);
 
     await expect(
-      submitAttempt(attRepo, repo, "attempt-1", NOW),
+      submitAttempt(attRepo, repo, "attempt-1", NOW, {
+        resolution: noneResolution,
+      }),
     ).rejects.toThrow(/before authoritative submission freeze/i);
   });
 });

@@ -12,7 +12,7 @@ import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
-import { buildExamPayload } from "./attempts.testHelpers.js";
+import { buildExamPayload, disruptAttempt } from "./attempts.testHelpers.js";
 
 const DEADLINE_SCANNER_TEST_PREFIX = "deadline-scanner-test-";
 
@@ -462,10 +462,7 @@ describe("attempt routes", () => {
         "Deadline AutoSubmit Disrupted Exam",
       );
       await backdateDeadline(attemptId);
-      await ctx.db
-        .update(schema.examAttempts)
-        .set({ status: "disrupted" })
-        .where(eq(schema.examAttempts.id, attemptId));
+      await disruptAttempt(ctx.db, t.orgId, attemptId);
 
       const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);

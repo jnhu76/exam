@@ -58,6 +58,7 @@ import {
   lockEnrollmentAndAttempt,
   prepareReconciledAttemptMutation,
 } from "@exam/exam-engine";
+import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
@@ -768,12 +769,31 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           attempts,
           parsed.data.attemptId,
         );
-        // ensureAttemptDeadlineReconciled performs its own findByIdForUpdate
-        // internally and returns the (possibly reconciled) attempt. Verify
-        // ownership on that returned object instead of a separate locked read,
-        // avoiding a redundant DB query. Reconcile is idempotent, so running
-        // it before the ownership check is safe even for non-owners (we throw
-        // before returning any data).
+        const preRead = await attempts.findById(parsed.data.attemptId);
+        const episodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const eventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
+        const resolution: SubmitInterruptionResolution =
+          preRead?.status === "disrupted"
+            ? {
+                mode: "active_interruption",
+                episodeRepo,
+                eventRepo,
+                hint: {
+                  policy:
+                    preRead.interruptionTimingPolicySnapshot?.policy ??
+                    "strict",
+                  eligibleSeconds: null,
+                  adjustmentId: null,
+                  reasonCode: "deadline_terminalization",
+                },
+              }
+            : { mode: "none", episodeRepo, eventRepo };
         const reconciled = await ensureAttemptDeadlineReconciled(
           exams,
           enrollments,
@@ -784,6 +804,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           ),
           cap,
           fastify.now(),
+          resolution,
         );
         if (reconciled.candidateId !== candidateProfile.id) {
           throw new NotFoundError("Attempt not found");
@@ -892,6 +913,35 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         // route no longer owns question-membership legality, effective-deadline
         // computation, or attempt.deadlineAt read-for-save — those live in
         // saveAnswer / the preparation seam.
+        const preAttempt = await attempts.findById(attemptId);
+        const saveEpisodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const saveEventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
+        const saveResolution: SubmitInterruptionResolution =
+          preAttempt?.status === "disrupted"
+            ? {
+                mode: "active_interruption",
+                episodeRepo: saveEpisodeRepo,
+                eventRepo: saveEventRepo,
+                hint: {
+                  policy:
+                    preAttempt.interruptionTimingPolicySnapshot?.policy ??
+                    "strict",
+                  eligibleSeconds: null,
+                  adjustmentId: null,
+                  reasonCode: "deadline_terminalization",
+                },
+              }
+            : {
+                mode: "none",
+                episodeRepo: saveEpisodeRepo,
+                eventRepo: saveEventRepo,
+              };
         const { attempt: currentAttempt, mutationContext } =
           await prepareReconciledAttemptMutation(
             exams,
@@ -903,6 +953,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             ),
             cap,
             now,
+            saveResolution,
           );
         if (currentAttempt.candidateId !== candidateProfile.id) {
           throw new NotFoundError("尝试不存在");
@@ -987,17 +1038,18 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Candidate profile not found");
       }
 
+      const now = fastify.now();
       const { attempt } = await submitAndGradeAttempt(
         fastify.db,
         ctx,
         attemptId,
         candidateProfile.id,
-        fastify.now(),
+        now,
         { request },
       );
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt, fastify.now()),
+        toCandidateAttemptResponse(attempt, now),
       );
     },
   );
@@ -1147,7 +1199,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       });
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(result, fastify.now()),
+        toCandidateAttemptResponse(result, now),
       );
     },
   );

@@ -166,7 +166,9 @@ export async function scanDatabaseForDisruptedAttempts(
   // authority and threads it through the whole scan; defaulting to
   // fastify.now() keeps call sites that omit it on the authority clock.
   now: Date = fastify.now(),
-  heartbeatTimeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS,
+  heartbeatTimeoutSeconds: number = Math.floor(
+    DEFAULT_HEARTBEAT_TIMEOUT_MS / 1000,
+  ),
 ): Promise<ScanResult> {
   const db = fastify.db as Database;
   const organizationRepo = createOrganizationRepo(db);
@@ -183,13 +185,13 @@ export async function scanDatabaseForDisruptedAttempts(
     const result = await scanForDisruptedAttempts(
       attempts,
       now,
-      heartbeatTimeoutMs,
+      heartbeatTimeoutSeconds * 1000,
       async (attemptId) => {
         return markAttemptDisrupted(
           db,
           ctx,
           attemptId,
-          Math.floor(heartbeatTimeoutMs / 1000),
+          heartbeatTimeoutSeconds,
           now,
         );
       },
@@ -221,7 +223,7 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
   const scanIntervalMs =
     config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS;
-  const heartbeatTimeoutMs = config.heartbeat.timeoutMs;
+  const heartbeatTimeoutSeconds = config.heartbeat.heartbeatTimeoutSeconds;
 
   let activeScan: Promise<void> | null = null;
   let closing = false;
@@ -234,7 +236,7 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
         const result = await scanDatabaseForDisruptedAttempts(
           fastify,
           tickNow,
-          heartbeatTimeoutMs,
+          heartbeatTimeoutSeconds,
         );
         heartbeatMetrics.lastScanAt = tickNow;
         heartbeatMetrics.disruptedCount += result.markedCount;

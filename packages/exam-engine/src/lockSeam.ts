@@ -1,5 +1,5 @@
 import { NotFoundError, ValidationError } from "@exam/domain";
-import type { ExamAttempt } from "@exam/domain";
+import type { ExamAttempt, ExamEnrollment } from "@exam/domain";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -166,7 +166,7 @@ export function assertCapabilityFor(
  * - `capability` is present only when an active attempt was found and locked.
  */
 export interface EnrollmentActiveAttemptLock {
-  enrollmentId: string;
+  enrollment: ExamEnrollment;
   activeAttempt: ExamAttempt | null;
   capability: LockedEnrollmentAttemptIdentity | null;
 }
@@ -227,9 +227,9 @@ export async function lockEnrollmentAndActiveAttempt(
       [TX_AFFINITY_TOKEN]: { enrollmentRepo, attemptRepo },
     };
 
-    return { enrollmentId: enrollment.id, activeAttempt: locked, capability };
+    return { enrollment, activeAttempt: locked, capability };
   }
 
   // No active attempt — no capability to mint.
-  return { enrollmentId: enrollment.id, activeAttempt: null, capability: null };
+  return { enrollment, activeAttempt: null, capability: null };
 }
