@@ -17,6 +17,7 @@ import {
   assertCapabilityFor,
   type LockedEnrollmentAttemptIdentity,
 } from "./lockSeam.js";
+import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
 
 // ── Mutation context authority (EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0) ──
 //
@@ -222,6 +223,7 @@ export async function ensureAttemptDeadlineReconciled(
   gradingWorksetRepo: GradingWorksetRepository,
   capability: LockedEnrollmentAttemptIdentity,
   now: Date,
+  resolution?: SubmitInterruptionResolution,
 ): Promise<ExamAttempt> {
   const { attemptId } = capability;
   const attempt = await attemptRepo.findById(attemptId);
@@ -272,6 +274,7 @@ export async function ensureAttemptDeadlineReconciled(
     {
       source: "deadline_scanner",
       submissionReason: "deadline",
+      ...(resolution !== undefined && { resolution }),
     },
   );
 
