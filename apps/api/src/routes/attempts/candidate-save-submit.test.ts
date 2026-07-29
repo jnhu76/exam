@@ -1246,10 +1246,15 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json().status).toBe("in_progress");
+      const body = res.json();
+      // REC-I4-I3A frozen restore response contract.
+      expect(body.lifecycle).toBe("restored");
+      expect(body.compensation.policy).toBe("strict");
+      expect(body.compensation.addedSeconds).toBe(0);
+      expect(body.attempt.status).toBe("in_progress");
     });
 
-    it("restores with deadlineAt adjusted for disconnected time", async () => {
+    it("restores with deadlineAt adjusted by the bounded_grace per-incident cap (ADR-013)", async () => {
       const exam7 = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
@@ -1289,7 +1294,12 @@ describe("attempt routes", () => {
 
       const fixedNow = new Date(Date.now());
       ctx.setNow(fixedNow);
-      const lastActivity = new Date(fixedNow.getTime() - 5 * 60_000);
+      // Disrupt 10 minutes ago. Under ADR-013 bounded_grace the eligible
+      // interval (600s) is capped by the per-incident snapshot cap (300s), so
+      // the grant is 300s — NOT the full disconnected duration. This is the
+      // behavior the legacy full-gap compensation (disconnectedDuration) was
+      // replaced by.
+      const lastActivity = new Date(fixedNow.getTime() - 10 * 60_000);
       await disruptAttempt(ctx.db, ctx.org.id, attId, {
         interruptedAt: lastActivity,
         lastActivityAt: lastActivity,
@@ -1304,13 +1314,201 @@ describe("attempt routes", () => {
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
-      expect(body.status).toBe("in_progress");
-      const restoredDeadline = new Date(body.deadlineAt);
-      const disconnectedMs = fixedNow.getTime() - lastActivity.getTime();
+      // REC-I4-I3A frozen restore response contract: the candidate-safe
+      // attempt is nested under `attempt`, and the compensation summary
+      // reports the policy + granted seconds.
+      expect(body.lifecycle).toBe("restored");
+      expect(body.compensation.policy).toBe("bounded_grace");
+      expect(body.compensation.addedSeconds).toBe(300);
+      expect(body.attempt.status).toBe("in_progress");
+      const restoredDeadline = new Date(body.attempt.deadlineAt);
       const expectedDeadline = new Date(
-        originalDeadline.getTime() + disconnectedMs,
+        originalDeadline.getTime() + 300 * 1000,
       );
       expect(restoredDeadline.getTime()).toBe(expectedDeadline.getTime());
+    });
+
+    it("strict policy restore grants zero seconds and preserves the deadline (ADR-013)", async () => {
+      const exam8 = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Strict Restore Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId8 = exam8.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId8}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, examId8);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId8}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attId = startRes.json().id;
+      const originalDeadline = new Date(startRes.json().deadlineAt);
+
+      const fixedNow = new Date(Date.now());
+      ctx.setNow(fixedNow);
+      const lastActivity = new Date(fixedNow.getTime() - 5 * 60_000);
+      await disruptAttempt(ctx.db, ctx.org.id, attId, {
+        interruptedAt: lastActivity,
+        lastActivityAt: lastActivity,
+        policy: "strict",
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attId}/restore`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.lifecycle).toBe("restored");
+      expect(body.compensation.policy).toBe("strict");
+      expect(body.compensation.addedSeconds).toBe(0);
+      expect(body.attempt.status).toBe("in_progress");
+      // Strict policy: deadline is preserved exactly, not extended by the
+      // disconnected duration.
+      const restoredDeadline = new Date(body.attempt.deadlineAt);
+      expect(restoredDeadline.getTime()).toBe(originalDeadline.getTime());
+    });
+
+    it("returns terminal lifecycle when restore triggers deadline reconciliation (expired)", async () => {
+      // Create an exam, start an attempt, then advance the clock past the
+      // deadline so the restore's deadline reconciliation submits the attempt.
+      const exam9 = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Terminal Restore Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId9 = exam9.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId9}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, examId9);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId9}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attId = startRes.json().id;
+      const attemptDeadline = new Date(startRes.json().deadlineAt);
+
+      // Advance the clock well past the deadline.
+      const expiredNow = new Date(attemptDeadline.getTime() + 60 * 1000);
+      ctx.setNow(expiredNow);
+
+      await disruptAttempt(ctx.db, ctx.org.id, attId, {
+        interruptedAt: expiredNow,
+        lastActivityAt: expiredNow,
+        policy: "strict",
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attId}/restore`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.lifecycle).toBe("terminal");
+      expect(body.compensation.policy).toBe("strict");
+      expect(body.compensation.addedSeconds).toBe(0);
+      // The attempt must have been submitted by deadline reconciliation.
+      expect(
+        body.attempt.status === "submitted" ||
+          body.attempt.status === "grading" ||
+          body.attempt.status === "graded",
+      ).toBe(true);
+    });
+
+    it("retry restore against already-terminal attempt returns terminal (idempotent)", async () => {
+      // Reuse the same expired attempt from the previous test. The retry
+      // restore must return 200 with lifecycle=terminal without error.
+      const exam10 = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Terminal Retry Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId10 = exam10.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId10}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, examId10);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId10}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attId = startRes.json().id;
+      const attemptDeadline = new Date(startRes.json().deadlineAt);
+
+      // Advance the clock past the deadline.
+      const expiredNow = new Date(attemptDeadline.getTime() + 60 * 1000);
+      ctx.setNow(expiredNow);
+
+      await disruptAttempt(ctx.db, ctx.org.id, attId, {
+        interruptedAt: expiredNow,
+        lastActivityAt: expiredNow,
+        policy: "strict",
+      });
+
+      // First restore — should terminalize.
+      const firstRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attId}/restore`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(firstRes.statusCode).toBe(200);
+      expect(firstRes.json().lifecycle).toBe("terminal");
+
+      // Second restore against the already-terminal attempt — must be
+      // idempotent: 200, lifecycle=terminal, no duplicate terminalization.
+      const secondRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attId}/restore`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(secondRes.statusCode).toBe(200);
+      const secondBody = secondRes.json();
+      expect(secondBody.lifecycle).toBe("terminal");
+      expect(secondBody.compensation.policy).toBe("strict");
+      expect(secondBody.compensation.addedSeconds).toBe(0);
+      // The attempt should remain in a terminal state.
+      expect(
+        secondBody.attempt.status === "submitted" ||
+          secondBody.attempt.status === "grading" ||
+          secondBody.attempt.status === "graded",
+      ).toBe(true);
     });
   });
 

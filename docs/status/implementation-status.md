@@ -45,6 +45,13 @@ Phase 2+ hardening.
   lifecycle-only restore helper, composed restore command with deadline
   reconciliation, and a
   phased fail-closed migration (0022) with status/pointer CHECK constraint.
+  REC-I4-I3A (Contract & Authoring Surface) freezes the public contract:
+  candidate restore returns the `RestoreAttemptResponseSchema` (lifecycle +
+  candidate-safe compensation summary; no internal evidence/ledger leak), Exam
+  create/update expose the interruption policy authoring fields with ADR-013
+  cross-field validation and draft-only mutation, attempt policy snapshots are
+  confirmed immutable post-creation, and structural regression tests prevent
+  legacy `restoreAttempt` / `disconnectedDuration` reintroduction.
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
@@ -170,14 +177,21 @@ audit, external log shipping. All Phase 4; none started.
 - **Interruption time compensation**: REC-I3 implements candidate direct-entry
   restore. REC-I4-I1 implemented the persistence foundation (ADR-013 `strict`
   default, explicit bounded caps, operator attribution, episode identity,
-  append-only adjustment ledger). REC-I4-I2 (Engine Policy Seam) now delivers
+  append-only adjustment ledger). REC-I4-I2 (Engine Policy Seam) delivers
   runtime compliance: restore goes through the composed
   `restoreInterruptedAttempt` command (the legacy `restoreAttempt` route is no
   longer used in production), and the heartbeat scanner, deadline scanner, and
   candidate/admin submit paths all thread a `SubmitInterruptionResolution` so
   every `disrupted → submitted` terminalization appends a `terminalized` event
-  with a context-specific reason code. A dedicated proctor recovery/incident UI
-  remains deferred.
+  with a context-specific reason code. REC-I4-I3A (Contract & Authoring
+  Surface) freezes the public contract: candidate restore returns
+  `RestoreAttemptResponseSchema` (lifecycle + candidate-safe compensation
+  summary; no internal evidence/ledger leak), Exam create/update expose the
+  interruption policy authoring fields with ADR-013 cross-field validation and
+  draft-only mutation, and attempt policy snapshots are confirmed immutable
+  post-creation. The operator grant route, `Permission.AttemptTimeGrant`, the
+  system incident model, and a dedicated proctor recovery/incident UI remain
+  deferred (REC-I4-I3B / REC-I6).
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the

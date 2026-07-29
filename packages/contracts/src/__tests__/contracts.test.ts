@@ -19,6 +19,7 @@ import {
   ExamSchema,
   UpdateExamRequestSchema,
 } from "../exam.js";
+import { normalizeInterruptionPolicyConfiguration } from "../interruption.js";
 import {
   CreateQuestionRequestSchema,
   QuestionImportRowSchema,
@@ -26,6 +27,7 @@ import {
   UpdateQuestionRequestSchema,
 } from "../question.js";
 import { QuestionSnapshotSchema } from "../attempt.js";
+import { RestoreAttemptResponseSchema } from "../attempt.js";
 import {
   ScoreListQuerySchema,
   AuditLogQuerySchema,
@@ -327,6 +329,279 @@ describe("exam contracts", () => {
       totalScore: 50,
     });
     expect(result.success).toBe(true);
+  });
+
+  // ── ADR-013 interruption policy authoring (REC-I4-I3A) ──
+
+  it("CreateExamRequestSchema accepts strict interruption policy with null caps", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "strict",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema accepts bounded_grace with valid caps", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "bounded_grace",
+      interruptionGracePerIncidentSeconds: 120,
+      interruptionGracePerAttemptSeconds: 300,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema accepts operator_incident", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "operator_incident",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema omits interruption fields by default", () => {
+    const result = CreateExamRequestSchema.parse(validExam);
+    expect(result.interruptionTimePolicy).toBeUndefined();
+  });
+
+  it("UpdateExamRequestSchema accepts partial interruption policy update", () => {
+    const result = UpdateExamRequestSchema.safeParse({
+      interruptionTimePolicy: "bounded_grace",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("normalizeInterruptionPolicyConfiguration defaults omitted input to strict/null caps", () => {
+    const resolved = normalizeInterruptionPolicyConfiguration({});
+    expect(resolved).toEqual({
+      policy: "strict",
+      perIncidentCapSeconds: null,
+      perAttemptAggregateCapSeconds: null,
+    });
+  });
+
+  it("normalizeInterruptionPolicyConfiguration rejects bounded_grace without caps", () => {
+    expect(() =>
+      normalizeInterruptionPolicyConfiguration({ policy: "bounded_grace" }),
+    ).toThrow();
+  });
+
+  it("normalizeInterruptionPolicyConfiguration rejects bounded_grace perIncident > perAttempt", () => {
+    expect(() =>
+      normalizeInterruptionPolicyConfiguration({
+        policy: "bounded_grace",
+        perIncidentCapSeconds: 600,
+        perAttemptAggregateCapSeconds: 300,
+      }),
+    ).toThrow();
+  });
+
+  it("normalizeInterruptionPolicyConfiguration rejects strict with caps", () => {
+    expect(() =>
+      normalizeInterruptionPolicyConfiguration({
+        policy: "strict",
+        perIncidentCapSeconds: 120,
+        perAttemptAggregateCapSeconds: null,
+      }),
+    ).toThrow();
+  });
+
+  it("ExamSchema DTO exposes interruption policy fields", () => {
+    const exam = ExamSchema.parse({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      organizationId: "550e8400-e29b-41d4-a716-446655440001",
+      title: "T",
+      description: "",
+      courseId: "550e8400-e29b-41d4-a716-446655440002",
+      status: "draft",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: new Date().toISOString(),
+      closeAt: new Date(Date.now() + 86400000).toISOString(),
+      passingScore: 0,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      latestStartOffsetMinutes: null,
+      minSubmitAfterStartMinutes: null,
+      resultPublicationMode: "immediate",
+      resultsPublishedAt: null,
+      interruptionTimePolicy: "bounded_grace",
+      interruptionGracePerIncidentSeconds: 120,
+      interruptionGracePerAttemptSeconds: 300,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(exam.interruptionTimePolicy).toBe("bounded_grace");
+    expect(exam.interruptionGracePerIncidentSeconds).toBe(120);
+    expect(exam.interruptionGracePerAttemptSeconds).toBe(300);
+  });
+
+  // ADR-013 cross-field validation on CreateExamRequestSchema itself
+  it("CreateExamRequestSchema rejects bounded_grace without caps", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "bounded_grace",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateExamRequestSchema rejects bounded_grace perIncident > perAttempt", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "bounded_grace",
+      interruptionGracePerIncidentSeconds: 600,
+      interruptionGracePerAttemptSeconds: 300,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateExamRequestSchema rejects strict with caps", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "strict",
+      interruptionGracePerIncidentSeconds: 120,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateExamRequestSchema rejects operator_incident with caps", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "operator_incident",
+      interruptionGracePerAttemptSeconds: 300,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ── ADR-013 restore response contract (REC-I4-I3A) ──
+describe("RestoreAttemptResponseSchema (REC-I4-I3A frozen contract)", () => {
+  const baseAttempt = {
+    id: "550e8400-e29b-41d4-a716-446655440010",
+    organizationId: "550e8400-e29b-41d4-a716-446655440001",
+    examId: "550e8400-e29b-41d4-a716-446655440002",
+    enrollmentId: "550e8400-e29b-41d4-a716-446655440003",
+    candidateId: "550e8400-e29b-41d4-a716-446655440004",
+    attemptNo: 1,
+    status: "in_progress",
+    questionSnapshot: [],
+    answers: [],
+    score: 0,
+    passed: false,
+    startedAt: new Date().toISOString(),
+    deadlineAt: new Date(Date.now() + 3600000).toISOString(),
+    lastActivityAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  it("accepts a restored strict-policy zero-grant response", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "strict", addedSeconds: 0 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a restored bounded_grace response with positive grant", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "bounded_grace", addedSeconds: 120 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an already_in_progress response", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "already_in_progress",
+      compensation: { policy: "strict", addedSeconds: 0 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects negative addedSeconds", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "strict", addedSeconds: -1 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown policy", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "lenient", addedSeconds: 0 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("does not expose internal interruption evidence (interruptionId/adjustmentId)", () => {
+    // The frozen contract deliberately omits episode id, detected-event
+    // evidence, and adjustment-ledger details. Parsing a payload that carries
+    // them must NOT surface those keys in the parsed output.
+    const parsed = RestoreAttemptResponseSchema.parse({
+      lifecycle: "restored",
+      compensation: { policy: "strict", addedSeconds: 0 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+      // Attempt to leak internal detail — must be stripped by the schema.
+      interruptionId: "should-not-leak",
+      adjustmentId: "should-not-leak",
+      eligibleSeconds: 999,
+    });
+    expect(parsed).not.toHaveProperty("interruptionId");
+    expect(parsed).not.toHaveProperty("adjustmentId");
+    expect(parsed).not.toHaveProperty("eligibleSeconds");
+    expect(parsed.compensation).not.toHaveProperty("interruptionId");
+    expect(parsed.compensation).not.toHaveProperty("adjustmentId");
+    expect(parsed.compensation).not.toHaveProperty("eligibleSeconds");
+  });
+
+  it("accepts a terminal lifecycle outcome (already-terminal or deadline-win)", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "terminal",
+      compensation: { policy: "strict", addedSeconds: 0 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects strict policy with positive addedSeconds (compensation invariant)", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "strict", addedSeconds: 300 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects operator_incident policy with positive addedSeconds", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "operator_incident", addedSeconds: 120 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(false);
   });
 });
 

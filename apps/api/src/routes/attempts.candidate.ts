@@ -10,6 +10,7 @@ import {
   LoadAttemptResponseSchema,
   QueueStatusResponseSchema,
   RestoreAttemptRequestSchema,
+  RestoreAttemptResponseSchema,
   SaveAnswerParamsSchema,
   SaveAnswerRequestSchema,
   SaveAnswerAcceptedSchema,
@@ -1112,7 +1113,19 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /attempts/:attemptId/restore — Explicitly restores a disrupted
-   * attempt back to in-progress, restoring saved answers and remaining time.
+   * attempt. ADR-013 §6 / REC-I4-I3A: returns the frozen restore response
+   * contract (command acknowledgement + candidate-safe compensation summary).
+   * The response deliberately does NOT expose internal interruption evidence
+   * (episode id, detected event, adjustment ledger) — those remain
+   * server-side authority. The candidate client re-reads the authoritative
+   * take-snapshot via GET after this returns.
+   *
+   * Lifecycle outcomes:
+   *   - `restored` — disrupted → in_progress (possibly with bounded_grace grant);
+   *   - `already_in_progress` — the attempt was already active;
+   *   - `terminal` — the attempt was already terminal on entry, or the
+   *     deadline reconciliation submitted it during this transaction.
+   *     All three outcomes return 200 (the terminalization is authoritative).
    */
   fastify.post(
     "/attempts/:attemptId/restore",
@@ -1126,7 +1139,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         security: cookieAuth,
         "x-role": ["Candidate"],
         response: {
-          200: LoadAttemptResponseSchema,
+          200: RestoreAttemptResponseSchema,
           400: ErrorResponseSchema,
           409: ErrorResponseSchema,
         },
@@ -1145,62 +1158,73 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // threaded through the entire restore transaction.
       const now = fastify.now();
 
-      const result = await executeInTransaction(fastify.db, async (tx) => {
-        const { exams, attempts, enrollments } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: createAttemptRepo(tx),
-            enrollmentRepo: createEnrollmentRepo(tx),
-          },
-          ctx,
-        );
-        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-          createAttemptGradingEntryRepo(tx),
-          ctx,
-        );
+      const restoreResult = await executeInTransaction(
+        fastify.db,
+        async (tx) => {
+          const { exams, attempts, enrollments } = createExamEngineRepos(
+            {
+              examRepo: createExamRepo(tx),
+              attemptRepo: createAttemptRepo(tx),
+              enrollmentRepo: createEnrollmentRepo(tx),
+            },
+            ctx,
+          );
+          const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+            createAttemptGradingEntryRepo(tx),
+            ctx,
+          );
 
-        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam.
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
-          attemptId,
-        );
+          // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam.
+          const cap = await lockEnrollmentAndAttempt(
+            enrollments,
+            attempts,
+            attemptId,
+          );
 
-        // Build interruption repos (R12: restore uses EA seam, these are
-        // the additional repos needed by restoreInterruptedAttempt).
-        const episodeRepo = createInterruptionEpisodeRepoAdapter(
-          createAttemptInterruptionRepo(tx),
-          ctx,
-        );
-        const eventRepo = createInterruptionEventRepoAdapter(
-          createAttemptInterruptionEventRepo(tx),
-          ctx,
-        );
-        const adjustmentRepo = createTimeAdjustmentRepoAdapter(
-          createAttemptTimeAdjustmentRepo(tx),
-          ctx,
-        );
+          // Build interruption repos (R12: restore uses EA seam, these are
+          // the additional repos needed by restoreInterruptedAttempt).
+          const episodeRepo = createInterruptionEpisodeRepoAdapter(
+            createAttemptInterruptionRepo(tx),
+            ctx,
+          );
+          const eventRepo = createInterruptionEventRepoAdapter(
+            createAttemptInterruptionEventRepo(tx),
+            ctx,
+          );
+          const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+            createAttemptTimeAdjustmentRepo(tx),
+            ctx,
+          );
 
-        // Composed restore: handles policy evaluation, deadline
-        // reconciliation, time grant (bounded_grace), and lifecycle.
-        const restoreResult = await restoreInterruptedAttempt(
-          exams,
-          attempts,
-          enrollments,
-          episodeRepo,
-          eventRepo,
-          adjustmentRepo,
-          gradingWorksetRepo,
-          cap,
-          now,
-        );
-
-        return restoreResult.attempt;
-      });
-
-      return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(result, now),
+          // Composed restore: handles policy evaluation, deadline
+          // reconciliation, time grant (bounded_grace), and lifecycle.
+          return restoreInterruptedAttempt(
+            exams,
+            attempts,
+            enrollments,
+            episodeRepo,
+            eventRepo,
+            adjustmentRepo,
+            gradingWorksetRepo,
+            cap,
+            now,
+          );
+        },
       );
+
+      // Project the engine result onto the frozen candidate-facing contract.
+      // The engine `lifecycle` union includes `terminal` (already-terminal
+      // on entry, or deadline-reconciliation submitted). All three outcomes
+      // (`restored`, `already_in_progress`, `terminal`) are legitimate 200
+      // results — the schema accepts them all.
+      return RestoreAttemptResponseSchema.parse({
+        lifecycle: restoreResult.lifecycle,
+        compensation: {
+          policy: restoreResult.compensation.policy,
+          addedSeconds: restoreResult.compensation.addedSeconds,
+        },
+        attempt: toCandidateAttemptResponse(restoreResult.attempt, now),
+      });
     },
   );
 }

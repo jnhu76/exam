@@ -15,6 +15,7 @@ import {
   CandidateStatusResponseSchema,
   ErrorResponseSchema,
   PASSING_SCORE_EXCEEDS_TOTAL_MSG,
+  normalizeInterruptionPolicyConfiguration,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -93,6 +94,13 @@ function toExamResponse(exam: Exam) {
     resultsPublishedAt: exam.resultsPublishedAt
       ? exam.resultsPublishedAt.toISOString()
       : null,
+    // ADR-013 §3: interruption time-compensation policy. The DB column is
+    // NOT NULL with a `strict` default; caps are nullable.
+    interruptionTimePolicy: exam.interruptionTimePolicy ?? "strict",
+    interruptionGracePerIncidentSeconds:
+      exam.interruptionGracePerIncidentSeconds ?? null,
+    interruptionGracePerAttemptSeconds:
+      exam.interruptionGracePerAttemptSeconds ?? null,
     createdAt: exam.createdAt.toISOString(),
     updatedAt: exam.updatedAt.toISOString(),
   };
@@ -496,6 +504,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
+      // ADR-013 §3: resolve the interruption policy from the (optional)
+      // authoring input. Normalization enforces the cross-field rules
+      // (strict/operator_incident ⇒ null caps; bounded_grace ⇒ both caps
+      // present, positive, perIncident ≤ perAttempt) and fails closed.
+      const interruptionPolicy = normalizeInterruptionPolicyConfiguration({
+        policy: data.interruptionTimePolicy,
+        perIncidentCapSeconds: data.interruptionGracePerIncidentSeconds,
+        perAttemptAggregateCapSeconds: data.interruptionGracePerAttemptSeconds,
+      });
+
       const exam = await createExamRepo(fastify.db).create(ctx, {
         title: data.title,
         description: data.description,
@@ -520,6 +538,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           request.body,
           data.resultPublicationMode ?? "immediate",
         ),
+        interruptionTimePolicy: interruptionPolicy.policy,
+        interruptionGracePerIncidentSeconds:
+          interruptionPolicy.perIncidentCapSeconds,
+        interruptionGracePerAttemptSeconds:
+          interruptionPolicy.perAttemptAggregateCapSeconds,
       });
       recordBestEffortAudit(fastify, request, ctx, {
         action: "exam.create",
@@ -674,6 +697,40 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               request.body,
               data.resultPublicationMode ?? "immediate",
             );
+          }
+          // ADR-013 §3: interruption policy is a substantive authoring field,
+          // mutable only while the exam is `draft` (the published guard above
+          // already rejected any non-schedule field). When any interruption
+          // field is present, merge the partial input with the exam's current
+          // resolved policy and re-validate the cross-field rules. The raw
+          // optional fields spread from `data` are replaced by the normalized
+          // result so the persisted shape always satisfies ADR-013.
+          if (exam.status === "draft") {
+            const hasInterruptionInput =
+              data.interruptionTimePolicy !== undefined ||
+              data.interruptionGracePerIncidentSeconds !== undefined ||
+              data.interruptionGracePerAttemptSeconds !== undefined;
+            if (hasInterruptionInput) {
+              const resolved = normalizeInterruptionPolicyConfiguration({
+                policy:
+                  data.interruptionTimePolicy ??
+                  exam.interruptionTimePolicy ??
+                  "strict",
+                perIncidentCapSeconds:
+                  data.interruptionGracePerIncidentSeconds === undefined
+                    ? (exam.interruptionGracePerIncidentSeconds ?? null)
+                    : data.interruptionGracePerIncidentSeconds,
+                perAttemptAggregateCapSeconds:
+                  data.interruptionGracePerAttemptSeconds === undefined
+                    ? (exam.interruptionGracePerAttemptSeconds ?? null)
+                    : data.interruptionGracePerAttemptSeconds,
+              });
+              updateData.interruptionTimePolicy = resolved.policy;
+              updateData.interruptionGracePerIncidentSeconds =
+                resolved.perIncidentCapSeconds;
+              updateData.interruptionGracePerAttemptSeconds =
+                resolved.perAttemptAggregateCapSeconds;
+            }
           }
           const updated = (await repo.update(
             ctx,

@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  InterruptionTimePolicySchema,
+  normalizeInterruptionPolicyConfiguration,
+} from "./interruption.js";
 
 // ── Exam ──────────────────────────────────────────────────────────
 
@@ -86,6 +90,13 @@ export const ExamSchema = z.object({
   // P2D-J5a: result publishing policy + manual publish timestamp.
   resultPublicationMode: ResultPublicationModeEnum,
   resultsPublishedAt: z.string().datetime().nullable(),
+  // ADR-013 §3: interruption time-compensation policy. The DB column is
+  // NOT NULL with a `strict` default, so the response always carries the
+  // resolved policy. Caps are nullable (null for strict / operator_incident;
+  // required positive integers for bounded_grace).
+  interruptionTimePolicy: InterruptionTimePolicySchema,
+  interruptionGracePerIncidentSeconds: z.number().int().positive().nullable(),
+  interruptionGracePerAttemptSeconds: z.number().int().positive().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -133,6 +144,14 @@ export const CreateExamRequestBaseSchema = z.object({
   // controlFlags.showResultImmediately; the route handler applies the
   // 'immediate' default after coercion.
   resultPublicationMode: ResultPublicationModeEnum.optional(),
+  // ADR-013 §3: interruption time-compensation authoring fields. Optional
+  // input; omitted resolves to `strict` with null caps. The route normalizes
+  // via `normalizeInterruptionPolicyConfiguration`, which enforces the
+  // ADR-013 cross-field rules (strict/operator_incident ⇒ null caps;
+  // bounded_grace ⇒ both caps present, positive, perIncident ≤ perAttempt).
+  interruptionTimePolicy: InterruptionTimePolicySchema.optional(),
+  interruptionGracePerIncidentSeconds: z.number().int().positive().nullish(),
+  interruptionGracePerAttemptSeconds: z.number().int().positive().nullish(),
 });
 
 export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
@@ -143,6 +162,35 @@ export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
         path: ["passingScore"],
         message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
       });
+    }
+    // ADR-013 §3: interruption policy cross-field validation on create.
+    // The route also validates via normalizeInterruptionPolicyConfiguration,
+    // but contract-level validation catches structural errors earlier.
+    if (data.interruptionTimePolicy !== undefined) {
+      const policy = data.interruptionTimePolicy;
+      const perIncident = data.interruptionGracePerIncidentSeconds;
+      const perAttempt = data.interruptionGracePerAttemptSeconds;
+      if (policy === "strict" || policy === "operator_incident") {
+        if (perIncident != null || perAttempt != null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Interruption policy ${policy} must have null caps`,
+          });
+        }
+      } else if (policy === "bounded_grace") {
+        if (perIncident == null || perAttempt == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "bounded_grace interruption policy requires both caps",
+          });
+        } else if (perIncident > perAttempt) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["interruptionGracePerIncidentSeconds"],
+            message: "per-incident cap cannot exceed the aggregate cap",
+          });
+        }
+      }
     }
   },
 );
@@ -173,6 +221,15 @@ export const UpdateExamRequestBaseSchema = z.object({
   // P2D-J5a: result publishing policy. Optional on update (only draft exams
   // accept full edits; published is schedule-only per ADR-005 Slice 2 §3.7).
   resultPublicationMode: ResultPublicationModeEnum.optional(),
+  // ADR-013 §3: interruption time-compensation authoring fields. Optional on
+  // update. The route normalizes the partial input together with the existing
+  // exam's resolved policy via `normalizeInterruptionPolicyConfiguration`,
+  // enforcing the cross-field rules against the POST-resolution shape.
+  // These fields are substantive authoring fields and may only be mutated
+  // while the exam is `draft` (enforced by the route's draft-only guard).
+  interruptionTimePolicy: InterruptionTimePolicySchema.optional(),
+  interruptionGracePerIncidentSeconds: z.number().int().positive().nullish(),
+  interruptionGracePerAttemptSeconds: z.number().int().positive().nullish(),
 });
 
 export const UpdateExamRequestSchema = UpdateExamRequestBaseSchema.superRefine(

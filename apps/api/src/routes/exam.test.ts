@@ -1707,3 +1707,201 @@ describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
     expect(pubRes.json().passingScore).toBe(0);
   });
 });
+
+// ADR-013 §3 / REC-I4-I3A: interruption time-compensation policy authoring
+// surface. Substantive authoring fields exposed through Exam create/update;
+// draft-only mutation; cross-field validation per ADR-013.
+describe("exam interruption policy authoring (ADR-013 / REC-I4-I3A)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let questionId: string;
+
+  function examPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      title: `I3A-${uniquePrefix()}`,
+      courseId,
+      durationMinutes: 60,
+      openAt: new Date().toISOString(),
+      closeAt: new Date(Date.now() + 86400000).toISOString(),
+      passingScore: 0,
+      totalScore: 100,
+      questionIds: [questionId],
+      ...overrides,
+    };
+  }
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(examRoutes);
+    });
+
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "I3A Course",
+        code: `I3A-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "I3A question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    questionId = qRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  it("creates an exam with the default strict interruption policy when omitted", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload(),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.interruptionTimePolicy).toBe("strict");
+    expect(body.interruptionGracePerIncidentSeconds).toBeNull();
+    expect(body.interruptionGracePerAttemptSeconds).toBeNull();
+  });
+
+  it("creates an exam with an explicit bounded_grace policy", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({
+        interruptionTimePolicy: "bounded_grace",
+        interruptionGracePerIncidentSeconds: 120,
+        interruptionGracePerAttemptSeconds: 300,
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.interruptionTimePolicy).toBe("bounded_grace");
+    expect(body.interruptionGracePerIncidentSeconds).toBe(120);
+    expect(body.interruptionGracePerAttemptSeconds).toBe(300);
+  });
+
+  it("rejects bounded_grace creation without caps (ADR-013 cross-field)", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({
+        interruptionTimePolicy: "bounded_grace",
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects bounded_grace creation with perIncident > perAttempt", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({
+        interruptionTimePolicy: "bounded_grace",
+        interruptionGracePerIncidentSeconds: 600,
+        interruptionGracePerAttemptSeconds: 300,
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("updates interruption policy on a draft exam", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload(),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {
+        interruptionTimePolicy: "bounded_grace",
+        interruptionGracePerIncidentSeconds: 90,
+        interruptionGracePerAttemptSeconds: 240,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(200);
+    const body = patchRes.json();
+    expect(body.interruptionTimePolicy).toBe("bounded_grace");
+    expect(body.interruptionGracePerIncidentSeconds).toBe(90);
+    expect(body.interruptionGracePerAttemptSeconds).toBe(240);
+  });
+
+  it("rejects interruption policy mutation on a published exam (draft-only)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload(),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {
+        interruptionTimePolicy: "bounded_grace",
+        interruptionGracePerIncidentSeconds: 90,
+        interruptionGracePerAttemptSeconds: 240,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // Published exams accept schedule fields only; interruption policy is a
+    // substantive authoring field frozen at publish.
+    expect(patchRes.statusCode).toBe(409);
+  });
+
+  it("rejects partial bounded_grace update missing caps (cross-field merge)", async () => {
+    // Start strict, then try to switch policy to bounded_grace via PATCH
+    // without supplying caps. The route merges the partial input with the
+    // existing (null) caps, which still violates bounded_grace requirements.
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload(),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {
+        interruptionTimePolicy: "bounded_grace",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(400);
+  });
+});
