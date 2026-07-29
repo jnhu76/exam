@@ -56,7 +56,7 @@ import {
 
 /**
  * Registers all admin-facing attempt routes: misconduct flag, force-submit,
- * and extend-time. Handlers are unchanged from the pre-split module.
+ * and time-grants. Handlers are unchanged from the pre-split module.
  */
 export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   /**

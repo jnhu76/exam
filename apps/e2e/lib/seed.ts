@@ -158,6 +158,12 @@ export async function seedExam(
     passingScore?: number;
     totalScore?: number;
     resultPublicationMode?: "immediate" | "after_grading" | "manual";
+    /**
+     * Interruption time-policy frozen into started attempts. Defaults to
+     * "strict". Operator time-grant (POST /time-grants) requires an exam seeded
+     * with "operator_incident"; pass that value for grant-focused scenarios.
+     */
+    interruptionTimePolicy?: "strict" | "bounded_grace" | "operator_incident";
     /** Optional subjective (manual-graded) fill_blank questions to include. */
     subjectiveQuestions?: SubjectiveQuestionSeed[];
     /**
@@ -257,6 +263,7 @@ export async function seedExam(
     retakePolicy: "unlimited",
     scoreStrategy: "highest",
     maxAttempts: 1,
+    interruptionTimePolicy: opts.interruptionTimePolicy ?? "strict",
   });
   const examId = exam.id as string;
 

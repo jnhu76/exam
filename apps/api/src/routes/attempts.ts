@@ -6,7 +6,7 @@ import { registerGradingQueueRoutes } from "./gradingQueue.js";
 /**
  * Fastify plugin that registers every attempt route. Acts as a registration
  * hub only — candidate runtime routes live in `attempts.candidate.ts` and
- * admin attempt routes (misconduct, force-submit, extend-time) live in
+ * admin attempt routes (misconduct, force-submit, time-grants) live in
  * `attempts.admin.ts`. Manual-grading queue routes (P2D-J3) live in
  * `gradingQueue.ts`. Route-layer shared helpers live in `attempts.shared.ts`.
  */

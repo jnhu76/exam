@@ -85,10 +85,14 @@ test.describe("Proctor Runtime E2E", () => {
     expect(body.candidates[0].status).toBe("graded");
   });
 
-  test("admin extends time on a new in_progress attempt", async ({
+  test("admin grants operator time on a new in_progress attempt", async ({
     request,
   }) => {
-    const exam2 = await seedExam(request, `j8-ext-${Date.now()}`);
+    // Operator time-grant requires the exam to freeze an operator_incident
+    // policy snapshot onto started attempts.
+    const exam2 = await seedExam(request, `j8-grant-${Date.now()}`, {
+      interruptionTimePolicy: "operator_incident",
+    });
     const candToken = await candidateLoginApi(
       request,
       exam2.candidate.username,
@@ -111,13 +115,24 @@ test.describe("Proctor Runtime E2E", () => {
       beforeBody.candidates[0].deadlineAt,
     ).getTime();
 
+    const operationId = crypto.randomUUID();
     const res = await adminPost(
       request,
       adminToken,
-      `/api/admin/attempts/${newAttemptId}/extend-time`,
-      { additionalMinutes: 15 },
+      `/api/admin/attempts/${newAttemptId}/time-grants`,
+      {
+        operationId,
+        addedSeconds: 15 * 60,
+        reasonCode: "technical_incident",
+        reasonText: "E2E operator time grant",
+      },
     );
     expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.outcome).toBe("granted");
+    expect(body.adjustment?.operationId).toBe(operationId);
+    expect(body.adjustment?.addedSeconds).toBe(15 * 60);
+    expect(body.adjustment?.source).toBe("operator");
 
     const afterRes = await adminGet(
       request,

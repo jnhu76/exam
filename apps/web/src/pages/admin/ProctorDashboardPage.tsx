@@ -82,7 +82,7 @@ function groupByStatus(candidates: CandidateStatusItem[]): StatusGroups {
 /**
  * Proctor dashboard for monitoring live exam candidates via HTTP polling.
  * Displays status cards grouped by attempt state and exposes action buttons
- * for force-submit, extend-time, and misconduct flag.
+ * for force-submit, time-grant, and misconduct flag.
  */
 export function ProctorDashboardPage() {
   const { t } = useTranslation();
