@@ -24,15 +24,15 @@
  * Usage:
  *   TLA2TOOLS_JAR=/path/to/tla2tools.jar node scripts/formal/run-operator-grant-tlc.mjs server
  *   TLA2TOOLS_JAR=/path/to/tla2tools.jar node scripts/formal/run-operator-grant-tlc.mjs client
+ *   TLA2TOOLS_JAR=/path/to/tla2tools.jar node scripts/formal/run-operator-grant-tlc.mjs witnesses
  *   TLA2TOOLS_JAR=/path/to/tla2tools.jar node scripts/formal/run-operator-grant-tlc.mjs counterexamples
  *   TLA2TOOLS_JAR=/path/to/tla2tools.jar node scripts/formal/run-operator-grant-tlc.mjs all
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, statSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,14 +47,20 @@ const COUNTEREXAMPLES = [
   {
     config: "ServerLegacyDuplicateEffect",
     model: SERVER_MODEL,
-    expectedViolation: "AtMostOneDeadlineEffectPerOperation",
+    expectedViolation: "AtMostOneLedgerPerOperation",
     flag: "LegacyDuplicateEffect",
   },
   {
     config: "ServerLegacyPartialCommit",
     model: SERVER_MODEL,
-    expectedViolation: "LedgerAndDeadlineCommitAtomically",
-    flag: "LegacyPartialCommit",
+    expectedViolation: "LedgerImpliesExactlyOneEffect",
+    flag: "LegacyLedgerOnlyCommit",
+  },
+  {
+    config: "ServerLegacyDeadlineOnlyCommit",
+    model: SERVER_MODEL,
+    expectedViolation: "EffectImpliesExactlyOneLedger",
+    flag: "LegacyDeadlineOnlyCommit",
   },
   {
     config: "ServerLegacyWrongConflictOutcome",
@@ -67,6 +73,12 @@ const COUNTEREXAMPLES = [
     model: SERVER_MODEL,
     expectedViolation: "TerminalAttemptNeverGranted",
     flag: "LegacyTerminalGrant",
+  },
+  {
+    config: "ServerLegacyRetryDuplicateApply",
+    model: SERVER_MODEL,
+    expectedViolation: "RetryDoesNotApplyAgain",
+    flag: "LegacyRetryDuplicateApply",
   },
   {
     config: "ClientLegacyPerTabPending",
@@ -94,7 +106,20 @@ const COUNTEREXAMPLES = [
   },
 ];
 
-const MODES = new Set(["server", "client", "counterexamples", "all"]);
+const WITNESSES = [
+  {
+    config: "ServerSameAttemptReplay",
+    model: SERVER_MODEL,
+    expectedViolation: "NoSameAttemptReplayWitness",
+  },
+  {
+    config: "ServerSameAttemptPayloadConflict",
+    model: SERVER_MODEL,
+    expectedViolation: "NoSameAttemptDifferentPayloadConflictWitness",
+  },
+];
+
+const MODES = new Set(["server", "client", "witnesses", "counterexamples", "all"]);
 
 function fail(msg) {
   console.error(`formal:operator-grant: ERROR — ${msg}`);
@@ -103,6 +128,23 @@ function fail(msg) {
 
 function info(msg) {
   console.error(`formal:operator-grant: ${msg}`);
+}
+
+export function validateJavaProbe(javaBin, probe) {
+  if (probe.error) {
+    throw new Error(`could not start '${javaBin} -version': ${probe.error.message}`);
+  }
+  if (probe.status !== 0) {
+    const detail = probe.stderr?.toString("utf8").trim();
+    const status =
+      probe.status === null
+        ? `signal ${probe.signal ?? "<unknown>"}`
+        : `status ${probe.status}`;
+    throw new Error(
+      `Java probe '${javaBin} -version' exited with ${status}` +
+        `${detail ? `: ${detail}` : ""}`,
+    );
+  }
 }
 
 function resolveJava() {
@@ -114,14 +156,7 @@ function resolveJava() {
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });
-    if (probe.error) {
-      if (process.env.JAVA_HOME) throw probe.error;
-      fail(
-        "Java is unavailable. Install Java (JRE 8+) or set JAVA_HOME. " +
-          "spawnSync error: " +
-          probe.error.message,
-      );
-    }
+    validateJavaProbe(javaBin, probe);
   } catch (err) {
     fail(
       "Java probe failed: " +
@@ -130,6 +165,15 @@ function resolveJava() {
     );
   }
   return javaBin;
+}
+
+export function resolveWorkers(raw = process.env.FORMAL_WORKERS) {
+  if (raw === undefined) return 2;
+  const workers = Number(raw);
+  if (!Number.isInteger(workers) || workers < 1) {
+    throw new Error(`FORMAL_WORKERS must be a positive integer, got "${raw}".`);
+  }
+  return workers;
 }
 
 function resolveJar() {
@@ -161,6 +205,23 @@ function resolveJar() {
   return abs;
 }
 
+export function buildTlcArgs({ jar, workers, configFile, metadir, modelFile }) {
+  return [
+    "-XX:+UseParallelGC",
+    "-jar",
+    jar,
+    "-workers",
+    String(workers),
+    "-nowarning",
+    "-difftrace",
+    "-config",
+    configFile,
+    "-metadir",
+    metadir,
+    modelFile,
+  ];
+}
+
 function runTlc({ javaBin, jar, modelFile, configFile, metadir, label, workers }) {
   if (!existsSync(join(MODEL_DIR, modelFile))) {
     fail(
@@ -174,21 +235,13 @@ function runTlc({ javaBin, jar, modelFile, configFile, metadir, label, workers }
   }
   mkdirSync(metadir, { recursive: true });
 
-  const args = [
-    "-XX:+UseParallelGC",
-    "-jar",
+  const args = buildTlcArgs({
     jar,
-    "-workers",
-    String(workers),
-    "-nowarning",
-    "-deadlock",
-    "-difftrace",
-    "-config",
     configFile,
-    "-metadir",
     metadir,
     modelFile,
-  ];
+    workers,
+  });
 
   info(`[${label}] model    : ${join("formal", "tla", "operator-grant", modelFile)}`);
   info(`[${label}] config   : ${join("formal", "tla", "operator-grant", configFile)}`);
@@ -220,7 +273,7 @@ function runTlc({ javaBin, jar, modelFile, configFile, metadir, label, workers }
   });
 }
 
-function parseViolation(output, expectedName) {
+export function parseViolation(output) {
   const lines = output.split(/\r?\n/);
   for (const line of lines) {
     const m = line.match(/Invariant\s+(\w+)\s+is\s+violated/i);
@@ -235,8 +288,9 @@ function parseViolation(output, expectedName) {
     if (m && m[1]) return m[1];
   }
   if (/Temporal properties were violated/i.test(output)) {
-    return expectedName ?? "__temporal__";
+    return "__temporal__";
   }
+  if (/Deadlock reached/i.test(output)) return "__deadlock__";
   return null;
 }
 
@@ -255,6 +309,13 @@ function detectToolError(output) {
   return null;
 }
 
+export function executionToolError(result) {
+  if (result.spawnError) {
+    return `process spawn failed: ${result.spawnError.message}`;
+  }
+  return detectToolError(result.output);
+}
+
 async function runSafety(javaBin, jar, modelFile, cfgFile, label) {
   const res = await runTlc({
     javaBin,
@@ -263,9 +324,9 @@ async function runSafety(javaBin, jar, modelFile, cfgFile, label) {
     configFile: cfgFile,
     metadir: join(WORK_ROOT, label),
     label,
-    workers: Number(process.env.FORMAL_WORKERS ?? 2),
+    workers: resolveWorkers(),
   });
-  const toolErr = detectToolError(res.output);
+  const toolErr = executionToolError(res);
   if (toolErr) {
     info(`${label}: FAILED — tool error (${toolErr}). Not a property result.`);
     return { mode: label, ok: false, reason: toolErr, code: res.code };
@@ -274,7 +335,7 @@ async function runSafety(javaBin, jar, modelFile, cfgFile, label) {
     info(`${label}: PASS — no invariant violation, no unexpected deadlock.`);
     return { mode: label, ok: true, code: res.code };
   }
-  const violated = parseViolation(res.output, null);
+  const violated = parseViolation(res.output);
   const vname = violated ?? "<unknown>";
   info(
     `${label}: FAILED — ${vname} was violated. ` +
@@ -288,22 +349,26 @@ async function runSafety(javaBin, jar, modelFile, cfgFile, label) {
   };
 }
 
-async function runCounterexamples(javaBin, jar) {
+async function runExpectedViolations(
+  javaBin,
+  jar,
+  { cases, directory, mode, successLabel },
+) {
   const results = [];
-  for (const ce of COUNTEREXAMPLES) {
+  for (const ce of cases) {
     const res = await runTlc({
       javaBin,
       jar,
       modelFile: ce.model,
-      configFile: join("counterexamples", `${ce.config}.cfg`),
-      metadir: join(WORK_ROOT, `ce_${ce.config}`),
-      label: `counterexample:${ce.config}`,
-      workers: Number(process.env.FORMAL_WORKERS ?? 2),
+      configFile: join(directory, `${ce.config}.cfg`),
+      metadir: join(WORK_ROOT, `${mode}_${ce.config}`),
+      label: `${mode}:${ce.config}`,
+      workers: resolveWorkers(),
     });
-    const toolErr = detectToolError(res.output);
+    const toolErr = executionToolError(res);
     if (toolErr) {
       info(
-        `counterexample:${ce.config}: FAILED — tool error (${toolErr}). ` +
+        `${mode}:${ce.config}: FAILED — tool error (${toolErr}). ` +
           `This is NOT the expected violation; do not mask it.`,
       );
       results.push({
@@ -317,8 +382,8 @@ async function runCounterexamples(javaBin, jar) {
     }
     if (res.code === 0) {
       info(
-        `counterexample:${ce.config}: FAILED — TLC found NO violation of ` +
-          `${ce.expectedViolation}. An expected-negative config MUST ` +
+        `${mode}:${ce.config}: FAILED — TLC found NO violation of ` +
+          `${ce.expectedViolation}. This evidence config MUST ` +
           `produce the named violation; absence is failure, not success.`,
       );
       results.push({
@@ -331,11 +396,11 @@ async function runCounterexamples(javaBin, jar) {
       });
       continue;
     }
-    const violated = parseViolation(res.output, ce.expectedViolation);
+    const violated = parseViolation(res.output);
     if (violated === ce.expectedViolation) {
       info(
-        `counterexample:${ce.config}: EXPECTED VIOLATION reproduced — ` +
-          `${violated} (flag ${ce.flag}=TRUE).`,
+        `${mode}:${ce.config}: ${successLabel} — ${violated}` +
+          `${ce.flag ? ` (flag ${ce.flag}=TRUE)` : ""}.`,
       );
       results.push({
         config: ce.config,
@@ -347,7 +412,7 @@ async function runCounterexamples(javaBin, jar) {
       });
     } else {
       info(
-        `counterexample:${ce.config}: FAILED — expected ` +
+        `${mode}:${ce.config}: FAILED — expected ` +
           `${ce.expectedViolation} to be violated, but TLC reported ` +
           `${violated ?? "<no named violation>"}. Investigate before ` +
           `treating this as expected.`,
@@ -362,7 +427,25 @@ async function runCounterexamples(javaBin, jar) {
       });
     }
   }
-  return { mode: "counterexamples", results };
+  return { mode, results };
+}
+
+async function runCounterexamples(javaBin, jar) {
+  return runExpectedViolations(javaBin, jar, {
+    cases: COUNTEREXAMPLES,
+    directory: "counterexamples",
+    mode: "counterexamples",
+    successLabel: "EXPECTED VIOLATION reproduced",
+  });
+}
+
+async function runWitnesses(javaBin, jar) {
+  return runExpectedViolations(javaBin, jar, {
+    cases: WITNESSES,
+    directory: "witnesses",
+    mode: "witnesses",
+    successLabel: "REACHABILITY WITNESS reproduced",
+  });
 }
 
 async function main() {
@@ -370,7 +453,7 @@ async function main() {
   if (!MODES.has(mode)) {
     fail(
       `Unknown mode "${mode}". Usage: node scripts/formal/run-operator-grant-tlc.mjs ` +
-        `<server|client|counterexamples|all>`,
+        `<server|client|witnesses|counterexamples|all>`,
     );
   }
 
@@ -389,19 +472,23 @@ async function main() {
     summary.push(
       await runSafety(javaBin, jar, CLIENT_MODEL, "OperatorGrantClientSafety.cfg", "client"),
     );
+  if (mode === "witnesses" || mode === "all")
+    summary.push(await runWitnesses(javaBin, jar));
   if (mode === "counterexamples" || mode === "all")
     summary.push(await runCounterexamples(javaBin, jar));
 
   info("---- summary ----");
   for (const s of summary) {
-    if (s.mode === "counterexamples") {
+    if (s.results) {
       for (const r of s.results) {
         const tag = r.reproduced
-          ? `EXPECTED_VIOLATION(${r.violated})`
+          ? s.mode === "witnesses"
+            ? `REACHABILITY_WITNESS(${r.violated})`
+            : `EXPECTED_VIOLATION(${r.violated})`
           : r.ok
             ? "OK"
             : "FAILED";
-        info(`  counterexample ${r.config}: ${tag}`);
+        info(`  ${s.mode} ${r.config}: ${tag}`);
       }
     } else {
       const tag = s.ok ? "PASS" : "FAIL";
@@ -410,7 +497,7 @@ async function main() {
   }
 
   const hardFail = summary.some((s) => {
-    if (s.mode === "counterexamples") {
+    if (s.results) {
       return s.results.some((r) => r.ok === false);
     }
     return s.ok === false;
@@ -423,6 +510,8 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  fail(`uncaught error: ${err ? err.stack || err.message : String(err)}`);
-});
+if (process.argv[1] && resolve(process.argv[1]) === __filename) {
+  main().catch((err) => {
+    fail(`uncaught error: ${err ? err.stack || err.message : String(err)}`);
+  });
+}

@@ -77,7 +77,8 @@ mismatches") and in the closeout audit (`docs/audits/REC-F1-*.md`).
 
 All TLC state, traces, checkpoints, coverage, dumps, and temporaries go
 under `formal/.work/` (git-ignored). See `.gitignore`. The runner points
-TLC's `-metadir` at `formal/.work/recovery/<mode>/`.
+TLC's `-metadir` at `formal/.work/recovery/<mode>/` or
+`formal/.work/operator-grant/<mode>/`.
 
 Never committed: `tla2tools.jar`, TLA+ Toolbox archives, Java runtimes, TLC
 state directories, raw multi-megabyte traces, downloaded binaries,
@@ -121,7 +122,7 @@ This separation prevents three failure modes:
 # Recovery protocol (target safety + liveness + expected counterexamples):
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery
 
-# Operator grant (server safety + client safety + expected counterexamples):
+# Operator grant (server/client safety + reachability + counterexamples):
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant
 
 # Individually:
@@ -130,12 +131,14 @@ TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:liveness
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:counterexamples
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:server
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:client
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:witnesses
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:counterexamples
+pnpm formal:operator-grant:runner-test
 ```
 
 The runner fails clearly if `TLA2TOOLS_JAR` is unset, the path is not a
-regular file, or Java is unavailable. See
-[`scripts/formal/run-recovery-tlc.mjs`](../scripts/formal/run-recovery-tlc.mjs).
+regular file, or Java is unavailable. See the recovery and operator-grant
+runners in `scripts/formal/`.
 
 Formal checks are **not** part of the default `pnpm verify` or CI in
 REC-F1. CI integration is a separate follow-up decision after model runtime

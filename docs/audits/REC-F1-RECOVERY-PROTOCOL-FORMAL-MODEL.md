@@ -307,9 +307,10 @@ No tests were invented.
    action model imply `ProcessRestore` does not change `timeGrant`. The
    current runtime violates this. This is the REC-I4 boundary, NOT a REC-F1
    finding and NOT fixed here (production code is out of scope).
-   RecoveryProtocol 的 timeGrant 性质在 recovery 模型中仍局部 vacuous；
-   独立 operator-grant 模型负责 command/idempotency/cross-tab semantics
-   (see `formal/tla/operator-grant/`, audit `docs/audits/REC-I4-F1-OPERATOR-GRANT-FORMAL-MODEL.md`).
+   RecoveryProtocol's `timeGrant` properties remain locally vacuous in the
+   recovery model. The independent operator-grant model owns command,
+   idempotency, and cross-tab semantics (see `formal/tla/operator-grant/` and
+   audit `docs/audits/REC-I4-F1-OPERATOR-GRANT-FORMAL-MODEL.md`).
 2. **Liveness PARTIAL — OPEN_QUESTION.** See "Liveness result".
 
 NavigateTo IS now in the route-switch Next (the prior "NavigateTo excluded"

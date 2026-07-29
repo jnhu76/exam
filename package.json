@@ -53,8 +53,10 @@
     "formal:recovery": "node scripts/formal/run-recovery-tlc.mjs all",
     "formal:operator-grant:server": "node scripts/formal/run-operator-grant-tlc.mjs server",
     "formal:operator-grant:client": "node scripts/formal/run-operator-grant-tlc.mjs client",
+    "formal:operator-grant:witnesses": "node scripts/formal/run-operator-grant-tlc.mjs witnesses",
     "formal:operator-grant:counterexamples": "node scripts/formal/run-operator-grant-tlc.mjs counterexamples",
-    "formal:operator-grant": "node scripts/formal/run-operator-grant-tlc.mjs all",
+    "formal:operator-grant:runner-test": "node --test scripts/formal/run-operator-grant-tlc.test.mjs",
+    "formal:operator-grant": "pnpm formal:operator-grant:runner-test && node scripts/formal/run-operator-grant-tlc.mjs all",
     "prepare": "husky"
   },
   "lint-staged": {
