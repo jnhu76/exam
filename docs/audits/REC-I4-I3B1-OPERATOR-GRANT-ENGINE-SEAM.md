@@ -146,14 +146,14 @@ result). Category breakdown:
 - **Terminal** (4): submitted/grading/graded/voided → outcome terminal, no grant.
 - **Expired reconcile** (2): in_progress expired (mode none), disrupted expired (mode active_interruption + terminalized event).
 - **Exam.closeAt** (1): afterDeadline > closeAt → `AttemptDeadlineExceedsExamCloseError`, no insert, no deadline change.
-- **Idempotency** (11): same payload replay, 5 different-payload conflicts (incl. interruptionId mismatch), reason canonicalization, 7 anti-corruption/shape conflicts (bounded_grace, administrative_correction, system_incident, wrong policy, non-null incidentId, non-null eligibleSeconds, different attemptId).
+- **Idempotency** (14): same payload replay, 5 different-payload conflicts (incl. interruptionId mismatch), reason canonicalization, 7 anti-corruption/shape conflicts (bounded_grace, administrative_correction, system_incident, wrong policy, non-null incidentId, non-null eligibleSeconds, different attemptId).
 - **InterruptionId ownership** (2): not owned → fails closed; historical episode still referenceable (valid UUID).
 - **Execution order: terminal wins** (3): already-terminal + malformed interruptionId, reconciled-to-terminal + malformed interruptionId, terminal + foreign interruptionId — all bypass episode lookup and grant.
 - **Execution order: active malformed interruptionId** (1): ValidationError before episode lookup.
-- **Policy guard** (2): missing snapshot, strict/bounded_grace rejected.
+- **Policy guard** (3): missing snapshot, strict/bounded_grace rejected.
 - **Atomicity sequencing** (2): insert throws → update never called; update throws → error propagates.
 - **Capability affinity** (1): different repos → rejected before any read/write.
-- **Input validation** (10): UUID, positive integer, PG integer bound, reasonCode empty/oversize, reasonText empty/oversize, incidentId non-null, `now` validity, attemptId mismatch, actorId empty.
+- **Input validation** (9): UUID, positive integer, PG integer bound, reasonCode empty/oversize, reasonText empty/oversize, incidentId non-null, `now` validity, attemptId mismatch, actorId empty.
 - **Not found** (1): attempt missing under lock → NotFoundError.
 
 ## Non-goals reaffirmed
