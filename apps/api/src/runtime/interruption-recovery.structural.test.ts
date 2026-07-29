@@ -159,23 +159,33 @@ describe("REC-I4-I2 interruption recovery structural guards", () => {
 describe("REC-I4-I3A contract + authoring structural guards", () => {
   const engineFiles = listTsFiles(ENGINE_SRC);
 
+  // Extract the restore-route handler block bounded by the next route
+  // registration, so a later route can never satisfy the contract matches by
+  // accident. Slices from the restore route path up to the next
+  // `fastify.<verb>(` registration (or EOF when restore is the last route).
+  function restoreRouteBlock(src: string): string {
+    const routeIdx = src.indexOf('"/attempts/:attemptId/restore"');
+    expect(routeIdx).toBeGreaterThan(-1);
+    const after = src.slice(routeIdx + 1);
+    const nextRoute = after.search(/\bfastify\.(get|post|put|patch|delete)\(/);
+    return nextRoute === -1
+      ? src.slice(routeIdx)
+      : src.slice(routeIdx, routeIdx + 1 + nextRoute);
+  }
+
   it("restore route returns RestoreAttemptResponseSchema (frozen contract)", () => {
     const src = readSource(join(API_SRC, "routes/attempts.candidate.ts"));
     expect(src).toMatch(/RestoreAttemptResponseSchema/);
     // The restore response schema is referenced as the 200 response. Extract
-    // the restore route registration block (from the route path to the end of
-    // the plugin function) and assert the 200 schema wiring.
-    const routeIdx = src.indexOf('"/attempts/:attemptId/restore"');
-    expect(routeIdx).toBeGreaterThan(-1);
-    const restoreBlock = src.slice(routeIdx);
+    // the restore route handler block (bounded by the next route registration)
+    // and assert the 200 schema wiring.
+    const restoreBlock = restoreRouteBlock(src);
     expect(restoreBlock).toMatch(/200:\s*RestoreAttemptResponseSchema/);
   });
 
   it("restore route projects compensation.policy + addedSeconds only (no evidence leak)", () => {
     const src = readSource(join(API_SRC, "routes/attempts.candidate.ts"));
-    const routeIdx = src.indexOf('"/attempts/:attemptId/restore"');
-    expect(routeIdx).toBeGreaterThan(-1);
-    const restoreBlock = src.slice(routeIdx);
+    const restoreBlock = restoreRouteBlock(src);
     // The candidate-facing projection exposes only policy + addedSeconds.
     expect(restoreBlock).toMatch(/compensation\.policy/);
     expect(restoreBlock).toMatch(/compensation\.addedSeconds/);
@@ -187,16 +197,16 @@ describe("REC-I4-I3A contract + authoring structural guards", () => {
 
   it("RestoreAttemptResponseSchema omits internal interruption evidence fields", () => {
     const src = readSource("packages/contracts/src/attempt.ts");
-    const restoreSchemaBlock = src.slice(
-      src.indexOf("RestoreAttemptResponseSchema"),
-    );
-    // The compensation object is now a named RestoreCompensationSchema
-    // with a superRefine. Verify the schema structure still enforces the
-    // no-leak invariant by scanning the RestoreCompensationSchema definition.
-    const compensationSchemaBlock = src.slice(
-      src.indexOf("RestoreCompensationSchema = z"),
-      src.indexOf("RestoreAttemptResponseSchema = z"),
-    );
+    // The compensation object is a named RestoreCompensationSchema with a
+    // superRefine. Extract just that schema definition (between its assignment
+    // and the top-level `);` that closes the chained call), excluding any
+    // docblock that may sit between it and RestoreAttemptResponseSchema, so a
+    // documentation reference to the omitted fields is not mistaken for a leak.
+    const startIdx = src.indexOf("RestoreCompensationSchema = z");
+    expect(startIdx).toBeGreaterThan(-1);
+    const defEnd = src.indexOf(");\n", startIdx);
+    expect(defEnd).toBeGreaterThan(-1);
+    const compensationSchemaBlock = src.slice(startIdx, defEnd + 2);
     // The schema must contain the policy + addedSeconds field definitions.
     expect(compensationSchemaBlock).toMatch(/\bpolicy:/);
     expect(compensationSchemaBlock).toMatch(/\baddedSeconds:/);

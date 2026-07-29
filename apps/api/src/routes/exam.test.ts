@@ -1880,6 +1880,7 @@ describe("exam interruption policy authoring (ADR-013 / REC-I4-I3A)", () => {
     // Published exams accept schedule fields only; interruption policy is a
     // substantive authoring field frozen at publish.
     expect(patchRes.statusCode).toBe(409);
+    expect(patchRes.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
   });
 
   it("rejects partial bounded_grace update missing caps (cross-field merge)", async () => {
@@ -1903,5 +1904,12 @@ describe("exam interruption policy authoring (ADR-013 / REC-I4-I3A)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(patchRes.statusCode).toBe(400);
+    // The route normalizes the normalizer failure into the VALIDATION_ERROR
+    // contract (details.fields), mapping the bounded_grace-without-caps issue
+    // onto the policy field (cross-field rules carry an empty normalizer path).
+    const body = patchRes.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.details.fields).toBeDefined();
+    expect(body.error.details.fields[0].field).toBe("interruptionTimePolicy");
   });
 });

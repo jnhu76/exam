@@ -179,12 +179,38 @@ export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
           perAttemptAggregateCapSeconds:
             data.interruptionGracePerAttemptSeconds,
         });
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["interruptionTimePolicy"],
-          message: "Invalid interruption policy configuration",
-        });
+      } catch (err) {
+        // Forward the normalizer's structured issues onto the corresponding API
+        // field so an authoring UI can highlight the offending cap. The
+        // normalizer validates with internal names (policy /
+        // perIncidentCapSeconds / perAttemptAggregateCapSeconds) and an empty
+        // path for cross-field rules, so map each back to its API field.
+        const issues =
+          err instanceof z.ZodError
+            ? err.issues
+            : ([
+                {
+                  code: z.ZodIssueCode.custom,
+                  path: [],
+                  message: "Invalid interruption policy configuration",
+                },
+              ] as z.ZodIssue[]);
+        const apiFieldByNormalizerKey: Record<string, string> = {
+          policy: "interruptionTimePolicy",
+          perIncidentCapSeconds: "interruptionGracePerIncidentSeconds",
+          perAttemptAggregateCapSeconds: "interruptionGracePerAttemptSeconds",
+        };
+        for (const issue of issues) {
+          const normalizerKey = String(issue.path[0] ?? "");
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [
+              apiFieldByNormalizerKey[normalizerKey] ??
+                "interruptionTimePolicy",
+            ],
+            message: issue.message,
+          });
+        }
       }
     }
   },

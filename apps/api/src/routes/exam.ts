@@ -3,7 +3,7 @@ import {
   type FastifyRequest,
   type FastifyReply,
 } from "fastify";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import {
   CreateExamRequestSchema,
   CreateExamRequestBaseSchema,
@@ -711,20 +711,57 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               data.interruptionGracePerIncidentSeconds !== undefined ||
               data.interruptionGracePerAttemptSeconds !== undefined;
             if (hasInterruptionInput) {
-              const resolved = normalizeInterruptionPolicyConfiguration({
-                policy:
-                  data.interruptionTimePolicy ??
-                  exam.interruptionTimePolicy ??
-                  "strict",
-                perIncidentCapSeconds:
-                  data.interruptionGracePerIncidentSeconds === undefined
-                    ? (exam.interruptionGracePerIncidentSeconds ?? null)
-                    : data.interruptionGracePerIncidentSeconds,
-                perAttemptAggregateCapSeconds:
-                  data.interruptionGracePerAttemptSeconds === undefined
-                    ? (exam.interruptionGracePerAttemptSeconds ?? null)
-                    : data.interruptionGracePerAttemptSeconds,
-              });
+              let resolved;
+              try {
+                resolved = normalizeInterruptionPolicyConfiguration({
+                  policy:
+                    data.interruptionTimePolicy ??
+                    exam.interruptionTimePolicy ??
+                    "strict",
+                  perIncidentCapSeconds:
+                    data.interruptionGracePerIncidentSeconds === undefined
+                      ? (exam.interruptionGracePerIncidentSeconds ?? null)
+                      : data.interruptionGracePerIncidentSeconds,
+                  perAttemptAggregateCapSeconds:
+                    data.interruptionGracePerAttemptSeconds === undefined
+                      ? (exam.interruptionGracePerAttemptSeconds ?? null)
+                      : data.interruptionGracePerAttemptSeconds,
+                });
+              } catch (err) {
+                // Normalize the normalizer's ZodError into the route's
+                // VALIDATION_ERROR contract (details.fields), matching the
+                // neighbouring passingScore guard. The normalizer validates
+                // with internal names, so map each issue back to its API
+                // field so the response never leaks perIncidentCapSeconds.
+                const issues =
+                  err instanceof ZodError
+                    ? err.issues
+                    : [
+                        {
+                          code: "custom" as const,
+                          path: [] as (string | number)[],
+                          message: "Invalid interruption policy configuration",
+                        },
+                      ];
+                const apiFieldByNormalizerKey: Record<string, string> = {
+                  policy: "interruptionTimePolicy",
+                  perIncidentCapSeconds: "interruptionGracePerIncidentSeconds",
+                  perAttemptAggregateCapSeconds:
+                    "interruptionGracePerAttemptSeconds",
+                };
+                throw new ValidationError(
+                  "Invalid interruption policy configuration",
+                  {
+                    fields: issues.map((issue) => ({
+                      field:
+                        apiFieldByNormalizerKey[String(issue.path[0] ?? "")] ??
+                        "interruptionTimePolicy",
+                      code: "INVALID_INTERRUPTION_POLICY",
+                      message: issue.message,
+                    })),
+                  },
+                );
+              }
               updateData.interruptionTimePolicy = resolved.policy;
               updateData.interruptionGracePerIncidentSeconds =
                 resolved.perIncidentCapSeconds;

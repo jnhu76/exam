@@ -43,7 +43,7 @@ regression tests.
 |------|--------|
 | `attempt.ts` | **EDITED** — added `RestoreLifecycleOutcomeEnum` and the frozen `RestoreAttemptResponseSchema` (`lifecycle` + candidate-safe `compensation` {policy, addedSeconds} + nested candidate-safe `attempt`); imports `InterruptionTimePolicySchema` |
 | `exam.ts` | **EDITED** — `ExamSchema` DTO exposes `interruptionTimePolicy` + nullable caps; `CreateExamRequestBaseSchema` / `UpdateExamRequestBaseSchema` accept optional interruption authoring fields |
-| `__tests__/contracts.test.ts` | **EDITED** — 16 new tests: Exam interruption authoring (strict/bounded_grace/operator_incident defaults, cross-field), `normalizeInterruptionPolicyConfiguration`, ExamSchema DTO projection, and the frozen `RestoreAttemptResponseSchema` (accept/reject/no-leak) |
+| `__tests__/contracts.test.ts` | **EDITED** — new tests covering Exam interruption authoring (strict/bounded_grace/operator_incident defaults + cross-field), `normalizeInterruptionPolicyConfiguration`, ExamSchema DTO projection, and the frozen `RestoreAttemptResponseSchema` (accept/reject/no-leak, including nested-compensation evidence stripping) |
 
 ### API (`apps/api/src/`)
 
@@ -53,7 +53,7 @@ regression tests.
 | `routes/exam.ts` | **EDITED** — create route resolves interruption policy via `normalizeInterruptionPolicyConfiguration`; update route merges partial input with the existing exam policy and re-validates (draft-only); `toExamResponse` exposes the resolved fields |
 | `routes/exam.test.ts` | **EDITED** — 7 new tests: default strict, explicit bounded_grace, cross-field rejection, draft update, published rejection (draft-only), partial-update cross-field merge |
 | `routes/attempts/candidate-save-submit.test.ts` | **EDITED** — replaced the legacy "adjusted for disconnected time" test with ADR-013 bounded_grace per-incident-cap semantics + a strict zero-grant test; both use the new response contract |
-| `runtime/interruption-recovery.structural.test.ts` | **EDITED** — new `REC-I4-I3A` describe block: frozen restore contract wiring, no-evidence-leak boundary, RestoreAttemptResponseSchema field shape, attempt-snapshot immutability (no update payload carries snapshot keys), Exam authoring field exposure, and a stronger legacy `restoreAttempt` / `disconnectedDuration` regression that scans test files too |
+| `runtime/interruption-recovery.structural.test.ts` | **EDITED** — new `REC-I4-I3A` describe block: frozen restore contract wiring, no-evidence-leak boundary, RestoreAttemptResponseSchema field shape, attempt-snapshot immutability (no update payload carries snapshot keys), Exam authoring field exposure, and a stronger legacy `restoreAttempt` / `disconnectedDuration` regression that scans production TypeScript only |
 
 ### Docs
 
@@ -206,12 +206,17 @@ pnpm verify:static
 pnpm verify
 ```
 
-Focused-test results at audit time:
+Focused-test results at audit time (totals reflect the full `@exam/contracts`
+and `@exam/api` suites run with the focused files above; the per-file
+`contracts.test.ts` run is 127 passed):
 
-- contracts: 290 passed (23 new — 16 initial + 7 from review: 5 CreateExam cross-field, 1 terminal lifecycle, 2 compensation invariant)
-- exam-engine: 443 passed (unchanged — no engine edits)
-- api: 1645 passed | 5 skipped (32 new across restore-contract, exam authoring,
-  and structural guards)
+- contracts (`@exam/contracts`): 292 passed
+- exam-engine (`restoreInterruption.test.ts` + `interruptionPolicy.test.ts`): 443 passed
+- api (`candidate-save-submit.test.ts` + `interruption-recovery.structural.test.ts` + `exam.test.ts`, full suite): 1645 passed | 5 skipped
+
+The authoritative result for any future re-run is the CI summary
+(`pnpm verify:static` / `pnpm verify`); per-file "N new" breakdowns are not
+maintained here because they rot between commits.
 
 ## Known limitations
 

@@ -298,6 +298,26 @@ export type RestoreLifecycleOutcomeDTO = z.infer<
 >;
 
 /**
+ * Candidate-safe compensation summary for the restore response.
+ * Enforces the ADR-013 invariant that `strict` and `operator_incident`
+ * candidate restore must grant zero seconds.
+ */
+const RestoreCompensationSchema = z
+  .object({
+    policy: InterruptionTimePolicySchema,
+    addedSeconds: z.number().int().min(0),
+  })
+  .superRefine((value, ctx) => {
+    if (value.policy !== "bounded_grace" && value.addedSeconds !== 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["addedSeconds"],
+        message: "strict and operator_incident restore must grant zero seconds",
+      });
+    }
+  });
+
+/**
  * Frozen HTTP response contract for
  * `POST /attempts/:attemptId/restore` (ADR-013 §6, REC-I4-I3A).
  *
@@ -328,27 +348,6 @@ export type RestoreLifecycleOutcomeDTO = z.infer<
  * during the restore transaction. The engine returns `lifecycle: "terminal"`
  * as a normal result (not a thrown error), so the route must not reject it.
  */
-
-/**
- * Candidate-safe compensation summary for the restore response.
- * Enforces the ADR-013 invariant that `strict` and `operator_incident`
- * candidate restore must grant zero seconds.
- */
-const RestoreCompensationSchema = z
-  .object({
-    policy: InterruptionTimePolicySchema,
-    addedSeconds: z.number().int().min(0),
-  })
-  .superRefine((value, ctx) => {
-    if (value.policy !== "bounded_grace" && value.addedSeconds !== 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["addedSeconds"],
-        message: "strict and operator_incident restore must grant zero seconds",
-      });
-    }
-  });
-
 export const RestoreAttemptResponseSchema = z.object({
   lifecycle: RestoreLifecycleOutcomeEnum,
   compensation: RestoreCompensationSchema,

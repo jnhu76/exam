@@ -1208,6 +1208,10 @@ describe("attempt routes", () => {
   describe("POST /attempts/:attemptId/restore", () => {
     let attemptId: string;
 
+    afterEach(() => {
+      ctx.setNow(null);
+    });
+
     beforeAll(async () => {
       const exam6 = await ctx.app.inject({
         method: "POST",
@@ -1435,11 +1439,7 @@ describe("attempt routes", () => {
       expect(body.compensation.policy).toBe("strict");
       expect(body.compensation.addedSeconds).toBe(0);
       // The attempt must have been submitted by deadline reconciliation.
-      expect(
-        body.attempt.status === "submitted" ||
-          body.attempt.status === "grading" ||
-          body.attempt.status === "graded",
-      ).toBe(true);
+      expect(["submitted", "grading", "graded"]).toContain(body.attempt.status);
     });
 
     it("retry restore against already-terminal attempt returns terminal (idempotent)", async () => {
@@ -1517,11 +1517,9 @@ describe("attempt routes", () => {
       expect(secondBody.compensation.policy).toBe("strict");
       expect(secondBody.compensation.addedSeconds).toBe(0);
       // The attempt should remain in a terminal state.
-      expect(
-        secondBody.attempt.status === "submitted" ||
-          secondBody.attempt.status === "grading" ||
-          secondBody.attempt.status === "graded",
-      ).toBe(true);
+      expect(["submitted", "grading", "graded"]).toContain(
+        secondBody.attempt.status,
+      );
 
       // Verify no duplicate terminalized event was created.
       const terminalizedEventsAfterSecond = await ctx.db

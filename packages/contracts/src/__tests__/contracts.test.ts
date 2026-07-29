@@ -26,8 +26,10 @@ import {
   QuestionSchema,
   UpdateQuestionRequestSchema,
 } from "../question.js";
-import { QuestionSnapshotSchema } from "../attempt.js";
-import { RestoreAttemptResponseSchema } from "../attempt.js";
+import {
+  QuestionSnapshotSchema,
+  RestoreAttemptResponseSchema,
+} from "../attempt.js";
 import {
   ScoreListQuerySchema,
   AuditLogQuerySchema,
@@ -580,7 +582,13 @@ describe("RestoreAttemptResponseSchema (REC-I4-I3A frozen contract)", () => {
     // them must NOT surface those keys in the parsed output.
     const parsed = RestoreAttemptResponseSchema.parse({
       lifecycle: "restored",
-      compensation: { policy: "strict", addedSeconds: 0 },
+      compensation: {
+        policy: "strict",
+        addedSeconds: 0,
+        interruptionId: "should-not-leak",
+        adjustmentId: "should-not-leak",
+        eligibleSeconds: 999,
+      },
       attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
       // Attempt to leak internal detail — must be stripped by the schema.
       interruptionId: "should-not-leak",
