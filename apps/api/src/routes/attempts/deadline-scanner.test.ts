@@ -592,7 +592,7 @@ describe("attempt routes", () => {
     // Reachability invariant (ACTIVE-DEADLINE-001): ordinary production
     // CANNOT create an active attempt with deadlineAt = NULL.
     // startOrRestoreAttempt (line 200) writes a non-null deadlineAt via
-    // calculateDeadlineAt; extendAttemptTime writes non-null; restoreAttempt
+    // calculateDeadlineAt; the operator time grant engine writes non-null; restoreAttempt
     // only preserves an existing value; scanner/submit never write deadlineAt.
     // A NULL active deadlineAt is therefore schema-admissible but
     // protocol-unreachable — a legacy/corrupt/historical defensive-recovery

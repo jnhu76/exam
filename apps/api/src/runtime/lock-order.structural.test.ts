@@ -341,14 +341,7 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
     expect(b).not.toMatch(/lockEnrollmentAndAttempt\b/);
   });
 
-  it("single-lock Attempt paths (extendAttemptTime) remain legal without the seam", () => {
-    for (const fn of ["extendAttemptTime"]) {
-      const body = functionBody(
-        "packages/exam-engine/src/attemptCommands.ts",
-        fn,
-      );
-      expect(body, `${fn} body not found`).not.toBeNull();
-      expect(body!).not.toMatch(/lockEnrollmentAndAttempt/);
-    }
-  });
+  // REC-I4-I3B2: the single-lock example (extendAttemptTime) was removed with
+  // the old /extend-time route. No single-lock Attempt path remains in this
+  // module, so this guardrail case is intentionally dropped.
 });

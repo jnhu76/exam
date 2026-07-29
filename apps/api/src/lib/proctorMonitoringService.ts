@@ -89,11 +89,16 @@ const COUNTED_EVENT_NAMES = [
   "deadline_auto_submit_failed",
 ] as const;
 
-/** Audit-log actions surfaced in the per-attempt timeline (compliance ops). */
+/**
+ * Audit-log actions surfaced in the per-attempt timeline (compliance ops).
+ * attempt.extendTime is retained for historical rows (the route was cut in
+ * REC-I4-I3B2); new grants emit attempt.timeGrant.
+ */
 const TIMELINE_AUDIT_ACTIONS = new Set([
   "attempt.forceSubmit",
   "attempt.misconductFlagged",
   "attempt.extendTime",
+  "attempt.timeGrant",
 ]);
 
 /** Maps an audit action to the timeline event name shown to proctors. */
@@ -105,6 +110,8 @@ function auditActionToEventName(action: string): string | null {
       return "mark_misconduct";
     case "attempt.extendTime":
       return "extend_time";
+    case "attempt.timeGrant":
+      return "grant_time";
     default:
       return null;
   }
@@ -136,6 +143,10 @@ const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
   force_submit: [],
   mark_misconduct: [],
   extend_time: ["durationMs"],
+  // REC-I4-I3B2: operator time-grant audit metadata. adjustmentId/operationId
+  // are correlation ids (not sensitive); addedSeconds/reasonCode tell proctors
+  // how much time was granted and why.
+  grant_time: ["addedSeconds", "reasonCode", "adjustmentId"],
 };
 
 type SafeMetadataValue = string | number | boolean | null;

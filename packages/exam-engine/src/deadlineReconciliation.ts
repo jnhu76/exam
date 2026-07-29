@@ -139,8 +139,9 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  *   ProtocolReachable(a) AND Active(a)  =>  a.deadlineAt != NULL
  *
  * because every ordinary production active-Attempt writer
- * (`startOrRestoreAttempt` via `calculateDeadlineAt`, `extendAttemptTime`)
- * writes a non-null `deadlineAt`, and no transition into `in_progress`/
+ * (`startOrRestoreAttempt` via `calculateDeadlineAt`, and the operator time
+ * grant engine `grantAttemptTime` added in REC-I4-I3B2) writes a non-null
+ * `deadlineAt`, and no transition into `in_progress`/
  * `disrupted` introduces NULL (`restoreInterruptedAttempt` only preserves it). The
  * fallback therefore covers schema-admissible but protocol-unreachable
  * legacy / corrupt / historical NULL rows; it does not declare NULL a valid

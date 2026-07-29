@@ -160,4 +160,28 @@ describe("projectSafeMetadata (per-event allowlist, default-deny)", () => {
     expect(projectSafeMetadata("submit_failed", null)).toEqual({});
     expect(projectSafeMetadata("submit_failed", undefined)).toEqual({});
   });
+
+  // REC-I4-I3B2: operator time-grant audit metadata. Projects the non-sensitive
+  // correlation/justification fields; drops anything outside the allowlist.
+  it("projects allowlisted fields for grant_time and drops the rest", () => {
+    const out = projectSafeMetadata("grant_time", {
+      adjustmentId: "adj-1",
+      operationId: "op-1",
+      addedSeconds: 600,
+      reasonCode: "technical_incident",
+      interruptionId: null,
+      // none of these are on the allowlist → dropped
+      actorId: "admin-1",
+      answer: "SECRET",
+      token: "abc",
+    });
+    expect(out).toEqual({
+      adjustmentId: "adj-1",
+      addedSeconds: 600,
+      reasonCode: "technical_incident",
+    });
+    expect(out).not.toHaveProperty("operationId");
+    expect(out).not.toHaveProperty("actorId");
+    expect(out).not.toHaveProperty("answer");
+  });
 });
