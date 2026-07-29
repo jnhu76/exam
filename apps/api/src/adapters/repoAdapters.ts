@@ -272,6 +272,10 @@ export function createTimeAdjustmentRepoAdapter(
       (await repo.findById(ctx, adjustmentId)) as Awaited<
         ReturnType<TimeAdjustmentRepository["findById"]>
       >,
+    findByOperationId: async (operationId) =>
+      (await repo.findByOperationId(ctx, operationId)) as Awaited<
+        ReturnType<TimeAdjustmentRepository["findByOperationId"]>
+      >,
     findBoundedByInterruption: async (interruptionId) =>
       (await repo.findBoundedByInterruption(ctx, interruptionId)) as Awaited<
         ReturnType<TimeAdjustmentRepository["findBoundedByInterruption"]>

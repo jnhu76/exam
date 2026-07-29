@@ -57,6 +57,7 @@ const noneResolution: SubmitInterruptionResolution = {
 const stubAdjustmentRepo: TimeAdjustmentRepository = {
   insert: async (input) => ({ id: "stub-adj", ...input }) as never,
   findById: async () => null,
+  findByOperationId: async () => null,
   findBoundedByInterruption: async () => null,
   sumBoundedGraceSeconds: async () => 0,
 };
@@ -636,6 +637,7 @@ describe("attemptCommands", () => {
             createdAt: new Date("2025-01-01T10:00:00Z"),
           }) as AttemptTimeAdjustment,
         findById: async () => null,
+        findByOperationId: async () => null,
         findBoundedByInterruption: async () => null,
         sumBoundedGraceSeconds: async () => 0,
       };

@@ -193,6 +193,7 @@ function setupMocks(opts: {
   outcome?: AttemptInterruptionEvent | null;
   latestOutcome?: AttemptInterruptionEvent | null;
   existingAdjustment?: AttemptTimeAdjustment | null;
+  existingOperationAdjustment?: AttemptTimeAdjustment | null;
   adjustmentById?: AttemptTimeAdjustment | null;
   sumBoundedGrace?: number;
   policyEvaluation?: {
@@ -259,6 +260,7 @@ function setupMocks(opts: {
       return { id: "adj-new", ...input } as never;
     },
     findById: async () => opts.adjustmentById ?? null,
+    findByOperationId: async () => opts.existingOperationAdjustment ?? null,
     findBoundedByInterruption: async () => opts.existingAdjustment ?? null,
     sumBoundedGraceSeconds: async () => opts.sumBoundedGrace ?? 0,
   };

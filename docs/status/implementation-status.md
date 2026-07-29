@@ -52,6 +52,11 @@ Phase 2+ hardening.
   cross-field validation and draft-only mutation, attempt policy snapshots are
   confirmed immutable post-creation, and structural regression tests prevent
   legacy `restoreAttempt` / `disconnectedDuration` reintroduction.
+  REC-I4-I3B1 (Operator Grant Engine Seam) implements the `grantAttemptTime()`
+  engine command for operator-initiated time grants with `operationId`-keyed
+  idempotency, ADR-013's frozen lock/reconcile order, and the append-only
+  adjustment ledger. The operator grant route and `Permission.AttemptTimeGrant`
+  remain deferred (REC-I4-I3B2).
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
@@ -189,9 +194,12 @@ audit, external log shipping. All Phase 4; none started.
   summary; no internal evidence/ledger leak), Exam create/update expose the
   interruption policy authoring fields with ADR-013 cross-field validation and
   draft-only mutation, and attempt policy snapshots are confirmed immutable
-  post-creation. The operator grant route, `Permission.AttemptTimeGrant`, the
-  system incident model, and a dedicated proctor recovery/incident UI remain
-  deferred (REC-I4-I3B / REC-I6).
+  post-creation. REC-I4-I3B1 (Operator Grant Engine Seam) implements the
+  `grantAttemptTime()` command: the ledger insert and deadline update through
+  transaction-bound repositories, with `operationId`-keyed idempotency and
+  ADR-013's frozen lock/reconcile order. The operator grant route,
+  `Permission.AttemptTimeGrant`, the system incident model, and a dedicated
+  proctor recovery/incident UI remain deferred (REC-I4-I3B2 / REC-I6).
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
