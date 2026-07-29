@@ -71,7 +71,7 @@ contract is `RestoreAttemptResponseSchema`:
 
 ```ts
 {
-  lifecycle: "restored" | "already_in_progress",
+  lifecycle: "restored" | "already_in_progress" | "terminal",
   compensation: {
     policy: "strict" | "bounded_grace" | "operator_incident",
     addedSeconds: number, // integer >= 0
@@ -208,9 +208,9 @@ pnpm verify
 
 Focused-test results at audit time:
 
-- contracts: 283 passed (16 new)
+- contracts: 290 passed (23 new — 16 initial + 7 from review: 5 CreateExam cross-field, 1 terminal lifecycle, 2 compensation invariant)
 - exam-engine: 443 passed (unchanged — no engine edits)
-- api: 1643 passed | 5 skipped (30 new across restore-contract, exam authoring,
+- api: 1645 passed | 5 skipped (32 new across restore-contract, exam authoring,
   and structural guards)
 
 ## Known limitations

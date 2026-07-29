@@ -488,6 +488,24 @@ describe("exam contracts", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("CreateExamRequestSchema rejects caps without policy (omitted defaults to strict)", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionGracePerIncidentSeconds: 120,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateExamRequestSchema rejects cap exceeding PostgreSQL integer max", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      interruptionTimePolicy: "bounded_grace",
+      interruptionGracePerIncidentSeconds: 2_147_483_648,
+      interruptionGracePerAttemptSeconds: 2_147_483_648,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ── ADR-013 restore response contract (REC-I4-I3A) ──

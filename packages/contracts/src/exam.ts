@@ -164,32 +164,27 @@ export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
       });
     }
     // ADR-013 §3: interruption policy cross-field validation on create.
-    // The route also validates via normalizeInterruptionPolicyConfiguration,
-    // but contract-level validation catches structural errors earlier.
-    if (data.interruptionTimePolicy !== undefined) {
-      const policy = data.interruptionTimePolicy;
-      const perIncident = data.interruptionGracePerIncidentSeconds;
-      const perAttempt = data.interruptionGracePerAttemptSeconds;
-      if (policy === "strict" || policy === "operator_incident") {
-        if (perIncident != null || perAttempt != null) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Interruption policy ${policy} must have null caps`,
-          });
-        }
-      } else if (policy === "bounded_grace") {
-        if (perIncident == null || perAttempt == null) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "bounded_grace interruption policy requires both caps",
-          });
-        } else if (perIncident > perAttempt) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["interruptionGracePerIncidentSeconds"],
-            message: "per-incident cap cannot exceed the aggregate cap",
-          });
-        }
+    // When any interruption field is present, use the canonical normalizer
+    // (which enforces all cross-field rules, PostgreSQL integer max, and
+    // default strict) to reject invalid combinations deterministically.
+    const hasInterruptionInput =
+      data.interruptionTimePolicy !== undefined ||
+      data.interruptionGracePerIncidentSeconds !== undefined ||
+      data.interruptionGracePerAttemptSeconds !== undefined;
+    if (hasInterruptionInput) {
+      try {
+        normalizeInterruptionPolicyConfiguration({
+          policy: data.interruptionTimePolicy,
+          perIncidentCapSeconds: data.interruptionGracePerIncidentSeconds,
+          perAttemptAggregateCapSeconds:
+            data.interruptionGracePerAttemptSeconds,
+        });
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["interruptionTimePolicy"],
+          message: "Invalid interruption policy configuration",
+        });
       }
     }
   },

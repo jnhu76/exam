@@ -1057,13 +1057,13 @@
 
 **字段说明**:
 
-- `lifecycle`：候选人可见的生命周期结果，取值 `restored` | `already_in_progress`。`terminal`（deadline 在和解时胜出）不通过该契约返回——此时引擎抛错、事务回滚，REC-I3 以 409 呈现，客户端重新 GET 权威快照（其自行运行和解并提交终态结果）。
+- `lifecycle`：候选人可见的生命周期结果，取值 `restored` | `already_in_progress` | `terminal`。`terminal` 表示 attempt 已处于终态（进入命令前已提交/评分，或 deadline reconciliation 在本事务中提交了 attempt）。三种结果均返回 200，terminal 不会导致错误 HTTP 状态码。
 - `compensation.policy`：本次恢复遵循的中断时间补偿策略（`strict` | `bounded_grace` | `operator_incident`），来自 attempt 创建时冻结的不可变快照。
 - `compensation.addedSeconds`：本次恢复授予的整秒数。`strict` 与 `operator_incident` 的候选人恢复恒为 `0`；`bounded_grace` 按四重最小值（eligible、单次上限、剩余聚合上限、closeAt 余量）计算。
 
 **不暴露的内部字段**：响应刻意不暴露中断取证细节——不包含中断 episode id、detected event、调整账本行 id、`eligibleSeconds`、before/after deadline、`reasonCode` 或任何 operator/system-incident 归因。这些保留为服务端权威（operator 授权路由、`Permission.AttemptTimeGrant` 与系统事件模型为 REC-I4-I3B / REC-I6 延期项）。
 
-**错误响应** (409)：当和解判定 attempt 已终态（deadline 胜出）时返回 ErrorResponse。
+**错误响应** (409)：仅用于真正的状态冲突（如并发提交竞争）或不可恢复的并发错误。`terminal` lifecycle outcome 不会返回 409。
 
 > ADR-013 策略语义：默认 `strict` 恢复仅还原生命周期、授予 0 秒；服务器静默不等于应得时间。`bounded_grace` 必须在考试上显式配置且两端 cap 为正整数（`perIncident <= perAttempt`），在 attempt 创建时冻结。
 

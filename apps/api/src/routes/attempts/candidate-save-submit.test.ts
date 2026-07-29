@@ -1491,6 +1491,19 @@ describe("attempt routes", () => {
       expect(firstRes.statusCode).toBe(200);
       expect(firstRes.json().lifecycle).toBe("terminal");
 
+      // Count terminalized events after the first restore.
+      const terminalizedEventsAfterFirst = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.attemptInterruptionEvents)
+        .where(
+          and(
+            eq(schema.attemptInterruptionEvents.attemptId, attId),
+            eq(schema.attemptInterruptionEvents.eventType, "terminalized"),
+          ),
+        );
+      const firstCount = terminalizedEventsAfterFirst[0]?.count ?? 0;
+      expect(firstCount).toBeGreaterThanOrEqual(1);
+
       // Second restore against the already-terminal attempt — must be
       // idempotent: 200, lifecycle=terminal, no duplicate terminalization.
       const secondRes = await ctx.app.inject({
@@ -1509,6 +1522,19 @@ describe("attempt routes", () => {
           secondBody.attempt.status === "grading" ||
           secondBody.attempt.status === "graded",
       ).toBe(true);
+
+      // Verify no duplicate terminalized event was created.
+      const terminalizedEventsAfterSecond = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.attemptInterruptionEvents)
+        .where(
+          and(
+            eq(schema.attemptInterruptionEvents.attemptId, attId),
+            eq(schema.attemptInterruptionEvents.eventType, "terminalized"),
+          ),
+        );
+      const secondCount = terminalizedEventsAfterSecond[0]?.count ?? 0;
+      expect(secondCount).toBe(firstCount);
     });
   });
 
