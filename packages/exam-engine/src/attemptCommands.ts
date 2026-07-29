@@ -646,9 +646,3 @@ export async function flagMisconduct(
   if (!updated) throw new NotFoundError("Attempt not found after update");
   return updated;
 }
-
-// REC-I4-I3B2: extendAttemptTime removed. The old POST /extend-time route was
-// cut and replaced by POST /time-grants, which routes through the operator
-// grant engine (grantAttemptTime). Keeping a deadline-mutation primitive with
-// no operationId, no reason, and no ledger would be a hidden compat layer, so
-// it is deleted rather than retained.

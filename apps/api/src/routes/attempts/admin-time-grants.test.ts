@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
 import { eq, like } from "drizzle-orm";
+import type { FastifyPluginAsync } from "fastify";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -11,6 +12,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
 import { buildExamPayload, disruptAttempt } from "./attempts.testHelpers.js";
+import type { AuthzPreHandler } from "../../types/fastify-auth.d.js";
 
 const GRANT_TEST_PREFIX = "time-grant-test-";
 
@@ -619,6 +621,254 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(403);
+    });
+
+    it("canonicalizes reasonCode/reasonText so the ledger and audit agree (200)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(t, "Grant Trim");
+      const operationId = crypto.randomUUID();
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/time-grants`,
+        payload: {
+          operationId,
+          addedSeconds: 300,
+          // Surround with whitespace on both ends to prove the contract layer
+          // trims before the engine/audit ever see the value.
+          reasonCode: "  technical_incident  ",
+          reasonText: "  room power outage  ",
+        },
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      // Response adjustment carries the trimmed (canonical) values.
+      const adjustment = res.json().adjustment;
+      expect(adjustment.reasonCode).toBe("technical_incident");
+      expect(adjustment.reasonText).toBe("room power outage");
+
+      // Ledger row and audit row MUST share the identical trimmed values — a
+      // divergence (ledger trimmed, audit raw) was the prior defect.
+      const ledger = (
+        await ctx.db
+          .select()
+          .from(schema.attemptTimeAdjustments)
+          .where(eq(schema.attemptTimeAdjustments.operationId, operationId))
+      )[0]!;
+      expect(ledger.reasonCode).toBe("technical_incident");
+      expect(ledger.reasonText).toBe("room power outage");
+      const auditRow = (
+        await ctx.db
+          .select()
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.targetId, attemptId))
+      ).filter((r) => r.action === "attempt.timeGrant")[0]!;
+      expect(auditRow.metadata).toMatchObject({
+        reasonCode: "technical_incident",
+        adjustmentId: ledger.id,
+      });
+    });
+
+    it("returns 404 RESOURCE_NOT_FOUND for a non-existent attempt (scoped resolver fail-closed)", async () => {
+      const t = await createIsolatedTestOrg();
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${crypto.randomUUID()}/time-grants`,
+        payload: {
+          operationId: crypto.randomUUID(),
+          addedSeconds: 600,
+          reasonCode: "technical_incident",
+          reasonText: "no such attempt",
+        },
+        cookies: { "auth-token": t.adminToken },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error?.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("returns 404 for a cross-org attempt (anti-enumeration, scoped resolver)", async () => {
+      // Org B admin owns the target attempt; Org A admin (a different org)
+      // must not learn the attempt exists → 404, not 403.
+      const orgB = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        orgB,
+        "Grant CrossOrg Target",
+      );
+      const orgA = await createIsolatedTestOrg();
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/time-grants`,
+        payload: {
+          operationId: crypto.randomUUID(),
+          addedSeconds: 600,
+          reasonCode: "technical_incident",
+          reasonText: "cross-org probe",
+        },
+        cookies: { "auth-token": orgA.adminToken },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error?.code).toBe("RESOURCE_NOT_FOUND");
+
+      // Defense-in-depth: no ledger row written for the failed grant.
+      const ledger = await ctx.db
+        .select()
+        .from(schema.attemptTimeAdjustments)
+        .where(eq(schema.attemptTimeAdjustments.attemptId, attemptId));
+      expect(ledger).toHaveLength(0);
+    });
+
+    // P1-2 — cross-Attempt operationId race. The same operationId is fired at
+    // TWO attempts under DIFFERENT exams in the same org. Different exams mean
+    // neither the Enrollment→Attempt lock nor the Exam FOR UPDATE lock overlap;
+    // the only mutex is the (organization_id, operation_id) unique index. The
+    // loser must surface as 409 IDEMPOTENCY_CONFLICT (via the route's 23505
+    // recovery rerun), NOT a generic RESOURCE_CONFLICT. (Same-Exam attempts
+    // would serialize on the exam lock and never exercise this path.)
+    describe("cross-Attempt operationId race (different exams)", () => {
+      it("the loser returns 409 IDEMPOTENCY_CONFLICT and writes exactly one ledger row", async () => {
+        const t = await createIsolatedTestOrg();
+        // Two distinct operator_incident exams → two attempts whose EA + Exam
+        // locks do not intersect. Only the operation unique index can arbitrate.
+        const a = await createStartedAttempt(t, "Race Attempt A");
+        const b = await createStartedAttempt(t, "Race Attempt B");
+        const beforeA = (await createAttemptRepo(ctx.db).findById(
+          makeAdminCtx(t),
+          a.attemptId,
+        ))!.deadlineAt!;
+        const beforeB = (await createAttemptRepo(ctx.db).findById(
+          makeAdminCtx(t),
+          b.attemptId,
+        ))!.deadlineAt!;
+        const operationId = crypto.randomUUID();
+        const payload = {
+          operationId,
+          addedSeconds: 300,
+          reasonCode: "technical_incident",
+          reasonText: "race scenario",
+        };
+
+        const [resA, resB] = await Promise.all([
+          ctx.app.inject({
+            method: "POST",
+            url: `/api/admin/attempts/${a.attemptId}/time-grants`,
+            payload,
+            cookies: { "auth-token": t.adminToken },
+          }),
+          ctx.app.inject({
+            method: "POST",
+            url: `/api/admin/attempts/${b.attemptId}/time-grants`,
+            payload,
+            cookies: { "auth-token": t.adminToken },
+          }),
+        ]);
+
+        // Exactly one grant wins (200 granted), the other conflicts (409).
+        const codes = [resA.statusCode, resB.statusCode].sort();
+        expect(codes).toEqual([200, 409]);
+        const winner = resA.statusCode === 200 ? resA : resB;
+        const loser = resA.statusCode === 200 ? resB : resA;
+        expect(winner.json().outcome).toBe("granted");
+        expect(loser.json().error?.code).toBe("IDEMPOTENCY_CONFLICT");
+
+        // Exactly ONE ledger row for this operationId — the loser did not write.
+        const rows = await ctx.db
+          .select()
+          .from(schema.attemptTimeAdjustments)
+          .where(eq(schema.attemptTimeAdjustments.operationId, operationId));
+        expect(rows).toHaveLength(1);
+
+        // The winner's attempt deadline advanced by 300s; the loser's is
+        // unchanged from its pre-race value.
+        const afterA = (await createAttemptRepo(ctx.db).findById(
+          makeAdminCtx(t),
+          a.attemptId,
+        ))!.deadlineAt!;
+        const afterB = (await createAttemptRepo(ctx.db).findById(
+          makeAdminCtx(t),
+          b.attemptId,
+        ))!.deadlineAt!;
+        const winnerAttemptId = winner.json().attempt.id;
+        if (winnerAttemptId === a.attemptId) {
+          expect(afterA.getTime()).toBe(beforeA.getTime() + 300_000);
+          expect(afterB.getTime()).toBe(beforeB.getTime());
+        } else {
+          expect(afterB.getTime()).toBe(beforeB.getTime() + 300_000);
+          expect(afterA.getTime()).toBe(beforeA.getTime());
+        }
+      }, 30_000);
+    });
+  });
+});
+
+/**
+ * Runtime authz-metadata conformance for the time-grants route. The route
+ * registry declares scope: Attempt / resolver: "attempt" for
+ * `attempt.time.grant`; this proves the route's live `preHandler` is the
+ * resource-aware `requireScopedCapability` (not the flat `requireCapability`).
+ * A flat gate would not attach `authz.kind: "scoped"` and would not resolve
+ * the target Attempt — the cross-org / non-existent 404 tests above are the
+ * behavioral proof; this is the structural/introspection proof.
+ */
+describe("time-grants route authz metadata (scoped resolver wired)", () => {
+  const captured: {
+    method: string;
+    url: string;
+    authz: AuthzPreHandler["authz"] | null;
+  }[] = [];
+
+  const capturePlugin: FastifyPluginAsync = async (fastify) => {
+    fastify.addHook("onRoute", (routeOptions) => {
+      const preHandlers = (
+        Array.isArray(routeOptions.preHandler)
+          ? routeOptions.preHandler
+          : [routeOptions.preHandler]
+      ).filter(Boolean) as unknown[];
+      const authzHandler = preHandlers.find(
+        (ph): ph is AuthzPreHandler =>
+          typeof ph === "function" &&
+          ((ph as unknown as AuthzPreHandler).authz?.kind === "scoped" ||
+            (ph as unknown as AuthzPreHandler).authz?.kind === "flat"),
+      );
+      captured.push({
+        method:
+          typeof routeOptions.method === "string"
+            ? routeOptions.method
+            : "UNKNOWN",
+        url: routeOptions.url as string,
+        authz: authzHandler?.authz ?? null,
+      });
+    });
+    await fastify.register(examRoutes);
+    await fastify.register(attemptRoutes);
+  };
+
+  let metaCtx: Awaited<ReturnType<typeof buildTestApp>>;
+  beforeAll(async () => {
+    metaCtx = await buildTestApp(capturePlugin, { prefix: "/api" });
+  });
+  afterAll(async () => {
+    await metaCtx.cleanup();
+  });
+
+  it("POST /admin/attempts/:attemptId/time-grants uses a scoped Attempt resolver", () => {
+    const match = captured.find(
+      (r) =>
+        r.method === "POST" &&
+        r.url.includes("/admin/attempts/:attemptId/time-grants"),
+    );
+    expect(
+      match,
+      `time-grants route not captured; captured: ${captured
+        .map((r) => `${r.method} ${r.url}`)
+        .join(", ")}`,
+    ).toBeDefined();
+    expect(match!.authz).toEqual({
+      kind: "scoped",
+      permission: "attempt.time.grant",
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
     });
   });
 });

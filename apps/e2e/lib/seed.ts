@@ -162,8 +162,13 @@ export async function seedExam(
      * Interruption time-policy frozen into started attempts. Defaults to
      * "strict". Operator time-grant (POST /time-grants) requires an exam seeded
      * with "operator_incident"; pass that value for grant-focused scenarios.
+     *
+     * Note: `bounded_grace` is intentionally NOT accepted here — seeding a
+     * bounded_grace exam requires per-incident / per-attempt grace caps that
+     * this helper does not supply. bounded_grace scenarios use their own
+     * dedicated seed path (see candidate-save-submit / disconnect-restore).
      */
-    interruptionTimePolicy?: "strict" | "bounded_grace" | "operator_incident";
+    interruptionTimePolicy?: "strict" | "operator_incident";
     /** Optional subjective (manual-graded) fill_blank questions to include. */
     subjectiveQuestions?: SubjectiveQuestionSeed[];
     /**

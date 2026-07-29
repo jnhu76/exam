@@ -15548,112 +15548,266 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "outcome": {
-                      "type": "string",
-                      "enum": ["granted", "terminal", "idempotent_replay"]
-                    },
-                    "adjustment": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "id": {
+                        "outcome": {
                           "type": "string",
-                          "format": "uuid"
+                          "enum": ["granted"]
                         },
-                        "operationId": {
-                          "type": "string",
-                          "format": "uuid"
+                        "adjustment": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "operationId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "attemptId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": ["operator"]
+                            },
+                            "beforeDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "afterDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "addedSeconds": {
+                              "type": "integer"
+                            },
+                            "reasonCode": {
+                              "type": "string"
+                            },
+                            "reasonText": {
+                              "type": "string"
+                            },
+                            "interruptionId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "incidentId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "operationId",
+                            "attemptId",
+                            "source",
+                            "beforeDeadline",
+                            "afterDeadline",
+                            "addedSeconds",
+                            "reasonCode",
+                            "reasonText",
+                            "interruptionId",
+                            "incidentId",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
                         },
-                        "attemptId": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "source": {
-                          "type": "string"
-                        },
-                        "beforeDeadline": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "afterDeadline": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "addedSeconds": {
-                          "type": "integer"
-                        },
-                        "reasonCode": {
-                          "type": "string"
-                        },
-                        "reasonText": {
-                          "type": "string",
-                          "nullable": true
-                        },
-                        "interruptionId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "nullable": true
-                        },
-                        "incidentId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "nullable": true
-                        },
-                        "createdAt": {
-                          "type": "string",
-                          "format": "date-time"
+                        "attempt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_started",
+                                "queued",
+                                "in_progress",
+                                "disrupted",
+                                "submitted",
+                                "grading",
+                                "graded",
+                                "voided"
+                              ]
+                            },
+                            "deadlineAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          },
+                          "required": ["id", "status", "deadlineAt"],
+                          "additionalProperties": false
                         }
                       },
-                      "required": [
-                        "id",
-                        "operationId",
-                        "attemptId",
-                        "source",
-                        "beforeDeadline",
-                        "afterDeadline",
-                        "addedSeconds",
-                        "reasonCode",
-                        "reasonText",
-                        "interruptionId",
-                        "incidentId",
-                        "createdAt"
-                      ],
-                      "additionalProperties": false,
-                      "nullable": true
+                      "required": ["outcome", "adjustment", "attempt"],
+                      "additionalProperties": false
                     },
-                    "attempt": {
+                    {
                       "type": "object",
                       "properties": {
-                        "id": {
+                        "outcome": {
                           "type": "string",
-                          "format": "uuid"
+                          "enum": ["idempotent_replay"]
                         },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "not_started",
-                            "queued",
-                            "in_progress",
-                            "disrupted",
-                            "submitted",
-                            "grading",
-                            "graded",
-                            "voided"
-                          ]
+                        "adjustment": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "operationId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "attemptId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": ["operator"]
+                            },
+                            "beforeDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "afterDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "addedSeconds": {
+                              "type": "integer"
+                            },
+                            "reasonCode": {
+                              "type": "string"
+                            },
+                            "reasonText": {
+                              "type": "string"
+                            },
+                            "interruptionId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "incidentId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "operationId",
+                            "attemptId",
+                            "source",
+                            "beforeDeadline",
+                            "afterDeadline",
+                            "addedSeconds",
+                            "reasonCode",
+                            "reasonText",
+                            "interruptionId",
+                            "incidentId",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
                         },
-                        "deadlineAt": {
-                          "type": "string",
-                          "format": "date-time",
-                          "nullable": true
+                        "attempt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_started",
+                                "queued",
+                                "in_progress",
+                                "disrupted",
+                                "submitted",
+                                "grading",
+                                "graded",
+                                "voided"
+                              ]
+                            },
+                            "deadlineAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          },
+                          "required": ["id", "status", "deadlineAt"],
+                          "additionalProperties": false
                         }
                       },
-                      "required": ["id", "status", "deadlineAt"],
+                      "required": ["outcome", "adjustment", "attempt"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["terminal"]
+                        },
+                        "adjustment": {
+                          "enum": ["null"],
+                          "nullable": true
+                        },
+                        "attempt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_started",
+                                "queued",
+                                "in_progress",
+                                "disrupted",
+                                "submitted",
+                                "grading",
+                                "graded",
+                                "voided"
+                              ]
+                            },
+                            "deadlineAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          },
+                          "required": ["id", "status", "deadlineAt"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["outcome", "adjustment", "attempt"],
                       "additionalProperties": false
                     }
-                  },
-                  "required": ["outcome", "adjustment", "attempt"],
-                  "additionalProperties": false
+                  ]
                 }
               }
             }

@@ -24,7 +24,11 @@ import {
   grantAttemptTime,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
-import type { SubmitInterruptionResolution } from "@exam/exam-engine";
+import type {
+  SubmitInterruptionResolution,
+  GrantAttemptTimeInput,
+  GrantAttemptTimeResult,
+} from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -318,7 +322,17 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptTimeGrant),
+        // ADR-013 / ADR-010 §3.9: the grant runs in the target-Attempt scope.
+        // `requireScopedCapability` is a strict superset of the flat
+        // capability gate — it first checks the Admin preset, then resolves
+        // the target Attempt's organization + parent chain and fail-closes
+        // (404 missing / 403 cross-org / 503 resolver error). This matches
+        // the route registry entry (scope: Attempt, resolver: "attempt").
+        fastify.requireScopedCapability(
+          Permission.AttemptTimeGrant,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: AttemptIdParamsSchema,
@@ -345,6 +359,8 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       }
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
+      // Contract already trims reasonCode/reasonText, so the committed ledger
+      // and the audit projection below share identical canonical values.
       const {
         operationId,
         addedSeconds,
@@ -354,83 +370,25 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       } = body.data;
       // One authoritative command timestamp threaded through the ledger insert,
       // the deadline update, and the audit so the three agree in this request.
+      // It is reused unchanged across the 23505 recovery rerun (below) so the
+      // original and recovered commands are byte-identical.
       const now = fastify.now();
 
-      const result = await executeInTransaction(fastify.db, async (tx) => {
-        const txAttemptRepo = createAttemptRepo(tx);
-        const txEnrollmentRepo = createEnrollmentRepo(tx);
-        const { exams, enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: txAttemptRepo,
-            enrollmentRepo: txEnrollmentRepo,
-          },
-          ctx,
-        );
-        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam. The
-        // grant command asserts capability affinity before touching the ledger.
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
+      const result = await grantWithOperationRaceRecovery(
+        fastify,
+        request,
+        ctx,
+        {
           attemptId,
-        );
-        const episodeRepo = createInterruptionEpisodeRepoAdapter(
-          createAttemptInterruptionRepo(tx),
-          ctx,
-        );
-        const eventRepo = createInterruptionEventRepoAdapter(
-          createAttemptInterruptionEventRepo(tx),
-          ctx,
-        );
-        const adjustmentRepo = createTimeAdjustmentRepoAdapter(
-          createAttemptTimeAdjustmentRepo(tx),
-          ctx,
-        );
-        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-          createAttemptGradingEntryRepo(tx),
-          ctx,
-        );
-        const grantResult = await grantAttemptTime(
-          exams,
-          attempts,
-          enrollments,
-          episodeRepo,
-          eventRepo,
-          adjustmentRepo,
-          gradingWorksetRepo,
-          cap,
-          {
-            attemptId,
-            operationId,
-            addedSeconds,
-            reasonCode,
-            reasonText,
-            // Normalize omitted interruptionId to null; the engine's input type
-            // is exact-optional (string | null), not undefined.
-            interruptionId: interruptionId ?? null,
-            actorId: ctx.actorId,
-            now,
-          },
-        );
-        // Compliance audit (atomic with the ledger insert + deadline update).
-        // Recorded only on a real grant; idempotent replay returns the
-        // already-committed result without a duplicate audit row.
-        if (grantResult.outcome === "granted") {
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: "attempt.timeGrant",
-            targetType: "attempt",
-            targetId: attemptId,
-            metadata: {
-              adjustmentId: grantResult.adjustment?.id ?? null,
-              operationId,
-              addedSeconds: grantResult.addedSeconds,
-              reasonCode,
-              interruptionId: interruptionId ?? null,
-            },
-          });
-        }
-        return grantResult;
-      });
+          operationId,
+          addedSeconds,
+          reasonCode,
+          reasonText,
+          interruptionId: interruptionId ?? null,
+          actorId: ctx.actorId,
+          now,
+        },
+      );
 
       return reply.send(
         TimeGrantResponseSchema.parse({
@@ -630,6 +588,173 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       return reply.type("text/csv; charset=utf-8").send(csv);
     },
   );
+}
+
+/**
+ * The `(organization_id, operation_id)` unique index on the operator time
+ * adjustment ledger. Two concurrent grants that carry the same `operationId`
+ * but target *different* Attempts (and therefore do not share the EA / Exam
+ * row locks) race only on this index. The loser's insert hits 23505; this
+ * constant names the exact constraint so recovery can be scoped to it and not
+ * swallow unrelated unique violations (duplicate username, etc.).
+ */
+const OPERATION_UNIQUE_CONSTRAINT =
+  "attempt_time_adjustments_org_operation_unique";
+
+/**
+ * Walks the error cause chain looking for a PostgreSQL `unique_violation`
+ * (23505) whose `constraint` is exactly the operator-grant operation unique
+ * index. Postgres-js surfaces the underlying error fields at the top of the
+ * thrown object (`.code`, `.constraint`); drizzle/retry wrappers may wrap it
+ * one or more levels, so the walk mirrors `plugins/errors.ts`'s
+ * `isConstraintError`. Returns false for any other 23505 (stays generic
+ * RESOURCE_CONFLICT).
+ */
+function isOrgOperationUniqueViolation(err: unknown): boolean {
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current === "object" && current !== null) {
+      const e = current as Record<string, unknown>;
+      if (e.code === "23505") {
+        const constraint = String(e.constraint ?? e.constraint_name ?? "");
+        if (constraint === OPERATION_UNIQUE_CONSTRAINT) return true;
+      }
+    }
+    current =
+      typeof current === "object" && current !== null && "cause" in current
+        ? (current as { cause: unknown }).cause
+        : null;
+  }
+  return false;
+}
+
+/**
+ * Executes one operator time grant inside a single transaction with NO
+ * recovery. The ledger insert, the attempt deadline update, and the
+ * compliance audit all commit together. Audit metadata is projected from the
+ * committed adjustment (not the request payload) so the audit and ledger
+ * agree even if the contract/engine ever diverge in trimming.
+ *
+ * On `outcome === "granted"` the adjustment is guaranteed non-null, so the
+ * audit narrows it without a fallback (`?? null`) — keeping
+ * `auditPolicy.AttemptTimeGrant.adjustmentId` a required UUID.
+ */
+async function runGrantTransaction(
+  fastify: FastifyInstance,
+  request: FastifyRequest,
+  ctx: RequestContext,
+  input: GrantAttemptTimeInput,
+): Promise<GrantAttemptTimeResult> {
+  return executeInTransaction(fastify.db, async (tx) => {
+    const txAttemptRepo = createAttemptRepo(tx);
+    const txEnrollmentRepo = createEnrollmentRepo(tx);
+    const { exams, enrollments, attempts } = createExamEngineRepos(
+      {
+        examRepo: createExamRepo(tx),
+        attemptRepo: txAttemptRepo,
+        enrollmentRepo: txEnrollmentRepo,
+      },
+      ctx,
+    );
+    // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam. The
+    // grant command asserts capability affinity before touching the ledger.
+    const cap = await lockEnrollmentAndAttempt(
+      enrollments,
+      attempts,
+      input.attemptId,
+    );
+    const episodeRepo = createInterruptionEpisodeRepoAdapter(
+      createAttemptInterruptionRepo(tx),
+      ctx,
+    );
+    const eventRepo = createInterruptionEventRepoAdapter(
+      createAttemptInterruptionEventRepo(tx),
+      ctx,
+    );
+    const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+      createAttemptTimeAdjustmentRepo(tx),
+      ctx,
+    );
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      ctx,
+    );
+    const grantResult = await grantAttemptTime(
+      exams,
+      attempts,
+      enrollments,
+      episodeRepo,
+      eventRepo,
+      adjustmentRepo,
+      gradingWorksetRepo,
+      cap,
+      input,
+    );
+    // Compliance audit (atomic with the ledger insert + deadline update).
+    // Recorded only on a real grant; idempotent replay returns the
+    // already-committed result without a duplicate audit row. Project the
+    // committed adjustment fields (not the request payload) so the audit and
+    // ledger never diverge.
+    if (grantResult.outcome === "granted" && grantResult.adjustment) {
+      await recordAtomicHttpAudit(tx, request, ctx, {
+        action: "attempt.timeGrant",
+        targetType: "attempt",
+        targetId: input.attemptId,
+        metadata: {
+          adjustmentId: grantResult.adjustment.id,
+          operationId: grantResult.adjustment.operationId,
+          addedSeconds: grantResult.adjustment.addedSeconds,
+          reasonCode: grantResult.adjustment.reasonCode,
+          interruptionId: grantResult.adjustment.interruptionId,
+        },
+      });
+    }
+    return grantResult;
+  });
+}
+
+/**
+ * Operator time grant with cross-Attempt operationId-race recovery
+ * (ADR-013 §9).
+ *
+ * Background: `operationId` is command identity scoped to the organization.
+ * Two concurrent grants carrying the same `operationId` but targeting
+ * *different* Attempts do NOT share the EA (Enrollment→Attempt) lock or the
+ * Exam `FOR UPDATE` lock, so nothing in the grant transaction serializes them.
+ * The only mutex is the `(organization_id, operation_id)` unique index. The
+ * loser's ledger insert fails with 23505, rolling its transaction back.
+ *
+ * Recovery: when the failure is exactly that constraint's 23505, re-run the
+ * SAME command (identical input, identical `now`) in a FRESH transaction. The
+ * new transaction's idempotency check now sees the winner's committed row, so
+ * it deterministically returns one of:
+ *   - `idempotent_replay` (same Attempt + same payload) — the loser targeted
+ *     the same Attempt as the winner and is a legitimate retry; or
+ *   - `IdempotencyConflictError` (different Attempt / payload) — the loser
+ *     raced a genuinely different command on the same identity, which maps to
+ *     `409 IDEMPOTENCY_CONFLICT` (NOT a generic RESOURCE_CONFLICT).
+ *
+ * This wrapper recovers AT MOST ONCE (a boolean guard, never recursion) and
+ * rethrows every other error unchanged. The original `now` is threaded
+ * through both attempts so the recovered command is byte-identical.
+ */
+async function grantWithOperationRaceRecovery(
+  fastify: FastifyInstance,
+  request: FastifyRequest,
+  ctx: RequestContext,
+  input: GrantAttemptTimeInput,
+): Promise<GrantAttemptTimeResult> {
+  try {
+    return await runGrantTransaction(fastify, request, ctx, input);
+  } catch (err) {
+    if (!isOrgOperationUniqueViolation(err)) throw err;
+    // Original tx already rolled back by the 23505. Re-run the SAME command
+    // in a new transaction exactly once; the engine's idempotency check now
+    // resolves the winner's committed row (replay or conflict).
+    return runGrantTransaction(fastify, request, ctx, input);
+  }
 }
 
 /**

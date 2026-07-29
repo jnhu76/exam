@@ -1494,7 +1494,17 @@ const zhCN = {
         cancel: "取消",
         confirm: "延长 {{minutes}} 分钟",
         confirming: "延长中...",
+        retry: "重试同一加时",
         done: "已延长 {{minutes}} 分钟",
+        doneReplay: "该加时已处理，未重复延长",
+        doneTerminal: "考试已结束，未延长时间",
+        indeterminate: "未确认加时是否成功，请重试同一命令以确认结果",
+        indeterminateBanner:
+          "上一次加时请求未确认结果。将使用相同的加时标识重试，不会重复加时。",
+        idempotencyConflict:
+          "加时标识已被其他请求占用且内容不同。请重新发起加时。",
+        blockedByPending:
+          "存在未确认的加时命令（{{minutes}} 分钟），请先重试或处理后再为其他考生加时",
       },
       misconductDialog: {
         title: "标记违规",

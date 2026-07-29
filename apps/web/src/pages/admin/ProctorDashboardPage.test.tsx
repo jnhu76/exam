@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import type { MeResponse } from "@exam/contracts";
@@ -27,7 +28,12 @@ vi.mock("@/lib/api", () => ({
   setNavigate: () => {},
 }));
 
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+
 const apiGet = vi.mocked(api.get);
+const apiPost = vi.mocked(api.post);
 
 function makeCandidate(overrides: Record<string, unknown> = {}) {
   return {
@@ -70,6 +76,10 @@ describe("ProctorDashboardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     statusBadgeProps.length = 0;
+    // The grant dialog persists pending (indeterminate) commands in
+    // sessionStorage; clear it between tests so one test's leftover pending
+    // command cannot leak into another.
+    sessionStorage.clear();
   });
 
   it("routes misconduct severity through the canonical statusMeta authority", async () => {
@@ -134,5 +144,210 @@ describe("ProctorDashboardPage", () => {
     expect(
       card?.querySelector("[data-testid='status-badge']"),
     ).toBeInTheDocument();
+  });
+
+  // ── Operator time-grant dialog (P1-3 / P1-4) ────────────────────────────
+  //
+  // The grant dialog implements a draft → submitting → (indeterminate | done)
+  // state machine. operationId is command identity: it is minted when the
+  // dialog opens, frozen on first submit, and reused verbatim on retry. The
+  // outcome (granted / idempotent_replay / terminal) drives distinct UI.
+  describe("operator time-grant dialog", () => {
+    /** Opens the grant dialog for the first candidate's extend button. */
+    async function openGrantDialog() {
+      // The card's extend button label ("延长时间").
+      const extendBtn = await screen.findByRole("button", { name: "延长时间" });
+      fireEvent.click(extendBtn);
+      await screen.findByText("延长考试时间");
+    }
+
+    /** Fills the reason textarea and clicks the confirm (10-minute) button. */
+    async function submitGrant() {
+      const reason = await screen.findByPlaceholderText("请说明延长原因");
+      fireEvent.change(reason, { target: { value: "网络中断" } });
+      const confirm = await screen.findByRole("button", {
+        name: "延长 10 分钟",
+      });
+      fireEvent.click(confirm);
+    }
+
+    it("branches on outcome: granted shows a success toast", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      apiPost.mockResolvedValueOnce({
+        outcome: "granted",
+        adjustment: {
+          id: "adj-1",
+          operationId: "op-1",
+          attemptId: "att-1",
+          source: "operator",
+          beforeDeadline: "2026-01-01T00:00:00Z",
+          afterDeadline: "2026-01-01T00:10:00Z",
+          addedSeconds: 600,
+          reasonCode: "technical_incident",
+          reasonText: "网络中断",
+          interruptionId: null,
+          incidentId: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+        attempt: {
+          id: "att-1",
+          status: "in_progress",
+          deadlineAt: "2026-01-01T00:10:00Z",
+        },
+      });
+      renderPage();
+      await openGrantDialog();
+      await submitGrant();
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("已延长"),
+        );
+      });
+    });
+
+    it("branches on outcome: terminal shows a WARNING (not success), no '已延长'", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      apiPost.mockResolvedValueOnce({
+        outcome: "terminal",
+        adjustment: null,
+        attempt: {
+          id: "att-1",
+          status: "graded",
+          deadlineAt: null,
+        },
+      });
+      renderPage();
+      await openGrantDialog();
+      await submitGrant();
+
+      await waitFor(() => {
+        // terminal must NOT use success — it reports that nothing was granted.
+        expect(toast.warning).toHaveBeenCalled();
+      });
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it("reuses the SAME operationId + payload on retry after an indeterminate failure", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // First attempt: network failure (status 0) → indeterminate.
+      apiPost.mockRejectedValueOnce(new Error("Network request failed"));
+      // Retry: succeeds as granted.
+      apiPost.mockResolvedValueOnce({
+        outcome: "granted",
+        adjustment: {
+          id: "adj-1",
+          operationId: "op-1",
+          attemptId: "att-1",
+          source: "operator",
+          beforeDeadline: "2026-01-01T00:00:00Z",
+          afterDeadline: "2026-01-01T00:10:00Z",
+          addedSeconds: 600,
+          reasonCode: "technical_incident",
+          reasonText: "网络中断",
+          interruptionId: null,
+          incidentId: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+        attempt: {
+          id: "att-1",
+          status: "in_progress",
+          deadlineAt: "2026-01-01T00:10:00Z",
+        },
+      });
+      renderPage();
+      await openGrantDialog();
+      await submitGrant();
+
+      // First POST captured.
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstBody = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      const firstOpId = firstBody.operationId as string;
+
+      // After the indeterminate failure, the dialog reopens to the same frozen
+      // command (retry button). Retry must send the identical operationId and
+      // identical payload.
+      await waitFor(() => {
+        expect(toast.warning).toHaveBeenCalled();
+      });
+      const retryBtn = await screen.findByRole("button", {
+        name: "重试同一加时",
+      });
+      fireEvent.click(retryBtn);
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const retryBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
+      expect(retryBody.operationId).toBe(firstOpId);
+      expect(retryBody.addedSeconds).toBe(firstBody.addedSeconds);
+      expect(retryBody.reasonCode).toBe(firstBody.reasonCode);
+      expect(retryBody.reasonText).toBe(firstBody.reasonText);
+
+      // Confirmed success clears the pending command.
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("已延长"),
+        );
+      });
+    });
+
+    it("IDEMPOTENCY_CONFLICT clears the command and surfaces the conflict", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // The thrown error must carry code=IDEMPOTENCY_CONFLICT for classification.
+      const conflict = Object.assign(new Error("操作标识符与已有请求冲突"), {
+        status: 409,
+        code: "IDEMPOTENCY_CONFLICT",
+      });
+      apiPost.mockRejectedValueOnce(conflict);
+      renderPage();
+      await openGrantDialog();
+      await submitGrant();
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("加时标识已被其他请求占用"),
+        );
+      });
+      // The frozen command was cleared — reopening must mint a NEW operationId,
+      // not reuse the conflicted one.
+      await openGrantDialog();
+      await submitGrant();
+      apiPost.mockResolvedValueOnce({
+        outcome: "granted",
+        adjustment: {
+          id: "adj-2",
+          operationId: "op-2",
+          attemptId: "att-1",
+          source: "operator",
+          beforeDeadline: "2026-01-01T00:00:00Z",
+          afterDeadline: "2026-01-01T00:10:00Z",
+          addedSeconds: 600,
+          reasonCode: "technical_incident",
+          reasonText: "网络中断",
+          interruptionId: null,
+          incidentId: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+        attempt: {
+          id: "att-1",
+          status: "in_progress",
+          deadlineAt: "2026-01-01T00:10:00Z",
+        },
+      });
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const secondBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
+      expect(secondBody.operationId).not.toBe("op-1");
+    });
   });
 });

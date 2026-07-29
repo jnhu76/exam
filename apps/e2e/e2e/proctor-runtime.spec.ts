@@ -14,7 +14,9 @@ import {
  * Validates the proctor runtime flows end-to-end via API-level tests:
  * 1. Candidate status polling endpoint returns live status.
  * 2. Force-submit transitions an in_progress attempt to graded.
- * 3. Extend-time updates the attempt deadline.
+ * 3. Operator time-grant (POST /time-grants) appends an operator adjustment
+ *    and advances the attempt deadline (REC-I4-I3B2; the legacy
+ *    /extend-time route was cut).
  * 4. Misconduct flag persists on the attempt and shows in status response.
  *
  * Uses seedExam() to create a fully-published exam + enrolled candidate,

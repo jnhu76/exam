@@ -199,7 +199,11 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
     z
       .object({
-        adjustmentId: z.string().uuid().nullable(),
+        // The attempt.timeGrant audit is written ONLY on outcome `granted`,
+        // for which a non-null adjustment ledger row always exists. A nullable
+        // adjustmentId admitted the impossible "granted audit, no adjustment"
+        // combination; making it a required UUID encodes the invariant.
+        adjustmentId: z.string().uuid(),
         operationId: z.string().uuid(),
         addedSeconds: z.number().int().positive(),
         reasonCode: z.string().max(100),

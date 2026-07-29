@@ -129,6 +129,11 @@ const SAVE_ERROR_METADATA = [
  * are projected from the raw client_events/audit_logs metadata; everything else
  * (answer text, question content, tokens, cookies, unknown keys) is dropped.
  * An entry of `undefined` means "no fields allowed" (empty metadata).
+ *
+ * `grant_time` is the operator time-grant event (REC-I4-I3B2). It is in this
+ * allowlist — the keys projected are correlation ids (adjustmentId /
+ * operationId) plus the magnitude/reason (addedSeconds / reasonCode) that
+ * proctors need to understand a grant in the timeline.
  */
 const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
   answer_autosave_failed: SAVE_ERROR_METADATA,
@@ -143,9 +148,6 @@ const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
   force_submit: [],
   mark_misconduct: [],
   extend_time: ["durationMs"],
-  // REC-I4-I3B2: operator time-grant audit metadata. adjustmentId/operationId
-  // are correlation ids (not sensitive); addedSeconds/reasonCode tell proctors
-  // how much time was granted and why.
   grant_time: ["addedSeconds", "reasonCode", "adjustmentId"],
 };
 

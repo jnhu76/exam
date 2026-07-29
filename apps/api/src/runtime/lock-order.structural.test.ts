@@ -147,7 +147,11 @@ function readProductionFile(relPath: string): string {
  */
 function functionBody(relPath: string, name: string): string | null {
   const text = readProductionFile(relPath);
-  const declRe = new RegExp(`export\\s+async\\s+function\\s+${name}\\s*\\(`);
+  // `export` is optional so module-private helpers (e.g. runGrantTransaction)
+  // are extractable too. The brace walker below is unchanged.
+  const declRe = new RegExp(
+    `(?:export\\s+)?async\\s+function\\s+${name}\\s*\\(`,
+  );
   const m = declRe.exec(text);
   if (!m) return null;
   // Skip through the parameter list tracking paren depth; ignore braces
@@ -173,34 +177,109 @@ function functionBody(relPath: string, name: string): string | null {
   return text.slice(start, i - 1);
 }
 
-// The 7 exact AE production entry points (PRODUCTION_ENTRY_POINT_COUNT = 7).
-const AE_ENTRY_POINTS: { rel: string; label: string }[] = [
+/**
+ * Extracts the body of a Fastify route handler (an anonymous
+ * `async (request, reply) => { ... }`) by anchoring on a unique substring
+ * inside that route's registration block — typically the route path string
+ * (e.g. `"/admin/attempts/:attemptId/time-grants"`). After the anchor it skips
+ * to the first `async (` token (the handler arrow), then to that arrow's
+ * opening `{`, and walks braces to the matching close.
+ *
+ * This is required because two route handlers can live in ONE file
+ * (e.g. attempts.admin.ts hosts both force-submit and time-grants). A naive
+ * file-level "does `lockEnrollmentAndAttempt(` appear anywhere?" check is
+ * satisfied by EITHER handler, so it cannot prove each one independently
+ * mints via the canonical seam. Anchoring on the route path extracts exactly
+ * that handler's body for a per-entrypoint seam assertion.
+ *
+ * Returns null if the anchor or handler body is not found.
+ */
+function routeHandlerBody(relPath: string, anchor: string): string | null {
+  const text = readProductionFile(relPath);
+  const anchorIdx = text.indexOf(anchor);
+  if (anchorIdx < 0) return null;
+  // Find the handler arrow `async (` after the anchor.
+  const arrowIdx = text.indexOf("async (", anchorIdx + anchor.length);
+  if (arrowIdx < 0) return null;
+  // Walk to the opening `{` of the handler body.
+  let i = arrowIdx;
+  while (i < text.length && text[i] !== "{") i++;
+  if (i >= text.length) return null;
+  const start = i + 1;
+  let depth = 1;
+  i++;
+  while (i < text.length && depth > 0) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") depth--;
+    i++;
+  }
+  return depth === 0 ? text.slice(start, i - 1) : null;
+}
+
+// Each AE (Enrollment→Attempt lock) production entry point. `file` is the
+// production source. Entries that share a file (attempts.admin.ts hosts both
+// force-submit and time-grants) MUST carry enough to assert INDEPENDENTLY that
+// the canonical seam is wired for THAT handler:
+//   - `routeAnchor`: a route-path substring that locates this handler's
+//     registration, proving the handler under test is the right one.
+//   - `wire`: the symbol the route handler calls that leads to the seam (the
+//     handler may call a wrapper, e.g. grantWithOperationRaceRecovery, rather
+//     than the seam directly).
+//   - `seamFn`: the named function whose body contains the seam mint + the
+//     engine consumer (the handler body for force-submit; the module-level
+//     runGrantTransaction for time-grant).
+//   - `consumer`: the engine consumer that must run AFTER the seam mint within
+//     `seamFn`'s body.
+// Standalone-file entries (one entry per file) keep the file-level check.
+const AE_ENTRY_POINTS: {
+  file: string;
+  label: string;
+  routeAnchor?: string;
+  wire?: string;
+  seamFn?: string;
+  consumer?: string;
+}[] = [
   {
-    rel: "apps/api/src/orchestrators/submitAndGradeAttempt.ts",
+    file: "apps/api/src/orchestrators/submitAndGradeAttempt.ts",
     label: "submitAndGradeAttempt",
   },
   {
-    rel: "apps/api/src/routes/attempts.candidate.ts",
+    file: "apps/api/src/routes/attempts.candidate.ts",
     label: "candidate take",
   },
   {
-    rel: "apps/api/src/routes/attempts.candidate.ts",
+    file: "apps/api/src/routes/attempts.candidate.ts",
     label: "candidate save",
   },
   {
-    rel: "apps/api/src/routes/attempts.candidate.ts",
+    file: "apps/api/src/routes/attempts.candidate.ts",
     label: "candidate restore",
   },
   {
-    rel: "apps/api/src/routes/attempts.admin.ts",
+    file: "apps/api/src/routes/attempts.admin.ts",
     label: "admin force-submit",
+    // force-submit mints the seam directly inside its handler body.
+    routeAnchor: "/admin/attempts/:attemptId/force-submit",
+    wire: "lockEnrollmentAndAttempt",
+    seamFn: "force-submit-handler",
+    consumer: "gradeAttemptIdempotent",
   },
   {
-    rel: "apps/api/src/plugins/deadlineScanner.ts",
+    file: "apps/api/src/routes/attempts.admin.ts",
+    label: "admin time-grant",
+    // time-grant routes through a recovery wrapper; the seam lives in the
+    // module-level runGrantTransaction, not the handler body.
+    routeAnchor: "/admin/attempts/:attemptId/time-grants",
+    wire: "grantWithOperationRaceRecovery",
+    seamFn: "runGrantTransaction",
+    consumer: "grantAttemptTime",
+  },
+  {
+    file: "apps/api/src/plugins/deadlineScanner.ts",
     label: "deadline autoSubmitAndGrade",
   },
   {
-    rel: "apps/api/src/routes/gradingQueue.ts",
+    file: "apps/api/src/routes/gradingQueue.ts",
     label: "manual gradeQuestion route",
   },
 ];
@@ -314,17 +393,68 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
     expect(body!).not.toMatch(/enrollmentRepo\.\w*ForUpdate/);
   });
 
-  // Rule 6 — exact 7-entry-point cutover gate.
-  describe("all 7 AE production entry points call the canonical seam", () => {
+  // Rule 6 — exact 8-entry-point cutover gate. Each entry point must mint via
+  // the canonical seam. Entries that share a file (attempts.admin.ts hosts both
+  // force-submit and time-grants) are asserted INDEPENDENTLY: the route handler
+  // under test (anchored on its path) must call the wiring symbol that leads to
+  // the seam, and the seam-holding function's body must mint
+  // lockEnrollmentAndAttempt BEFORE its engine consumer. Standalone-file
+  // entries keep the file-level check.
+  describe("all 8 AE production entry points call the canonical seam", () => {
     for (const ep of AE_ENTRY_POINTS) {
-      it(`${ep.label} (${ep.rel}) mints via lockEnrollmentAndAttempt`, () => {
-        const text = readProductionFile(ep.rel);
-        expect(text).toMatch(/lockEnrollmentAndAttempt\s*\(/);
-      });
+      if (ep.routeAnchor && ep.wire && ep.seamFn && ep.consumer) {
+        it(`${ep.label} (${ep.file}) wires the seam and mints before ${ep.consumer}`, () => {
+          // (a) The route handler under test (anchored on its path) calls the
+          //     symbol that leads to the seam. For force-submit that is the
+          //     seam itself; for time-grant it is the recovery wrapper.
+          const handlerBody = routeHandlerBody(ep.file, ep.routeAnchor!);
+          expect(
+            handlerBody,
+            `${ep.label} handler body not found`,
+          ).not.toBeNull();
+          expect(
+            handlerBody!,
+            `${ep.label} handler must call ${ep.wire}`,
+          ).toContain(ep.wire);
+
+          // (b) The seam-holding function mints the capability BEFORE its
+          //     engine consumer. For force-submit the seam+consumer live in
+          //     the handler body (seamFn === "force-submit-handler"); for
+          //     time-grant they live in the module-level runGrantTransaction.
+          const seamBody =
+            ep.seamFn === "force-submit-handler"
+              ? handlerBody
+              : functionBody(ep.file, ep.seamFn!);
+          expect(
+            seamBody,
+            `${ep.label} seam function body not found`,
+          ).not.toBeNull();
+          const b = seamBody!;
+          const lockIdx = b.indexOf("lockEnrollmentAndAttempt(");
+          expect(
+            lockIdx,
+            `${ep.label} must mint via lockEnrollmentAndAttempt`,
+          ).toBeGreaterThanOrEqual(0);
+          const consumerIdx = b.indexOf(ep.consumer!);
+          expect(
+            consumerIdx,
+            `${ep.label} consumer ${ep.consumer} not found`,
+          ).toBeGreaterThanOrEqual(0);
+          expect(
+            consumerIdx,
+            `${ep.label}: ${ep.consumer} must run AFTER lockEnrollmentAndAttempt`,
+          ).toBeGreaterThan(lockIdx);
+        });
+      } else {
+        it(`${ep.label} (${ep.file}) mints via lockEnrollmentAndAttempt`, () => {
+          const text = readProductionFile(ep.file);
+          expect(text).toMatch(/lockEnrollmentAndAttempt\s*\(/);
+        });
+      }
     }
 
-    it("exactly 7 production AE entry points are covered", () => {
-      expect(AE_ENTRY_POINTS).toHaveLength(7);
+    it("exactly 8 production AE entry points are covered", () => {
+      expect(AE_ENTRY_POINTS).toHaveLength(8);
     });
   });
 
