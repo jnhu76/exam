@@ -35,6 +35,7 @@ export const AuditAction = {
   // ── Attempt admin / proctor operations ──
   AttemptForceSubmit: "attempt.forceSubmit",
   AttemptExtendTime: "attempt.extendTime",
+  AttemptTimeGrant: "attempt.timeGrant",
   AttemptMisconductFlagged: "attempt.misconductFlagged",
   AttemptExported: "attempt.exported",
 

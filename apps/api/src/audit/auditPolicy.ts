@@ -183,12 +183,33 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
     z.object({ reason: z.string().max(500).optional() }).strict(),
   ),
+  // REC-I4-I3B2: the old POST /extend-time route was cut. The action is retained
+  // verbatim (ADR "NO rename") but deprecated — no production emitter remains.
   [AuditAction.AttemptExtendTime]: definition(
-    "active",
+    "deprecated",
     "atomic",
     "privileged_mutation",
     "low",
     z.object({ additionalMinutes: z.number().int().positive() }).strict(),
+  ),
+  [AuditAction.AttemptTimeGrant]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        // The attempt.timeGrant audit is written ONLY on outcome `granted`,
+        // for which a non-null adjustment ledger row always exists. A nullable
+        // adjustmentId admitted the impossible "granted audit, no adjustment"
+        // combination; making it a required UUID encodes the invariant.
+        adjustmentId: z.string().uuid(),
+        operationId: z.string().uuid(),
+        addedSeconds: z.number().int().positive(),
+        reasonCode: z.string().max(100),
+        interruptionId: z.string().uuid().nullable().optional(),
+      })
+      .strict(),
   ),
   [AuditAction.AttemptMisconductFlagged]: definition(
     "active",

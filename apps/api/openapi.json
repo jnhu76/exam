@@ -15480,7 +15480,7 @@
         }
       }
     },
-    "/api/admin/attempts/{attemptId}/extend-time": {
+    "/api/admin/attempts/{attemptId}/time-grants": {
       "post": {
         "requestBody": {
           "required": true,
@@ -15489,13 +15489,37 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "additionalMinutes": {
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "addedSeconds": {
                     "type": "integer",
                     "exclusiveMinimum": true,
-                    "minimum": 0
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "reasonCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "reasonText": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "interruptionId": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
-                "required": ["additionalMinutes"],
+                "required": [
+                  "operationId",
+                  "addedSeconds",
+                  "reasonCode",
+                  "reasonText"
+                ],
                 "additionalProperties": false
               }
             }
@@ -15524,242 +15548,266 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "organizationId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "examId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "enrollmentId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "candidateId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "attemptNo": {
-                      "type": "integer"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "not_started",
-                        "queued",
-                        "in_progress",
-                        "disrupted",
-                        "submitted",
-                        "grading",
-                        "graded",
-                        "voided"
-                      ]
-                    },
-                    "questionSnapshot": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "originalQuestionId": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "single_choice",
-                              "multiple_choice",
-                              "fill_blank",
-                              "true_false",
-                              "text_response"
-                            ]
-                          },
-                          "content": {
-                            "type": "string"
-                          },
-                          "attachments": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "url": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string",
-                                  "enum": ["image", "file"]
-                                },
-                                "name": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["url", "type", "name"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "options": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "content": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["id", "content"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "score": {
-                            "type": "number"
-                          },
-                          "gradingRule": {
-                            "type": "object",
-                            "properties": {
-                              "multiSelectScoring": {
-                                "type": "string",
-                                "enum": ["all_correct_full", "partial_half"]
-                              },
-                              "fillBlankMatchMode": {
-                                "type": "string",
-                                "enum": ["exact", "keyword"]
-                              },
-                              "fillBlankCaseSensitive": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "multiSelectScoring",
-                              "fillBlankMatchMode"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "order": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "originalQuestionId",
-                          "type",
-                          "content",
-                          "attachments",
-                          "options",
-                          "score",
-                          "gradingRule",
-                          "order"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "answers": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "questionId": {
-                            "type": "string"
-                          },
-                          "answer": {},
-                          "version": {
-                            "type": "integer"
-                          },
-                          "savedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          }
-                        },
-                        "required": ["questionId", "version", "savedAt"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "score": {
-                      "type": "number"
-                    },
-                    "passed": {
-                      "type": "boolean"
-                    },
-                    "startedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "submittedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "deadlineAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "lastActivityAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "misconduct": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "flaggedAt": {
+                        "outcome": {
                           "type": "string",
-                          "format": "date-time"
+                          "enum": ["granted"]
                         },
-                        "flaggedBy": {
-                          "type": "string"
+                        "adjustment": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "operationId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "attemptId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": ["operator"]
+                            },
+                            "beforeDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "afterDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "addedSeconds": {
+                              "type": "integer"
+                            },
+                            "reasonCode": {
+                              "type": "string"
+                            },
+                            "reasonText": {
+                              "type": "string"
+                            },
+                            "interruptionId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "incidentId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "operationId",
+                            "attemptId",
+                            "source",
+                            "beforeDeadline",
+                            "afterDeadline",
+                            "addedSeconds",
+                            "reasonCode",
+                            "reasonText",
+                            "interruptionId",
+                            "incidentId",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
                         },
-                        "notes": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1000
-                        },
-                        "severity": {
-                          "type": "string",
-                          "enum": ["warning", "serious"]
+                        "attempt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_started",
+                                "queued",
+                                "in_progress",
+                                "disrupted",
+                                "submitted",
+                                "grading",
+                                "graded",
+                                "voided"
+                              ]
+                            },
+                            "deadlineAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          },
+                          "required": ["id", "status", "deadlineAt"],
+                          "additionalProperties": false
                         }
                       },
-                      "required": [
-                        "flaggedAt",
-                        "flaggedBy",
-                        "notes",
-                        "severity"
-                      ],
-                      "additionalProperties": false,
-                      "nullable": true
+                      "required": ["outcome", "adjustment", "attempt"],
+                      "additionalProperties": false
                     },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["idempotent_replay"]
+                        },
+                        "adjustment": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "operationId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "attemptId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": ["operator"]
+                            },
+                            "beforeDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "afterDeadline": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "addedSeconds": {
+                              "type": "integer"
+                            },
+                            "reasonCode": {
+                              "type": "string"
+                            },
+                            "reasonText": {
+                              "type": "string"
+                            },
+                            "interruptionId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "incidentId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "operationId",
+                            "attemptId",
+                            "source",
+                            "beforeDeadline",
+                            "afterDeadline",
+                            "addedSeconds",
+                            "reasonCode",
+                            "reasonText",
+                            "interruptionId",
+                            "incidentId",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "attempt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_started",
+                                "queued",
+                                "in_progress",
+                                "disrupted",
+                                "submitted",
+                                "grading",
+                                "graded",
+                                "voided"
+                              ]
+                            },
+                            "deadlineAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          },
+                          "required": ["id", "status", "deadlineAt"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["outcome", "adjustment", "attempt"],
+                      "additionalProperties": false
                     },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "serverNow": {
-                      "type": "string",
-                      "format": "date-time"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["terminal"]
+                        },
+                        "adjustment": {
+                          "enum": ["null"],
+                          "nullable": true
+                        },
+                        "attempt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_started",
+                                "queued",
+                                "in_progress",
+                                "disrupted",
+                                "submitted",
+                                "grading",
+                                "graded",
+                                "voided"
+                              ]
+                            },
+                            "deadlineAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          },
+                          "required": ["id", "status", "deadlineAt"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["outcome", "adjustment", "attempt"],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "id",
-                    "organizationId",
-                    "examId",
-                    "enrollmentId",
-                    "candidateId",
-                    "attemptNo",
-                    "status",
-                    "questionSnapshot",
-                    "answers",
-                    "createdAt",
-                    "updatedAt",
-                    "serverNow"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               }
             }

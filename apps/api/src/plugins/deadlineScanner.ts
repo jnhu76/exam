@@ -123,9 +123,10 @@ function createSystemContext(organizationId: string): RequestContext {
  * 1. `executeInTransaction` runs at REPEATABLE READ with 40001/40P01 retry.
  * 2. Lock `Attempt FOR UPDATE` first.
  * 3. Lock `Exam FOR UPDATE` AFTER the attempt lock — lock order is
- *    `Attempt → Exam`. This is consistent with `extendAttemptTime` (which
- *    locks Attempt then reads Exam) and inverts no existing path (admin
- *    exam transitions lock Exam only; `extendExam` locks Exam only). No
+ *    `Attempt → Exam`. This is consistent with the operator time grant engine
+ *    (which locks Attempt then reads Exam under the EA seam) and inverts no
+ *    existing path (admin exam transitions lock Exam only; `extendExam` locks
+ *    Exam only). No
  *    `Exam → Attempt` path exists, so no deadlock inversion is introduced.
  * 4. The `Exam FOR UPDATE` is the SERIALIZATION POINT vs `extendExam`
  *    (which takes `Exam FOR UPDATE` in `executeAdminExamTransition`):

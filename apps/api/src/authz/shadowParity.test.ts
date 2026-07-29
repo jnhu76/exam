@@ -44,7 +44,6 @@ const proctorPerms = [
   Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
   Permission.AttemptMisconductMark,
-  Permission.AttemptTimeExtend,
   Permission.AttemptForceSubmit,
 ];
 const graderPerms = [

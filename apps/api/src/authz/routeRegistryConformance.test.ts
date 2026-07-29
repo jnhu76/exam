@@ -376,11 +376,10 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       path: "/admin/attempts/:attemptId/force-submit",
       permission: "attempt.force_submit",
     },
-    {
-      method: "POST",
-      path: "/admin/attempts/:attemptId/extend-time",
-      permission: "attempt.time.extend",
-    },
+    // NOTE: POST /admin/attempts/:attemptId/time-grants is intentionally NOT in
+    // this M10-B (flat-gate) list — it is a resource-aware route that resolves
+    // the target Attempt scope (ADR-013 / ADR-010 §3.9). Its scoped-gate
+    // conformance is asserted in the dedicated block below.
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/timeline",
@@ -453,8 +452,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   ];
 
-  it("has exactly 28 M10-B routes defined", () => {
-    expect(m10bRouteSpecs).toHaveLength(28);
+  it("has exactly 27 M10-B routes defined", () => {
+    expect(m10bRouteSpecs).toHaveLength(27);
   });
 
   /**
@@ -508,6 +507,38 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       ).toBe(0);
     },
   );
+
+  // ──────────────────────── Scoped-grant conformance ────────────────────────
+
+  /**
+   * The operator time-grant route is resource-aware: it resolves the target
+   * Attempt scope before the handler runs (ADR-013 / ADR-010 §3.9). This is
+   * the M10-B superset — a scoped gate that first checks the Admin preset,
+   * then resolves the Attempt's organization + parent chain and fail-closes
+   * (404 / 403 / 503). The route registry declares scope: Attempt / resolver:
+   * "attempt"; this proves the live preHandler matches.
+   */
+  it("[scoped] POST /admin/attempts/:attemptId/time-grants — scoped Attempt resolver gate", () => {
+    const matches = capturedRoutes.filter(
+      (r) =>
+        r.method === "POST" &&
+        r.url.endsWith("/admin/attempts/:attemptId/time-grants"),
+    );
+    expect(matches).toHaveLength(1);
+    const route = matches[0]!;
+    expect(route.scopedCapabilityHandlerCount, "time-grants scoped count").toBe(
+      1,
+    );
+    expect(route.flatCapabilityHandlerCount, "time-grants flat count").toBe(0);
+    expect(route.roleHandlerCount).toBe(0);
+    expect(route.permissionListHandlerCount).toBe(0);
+    expect(route.authzHandlers[0]).toEqual({
+      kind: "scoped",
+      permission: "attempt.time.grant",
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+    });
+  });
 
   // ──────────────────────── M10-C conformance ────────────────────────
 

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { isAdmin } from "@/lib/capabilities";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -37,10 +39,128 @@ import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import type {
   CandidateStatusItem,
   CandidateStatusResponse,
+  TimeGrantRequest,
+  TimeGrantResponse,
 } from "@exam/contracts";
 
 /** Polling interval for the proctor dashboard (ms). */
 const POLL_INTERVAL_MS = 5_000;
+
+/**
+ * sessionStorage key for an unresolved (indeterminate) operator time grant.
+ * The grant's `operationId` is command identity: losing it across a refresh
+ * would silently mint a new identity and could legitimately double-grant. The
+ * pending command is therefore persisted keyed by `organizationId + attemptId`
+ * so a refresh / accidental navigation cannot discard it. Cleared on a
+ * confirmed outcome (granted / idempotent_replay / terminal) or explicit
+ * discard.
+ */
+const PENDING_GRANT_STORAGE_KEY = "exam.pendingTimeGrant";
+
+/** A frozen operator time-grant command — the exact bytes to (re)send. */
+interface PendingTimeGrant {
+  organizationId: string;
+  attemptId: string;
+  operationId: string;
+  addedSeconds: number;
+  reasonCode: string;
+  reasonText: string;
+}
+
+/**
+ * State machine for the time-grant dialog. `draft` holds a live operationId +
+ * editable fields; the moment the user submits, a `PendingTimeGrant` is frozen
+ * and the dialog moves to `submitting` (or `indeterminate` on an unconfirmed
+ * failure). Retry always replays the frozen command verbatim.
+ */
+type GrantDialogState =
+  | {
+      phase: "draft";
+      operationId: string;
+      minutes: number;
+      reasonCode: string;
+      reasonText: string;
+    }
+  | { phase: "submitting"; command: PendingTimeGrant }
+  | { phase: "indeterminate"; command: PendingTimeGrant };
+
+/** Failure classification for a grant request outcome. */
+type GrantFailureKind =
+  | "indeterminate"
+  | "confirmed_rejection"
+  | "idempotency_conflict";
+
+/**
+ * Classifies a thrown grant error into the recovery action the UI must take.
+ *
+ *   indeterminate       — network drop / 5xx where the server's commit status
+ *                         is unknown. KEEP the frozen command and reuse the
+ *                         same operationId on retry (never mint a new one).
+ *   confirmed_rejection — 4xx with a known code (validation / state / not
+ *                         found). The command will never succeed as-sent; clear
+ *                         it and let the admin re-edit.
+ *   idempotency_conflict — the operationId was already committed for a
+ *                         different payload. That identity is now unusable;
+ *                         clear it and tell the admin a new command is needed.
+ */
+function classifyGrantFailure(error: unknown): GrantFailureKind {
+  if (error && typeof error === "object" && "status" in error) {
+    const status = (error as { status: number }).status;
+    const code = (error as { code?: string }).code;
+    if (code === "IDEMPOTENCY_CONFLICT") return "idempotency_conflict";
+    // status 0 = network failure (fetch threw); 5xx = server may or may not
+    // have committed → treat as unconfirmed.
+    if (status === 0 || status >= 500) return "indeterminate";
+    // 4xx with a definitive code is a confirmed rejection.
+    return "confirmed_rejection";
+  }
+  // Non-ApiError throw (defensive): treat as unconfirmed.
+  return "indeterminate";
+}
+
+/** Builds the sessionStorage sub-key for one attempt's pending grant. */
+function pendingGrantStorageKey(organizationId: string, attemptId: string) {
+  return `${PENDING_GRANT_STORAGE_KEY}:${organizationId}:${attemptId}`;
+}
+
+/** Loads a persisted pending grant for an attempt, if any. */
+function loadPendingGrant(
+  organizationId: string,
+  attemptId: string,
+): PendingTimeGrant | null {
+  try {
+    const raw = sessionStorage.getItem(
+      pendingGrantStorageKey(organizationId, attemptId),
+    );
+    return raw ? (JSON.parse(raw) as PendingTimeGrant) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persists a pending grant so a refresh cannot lose the operationId. */
+function savePendingGrant(command: PendingTimeGrant): void {
+  try {
+    sessionStorage.setItem(
+      pendingGrantStorageKey(command.organizationId, command.attemptId),
+      JSON.stringify(command),
+    );
+  } catch {
+    // sessionStorage may be unavailable (private mode / quota); the in-memory
+    // state machine still guards the within-session retry path.
+  }
+}
+
+/** Clears a persisted pending grant for an attempt. */
+function clearPendingGrant(organizationId: string, attemptId: string): void {
+  try {
+    sessionStorage.removeItem(
+      pendingGrantStorageKey(organizationId, attemptId),
+    );
+  } catch {
+    // ignore
+  }
+}
 
 /** Groups candidates into status categories for the proctor dashboard. */
 interface StatusGroups {
@@ -78,11 +198,12 @@ function groupByStatus(candidates: CandidateStatusItem[]): StatusGroups {
 /**
  * Proctor dashboard for monitoring live exam candidates via HTTP polling.
  * Displays status cards grouped by attempt state and exposes action buttons
- * for force-submit, extend-time, and misconduct flag.
+ * for force-submit, time-grant, and misconduct flag.
  */
 export function ProctorDashboardPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
+  const { user } = useAuthContext();
   const { id: examId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<CandidateStatusResponse | null>(null);
@@ -92,11 +213,34 @@ export function ProctorDashboardPage() {
 
   // Action dialogs
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const [extendMinutes, setExtendMinutes] = useState(10);
   const [extending, setExtending] = useState(false);
   const [extendTarget, setExtendTarget] = useState<CandidateStatusItem | null>(
     null,
   );
+  // Operator time-grant dialog state machine (REC-I4-I3B2 + review P1-3/P1-4).
+  //
+  //   draft        — dialog open, operationId minted, fields still editable.
+  //                  Submitting freezes a PendingTimeGrant and moves to
+  //                  `submitting`.
+  //   submitting   — a frozen command is in flight; fields are read-only.
+  //   indeterminate— the request failed without a confirmed outcome (network
+  //                  drop / 5xx where commit status is unknown). The frozen
+  //                  command is RETAINED and reused verbatim on retry so the
+  //                  same operationId cannot silently mint a duplicate grant.
+  //                  It is also persisted to sessionStorage so a refresh /
+  //                  navigation cannot lose the pending identity.
+  //
+  // A confirmed outcome (granted / idempotent_replay / terminal), a confirmed
+  // rejection (4xx with a known code), or an idempotency conflict clears the
+  // frozen command. An indeterminate command for one attempt blocks opening a
+  // grant dialog for a different attempt until it is resolved or discarded.
+  const [grantState, setGrantState] = useState<GrantDialogState>({
+    phase: "draft",
+    operationId: crypto.randomUUID(),
+    minutes: 10,
+    reasonCode: "technical_incident",
+    reasonText: "",
+  });
 
   const [misconductDialogOpen, setMisconductDialogOpen] = useState(false);
   const [misconductSeverity, setMisconductSeverity] = useState<
@@ -153,31 +297,189 @@ export function ProctorDashboardPage() {
     }
   }
 
-  /** Handles extend-time for a candidate. */
-  async function handleExtendTime() {
-    if (!extendTarget?.attemptId || extending) return;
+  /** Handles operator time grant for a candidate (REC-I4-I3B2 + review P1-3/4). */
+  async function handleGrantTime() {
+    if (!extendTarget?.attemptId || !user) return;
+    const orgId = user.organizationId;
+    const attemptId = extendTarget.attemptId;
+
+    // Resolve the command to send. From `draft` we freeze a fresh command
+    // (first send); from `submitting`/`indeterminate` we replay the already
+    // frozen command VERBATIM — same operationId, same payload — so a retry
+    // can never drift into an idempotency conflict or a duplicate grant.
+    let command: PendingTimeGrant;
+    if (grantState.phase === "draft") {
+      command = {
+        organizationId: orgId,
+        attemptId,
+        operationId: grantState.operationId,
+        addedSeconds: grantState.minutes * 60,
+        reasonCode: grantState.reasonCode,
+        reasonText: grantState.reasonText.trim() || grantState.reasonCode,
+      };
+    } else {
+      command = grantState.command;
+      // Defensive: the frozen command must target the open dialog's attempt.
+      if (command.attemptId !== attemptId) return;
+    }
+
     setExtending(true);
+    setGrantState({ phase: "submitting", command });
+    const body: TimeGrantRequest = {
+      operationId: command.operationId,
+      addedSeconds: command.addedSeconds,
+      reasonCode: command.reasonCode,
+      reasonText: command.reasonText,
+    };
+
     try {
-      await api.post(
-        `/api/admin/attempts/${extendTarget.attemptId}/extend-time`,
-        { additionalMinutes: extendMinutes },
+      const res = await api.post<TimeGrantResponse, TimeGrantRequest>(
+        `/api/admin/attempts/${attemptId}/time-grants`,
+        body,
       );
-      toast.success(
-        t("admin.proctorDashboard.extendDialog.done", {
-          minutes: extendMinutes,
-        }),
-      );
-      setExtendDialogOpen(false);
+      // All three outcomes are CONFIRMED results → clear the pending command.
+      clearPendingGrant(orgId, attemptId);
+      switch (res.outcome) {
+        case "granted":
+          toast.success(
+            t("admin.proctorDashboard.extendDialog.done", {
+              minutes: command.addedSeconds / 60,
+            }),
+          );
+          break;
+        case "idempotent_replay":
+          // Same command was already committed; do not report a new grant.
+          toast.success(t("admin.proctorDashboard.extendDialog.doneReplay"));
+          break;
+        case "terminal":
+          // The attempt had already ended; NO time was added. Surface as a
+          // warning, not a success, so the proctor does not misread it.
+          toast.warning(t("admin.proctorDashboard.extendDialog.doneTerminal"));
+          break;
+      }
+      // Confirmed result: close the dialog and reset to a fresh draft.
+      resetGrantDialog();
       await loadStatus();
     } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.proctorDashboard.errors.extendFailed"),
-      );
+      switch (classifyGrantFailure(err)) {
+        case "indeterminate": {
+          // Commit status unknown: KEEP the frozen command, persist it so a
+          // refresh cannot lose it, and surface a retry affordance.
+          savePendingGrant(command);
+          setGrantState({ phase: "indeterminate", command });
+          toast.warning(t("admin.proctorDashboard.extendDialog.indeterminate"));
+          break;
+        }
+        case "idempotency_conflict": {
+          // The operationId is now unusable for this payload; clear it and
+          // tell the admin a new command is required to retry.
+          clearPendingGrant(orgId, attemptId);
+          resetGrantDialog();
+          toast.error(
+            t("admin.proctorDashboard.extendDialog.idempotencyConflict"),
+          );
+          break;
+        }
+        case "confirmed_rejection":
+        default: {
+          // Definitive failure (validation / state / not-found): clear the
+          // command and let the admin re-edit.
+          clearPendingGrant(orgId, attemptId);
+          resetGrantDialog();
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : t("admin.proctorDashboard.errors.extendFailed"),
+          );
+          break;
+        }
+      }
     } finally {
       setExtending(false);
     }
+  }
+
+  /**
+   * Resets the grant dialog to a fresh editable draft (new operationId, default
+   * fields) and clears the dialog target. Used on confirmed outcomes and
+   * discardable failures. Does NOT touch an indeterminate command's persisted
+   * copy — that is cleared separately via clearPendingGrant.
+   */
+  function resetGrantDialog() {
+    setGrantState({
+      phase: "draft",
+      operationId: crypto.randomUUID(),
+      minutes: 10,
+      reasonCode: "technical_incident",
+      reasonText: "",
+    });
+    setExtendDialogOpen(false);
+    setExtendTarget(null);
+  }
+
+  /**
+   * Opens the grant dialog for a candidate. Honors the indeterminate-command
+   * invariant: if an unresolved command exists for THIS attempt, restore it
+   * (so the proctor retries the same operationId); if one exists for a
+   * DIFFERENT attempt, block opening and direct the proctor to resolve it
+   * first (prevents a second in-flight grant that would mint a new identity).
+   */
+  function openGrantDialog(candidate: CandidateStatusItem) {
+    if (!user || !candidate.attemptId) return;
+    const orgId = user.organizationId;
+    const attemptId = candidate.attemptId;
+
+    // If the in-memory state is an unresolved command for a different attempt,
+    // block: that command's operationId is still live.
+    if (
+      (grantState.phase === "submitting" ||
+        grantState.phase === "indeterminate") &&
+      grantState.command.attemptId !== attemptId
+    ) {
+      toast.warning(
+        t("admin.proctorDashboard.extendDialog.blockedByPending", {
+          minutes: grantState.command.addedSeconds / 60,
+        }),
+      );
+      return;
+    }
+
+    setExtendTarget(candidate);
+
+    // Hydrate from sessionStorage: a prior indeterminate command for this
+    // attempt (e.g. after a refresh) must be retried with the same identity.
+    const pending = loadPendingGrant(orgId, attemptId);
+    if (pending) {
+      setGrantState({ phase: "indeterminate", command: pending });
+    } else {
+      setGrantState({
+        phase: "draft",
+        operationId: crypto.randomUUID(),
+        minutes: 10,
+        reasonCode: "technical_incident",
+        reasonText: "",
+      });
+    }
+    setExtendDialogOpen(true);
+  }
+
+  /**
+   * Patches a subset of the editable draft fields. No-op when the dialog is not
+   * in the `draft` phase (frozen commands are read-only). Centralizing the
+   * `phase === "draft"` guard keeps the discriminated-union narrowing in one
+   * place instead of each input's onChange.
+   */
+  function updateDraft(
+    patch: Partial<
+      Pick<
+        Extract<GrantDialogState, { phase: "draft" }>,
+        "minutes" | "reasonCode" | "reasonText"
+      >
+    >,
+  ) {
+    setGrantState((prev) =>
+      prev.phase === "draft" ? { ...prev, ...patch } : prev,
+    );
   }
 
   /** Handles misconduct flag for a candidate. */
@@ -208,6 +510,29 @@ export function ProctorDashboardPage() {
       setFlagging(false);
     }
   }
+
+  // Project the grant dialog fields from the state machine. In `draft` the
+  // fields are live-editable; once a command is frozen (submitting /
+  // indeterminate) the inputs render the frozen command read-only so a retry
+  // cannot drift the payload.
+  const grantFieldsEditable = grantState.phase === "draft";
+  const grantMinutes =
+    grantState.phase === "draft"
+      ? grantState.minutes
+      : Math.round(grantState.command.addedSeconds / 60);
+  const grantReasonCode =
+    grantState.phase === "draft"
+      ? grantState.reasonCode
+      : grantState.command.reasonCode;
+  const grantReasonText =
+    grantState.phase === "draft"
+      ? grantState.reasonText
+      : grantState.command.reasonText;
+  // A frozen command (retry) is always submittable; a draft needs a positive
+  // minute count and a non-empty reason.
+  const canSubmitGrant =
+    grantState.phase !== "draft" ||
+    (grantState.minutes > 0 && grantState.reasonText.trim().length > 0);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadStatus} />;
@@ -305,8 +630,26 @@ export function ProctorDashboardPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Extend-time dialog */}
-      <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
+      {/* Operator time grant dialog */}
+      <Dialog
+        open={extendDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            // Closing in `draft` (nothing sent yet) is a free cancel — clear
+            // the identity. Closing while a command is `submitting` or
+            // `indeterminate` KEEPS the frozen command alive: its operationId
+            // may already be committed server-side, so discarding it would
+            // risk minting a duplicate on the next open.
+            if (grantState.phase === "draft") {
+              resetGrantDialog();
+            } else {
+              setExtendDialogOpen(false);
+            }
+          } else {
+            setExtendDialogOpen(open);
+          }
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
@@ -318,6 +661,14 @@ export function ProctorDashboardPage() {
               })}
             </DialogDescription>
           </DialogHeader>
+          {grantState.phase === "indeterminate" && (
+            <div
+              role="alert"
+              className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning"
+            >
+              {t("admin.proctorDashboard.extendDialog.indeterminateBanner")}
+            </div>
+          )}
           <div className="flex flex-col gap-3 py-2">
             <Label htmlFor="extend-minutes">
               {t("admin.proctorDashboard.extendDialog.minutesLabel")}
@@ -326,10 +677,52 @@ export function ProctorDashboardPage() {
               id="extend-minutes"
               type="number"
               min={1}
-              value={extendMinutes}
+              value={grantMinutes}
+              disabled={!grantFieldsEditable}
               onChange={(e) =>
-                setExtendMinutes(Number.parseInt(e.target.value, 10) || 0)
+                updateDraft({
+                  minutes: Number.parseInt(e.target.value, 10) || 0,
+                })
               }
+            />
+            <Label htmlFor="grant-reason-code">
+              {t("admin.proctorDashboard.extendDialog.reasonCodeLabel")}
+            </Label>
+            <Select
+              value={grantReasonCode}
+              disabled={!grantFieldsEditable}
+              onValueChange={(v) => updateDraft({ reasonCode: v })}
+            >
+              <SelectTrigger id="grant-reason-code">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="technical_incident">
+                  {t(
+                    "admin.proctorDashboard.extendDialog.reasonCodeTechnicalIncident",
+                  )}
+                </SelectItem>
+                <SelectItem value="candidate_request">
+                  {t(
+                    "admin.proctorDashboard.extendDialog.reasonCodeCandidateRequest",
+                  )}
+                </SelectItem>
+                <SelectItem value="other">
+                  {t("admin.proctorDashboard.extendDialog.reasonCodeOther")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Label htmlFor="grant-reason-text">
+              {t("admin.proctorDashboard.extendDialog.reasonTextLabel")}
+            </Label>
+            <Textarea
+              id="grant-reason-text"
+              value={grantReasonText}
+              disabled={!grantFieldsEditable}
+              onChange={(e) => updateDraft({ reasonText: e.target.value })}
+              placeholder={t(
+                "admin.proctorDashboard.extendDialog.reasonTextPlaceholder",
+              )}
             />
           </div>
           <DialogFooter>
@@ -340,14 +733,16 @@ export function ProctorDashboardPage() {
               {t("admin.proctorDashboard.extendDialog.cancel")}
             </Button>
             <Button
-              disabled={extending || extendMinutes <= 0}
-              onClick={() => void handleExtendTime()}
+              disabled={extending || !canSubmitGrant}
+              onClick={() => void handleGrantTime()}
             >
               {extending
                 ? t("admin.proctorDashboard.extendDialog.confirming")
-                : t("admin.proctorDashboard.extendDialog.confirm", {
-                    minutes: extendMinutes,
-                  })}
+                : grantState.phase === "indeterminate"
+                  ? t("admin.proctorDashboard.extendDialog.retry")
+                  : t("admin.proctorDashboard.extendDialog.confirm", {
+                      minutes: grantMinutes,
+                    })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -508,15 +903,11 @@ export function ProctorDashboardPage() {
                         }
                       />
                     )}
-                    {candidate.attemptId && (
+                    {candidate.attemptId && user && isAdmin(user) && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setExtendTarget(candidate);
-                          setExtendMinutes(10);
-                          setExtendDialogOpen(true);
-                        }}
+                        onClick={() => openGrantDialog(candidate)}
                       >
                         {t("admin.proctorDashboard.card.extend")}
                       </Button>

@@ -89,11 +89,16 @@ const COUNTED_EVENT_NAMES = [
   "deadline_auto_submit_failed",
 ] as const;
 
-/** Audit-log actions surfaced in the per-attempt timeline (compliance ops). */
+/**
+ * Audit-log actions surfaced in the per-attempt timeline (compliance ops).
+ * attempt.extendTime is retained for historical rows (the route was cut in
+ * REC-I4-I3B2); new grants emit attempt.timeGrant.
+ */
 const TIMELINE_AUDIT_ACTIONS = new Set([
   "attempt.forceSubmit",
   "attempt.misconductFlagged",
   "attempt.extendTime",
+  "attempt.timeGrant",
 ]);
 
 /** Maps an audit action to the timeline event name shown to proctors. */
@@ -105,6 +110,8 @@ function auditActionToEventName(action: string): string | null {
       return "mark_misconduct";
     case "attempt.extendTime":
       return "extend_time";
+    case "attempt.timeGrant":
+      return "grant_time";
     default:
       return null;
   }
@@ -122,6 +129,11 @@ const SAVE_ERROR_METADATA = [
  * are projected from the raw client_events/audit_logs metadata; everything else
  * (answer text, question content, tokens, cookies, unknown keys) is dropped.
  * An entry of `undefined` means "no fields allowed" (empty metadata).
+ *
+ * `grant_time` is the operator time-grant event (REC-I4-I3B2). It is in this
+ * allowlist — the keys projected are correlation ids (adjustmentId /
+ * operationId) plus the magnitude/reason (addedSeconds / reasonCode) that
+ * proctors need to understand a grant in the timeline.
  */
 const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
   answer_autosave_failed: SAVE_ERROR_METADATA,
@@ -136,6 +148,7 @@ const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
   force_submit: [],
   mark_misconduct: [],
   extend_time: ["durationMs"],
+  grant_time: ["addedSeconds", "reasonCode", "adjustmentId"],
 };
 
 type SafeMetadataValue = string | number | boolean | null;

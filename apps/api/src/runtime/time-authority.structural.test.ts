@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 //
 // Scope: this guardrail enforces EXAM BUSINESS TIME authority — exam lifecycle,
 // attempt lifecycle, deadline, restore, heartbeat/disrupted, force-submit,
-// extend-time, score/export gate, and state-transition audit timestamps. It is
+// time-grant, score/export gate, and state-transition audit timestamps. It is
 // NOT a "ban every wall-clock read in the system" rule. Frontend display,
 // performance timing, and non-authoritative reporting are out of scope.
 //

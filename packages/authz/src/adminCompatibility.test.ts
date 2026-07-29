@@ -60,7 +60,9 @@ describe("RBAC-M6 — Admin is the migration compatibility superset", () => {
       Permission.AttemptStatusView,
       Permission.AttemptTimelineView,
       Permission.AttemptMisconductMark,
-      Permission.AttemptTimeExtend,
+      // REC-I4-I3B2: the /extend-time route was cut and replaced by the
+      // Admin-only /time-grants route gated on AttemptTimeGrant.
+      Permission.AttemptTimeGrant,
       Permission.AttemptForceSubmit,
       Permission.AttemptExport,
       // grading (compat)

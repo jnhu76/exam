@@ -195,7 +195,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
    * dedicated incident table). Payload must not contain candidate answers.
    *
    * M9 v0: lightweight incident recording only. Full proctor authority
-   * boundary (force-submit, extend-time, dashboard) is L7.
+   * boundary (force-submit, time-grant, dashboard) is L7.
    */
   fastify.post(
     "/admin/attempts/:attemptId/proctor-incident",

@@ -439,19 +439,115 @@ export const ForceSubmitRequestSchema = z.object({
 /** Type for a force-submit request body. */
 export type ForceSubmitRequest = z.infer<typeof ForceSubmitRequestSchema>;
 
-// ── Extend Time (Admin) ──────────────────────────────────────────
+// ── Operator Time Grant (Admin) ──────────────────────────────────
 
 /**
- * Request body schema for an admin extending an attempt's deadline by a
- * positive number of minutes. Only in_progress/disrupted attempts may be
- * extended; an extension beyond exam.closeAt is rejected.
+ * Upper bound of a PostgreSQL `integer`. The `addedSeconds` column is a
+ * Postgres integer, not an unbounded JS number; reject oversized values at
+ * the contract layer rather than surfacing a low-level DB error.
  */
-export const ExtendTimeRequestSchema = z.object({
-  additionalMinutes: z.number().int().positive(),
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+
+/**
+ * Request body schema for an admin granting operator time to an attempt
+ * (REC-I4-I3B2). The client supplies command identity (`operationId`), the
+ * grant magnitude, and a reason. Server-decided fields (actorId, source,
+ * policy, beforeDeadline, afterDeadline, incidentId) are intentionally
+ * absent — they are derived server-side and can not be set by the caller.
+ *
+ * `reasonCode` / `reasonText` are trimmed at the contract boundary so the
+ * committed ledger and the compliance audit see identical canonical values
+ * (prevents a " x " vs "x" payload from looking like a different command on
+ * retry, and keeps audit projection in lockstep with the ledger).
+ */
+export const TimeGrantRequestSchema = z.object({
+  operationId: z.string().uuid(),
+  addedSeconds: z.number().int().positive().max(POSTGRES_INTEGER_MAX),
+  reasonCode: z.string().trim().min(1).max(100),
+  reasonText: z.string().trim().min(1).max(1000),
+  interruptionId: z.string().uuid().optional(),
 });
 
-/** Type for an extend-time request body. */
-export type ExtendTimeRequest = z.infer<typeof ExtendTimeRequestSchema>;
+/** Type for an operator time grant request body. */
+export type TimeGrantRequest = z.infer<typeof TimeGrantRequestSchema>;
+
+/**
+ * Outcome of an operator time grant command. `granted` = a new adjustment was
+ * written; `idempotent_replay` = the same command was already committed;
+ * `terminal` = deadline reconciliation terminalized the attempt, no grant.
+ */
+export const GrantOutcomeEnum = z.enum([
+  "granted",
+  "terminal",
+  "idempotent_replay",
+]);
+export type GrantOutcome = z.infer<typeof GrantOutcomeEnum>;
+
+/**
+ * The committed operator adjustment ledger row projected into a grant
+ * response. `source` is pinned to `"operator"`: the grant route only ever
+ * writes operator-source adjustments, so encoding the full
+ * `TimeAdjustmentSource` union here would admit impossible combinations.
+ */
+const OperatorTimeGrantAdjustmentSchema = z.object({
+  id: z.string().uuid(),
+  operationId: z.string().uuid(),
+  attemptId: z.string().uuid(),
+  source: z.literal("operator"),
+  beforeDeadline: z.string().datetime(),
+  afterDeadline: z.string().datetime(),
+  addedSeconds: z.number().int(),
+  reasonCode: z.string(),
+  reasonText: z.string(),
+  interruptionId: z.string().uuid().nullable(),
+  incidentId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+});
+
+/**
+ * Response schema for `POST /admin/attempts/:attemptId/time-grants`. Returns the
+ * operation fact (the adjustment ledger row) and the resulting attempt, not
+ * just the attempt.
+ *
+ * Encoded as a discriminated union on `outcome` to make the invariant
+ * un-representable: `granted` and `idempotent_replay` require a non-null
+ * adjustment (the committed/replayed ledger row), while `terminal` requires
+ * `adjustment: null` (deadline reconciliation ended the attempt; nothing was
+ * written). The shared `attempt` projection carries the post-command status
+ * and deadline.
+ */
+export const TimeGrantResponseSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("granted"),
+    adjustment: OperatorTimeGrantAdjustmentSchema,
+    attempt: z.object({
+      id: z.string().uuid(),
+      status: AttemptStatusEnum,
+      deadlineAt: z.string().datetime().nullable(),
+    }),
+  }),
+  z.object({
+    outcome: z.literal("idempotent_replay"),
+    adjustment: OperatorTimeGrantAdjustmentSchema,
+    attempt: z.object({
+      id: z.string().uuid(),
+      status: AttemptStatusEnum,
+      deadlineAt: z.string().datetime().nullable(),
+    }),
+  }),
+  z.object({
+    outcome: z.literal("terminal"),
+    adjustment: z.null(),
+    attempt: z.object({
+      id: z.string().uuid(),
+      status: AttemptStatusEnum,
+      deadlineAt: z.string().datetime().nullable(),
+    }),
+  }),
+]);
+
+/** Type for the operator time grant response. */
+export type TimeGrantResponse = z.infer<typeof TimeGrantResponseSchema>;
 
 // ── Attempt Export (P2E-J4) ────────────────────────────────────────
 
