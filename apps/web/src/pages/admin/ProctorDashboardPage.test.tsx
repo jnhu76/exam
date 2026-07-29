@@ -2,6 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
+import { AuthProvider } from "@/contexts/AuthContext";
+import type { MeResponse } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
 
 // Ownership-sensitive mock: capture the canonical status keys the page routes
@@ -40,15 +42,26 @@ function makeCandidate(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const adminUser: MeResponse = {
+  id: "admin-1",
+  username: "admin",
+  name: "Admin",
+  role: "Admin",
+  organizationId: "org-1",
+  capabilities: [],
+};
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1/proctor"]}>
-      <Routes>
-        <Route
-          path="/admin/exams/:id/proctor"
-          element={<ProctorDashboardPage />}
-        />
-      </Routes>
+      <AuthProvider initialUser={adminUser}>
+        <Routes>
+          <Route
+            path="/admin/exams/:id/proctor"
+            element={<ProctorDashboardPage />}
+          />
+        </Routes>
+      </AuthProvider>
     </MemoryRouter>,
   );
 }

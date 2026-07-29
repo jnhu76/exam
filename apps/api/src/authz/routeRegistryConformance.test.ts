@@ -378,8 +378,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
     {
       method: "POST",
-      path: "/admin/attempts/:attemptId/extend-time",
-      permission: "attempt.time.extend",
+      path: "/admin/attempts/:attemptId/time-grants",
+      permission: "attempt.time.grant",
     },
     {
       method: "GET",

@@ -54,10 +54,10 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
     expect(e?.auditAction).toBe("attempt.forceSubmit");
   });
 
-  it("extend-time -> attempt.time.extend @ attempt scope", () => {
-    const e = find("POST", "/admin/attempts/:attemptId/extend-time");
-    expect(e?.permission).toBe("attempt.time.extend");
-    expect(e?.auditAction).toBe("attempt.extendTime");
+  it("time-grants -> attempt.time.grant @ attempt scope", () => {
+    const e = find("POST", "/admin/attempts/:attemptId/time-grants");
+    expect(e?.permission).toBe("attempt.time.grant");
+    expect(e?.auditAction).toBe("attempt.timeGrant");
   });
 
   it("misconduct -> attempt.misconduct.mark @ attempt scope", () => {
@@ -217,7 +217,7 @@ describe("RBAC-M4 route permission registry — coverage of protected routes", (
     { method: "GET", path: "/scores/attempts/:attemptId" },
     { method: "POST", path: "/admin/attempts/:attemptId/misconduct" },
     { method: "POST", path: "/admin/attempts/:attemptId/force-submit" },
-    { method: "POST", path: "/admin/attempts/:attemptId/extend-time" },
+    { method: "POST", path: "/admin/attempts/:attemptId/time-grants" },
     { method: "GET", path: "/admin/attempts/:attemptId/timeline" },
     { method: "GET", path: "/admin/attempts/:attemptId/export" },
     { method: "GET", path: "/admin/attempts/:attemptId/export/csv" },

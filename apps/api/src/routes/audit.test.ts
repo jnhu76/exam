@@ -14,7 +14,7 @@ import {
   recordAtomicHttpAudit,
   recordSensitiveReadAudit,
 } from "../audit/auditWriter.js";
-import type { AuditActionForDurability } from "../audit/auditPolicy.js";
+import type { ActiveAuditActionForDurability } from "../audit/auditPolicy.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -146,7 +146,7 @@ describe("audit log baseline (S06-lite)", () => {
   async function writeTransactionalAudit(
     request: FastifyRequest,
     requestContext: RequestContext,
-    action: AuditActionForDurability<"atomic">,
+    action: ActiveAuditActionForDurability<"atomic">,
     targetType: string,
     targetId: string,
     metadata?: Record<string, unknown>,

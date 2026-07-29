@@ -12,14 +12,16 @@ const has = (
 
 describe("RBAC-M2 boundary #1 — Admin is a compatibility superset", () => {
   it("Admin holds the 4 proctor trap perms (so flipping gates never denies Admin)", () => {
-    const [f, e, m, room] = has(
+    // REC-I4-I3B2: the trap perm is now AttemptTimeGrant (Admin-only), not the
+    // old AttemptTimeExtend. Admin must hold it so the new route stays accessible.
+    const [f, g, m, room] = has(
       Role.Admin,
       Permission.AttemptForceSubmit,
-      Permission.AttemptTimeExtend,
+      Permission.AttemptTimeGrant,
       Permission.AttemptMisconductMark,
       Permission.ExamRoomView,
     );
-    expect([f, e, m, room]).toEqual([true, true, true, true]);
+    expect([f, g, m, room]).toEqual([true, true, true, true]);
   });
 
   it("Admin holds grading detail/answer/score (preserve current Admin grading access)", () => {
@@ -63,16 +65,16 @@ describe("RBAC-M2 boundary #1 — Admin is a compatibility superset", () => {
 
 describe("RBAC-M2 boundary #2/#3 — Teacher is not Grader or Proctor by default", () => {
   it("Teacher does NOT view candidate answers / grade / proctor by default", () => {
-    const [ans, grade, force, extend, misconduct, room] = has(
+    const [ans, grade, force, grant, misconduct, room] = has(
       Role.Teacher,
       Permission.GradingAnswerView,
       Permission.GradingScoreWrite,
       Permission.AttemptForceSubmit,
-      Permission.AttemptTimeExtend,
+      Permission.AttemptTimeGrant,
       Permission.AttemptMisconductMark,
       Permission.ExamRoomView,
     );
-    expect([ans, grade, force, extend, misconduct, room]).toEqual([
+    expect([ans, grade, force, grant, misconduct, room]).toEqual([
       false,
       false,
       false,
@@ -105,15 +107,18 @@ describe("RBAC-M2 boundary #4/#5 — Proctor cannot view answers / grade / publi
     expect([ans, grade, pub, scores]).toEqual([false, false, false, false]);
   });
 
-  it("Proctor CAN operate runtime authority (force-submit / extend / misconduct / room)", () => {
-    const [force, extend, misconduct, room] = has(
+  it("Proctor CAN operate runtime authority (force-submit / misconduct / room) but NOT grant time", () => {
+    // REC-I4-I3B2: operator time grant is Admin-only. Proctor retains
+    // force-submit / misconduct / room but must NOT hold AttemptTimeGrant
+    // (the old AttemptTimeExtend route was cut; no grant path remains).
+    const [force, grant, misconduct, room] = has(
       Role.Proctor,
       Permission.AttemptForceSubmit,
-      Permission.AttemptTimeExtend,
+      Permission.AttemptTimeGrant,
       Permission.AttemptMisconductMark,
       Permission.ExamRoomView,
     );
-    expect([force, extend, misconduct, room]).toEqual([true, true, true, true]);
+    expect([force, grant, misconduct, room]).toEqual([true, false, true, true]);
   });
 });
 
