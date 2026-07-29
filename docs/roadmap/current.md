@@ -18,15 +18,23 @@ for the full implemented/partial/limited breakdown.
 
 ## What is being worked on now
 
-- **Recovery hardening — REC-I4-I2 Engine Policy Seam is implemented.**
-  ADR-013 and the REC-I4-R0 reality audit defines strict/bounded_grace/
-  operator_incident policies, lifecycle-only restore, and pure policy
-  evaluation. REC-I4-I1 adds the Domain, contract, PostgreSQL persistence
-  ledger. REC-I4-I2 completes the runtime: atomic scanner disruption with
-  episode creation, pure policy evaluator, composed restore command with
-  deadline reconciliation, and a phased fail-closed migration (0022) with
-  status/pointer CHECK constraint. The next authorized recovery Job is
-  **REC-I4-I3**. REC-I4 does not introduce Redis.
+- **Recovery hardening — REC-I4-I3A Contract & Authoring Surface is
+  implemented.** ADR-013 and the REC-I4-R0 reality audit define
+  strict/bounded_grace/operator_incident policies, lifecycle-only restore, and
+  pure policy evaluation. REC-I4-I1 adds the Domain, contract, PostgreSQL
+  persistence ledger. REC-I4-I2 completes the runtime: atomic scanner
+  disruption with episode creation, pure policy evaluator, composed restore
+  command with deadline reconciliation, and a phased fail-closed migration
+  (0022) with status/pointer CHECK constraint. **REC-I4-I3A** freezes the
+  public contract and authoring surface: the candidate restore HTTP response
+  contract (`RestoreAttemptResponseSchema`), Exam create/update interruption
+  policy authoring fields with ADR-013 cross-field validation and draft-only
+  mutation, confirmed attempt-snapshot immutability, no leak of internal
+  interruption evidence/ledger to candidate responses, and structural
+  regression tests preventing legacy `restoreAttempt` /
+  `disconnectedDuration` reintroduction. The operator grant route,
+  `Permission.AttemptTimeGrant`, and the system incident model remain deferred
+  (REC-I4-I3B / REC-I6). REC-I4 does not introduce Redis.
 
 - **Phase 3, Module P6 — MVP ready closeout is CLOSED.**
   All Phase 3 MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0

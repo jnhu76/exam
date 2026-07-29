@@ -713,9 +713,20 @@
   },
   "retakePolicy": "no-retake",
   "scoreStrategy": "best",
-  "maxAttempts": 1
+  "maxAttempts": 1,
+  "interruptionTimePolicy": "strict",
+  "interruptionGracePerIncidentSeconds": null,
+  "interruptionGracePerAttemptSeconds": null
 }
 ```
+
+**中断时间补偿策略字段（ADR-013 / REC-I4-I3A）**：可选的创作字段，省略时解析为 `strict` 且两端 cap 为 `null`。
+
+- `interruptionTimePolicy`：`strict` | `bounded_grace` | `operator_incident`，默认 `strict`。
+- `interruptionGracePerIncidentSeconds`：单次中断授予上限（秒）。`strict` / `operator_incident` 必须为 `null`；`bounded_grace` 必须为正整数。
+- `interruptionGracePerAttemptSeconds`：单次 attempt 聚合授予上限（秒）。同上约束，且 `perIncident <= perAttempt`。
+
+这些是实质性创作字段，仅在考试处于 `draft` 时可变更（发布后冻结）。attempt 创建时按当时 Exam 配置冻结为不可变快照。详见 `docs/adr/ADR-013-interruption-time-compensation-policy.md`。
 
 **响应** (201):
 
@@ -1016,7 +1027,45 @@
 
 **错误响应** (409): 当 attempt 不在 `in_progress` 时返回 ErrorResponse，`error.code` 为 `INVALID_STATE_TRANSITION`。
 
-> 心跳仅用于刷新 `lastActivityAt`，与 deadline 无耦合——deadline 之后的心跳仍会被接受。后台扫描任务（`HEARTBEAT_TIMEOUT_MS`，默认 60s）将长时间无活动的 `in_progress` attempt 标记为 `disrupted`。前端 restore UI 未产品化，参见 `docs/status/implementation-status.md` Known limitations。
+> 心跳仅用于刷新 `lastActivityAt`，与 deadline 无耦合——deadline 之后的心跳仍会被接受。后台扫描任务（`HEARTBEAT_TIMEOUT_MS`，默认 60s）将长时间无活动的 `in_progress` attempt 标记为 `disrupted`。
+
+---
+
+### POST /attempts/:attemptId/restore
+
+**权限**: Candidate（仅限本人 attempt）
+
+显式恢复一个 `disrupted` 状态的 attempt。ADR-013 / REC-I4-I3A：返回冻结的恢复响应契约（命令确认 + 候选人安全补偿摘要）。该响应**不是**答题页权威状态——客户端在收到该响应后必须重新 GET `/candidate/attempts/:attemptId/take` 获取权威快照（ADR-012 / REC-I3）。
+
+**响应** (200) — `RestoreAttemptResponse`：
+
+```json
+{
+  "lifecycle": "restored",
+  "compensation": {
+    "policy": "strict",
+    "addedSeconds": 0
+  },
+  "attempt": {
+    "id": "attempt-uuid",
+    "status": "in_progress",
+    "deadlineAt": "2024-06-01T11:00:00.000Z",
+    "serverNow": "2024-06-01T10:30:00.000Z"
+  }
+}
+```
+
+**字段说明**:
+
+- `lifecycle`：候选人可见的生命周期结果，取值 `restored` | `already_in_progress` | `terminal`。`terminal` 表示 attempt 已处于终态（进入命令前已提交/评分，或 deadline reconciliation 在本事务中提交了 attempt）。三种结果均返回 200，terminal 不会导致错误 HTTP 状态码。
+- `compensation.policy`：本次恢复遵循的中断时间补偿策略（`strict` | `bounded_grace` | `operator_incident`），来自 attempt 创建时冻结的不可变快照。
+- `compensation.addedSeconds`：本次恢复授予的整秒数。`strict` 与 `operator_incident` 的候选人恢复恒为 `0`；`bounded_grace` 按四重最小值（eligible、单次上限、剩余聚合上限、closeAt 余量）计算。
+
+**不暴露的内部字段**：响应刻意不暴露中断取证细节——不包含中断 episode id、detected event、调整账本行 id、`eligibleSeconds`、before/after deadline、`reasonCode` 或任何 operator/system-incident 归因。这些保留为服务端权威（operator 授权路由、`Permission.AttemptTimeGrant` 与系统事件模型为 REC-I4-I3B / REC-I6 延期项）。
+
+**错误响应** (409)：仅用于真正的状态冲突（如并发提交竞争）或不可恢复的并发错误。`terminal` lifecycle outcome 不会返回 409。
+
+> ADR-013 策略语义：默认 `strict` 恢复仅还原生命周期、授予 0 秒；服务器静默不等于应得时间。`bounded_grace` 必须在考试上显式配置且两端 cap 为正整数（`perIncident <= perAttempt`），在 attempt 创建时冻结。
 
 ---
 

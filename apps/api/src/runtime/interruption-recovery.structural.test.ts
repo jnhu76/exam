@@ -152,3 +152,156 @@ describe("REC-I4-I2 interruption recovery structural guards", () => {
     expect(src).toMatch(/'terminalized'/);
   });
 });
+
+// REC-I4-I3A: public contract + authoring surface structural guards.
+// These lock in the frozen restore response contract, the no-leak boundary,
+// attempt-snapshot immutability, and the Exam authoring surface.
+describe("REC-I4-I3A contract + authoring structural guards", () => {
+  const engineFiles = listTsFiles(ENGINE_SRC);
+
+  // Extract the restore-route handler block bounded by the next route
+  // registration, so a later route can never satisfy the contract matches by
+  // accident. Slices from the restore route path up to the next
+  // `fastify.<verb>(` registration (or EOF when restore is the last route).
+  function restoreRouteBlock(src: string): string {
+    const routeIdx = src.indexOf('"/attempts/:attemptId/restore"');
+    expect(routeIdx).toBeGreaterThan(-1);
+    const after = src.slice(routeIdx + 1);
+    const nextRoute = after.search(/\bfastify\.(get|post|put|patch|delete)\(/);
+    return nextRoute === -1
+      ? src.slice(routeIdx)
+      : src.slice(routeIdx, routeIdx + 1 + nextRoute);
+  }
+
+  it("restore route returns RestoreAttemptResponseSchema (frozen contract)", () => {
+    const src = readSource(join(API_SRC, "routes/attempts.candidate.ts"));
+    expect(src).toMatch(/RestoreAttemptResponseSchema/);
+    // The restore response schema is referenced as the 200 response. Extract
+    // the restore route handler block (bounded by the next route registration)
+    // and assert the 200 schema wiring.
+    const restoreBlock = restoreRouteBlock(src);
+    expect(restoreBlock).toMatch(/200:\s*RestoreAttemptResponseSchema/);
+  });
+
+  it("restore route projects compensation.policy + addedSeconds only (no evidence leak)", () => {
+    const src = readSource(join(API_SRC, "routes/attempts.candidate.ts"));
+    const restoreBlock = restoreRouteBlock(src);
+    // The candidate-facing projection exposes only policy + addedSeconds.
+    expect(restoreBlock).toMatch(/compensation\.policy/);
+    expect(restoreBlock).toMatch(/compensation\.addedSeconds/);
+    // Internal evidence must NOT be projected into the response.
+    expect(restoreBlock).not.toMatch(/compensation\.interruptionId/);
+    expect(restoreBlock).not.toMatch(/compensation\.adjustmentId/);
+    expect(restoreBlock).not.toMatch(/compensation\.eligibleSeconds/);
+  });
+
+  it("RestoreAttemptResponseSchema omits internal interruption evidence fields", () => {
+    const src = readSource("packages/contracts/src/attempt.ts");
+    // The compensation object is a named RestoreCompensationSchema with a
+    // superRefine. Extract just that schema definition (between its assignment
+    // and the top-level `);` that closes the chained call), excluding any
+    // docblock that may sit between it and RestoreAttemptResponseSchema, so a
+    // documentation reference to the omitted fields is not mistaken for a leak.
+    const startIdx = src.indexOf("RestoreCompensationSchema = z");
+    expect(startIdx).toBeGreaterThan(-1);
+    const defEnd = src.indexOf(");\n", startIdx);
+    expect(defEnd).toBeGreaterThan(-1);
+    const compensationSchemaBlock = src.slice(startIdx, defEnd + 2);
+    // The schema must contain the policy + addedSeconds field definitions.
+    expect(compensationSchemaBlock).toMatch(/\bpolicy:/);
+    expect(compensationSchemaBlock).toMatch(/\baddedSeconds:/);
+    // Internal identifiers must not appear in the schema fields.
+    expect(compensationSchemaBlock).not.toMatch(/interruptionId/);
+    expect(compensationSchemaBlock).not.toMatch(/adjustmentId/);
+    expect(compensationSchemaBlock).not.toMatch(/eligibleSeconds/);
+    expect(compensationSchemaBlock).not.toMatch(/reasonCode/);
+  });
+
+  it("attempt timing-policy snapshot is never mutated after creation", () => {
+    // The snapshot is set only in startOrRestoreAttempt's create call. No
+    // attemptRepo.update() payload in the engine may carry snapshot keys.
+    const snapshotKeys = [
+      "interruptionTimingPolicySnapshot",
+      "interruptionPolicySnapshotVersion",
+    ];
+    const violations: string[] = [];
+    for (const f of engineFiles) {
+      if (!f.includes("attemptCommands") && !f.includes("restoreInterruption"))
+        continue;
+      const src = readFileSync(f, "utf8");
+      // Find every attemptRepo.update / attempts.update call and inspect its
+      // object-literal payload for snapshot keys.
+      const updateCallRe =
+        /(?:attemptRepo|attempts)\.update\([^;]*?\{([^}]*?)\}/gs;
+      let match: RegExpExecArray | null;
+      while ((match = updateCallRe.exec(src)) !== null) {
+        const payload = match[1]!;
+        for (const key of snapshotKeys) {
+          if (payload.includes(key)) {
+            violations.push(`${f}: update payload contains ${key}`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("Exam create/update contracts expose interruption policy authoring fields", () => {
+    const src = readSource("packages/contracts/src/exam.ts");
+    // Create + update base schemas carry the authoring fields.
+    expect(src).toMatch(
+      /interruptionTimePolicy:\s*InterruptionTimePolicySchema/,
+    );
+    expect(src).toMatch(
+      /interruptionGracePerIncidentSeconds:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullish\(\)/,
+    );
+    expect(src).toMatch(
+      /interruptionGracePerAttemptSeconds:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullish\(\)/,
+    );
+    // The ExamSchema DTO exposes the resolved policy + nullable caps.
+    expect(src).toMatch(
+      /interruptionGracePerIncidentSeconds:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullable\(\)/,
+    );
+  });
+
+  it("exam create/update routes normalize interruption policy (ADR-013 cross-field)", () => {
+    const src = readSource(join(API_SRC, "routes/exam.ts"));
+    expect(src).toMatch(/normalizeInterruptionPolicyConfiguration/);
+    // The response serializer exposes the resolved policy fields.
+    expect(src).toMatch(
+      /interruptionTimePolicy:\s*exam\.interruptionTimePolicy/,
+    );
+  });
+
+  it("no production code reintroduces legacy full-gap restoreAttempt", () => {
+    // Broader than the I2 guard (which scans engine + api production files):
+    // scans production .ts across engine, api, contracts, db, and domain, and
+    // rejects any re-introduction of a bare restoreAttempt function definition
+    // or disconnectedDuration compensation logic (excluding this guard file
+    // itself, which legitimately names the patterns).
+    const guardFile = fileURLToPath(import.meta.url);
+    const dirsToScan = [
+      ENGINE_SRC,
+      API_SRC,
+      "packages/contracts/src",
+      "packages/db/src",
+      "packages/domain/src",
+    ];
+    const violations: string[] = [];
+    for (const dir of dirsToScan) {
+      for (const f of listTsFiles(dir)) {
+        if (f === guardFile) continue;
+        const src = readFileSync(f, "utf8");
+        // A function DEFINITION of the legacy coupled restore (not the new
+        // restoreAttemptState / restoreInterruptedAttempt).
+        if (/\bfunction\s+restoreAttempt\b/.test(src)) {
+          violations.push(`${f}: defines legacy restoreAttempt`);
+        }
+        if (/disconnectedDuration/.test(src)) {
+          violations.push(`${f}: uses disconnectedDuration`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+});
