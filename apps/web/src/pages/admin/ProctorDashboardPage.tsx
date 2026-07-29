@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, Users, MonitorPlay } from "lucide-react";
+import { createContextSafeUuid } from "@/lib/uuid";
 import type {
   CandidateStatusItem,
   CandidateStatusResponse,
@@ -234,13 +235,13 @@ export function ProctorDashboardPage() {
   // rejection (4xx with a known code), or an idempotency conflict clears the
   // frozen command. An indeterminate command for one attempt blocks opening a
   // grant dialog for a different attempt until it is resolved or discarded.
-  const [grantState, setGrantState] = useState<GrantDialogState>({
+  const [grantState, setGrantState] = useState<GrantDialogState>(() => ({
     phase: "draft",
-    operationId: crypto.randomUUID(),
+    operationId: createContextSafeUuid(),
     minutes: 10,
     reasonCode: "technical_incident",
     reasonText: "",
-  });
+  }));
 
   const [misconductDialogOpen, setMisconductDialogOpen] = useState(false);
   const [misconductSeverity, setMisconductSeverity] = useState<
@@ -408,7 +409,7 @@ export function ProctorDashboardPage() {
   function resetGrantDialog() {
     setGrantState({
       phase: "draft",
-      operationId: crypto.randomUUID(),
+      operationId: createContextSafeUuid(),
       minutes: 10,
       reasonCode: "technical_incident",
       reasonText: "",
@@ -454,7 +455,7 @@ export function ProctorDashboardPage() {
     } else {
       setGrantState({
         phase: "draft",
-        operationId: crypto.randomUUID(),
+        operationId: createContextSafeUuid(),
         minutes: 10,
         reasonCode: "technical_incident",
         reasonText: "",

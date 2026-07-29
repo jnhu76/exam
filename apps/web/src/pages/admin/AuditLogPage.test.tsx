@@ -273,4 +273,27 @@ describe("AuditLogPage", () => {
     await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
     expect(await screen.findByText("取消考试")).toBeInTheDocument();
   });
+
+  it("includes attempt.timeGrant in the action filter with a Chinese label and sends the exact action value", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+
+    // Open the action filter and verify the time-grant action is present with
+    // its Chinese label (not the raw action key).
+    await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
+    const grantOption = await screen.findByRole("option", {
+      name: "授予考试时间",
+    });
+    expect(grantOption).toBeInTheDocument();
+    // The raw action key must not appear as a visible label.
+    expect(screen.queryByText("attempt.timeGrant")).not.toBeInTheDocument();
+
+    // Selecting it sends the exact action value to the API.
+    await user.click(grantOption);
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("action=attempt.timeGrant");
+    });
+  });
 });

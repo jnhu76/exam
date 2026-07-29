@@ -265,6 +265,30 @@ describe("AttemptDetailPage", () => {
     expect(screen.getByText("管理员强制交卷")).toBeInTheDocument();
   });
 
+  it("renders grant_time timeline event with a Chinese label, not the raw key", async () => {
+    mockTimelineResult(mockGradedResult, {
+      events: [
+        {
+          id: "e-grant",
+          organizationId: "org1",
+          actorId: "admin-1",
+          action: "grant_time",
+          targetType: "attempt",
+          targetId: "attempt-1",
+          metadata: { addedSeconds: 600 },
+          ipAddress: null,
+          userAgent: null,
+          createdAt: "2026-06-23T08:10:00.000Z",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText("答卷时间线");
+    // The localized label is rendered, never the raw action key.
+    expect(await screen.findByText("授予考试时间")).toBeInTheDocument();
+    expect(screen.queryByText("grant_time")).not.toBeInTheDocument();
+  });
+
   it("shows empty state when timeline has no events", async () => {
     mockTimelineResult(mockGradedResult, { events: [] });
     renderPage();

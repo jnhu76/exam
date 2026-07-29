@@ -72,6 +72,7 @@ const ACTION_FILTER_KEYS = [
   "attempt.misconductFlagged",
   "attempt.forceSubmit",
   "attempt.extendTime",
+  "attempt.timeGrant",
   "attempt.exported",
   "grading.score_entered",
   "grading.finalized",

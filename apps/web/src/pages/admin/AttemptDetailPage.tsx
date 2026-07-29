@@ -139,6 +139,11 @@ const EVENT_META: Record<string, EventMeta> = {
     tone: "warning",
     icon: Timer,
   },
+  grant_time: {
+    labelKey: "admin.attemptDetail.events.grantTime",
+    tone: "warning",
+    icon: Clock,
+  },
   "attempt.misconductFlagged": {
     labelKey: "admin.attemptDetail.events.misconductFlagged",
     tone: "destructive",
