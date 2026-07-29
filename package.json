@@ -57,6 +57,8 @@
     "formal:operator-grant:counterexamples": "node scripts/formal/run-operator-grant-tlc.mjs counterexamples",
     "formal:operator-grant:runner-test": "node --test scripts/formal/run-operator-grant-tlc.test.mjs",
     "formal:operator-grant": "pnpm formal:operator-grant:runner-test && node scripts/formal/run-operator-grant-tlc.mjs all",
+    "test:operator-grant-race": "pnpm --filter @exam/api exec vitest run src/routes/attempts/admin-time-grants.concurrency.test.ts --reporter=verbose",
+    "test:operator-grant-race:repeat": "node scripts/test/run-operator-grant-race-repeat.mjs",
     "prepare": "husky"
   },
   "lint-staged": {
