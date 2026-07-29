@@ -42,6 +42,7 @@ export const errorMessages = {
   ANSWER_VERSION_CONFLICT: "答案版本冲突",
   EXAM_NOT_OPEN: "考试尚未开放",
   ATTEMPT_DEADLINE_EXCEEDED: "考试时间已到",
+  DEADLINE_EXCEEDS_EXAM_CLOSE: "延长后的截止时间不能超过考试结束时间",
   EXAM_ALREADY_PUBLISHED: "考试已发布，不能重复发布",
   EXAM_NOT_DRAFT: "仅草稿状态的考试允许此操作",
   EXAM_CLOSE_NOT_ALLOWED: "考试当前状态不允许关闭",

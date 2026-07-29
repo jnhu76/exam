@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { isAdmin } from "@/lib/capabilities";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -37,6 +39,8 @@ import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import type {
   CandidateStatusItem,
   CandidateStatusResponse,
+  TimeGrantRequest,
+  TimeGrantResponse,
 } from "@exam/contracts";
 
 /** Polling interval for the proctor dashboard (ms). */
@@ -83,6 +87,7 @@ function groupByStatus(candidates: CandidateStatusItem[]): StatusGroups {
 export function ProctorDashboardPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
+  const { user } = useAuthContext();
   const { id: examId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<CandidateStatusResponse | null>(null);
@@ -93,6 +98,11 @@ export function ProctorDashboardPage() {
   // Action dialogs
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [extendMinutes, setExtendMinutes] = useState(10);
+  const [grantReasonCode, setGrantReasonCode] = useState("technical_incident");
+  const [grantReasonText, setGrantReasonText] = useState("");
+  // Caller-supplied idempotency identity: minted when the dialog opens, reused
+  // across retries, discarded only on success or when the dialog closes.
+  const [grantOperationId, setGrantOperationId] = useState<string | null>(null);
   const [extending, setExtending] = useState(false);
   const [extendTarget, setExtendTarget] = useState<CandidateStatusItem | null>(
     null,
@@ -153,20 +163,29 @@ export function ProctorDashboardPage() {
     }
   }
 
-  /** Handles extend-time for a candidate. */
-  async function handleExtendTime() {
-    if (!extendTarget?.attemptId || extending) return;
+  /** Handles operator time grant for a candidate (REC-I4-I3B2). */
+  async function handleGrantTime() {
+    if (!extendTarget?.attemptId || extending || !grantOperationId) return;
     setExtending(true);
     try {
-      await api.post(
-        `/api/admin/attempts/${extendTarget.attemptId}/extend-time`,
-        { additionalMinutes: extendMinutes },
+      const body: TimeGrantRequest = {
+        operationId: grantOperationId,
+        addedSeconds: extendMinutes * 60,
+        reasonCode: grantReasonCode,
+        reasonText: grantReasonText.trim() || grantReasonCode,
+      };
+      const res = await api.post<TimeGrantResponse, TimeGrantRequest>(
+        `/api/admin/attempts/${extendTarget.attemptId}/time-grants`,
+        body,
       );
       toast.success(
         t("admin.proctorDashboard.extendDialog.done", {
           minutes: extendMinutes,
         }),
       );
+      // Success: discard the operationId so the next dialog open mints a fresh
+      // one. A closed/discarded dialog never reuses a stale identity.
+      setGrantOperationId(null);
       setExtendDialogOpen(false);
       await loadStatus();
     } catch (err) {
@@ -175,6 +194,7 @@ export function ProctorDashboardPage() {
           ? err.message
           : t("admin.proctorDashboard.errors.extendFailed"),
       );
+      // Retry reuses the same operationId (idempotency); do NOT regenerate.
     } finally {
       setExtending(false);
     }
@@ -305,8 +325,16 @@ export function ProctorDashboardPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Extend-time dialog */}
-      <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
+      {/* Operator time grant dialog */}
+      <Dialog
+        open={extendDialogOpen}
+        onOpenChange={(open) => {
+          // Closing (incl. dismiss) discards the operationId so the next open
+          // mints a fresh identity — a stale identity is never reused.
+          if (!open) setGrantOperationId(null);
+          setExtendDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
@@ -331,6 +359,43 @@ export function ProctorDashboardPage() {
                 setExtendMinutes(Number.parseInt(e.target.value, 10) || 0)
               }
             />
+            <Label htmlFor="grant-reason-code">
+              {t("admin.proctorDashboard.extendDialog.reasonCodeLabel")}
+            </Label>
+            <Select
+              value={grantReasonCode}
+              onValueChange={(v) => setGrantReasonCode(v)}
+            >
+              <SelectTrigger id="grant-reason-code">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="technical_incident">
+                  {t(
+                    "admin.proctorDashboard.extendDialog.reasonCodeTechnicalIncident",
+                  )}
+                </SelectItem>
+                <SelectItem value="candidate_request">
+                  {t(
+                    "admin.proctorDashboard.extendDialog.reasonCodeCandidateRequest",
+                  )}
+                </SelectItem>
+                <SelectItem value="other">
+                  {t("admin.proctorDashboard.extendDialog.reasonCodeOther")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Label htmlFor="grant-reason-text">
+              {t("admin.proctorDashboard.extendDialog.reasonTextLabel")}
+            </Label>
+            <Textarea
+              id="grant-reason-text"
+              value={grantReasonText}
+              onChange={(e) => setGrantReasonText(e.target.value)}
+              placeholder={t(
+                "admin.proctorDashboard.extendDialog.reasonTextPlaceholder",
+              )}
+            />
           </div>
           <DialogFooter>
             <Button
@@ -340,8 +405,12 @@ export function ProctorDashboardPage() {
               {t("admin.proctorDashboard.extendDialog.cancel")}
             </Button>
             <Button
-              disabled={extending || extendMinutes <= 0}
-              onClick={() => void handleExtendTime()}
+              disabled={
+                extending ||
+                extendMinutes <= 0 ||
+                grantReasonText.trim().length === 0
+              }
+              onClick={() => void handleGrantTime()}
             >
               {extending
                 ? t("admin.proctorDashboard.extendDialog.confirming")
@@ -508,13 +577,18 @@ export function ProctorDashboardPage() {
                         }
                       />
                     )}
-                    {candidate.attemptId && (
+                    {candidate.attemptId && user && isAdmin(user) && (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => {
                           setExtendTarget(candidate);
                           setExtendMinutes(10);
+                          // Mint a fresh idempotency identity for this grant
+                          // command; reused on retry, discarded on close/success.
+                          setGrantOperationId(crypto.randomUUID());
+                          setGrantReasonCode("technical_incident");
+                          setGrantReasonText("");
                           setExtendDialogOpen(true);
                         }}
                       >

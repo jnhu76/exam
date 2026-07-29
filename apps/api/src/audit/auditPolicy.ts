@@ -183,12 +183,29 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
     z.object({ reason: z.string().max(500).optional() }).strict(),
   ),
+  // REC-I4-I3B2: the old POST /extend-time route was cut. The action is retained
+  // verbatim (ADR "NO rename") but deprecated — no production emitter remains.
   [AuditAction.AttemptExtendTime]: definition(
-    "active",
+    "deprecated",
     "atomic",
     "privileged_mutation",
     "low",
     z.object({ additionalMinutes: z.number().int().positive() }).strict(),
+  ),
+  [AuditAction.AttemptTimeGrant]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        adjustmentId: z.string().uuid().nullable(),
+        operationId: z.string().uuid(),
+        addedSeconds: z.number().int().positive(),
+        reasonCode: z.string().max(100),
+        interruptionId: z.string().uuid().nullable().optional(),
+      })
+      .strict(),
   ),
   [AuditAction.AttemptMisconductFlagged]: definition(
     "active",

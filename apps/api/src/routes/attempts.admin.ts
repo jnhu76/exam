@@ -4,7 +4,8 @@ import {
   FlagMisconductRequestSchema,
   FlagMisconductResponseSchema,
   ForceSubmitRequestSchema,
-  ExtendTimeRequestSchema,
+  TimeGrantRequestSchema,
+  TimeGrantResponseSchema,
   LoadAttemptResponseSchema,
   AttemptTimelineResponseSchema,
   AttemptIdParamsSchema,
@@ -20,7 +21,7 @@ import {
   submitAttempt,
   gradeAttemptIdempotent,
   flagMisconduct,
-  extendAttemptTime,
+  grantAttemptTime,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
 import type { SubmitInterruptionResolution } from "@exam/exam-engine";
@@ -31,6 +32,7 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
 import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
+import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import {
@@ -39,6 +41,7 @@ import {
   createGradingWorksetRepoAdapter,
   createInterruptionEpisodeRepoAdapter,
   createInterruptionEventRepoAdapter,
+  createTimeAdjustmentRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
@@ -300,25 +303,30 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * POST /admin/attempts/:attemptId/extend-time — Admin extends an
-   * in_progress/disrupted attempt's deadline by N minutes inside a
-   * transaction with a row lock. Rejected (409) if the new deadline would
-   * exceed exam.closeAt, or for non-active states. Audit: attempt.extendTime.
+   * POST /admin/attempts/:attemptId/time-grants — Admin grants operator time to
+   * an in_progress/disrupted attempt (REC-I4-I3B2). The adjustment ledger insert,
+   * the attempt deadline update, and the compliance audit all commit inside ONE
+   * transaction. The client supplies command identity (operationId), magnitude,
+   * and reason; server-decided fields (actorId, source, policy, deadlines,
+   * incidentId) are derived server-side and can not be set by the caller.
+   * Idempotent: the same operationId + same payload returns the committed result
+   * without a duplicate ledger row. Returns the operation fact (outcome +
+   * adjustment + attempt), not just the attempt.
    */
   fastify.post(
-    "/admin/attempts/:attemptId/extend-time",
+    "/admin/attempts/:attemptId/time-grants",
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptTimeExtend),
+        fastify.requireCapability(Permission.AttemptTimeGrant),
       ],
       schema: {
         params: AttemptIdParamsSchema,
-        body: ExtendTimeRequestSchema,
+        body: TimeGrantRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
         response: {
-          200: LoadAttemptResponseSchema,
+          200: TimeGrantResponseSchema,
           400: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
@@ -331,45 +339,124 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const body = ExtendTimeRequestSchema.safeParse(request.body ?? {});
+      const body = TimeGrantRequestSchema.safeParse(request.body ?? {});
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
-      const { additionalMinutes } = body.data;
+      const {
+        operationId,
+        addedSeconds,
+        reasonCode,
+        reasonText,
+        interruptionId,
+      } = body.data;
+      // One authoritative command timestamp threaded through the ledger insert,
+      // the deadline update, and the audit so the three agree in this request.
+      const now = fastify.now();
 
-      // extendAttemptTime uses findByIdForUpdate and returns the updated
-      // attempt, so we reuse it from the transaction callback instead of a
-      // second findById roundtrip (review fix).
-      const attempt = await executeInTransaction(fastify.db, async (tx) => {
+      const result = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
-        const { exams, attempts } = createExamEngineRepos(
+        const txEnrollmentRepo = createEnrollmentRepo(tx);
+        const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
             attemptRepo: txAttemptRepo,
-            enrollmentRepo: createEnrollmentRepo(tx),
+            enrollmentRepo: txEnrollmentRepo,
           },
           ctx,
         );
-        const extended = await extendAttemptTime(
-          exams,
+        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam. The
+        // grant command asserts capability affinity before touching the ledger.
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
           attempts,
           attemptId,
-          additionalMinutes,
-          fastify.now(),
         );
-        await recordAtomicHttpAudit(tx, request, ctx, {
-          action: "attempt.extendTime",
-          targetType: "attempt",
-          targetId: attemptId,
-          metadata: { additionalMinutes },
-        });
-        return extended;
+        const episodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const eventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
+        const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+          createAttemptTimeAdjustmentRepo(tx),
+          ctx,
+        );
+        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(tx),
+          ctx,
+        );
+        const grantResult = await grantAttemptTime(
+          exams,
+          attempts,
+          enrollments,
+          episodeRepo,
+          eventRepo,
+          adjustmentRepo,
+          gradingWorksetRepo,
+          cap,
+          {
+            attemptId,
+            operationId,
+            addedSeconds,
+            reasonCode,
+            reasonText,
+            // Normalize omitted interruptionId to null; the engine's input type
+            // is exact-optional (string | null), not undefined.
+            interruptionId: interruptionId ?? null,
+            actorId: ctx.actorId,
+            now,
+          },
+        );
+        // Compliance audit (atomic with the ledger insert + deadline update).
+        // Recorded only on a real grant; idempotent replay returns the
+        // already-committed result without a duplicate audit row.
+        if (grantResult.outcome === "granted") {
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "attempt.timeGrant",
+            targetType: "attempt",
+            targetId: attemptId,
+            metadata: {
+              adjustmentId: grantResult.adjustment?.id ?? null,
+              operationId,
+              addedSeconds: grantResult.addedSeconds,
+              reasonCode,
+              interruptionId: interruptionId ?? null,
+            },
+          });
+        }
+        return grantResult;
       });
 
-      return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
+      return reply.send(
+        TimeGrantResponseSchema.parse({
+          outcome: result.outcome,
+          adjustment: result.adjustment
+            ? {
+                id: result.adjustment.id,
+                operationId: result.adjustment.operationId,
+                attemptId: result.adjustment.attemptId,
+                source: result.adjustment.source,
+                beforeDeadline: result.adjustment.beforeDeadline.toISOString(),
+                afterDeadline: result.adjustment.afterDeadline.toISOString(),
+                addedSeconds: result.adjustment.addedSeconds,
+                reasonCode: result.adjustment.reasonCode,
+                reasonText: result.adjustment.reasonText,
+                interruptionId: result.adjustment.interruptionId,
+                incidentId: result.adjustment.incidentId,
+                createdAt: result.adjustment.createdAt.toISOString(),
+              }
+            : null,
+          attempt: {
+            id: result.attempt.id,
+            status: result.attempt.status,
+            deadlineAt: result.attempt.deadlineAt?.toISOString() ?? null,
+          },
+        }),
       );
     },
   );

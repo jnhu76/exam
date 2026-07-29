@@ -99,7 +99,7 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
   Permission.AttemptMisconductMark,
-  Permission.AttemptTimeExtend,
+  Permission.AttemptTimeGrant,
   Permission.AttemptForceSubmit,
   Permission.AttemptExport,
   // Grading — compat superset (preserve current Admin grading access)
@@ -148,8 +148,9 @@ const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
   Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
   Permission.AttemptMisconductMark,
-  Permission.AttemptTimeExtend,
   Permission.AttemptForceSubmit,
+  // AttemptTimeExtend removed: the old /extend-time route is cut in REC-I4-I3B2.
+  // Operator time grant (AttemptTimeGrant) is Admin-only; Proctor has no grant path.
   // Explicitly NOT granted: grading.*, ExamResultPublish, ScoreAllView, ExamPublish.
 ];
 
@@ -202,7 +203,7 @@ export const ROLE_PRESETS: Record<RoleKey, RolePreset> = {
     sensitivePermissions: [
       Permission.UserRoleAssign,
       Permission.AttemptForceSubmit,
-      Permission.AttemptTimeExtend,
+      Permission.AttemptTimeGrant,
       Permission.AttemptMisconductMark,
       Permission.GradingAnswerView,
       Permission.GradingScoreWrite,
@@ -238,7 +239,6 @@ export const ROLE_PRESETS: Record<RoleKey, RolePreset> = {
     permissions: PROCTOR_PERMISSIONS,
     sensitivePermissions: [
       Permission.AttemptForceSubmit,
-      Permission.AttemptTimeExtend,
       Permission.AttemptMisconductMark,
     ],
   },
