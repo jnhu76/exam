@@ -37,6 +37,25 @@ const DEADLINE = new Date("2026-01-01T02:00:00.000Z");
 const EXAM_CLOSE = new Date("2026-01-01T03:00:00.000Z");
 const ACTOR = "admin-1";
 const OPERATION_ID = "11111111-1111-1111-1111-111111111111";
+const INTERRUPTION_ID = "33333333-3333-3333-3333-333333333333";
+const FOREIGN_INTERRUPTION_ID = "44444444-4444-4444-4444-444444444444";
+
+/**
+ * Narrow an unknown inserted event to a terminalized event before asserting.
+ * The event repo's `insert` accepts a structural input shape; the returned
+ * row carries `eventType`. A typed predicate avoids `as any` while letting
+ * TypeScript narrow the result.
+ */
+function isTerminalizedEvent(
+  event: unknown,
+): event is AttemptInterruptionEvent & { eventType: "terminalized" } {
+  return (
+    typeof event === "object" &&
+    event !== null &&
+    "eventType" in event &&
+    (event as AttemptInterruptionEvent).eventType === "terminalized"
+  );
+}
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -116,6 +135,18 @@ function makeEnrollment(): ExamEnrollment {
     createdAt: new Date("2025-12-31T00:00:00Z"),
     updatedAt: new Date("2025-12-31T00:00:00Z"),
   } as unknown as ExamEnrollment;
+}
+
+function makeEpisode(
+  overrides: Partial<AttemptInterruption> = {},
+): AttemptInterruption {
+  return {
+    id: INTERRUPTION_ID,
+    organizationId: "org-1",
+    attemptId: "attempt-1",
+    createdAt: new Date("2025-12-31T05:00:00Z"),
+    ...overrides,
+  };
 }
 
 function baseInput(
@@ -201,7 +232,7 @@ function setupMocks(opts: {
 
   const episodeRepo: InterruptionEpisodeRepository = {
     create: async () => ({
-      id: "ep-1",
+      id: INTERRUPTION_ID,
       organizationId: "org-1",
       attemptId: "attempt-1",
       createdAt: NOW,
@@ -394,15 +425,10 @@ describe("grantAttemptTime", () => {
         attempt: makeAttempt({
           status: "disrupted",
           deadlineAt: new Date("2026-01-01T00:30:00Z"), // before NOW
-          currentInterruptionId: "ep-1",
+          currentInterruptionId: INTERRUPTION_ID,
           interruptedAt: new Date("2026-01-01T00:10:00Z"),
         }),
-        episode: {
-          id: "ep-1",
-          organizationId: "org-1",
-          attemptId: "attempt-1",
-          createdAt: new Date("2026-01-01T00:10:00Z"),
-        },
+        episode: makeEpisode({ id: INTERRUPTION_ID }),
         // The terminalization path requires a detected event for the
         // active interruption (resolveActiveInterruptionOnTerminalization
         // validates episode identity against the detected event).
@@ -410,7 +436,7 @@ describe("grantAttemptTime", () => {
           id: "ev-det-ep-1",
           organizationId: "org-1",
           attemptId: "attempt-1",
-          interruptionId: "ep-1",
+          interruptionId: INTERRUPTION_ID,
           eventType: "detected",
           occurredAt: new Date("2026-01-01T00:10:00Z"),
           observedLastActivityAt: new Date("2026-01-01T00:08:00Z"),
@@ -432,9 +458,7 @@ describe("grantAttemptTime", () => {
       expect(ctx.insertedAdjustments).toHaveLength(0);
 
       // A terminalized event was appended (disrupted + expired path).
-      const terminalized = ctx.insertedEvents.find(
-        (e: any) => e.eventType === "terminalized",
-      ) as any;
+      const terminalized = ctx.insertedEvents.find(isTerminalizedEvent);
       expect(terminalized).toBeDefined();
     });
   });
@@ -496,6 +520,7 @@ describe("grantAttemptTime", () => {
       ["reasonCode", { reasonCode: "different_reason" }],
       ["reasonText", { reasonText: "different reason text" }],
       ["actorId", { actorId: "admin-2" }],
+      ["interruptionId", { interruptionId: FOREIGN_INTERRUPTION_ID }],
     ] as const)(
       "same operationId + different %s: throws IdempotencyConflictError, no insert, no deadline change",
       async (_label, override) => {
@@ -566,6 +591,56 @@ describe("grantAttemptTime", () => {
       expect(result.outcome).toBe("idempotent_replay");
       expect(result.adjustment!.id).toBe("adj-existing");
     });
+
+    it.each([
+      ["source is bounded_grace", { source: "bounded_grace" }],
+      [
+        "source is administrative_correction",
+        { source: "administrative_correction" },
+      ],
+      ["source is system_incident", { source: "system_incident" }],
+      ["policy is not operator_incident", { policy: "bounded_grace" }],
+      [
+        "incidentId is non-null",
+        { incidentId: "55555555-5555-5555-5555-555555555555" },
+      ],
+      ["eligibleSeconds is non-null", { eligibleSeconds: 300 }],
+      ["attemptId differs", { attemptId: "attempt-999" }],
+    ] as const)(
+      "same operationId + %s: throws IdempotencyConflictError, no insert, no deadline change",
+      async (_label, override) => {
+        const existing: AttemptTimeAdjustment = {
+          id: "adj-existing",
+          operationId: OPERATION_ID,
+          organizationId: "org-1",
+          attemptId: "attempt-1",
+          interruptionId: null,
+          incidentId: null,
+          policy: "operator_incident",
+          source: "operator",
+          beforeDeadline: DEADLINE,
+          afterDeadline: new Date(DEADLINE.getTime() + 600_000),
+          addedSeconds: 600,
+          eligibleSeconds: null,
+          reasonCode: "operator_grant",
+          reasonText: "network incident",
+          actorId: ACTOR,
+          createdAt: NOW,
+          ...override,
+        };
+        const ctx = setupMocks({
+          attempt: makeAttempt({ status: "in_progress" }),
+          existingOperationAdjustment: existing,
+        });
+        await expect(runGrant(ctx, baseInput())).rejects.toThrow(
+          IdempotencyConflictError,
+        );
+        expect(ctx.insertedAdjustments).toHaveLength(0);
+        expect(
+          ctx.attemptUpdates.filter((u) => "deadlineAt" in u),
+        ).toHaveLength(0);
+      },
+    );
   });
 
   describe("interruptionId ownership", () => {
@@ -575,10 +650,7 @@ describe("grantAttemptTime", () => {
         episode: null, // findByAttemptForUpdate returns null
       });
       await expect(
-        runGrant(
-          ctx,
-          baseInput({ interruptionId: "99999999-9999-9999-9999-999999999999" }),
-        ),
+        runGrant(ctx, baseInput({ interruptionId: FOREIGN_INTERRUPTION_ID })),
       ).rejects.toThrow(ValidationError);
       expect(ctx.insertedAdjustments).toHaveLength(0);
       expect(ctx.attemptUpdates.filter((u) => "deadlineAt" in u)).toHaveLength(
@@ -593,19 +665,89 @@ describe("grantAttemptTime", () => {
           currentInterruptionId: null, // pointer cleared after a prior restore
           interruptedAt: null,
         }),
-        episode: {
-          id: "ep-historical",
-          organizationId: "org-1",
-          attemptId: "attempt-1",
-          createdAt: new Date("2025-12-31T05:00:00Z"),
-        },
+        episode: makeEpisode({ id: INTERRUPTION_ID }),
       });
       const result = await runGrant(
         ctx,
-        baseInput({ interruptionId: "ep-historical" }),
+        baseInput({ interruptionId: INTERRUPTION_ID }),
       );
       expect(result.outcome).toBe("granted");
-      expect(ctx.insertedAdjustments[0]!.interruptionId).toBe("ep-historical");
+      expect(ctx.insertedAdjustments[0]!.interruptionId).toBe(INTERRUPTION_ID);
+    });
+  });
+
+  describe("execution order: terminal wins over interruption validation", () => {
+    it("already-terminal attempt + malformed interruptionId: outcome terminal, no episode lookup, no grant", async () => {
+      const ctx = setupMocks({
+        attempt: makeAttempt({ status: "submitted" }),
+        episode: makeEpisode(),
+      });
+      const episodeSpy = vi.spyOn(ctx.episodeRepo, "findByAttemptForUpdate");
+      const result = await runGrant(
+        ctx,
+        baseInput({ interruptionId: "not-a-uuid" }),
+      );
+
+      expect(result.outcome).toBe("terminal");
+      expect(result.adjustment).toBeNull();
+      expect(result.addedSeconds).toBe(0);
+      expect(episodeSpy).not.toHaveBeenCalled();
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+    });
+
+    it("reconciled-to-terminal attempt + malformed interruptionId: outcome terminal, no episode lookup, no grant", async () => {
+      const ctx = setupMocks({
+        attempt: makeAttempt({
+          status: "in_progress",
+          deadlineAt: new Date("2026-01-01T00:30:00Z"), // before NOW → terminalizes
+        }),
+        episode: makeEpisode(),
+      });
+      const episodeSpy = vi.spyOn(ctx.episodeRepo, "findByAttemptForUpdate");
+      const result = await runGrant(
+        ctx,
+        baseInput({ interruptionId: "not-a-uuid" }),
+      );
+
+      expect(result.outcome).toBe("terminal");
+      expect(result.adjustment).toBeNull();
+      expect(episodeSpy).not.toHaveBeenCalled();
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+    });
+
+    it("terminal attempt + foreign interruptionId: outcome terminal, no episode lookup, no grant", async () => {
+      const ctx = setupMocks({
+        attempt: makeAttempt({ status: "grading" }),
+        episode: null, // would fail ownership if lookup ran
+      });
+      const episodeSpy = vi.spyOn(ctx.episodeRepo, "findByAttemptForUpdate");
+      const result = await runGrant(
+        ctx,
+        baseInput({ interruptionId: FOREIGN_INTERRUPTION_ID }),
+      );
+
+      expect(result.outcome).toBe("terminal");
+      expect(result.adjustment).toBeNull();
+      expect(episodeSpy).not.toHaveBeenCalled();
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+    });
+  });
+
+  describe("execution order: active malformed interruptionId fails before episode lookup", () => {
+    it("active attempt + malformed interruptionId: ValidationError, no episode lookup, no grant", async () => {
+      const ctx = setupMocks({
+        attempt: makeAttempt({ status: "in_progress" }),
+        episode: makeEpisode(),
+      });
+      const episodeSpy = vi.spyOn(ctx.episodeRepo, "findByAttemptForUpdate");
+      await expect(
+        runGrant(ctx, baseInput({ interruptionId: "not-a-uuid" })),
+      ).rejects.toThrow(ValidationError);
+      expect(episodeSpy).not.toHaveBeenCalled();
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+      expect(ctx.attemptUpdates.filter((u) => "deadlineAt" in u)).toHaveLength(
+        0,
+      );
     });
   });
 
@@ -740,10 +882,13 @@ describe("grantAttemptTime", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it("reasonText must be non-empty and bounded", async () => {
+    it("reasonText must be non-empty and at most 1000 chars", async () => {
       const ctx = setupMocks({});
       await expect(
         runGrant(ctx, baseInput({ reasonText: "   " })),
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        runGrant(ctx, baseInput({ reasonText: "x".repeat(1001) })),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -757,6 +902,29 @@ describe("grantAttemptTime", () => {
           }),
         ),
       ).rejects.toThrow(ValidationError);
+    });
+
+    it("now must be a valid Date", async () => {
+      const ctx = setupMocks({});
+      await expect(
+        runGrant(ctx, baseInput({ now: new Date("invalid") })),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("attemptId must match the locked attempt", async () => {
+      const ctx = setupMocks({});
+      await expect(
+        runGrant(ctx, baseInput({ attemptId: "different-attempt" })),
+      ).rejects.toThrow(ValidationError);
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+    });
+
+    it("actorId must be non-empty", async () => {
+      const ctx = setupMocks({});
+      await expect(
+        runGrant(ctx, baseInput({ actorId: "   " })),
+      ).rejects.toThrow(ValidationError);
+      expect(ctx.insertedAdjustments).toHaveLength(0);
     });
   });
 

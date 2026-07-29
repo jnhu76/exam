@@ -45,6 +45,35 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Determines whether a committed adjustment row is the exact same operator
+ * grant command as the incoming request. Used by the idempotency check: an
+ * existing row that matches every field is a replay (same command), while any
+ * mismatch is an idempotency identity conflict (ADR-013 §9).
+ */
+function isSameOperatorGrantOperation(
+  existing: AttemptTimeAdjustment,
+  attemptId: string,
+  addedSeconds: number,
+  reasonCode: string,
+  reasonText: string,
+  actorId: string,
+  interruptionId: string | null,
+): boolean {
+  return (
+    existing.attemptId === attemptId &&
+    existing.addedSeconds === addedSeconds &&
+    existing.reasonCode === reasonCode &&
+    existing.reasonText === reasonText &&
+    existing.actorId === actorId &&
+    (existing.interruptionId ?? null) === interruptionId &&
+    existing.source === "operator" &&
+    existing.policy === "operator_incident" &&
+    existing.incidentId === null &&
+    existing.eligibleSeconds === null
+  );
+}
+
+/**
  * Caller-supplied input for an operator time grant (ADR-013 §5
  * `operator_incident`). `operationId` is command identity, not a dedupe field:
  * same identity + same payload returns the committed result; same identity +
@@ -105,9 +134,9 @@ export interface GrantAttemptTimeResult {
  *   3. normalize + validate inputs;
  *   4. operationId replay/conflict check;
  *   5. validate the `operator_incident` policy snapshot;
- *   6. validate optional interruption episode ownership;
- *   7. reconcile the deadline (may terminalize);
- *   8. if terminal: return, no grant;
+ *   6. reconcile the deadline (may terminalize);
+ *   7. if terminal: return, no grant;
+ *   8. validate optional interruption episode ownership;
  *   9. require the attempt still `in_progress | disrupted`;
  *   10. compute afterDeadline with arithmetic safety;
  *   11. reject (no silent clamp) if `afterDeadline > exam.closeAt`;
@@ -160,6 +189,9 @@ export async function grantAttemptTime(
   //    same canonical values (prevents " x " vs "x" from looking like a
   //    different payload on retry).
   const { attemptId, operationId, addedSeconds, actorId, now } = input;
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
+    throw new ValidationError("now must be a valid timestamp");
+  }
   if (attemptId !== capability.attemptId) {
     throw new ValidationError(
       "Grant attemptId does not match the locked attempt",
@@ -199,28 +231,24 @@ export async function grantAttemptTime(
   }
   const interruptionId = input.interruptionId ?? null;
 
-  // 4. operationId replay / conflict check.
+  // 4. operationId replay / conflict check. `operationId` is command
+  //    identity: the same identity + the same payload returns the committed
+  //    result (idempotent_replay); any mismatch is an idempotency identity
+  //    conflict (ADR-013 §9), including rows belonging to bounded_grace,
+  //    administrative_correction, system_incident, or a different attempt.
   const existing = await adjustmentRepo.findByOperationId(operationId);
   if (existing) {
-    // Anti-corrosion: the committed row must be the same command shape.
     if (
-      existing.source !== "operator" ||
-      existing.policy !== "operator_incident" ||
-      existing.incidentId !== null ||
-      existing.eligibleSeconds !== null
+      !isSameOperatorGrantOperation(
+        existing,
+        attemptId,
+        addedSeconds,
+        reasonCode,
+        reasonText,
+        actorId,
+        interruptionId,
+      )
     ) {
-      throw new ValidationError(
-        "Existing operation adjustment failed anti-corrosion validation",
-      );
-    }
-    const samePayload =
-      existing.attemptId === attemptId &&
-      existing.addedSeconds === addedSeconds &&
-      existing.reasonCode === reasonCode &&
-      existing.reasonText === reasonText &&
-      existing.actorId === actorId &&
-      (existing.interruptionId ?? null) === interruptionId;
-    if (!samePayload) {
       throw new IdempotencyConflictError();
     }
     const replayedAttempt = await attemptRepo.findById(attemptId);
@@ -251,24 +279,7 @@ export async function grantAttemptTime(
     );
   }
 
-  // 6. Validate optional interruption episode ownership via the canonical
-  //    episode port. This legally references the current active episode,
-  //    restored historical episodes, strict/operator_incident historical
-  //    episodes, and bounded episodes that produced no positive adjustment.
-  //    The DB composite FK remains the last line of defense.
-  if (interruptionId) {
-    const episode = await episodeRepo.findByAttemptForUpdate(
-      attempt.id,
-      interruptionId,
-    );
-    if (!episode || episode.attemptId !== attempt.id) {
-      throw new ValidationError(
-        "Interruption episode does not belong to this attempt",
-      );
-    }
-  }
-
-  // 7. Reconcile the deadline. Expired in_progress → terminalized via
+  // 6. Reconcile the deadline. Expired in_progress → terminalized via
   //    mode none; expired disrupted → terminalized with the terminalized
   //    event + pointer clearing via mode active_interruption. Both end the
   //    command with outcome terminal and no grant, so an expired attempt
@@ -298,7 +309,10 @@ export async function grantAttemptTime(
     resolution,
   );
 
-  // 8. If reconciliation terminalized the attempt, return terminal — no grant.
+  // 7. If reconciliation terminalized the attempt, return terminal — no grant.
+  //    Terminal wins over interruption validation: a terminal attempt never
+  //    performs an episode lookup, ledger insert, or deadline grant regardless
+  //    of the interruptionId supplied.
   if (
     reconciled.status === "submitted" ||
     reconciled.status === "grading" ||
@@ -311,6 +325,29 @@ export async function grantAttemptTime(
       adjustment: null,
       addedSeconds: 0,
     };
+  }
+
+  // 8. Validate optional interruption episode ownership via the canonical
+  //    episode port. This runs only for still-active attempts (terminal wins).
+  //    Normalize omitted interruptionId to null in step 3; here we validate
+  //    non-null references as canonical UUIDs before any repository access,
+  //    then load via the episode port. This legally references the current
+  //    active episode, restored historical episodes, strict/operator_incident
+  //    historical episodes, and bounded episodes that produced no positive
+  //    adjustment. The DB composite FK remains the last line of defense.
+  if (interruptionId !== null && !UUID_RE.test(interruptionId)) {
+    throw new ValidationError("interruptionId must be a valid UUID");
+  }
+  if (interruptionId !== null) {
+    const episode = await episodeRepo.findByAttemptForUpdate(
+      attempt.id,
+      interruptionId,
+    );
+    if (!episode || episode.attemptId !== attempt.id) {
+      throw new ValidationError(
+        "Interruption episode does not belong to this attempt",
+      );
+    }
   }
 
   // 9. Require the attempt still be grantable after reconciliation.

@@ -92,16 +92,16 @@ export async function grantAttemptTime(
 ): Promise<GrantAttemptTimeResult>
 ```
 
-Frozen execution order (ADR-013 §7/§9, P1–P4 fixes applied):
+Frozen execution order (ADR-013 §7/§9, P1–P4 fixes applied, review-round alignment):
 
 1. assert EA capability affinity (`assertCapabilityFor`);
 2. re-read locked Attempt, lock Exam;
-3. normalize + validate inputs (canonicalize, integer/UUID bounds, `incidentId` null);
+3. normalize + validate inputs (canonicalize, integer/UUID bounds, `incidentId` null, `now` validity);
 4. `operationId` replay/conflict check (`findByOperationId`);
 5. validate `operator_incident` policy snapshot (P1-4 guard);
-6. validate optional interruption episode ownership (P1-3, via episode port);
-7. reconcile deadline: `in_progress` → `mode:none`; `disrupted` → `mode:active_interruption`;
-8. if terminal after reconcile → return `{ outcome: "terminal" }`, no grant;
+6. reconcile deadline: `in_progress` → `mode:none`; `disrupted` → `mode:active_interruption`;
+7. if terminal after reconcile → return `{ outcome: "terminal" }`, no grant (terminal wins over interruption validation);
+8. validate optional interruption episode ownership (UUID format, then `episodeRepo.findByAttemptForUpdate`);
 9. require still `in_progress | disrupted`;
 10. compute `afterDeadline` with arithmetic safety;
 11. reject (no silent clamp) if `afterDeadline > exam.closeAt`;
@@ -122,9 +122,9 @@ Frozen execution order (ADR-013 §7/§9, P1–P4 fixes applied):
 
 `operationId` is command identity, not a dedupe field (ADR-013 §9):
 
-- Same `operationId` + same payload → returns the committed adjustment (`idempotent_replay`), no second grant.
-- Same `operationId` + different payload → `IdempotencyConflictError` (HTTP 409).
-- Replay comparison covers user payload fields (`attemptId`, `addedSeconds`, `reasonCode`, `reasonText`, `actorId`, `interruptionId`) plus anti-corrosion checks (`source === "operator"`, `policy === "operator_incident"`, `incidentId === null`, `eligibleSeconds === null`).
+- Same `operationId` + exact-same operator grant → returns the committed adjustment (`idempotent_replay`), no second grant.
+- Same `operationId` + anything else → `IdempotencyConflictError` (HTTP 409).
+- The exact-command comparison covers user payload fields (`attemptId`, `addedSeconds`, `reasonCode`, `reasonText`, `actorId`, `interruptionId`) plus shape checks (`source === "operator"`, `policy === "operator_incident"`, `incidentId === null`, `eligibleSeconds === null`). Any mismatch — including `bounded_grace`, `administrative_correction`, `system_incident`, different attempt, different interruption, or incompatible policy/source/incident/eligible shape — is an idempotency conflict, not a `ValidationError`.
 - Inputs are canonicalized (trimmed) up front so `"x"` vs `"  x  "` is the same payload.
 
 ## 4. Atomicity scope
@@ -136,20 +136,24 @@ the two writes commit and roll back together. Mock tests prove insert/update
 ordering, non-swallowed errors, and no continuation after failure — they do
 **not** prove PostgreSQL rollback (REC-I4-V1 owns the dual-connection test).
 
-## 5. Tests (30)
+## 5. Tests
 
-All 15 required scenarios covered, organized in `describe` blocks:
+All required scenarios covered, organized in `describe` blocks. The focused
+`operatorGrant.test.ts` suite passes 45 tests (authoritative `vitest run`
+result). Category breakdown:
 
 - **Happy path** (2): in_progress normal grant, disrupted normal grant (no auto-restore).
 - **Terminal** (4): submitted/grading/graded/voided → outcome terminal, no grant.
 - **Expired reconcile** (2): in_progress expired (mode none), disrupted expired (mode active_interruption + terminalized event).
 - **Exam.closeAt** (1): afterDeadline > closeAt → `AttemptDeadlineExceedsExamCloseError`, no insert, no deadline change.
-- **Idempotency** (6): same payload replay, 4 different-payload conflicts, reason canonicalization.
-- **InterruptionId ownership** (2): not owned → fails closed; historical episode still referenceable.
+- **Idempotency** (11): same payload replay, 5 different-payload conflicts (incl. interruptionId mismatch), reason canonicalization, 7 anti-corruption/shape conflicts (bounded_grace, administrative_correction, system_incident, wrong policy, non-null incidentId, non-null eligibleSeconds, different attemptId).
+- **InterruptionId ownership** (2): not owned → fails closed; historical episode still referenceable (valid UUID).
+- **Execution order: terminal wins** (3): already-terminal + malformed interruptionId, reconciled-to-terminal + malformed interruptionId, terminal + foreign interruptionId — all bypass episode lookup and grant.
+- **Execution order: active malformed interruptionId** (1): ValidationError before episode lookup.
 - **Policy guard** (2): missing snapshot, strict/bounded_grace rejected.
 - **Atomicity sequencing** (2): insert throws → update never called; update throws → error propagates.
 - **Capability affinity** (1): different repos → rejected before any read/write.
-- **Input validation** (6): UUID, positive integer, PG integer bound, reasonCode empty/oversize, reasonText empty, incidentId non-null.
+- **Input validation** (10): UUID, positive integer, PG integer bound, reasonCode empty/oversize, reasonText empty/oversize, incidentId non-null, `now` validity, attemptId mismatch, actorId empty.
 - **Not found** (1): attempt missing under lock → NotFoundError.
 
 ## Non-goals reaffirmed
@@ -165,26 +169,52 @@ All 15 required scenarios covered, organized in `describe` blocks:
 ## Verification
 
 ```text
-pnpm --filter @exam/exam-engine test -- operatorGrant.test.ts  → 30 passed
+pnpm --filter @exam/exam-engine test -- operatorGrant.test.ts  → 45 passed
 pnpm --filter @exam/exam-engine test -- restoreInterruption.test.ts attemptCommands.test.ts  → mock edits green
 pnpm --filter @exam/exam-engine typecheck  → OK
 pnpm --filter @exam/api typecheck  → OK
-pnpm typecheck  → 17/17 tasks, OK
+pnpm typecheck  → OK
 pnpm format:check  → OK
 pnpm lint:arch  → Architecture checks passed
 pnpm lint:copy  → No hardcoded business copy found
-pnpm verify  → 9/9 tasks, OK
+pnpm verify  → OK
 ```
+
+## Cross-Attempt operationId race (B2/V1 debt)
+
+The unique `(organizationId, operationId)` index is the final arbiter of
+idempotency, but B1's per-Attempt lock order does **not** serialize two
+commands that share the same `operationId` across **different** Attempts:
+
+```text
+same organization
++ same operationId
++ different Attempts
+→ different Attempt locks do not serialize the commands
+→ both transactions may initially observe no existing adjustment
+→ unique (organizationId, operationId) decides the winner
+```
+
+B2/V1 must prove:
+
+1. only one ledger row commits;
+2. the losing command is reconstructed or mapped to `IdempotencyConflictError`;
+3. it does not leak raw PostgreSQL `23505`;
+4. the HTTP response is `IDEMPOTENCY_CONFLICT`, not generic `RESOURCE_CONFLICT`;
+5. no losing Attempt receives a deadline update.
+
+`IDEMPOTENCY_CONFLICT` has been added to the public contracts/message
+registry (`packages/contracts/src/messageRegistry.ts`) so `getErrorMessage()`
+resolves this domain error to Chinese instead of the raw English message.
 
 ## Known limitations
 
 1. No real-PostgreSQL concurrency proof — REC-I4-V1 owns the dual-connection
-   idempotency/lock test.
+   idempotency/lock test (see cross-Attempt race above).
 2. No HTTP/RBAC surface — the engine seam is callable but unwired; wiring is
    REC-I4-I3B2.
 3. Atomicity (ledger+deadline commit/rollback) is owned by the B2 caller's
    `executeInTransaction`; B1 is transaction-compatible, not atomic by itself.
-
 ## Next Job
 
 `REC-I4-I3B2` (operator grant route + `Permission.AttemptTimeGrant`) or
