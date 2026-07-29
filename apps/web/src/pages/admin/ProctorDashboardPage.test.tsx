@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
-import type { MeResponse } from "@exam/contracts";
+import type { MeResponse, TimeGrantRequest } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
 
 // Ownership-sensitive mock: capture the canonical status keys the page routes
@@ -309,20 +309,11 @@ describe("ProctorDashboardPage", () => {
         status: 409,
         code: "IDEMPOTENCY_CONFLICT",
       });
+      // Register BOTH mocks up front: first rejects with the conflict, second
+      // succeeds as granted. Registering the success mock after the second
+      // submitGrant() would be too late — the second request would hit the base
+      // mock (undefined) and could fall into the indeterminate branch.
       apiPost.mockRejectedValueOnce(conflict);
-      renderPage();
-      await openGrantDialog();
-      await submitGrant();
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining("加时标识已被其他请求占用"),
-        );
-      });
-      // The frozen command was cleared — reopening must mint a NEW operationId,
-      // not reuse the conflicted one.
-      await openGrantDialog();
-      await submitGrant();
       apiPost.mockResolvedValueOnce({
         outcome: "granted",
         adjustment: {
@@ -345,9 +336,149 @@ describe("ProctorDashboardPage", () => {
           deadlineAt: "2026-01-01T00:10:00Z",
         },
       });
+
+      renderPage();
+      await openGrantDialog();
+      await submitGrant();
+
+      // First POST captured.
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstBody = apiPost.mock.calls[0]![1] as TimeGrantRequest;
+      const firstOperationId = firstBody.operationId;
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("加时标识已被其他请求占用"),
+        );
+      });
+
+      // The frozen command was cleared — reopening must mint a NEW operationId,
+      // not reuse the conflicted one.
+      await openGrantDialog();
+      await submitGrant();
+
       await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
-      const secondBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
-      expect(secondBody.operationId).not.toBe("op-1");
+      const secondBody = apiPost.mock.calls[1]![1] as TimeGrantRequest;
+
+      // The new command must carry a fresh identity, the normal payload, and
+      // resolve as a confirmed grant (not indeterminate).
+      expect(secondBody.operationId).not.toBe(firstOperationId);
+      expect(secondBody.addedSeconds).toBe(600);
+      expect(secondBody.reasonCode).toBe("technical_incident");
+      expect(toast.success).toHaveBeenCalled();
+    });
+
+    it("renders and opens the grant dialog without randomUUID (non-secure context)", async () => {
+      // Simulate a plain-HTTP LAN origin where crypto.randomUUID is unavailable
+      // (non-secure context). The page must still render, and opening the grant
+      // dialog must not throw. Restores the original property after the test.
+      const originalRandomUUID = crypto.randomUUID;
+      // @ts-expect-error — deliberately removing randomUUID to simulate a
+      // non-secure context where it is undefined.
+      delete crypto.randomUUID;
+      try {
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        apiPost.mockResolvedValueOnce({
+          outcome: "granted",
+          adjustment: {
+            id: "adj-1",
+            operationId: "op-1",
+            attemptId: "att-1",
+            source: "operator",
+            beforeDeadline: "2026-01-01T00:00:00Z",
+            afterDeadline: "2026-01-01T00:10:00Z",
+            addedSeconds: 600,
+            reasonCode: "technical_incident",
+            reasonText: "网络中断",
+            interruptionId: null,
+            incidentId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          attempt: {
+            id: "att-1",
+            status: "in_progress",
+            deadlineAt: "2026-01-01T00:10:00Z",
+          },
+        });
+
+        renderPage();
+        // Page still renders and shows the candidate.
+        expect(await screen.findByText("张三")).toBeInTheDocument();
+
+        // Opening the dialog must not throw even without randomUUID.
+        await openGrantDialog();
+        expect(screen.getByText("延长考试时间")).toBeInTheDocument();
+
+        // Submitting sends a well-formed UUID operationId.
+        await submitGrant();
+        await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+        const body = apiPost.mock.calls[0]![1] as TimeGrantRequest;
+        expect(body.operationId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+
+        await waitFor(() => {
+          expect(toast.success).toHaveBeenCalledWith(
+            expect.stringContaining("已延长"),
+          );
+        });
+      } finally {
+        // Restore so other tests are not polluted.
+        crypto.randomUUID = originalRandomUUID;
+      }
+    });
+
+    it("mints a fresh operationId on confirmed outcome", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      apiPost.mockResolvedValueOnce({
+        outcome: "granted",
+        adjustment: {
+          id: "adj-1",
+          operationId: "op-1",
+          attemptId: "att-1",
+          source: "operator",
+          beforeDeadline: "2026-01-01T00:00:00Z",
+          afterDeadline: "2026-01-01T00:10:00Z",
+          addedSeconds: 600,
+          reasonCode: "technical_incident",
+          reasonText: "网络中断",
+          interruptionId: null,
+          incidentId: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+        attempt: {
+          id: "att-1",
+          status: "in_progress",
+          deadlineAt: "2026-01-01T00:10:00Z",
+        },
+      });
+
+      renderPage();
+      await openGrantDialog();
+      await submitGrant();
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstBody = apiPost.mock.calls[0]![1] as TimeGrantRequest;
+
+      // After a confirmed grant, the dialog resets to a draft with a NEW
+      // operationId. Reopen and submit again to capture it.
+      await openGrantDialog();
+      // The draft was reset — the reason text is empty, so we must fill it.
+      const reason = await screen.findByPlaceholderText("请说明延长原因");
+      fireEvent.change(reason, { target: { value: "设备故障" } });
+      const confirm = await screen.findByRole("button", {
+        name: "延长 10 分钟",
+      });
+      fireEvent.click(confirm);
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const secondBody = apiPost.mock.calls[1]![1] as TimeGrantRequest;
+      expect(secondBody.operationId).not.toBe(firstBody.operationId);
     });
   });
 });
