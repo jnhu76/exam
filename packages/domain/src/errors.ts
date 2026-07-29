@@ -88,6 +88,20 @@ export class ConflictError extends AppError {
   }
 }
 
+/**
+ * The same stable `operationId` was replayed with a differing payload (HTTP 409).
+ *
+ * Used by idempotency-keyed commands where `operationId` is command identity,
+ * not a dedupe field: the same identity plus the same payload returns the
+ * committed result, while the same identity plus a different payload is a
+ * conflict (ADR-013 §9).
+ */
+export class IdempotencyConflictError extends AppError {
+  constructor(message = "Operation id reused with a different payload") {
+    super(message, "IDEMPOTENCY_CONFLICT", 409);
+  }
+}
+
 /** User with the same username already exists (HTTP 409). */
 export class UserAlreadyExistsError extends AppError {
   constructor(message = "User already exists") {

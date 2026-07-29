@@ -32,9 +32,14 @@ for the full implemented/partial/limited breakdown.
   mutation, confirmed attempt-snapshot immutability, no leak of internal
   interruption evidence/ledger to candidate responses, and structural
   regression tests preventing legacy `restoreAttempt` /
-  `disconnectedDuration` reintroduction. The operator grant route,
-  `Permission.AttemptTimeGrant`, and the system incident model remain deferred
-  (REC-I4-I3B / REC-I6). REC-I4 does not introduce Redis.
+  `disconnectedDuration` reintroduction.
+  
+  **REC-I4-I3B1 (Operator Grant Engine Seam) is implemented.** The
+  `grantAttemptTime()` engine command performs the ledger insert and deadline
+  update through transaction-bound repositories, with `operationId`-keyed
+  idempotency and ADR-013's frozen lock/reconcile order. The operator grant
+  route, `Permission.AttemptTimeGrant`, and the system incident model remain
+  deferred (REC-I4-I3B2 / REC-I6). REC-I4 does not introduce Redis.
 
 - **Phase 3, Module P6 — MVP ready closeout is CLOSED.**
   All Phase 3 MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0

@@ -109,6 +109,13 @@ export interface TimeAdjustmentRepository {
   /** Loads an adjustment by id, used for retry reconstruction validation. */
   findById(adjustmentId: string): Promise<AttemptTimeAdjustment | null>;
   /**
+   * Returns the committed adjustment for a stable `operationId`, or null. The
+   * unique `(organizationId, operationId)` index makes this the idempotency
+   * authority for operator grants: same identity + same payload returns the
+   * committed result, same identity + different payload conflicts (ADR-013 §9).
+   */
+  findByOperationId(operationId: string): Promise<AttemptTimeAdjustment | null>;
+  /**
    * Returns the existing bounded_grace adjustment for an interruption, or
    * null. The partial unique index makes this the idempotency authority for
    * automatic bounded grants.

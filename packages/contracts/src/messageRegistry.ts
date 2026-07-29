@@ -58,6 +58,7 @@ export const errorMessages = {
   QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
   MAX_ATTEMPTS_REACHED: "已达到最大考试次数",
   EXAM_ALREADY_PASSED: "本场考试已通过",
+  IDEMPOTENCY_CONFLICT: "操作标识符与已有请求冲突",
   CSRF_ORIGIN_REJECTED: "请求来源不被允许",
   AUTH_REGISTER_DISABLED: "Phase 1 不支持公开注册",
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",
