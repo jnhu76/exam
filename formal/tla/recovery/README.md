@@ -236,6 +236,10 @@ violation / counterexample not reproduced / tool error → non-zero.
    it becomes a meaningful cross-state check once REC-I4 introduces a
    reachable time-compensation action; no REC-F1 widening of scope is
    implied. Recorded, NOT modeled as target.
+   RecoveryProtocol's `timeGrant` properties remain locally vacuous in the
+   recovery model. The independent operator-grant model owns command,
+   idempotency, and cross-tab semantics (see
+   `formal/tla/operator-grant/`).
 2. **Liveness PARTIAL** — see above.
 3. `NavigateTo` preserves in-flight requests in both modes (the real
    implementation does not cancel old POSTs). The generation token makes
