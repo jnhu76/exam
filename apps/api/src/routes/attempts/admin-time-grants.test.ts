@@ -790,6 +790,8 @@ describe("attempt routes", () => {
           b.attemptId,
         ))!.deadlineAt!;
         const winnerAttemptId = winner.json().attempt.id;
+        const loserAttemptId =
+          winnerAttemptId === a.attemptId ? b.attemptId : a.attemptId;
         if (winnerAttemptId === a.attemptId) {
           expect(afterA.getTime()).toBe(beforeA.getTime() + 300_000);
           expect(afterB.getTime()).toBe(beforeB.getTime());
@@ -797,6 +799,35 @@ describe("attempt routes", () => {
           expect(afterB.getTime()).toBe(beforeB.getTime() + 300_000);
           expect(afterA.getTime()).toBe(beforeA.getTime());
         }
+
+        // P1#6 — audit atomicity: the winner's compliance audit commits with
+        // its ledger row (exactly one `attempt.timeGrant` audit, pointing at
+        // the winner's adjustmentId); the loser recorded ZERO audit rows
+        // (its transaction rolled back on the 23505, and the recovery rerun
+        // threw IdempotencyConflictError before granting). This is the
+        // HTTP-layer proof of audit atomicity that pairs with the
+        // deterministic DB/domain evidence in
+        // admin-time-grants.concurrency.test.ts.
+        const winnerAudit = (
+          await ctx.db
+            .select()
+            .from(schema.auditLogs)
+            .where(eq(schema.auditLogs.targetId, winnerAttemptId))
+        ).filter((r) => r.action === "attempt.timeGrant");
+        expect(winnerAudit).toHaveLength(1);
+        expect(winnerAudit[0]!.metadata).toMatchObject({
+          adjustmentId: rows[0]!.id,
+          operationId,
+          addedSeconds: 300,
+        });
+
+        const loserAudit = (
+          await ctx.db
+            .select()
+            .from(schema.auditLogs)
+            .where(eq(schema.auditLogs.targetId, loserAttemptId))
+        ).filter((r) => r.action === "attempt.timeGrant");
+        expect(loserAudit).toHaveLength(0);
       }, 30_000);
     });
   });

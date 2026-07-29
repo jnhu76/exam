@@ -1,76 +1,37 @@
 /**
- * REC-I4-V1 — Operator Grant Concurrency Test Harness.
+ * REC-I4-V1 — Operator Grant Concurrency Test Harness (test-only).
  *
- * Provides the infrastructure to run two concurrent operator-grant transactions
- * with a deterministic barrier, using two separate PostgreSQL connections.
+ * This harness contains NO duplicate of the production grant/recovery logic.
+ * The deterministic concurrency test calls the SAME production function
+ * (`grantWithOperationRaceRecovery` from
+ * `orchestrators/operatorGrantExecution.ts`) that the HTTP route calls. This
+ * file owns only the test-only concerns:
  *
- * Each transaction wraps the `TimeAdjustmentRepository.findByOperationId` seam
- * with a barrier hook that fires when the lookup returns absent. The test
- * controller orchestrates the ordering: T1 releases first, commits, then T2
- * releases and hits the unique constraint.
+ *   - {@link getBackendPid} / {@link assertDistinctConnections}: prove the two
+ *     PostgreSQL connections are physically distinct (distinct PIDs) and
+ *     share the same isolated schema.
+ *   - {@link createBarrierBackedObserver}: builds the
+ *     {@link OperatorGrantExecutionObserver} the test passes into the
+ *     production function, wiring its hooks to a {@link RaceBarrier} so the
+ *     test controller can fix T1-before-T2 ordering and observe the real
+ *     in-transaction evidence (PID, txid, and the SQLSTATE/constraint
+ *     extracted from the caught error).
+ *
+ * Nothing here re-declares `OPERATION_UNIQUE_CONSTRAINT`,
+ * re-implements the constraint matcher, or re-runs the grant transaction. If
+ * the production recovery logic changes, this harness needs no change.
  */
 
 import { sql } from "drizzle-orm";
-import type { Database, TenantContext } from "@exam/db/src/types.js";
-import { executeInTransaction } from "@exam/db/src/types.js";
-import type {
-  GrantAttemptTimeInput,
-  GrantAttemptTimeResult,
-} from "@exam/exam-engine";
-import { grantAttemptTime, lockEnrollmentAndAttempt } from "@exam/exam-engine";
-import type { TimeAdjustmentRepository } from "@exam/exam-engine";
-import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
-import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
-import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
-import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
-import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
-import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
-import {
-  createExamEngineRepos,
-  createTimeAdjustmentRepoAdapter,
-  createInterruptionEpisodeRepoAdapter,
-  createInterruptionEventRepoAdapter,
-  createGradingWorksetRepoAdapter,
-} from "../adapters/repoAdapters.js";
+import type { Database } from "@exam/db/src/types.js";
+import type { OperatorGrantExecutionObserver } from "../orchestrators/operatorGrantExecution.js";
 import type { RaceBarrier } from "./barrier.js";
 
 /**
- * The exact constraint name for the `(organization_id, operation_id)` unique
- * index on `attempt_time_adjustments`, matching the constant in
- * `attempts.admin.ts`.
- */
-export const OPERATION_UNIQUE_CONSTRAINT =
-  "attempt_time_adjustments_org_operation_unique";
-
-/**
- * Walks the error cause chain looking for a PostgreSQL unique_violation (23505)
- * whose `constraint` is exactly the operator-grant operation unique index.
- * Mirrors the same function in `attempts.admin.ts`.
- */
-export function isOrgOperationUniqueViolation(err: unknown): boolean {
-  let current: unknown = err;
-  const visited = new Set<unknown>();
-  while (current && !visited.has(current)) {
-    visited.add(current);
-    if (typeof current === "object" && current !== null) {
-      const e = current as Record<string, unknown>;
-      if (e.code === "23505") {
-        const constraint = String(e.constraint ?? e.constraint_name ?? "");
-        if (constraint === OPERATION_UNIQUE_CONSTRAINT) return true;
-      }
-    }
-    current =
-      typeof current === "object" && current !== null && "cause" in current
-        ? (current as { cause: unknown }).cause
-        : null;
-  }
-  return false;
-}
-
-/**
- * Returns the current PostgreSQL backend PID for the given database connection.
- * Must be called while the connection is active (inside a transaction).
+ * Returns the current PostgreSQL backend PID for the given database
+ * connection. Used in `beforeAll` to fail fast if the two connections
+ * collapse into one backend. (In-transaction identity — PID + txid — is
+ * captured by the production module itself.)
  */
 export async function getBackendPid(db: Database): Promise<number> {
   const rows = (await db.execute(
@@ -83,227 +44,104 @@ export async function getBackendPid(db: Database): Promise<number> {
   return pid;
 }
 
+/** Connection + schema evidence collected by {@link assertDistinctConnections}. */
+export interface ConnectionEvidence {
+  /** Backend PID of this connection. */
+  pid: number;
+  /** `current_schema()` as seen by this connection. */
+  currentSchema: string;
+  /** `current_setting('search_path')` as seen by this connection. */
+  searchPath: string;
+}
+
 /**
- * Wraps a `TimeAdjustmentRepository` with barrier hooks for the deterministic
- * race. The `findByOperationId` method signals the barrier when the lookup
- * returns absent, then waits for the controller to release the transaction.
+ * Proves two connections are (a) physically distinct (distinct PIDs) and
+ * (b) running in the same isolated schema (same `current_schema()` and
+ * `search_path`). This is the runtime proof the V1 race is real: two
+ * distinct backends, one shared constraint, in one schema.
  */
-export function wrapAdjustmentRepoWithBarrier(
-  inner: TimeAdjustmentRepository,
+export async function collectConnectionEvidence(
+  db: Database,
+): Promise<ConnectionEvidence> {
+  const rows = (await db.execute(
+    sql`SELECT pg_backend_pid() AS pid, current_schema()::text AS schema, current_setting('search_path')::text AS search_path`,
+  )) as unknown as Array<{ pid: number; schema: string; search_path: string }>;
+  const row = rows[0];
+  if (!row) throw new Error("Connection evidence query returned no rows");
+  return {
+    pid: Number(row.pid),
+    currentSchema: String(row.schema),
+    searchPath: String(row.search_path),
+  };
+}
+
+/**
+ * Builds a barrier-backed {@link OperatorGrantExecutionObserver} for one label
+ * (T1 or T2). The test passes this observer into the production
+ * `grantWithOperationRaceRecovery` call.
+ *
+ * Hook wiring:
+ *   - `afterOperationLookupAbsent` → resolves `t1ReadAbsent`/`t2ReadAbsent`
+ *     (with the real in-transaction PID/txid from the production module),
+ *     then AWAITS `releaseT1`/`releaseT2` — this is the barrier gate that
+ *     lets the test controller fix T1-before-T2 ordering.
+ *   - `onPrimaryCommitted` → resolves `t1PrimaryCommitted` (T1 only) so the
+ *     test can assert T1 committed before T2's violation.
+ *   - `onUniqueViolation` → resolves `t2UniqueViolation` with the real
+ *     SQLSTATE/constraint extracted by the production matcher (T2 only).
+ *   - `onRecoveryTransaction` → resolves `t2RecoveryStarted` with the
+ *     recovery transaction's txid (T2 only).
+ */
+export function createBarrierBackedObserver(
   barrier: RaceBarrier,
   label: "T1" | "T2",
   operationId: string,
   attemptId: string,
-  db: Database,
-): TimeAdjustmentRepository {
+): OperatorGrantExecutionObserver {
   return {
-    ...inner,
-    findByOperationId: async (opId: string) => {
-      const result = await inner.findByOperationId(opId);
-      if (opId === operationId && result === null) {
-        const pid = await getBackendPid(db);
-        const observation = { label, pid, operationId: opId, attemptId };
-        if (label === "T1") {
-          barrier.t1ReadAbsent.resolve(observation);
-          await barrier.releaseT1.promise;
-        } else {
-          barrier.t2ReadAbsent.resolve(observation);
-          await barrier.releaseT2.promise;
-        }
+    afterOperationLookupAbsent: async (obs) => {
+      if (obs.operationId !== operationId) return;
+      const observation = {
+        label: obs.label,
+        pid: obs.pid,
+        txid: obs.txid,
+        operationId: obs.operationId,
+        attemptId: obs.attemptId,
+      };
+      if (label === "T1") {
+        barrier.t1ReadAbsent.resolve(observation);
+        await barrier.releaseT1.promise;
+      } else {
+        barrier.t2ReadAbsent.resolve(observation);
+        await barrier.releaseT2.promise;
       }
-      return result;
     },
-  } as TimeAdjustmentRepository;
-}
-
-/**
- * Runs one operator time grant inside a transaction with barrier-wrapped
- * adjustment repos. This is the "primary" transaction — it may be rolled
- * back by a unique violation.
- */
-export async function runGrantTransactionWithBarrier(
-  db: Database,
-  ctx: TenantContext,
-  input: GrantAttemptTimeInput,
-  barrier: RaceBarrier,
-  label: "T1" | "T2",
-): Promise<GrantAttemptTimeResult> {
-  return executeInTransaction(db, async (tx) => {
-    const txAttemptRepo = createAttemptRepo(tx);
-    const txEnrollmentRepo = createEnrollmentRepo(tx);
-
-    const { exams, enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: createExamRepo(tx),
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: txEnrollmentRepo,
-      },
-      ctx as never,
-    );
-
-    const cap = await lockEnrollmentAndAttempt(
-      enrollments,
-      attempts,
-      input.attemptId,
-    );
-
-    const episodeRepo = createInterruptionEpisodeRepoAdapter(
-      createAttemptInterruptionRepo(tx),
-      ctx as never,
-    );
-    const eventRepo = createInterruptionEventRepoAdapter(
-      createAttemptInterruptionEventRepo(tx),
-      ctx as never,
-    );
-
-    const rawAdjustmentRepo = createTimeAdjustmentRepoAdapter(
-      createAttemptTimeAdjustmentRepo(tx),
-      ctx as never,
-    );
-    const adjustmentRepo = wrapAdjustmentRepoWithBarrier(
-      rawAdjustmentRepo,
-      barrier,
-      label,
-      input.operationId,
-      input.attemptId,
-      tx,
-    );
-
-    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-      createAttemptGradingEntryRepo(tx),
-      ctx as never,
-    );
-
-    return grantAttemptTime(
-      exams,
-      attempts,
-      enrollments,
-      episodeRepo,
-      eventRepo,
-      adjustmentRepo,
-      gradingWorksetRepo,
-      cap,
-      input,
-    );
-  });
-}
-
-/**
- * Runs one operator time grant inside a transaction WITHOUT barrier hooks.
- * Used for the recovery transaction after a unique violation.
- */
-export async function runGrantTransaction(
-  db: Database,
-  ctx: TenantContext,
-  input: GrantAttemptTimeInput,
-): Promise<GrantAttemptTimeResult> {
-  return executeInTransaction(db, async (tx) => {
-    const txAttemptRepo = createAttemptRepo(tx);
-    const txEnrollmentRepo = createEnrollmentRepo(tx);
-
-    const { exams, enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: createExamRepo(tx),
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: txEnrollmentRepo,
-      },
-      ctx as never,
-    );
-
-    const cap = await lockEnrollmentAndAttempt(
-      enrollments,
-      attempts,
-      input.attemptId,
-    );
-
-    const episodeRepo = createInterruptionEpisodeRepoAdapter(
-      createAttemptInterruptionRepo(tx),
-      ctx as never,
-    );
-    const eventRepo = createInterruptionEventRepoAdapter(
-      createAttemptInterruptionEventRepo(tx),
-      ctx as never,
-    );
-    const adjustmentRepo = createTimeAdjustmentRepoAdapter(
-      createAttemptTimeAdjustmentRepo(tx),
-      ctx as never,
-    );
-    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-      createAttemptGradingEntryRepo(tx),
-      ctx as never,
-    );
-
-    return grantAttemptTime(
-      exams,
-      attempts,
-      enrollments,
-      episodeRepo,
-      eventRepo,
-      adjustmentRepo,
-      gradingWorksetRepo,
-      cap,
-      input,
-    );
-  });
-}
-
-/**
- * Runs an operator time grant with recovery (matching the production route's
- * `grantWithOperationRaceRecovery`). If the primary transaction hits a 23505
- * unique violation on the operation constraint, records the observation,
- * starts a fresh transaction, and re-runs the same command.
- *
- * @param db - Database connection for the primary + recovery transactions.
- * @param ctx - Tenant context.
- * @param input - Grant command input.
- * @param barrier - Race barrier for observations.
- * @param label - "T1" or "T2".
- * @returns The grant result.
- */
-export async function runGrantWithRaceRecovery(
-  db: Database,
-  ctx: TenantContext,
-  input: GrantAttemptTimeInput,
-  barrier: RaceBarrier,
-  label: "T1" | "T2",
-): Promise<GrantAttemptTimeResult> {
-  const pid = await getBackendPid(db);
-
-  try {
-    const result = await runGrantTransactionWithBarrier(
-      db,
-      ctx,
-      input,
-      barrier,
-      label,
-    );
-    // T1 path: transaction committed successfully.
-    if (label === "T1") {
-      barrier.t1Committed.resolve({ pid, outcome: result.outcome });
-    }
-    return result;
-  } catch (err) {
-    if (!isOrgOperationUniqueViolation(err)) throw err;
-
-    // T2 path: record the unique violation.
-    barrier.t2UniqueViolation.resolve({
-      code: "23505",
-      constraint: OPERATION_UNIQUE_CONSTRAINT,
-      pid,
-    });
-
-    // Fresh recovery transaction.
-    const recoveryPid = await getBackendPid(db);
-    barrier.t2RecoveryStarted.resolve({ pid: recoveryPid });
-
-    // Re-run the SAME command in a fresh transaction (no barrier).
-    const recoveryResult = await runGrantTransaction(db, ctx, input);
-
-    barrier.t2RecoveryCompleted.resolve({
-      pid: recoveryPid,
-      outcome: recoveryResult.outcome,
-    });
-
-    return recoveryResult;
-  }
+    onPrimaryCommitted: async (obs) => {
+      // Only T1 is expected to commit on the primary path; T2's primary
+      // transaction violates. Resolve the T1 deferred regardless of label so
+      // the assertion has the evidence it needs.
+      if (obs.label === "T1") {
+        barrier.t1PrimaryCommitted.resolve({
+          pid: obs.pid,
+          txid: obs.txid,
+          outcome: obs.outcome,
+        });
+      }
+    },
+    onUniqueViolation: async (obs) => {
+      barrier.t2UniqueViolation.resolve({
+        code: obs.code,
+        constraint: obs.constraint,
+        ...(obs.table ? { table: obs.table } : {}),
+        pid: obs.pid,
+        txid: obs.txid,
+      });
+    },
+    onRecoveryTransaction: async (obs) => {
+      barrier.t2RecoveryStarted.resolve({
+        pid: obs.pid,
+        txid: obs.txid,
+      });
+    },
+  };
 }

@@ -67,11 +67,12 @@ function runTest(iteration, total) {
   const stdout = result.stdout?.toString() ?? "";
   const stderr = result.stderr?.toString() ?? "";
 
-  // Check for success: exit code 0 and vitest reports passing tests
-  const passed =
-    result.status === 0 &&
-    stdout.includes("Tests") &&
-    stdout.includes("passed");
+  // Success is the vitest exit code only. `result.status === 0` means vitest
+  // ran and every test passed (vitest exits non-zero on any failure or
+  // collection error). Do NOT additionally scrape stdout for literal tokens
+  // like "Tests"/"passed" — a future reporter tweak that drops those tokens
+  // would make every iteration report failure despite exit 0.
+  const passed = result.status === 0;
 
   if (!passed) {
     console.error(`[FAIL] Iteration ${iteration}/${total}`);
