@@ -17,13 +17,21 @@ formal/
 ├── .gitignore                 (generated TLC artifacts are never committed)
 └── tla/
     ├── TOOLCHAIN.md           (pinned TLA+ version + checksum + repro evidence)
-    └── recovery/
+    ├── recovery/
+    │   ├── README.md          (model scope, variables, actions, invariants)
+    │   ├── RecoveryProtocol.tla
+    │   ├── RecoveryProtocolSafety.cfg
+    │   ├── RecoveryProtocolLiveness.cfg
+    │   └── counterexamples/
+    │       └── README.md      (expected-negative configs + normalized traces)
+    └── operator-grant/
         ├── README.md          (model scope, variables, actions, invariants)
-        ├── RecoveryProtocol.tla
-        ├── RecoveryProtocolSafety.cfg
-        ├── RecoveryProtocolLiveness.cfg
+        ├── OperatorGrantServer.tla
+        ├── OperatorGrantServerSafety.cfg
+        ├── OperatorGrantClient.tla
+        ├── OperatorGrantClientSafety.cfg
         └── counterexamples/
-            └── README.md      (expected-negative configs + normalized traces)
+            └── README.md      (expected-negative configs)
 ```
 
 Execution adapters live under `scripts/formal/` (repository root), not here.
@@ -110,13 +118,19 @@ This separation prevents three failure modes:
 ## How to run all formal checks
 
 ```bash
-# All three suites (target safety + liveness + expected counterexamples):
+# Recovery protocol (target safety + liveness + expected counterexamples):
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery
+
+# Operator grant (server safety + client safety + expected counterexamples):
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant
 
 # Individually:
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:safety
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:liveness
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:recovery:counterexamples
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:server
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:client
+TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:counterexamples
 ```
 
 The runner fails clearly if `TLA2TOOLS_JAR` is unset, the path is not a

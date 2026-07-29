@@ -51,6 +51,10 @@
     "formal:recovery:counterexamples": "node scripts/formal/run-recovery-tlc.mjs counterexamples",
     "formal:recovery:explore": "node scripts/formal/run-recovery-tlc.mjs explore",
     "formal:recovery": "node scripts/formal/run-recovery-tlc.mjs all",
+    "formal:operator-grant:server": "node scripts/formal/run-operator-grant-tlc.mjs server",
+    "formal:operator-grant:client": "node scripts/formal/run-operator-grant-tlc.mjs client",
+    "formal:operator-grant:counterexamples": "node scripts/formal/run-operator-grant-tlc.mjs counterexamples",
+    "formal:operator-grant": "node scripts/formal/run-operator-grant-tlc.mjs all",
     "prepare": "husky"
   },
   "lint-staged": {
