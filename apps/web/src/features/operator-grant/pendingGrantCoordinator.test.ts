@@ -664,7 +664,7 @@ describe("PendingGrantCoordinator", () => {
       tabId: TAB_A,
       leaseDurationMs: 30_000,
       lockRequest:
-        throwingLockRequest as unknown as CoordinatorDependencies["lockRequest"],
+        throwingLockRequest as CoordinatorDependencies["lockRequest"],
       broadcastChannel: new MockBroadcastChannel("test"),
       storage: new FakeStorage(),
       now: () => Date.now(),

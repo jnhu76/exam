@@ -49,7 +49,7 @@ async function readDeadlineMs(
   attemptId: string,
 ): Promise<number> {
   const res = await request.get(
-    `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/api/admin/exams/${examId}/candidates/status`,
+    `/api/admin/exams/${examId}/candidates/status`,
     { headers: { Cookie: `auth-token=${token}` } },
   );
   expect(res.ok()).toBe(true);

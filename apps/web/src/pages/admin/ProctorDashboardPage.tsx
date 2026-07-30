@@ -181,8 +181,9 @@ export function ProctorDashboardPage() {
   //                  drop / 5xx where commit status is unknown). The frozen
   //                  command is RETAINED and reused verbatim on retry so the
   //                  same operationId cannot silently mint a duplicate grant.
-  //                  It is also persisted to sessionStorage so a refresh /
-  //                  navigation cannot lose the pending identity.
+  //                  It is also persisted through the shared coordinator
+  //                  authority in localStorage so a refresh / navigation cannot
+  //                  lose the pending identity.
   //
   // A confirmed outcome (granted / idempotent_replay / terminal), a confirmed
   // rejection (4xx with a known code), or an idempotency conflict clears the
@@ -307,6 +308,11 @@ export function ProctorDashboardPage() {
           // dialog whose retry button is a dead affordance (the attemptId
           // guard below at the `else` branch silently returns). For a
           // different attempt, block and reset to a fresh draft instead.
+          toast.warning(
+            t("admin.proctorDashboard.extendDialog.blockedByPending", {
+              minutes: existing.command.addedSeconds / 60,
+            }),
+          );
           if (existing.command.attemptId === attemptId) {
             setGrantState({
               phase: "indeterminate",
@@ -320,19 +326,9 @@ export function ProctorDashboardPage() {
               },
               revision: existing.revision,
             });
-            toast.warning(
-              t("admin.proctorDashboard.extendDialog.blockedByPending", {
-                minutes: existing.command.addedSeconds / 60,
-              }),
-            );
           } else {
             // A different attempt's command is still pending — direct the
             // proctor to resolve it first; do NOT open a dead dialog.
-            toast.warning(
-              t("admin.proctorDashboard.extendDialog.blockedByPending", {
-                minutes: existing.command.addedSeconds / 60,
-              }),
-            );
             resetGrantDialog();
           }
           return;
@@ -500,7 +496,19 @@ export function ProctorDashboardPage() {
     // Check the shared authority for a pending command (REC-I4-C1).
     // This covers cross-tab scenarios: another tab may have a pending command
     // for this attempt or a different attempt.
-    const current = await coordinator.getCurrent(orgId, user.id);
+    let current;
+    try {
+      current = await coordinator.getCurrent(orgId, user.id);
+    } catch {
+      // Defensive: getCurrent is declared to return a Result, but if anything
+      // inside the coordinator throws synchronously (e.g. a future default-dependency
+      // change), fail closed exactly like CoordinationUnavailableError.
+      setExtendTarget(null);
+      toast.error(
+        t("admin.proctorDashboard.extendDialog.coordinationUnavailable"),
+      );
+      return;
+    }
     if (!current.ok) {
       // Coordination unavailable (Web Locks / localStorage / corrupted record):
       // fail closed — do NOT open a fresh draft, which would mint a new
@@ -994,7 +1002,7 @@ export function ProctorDashboardPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => openGrantDialog(candidate)}
+                        onClick={() => void openGrantDialog(candidate)}
                       >
                         {t("admin.proctorDashboard.card.extend")}
                       </Button>
