@@ -35,6 +35,11 @@ describe("rate limit plugin", () => {
 
   it("enforces the limit in test mode (first request OK, second request 429 with RATE_LIMITED ErrorResponse)", async () => {
     vi.stubEnv("APP_MODE", "test");
+    // Explicitly enable the limiter: `enabled` is `mode !== "e2e" &&
+    // !isTruthy(RATE_LIMIT_DISABLED)`, and there is no shared setup forcing
+    // this env, so an inherited RATE_LIMIT_DISABLED=true would otherwise make
+    // both requests 200. Keeps this test fully hermetic.
+    vi.stubEnv("RATE_LIMIT_DISABLED", "false");
     resetRuntimeConfigForTest();
 
     const app = await buildRateLimitProbeApp();
