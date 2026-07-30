@@ -37,6 +37,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import { createContextSafeUuid } from "@/lib/uuid";
+import { getPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
+import {
+  CoordinationUnavailableError,
+  AlreadyPendingError,
+} from "@/features/operator-grant/pendingGrantAuthority";
 import type {
   CandidateStatusItem,
   CandidateStatusResponse,
@@ -46,17 +51,6 @@ import type {
 
 /** Polling interval for the proctor dashboard (ms). */
 const POLL_INTERVAL_MS = 5_000;
-
-/**
- * sessionStorage key for an unresolved (indeterminate) operator time grant.
- * The grant's `operationId` is command identity: losing it across a refresh
- * would silently mint a new identity and could legitimately double-grant. The
- * pending command is therefore persisted keyed by `organizationId + attemptId`
- * so a refresh / accidental navigation cannot discard it. Cleared on a
- * confirmed outcome (granted / idempotent_replay / terminal) or explicit
- * discard.
- */
-const PENDING_GRANT_STORAGE_KEY = "exam.pendingTimeGrant";
 
 /** A frozen operator time-grant command — the exact bytes to (re)send. */
 interface PendingTimeGrant {
@@ -73,6 +67,9 @@ interface PendingTimeGrant {
  * editable fields; the moment the user submits, a `PendingTimeGrant` is frozen
  * and the dialog moves to `submitting` (or `indeterminate` on an unconfirmed
  * failure). Retry always replays the frozen command verbatim.
+ *
+ * The `revision` field tracks the shared-authority revision for the frozen
+ * command, used in compare-and-clear on confirmed outcomes.
  */
 type GrantDialogState =
   | {
@@ -82,8 +79,8 @@ type GrantDialogState =
       reasonCode: string;
       reasonText: string;
     }
-  | { phase: "submitting"; command: PendingTimeGrant }
-  | { phase: "indeterminate"; command: PendingTimeGrant };
+  | { phase: "submitting"; command: PendingTimeGrant; revision: number }
+  | { phase: "indeterminate"; command: PendingTimeGrant; revision: number };
 
 /** Failure classification for a grant request outcome. */
 type GrantFailureKind =
@@ -117,50 +114,6 @@ function classifyGrantFailure(error: unknown): GrantFailureKind {
   }
   // Non-ApiError throw (defensive): treat as unconfirmed.
   return "indeterminate";
-}
-
-/** Builds the sessionStorage sub-key for one attempt's pending grant. */
-function pendingGrantStorageKey(organizationId: string, attemptId: string) {
-  return `${PENDING_GRANT_STORAGE_KEY}:${organizationId}:${attemptId}`;
-}
-
-/** Loads a persisted pending grant for an attempt, if any. */
-function loadPendingGrant(
-  organizationId: string,
-  attemptId: string,
-): PendingTimeGrant | null {
-  try {
-    const raw = sessionStorage.getItem(
-      pendingGrantStorageKey(organizationId, attemptId),
-    );
-    return raw ? (JSON.parse(raw) as PendingTimeGrant) : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Persists a pending grant so a refresh cannot lose the operationId. */
-function savePendingGrant(command: PendingTimeGrant): void {
-  try {
-    sessionStorage.setItem(
-      pendingGrantStorageKey(command.organizationId, command.attemptId),
-      JSON.stringify(command),
-    );
-  } catch {
-    // sessionStorage may be unavailable (private mode / quota); the in-memory
-    // state machine still guards the within-session retry path.
-  }
-}
-
-/** Clears a persisted pending grant for an attempt. */
-function clearPendingGrant(organizationId: string, attemptId: string): void {
-  try {
-    sessionStorage.removeItem(
-      pendingGrantStorageKey(organizationId, attemptId),
-    );
-  } catch {
-    // ignore
-  }
 }
 
 /** Groups candidates into status categories for the proctor dashboard. */
@@ -228,8 +181,9 @@ export function ProctorDashboardPage() {
   //                  drop / 5xx where commit status is unknown). The frozen
   //                  command is RETAINED and reused verbatim on retry so the
   //                  same operationId cannot silently mint a duplicate grant.
-  //                  It is also persisted to sessionStorage so a refresh /
-  //                  navigation cannot lose the pending identity.
+  //                  It is also persisted through the shared coordinator
+  //                  authority in localStorage so a refresh / navigation cannot
+  //                  lose the pending identity.
   //
   // A confirmed outcome (granted / idempotent_replay / terminal), a confirmed
   // rejection (4xx with a known code), or an idempotency conflict clears the
@@ -278,6 +232,27 @@ export function ProctorDashboardPage() {
     };
   }, [loadStatus]);
 
+  // REC-I4-C1: subscribe to cross-tab authority changes so this tab's dialog
+  // state stays in sync when another tab reserves or clears a pending command.
+  useEffect(() => {
+    const coordinator = getPendingGrantCoordinator();
+    const unsubscribe = coordinator.subscribe((event) => {
+      // If the current grant dialog is in an indeterminate state and another
+      // tab cleared the authority, close the dialog gracefully.
+      if (
+        event.type === "authority_cleared" &&
+        (grantState.phase === "indeterminate" ||
+          grantState.phase === "submitting")
+      ) {
+        resetGrantDialog();
+      }
+      // If another tab reserved a command while we're in draft, we don't
+      // automatically close — the user will hit the reserve step on submit
+      // and get the AlreadyPendingError flow.
+    });
+    return () => unsubscribe();
+  }, [grantState.phase]);
+
   /** Handles force-submit for a candidate. */
   async function handleForceSubmit(attemptId: string) {
     setForceSubmitting(true);
@@ -298,17 +273,19 @@ export function ProctorDashboardPage() {
     }
   }
 
-  /** Handles operator time grant for a candidate (REC-I4-I3B2 + review P1-3/4). */
+  /** Handles operator time grant for a candidate (REC-I4-C1 cross-tab authority). */
   async function handleGrantTime() {
     if (!extendTarget?.attemptId || !user) return;
     const orgId = user.organizationId;
     const attemptId = extendTarget.attemptId;
+    const coordinator = getPendingGrantCoordinator();
 
     // Resolve the command to send. From `draft` we freeze a fresh command
     // (first send); from `submitting`/`indeterminate` we replay the already
     // frozen command VERBATIM — same operationId, same payload — so a retry
     // can never drift into an idempotency conflict or a duplicate grant.
     let command: PendingTimeGrant;
+    let revision: number;
     if (grantState.phase === "draft") {
       command = {
         organizationId: orgId,
@@ -318,14 +295,60 @@ export function ProctorDashboardPage() {
         reasonCode: grantState.reasonCode,
         reasonText: grantState.reasonText.trim() || grantState.reasonCode,
       };
+      // REC-I4-C1: reserve the command in the shared authority BEFORE sending
+      // the HTTP request. If the shared authority is unavailable or another
+      // tab already has a pending command, fail closed — never send a request
+      // that could create a duplicate operationId.
+      const reserve = await coordinator.reserve(orgId, user.id, command);
+      if (!reserve.ok) {
+        if (reserve.error instanceof AlreadyPendingError) {
+          const existing = reserve.error.existing;
+          // Only restore the pending command when it targets THIS attempt.
+          // Restoring a different attempt's frozen command would show a
+          // dialog whose retry button is a dead affordance (the attemptId
+          // guard below at the `else` branch silently returns). For a
+          // different attempt, block and reset to a fresh draft instead.
+          toast.warning(
+            t("admin.proctorDashboard.extendDialog.blockedByPending", {
+              minutes: existing.command.addedSeconds / 60,
+            }),
+          );
+          if (existing.command.attemptId === attemptId) {
+            setGrantState({
+              phase: "indeterminate",
+              command: {
+                organizationId: existing.organizationId,
+                attemptId: existing.command.attemptId,
+                operationId: existing.command.operationId,
+                addedSeconds: existing.command.addedSeconds,
+                reasonCode: existing.command.reasonCode,
+                reasonText: existing.command.reasonText,
+              },
+              revision: existing.revision,
+            });
+          } else {
+            // A different attempt's command is still pending — direct the
+            // proctor to resolve it first; do NOT open a dead dialog.
+            resetGrantDialog();
+          }
+          return;
+        }
+        // CoordinationUnavailableError — fail closed.
+        toast.error(
+          t("admin.proctorDashboard.extendDialog.coordinationUnavailable"),
+        );
+        return;
+      }
+      revision = reserve.authority.revision;
     } else {
       command = grantState.command;
+      revision = grantState.revision;
       // Defensive: the frozen command must target the open dialog's attempt.
       if (command.attemptId !== attemptId) return;
     }
 
     setExtending(true);
-    setGrantState({ phase: "submitting", command });
+    setGrantState({ phase: "submitting", command, revision });
     const body: TimeGrantRequest = {
       operationId: command.operationId,
       addedSeconds: command.addedSeconds,
@@ -333,13 +356,35 @@ export function ProctorDashboardPage() {
       reasonText: command.reasonText,
     };
 
+    // Clear the shared authority after a confirmed HTTP outcome (or a
+    // discardable failure). Surfaces a non-blocking warning if the clear
+    // itself failed (stale revision / coordination unavailable) WITHOUT
+    // changing the grant's HTTP result — the server is the source of truth
+    // for the deadline effect; the authority is bookkeeping. Still, a failed
+    // clear can leave a stale pending command visible to other tabs, so the
+    // proctor is told to refresh / close other exam-admin tabs.
+    const clearAuthority = async (): Promise<void> => {
+      const cleared = await coordinator.clearConfirmed(orgId, user.id, {
+        operationId: command.operationId,
+        revision,
+      });
+      if (!cleared.ok) {
+        toast.warning(
+          t("admin.proctorDashboard.extendDialog.clearStaleWarning"),
+        );
+      }
+    };
+
     try {
       const res = await api.post<TimeGrantResponse, TimeGrantRequest>(
         `/api/admin/attempts/${attemptId}/time-grants`,
         body,
       );
-      // All three outcomes are CONFIRMED results → clear the pending command.
-      clearPendingGrant(orgId, attemptId);
+      // All three outcomes are CONFIRMED results → clear the pending command
+      // via compare-and-clear (only clears if the authority still matches our
+      // operationId and revision, preventing stale tabs from deleting a newer
+      // authority).
+      await clearAuthority();
       switch (res.outcome) {
         case "granted":
           toast.success(
@@ -364,17 +409,17 @@ export function ProctorDashboardPage() {
     } catch (err) {
       switch (classifyGrantFailure(err)) {
         case "indeterminate": {
-          // Commit status unknown: KEEP the frozen command, persist it so a
-          // refresh cannot lose it, and surface a retry affordance.
-          savePendingGrant(command);
-          setGrantState({ phase: "indeterminate", command });
+          // Commit status unknown: the command is already persisted in the
+          // shared authority (from the reserve step above). KEEP the frozen
+          // command in the state machine and surface a retry affordance.
+          setGrantState({ phase: "indeterminate", command, revision });
           toast.warning(t("admin.proctorDashboard.extendDialog.indeterminate"));
           break;
         }
         case "idempotency_conflict": {
           // The operationId is now unusable for this payload; clear it and
           // tell the admin a new command is required to retry.
-          clearPendingGrant(orgId, attemptId);
+          await clearAuthority();
           resetGrantDialog();
           toast.error(
             t("admin.proctorDashboard.extendDialog.idempotencyConflict"),
@@ -385,7 +430,7 @@ export function ProctorDashboardPage() {
         default: {
           // Definitive failure (validation / state / not-found): clear the
           // command and let the admin re-edit.
-          clearPendingGrant(orgId, attemptId);
+          await clearAuthority();
           resetGrantDialog();
           toast.error(
             err instanceof Error
@@ -403,8 +448,8 @@ export function ProctorDashboardPage() {
   /**
    * Resets the grant dialog to a fresh editable draft (new operationId, default
    * fields) and clears the dialog target. Used on confirmed outcomes and
-   * discardable failures. Does NOT touch an indeterminate command's persisted
-   * copy — that is cleared separately via clearPendingGrant.
+   * discardable failures. The shared authority is cleared separately via
+   * coordinator.clearConfirmed.
    */
   function resetGrantDialog() {
     setGrantState({
@@ -419,16 +464,17 @@ export function ProctorDashboardPage() {
   }
 
   /**
-   * Opens the grant dialog for a candidate. Honors the indeterminate-command
-   * invariant: if an unresolved command exists for THIS attempt, restore it
-   * (so the proctor retries the same operationId); if one exists for a
-   * DIFFERENT attempt, block opening and direct the proctor to resolve it
+   * Opens the grant dialog for a candidate. Honors the cross-tab pending command
+   * invariant (REC-I4-C1): if an unresolved command exists for THIS attempt,
+   * restore it (so the proctor retries the same operationId); if one exists for
+   * a DIFFERENT attempt, block opening and direct the proctor to resolve it
    * first (prevents a second in-flight grant that would mint a new identity).
    */
-  function openGrantDialog(candidate: CandidateStatusItem) {
+  async function openGrantDialog(candidate: CandidateStatusItem) {
     if (!user || !candidate.attemptId) return;
     const orgId = user.organizationId;
     const attemptId = candidate.attemptId;
+    const coordinator = getPendingGrantCoordinator();
 
     // If the in-memory state is an unresolved command for a different attempt,
     // block: that command's operationId is still live.
@@ -447,12 +493,60 @@ export function ProctorDashboardPage() {
 
     setExtendTarget(candidate);
 
-    // Hydrate from sessionStorage: a prior indeterminate command for this
-    // attempt (e.g. after a refresh) must be retried with the same identity.
-    const pending = loadPendingGrant(orgId, attemptId);
-    if (pending) {
-      setGrantState({ phase: "indeterminate", command: pending });
+    // Check the shared authority for a pending command (REC-I4-C1).
+    // This covers cross-tab scenarios: another tab may have a pending command
+    // for this attempt or a different attempt.
+    let current;
+    try {
+      current = await coordinator.getCurrent(orgId, user.id);
+    } catch {
+      // Defensive: getCurrent is declared to return a Result, but if anything
+      // inside the coordinator throws synchronously (e.g. a future default-dependency
+      // change), fail closed exactly like CoordinationUnavailableError.
+      setExtendTarget(null);
+      toast.error(
+        t("admin.proctorDashboard.extendDialog.coordinationUnavailable"),
+      );
+      return;
+    }
+    if (!current.ok) {
+      // Coordination unavailable (Web Locks / localStorage / corrupted record):
+      // fail closed — do NOT open a fresh draft, which would mint a new
+      // operationId that cannot be coordinated across tabs.
+      setExtendTarget(null);
+      toast.error(
+        t("admin.proctorDashboard.extendDialog.coordinationUnavailable"),
+      );
+      return;
+    }
+    if (current.authority) {
+      const pending = current.authority;
+      if (pending.command.attemptId === attemptId) {
+        // Same attempt — restore the exact frozen command.
+        setGrantState({
+          phase: "indeterminate",
+          command: {
+            organizationId: pending.organizationId,
+            attemptId: pending.command.attemptId,
+            operationId: pending.command.operationId,
+            addedSeconds: pending.command.addedSeconds,
+            reasonCode: pending.command.reasonCode,
+            reasonText: pending.command.reasonText,
+          },
+          revision: pending.revision,
+        });
+      } else {
+        // Different attempt — block and show which attempt is pending.
+        toast.warning(
+          t("admin.proctorDashboard.extendDialog.blockedByPending", {
+            minutes: pending.command.addedSeconds / 60,
+          }),
+        );
+        setExtendTarget(null);
+        return;
+      }
     } else {
+      // No shared pending command — create a fresh draft.
       setGrantState({
         phase: "draft",
         operationId: createContextSafeUuid(),
@@ -908,7 +1002,7 @@ export function ProctorDashboardPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => openGrantDialog(candidate)}
+                        onClick={() => void openGrantDialog(candidate)}
                       >
                         {t("admin.proctorDashboard.card.extend")}
                       </Button>

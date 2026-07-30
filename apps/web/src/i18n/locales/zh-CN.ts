@@ -1507,6 +1507,10 @@ const zhCN = {
           "加时标识已被其他请求占用且内容不同。请重新发起加时。",
         blockedByPending:
           "存在未确认的加时命令（{{minutes}} 分钟），请先重试或处理后再为其他考生加时",
+        coordinationUnavailable:
+          "无法安全协调其他标签页中的待处理加时操作，请关闭其他考试管理标签页或恢复浏览器存储后重试",
+        clearStaleWarning:
+          "加时结果已确认，但跨标签页待处理状态未能清除。请刷新页面或关闭其他考试管理标签页。",
       },
       misconductDialog: {
         title: "标记违规",
