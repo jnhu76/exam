@@ -146,8 +146,11 @@ type GrantPhase = "primary" | "recovery";
  *   the fresh recovery transaction BEFORE the engine grant runs, proving its
  *   txid differs from primary (it fires before the grant so it is not skipped
  *   when recovery throws `IdempotencyConflictError`).
- * - {@link OperatorGrantExecutionObserver.onPrimaryCommitted} fires after a
- *   primary transaction commits, for causal-ordering assertions.
+ * - {@link OperatorGrantExecutionObserver.onPrimaryCommitted} fires AFTER the
+ *   primary transaction has committed (after `executeInTransaction` resolves,
+ *   NOT inside its callback), for causal-ordering assertions. Firing it
+ *   post-commit — outside the callback — is what makes it a true commit
+ *   observation rather than a "ready to commit" signal.
  */
 export interface OperatorGrantExecutionObserver {
   afterOperationLookupAbsent?(observation: {
@@ -171,6 +174,13 @@ export interface OperatorGrantExecutionObserver {
     pid: number;
     txid: string;
   }): Promise<void>;
+  /**
+   * Fires AFTER the primary transaction has committed (post-COMMIT), never
+   * inside the `executeInTransaction` callback. The COMMIT happens only once
+   * the callback's returned promise settles; firing the hook OUTSIDE the
+   * callback — after `executeInTransaction` resolves — is the only way to
+   * truthfully label it "committed" rather than "ready to commit".
+   */
   onPrimaryCommitted?(observation: {
     label: OperatorGrantLabel;
     pid: number;
@@ -242,10 +252,14 @@ interface GrantTransactionOutcome {
  * Runs one grant transaction (primary or recovery) with the engine, ledger,
  * deadline update, and audit all atomic. Observer hooks fire inside the
  * callback:
- *   - primary: `afterOperationLookupAbsent` gate on the adjustment repo,
- *     then `onPrimaryCommitted` after commit;
+ *   - primary: `afterOperationLookupAbsent` gate on the adjustment repo;
  *   - recovery: `onRecoveryTransaction` immediately after identity capture
  *     (before the grant, so it is not skipped when recovery throws).
+ *
+ * `onPrimaryCommitted` is intentionally NOT fired inside the callback: the
+ * COMMIT happens only after the callback's returned promise settles, so a
+ * callback-local observation would be "ready to commit", not "committed". The
+ * hook is fired below, AFTER `executeInTransaction` resolves (post-COMMIT).
  *
  * Returns the grant result AND the captured identity, even when the callback
  * threw (so the recovery wrapper can correlate the failure to the primary
@@ -262,6 +276,10 @@ async function runGrantTransaction(
   const observer = options.observer;
   const label = options.label ?? "T1";
   let identity: BackendIdentity = { pid: 0, txid: "" };
+  // Outcome captured in-callback so onPrimaryCommitted can be fired POST-COMMIT
+  // (after executeInTransaction resolves). Kept in the outer scope so the
+  // post-commit hook has the value without re-reading it from `result`.
+  let primaryOutcome: string | undefined;
   try {
     const result = await executeInTransaction(db, async (tx) => {
       identity = await captureBackendIdentity(tx);
@@ -354,15 +372,25 @@ async function runGrantTransaction(
         });
       }
       if (phase === "primary") {
-        await observer?.onPrimaryCommitted?.({
-          label,
-          pid: identity.pid,
-          txid: identity.txid,
-          outcome: grantResult.outcome,
-        });
+        // Stash the outcome so onPrimaryCommitted can fire POST-COMMIT below.
+        // Do NOT fire the hook here: the COMMIT has not happened yet — it only
+        // happens once this callback's promise settles.
+        primaryOutcome = grantResult.outcome;
       }
       return grantResult;
     });
+    // `executeInTransaction` has now resolved, which means the COMMIT has been
+    // issued and settled (see executeInTransaction: it `await`s db.transaction,
+    // and Drizzle COMMITs only after the callback promise settles). Only at
+    // this point is "committed" a truthful label for a primary-phase grant.
+    if (phase === "primary" && primaryOutcome !== undefined) {
+      await observer?.onPrimaryCommitted?.({
+        label,
+        pid: identity.pid,
+        txid: identity.txid,
+        outcome: primaryOutcome,
+      });
+    }
     return { result, identity };
   } catch (error) {
     return { error, identity };

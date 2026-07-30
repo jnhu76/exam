@@ -7,7 +7,7 @@
  * `orchestrators/operatorGrantExecution.ts`) that the HTTP route calls. This
  * file owns only the test-only concerns:
  *
- *   - {@link getBackendPid} / {@link assertDistinctConnections}: prove the two
+ *   - {@link getBackendPid} / {@link collectConnectionEvidence}: prove the two
  *     PostgreSQL connections are physically distinct (distinct PIDs) and
  *     share the same isolated schema.
  *   - {@link createBarrierBackedObserver}: builds the
@@ -44,7 +44,7 @@ export async function getBackendPid(db: Database): Promise<number> {
   return pid;
 }
 
-/** Connection + schema evidence collected by {@link assertDistinctConnections}. */
+/** Connection + schema evidence collected by {@link collectConnectionEvidence}. */
 export interface ConnectionEvidence {
   /** Backend PID of this connection. */
   pid: number;

@@ -4,7 +4,7 @@
  * Proves that two concurrent operator-grant commands with the same `operationId`
  * but targeting different Attempts (different Exams, so no row-lock overlap)
  * deterministically resolve to:
- *   1. T1 wins (granted, one ledger row, deadline advanced, one audit row)
+ *   1. T1 wins (granted, one ledger row, deadline advanced)
  *   2. T2 loses (23505 unique violation → fresh transaction → IDEMPOTENCY_CONFLICT)
  *
  * This test calls the SAME production function (`grantWithOperationRaceRecovery`
@@ -388,11 +388,13 @@ describe("REC-I4-V1: deterministic operationId race recovery", () => {
     };
 
     // ── 5. Launch both transactions on the PRODUCTION recovery path ──────
-    // No `audit` option → the test does not record HTTP audit (it has no
-    // FastifyRequest). Audit atomicity is asserted separately below by
-    // counting audit rows: the production module records the audit only when
-    // `audit` is set, so the deterministic test instead proves the SAME code
-    // path by calling it through the HTTP route in admin-time-grants.test.ts.
+    // No `audit` option → the test does not record the HTTP compliance audit
+    // (it has no FastifyRequest). Audit atomicity (winner=1, loser=0
+    // `attempt.timeGrant` rows) is therefore NOT asserted in this file; it is
+    // proven by the `Promise.all` HTTP race test in
+    // admin-time-grants.test.ts, which drives the SAME production code path
+    // through the route. The deterministic test owns the DB/domain evidence
+    // only (ledger, deadline, recovery txid).
     const barrier = createRaceBarrier();
     const observer1 = createBarrierBackedObserver(
       barrier,
@@ -447,14 +449,21 @@ describe("REC-I4-V1: deterministic operationId race recovery", () => {
 
       // ── 8. Release T2; it must violate then recover to a conflict ─────
       barrier.releaseT2.resolve();
+      // Recovery must NOT succeed — it must throw IdempotencyConflictError.
+      // Track resolution separately so a misbehaving recovery that resolves
+      // instead of rejecting surfaces as "T2 recovery unexpectedly succeeded",
+      // not as a misleading "expected IdempotencyConflictError". (The previous
+      // form let expect(t2Result).toBeNull()'s AssertionError be caught into
+      // t2Error and then mis-reported as a type mismatch.)
+      let t2Resolved = false;
       let t2Error: unknown = null;
       try {
-        const t2Result = await t2Promise;
-        // Recovery must NOT succeed — it must throw IdempotencyConflictError.
-        expect(t2Result).toBeNull();
+        await t2Promise;
+        t2Resolved = true;
       } catch (err) {
         t2Error = err;
       }
+      expect(t2Resolved, "T2 recovery unexpectedly succeeded").toBe(false);
       expect(t2Error).toBeInstanceOf(IdempotencyConflictError);
 
       // ── 9. The violation evidence comes from the REAL caught error ────
@@ -475,6 +484,12 @@ describe("REC-I4-V1: deterministic operationId race recovery", () => {
       // Settle every outstanding deferred + clear every timer so an
       // unawaited deferred cannot time out 10s later.
       barrier.dispose();
+      // Wait for both transactions to truly finish before letting the test
+      // exit. On a mid-assertion failure, dispose() releases the barrier gates
+      // but does NOT await the in-flight transactions; without this, the test
+      // could exit while T1/T2 are still running, racing afterAll' teardown
+      // (connection close + schema drop).
+      await Promise.allSettled([t1Promise, t2Promise]);
     }
 
     // ── 11. Final DB invariants: exactly one ledger row, on A1 ───────────
