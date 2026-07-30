@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import type { MeResponse, TimeGrantRequest } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
+import { resetPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
 
 // Ownership-sensitive mock: capture the canonical status keys the page routes
 // through the shared StatusBadge boundary. A local severity → variant decision
@@ -76,10 +77,11 @@ describe("ProctorDashboardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     statusBadgeProps.length = 0;
-    // The grant dialog persists pending (indeterminate) commands in
-    // sessionStorage; clear it between tests so one test's leftover pending
-    // command cannot leak into another.
+    // Clear shared state between tests so one test's leftover pending command
+    // cannot leak into another.
     sessionStorage.clear();
+    localStorage.clear();
+    resetPendingGrantCoordinator();
   });
 
   it("routes misconduct severity through the canonical statusMeta authority", async () => {

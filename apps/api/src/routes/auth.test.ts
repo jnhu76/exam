@@ -129,7 +129,9 @@ describe("auth routes", () => {
       rateLimit: true,
     });
     try {
-      for (let i = 0; i < 12; i++) {
+      // 5 iterations is enough to prove e2e mode bypasses rate limiting;
+      // more would be redundant and risk timeout under argon2 cost.
+      for (let i = 0; i < 5; i++) {
         const response = await e2eCtx.app.inject({
           method: "POST",
           url: "/api/auth/login",

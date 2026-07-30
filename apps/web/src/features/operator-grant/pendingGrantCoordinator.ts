@@ -1,0 +1,528 @@
+/**
+ * REC-I4-C1 — Cross-tab pending grant coordinator.
+ *
+ * Coordinates operator time-grant commands across browser tabs using:
+ *   - localStorage  — durable shared authority (survives refresh, cross-tab)
+ *   - navigator.locks — atomic read-check-write for the storage key
+ *   - BroadcastChannel — real-time UI update notifications
+ *   - storage event     — backup notification channel
+ *
+ * At most one unresolved command per (organizationId, actorId) pair.
+ * The command is persisted BEFORE the first HTTP request is sent (fail-closed:
+ * no shared authority → no request). Confirmed outcomes use compare-and-clear
+ * so stale tabs cannot accidentally delete a newer authority.
+ */
+
+import { createContextSafeUuid } from "@/lib/uuid";
+import {
+  type PendingGrantAuthority,
+  type PendingGrantCommand,
+  type ReserveResult,
+  type TakeOverResult,
+  type ClearResult,
+  type GetCurrentResult,
+  type AuthorityChangeEvent,
+  type AuthorityChangeEventType,
+  type BroadcastMessage,
+  CoordinationUnavailableError,
+  AlreadyPendingError,
+  LeaseConflictError,
+  CompareAndClearMismatchError,
+  isLeaseExpired,
+} from "./pendingGrantAuthority";
+
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const STORAGE_KEY_PREFIX = "exam.pendingGrantAuthority";
+const LOCK_NAME_PREFIX = "exam.pendingGrantAuthority";
+const DEFAULT_BROADCAST_CHANNEL = "exam.pending-grant-coordinator";
+const DEFAULT_LEASE_DURATION_MS = 30_000; // 30 seconds
+
+// ── Dependencies ────────────────────────────────────────────────────────────
+
+export interface CoordinatorDependencies {
+  tabId: string;
+  leaseDurationMs: number;
+  lockRequest: <T>(
+    name: string,
+    callback: (lock: { name: string } | null) => Promise<T>,
+  ) => Promise<T>;
+  broadcastChannel: {
+    postMessage: (msg: unknown) => void;
+    close: () => void;
+    onmessage: ((event: MessageEvent) => void) | null;
+  };
+  storage: Storage;
+  now: () => number;
+}
+
+// ── Default dependencies ────────────────────────────────────────────────────
+
+function createDefaultDeps(): CoordinatorDependencies {
+  let tabId: string;
+  try {
+    const key = "exam.tabId";
+    const stored = sessionStorage.getItem(key);
+    if (stored) {
+      tabId = stored;
+    } else {
+      tabId = createContextSafeUuid();
+      sessionStorage.setItem(key, tabId);
+    }
+  } catch {
+    tabId = createContextSafeUuid();
+  }
+
+  return {
+    tabId,
+    leaseDurationMs: DEFAULT_LEASE_DURATION_MS,
+    lockRequest: <T>(
+      name: string,
+      callback: (lock: { name: string } | null) => Promise<T>,
+    ): Promise<T> => {
+      if (typeof navigator !== "undefined" && navigator.locks) {
+        // navigator.locks.request is typed as returning Promise<any>;
+        // cast to the expected generic return type.
+        return navigator.locks.request(
+          name,
+          callback as (lock: Lock | null) => Promise<T>,
+        ) as Promise<T>;
+      }
+      // Fallback: no Web Locks API available → run without lock
+      return callback({ name });
+    },
+    broadcastChannel:
+      typeof BroadcastChannel !== "undefined"
+        ? new BroadcastChannel(DEFAULT_BROADCAST_CHANNEL)
+        : {
+            postMessage: () => {},
+            close: () => {},
+            onmessage: null,
+          },
+    storage:
+      typeof localStorage !== "undefined"
+        ? localStorage
+        : createInMemoryStorage(),
+    now: () => Date.now(),
+  };
+}
+
+function createInMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => [...store.keys()][index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  };
+}
+
+// ── Storage helpers ─────────────────────────────────────────────────────────
+
+function storageKey(orgId: string, actorId: string): string {
+  return `${STORAGE_KEY_PREFIX}:${orgId}:${actorId}`;
+}
+
+function lockName(orgId: string, actorId: string): string {
+  return `${LOCK_NAME_PREFIX}:${orgId}:${actorId}`;
+}
+
+// ── Coordinator ─────────────────────────────────────────────────────────────
+
+export class PendingGrantCoordinator {
+  private readonly deps: CoordinatorDependencies;
+  private readonly listeners = new Set<(event: AuthorityChangeEvent) => void>();
+  private readonly storageHandler: (e: StorageEvent) => void;
+  private destroyed = false;
+
+  constructor(deps?: Partial<CoordinatorDependencies>) {
+    this.deps = { ...createDefaultDeps(), ...deps };
+    this.deps.broadcastChannel.onmessage = (event: MessageEvent) => {
+      const data = event.data as BroadcastMessage;
+      this.notifyListeners(data);
+    };
+    this.storageHandler = (e: StorageEvent) => {
+      if (e.key?.startsWith(STORAGE_KEY_PREFIX)) {
+        const parts = e.key.slice(STORAGE_KEY_PREFIX.length + 1).split(":");
+        if (parts.length === 2) {
+          this.notifyListeners({
+            type: e.newValue ? "authority_created" : "authority_cleared",
+            organizationId: parts[0]!,
+            actorId: parts[1]!,
+          });
+        }
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", this.storageHandler);
+    }
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    this.deps.broadcastChannel.close();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", this.storageHandler);
+    }
+    this.listeners.clear();
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────────
+
+  /**
+   * Atomically reserves a pending command for the given (orgId, actorId).
+   * Fails if an unresolved command already exists (AlreadyPendingError) or
+   * if the shared storage is unavailable (CoordinationUnavailableError).
+   *
+   * On success, the command is persisted to localStorage with a fresh
+   * in-flight lease held by this tab. The caller MUST then send the HTTP
+   * request — the command is already visible to other tabs.
+   */
+  async reserve(
+    orgId: string,
+    actorId: string,
+    command: PendingGrantCommand,
+  ): Promise<ReserveResult> {
+    return this.withLock(orgId, actorId, async () => {
+      try {
+        // Check if an authority already exists
+        const existing = this.readAuthority(orgId, actorId);
+        if (existing) {
+          return {
+            ok: false as const,
+            error: new AlreadyPendingError(existing),
+          };
+        }
+
+        const now = this.deps.now();
+        const authority: PendingGrantAuthority = {
+          schemaVersion: 1,
+          organizationId: orgId,
+          actorId,
+          command,
+          revision: 1,
+          createdAt: now,
+          inFlightLease: {
+            tabId: this.deps.tabId,
+            leaseId: createContextSafeUuid(),
+            expiresAt: now + this.deps.leaseDurationMs,
+          },
+        };
+
+        this.writeAuthority(orgId, actorId, authority);
+        this.broadcast({
+          type: "authority_created",
+          organizationId: orgId,
+          actorId,
+        });
+        return { ok: true as const, authority };
+      } catch (err) {
+        if (err instanceof CoordinationUnavailableError) {
+          return { ok: false as const, error: err };
+        }
+        return {
+          ok: false as const,
+          error: new CoordinationUnavailableError(
+            "Shared storage unavailable: cannot reserve time-grant command",
+          ),
+        };
+      }
+    });
+  }
+
+  /**
+   * Takes over an expired lease, allowing a different tab to retry the same
+   * frozen command. The command identity (operationId, payload) is preserved
+   * — never mint a new operationId on takeover.
+   *
+   * Fails if the lease is still valid (LeaseConflictError) or storage is
+   * unavailable.
+   */
+  async takeOver(
+    orgId: string,
+    actorId: string,
+    command: PendingGrantCommand,
+  ): Promise<TakeOverResult> {
+    return this.withLock(orgId, actorId, async () => {
+      try {
+        const existing = this.readAuthority(orgId, actorId);
+        if (!existing) {
+          return {
+            ok: false as const,
+            error: new CoordinationUnavailableError(
+              "No pending time-grant command to take over",
+            ),
+          };
+        }
+
+        // Check lease validity
+        if (
+          existing.inFlightLease &&
+          !isLeaseExpired(existing.inFlightLease, this.deps.now())
+        ) {
+          return {
+            ok: false as const,
+            error: new LeaseConflictError(existing),
+          };
+        }
+
+        // Preserve the exact command — takeover must not change operationId
+        const now = this.deps.now();
+        const updated: PendingGrantAuthority = {
+          ...existing,
+          command, // Use the provided command (must be identical to original)
+          revision: existing.revision + 1,
+          inFlightLease: {
+            tabId: this.deps.tabId,
+            leaseId: createContextSafeUuid(),
+            expiresAt: now + this.deps.leaseDurationMs,
+          },
+        };
+
+        this.writeAuthority(orgId, actorId, updated);
+        this.broadcast({
+          type: "lease_acquired",
+          organizationId: orgId,
+          actorId,
+        });
+        return { ok: true as const, authority: updated };
+      } catch (err) {
+        if (err instanceof CoordinationUnavailableError) {
+          return { ok: false as const, error: err };
+        }
+        return {
+          ok: false as const,
+          error: new CoordinationUnavailableError(
+            "Shared storage unavailable: cannot take over time-grant command",
+          ),
+        };
+      }
+    });
+  }
+
+  /**
+   * Confirms and clears the pending authority using compare-and-clear.
+   * Only succeeds when the stored authority's operationId AND revision
+   * match the expected values. This prevents stale tabs from deleting
+   * a newer authority that replaced theirs.
+   */
+  async clearConfirmed(
+    orgId: string,
+    actorId: string,
+    expected: { operationId: string; revision: number },
+  ): Promise<ClearResult> {
+    return this.withLock(orgId, actorId, async () => {
+      try {
+        const existing = this.readAuthority(orgId, actorId);
+        if (!existing) {
+          // Already cleared — that's OK
+          return { ok: true as const };
+        }
+
+        // Compare-and-clear
+        if (
+          existing.command.operationId !== expected.operationId ||
+          existing.revision !== expected.revision
+        ) {
+          return {
+            ok: false as const,
+            error: new CompareAndClearMismatchError(),
+          };
+        }
+
+        this.removeAuthority(orgId, actorId);
+        this.broadcast({
+          type: "authority_cleared",
+          organizationId: orgId,
+          actorId,
+        });
+        return { ok: true as const };
+      } catch (err) {
+        if (err instanceof CoordinationUnavailableError) {
+          return { ok: false as const, error: err };
+        }
+        return {
+          ok: false as const,
+          error: new CoordinationUnavailableError(
+            "Shared storage unavailable: cannot clear time-grant command",
+          ),
+        };
+      }
+    });
+  }
+
+  /**
+   * Reads the current pending authority (if any) for the given (orgId, actorId).
+   */
+  async getCurrent(orgId: string, actorId: string): Promise<GetCurrentResult> {
+    return this.withLock(orgId, actorId, async () => {
+      try {
+        const authority = this.readAuthority(orgId, actorId);
+        return { ok: true as const, authority };
+      } catch (err) {
+        if (err instanceof CoordinationUnavailableError) {
+          return { ok: false as const, error: err };
+        }
+        return {
+          ok: false as const,
+          error: new CoordinationUnavailableError(
+            "Shared storage unavailable: cannot read time-grant status",
+          ),
+        };
+      }
+    });
+  }
+
+  /**
+   * Subscribes to authority change events. Returns an unsubscribe function.
+   */
+  subscribe(callback: (event: AuthorityChangeEvent) => void): () => void {
+    this.listeners.add(callback);
+    return () => {
+      this.listeners.delete(callback);
+    };
+  }
+
+  // ── Internal helpers ────────────────────────────────────────────────────
+
+  private async withLock<T>(
+    orgId: string,
+    actorId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const name = lockName(orgId, actorId);
+    try {
+      return await this.deps.lockRequest(name, async () => {
+        if (this.destroyed) {
+          throw new CoordinationUnavailableError(
+            "Coordinator has been destroyed",
+          );
+        }
+        return await fn();
+      });
+    } catch (err) {
+      if (err instanceof CoordinationUnavailableError) {
+        throw err;
+      }
+      // If the lock request itself fails (e.g., Web Locks unavailable),
+      // still try to execute without the lock — but surface as unavailable
+      // if the underlying operation fails.
+      if (this.destroyed) {
+        throw new CoordinationUnavailableError(
+          "Coordinator has been destroyed",
+        );
+      }
+      // Rethrow as coordination unavailable
+      throw new CoordinationUnavailableError(
+        "Cannot acquire shared lock: coordination unavailable",
+      );
+    }
+  }
+
+  private readAuthority(
+    orgId: string,
+    actorId: string,
+  ): PendingGrantAuthority | null {
+    const key = storageKey(orgId, actorId);
+    const raw = this.deps.storage.getItem(key);
+    if (raw === null) return null;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      throw new CoordinationUnavailableError(
+        `Corrupted shared storage record (${key}): cannot parse JSON`,
+      );
+    }
+
+    if (!isValidAuthority(parsed)) {
+      throw new CoordinationUnavailableError(
+        `Invalid shared storage record format (${key})`,
+      );
+    }
+
+    return parsed;
+  }
+
+  private writeAuthority(
+    orgId: string,
+    actorId: string,
+    authority: PendingGrantAuthority,
+  ): void {
+    const key = storageKey(orgId, actorId);
+    try {
+      this.deps.storage.setItem(key, JSON.stringify(authority));
+    } catch (err) {
+      throw new CoordinationUnavailableError(
+        `Shared storage write failed (${key}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  private removeAuthority(orgId: string, actorId: string): void {
+    const key = storageKey(orgId, actorId);
+    try {
+      this.deps.storage.removeItem(key);
+    } catch {
+      throw new CoordinationUnavailableError(
+        `Shared storage remove failed (${key})`,
+      );
+    }
+  }
+
+  private broadcast(event: AuthorityChangeEvent): void {
+    try {
+      this.deps.broadcastChannel.postMessage(event);
+    } catch {
+      // BroadcastChannel is best-effort; don't fail the operation
+    }
+    this.notifyListeners(event);
+  }
+
+  private notifyListeners(event: AuthorityChangeEvent): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch {
+        // Isolate listener failures
+      }
+    }
+  }
+}
+
+// ── Validation ──────────────────────────────────────────────────────────────
+
+function isValidAuthority(value: unknown): value is PendingGrantAuthority {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  if (obj.schemaVersion !== 1) return false;
+  if (typeof obj.organizationId !== "string") return false;
+  if (typeof obj.actorId !== "string") return false;
+  if (!obj.command || typeof obj.command !== "object") return false;
+  const cmd = obj.command as Record<string, unknown>;
+  if (typeof cmd.attemptId !== "string") return false;
+  if (typeof cmd.operationId !== "string") return false;
+  if (typeof cmd.addedSeconds !== "number") return false;
+  if (typeof cmd.reasonCode !== "string") return false;
+  if (typeof cmd.reasonText !== "string") return false;
+  if (typeof obj.revision !== "number") return false;
+  if (typeof obj.createdAt !== "number") return false;
+  // inFlightLease is optional
+  if (obj.inFlightLease !== undefined && obj.inFlightLease !== null) {
+    if (typeof obj.inFlightLease !== "object") return false;
+    const lease = obj.inFlightLease as Record<string, unknown>;
+    if (typeof lease.tabId !== "string") return false;
+    if (typeof lease.leaseId !== "string") return false;
+    if (typeof lease.expiresAt !== "number") return false;
+  }
+  return true;
+}
