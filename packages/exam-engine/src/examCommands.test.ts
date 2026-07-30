@@ -233,6 +233,89 @@ describe("examCommands", () => {
       );
     });
 
+    // ── P2 authoring closeout: text_response publish clarity + freeze ──
+    // The publish reject message must name the offending question id so an
+    // admin authoring several text_response items can locate the one missing
+    // a rubric; and the snapshot must freeze the optional reference answer
+    // exactly as authored, independent of later live-question edits.
+
+    it("names the offending question id in the text_response rubric reject message", async () => {
+      const repo = makeRepo(
+        makeExam({
+          questionIds: ["q-text-7"],
+          totalScore: 20,
+          passingScore: 10,
+        }),
+      );
+      const textQ = makeQuestion("q-text-7", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: null,
+        rubric: "",
+        score: 20,
+      });
+      await expect(publishExam(repo, "exam-1", [textQ])).rejects.toThrow(
+        /q-text-7/,
+      );
+    });
+
+    it("freezes the optional text_response reference answer into the snapshot", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-text"], totalScore: 20, passingScore: 10 }),
+      );
+      const textQ = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: "参考要点一\n参考要点二",
+        rubric: "按论证完整性给分",
+        score: 20,
+      });
+      const result = await publishExam(repo, "exam-1", [textQ]);
+      expect(result.status).toBe("published");
+      expect(result.questionSnapshot[0]?.standardAnswer).toBe(
+        "参考要点一\n参考要点二",
+      );
+      expect(result.questionSnapshot[0]?.rubric).toBe("按论证完整性给分");
+    });
+
+    it("snapshot stays frozen when the live text_response is edited after publish", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-text"], totalScore: 20, passingScore: 10 }),
+      );
+      const textQ = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述（原稿）",
+        options: [],
+        standardAnswer: "原始参考答案",
+        rubric: "原始评分标准",
+        score: 20,
+      });
+      const published = await publishExam(repo, "exam-1", [textQ]);
+      const frozen = published.questionSnapshot[0];
+
+      // Simulate a post-publish live edit: content, rubric, and reference
+      // answer all change on the live Question row.
+      const editedLive = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述（修改稿）",
+        options: [],
+        standardAnswer: "修改后的参考答案",
+        rubric: "修改后的评分标准",
+        score: 20,
+      });
+      const rebuilt = buildQuestionSnapshot(["q-text"], [editedLive]);
+
+      // The persisted (frozen) snapshot from publish is unchanged by the
+      // live edit; only a fresh buildQuestionSnapshot would reflect edits.
+      expect(frozen?.rubric).toBe("原始评分标准");
+      expect(frozen?.standardAnswer).toBe("原始参考答案");
+      expect(frozen?.content).toBe("阐述（原稿）");
+      expect(rebuilt[0]?.rubric).toBe("修改后的评分标准");
+      expect(rebuilt[0]?.standardAnswer).toBe("修改后的参考答案");
+    });
+
     it("accepts text_response publish when rubric is non-empty", async () => {
       const repo = makeRepo(
         makeExam({ questionIds: ["q-text"], totalScore: 20, passingScore: 10 }),
