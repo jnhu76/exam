@@ -15,6 +15,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError } from "@/components/shared/FieldError";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { ArrowLeft } from "lucide-react";
 
 /**
@@ -155,6 +166,7 @@ export function GradingDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { formatDateTime } = useProductDateTime();
   const [data, setData] = useState<GradingDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,40 +179,65 @@ export function GradingDetailPage() {
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
+  // Confirmation dialog target: holds the validated question awaiting the
+  // operator's explicit "confirm submit". The dialog is the gate before any
+  // irrevocable POST — see handleSubmitClick / submitScore.
+  const [confirmTarget, setConfirmTarget] = useState<{
+    questionId: string;
+    score: number;
+    maxScore: number;
+  } | null>(null);
+
+  /**
+   * Re-fetches the authoritative grading-details and replaces ALL local state
+   * (data, scores, comments) from the server response. Used both for the
+   * initial load and for the post-POST reconciliation, so the page never shows
+   * a client-fabricated gradedBy/gradedAt/terminal state — it always reflects
+   * what the server committed.
+   */
+  const refreshFromServer =
+    useCallback(async (): Promise<GradingDetailData | null> => {
+      if (!id) return null;
+      const result = await api.get<GradingDetailData>(
+        `/api/admin/attempts/${id}/grading-details`,
+      );
+      setData(result);
+      const nextScores: Record<string, string> = {};
+      const nextComments: Record<string, string> = {};
+      for (const q of result.questions) {
+        nextScores[q.questionId] = q.entry != null ? String(q.entry.score) : "";
+        nextComments[q.questionId] = q.entry?.comment ?? "";
+      }
+      setScores(nextScores);
+      setComments(nextComments);
+      return result;
+    }, [id]);
 
   const loadDetail = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     setError(null);
     try {
-      const result = await api.get<GradingDetailData>(
-        `/api/admin/attempts/${id}/grading-details`,
-      );
-      setData(result);
-      const initialScores: Record<string, string> = {};
-      const initialComments: Record<string, string> = {};
-      for (const q of result.questions) {
-        // Pending question → empty input (NOT 0). Completed question → the
-        // submitted score, including an explicit 0, rendered as a string.
-        initialScores[q.questionId] =
-          q.entry != null ? String(q.entry.score) : "";
-        initialComments[q.questionId] = q.entry?.comment ?? "";
-      }
-      setScores(initialScores);
-      setComments(initialComments);
+      await refreshFromServer();
     } catch {
       setError(t("admin.gradingDetail.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [id, t]);
+  }, [id, t, refreshFromServer]);
 
   useEffect(() => {
     loadDetail();
   }, [loadDetail]);
 
-  const handleSave = useCallback(
-    async (questionId: string, maxScore: number) => {
+  /**
+   * Click handler for the "提交评分" button. Validates the raw score input and,
+   * on success, opens the confirmation dialog instead of POSTing directly. The
+   * dialog's confirm action runs {@link submitScore}. On a validation error the
+   * field-level error is set and no dialog/POST happens.
+   */
+  const handleSubmitClick = useCallback(
+    (questionId: string, maxScore: number) => {
       const parsed = parseScoreInput(scores[questionId] ?? "", maxScore);
       if ("error" in parsed) {
         setValidationErrors((prev) => ({
@@ -209,12 +246,29 @@ export function GradingDetailPage() {
         }));
         return;
       }
-      const { score } = parsed;
       setValidationErrors((prev) => {
         const next = { ...prev };
         delete next[questionId];
         return next;
       });
+      setConfirmTarget({
+        questionId,
+        score: parsed.score,
+        maxScore,
+      });
+    },
+    [scores],
+  );
+
+  /**
+   * Performs the irrevocable POST, then refreshes local state from the
+   * authoritative GET so the submitted question immediately reflects the
+   * server-committed entry (score, comment, gradedBy, gradedAt, read-only
+   * state). The page must NOT fabricate gradedBy/gradedAt client-side.
+   */
+  const submitScore = useCallback(
+    async (questionId: string, score: number, maxScore: number) => {
+      setConfirmTarget(null);
       setSaving((prev) => ({ ...prev, [questionId]: true }));
       try {
         const result = await api.post<GradeQuestionResponse>(
@@ -225,10 +279,12 @@ export function GradingDetailPage() {
             comment: comments[questionId] ?? "",
           },
         );
-        setData((prev) =>
-          prev ? { ...prev, gradingStatus: result.gradingStatus } : prev,
-        );
-        if (result.fullyGraded) {
+        // Authoritative reconciliation: replace local state from the server so
+        // the just-graded question becomes read-only with the real gradedBy /
+        // gradedAt, and the top-level gradingStatus reflects the committed
+        // terminal projection.
+        const refreshed = await refreshFromServer();
+        if (refreshed && result.fullyGraded) {
           toast.success(t("admin.gradingDetail.toast.fullyGraded"));
         } else {
           toast.success(t("admin.gradingDetail.toast.saved"));
@@ -239,7 +295,7 @@ export function GradingDetailPage() {
         setSaving((prev) => ({ ...prev, [questionId]: false }));
       }
     },
-    [id, scores, comments, t],
+    [id, comments, t, refreshFromServer],
   );
 
   if (isLoading) return <LoadingState />;
@@ -251,6 +307,8 @@ export function GradingDetailPage() {
         onRetry={loadDetail}
       />
     );
+
+  const isFullyGraded = data.gradingStatus === "fully_graded";
 
   return (
     <div className="flex flex-col gap-6">
@@ -268,110 +326,227 @@ export function GradingDetailPage() {
         }
         status={<StatusBadge status={data.gradingStatus} />}
       />
-      {data.questions.map((q) => (
-        <Card key={q.questionId}>
-          <CardHeader>
-            <CardTitle className="text-base">{q.content}</CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>
-                {t("admin.gradingDetail.question.maxScore", {
-                  score: q.maxScore,
-                })}
-              </span>
-              <span>·</span>
-              <span>{t("admin.gradingDetail.question.subjective")}</span>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>{t("admin.gradingDetail.question.candidateAnswer")}</Label>
-              <div
-                data-testid={`grading-candidate-answer-${q.questionId}`}
-                className="type-long-response min-h-16 rounded-md border bg-muted/30 p-3"
-              >
-                {formatAnswer(q.candidateAnswer)}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{t("admin.gradingDetail.question.standardAnswer")}</Label>
-              <div
-                data-testid={`grading-standard-answer-${q.questionId}`}
-                className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
-              >
-                {formatStandardAnswer(q.standardAnswer)}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{t("admin.gradingDetail.question.rubric")}</Label>
-              <div
-                data-testid={`grading-rubric-${q.questionId}`}
-                className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
-              >
-                {q.rubric ||
-                  i18n.t("admin.gradingDetail.format.notSet" as never)}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`score-${q.questionId}`}>
-                {t("admin.gradingDetail.question.scoreLabel")}
-              </Label>
-              <Input
-                id={`score-${q.questionId}`}
-                data-testid={`grading-score-input-${q.questionId}`}
-                type="number"
-                min={0}
-                max={q.maxScore}
-                value={scores[q.questionId] ?? ""}
-                onChange={(e) =>
-                  setScores((prev) => ({
-                    ...prev,
-                    [q.questionId]: e.target.value,
-                  }))
-                }
-              />
-              <FieldError>{validationErrors[q.questionId]}</FieldError>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`comment-${q.questionId}`}>
-                {t("admin.gradingDetail.question.commentLabel")}
-              </Label>
-              <Textarea
-                id={`comment-${q.questionId}`}
-                data-testid={`grading-comment-input-${q.questionId}`}
-                value={comments[q.questionId] ?? ""}
-                onChange={(e) =>
-                  setComments((prev) => ({
-                    ...prev,
-                    [q.questionId]: e.target.value,
-                  }))
-                }
-                placeholder={t(
-                  "admin.gradingDetail.question.commentPlaceholder",
-                )}
-                rows={3}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                data-testid={`grading-save-btn-${q.questionId}`}
-                onClick={() => handleSave(q.questionId, q.maxScore)}
-                disabled={saving[q.questionId]}
-              >
-                {saving[q.questionId]
-                  ? t("admin.gradingDetail.question.saving")
-                  : t("admin.gradingDetail.question.save")}
-              </Button>
-              {q.entry && (
-                <span className="text-sm text-muted-foreground">
-                  {t("admin.gradingDetail.question.gradedLabel", {
-                    score: q.entry.score,
+      {isFullyGraded ? (
+        <div
+          role="status"
+          data-testid="grading-fully-graded-notice"
+          className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground"
+        >
+          {t("admin.gradingDetail.fullyGradedNotice")}
+        </div>
+      ) : (
+        <div
+          role="note"
+          data-testid="grading-irrevocable-notice"
+          className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground"
+        >
+          {t("admin.gradingDetail.irrevocableNotice")}
+        </div>
+      )}
+      {data.questions.map((q) => {
+        // A question is read-only once its entry is completed_manual, OR once
+        // the whole attempt has reached the terminal fully_graded state (every
+        // question is then committed). Either way: no submit button, inputs
+        // disabled, and the committed entry metadata is shown.
+        const completed = q.entry !== null || isFullyGraded;
+        return (
+          <Card key={q.questionId}>
+            <CardHeader>
+              <CardTitle className="text-base">{q.content}</CardTitle>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>
+                  {t("admin.gradingDetail.question.maxScore", {
+                    score: q.maxScore,
                   })}
                 </span>
+                <span>·</span>
+                <span>{t("admin.gradingDetail.question.subjective")}</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>
+                  {t("admin.gradingDetail.question.candidateAnswer")}
+                </Label>
+                <div
+                  data-testid={`grading-candidate-answer-${q.questionId}`}
+                  className="type-long-response min-h-16 rounded-md border bg-muted/30 p-3"
+                >
+                  {formatAnswer(q.candidateAnswer)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  {t("admin.gradingDetail.question.standardAnswer")}
+                </Label>
+                <div
+                  data-testid={`grading-standard-answer-${q.questionId}`}
+                  className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+                >
+                  {formatStandardAnswer(q.standardAnswer)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t("admin.gradingDetail.question.rubric")}</Label>
+                <div
+                  data-testid={`grading-rubric-${q.questionId}`}
+                  className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+                >
+                  {q.rubric ||
+                    i18n.t("admin.gradingDetail.format.notSet" as never)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`score-${q.questionId}`}>
+                  {t("admin.gradingDetail.question.scoreLabel")}
+                </Label>
+                <Input
+                  id={`score-${q.questionId}`}
+                  data-testid={`grading-score-input-${q.questionId}`}
+                  type="number"
+                  min={0}
+                  max={q.maxScore}
+                  disabled={completed}
+                  value={scores[q.questionId] ?? ""}
+                  onChange={(e) =>
+                    setScores((prev) => ({
+                      ...prev,
+                      [q.questionId]: e.target.value,
+                    }))
+                  }
+                />
+                <FieldError>{validationErrors[q.questionId]}</FieldError>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`comment-${q.questionId}`}>
+                  {t("admin.gradingDetail.question.commentLabel")}
+                </Label>
+                <Textarea
+                  id={`comment-${q.questionId}`}
+                  data-testid={`grading-comment-input-${q.questionId}`}
+                  disabled={completed}
+                  value={comments[q.questionId] ?? ""}
+                  onChange={(e) =>
+                    setComments((prev) => ({
+                      ...prev,
+                      [q.questionId]: e.target.value,
+                    }))
+                  }
+                  placeholder={t(
+                    "admin.gradingDetail.question.commentPlaceholder",
+                  )}
+                  rows={3}
+                />
+              </div>
+              {completed ? (
+                <div
+                  className="space-y-1 text-sm text-muted-foreground"
+                  data-testid={`grading-submitted-meta-${q.questionId}`}
+                >
+                  <div className="font-medium text-foreground">
+                    {t("admin.gradingDetail.question.submittedLabel")}
+                  </div>
+                  <div>
+                    {t("admin.gradingDetail.question.gradedLabel", {
+                      score: q.entry?.score ?? 0,
+                    })}
+                  </div>
+                  {q.entry?.comment ? (
+                    <div
+                      data-testid={`grading-submitted-comment-${q.questionId}`}
+                    >
+                      {q.entry.comment}
+                    </div>
+                  ) : null}
+                  {/* gradedBy may currently be only an actor id; show the value
+                      the server committed without fabricating a display name. */}
+                  <div data-testid={`grading-submitted-grader-${q.questionId}`}>
+                    {t("admin.gradingDetail.question.gradedBy", {
+                      grader: q.entry?.gradedBy ?? "",
+                    })}
+                  </div>
+                  {q.entry?.gradedAt ? (
+                    <div data-testid={`grading-submitted-time-${q.questionId}`}>
+                      {t("admin.gradingDetail.question.gradedAt", {
+                        time: formatDateTime(q.entry.gradedAt),
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    data-testid={`grading-submit-btn-${q.questionId}`}
+                    onClick={() => handleSubmitClick(q.questionId, q.maxScore)}
+                    disabled={saving[q.questionId]}
+                  >
+                    {saving[q.questionId]
+                      ? t("admin.gradingDetail.question.submitting")
+                      : t("admin.gradingDetail.question.submit")}
+                  </Button>
+                </div>
               )}
+            </CardContent>
+          </Card>
+        );
+      })}
+      {/* Single controlled confirmation dialog. Opened by handleSubmitClick once
+          the score validates; the confirm action runs the irrevocable POST. */}
+      <AlertDialog
+        open={confirmTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("admin.gradingDetail.confirm.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.gradingDetail.confirm.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-1 rounded-lg border bg-muted/40 p-3 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">
+                {t("admin.gradingDetail.confirm.score", {
+                  score: confirmTarget?.score ?? 0,
+                })}
+              </span>
             </div>
-          </CardContent>
-        </Card>
-      ))}
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">
+                {t("admin.gradingDetail.confirm.maxScore", {
+                  score: confirmTarget?.maxScore ?? 0,
+                })}
+              </span>
+            </div>
+            <div className="text-muted-foreground">
+              {t("admin.gradingDetail.confirm.irrevocable")}
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {t("admin.gradingDetail.confirm.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!confirmTarget}
+              onClick={() => {
+                if (confirmTarget) {
+                  void submitScore(
+                    confirmTarget.questionId,
+                    confirmTarget.score,
+                    confirmTarget.maxScore,
+                  );
+                }
+              }}
+            >
+              {t("admin.gradingDetail.confirm.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

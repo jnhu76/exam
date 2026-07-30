@@ -1687,6 +1687,10 @@ const zhCN = {
     },
     gradingDetail: {
       title: "手动评分",
+      /** One-time-irreversible-scoring banner shown above the question list. */
+      irrevocableNotice: "评分提交后不可修改，请确认分数与评语。",
+      /** Banner shown once the whole attempt is fully graded. */
+      fullyGradedNotice: "评分已完成。",
       errors: {
         loadFailed: "加载评分详情失败",
         dataLoadFailed: "评分数据加载异常，请重试",
@@ -1704,9 +1708,21 @@ const zhCN = {
         scoreLabel: "分数",
         commentLabel: "评语（可选）",
         commentPlaceholder: "输入评语...",
-        save: "保存",
-        saving: "保存中...",
+        submit: "提交评分",
+        submitting: "提交中...",
+        submittedLabel: "已提交评分",
         gradedLabel: "已评分: {{score}} 分",
+        gradedBy: "评分人: {{grader}}",
+        gradedAt: "评分时间: {{time}}",
+      },
+      confirm: {
+        title: "确认提交评分？",
+        description: "提交后本题不可再修改。请确认分数与评语。",
+        score: "分数: {{score}}",
+        maxScore: "满分: {{score}}",
+        irrevocable: "提交后不可通过普通阅卷流程修改。",
+        confirm: "确认提交",
+        cancel: "取消",
       },
       validation: {
         scoreRequired: "请输入分数",
