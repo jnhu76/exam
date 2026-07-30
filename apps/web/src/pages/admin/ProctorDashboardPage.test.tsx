@@ -8,6 +8,63 @@ import type { MeResponse, TimeGrantRequest } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
 import { resetPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
 
+/**
+ * Seeds localStorage with a pending-grant authority for the test admin
+ * (org-1 / admin-1), restoring the exact frozen command the page would use.
+ *
+ * `withActiveLease` controls whether the authority has a non-expired in-flight
+ * lease (true → an indeterminate retry MUST get a LeaseConflict and send NO
+ * POST) or no lease at all (false → claimForSend succeeds and the retry POSTs).
+ *
+ * The expiry is computed against the real clock the production coordinator uses
+ * (Date.now), so an active lease is `Date.now() + 30_000`.
+ */
+function seedPendingAuthority(
+  overrides: Partial<{
+    attemptId: string;
+    operationId: string;
+    addedSeconds: number;
+    withActiveLease: boolean;
+  }> = {},
+): {
+  operationId: string;
+  attemptId: string;
+  addedSeconds: number;
+  revision: number;
+  leaseId: string;
+} {
+  const operationId = overrides.operationId ?? "seed-op-1";
+  const attemptId = overrides.attemptId ?? "att-1";
+  const addedSeconds = overrides.addedSeconds ?? 600;
+  const leaseId = "seed-lease-1";
+  const authority = {
+    schemaVersion: 1 as const,
+    organizationId: "org-1",
+    actorId: "admin-1",
+    command: {
+      attemptId,
+      operationId,
+      addedSeconds,
+      reasonCode: "technical_incident",
+      reasonText: "网络中断",
+    },
+    revision: 1,
+    createdAt: Date.now(),
+    inFlightLease: overrides.withActiveLease
+      ? {
+          tabId: "other-tab",
+          leaseId,
+          expiresAt: Date.now() + 30_000,
+        }
+      : undefined,
+  };
+  localStorage.setItem(
+    "exam.pendingGrantAuthority:org-1:admin-1",
+    JSON.stringify(authority),
+  );
+  return { operationId, attemptId, addedSeconds, revision: 1, leaseId };
+}
+
 // Ownership-sensitive mock: capture the canonical status keys the page routes
 // through the shared StatusBadge boundary. A local severity → variant decision
 // (the bypass this test guards against) would NOT call StatusBadge with
@@ -555,6 +612,250 @@ describe("ProctorDashboardPage", () => {
       expect(apiPost).not.toHaveBeenCalled();
 
       getterSpy.mockRestore();
+    });
+
+    // ── Send-claim ownership (REC-I4-C1 follow-up #233) ───────────────────
+    //
+    // The retry path MUST `claimForSend` before POST. If a non-expired lease
+    // already exists (another tab is sending), the POST is suppressed, the
+    // frozen command is KEPT, no new operationId is minted, and the lease
+    // conflict warning is shown. If no lease exists, the claim succeeds and
+    // the POST replays the exact frozen command.
+    describe("indeterminate retry send-claim (claimForSend)", () => {
+      it("suppresses the POST when an active lease exists (lease conflict)", async () => {
+        // Seed an indeterminate authority for att-1 WITH a non-expired lease
+        // held by another tab. The retry must get LeaseConflictError → no POST.
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        seedPendingAuthority({ withActiveLease: true });
+
+        renderPage();
+        await screen.findByText("张三");
+
+        // Open the dialog: the coordinator's getCurrent restores the frozen
+        // command as indeterminate (retry button visible).
+        const extendBtn = await screen.findByRole("button", {
+          name: "延长时间",
+        });
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+        const retryBtn = await screen.findByRole("button", {
+          name: "重试同一加时",
+        });
+        expect(retryBtn).toBeInTheDocument();
+
+        // Retry: claimForSend must return LeaseConflictError → NO POST.
+        fireEvent.click(retryBtn);
+        await waitFor(() => {
+          expect(toast.warning).toHaveBeenCalledWith(
+            expect.stringContaining("另一个标签页正在处理"),
+          );
+        });
+        // Definitive proof: zero time-grants POST was sent.
+        expect(apiPost).not.toHaveBeenCalled();
+      });
+
+      it("re-claims and POSTs the identical frozen command when no lease exists", async () => {
+        // Seed an indeterminate authority with NO active lease (it was
+        // released). The retry's claimForSend succeeds → POST the exact frozen
+        // command, then clearConfirmed on the confirmed result.
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        const seeded = seedPendingAuthority({ withActiveLease: false });
+        apiPost.mockResolvedValueOnce({
+          outcome: "idempotent_replay",
+          adjustment: null,
+          attempt: {
+            id: "att-1",
+            status: "in_progress",
+            deadlineAt: "2026-01-01T00:10:00Z",
+          },
+        });
+
+        renderPage();
+        await screen.findByText("张三");
+
+        const extendBtn = await screen.findByRole("button", {
+          name: "延长时间",
+        });
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+        const retryBtn = await screen.findByRole("button", {
+          name: "重试同一加时",
+        });
+
+        fireEvent.click(retryBtn);
+
+        // Exactly one POST, carrying the EXACT frozen command identity.
+        await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+        const body = apiPost.mock.calls[0]![1] as TimeGrantRequest;
+        expect(body.operationId).toBe(seeded.operationId);
+        expect(body.addedSeconds).toBe(seeded.addedSeconds);
+        expect(body.reasonCode).toBe("technical_incident");
+        expect(body.reasonText).toBe("网络中断");
+
+        // Confirmed result (idempotent_replay) clears the authority and
+        // surfaces the replay toast — no false "second grant".
+        await waitFor(() => {
+          expect(toast.success).toHaveBeenCalledWith(
+            expect.stringContaining("该加时已处理"),
+          );
+        });
+      });
+
+      it("releases the lease on an indeterminate retry failure and keeps the frozen command", async () => {
+        // No seeded authority — drive a real draft → indeterminate flow, then
+        // prove the retry re-claims and a SECOND indeterminate failure releases.
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        // First send (draft): network failure → indeterminate.
+        apiPost.mockRejectedValueOnce(new Error("Network request failed"));
+        // Retry: also indeterminate (another masked 5xx).
+        apiPost.mockRejectedValueOnce(new Error("Network request failed"));
+
+        renderPage();
+        await openGrantDialog();
+        await submitGrant();
+
+        // First POST captured → indeterminate, retry affordance appears.
+        await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+        const retryBtn = await screen.findByRole("button", {
+          name: "重试同一加时",
+        });
+        fireEvent.click(retryBtn);
+
+        // The retry re-claimed then POSTed again, then failed indeterminate →
+        // releaseIndeterminate surrendered the lease but kept the command, so
+        // the retry button must STILL be available for a later retry.
+        await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+        await waitFor(() => {
+          expect(toast.warning).toHaveBeenCalledWith(
+            expect.stringContaining("未确认加时是否成功"),
+          );
+        });
+        // The frozen command is retained → retry affordance still present.
+        expect(
+          await screen.findByRole("button", { name: "重试同一加时" }),
+        ).toBeInTheDocument();
+      });
+
+      it("fails closed when coordination becomes unavailable mid-retry", async () => {
+        // Seed an indeterminate authority, then poison the storage AFTER the
+        // dialog opens so the retry's claimForSend hits a CoordinationUnavailable.
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        seedPendingAuthority({ withActiveLease: false });
+
+        renderPage();
+        await screen.findByText("张三");
+        const extendBtn = await screen.findByRole("button", {
+          name: "延长时间",
+        });
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+
+        // Corrupt the shared authority so claimForSend fails closed.
+        localStorage.setItem(
+          "exam.pendingGrantAuthority:org-1:admin-1",
+          "not-valid-json{{{",
+        );
+
+        const retryBtn = await screen.findByRole("button", {
+          name: "重试同一加时",
+        });
+        fireEvent.click(retryBtn);
+
+        // Fail closed: coordination-unavailable error, NO POST.
+        await waitFor(() => {
+          expect(toast.error).toHaveBeenCalledWith(
+            expect.stringContaining("无法安全协调"),
+          );
+        });
+        expect(apiPost).not.toHaveBeenCalled();
+      });
+
+      // ── Stale-response reconciliation (review P1) ─────────────────────────
+      //
+      // A late stale indeterminate response must NOT revive a hidden local
+      // indeterminate state. Scenario:
+      //   Tab is submitting a frozen command; the request fails indeterminate.
+      //   Meanwhile another tab confirmed + CLEARED the authority (the
+      //   authority_cleared broadcast already closed this dialog). The stale
+      //   response's releaseIndeterminate returns a mismatch; reconciliation
+      //   re-reads the shared authority, sees it gone, and resets to a fresh
+      //   draft + resolvedInAnotherTab info toast. A subsequent attempt on a
+      //   DIFFERENT candidate must open without a false block.
+      it("a stale indeterminate response does not revive a hidden local state after the authority was cleared elsewhere", async () => {
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        // Seed a released authority (NO active lease) for att-1. openGrantDialog
+        // restores it as indeterminate; retry will claimForSend (succeeds, fresh
+        // lease) then POST.
+        seedPendingAuthority({ withActiveLease: false });
+
+        // The POST resolves indeterminate (network failure). Crucially, we
+        // simulate the cross-tab clear happening DURING the in-flight request:
+        // remove the shared authority from localStorage before the request
+        // rejects, so the subsequent releaseIndeterminate sees no authority and
+        // returns a mismatch.
+        apiPost.mockImplementationOnce(async () => {
+          localStorage.removeItem("exam.pendingGrantAuthority:org-1:admin-1");
+          throw new Error("Network request failed");
+        });
+
+        renderPage();
+        await screen.findByText("张三");
+        const extendBtn = await screen.findByRole("button", {
+          name: "延长时间",
+        });
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+        // Retry the frozen command (claimForSend → POST).
+        const retryBtn = await screen.findByRole("button", {
+          name: "重试同一加时",
+        });
+        fireEvent.click(retryBtn);
+
+        // The stale indeterminate response reconciles against the (now empty)
+        // shared authority → reset + resolvedInAnotherTab info toast.
+        await waitFor(() => {
+          expect(toast.info).toHaveBeenCalledWith(
+            expect.stringContaining("其他标签页处理"),
+          );
+        });
+        // No hidden local indeterminate state survived: the dialog was reset to
+        // a fresh draft (retry affordance gone).
+        expect(
+          screen.queryByRole("button", { name: "重试同一加时" }),
+        ).not.toBeInTheDocument();
+
+        // Reopen the grant dialog for the SAME candidate. Because the local
+        // stale indeterminate state was discarded and the shared authority is
+        // now empty, openGrantDialog reads the authority first and opens a
+        // FRESH draft — NOT a retry. No blockedByPending warning either.
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+        // Fresh draft → confirm button shows "延长 10 分钟", NOT "重试同一加时".
+        expect(
+          screen.getByRole("button", { name: "延长 10 分钟" }),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: "重试同一加时" }),
+        ).not.toBeInTheDocument();
+        expect(toast.warning).not.toHaveBeenCalledWith(
+          expect.stringContaining("存在未确认的加时命令"),
+        );
+      });
     });
   });
 });

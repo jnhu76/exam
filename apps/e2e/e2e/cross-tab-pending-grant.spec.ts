@@ -342,4 +342,224 @@ test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
 
     await pageB.close();
   });
+
+  /**
+   * Trace 3 (REC-I4-C1 #233): deterministic concurrent retry with a gated POST.
+   *
+   *   Tab A creates the frozen command → server commits but response masked as
+   *   5xx → UI releaseIndeterminate (authority KEPT, no active lease).
+   *   Tab B and Tab C restore the same command and BOTH attempt retry.
+   *   Tab B claims first → POSTs (the response is GATED open, server really
+   *   committed again as idempotent_replay).
+   *   While Tab B's POST is gated open, Tab C's retry's claimForSend sees
+   *   Tab B's active lease → LeaseConflict → Tab C sends ZERO POST.
+   *   Tab B's gate is released → idempotent_replay → authority cleared.
+   *   The deadline increased EXACTLY ONCE (600s), proving a single effect.
+   *
+   * Coordination uses a route gate + an observed-POST barrier, NOT a fixed
+   * waitForTimeout. POST counts come from per-page request listeners.
+   */
+  test("concurrent retry: only the first claim POSTs, the second gets a lease conflict (single effect)", async ({
+    page,
+    context,
+    request,
+  }) => {
+    // Fresh exam + attempt so the deadline assertion is independent of Trace 1.
+    const seeded3 = await seedExam(
+      page.request,
+      `c1-concurrent-${Date.now()}`,
+      { interruptionTimePolicy: "operator_incident" },
+    );
+    const candToken3 = await candidateLoginApi(
+      page.request,
+      seeded3.candidate.username,
+      seeded3.candidate.password,
+    );
+    const attemptId3 = await candidateStartAttempt(
+      page.request,
+      candToken3,
+      seeded3.examId,
+    );
+    const adminToken3 = await adminApiToken(page.request);
+    const deadlineBefore = await readDeadlineMs(
+      request,
+      adminToken3,
+      seeded3.examId,
+      attemptId3,
+    );
+
+    // ── Tab B and Tab C: log in FIRST. loginViaUi clears localStorage, and
+    //    storage is shared in one context, so both must log in BEFORE Tab A
+    //    writes the pending authority. (page === Tab A.)
+    const pageB = await context.newPage();
+    await loginAsAdmin(pageB);
+    const pageC = await context.newPage();
+    await loginAsAdmin(pageC);
+
+    // Per-page request listeners count each tab's time-grants POST. Counting
+    // via request listeners (not URL/dialog state) is the deterministic proof.
+    const tabBPosts: Request[] = [];
+    const tabCPosts: Request[] = [];
+    pageB.on("request", (req) => {
+      if (req.method() === "POST" && req.url().includes("/time-grants")) {
+        tabBPosts.push(req);
+      }
+    });
+    pageC.on("request", (req) => {
+      if (req.method() === "POST" && req.url().includes("/time-grants")) {
+        tabCPosts.push(req);
+      }
+    });
+
+    // ── Tab A: create the frozen command with a masked-5xx response so the
+    //    dialog goes indeterminate and releaseIndeterminate fires (authority
+    //    kept, no active lease → Tab B/C are eligible to retry-claim).
+    const pageA = page;
+    let tabAGrantHappened = false;
+    await pageA.route("**/api/admin/attempts/*/time-grants", async (route) => {
+      if (tabAGrantHappened) {
+        await route.continue();
+        return;
+      }
+      tabAGrantHappened = true;
+      await route.fetch(); // really commit on the server
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "masked-for-indeterminate" }),
+      });
+    });
+
+    await pageA.goto(`/admin/exams/${seeded3.examId}/proctor`);
+    await pageA.waitForURL("**/proctor**", { timeout: 15_000 });
+    await submitTenMinuteGrant(pageA);
+
+    // Confirm Tab A is indeterminate and the authority was released (no active
+    // lease): read the persisted authority and assert inFlightLease is absent.
+    await expect(pageA.getByText("未确认加时是否成功").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect
+      .poll(
+        async () => {
+          return await pageA.evaluate(() => {
+            const keys = Object.keys(localStorage).filter((k) =>
+              k.startsWith("exam.pendingGrantAuthority:"),
+            );
+            if (keys.length !== 1) return null;
+            const v = JSON.parse(localStorage.getItem(keys[0]!) ?? "null");
+            return { revision: v?.revision, lease: v?.inFlightLease ?? null };
+          });
+        },
+        { timeout: 15_000, message: "authority released (no active lease)" },
+      )
+      .toEqual({ revision: expect.any(Number), lease: null });
+
+    // ── Tab B and Tab C: open the SAME attempt's grant dialog. Each restores
+    //    the frozen command as indeterminate (retry button visible).
+    for (const p of [pageB, pageC]) {
+      await p.goto(`/admin/exams/${seeded3.examId}/proctor`);
+      await p.waitForURL("**/proctor**", { timeout: 15_000 });
+      const btn = p.getByRole("button", { name: "延长时间" });
+      await expect(btn.first()).toBeVisible({ timeout: 15_000 });
+      await btn.first().click();
+      await expect(p.getByText("延长考试时间").first()).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(p.getByRole("button", { name: "重试同一加时" })).toBeVisible(
+        { timeout: 15_000 },
+      );
+    }
+
+    // ── Tab B's retry: GATE the response open (server already committed as a
+    //    replay, real idempotent_replay result) so Tab B stays in `submitting`
+    //    (holding the active lease) while Tab C races its claim.
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let tabBGrantGated = false;
+    await pageB.route("**/api/admin/attempts/*/time-grants", async (route) => {
+      if (tabBGrantGated) {
+        // Any later request from Tab B passes through.
+        await route.continue();
+        return;
+      }
+      tabBGrantGated = true;
+      // Really hit the server: it already committed (from Tab A) → the real
+      // result is idempotent_replay. Hold the gate open so the lease stays
+      // active while Tab C races, then fulfill with the REAL server response
+      // (route.fetch captured it) so the page classifies it as a confirmed
+      // idempotent_replay.
+      const realRes = await route.fetch();
+      await gate;
+      await route.fulfill({ response: realRes });
+    });
+
+    // Start Tab B's retry (claimForSend → POST, gated open).
+    await pageB.getByRole("button", { name: "重试同一加时" }).click();
+
+    // Observable barrier: wait until Tab B's POST has been issued (the page is
+    // now in `submitting`, holding the active lease). This is the point at which
+    // Tab C's claim MUST conflict.
+    await expect
+      .poll(async () => tabBPosts.length, { timeout: 15_000 })
+      .toBe(1);
+
+    // ── Tab C's retry: claimForSend must see Tab B's active lease and return
+    //    LeaseConflict → Tab C sends NO POST. Register a route on Tab C that
+    //    FAILS THE TEST on any time-grants POST (the only valid outcome under
+    //    Tab B's active lease is zero POSTs). The conflict toast is the reliable
+    //    barrier: it only appears once claimForSend returned LeaseConflictError
+    //    and the handler returned before POSTing — no fixed sleep needed.
+    await pageC.route("**/api/admin/attempts/*/time-grants", (route) => {
+      throw new Error(
+        "Tab C must not POST a time-grant while Tab B holds the active lease",
+      );
+    });
+    await pageC.getByRole("button", { name: "重试同一加时" }).click();
+    await expect(pageC.getByText("另一个标签页正在处理").first()).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Definitive: the conflict toast fired (claimForSend returned
+    // LeaseConflictError) and the abort route was never hit → Tab C sent ZERO
+    // time-grants POST. The request listener is the count authority.
+    expect(
+      tabCPosts,
+      "Tab C must not POST under Tab B's active lease",
+    ).toHaveLength(0);
+
+    // ── Release Tab B's gate. The real server result resolves idempotent replay
+    //    → the page clears the authority and surfaces the replay toast.
+    releaseGate();
+    await expect(
+      pageB.getByText("该加时已处理，未重复延长").first(),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // The coordinator must have cleared the authority on the confirmed replay.
+    const authAfter = await pageB.evaluate(
+      () =>
+        Object.keys(localStorage).filter((k) =>
+          k.startsWith("exam.pendingGrantAuthority:"),
+        ).length,
+    );
+    expect(authAfter, "authority cleared after gated confirmed replay").toBe(0);
+
+    // ── The deadline increased EXACTLY ONCE: 600s. Server-side idempotency +
+    //    the client send-lease together prevent a duplicate effect.
+    const deadlineAfter = await readDeadlineMs(
+      request,
+      adminToken3,
+      seeded3.examId,
+      attemptId3,
+    );
+    const deltaSec = Math.round((deadlineAfter - deadlineBefore) / 1000);
+    expect(deltaSec).toBe(600);
+
+    await pageB.close();
+    await pageC.close();
+  });
 });

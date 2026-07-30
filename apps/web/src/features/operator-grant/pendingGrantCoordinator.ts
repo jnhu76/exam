@@ -17,8 +17,10 @@ import { createContextSafeUuid } from "@/lib/uuid";
 import {
   type PendingGrantAuthority,
   type PendingGrantCommand,
+  type PendingGrantSendClaim,
   type ReserveResult,
-  type TakeOverResult,
+  type ClaimForSendResult,
+  type ReleaseResult,
   type ClearResult,
   type GetCurrentResult,
   type AuthorityChangeEvent,
@@ -277,8 +279,13 @@ export class PendingGrantCoordinator {
    * if the shared storage is unavailable (CoordinationUnavailableError).
    *
    * On success, the command is persisted to localStorage with a fresh
-   * in-flight lease held by this tab. The caller MUST then send the HTTP
-   * request — the command is already visible to other tabs.
+   * in-flight lease held by this tab, and the returned `claim` is the FIRST
+   * send claim — the caller does NOT need to call `claimForSend` before the
+   * first HTTP POST. Reserve is the atomic first-send acquisition; every
+   * subsequent RETRY must call `claimForSend` instead.
+   *
+   * The caller MUST then send the HTTP request — the command is already
+   * visible to other tabs.
    */
   async reserve(
     orgId: string,
@@ -297,6 +304,7 @@ export class PendingGrantCoordinator {
         }
 
         const now = this.deps.now();
+        const leaseId = createContextSafeUuid();
         const authority: PendingGrantAuthority = {
           schemaVersion: 1,
           organizationId: orgId,
@@ -306,7 +314,7 @@ export class PendingGrantCoordinator {
           createdAt: now,
           inFlightLease: {
             tabId: this.deps.tabId,
-            leaseId: createContextSafeUuid(),
+            leaseId,
             expiresAt: now + this.deps.leaseDurationMs,
           },
         };
@@ -317,7 +325,14 @@ export class PendingGrantCoordinator {
           organizationId: orgId,
           actorId,
         });
-        return { ok: true as const, authority };
+        // First-send claim: the reserve step has atomically acquired the
+        // in-flight lease, so the first POST does not re-claim.
+        const claim: PendingGrantSendClaim = {
+          operationId: command.operationId,
+          revision: authority.revision,
+          leaseId,
+        };
+        return { ok: true as const, authority, claim };
       });
     } catch (err) {
       return { ok: false as const, error: toCoordinationUnavailable(err) };
@@ -325,18 +340,33 @@ export class PendingGrantCoordinator {
   }
 
   /**
-   * Takes over an expired lease, allowing a different tab to retry the same
-   * frozen command. The command identity (operationId, payload) is preserved
-   * — never mint a new operationId on takeover.
+   * Atomically acquires a SEND lease for a retry, under the same Web Lock as
+   * reserve / clearConfirmed / releaseIndeterminate. This is the ONLY valid
+   * way to (re)send a frozen command on a retry path — `getCurrent` no longer
+   * grants send authority by itself.
    *
-   * Fails if the lease is still valid (LeaseConflictError) or storage is
-   * unavailable.
+   * Inside the lock:
+   *   1. Read the authority; fail closed if absent.
+   *   2. Verify the caller's command is structurally equal to the stored
+   *      frozen command (`commandsEqual`) — fail closed on any drift, since a
+   *      mutated command must never overwrite the canonical identity.
+   *   3. If a non-expired lease exists — even held by THIS tab — return
+   *      LeaseConflictError. A single send claim per authority revision is the
+   *      invariant; double-click / concurrent-retry coordination lives here.
+   *   4. Otherwise (no lease or expired lease): revision+1, mint a fresh
+   *      leaseId, set expiresAt = now + leaseDuration, and ALWAYS reuse the
+   *      canonical stored command (the caller cannot mutate it).
+   *   5. Write back and return the new claim.
+   *
+   * Server-side idempotency remains the final effect-safety authority; this
+   * method coordinates the client-side SEND so two tabs cannot both POST the
+   * same command at once.
    */
-  async takeOver(
+  async claimForSend(
     orgId: string,
     actorId: string,
-    command: PendingGrantCommand,
-  ): Promise<TakeOverResult> {
+    expectedCommand: PendingGrantCommand,
+  ): Promise<ClaimForSendResult> {
     try {
       return await this.withLock(orgId, actorId, async () => {
         const existing = this.readAuthority(orgId, actorId);
@@ -344,12 +374,28 @@ export class PendingGrantCoordinator {
           return {
             ok: false as const,
             error: new CoordinationUnavailableError(
-              "No pending time-grant command to take over",
+              "No pending time-grant command to claim",
             ),
           };
         }
 
-        // Check lease validity
+        // Enforce frozen-command equality: a retry must replay the EXACT
+        // command persisted by the original tab. A caller cannot reuse an
+        // expired lease to overwrite operationId / payload — that would let a
+        // crashed tab's identity be silently mutated, defeating C1. If the
+        // caller's command differs on any field, fail closed.
+        if (!commandsEqual(existing.command, expectedCommand)) {
+          return {
+            ok: false as const,
+            error: new CoordinationUnavailableError(
+              "claimForSend command does not match the stored frozen command",
+            ),
+          };
+        }
+
+        // A non-expired lease blocks the claim — even when held by THIS tab.
+        // That is the whole point: at most one in-flight send claim per
+        // authority, regardless of tabId.
         if (
           existing.inFlightLease &&
           !isLeaseExpired(existing.inFlightLease, this.deps.now())
@@ -360,30 +406,18 @@ export class PendingGrantCoordinator {
           };
         }
 
-        // Enforce frozen-command equality: a takeover must replay the EXACT
-        // command persisted by the original tab. A caller cannot reuse an
-        // expired lease to overwrite operationId / payload — that would let a
-        // crashed tab's identity be silently mutated, defeating C1. If the
-        // caller's command differs on any field, fail closed.
-        if (!commandsEqual(existing.command, command)) {
-          return {
-            ok: false as const,
-            error: new CoordinationUnavailableError(
-              "takeOver command does not match the stored frozen command",
-            ),
-          };
-        }
-
-        // Preserve the exact command — always reuse the stored frozen command
-        // (ignore the caller's copy) and bump the revision for the new lease.
+        // Take over the (absent or expired) lease: revision+1, fresh leaseId,
+        // new expiry. The command is ALWAYS the stored canonical command — the
+        // caller's copy is only used for the equality check above.
         const now = this.deps.now();
+        const leaseId = createContextSafeUuid();
         const updated: PendingGrantAuthority = {
           ...existing,
           command: existing.command,
           revision: existing.revision + 1,
           inFlightLease: {
             tabId: this.deps.tabId,
-            leaseId: createContextSafeUuid(),
+            leaseId,
             expiresAt: now + this.deps.leaseDurationMs,
           },
         };
@@ -391,6 +425,77 @@ export class PendingGrantCoordinator {
         this.writeAuthority(orgId, actorId, updated);
         this.broadcast({
           type: "lease_acquired",
+          organizationId: orgId,
+          actorId,
+        });
+        const claim: PendingGrantSendClaim = {
+          operationId: updated.command.operationId,
+          revision: updated.revision,
+          leaseId,
+        };
+        return { ok: true as const, authority: updated, claim };
+      });
+    } catch (err) {
+      return { ok: false as const, error: toCoordinationUnavailable(err) };
+    }
+  }
+
+  /**
+   * Compare-and-release for an INDETERMINATE retry outcome: the request failed
+   * without a confirmed server result (network drop / masked 5xx), so the
+   * frozen command is KEPT but the active lease is surrendered. Other tabs may
+   * then `claimForSend` to retry the same command.
+   *
+   * Inside the lock:
+   *   1. Read the authority.
+   *   2. Compare operationId + revision + leaseId against the presented claim.
+   *      A mismatch (the lease was already released or re-claimed by another
+   *      tab) returns CompareAndClearMismatchError — a late response cannot
+   *      release a claim it no longer owns.
+   *   3. Remove inFlightLease, revision+1, KEEP the full frozen command.
+   *   4. Write back, broadcast lease_released, return the updated authority.
+   *
+   * revision MUST increment so a stale claim from a previous revision cannot
+   * later clear or release the authority.
+   */
+  async releaseIndeterminate(
+    orgId: string,
+    actorId: string,
+    claim: PendingGrantSendClaim,
+  ): Promise<ReleaseResult> {
+    try {
+      return await this.withLock(orgId, actorId, async () => {
+        const existing = this.readAuthority(orgId, actorId);
+        if (!existing) {
+          return {
+            ok: false as const,
+            error: new CompareAndClearMismatchError(),
+          };
+        }
+
+        // Full-claim comparison: operationId + revision + leaseId.
+        if (
+          existing.command.operationId !== claim.operationId ||
+          existing.revision !== claim.revision ||
+          existing.inFlightLease?.leaseId !== claim.leaseId
+        ) {
+          return {
+            ok: false as const,
+            error: new CompareAndClearMismatchError(),
+          };
+        }
+
+        // Release the lease, bump revision, keep the frozen command verbatim.
+        const updated: PendingGrantAuthority = {
+          ...existing,
+          command: existing.command,
+          revision: existing.revision + 1,
+          inFlightLease: undefined,
+        };
+
+        this.writeAuthority(orgId, actorId, updated);
+        this.broadcast({
+          type: "lease_released",
           organizationId: orgId,
           actorId,
         });
@@ -402,15 +507,16 @@ export class PendingGrantCoordinator {
   }
 
   /**
-   * Confirms and clears the pending authority using compare-and-clear.
-   * Only succeeds when the stored authority's operationId AND revision
-   * match the expected values. This prevents stale tabs from deleting
-   * a newer authority that replaced theirs.
+   * Confirms and clears the pending authority using compare-and-clear against
+   * the FULL send claim (operationId + revision + leaseId). Only the current
+   * send claim's confirmed response may clear the authority — a stale request
+   * whose response arrives AFTER the lease was released or re-claimed (a new
+   * revision / new leaseId) gets a mismatch and cannot delete the newer claim.
    */
   async clearConfirmed(
     orgId: string,
     actorId: string,
-    expected: { operationId: string; revision: number },
+    claim: PendingGrantSendClaim,
   ): Promise<ClearResult> {
     try {
       return await this.withLock(orgId, actorId, async () => {
@@ -420,10 +526,11 @@ export class PendingGrantCoordinator {
           return { ok: true as const };
         }
 
-        // Compare-and-clear
+        // Full-claim compare-and-clear: operationId + revision + leaseId.
         if (
-          existing.command.operationId !== expected.operationId ||
-          existing.revision !== expected.revision
+          existing.command.operationId !== claim.operationId ||
+          existing.revision !== claim.revision ||
+          existing.inFlightLease?.leaseId !== claim.leaseId
         ) {
           return {
             ok: false as const,
