@@ -117,6 +117,38 @@
 - **测试隔离口径**：只有 best-effort action 需要 drain。atomic action 与业务事务
   一起 settle；domain-history exclusion 不得靠 drain 伪装成审计保证。
 
+### 2026-07-30 — #231 auth route E2E rate-limit amplification test（测试所有权与成本不匹配）
+
+- **现象**：`apps/api/src/routes/auth.test.ts` 的 `APP_MODE=e2e does not
+  rate-limit repeated login requests` 用例在 CI 下偶发 5000ms 超时。该用例
+  连续 12 次走完整登录流程（argon2 密码哈希 + audit 写入），证明一个
+  **plugin-level** 的 E2E bypass。
+- **真正的问题（测试所有权 / 成本不匹配）**：该 proof 的被测对象是
+  `rateLimitPlugin`（`APP_MODE=e2e` 时整插件不注册），但证明手段是 auth
+  route 的 12 次端到端登录放大。登录路由拥有 route-level `rateLimit.max = 10`，
+  因此第 11 次请求才会越过登录路由自身的限制——既不能机械地把 12 次减到 2 次或
+  5 次（那样测的是 route limiter，不是 E2E bypass），又用 12 × 完整认证流程
+  证明一个不依赖数据库的 plugin 行为，测试所有权和成本严重不匹配。issue #231
+  原始修复方案（"12 → 5"）的根因描述（"argon2 400ms × 12 ≈ 4800ms"）也不准确：
+  放大来自 12 次完整认证（哈希 + audit），不是单纯哈希。
+- **修复（测试所有权迁移，非 timeout/skip/retry）**：
+  1. **删除** auth route 的 `APP_MODE=e2e does not rate-limit repeated login
+     requests` 用例。该 proof 不属于 auth route 测试。
+  2. **保留** auth route 的 `non-e2e mode enforces the route-level login
+     limiter` 用例不动——它继续负责证明真实登录路由的 route-level `max=10`
+     行为（10 次成功 + 第 11 次 429，不减少 10+1 边界）。
+  3. **扩展** `apps/api/src/plugins/rateLimit.test.ts`：每个测试创建并关闭自己
+     的 Fastify app（`buildRateLimitProbeApp()` + `finally { app.close() }` +
+     `afterEach` unstub env + reset runtime config），避免 runtime config 缓存
+     与请求计数跨测试泄漏。新增 E2E bypass proof：route `max=1` 时第 2 次请求仍
+     返回 200（route `max=1` 下，第 2 次请求就是 limiter 是否生效的完整边界证明）。
+- **没有掩盖问题**：未使用单测试 timeout、未 skip、未 retry。生产 rate-limit 与
+  auth 行为未改动。plugin-level E2E bypass proof 迁移到一个无数据库、无 argon2、
+  无 audit 的纯 plugin 测试，证明成本与被测对象匹配。
+- **未误套其他条目**：本修复不涉及旧文档中 legacy-role 测试的"6 轮 login + audit
+  polling"放大（那是 BUG-FLAKE-001 auth amplification 子类的另一用例），也未声称
+  根因是固定的"argon2 400ms"。
+
 ---
 
 ## 已升级条目
