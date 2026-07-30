@@ -9,8 +9,8 @@ import {
   LeaseConflictError,
   CompareAndClearMismatchError,
   type PendingGrantCommand,
+  type PendingGrantSendClaim,
   type AuthorityChangeEvent,
-  commandDigest,
 } from "./pendingGrantAuthority";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -218,9 +218,9 @@ describe("PendingGrantCoordinator", () => {
     vi.useRealTimers();
   });
 
-  // ── 1. No record → successful reserve ────────────────────────────────────
+  // ── 1. No record → successful reserve returns a first-send claim ────────
 
-  it("reserves a command when no authority exists", async () => {
+  it("reserves a command and returns the first-send claim", async () => {
     const env = createTestEnv();
     const { coord } = env.createCoordinator(TAB_A);
 
@@ -238,6 +238,11 @@ describe("PendingGrantCoordinator", () => {
     expect(result.authority.inFlightLease).toBeDefined();
     expect(result.authority.inFlightLease!.tabId).toBe(TAB_A);
     expect(result.authority.inFlightLease!.expiresAt).toBe(Date.now() + 30_000);
+    // First-send claim mirrors the freshly created authority.
+    const claim = result.claim;
+    expect(claim.operationId).toBe(COMMAND.operationId);
+    expect(claim.revision).toBe(1);
+    expect(claim.leaseId).toBe(result.authority.inFlightLease!.leaseId);
   });
 
   // ── 2. Two calls reserve simultaneously → only one succeeds ──────────────
@@ -303,9 +308,36 @@ describe("PendingGrantCoordinator", () => {
     expect(resultB.error).toBeInstanceOf(AlreadyPendingError);
   });
 
-  // ── 5. Take over expired lease ──────────────────────────────────────────
+  // ── 5. claimForSend succeeds when no lease exists (first claim after release) ─
 
-  it("takes over an expired lease", async () => {
+  it("claimForSend succeeds when there is no lease", async () => {
+    const env = createTestEnv();
+    const { coord: coordA } = env.createCoordinator(TAB_A);
+    const { coord: coordB } = env.createCoordinator(TAB_B);
+
+    // A reserves (lease held by A), then releases it so the authority exists
+    // without an active lease.
+    const reserve = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(true);
+    if (!reserve.ok) return;
+    const released = await coordA.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      reserve.claim,
+    );
+    expect(released.ok).toBe(true);
+
+    // B can now claim with no active lease.
+    const claim = await coordB.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+    expect(claim.claim.operationId).toBe(COMMAND.operationId);
+    expect(claim.authority.inFlightLease!.tabId).toBe(TAB_B);
+  });
+
+  // ── 6. claimForSend succeeds on an EXPIRED lease ─────────────────────────
+
+  it("claimForSend takes over an expired lease", async () => {
     const env = createTestEnv();
     const { coord: coordA } = env.createCoordinator(TAB_A);
     const { coord: coordB } = env.createCoordinator(TAB_B);
@@ -317,24 +349,24 @@ describe("PendingGrantCoordinator", () => {
     // Advance time past the lease expiry
     vi.advanceTimersByTime(31_000);
 
-    // B can take over
-    const takeOver = await coordB.takeOver(ORG_A, ACTOR_1, COMMAND);
-    expect(takeOver.ok).toBe(true);
-    if (!takeOver.ok) return;
-    expect(takeOver.authority.command.operationId).toBe("op-1");
-    expect(takeOver.authority.command.attemptId).toBe("att-1");
+    // B can claim
+    const claim = await coordB.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+    expect(claim.authority.command.operationId).toBe("op-1");
+    expect(claim.authority.command.attemptId).toBe("att-1");
     // The command must be identical — no new operationId
-    expect(takeOver.authority.command.operationId).toBe(COMMAND.operationId);
+    expect(claim.authority.command.operationId).toBe(COMMAND.operationId);
     // Lease is now held by B
-    expect(takeOver.authority.inFlightLease).toBeDefined();
-    expect(takeOver.authority.inFlightLease!.tabId).toBe(TAB_B);
+    expect(claim.authority.inFlightLease).toBeDefined();
+    expect(claim.authority.inFlightLease!.tabId).toBe(TAB_B);
     // Revision incremented
-    expect(takeOver.authority.revision).toBe(2);
+    expect(claim.authority.revision).toBe(2);
   });
 
-  // ── 6. Non-expired lease cannot be taken over ───────────────────────────
+  // ── 7. claimForSend refuses a NON-EXPIRED lease (different tab) ──────────
 
-  it("refuses takeover of a non-expired lease", async () => {
+  it("refuses claimForSend while another tab's lease is valid", async () => {
     const env = createTestEnv();
     const { coord: coordA } = env.createCoordinator(TAB_A);
     const { coord: coordB } = env.createCoordinator(TAB_B);
@@ -343,16 +375,164 @@ describe("PendingGrantCoordinator", () => {
     const reserveA = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
     expect(reserveA.ok).toBe(true);
 
-    // B tries to take over while lease is still valid
-    const takeOver = await coordB.takeOver(ORG_A, ACTOR_1, COMMAND);
-    expect(takeOver.ok).toBe(false);
-    if (takeOver.ok) return;
-    expect(takeOver.error).toBeInstanceOf(LeaseConflictError);
+    // B tries to claim while lease is still valid
+    const claim = await coordB.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claim.ok).toBe(false);
+    if (claim.ok) return;
+    expect(claim.error).toBeInstanceOf(LeaseConflictError);
   });
 
-  // ── 7. Compare-and-clear on confirmed outcome ───────────────────────────
+  // ── 8. claimForSend refuses a NON-EXPIRED lease held by the SAME tab ─────
 
-  it("clears authority with matching compare-and-clear", async () => {
+  it("refuses claimForSend while the SAME tab's lease is still valid", async () => {
+    const env = createTestEnv();
+    const { coord } = env.createCoordinator(TAB_A);
+
+    // A reserves (lease valid for 30s). A retrying without release must not
+    // mint a second concurrent claim for the same tab — a single in-flight
+    // send claim per authority revision is the invariant.
+    const reserve = await coord.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(true);
+
+    const claim = await coord.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claim.ok).toBe(false);
+    if (claim.ok) return;
+    expect(claim.error).toBeInstanceOf(LeaseConflictError);
+  });
+
+  // ── 9. Two coordinators claim concurrently → only one succeeds ───────────
+
+  it("two concurrent claimForSend: only one succeeds (lock serializes)", async () => {
+    const env = createTestEnv();
+    const { coord: coordA } = env.createCoordinator(TAB_A);
+    const { coord: coordB } = env.createCoordinator(TAB_B);
+
+    // A reserves then releases, leaving an authority with no active lease.
+    const reserve = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(true);
+    if (!reserve.ok) return;
+    const released = await coordA.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      reserve.claim,
+    );
+    expect(released.ok).toBe(true);
+
+    // Both A and B claim concurrently. The shared lock serializes them: the
+    // first acquires the lease, the second must get LeaseConflictError.
+    const [claimA, claimB] = await Promise.all([
+      coordA.claimForSend(ORG_A, ACTOR_1, COMMAND),
+      coordB.claimForSend(ORG_A, ACTOR_1, COMMAND),
+    ]);
+    const oks = [claimA.ok, claimB.ok].filter(Boolean).length;
+    expect(oks).toBe(1);
+    // Exactly one returned a claim and the other a LeaseConflictError.
+    if (claimA.ok && !claimB.ok) {
+      expect(claimB.error).toBeInstanceOf(LeaseConflictError);
+    } else if (claimB.ok && !claimA.ok) {
+      expect(claimA.error).toBeInstanceOf(LeaseConflictError);
+    } else {
+      throw new Error("expected exactly one successful concurrent claim");
+    }
+  });
+
+  // ── 10. claimForSend rejects a mutated frozen command (fail closed) ──────
+
+  it("claimForSend rejects a mutated frozen command and leaves the authority intact", async () => {
+    const env = createTestEnv();
+    const { coord: coordA } = env.createCoordinator(TAB_A);
+    const { coord: coordB } = env.createCoordinator(TAB_B);
+
+    // A reserves the canonical command (op-1 / att-1 / 600s).
+    const reserveA = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserveA.ok).toBe(true);
+
+    // Let the lease expire so B is eligible to claim.
+    vi.advanceTimersByTime(31_000);
+
+    // B attempts a claim with the SAME operationId but a MUTATED payload
+    // (addedSeconds 600 → 1200). This must fail closed: a retry must replay
+    // the exact frozen command, never overwrite it.
+    const claim = await coordB.claimForSend(
+      ORG_A,
+      ACTOR_1,
+      COMMAND_SAME_OP_DIFF_PAYLOAD,
+    );
+    expect(claim.ok).toBe(false);
+    if (claim.ok) return;
+    expect(claim.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    // The stored authority must be unchanged: same command, same revision (1),
+    // no new lease for B. A mutation must not silently persist.
+    const current = await coordA.getCurrent(ORG_A, ACTOR_1);
+    expect(current.ok).toBe(true);
+    if (!current.ok) return;
+    expect(current.authority).not.toBeNull();
+    expect(current.authority!.command.addedSeconds).toBe(600);
+    expect(current.authority!.revision).toBe(1);
+  });
+
+  // ── 11. releaseIndeterminate: keeps command, removes lease, revision+1 ───
+
+  it("releaseIndeterminate keeps the command, removes the lease, and bumps revision", async () => {
+    const env = createTestEnv();
+    const { coord } = env.createCoordinator(TAB_A);
+
+    const reserve = await coord.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(true);
+    if (!reserve.ok) return;
+    const beforeRev = reserve.authority.revision;
+    const beforeCmd = reserve.authority.command;
+
+    const released = await coord.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      reserve.claim,
+    );
+    expect(released.ok).toBe(true);
+    if (!released.ok) return;
+    // Command preserved verbatim.
+    expect(released.authority.command).toEqual(beforeCmd);
+    // Lease removed.
+    expect(released.authority.inFlightLease).toBeUndefined();
+    // Revision bumped so the released claim cannot later clear or re-release.
+    expect(released.authority.revision).toBe(beforeRev + 1);
+
+    // A fresh claimForSend now succeeds (no active lease).
+    const claim = await coord.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claim.ok).toBe(true);
+  });
+
+  // ── 12. releaseIndeterminate rejects a STALE claim (mismatch) ────────────
+
+  it("releaseIndeterminate rejects a stale claim", async () => {
+    const env = createTestEnv();
+    const { coord: coordA } = env.createCoordinator(TAB_A);
+
+    const reserve = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(true);
+    if (!reserve.ok) return;
+    const staleClaim: PendingGrantSendClaim = { ...reserve.claim };
+
+    // A releases legitimately; revision bumps and leaseId is gone.
+    const released = await coordA.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      reserve.claim,
+    );
+    expect(released.ok).toBe(true);
+
+    // A stale retry of the original release must mismatch — it cannot operate
+    // on the authority after revision bumped.
+    const stale = await coordA.releaseIndeterminate(ORG_A, ACTOR_1, staleClaim);
+    expect(stale.ok).toBe(false);
+    if (stale.ok) return;
+    expect(stale.error).toBeInstanceOf(CompareAndClearMismatchError);
+  });
+
+  // ── 13. clearConfirmed requires the FULL claim (operationId+revision+leaseId) ─
+
+  it("clears authority with matching full claim", async () => {
     const env = createTestEnv();
     const { coord } = env.createCoordinator(TAB_A);
 
@@ -360,11 +540,8 @@ describe("PendingGrantCoordinator", () => {
     expect(reserve.ok).toBe(true);
     if (!reserve.ok) return;
 
-    // Clear with matching operationId + revision
-    const clear = await coord.clearConfirmed(ORG_A, ACTOR_1, {
-      operationId: "op-1",
-      revision: 1,
-    });
+    // Clear with the full matching claim.
+    const clear = await coord.clearConfirmed(ORG_A, ACTOR_1, reserve.claim);
     expect(clear.ok).toBe(true);
 
     // Authority should now be gone
@@ -374,9 +551,9 @@ describe("PendingGrantCoordinator", () => {
     expect(current.authority).toBeNull();
   });
 
-  // ── 8. Old revision cannot clear new record ─────────────────────────────
+  // ── 14. clearConfirmed refuses a stale claim ─────────────────────────────
 
-  it("refuses clear with stale revision (compare-and-clear mismatch)", async () => {
+  it("refuses clear with a stale claim (compare-and-clear mismatch)", async () => {
     const env = createTestEnv();
     const { coord: coordA } = env.createCoordinator(TAB_A);
     const { coord: coordB } = env.createCoordinator(TAB_B);
@@ -384,32 +561,75 @@ describe("PendingGrantCoordinator", () => {
     // A reserves a command (rev 1)
     const reserveA = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
     expect(reserveA.ok).toBe(true);
+    if (!reserveA.ok) return;
+    const staleClaim = reserveA.claim;
 
     // Advance time so lease expires
     vi.advanceTimersByTime(31_000);
 
-    // B takes over (rev 2)
-    const takeOver = await coordB.takeOver(ORG_A, ACTOR_1, COMMAND);
-    expect(takeOver.ok).toBe(true);
+    // B claims (rev 2, new leaseId)
+    const claimB = await coordB.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claimB.ok).toBe(true);
+    if (!claimB.ok) return;
 
-    // Now A (stale) tries to clear with revision 1 — should fail
-    const staleClear = await coordA.clearConfirmed(ORG_A, ACTOR_1, {
-      operationId: "op-1",
-      revision: 1,
-    });
+    // Now A (stale rev-1 claim) tries to clear — must fail.
+    const staleClear = await coordA.clearConfirmed(ORG_A, ACTOR_1, staleClaim);
     expect(staleClear.ok).toBe(false);
     if (staleClear.ok) return;
     expect(staleClear.error).toBeInstanceOf(CompareAndClearMismatchError);
 
-    // B can still clear with rev 2
-    const freshClear = await coordB.clearConfirmed(ORG_A, ACTOR_1, {
-      operationId: "op-1",
-      revision: 2,
-    });
+    // B can still clear with its fresh full claim.
+    const freshClear = await coordB.clearConfirmed(
+      ORG_A,
+      ACTOR_1,
+      claimB.claim,
+    );
     expect(freshClear.ok).toBe(true);
   });
 
-  // ── 9. Corrupted record fails closed ────────────────────────────────────
+  // ── 15. New claim makes an OLD response's clear mismatch (stale late clear) ─
+
+  it("a late stale response cannot clear an authority that was re-claimed", async () => {
+    const env = createTestEnv();
+    const { coord: coordA } = env.createCoordinator(TAB_A);
+    const { coord: coordB } = env.createCoordinator(TAB_B);
+
+    // A reserves (rev 1) then releases legitimately (rev 2, no lease).
+    const reserveA = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserveA.ok).toBe(true);
+    if (!reserveA.ok) return;
+    const released = await coordA.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      reserveA.claim,
+    );
+    expect(released.ok).toBe(true);
+
+    // B claims (rev 3, new leaseId). The authority now belongs to B's claim.
+    const claimB = await coordB.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claimB.ok).toBe(true);
+    if (!claimB.ok) return;
+
+    // A's original (rev-1) confirmed response arrives LATE and tries to clear.
+    // It must mismatch — otherwise it would delete B's in-flight claim.
+    const lateClear = await coordA.clearConfirmed(
+      ORG_A,
+      ACTOR_1,
+      reserveA.claim,
+    );
+    expect(lateClear.ok).toBe(false);
+    if (lateClear.ok) return;
+    expect(lateClear.error).toBeInstanceOf(CompareAndClearMismatchError);
+
+    // B's authority is intact.
+    const current = await coordB.getCurrent(ORG_A, ACTOR_1);
+    expect(current.ok).toBe(true);
+    if (!current.ok) return;
+    expect(current.authority).not.toBeNull();
+    expect(current.authority!.revision).toBe(3);
+  });
+
+  // ── 16. Corrupted record fails closed ────────────────────────────────────
 
   it("corrupted storage record fails closed", async () => {
     const env = createTestEnv();
@@ -432,7 +652,7 @@ describe("PendingGrantCoordinator", () => {
     expect(current.error).toBeInstanceOf(CoordinationUnavailableError);
   });
 
-  // ── 10. Storage write failure fails closed ──────────────────────────────
+  // ── 17. Storage write failure fails closed ──────────────────────────────
 
   it("storage write failure fails closed", async () => {
     const env = createTestEnv();
@@ -453,7 +673,7 @@ describe("PendingGrantCoordinator", () => {
     setItemSpy.mockRestore();
   });
 
-  // ── 11. Actor / organization isolation ──────────────────────────────────
+  // ── 18. Actor / organization isolation ──────────────────────────────────
 
   it("isolates authorities by actorId", async () => {
     const env = createTestEnv();
@@ -481,7 +701,7 @@ describe("PendingGrantCoordinator", () => {
     expect(resultB.ok).toBe(true);
   });
 
-  // ── 12. BroadcastChannel notifies other tabs ────────────────────────────
+  // ── 19. BroadcastChannel notifies other tabs ────────────────────────────
 
   it("broadcasts authority_created on reserve", async () => {
     const env = createTestEnv();
@@ -514,11 +734,10 @@ describe("PendingGrantCoordinator", () => {
       received.push(event.data as AuthorityChangeEvent);
     };
 
-    await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
-    await coordA.clearConfirmed(ORG_A, ACTOR_1, {
-      operationId: "op-1",
-      revision: 1,
-    });
+    const reserve = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(true);
+    if (!reserve.ok) return;
+    await coordA.clearConfirmed(ORG_A, ACTOR_1, reserve.claim);
 
     // The clear should produce a broadcast
     const clearEvents = received.filter((r) => r.type === "authority_cleared");
@@ -530,12 +749,12 @@ describe("PendingGrantCoordinator", () => {
     });
   });
 
-  // ── 13. TakeOver broadcasts lease_acquired ──────────────────────────────
+  // ── 20. claimForSend broadcasts lease_acquired; release broadcasts lease_released ─
 
-  it("broadcasts lease_acquired on takeover", async () => {
+  it("broadcasts lease_acquired on claimForSend and lease_released on releaseIndeterminate", async () => {
     const env = createTestEnv();
     const { coord: coordA, channel: channelA } = env.createCoordinator(TAB_A);
-    const { coord: coordB, channel: channelB } = env.createCoordinator(TAB_B);
+    const { coord: coordB } = env.createCoordinator(TAB_B);
 
     const received: AuthorityChangeEvent[] = [];
     channelA.onmessage = (event: MessageEvent) => {
@@ -544,9 +763,11 @@ describe("PendingGrantCoordinator", () => {
 
     await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
     vi.advanceTimersByTime(31_000);
-    await coordB.takeOver(ORG_A, ACTOR_1, COMMAND);
+    const claimB = await coordB.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claimB.ok).toBe(true);
+    if (!claimB.ok) return;
 
-    // A should receive the lease_acquired broadcast
+    // A should receive the lease_acquired broadcast (from B's claim).
     const leaseEvents = received.filter((r) => r.type === "lease_acquired");
     expect(leaseEvents.length).toBe(1);
     expect(leaseEvents[0]).toEqual({
@@ -554,9 +775,25 @@ describe("PendingGrantCoordinator", () => {
       organizationId: ORG_A,
       actorId: ACTOR_1,
     });
+
+    // B releases the lease.
+    const released = await coordB.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      claimB.claim,
+    );
+    expect(released.ok).toBe(true);
+
+    const releasedEvents = received.filter((r) => r.type === "lease_released");
+    expect(releasedEvents.length).toBe(1);
+    expect(releasedEvents[0]).toEqual({
+      type: "lease_released",
+      organizationId: ORG_A,
+      actorId: ACTOR_1,
+    });
   });
 
-  // ── 14. Subscribe callback receives events ──────────────────────────────
+  // ── 21. Subscribe callback receives events ──────────────────────────────
 
   it("calls subscribe callback on authority changes", async () => {
     const env = createTestEnv();
@@ -579,14 +816,12 @@ describe("PendingGrantCoordinator", () => {
     events.length = 0;
     unsubscribe();
 
-    await coord.clearConfirmed(ORG_A, ACTOR_1, {
-      operationId: "op-1",
-      revision: 1,
-    });
+    const reserve = await coord.reserve(ORG_B, ACTOR_2, COMMAND);
+    expect(reserve.ok).toBe(true);
     expect(events.length).toBe(0);
   });
 
-  // ── 15. Lease expiry is detected by getCurrent ──────────────────────────
+  // ── 22. Lease expiry is detected by getCurrent ──────────────────────────
 
   it("reports authority with expired lease via getCurrent", async () => {
     const env = createTestEnv();
@@ -606,48 +841,12 @@ describe("PendingGrantCoordinator", () => {
     );
   });
 
-  // ── 16. takeOver rejects a mutated frozen command (B4) ───────────────────
-
-  it("takeOver rejects a mutated frozen command and leaves the authority intact", async () => {
-    const env = createTestEnv();
-    const { coord: coordA } = env.createCoordinator(TAB_A);
-    const { coord: coordB } = env.createCoordinator(TAB_B);
-
-    // A reserves the canonical command (op-1 / att-1 / 600s).
-    const reserveA = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
-    expect(reserveA.ok).toBe(true);
-
-    // Let the lease expire so B is eligible to take over.
-    vi.advanceTimersByTime(31_000);
-
-    // B attempts a takeover with the SAME operationId but a MUTATED payload
-    // (addedSeconds 600 → 1200). This must fail closed: a takeover must replay
-    // the exact frozen command, never overwrite it.
-    const takeOver = await coordB.takeOver(
-      ORG_A,
-      ACTOR_1,
-      COMMAND_SAME_OP_DIFF_PAYLOAD,
-    );
-    expect(takeOver.ok).toBe(false);
-    if (takeOver.ok) return;
-    expect(takeOver.error).toBeInstanceOf(CoordinationUnavailableError);
-
-    // The stored authority must be unchanged: same command, same revision (1),
-    // no new lease for B. A mutation must not silently persist.
-    const current = await coordA.getCurrent(ORG_A, ACTOR_1);
-    expect(current.ok).toBe(true);
-    if (!current.ok) return;
-    expect(current.authority).not.toBeNull();
-    expect(current.authority!.command.addedSeconds).toBe(600);
-    expect(current.authority!.revision).toBe(1);
-  });
-
-  // ── 17. A failing lock never rejects the public API (B3) ─────────────────
+  // ── 23. A failing lock never rejects the public API ─────────────────────
   //
   // The fail-closed default dependency rejects lockRequest when Web Locks is
-  // unavailable. This test proves the four public methods convert that
-  // rejection into a { ok: false } Result rather than rejecting the returned
-  // Promise — the page never needs a try/catch around coordinator calls.
+  // unavailable. This test proves every public method converts that rejection
+  // into a { ok: false } Result rather than rejecting the returned Promise —
+  // the page never needs a try/catch around coordinator calls.
 
   it("public methods return a Result (never reject) when lock acquisition fails", async () => {
     // Build a coordinator whose lockRequest always rejects, simulating a
@@ -670,23 +869,36 @@ describe("PendingGrantCoordinator", () => {
       now: () => Date.now(),
     });
 
+    const fakeClaim: PendingGrantSendClaim = {
+      operationId: "op-1",
+      revision: 1,
+      leaseId: "lease-1",
+    };
+
     // reserve — returns a Result, does not reject.
     const reserve = await coord.reserve(ORG_A, ACTOR_1, COMMAND);
     expect(reserve.ok).toBe(false);
     if (reserve.ok) return;
     expect(reserve.error).toBeInstanceOf(CoordinationUnavailableError);
 
-    // takeOver — returns a Result, does not reject.
-    const takeOver = await coord.takeOver(ORG_A, ACTOR_1, COMMAND);
-    expect(takeOver.ok).toBe(false);
-    if (takeOver.ok) return;
-    expect(takeOver.error).toBeInstanceOf(CoordinationUnavailableError);
+    // claimForSend — returns a Result, does not reject.
+    const claim = await coord.claimForSend(ORG_A, ACTOR_1, COMMAND);
+    expect(claim.ok).toBe(false);
+    if (claim.ok) return;
+    expect(claim.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    // releaseIndeterminate — returns a Result, does not reject.
+    const released = await coord.releaseIndeterminate(
+      ORG_A,
+      ACTOR_1,
+      fakeClaim,
+    );
+    expect(released.ok).toBe(false);
+    if (released.ok) return;
+    expect(released.error).toBeInstanceOf(CoordinationUnavailableError);
 
     // clearConfirmed — returns a Result, does not reject.
-    const clear = await coord.clearConfirmed(ORG_A, ACTOR_1, {
-      operationId: "op-1",
-      revision: 1,
-    });
+    const clear = await coord.clearConfirmed(ORG_A, ACTOR_1, fakeClaim);
     expect(clear.ok).toBe(false);
     if (clear.ok) return;
     expect(clear.error).toBeInstanceOf(CoordinationUnavailableError);
@@ -700,7 +912,7 @@ describe("PendingGrantCoordinator", () => {
     coord.destroy();
   });
 
-  // ── 18. Lazy storage: constructor tolerates unavailable localStorage ───────
+  // ── 24. Lazy storage: constructor tolerates unavailable localStorage ───────
   //
   // The production singleton calls `new PendingGrantCoordinator()` during page
   // load. Browser policies that block the localStorage getter (e.g. disabled
@@ -728,7 +940,7 @@ describe("PendingGrantCoordinator", () => {
     coord?.destroy();
   });
 
-  // ── 19. Storage unavailability is surfaced as a Result (B5) ───────────────
+  // ── 25. Storage unavailability is surfaced as a Result ───────────────────
   //
   // With a working lock manager but a storage implementation that always throws,
   // getCurrent must fail closed as a CoordinationUnavailableError Result — never

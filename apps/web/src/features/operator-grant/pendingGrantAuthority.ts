@@ -85,15 +85,48 @@ export class CompareAndClearMismatchError extends Error {
   }
 }
 
+// ── Send claim ──────────────────────────────────────────────────────────────
+
+/**
+ * Proof that a tab holds the send lease for the current authority revision.
+ * A claim is ONLY issued atomically inside the coordinator lock — either by
+ * `reserve` (the first send) or by `claimForSend` (every retry). It MUST be
+ * presented back verbatim to `clearConfirmed` / `releaseIndeterminate` so a
+ * stale request whose response arrives late (after the lease was released or
+ * re-claimed) cannot corrupt a newer claim.
+ *
+ * All three fields are part of the identity: comparing only operationId +
+ * revision is insufficient — two different leases can share a revision bump.
+ */
+export interface PendingGrantSendClaim {
+  operationId: string;
+  revision: number;
+  leaseId: string;
+}
+
 // ── Result types ────────────────────────────────────────────────────────────
 
 export type ReserveResult =
-  | { ok: true; authority: PendingGrantAuthority }
+  | { ok: true; authority: PendingGrantAuthority; claim: PendingGrantSendClaim }
   | { ok: false; error: CoordinationUnavailableError | AlreadyPendingError };
 
-export type TakeOverResult =
+export type ClaimForSendResult =
+  | {
+      ok: true;
+      authority: PendingGrantAuthority;
+      claim: PendingGrantSendClaim;
+    }
+  | {
+      ok: false;
+      error: CoordinationUnavailableError | LeaseConflictError;
+    };
+
+export type ReleaseResult =
   | { ok: true; authority: PendingGrantAuthority }
-  | { ok: false; error: CoordinationUnavailableError | LeaseConflictError };
+  | {
+      ok: false;
+      error: CoordinationUnavailableError | CompareAndClearMismatchError;
+    };
 
 export type ClearResult =
   | { ok: true }
@@ -112,7 +145,7 @@ export type AuthorityChangeEventType =
   | "authority_created"
   | "authority_cleared"
   | "lease_acquired"
-  | "lease_expired";
+  | "lease_released";
 
 export interface AuthorityChangeEvent {
   type: AuthorityChangeEventType;
