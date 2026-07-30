@@ -9,6 +9,7 @@ import {
   LeaseConflictError,
   CompareAndClearMismatchError,
   type PendingGrantCommand,
+  type AuthorityChangeEvent,
   commandDigest,
 } from "./pendingGrantAuthority";
 
@@ -182,6 +183,28 @@ class FakeStorage implements Storage {
   }
   setItem(key: string, value: string): void {
     this.store.set(key, value);
+  }
+}
+
+/** A Storage implementation that always throws, simulating a disabled API. */
+class ThrowingStorage implements Storage {
+  get length(): number {
+    throw new Error("Storage access denied");
+  }
+  clear(): void {
+    throw new Error("Storage access denied");
+  }
+  getItem(): string | null {
+    throw new Error("Storage access denied");
+  }
+  key(): string | null {
+    throw new Error("Storage access denied");
+  }
+  removeItem(): void {
+    throw new Error("Storage access denied");
+  }
+  setItem(): void {
+    throw new Error("Storage access denied");
   }
 }
 
@@ -466,9 +489,9 @@ describe("PendingGrantCoordinator", () => {
     // Create a second coordinator to receive the broadcast
     const { channel: channelB } = env.createCoordinator(TAB_B);
 
-    const received: unknown[] = [];
+    const received: AuthorityChangeEvent[] = [];
     channelB.onmessage = (event: MessageEvent) => {
-      received.push(event.data);
+      received.push(event.data as AuthorityChangeEvent);
     };
 
     await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
@@ -486,9 +509,9 @@ describe("PendingGrantCoordinator", () => {
     const { coord: coordA } = env.createCoordinator(TAB_A);
     const { channel: channelB } = env.createCoordinator(TAB_B);
 
-    const received: unknown[] = [];
+    const received: AuthorityChangeEvent[] = [];
     channelB.onmessage = (event: MessageEvent) => {
-      received.push(event.data);
+      received.push(event.data as AuthorityChangeEvent);
     };
 
     await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
@@ -498,9 +521,7 @@ describe("PendingGrantCoordinator", () => {
     });
 
     // The clear should produce a broadcast
-    const clearEvents = received.filter(
-      (r: any) => r.type === "authority_cleared",
-    );
+    const clearEvents = received.filter((r) => r.type === "authority_cleared");
     expect(clearEvents.length).toBe(1);
     expect(clearEvents[0]).toEqual({
       type: "authority_cleared",
@@ -516,9 +537,9 @@ describe("PendingGrantCoordinator", () => {
     const { coord: coordA, channel: channelA } = env.createCoordinator(TAB_A);
     const { coord: coordB, channel: channelB } = env.createCoordinator(TAB_B);
 
-    const received: unknown[] = [];
+    const received: AuthorityChangeEvent[] = [];
     channelA.onmessage = (event: MessageEvent) => {
-      received.push(event.data);
+      received.push(event.data as AuthorityChangeEvent);
     };
 
     await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
@@ -526,9 +547,7 @@ describe("PendingGrantCoordinator", () => {
     await coordB.takeOver(ORG_A, ACTOR_1, COMMAND);
 
     // A should receive the lease_acquired broadcast
-    const leaseEvents = received.filter(
-      (r: any) => r.type === "lease_acquired",
-    );
+    const leaseEvents = received.filter((r) => r.type === "lease_acquired");
     expect(leaseEvents.length).toBe(1);
     expect(leaseEvents[0]).toEqual({
       type: "lease_acquired",
@@ -673,6 +692,62 @@ describe("PendingGrantCoordinator", () => {
     expect(clear.error).toBeInstanceOf(CoordinationUnavailableError);
 
     // getCurrent — returns a Result, does not reject.
+    const current = await coord.getCurrent(ORG_A, ACTOR_1);
+    expect(current.ok).toBe(false);
+    if (current.ok) return;
+    expect(current.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    coord.destroy();
+  });
+
+  // ── 18. Lazy storage: constructor tolerates unavailable localStorage ───────
+  //
+  // The production singleton calls `new PendingGrantCoordinator()` during page
+  // load. Browser policies that block the localStorage getter (e.g. disabled
+  // storage, SecurityError) must not crash construction; the failure is surfaced
+  // later, when a public method actually needs storage, and converted to a
+  // Result so the page can show coordinationUnavailable and refuse to send.
+
+  it("constructor does not throw when localStorage getter is blocked", () => {
+    const getterSpy = vi
+      .spyOn(window, "localStorage", "get")
+      .mockImplementation(() => {
+        throw new DOMException(
+          "Access is denied for this document",
+          "SecurityError",
+        );
+      });
+
+    let coord: PendingGrantCoordinator | undefined;
+    expect(() => {
+      coord = new PendingGrantCoordinator();
+    }).not.toThrow();
+    expect(coord).toBeInstanceOf(PendingGrantCoordinator);
+
+    getterSpy.mockRestore();
+    coord?.destroy();
+  });
+
+  // ── 19. Storage unavailability is surfaced as a Result (B5) ───────────────
+  //
+  // With a working lock manager but a storage implementation that always throws,
+  // getCurrent must fail closed as a CoordinationUnavailableError Result — never
+  // reject the Promise and never silently degrade to a fresh uncoordinated draft.
+
+  it("getCurrent returns ok: false when storage is unavailable", async () => {
+    const lockManager = new MockLockManager();
+    const coord = new PendingGrantCoordinator({
+      tabId: TAB_A,
+      leaseDurationMs: 30_000,
+      lockRequest: lockManager.request as <T>(
+        name: string,
+        callback: (lock: { name: string } | null) => Promise<T>,
+      ) => Promise<T>,
+      broadcastChannel: new MockBroadcastChannel("test"),
+      storage: new ThrowingStorage(),
+      now: () => Date.now(),
+    });
+
     const current = await coord.getCurrent(ORG_A, ACTOR_1);
     expect(current.ok).toBe(false);
     if (current.ok) return;

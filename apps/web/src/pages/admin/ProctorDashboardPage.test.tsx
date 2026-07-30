@@ -517,5 +517,44 @@ describe("ProctorDashboardPage", () => {
       // No grant request was ever sent.
       expect(apiPost).not.toHaveBeenCalled();
     });
+
+    it("fails closed when cross-tab coordination is unavailable (storage blocked)", async () => {
+      // REC-I4-C1: if the browser blocks the localStorage getter (e.g. disabled
+      // storage policy), opening the grant dialog must not crash or silently
+      // degrade to a fresh draft. The lazy storage adapter surfaces the failure
+      // as a CoordinationUnavailable Result, and the page shows the coordination
+      // unavailable message while keeping the dialog closed.
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+
+      const getterSpy = vi
+        .spyOn(window, "localStorage", "get")
+        .mockImplementation(() => {
+          throw new DOMException(
+            "Access is denied for this document",
+            "SecurityError",
+          );
+        });
+
+      renderPage();
+      await screen.findByText("张三");
+
+      const extendBtn = await screen.findByRole("button", { name: "延长时间" });
+      fireEvent.click(extendBtn);
+
+      // Must fail closed: error toast shown, dialog NOT opened.
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("无法安全协调"),
+        );
+      });
+      expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();
+      // No grant request was ever sent.
+      expect(apiPost).not.toHaveBeenCalled();
+
+      getterSpy.mockRestore();
+    });
   });
 });

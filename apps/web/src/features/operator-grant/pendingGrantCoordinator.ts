@@ -59,6 +59,52 @@ export interface CoordinatorDependencies {
 
 // ── Default dependencies ────────────────────────────────────────────────────
 
+/**
+ * Lazily accesses `window.localStorage` so that merely constructing the
+ * coordinator never throws. Storage unavailability (disabled by browser policy,
+ * SecurityError on the getter, or missing implementation) is surfaced on the
+ * first read/write and converted into a Result by the public API.
+ */
+function requireLocalStorage(): Storage {
+  let storage: Storage | undefined;
+  try {
+    storage = window.localStorage;
+  } catch (error) {
+    throw new CoordinationUnavailableError(
+      `localStorage unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!storage) {
+    throw new CoordinationUnavailableError(
+      "localStorage unavailable: cannot persist shared cross-tab grant authority",
+    );
+  }
+  return storage;
+}
+
+function createLazyLocalStorage(): Storage {
+  return {
+    get length() {
+      return requireLocalStorage().length;
+    },
+    getItem(key: string): string | null {
+      return requireLocalStorage().getItem(key);
+    },
+    setItem(key: string, value: string): void {
+      requireLocalStorage().setItem(key, value);
+    },
+    removeItem(key: string): void {
+      requireLocalStorage().removeItem(key);
+    },
+    key(index: number): string | null {
+      return requireLocalStorage().key(index);
+    },
+    clear(): void {
+      requireLocalStorage().clear();
+    },
+  };
+}
+
 function createDefaultDeps(): CoordinatorDependencies {
   let tabId: string;
   try {
@@ -104,13 +150,7 @@ function createDefaultDeps(): CoordinatorDependencies {
     ) as Promise<T>;
   };
 
-  let storage: Storage;
-  if (typeof localStorage === "undefined") {
-    throw new CoordinationUnavailableError(
-      "localStorage unavailable: cannot persist shared cross-tab grant authority",
-    );
-  }
-  storage = localStorage;
+  const storage = createLazyLocalStorage();
 
   const broadcastChannel: CoordinatorDependencies["broadcastChannel"] =
     typeof BroadcastChannel !== "undefined"
