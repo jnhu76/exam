@@ -161,8 +161,14 @@ export function createAttemptGradingEntryRepo(db: Database) {
      * reads the entry first (fail-closed when missing, reject when gradingMode
      * != manual, reject when status != pending_manual per Slice 3C) and then
      * calls this to UPDATE the SAME entry. No second row is ever created. The
-     * command guarantees the entry is pending when this is called; this repo
-     * method does not itself enforce the pending → completed transition guard.
+     * command guarantees the entry is pending when this is called.
+     *
+     * Slice 4 defense-in-depth: the WHERE clause additionally constrains
+     * `grading_mode = 'manual'` AND `status = 'pending_manual'`. The engine
+     * guard remains the primary state-machine authority, but the SQL layer now
+     * refuses to overwrite a `completed_manual` entry or complete an `auto`
+     * entry even if the engine guard were ever bypassed. A non-matching UPDATE
+     * returns null (no rows touched); the engine fails closed on null.
      */
     async completeManualEntry(
       ctx: TenantContext | RequestContext,
@@ -185,6 +191,11 @@ export function createAttemptGradingEntryRepo(db: Database) {
             eq(attemptGradingEntries.organizationId, orgId),
             eq(attemptGradingEntries.attemptId, input.attemptId),
             eq(attemptGradingEntries.questionId, input.questionId),
+            eq(attemptGradingEntries.gradingMode, "manual" as GradingEntryMode),
+            eq(
+              attemptGradingEntries.status,
+              "pending_manual" as GradingEntryStatus,
+            ),
           ),
         )
         .returning();

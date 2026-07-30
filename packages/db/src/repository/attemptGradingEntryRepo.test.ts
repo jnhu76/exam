@@ -428,4 +428,130 @@ describe("attemptGradingEntryRepo", () => {
     const ownRows = await entryRepo.findByAttempt(ctx, attemptId);
     expect(ownRows.find((r) => r.questionId === "q-cross-org")).toBeUndefined();
   });
+
+  // ---- Slice 4: SQL-level status / mode guard on completeManualEntry ----
+  // The engine layer already enforces the pending_manual → completed_manual
+  // transition. These tests prove the SQL UPDATE itself now refuses to touch a
+  // row that is not (grading_mode='manual', status='pending_manual'), as
+  // defense-in-depth, and that a rejected UPDATE leaves the original row intact.
+
+  it("Slice 4: a pending_manual manual entry can be completed", async () => {
+    const now = new Date();
+    await entryRepo.bulkCreate(ctx, [
+      {
+        attemptId,
+        questionId: "q-s4-pending",
+        gradingMode: "manual",
+        status: "pending_manual",
+        maxScore: 20,
+        earnedScore: null,
+        candidateAnswer: "ans",
+        standardAnswer: null,
+        correct: null,
+      },
+    ]);
+    const updated = await entryRepo.completeManualEntry(ctx, {
+      attemptId,
+      questionId: "q-s4-pending",
+      earnedScore: 15,
+      maxScore: 20,
+      comment: "ok",
+      gradedBy: "grader-s4",
+      gradedAt: now,
+      now,
+    });
+    expect(updated).not.toBeNull();
+    expect(updated!.status).toBe("completed_manual");
+    expect(updated!.earnedScore).toBe(15);
+    expect(updated!.gradedBy).toBe("grader-s4");
+  });
+
+  it("Slice 4: a completed_manual entry cannot be overwritten (returns null)", async () => {
+    const now = new Date();
+    // Seed an already-completed manual entry (the committed score/grader).
+    await db.insert(schema.attemptGradingEntries).values({
+      id: randomUUID(),
+      organizationId: orgId,
+      attemptId,
+      questionId: "q-s4-done",
+      gradingMode: "manual",
+      status: "completed_manual",
+      maxScore: 20,
+      earnedScore: 12,
+      candidateAnswer: "ans",
+      standardAnswer: null,
+      correct: false,
+      comment: "original comment",
+      gradedBy: "original-grader",
+      gradedAt: new Date("2025-01-01T00:00:00Z"),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Attempt to overwrite with a different score/grader.
+    const result = await entryRepo.completeManualEntry(ctx, {
+      attemptId,
+      questionId: "q-s4-done",
+      earnedScore: 20,
+      maxScore: 20,
+      comment: "tampered comment",
+      gradedBy: "attacker-grader",
+      gradedAt: now,
+      now,
+    });
+    expect(result).toBeNull();
+
+    // The original committed score/comment/grader/time are untouched.
+    const row = await entryRepo.findByAttemptAndQuestion(
+      ctx,
+      attemptId,
+      "q-s4-done",
+    );
+    expect(row!.status).toBe("completed_manual");
+    expect(row!.earnedScore).toBe(12);
+    expect(row!.comment).toBe("original comment");
+    expect(row!.gradedBy).toBe("original-grader");
+  });
+
+  it("Slice 4: an auto entry cannot be completed as manual (returns null)", async () => {
+    const now = new Date();
+    await db.insert(schema.attemptGradingEntries).values({
+      id: randomUUID(),
+      organizationId: orgId,
+      attemptId,
+      questionId: "q-s4-auto",
+      gradingMode: "auto",
+      status: "completed_auto",
+      maxScore: 20,
+      earnedScore: 20,
+      candidateAnswer: "a",
+      standardAnswer: "a",
+      correct: true,
+      comment: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await entryRepo.completeManualEntry(ctx, {
+      attemptId,
+      questionId: "q-s4-auto",
+      earnedScore: 5,
+      maxScore: 20,
+      comment: "should not apply",
+      gradedBy: "grader-s4",
+      gradedAt: now,
+      now,
+    });
+    expect(result).toBeNull();
+
+    // The auto entry is untouched.
+    const row = await entryRepo.findByAttemptAndQuestion(
+      ctx,
+      attemptId,
+      "q-s4-auto",
+    );
+    expect(row!.gradingMode).toBe("auto");
+    expect(row!.status).toBe("completed_auto");
+    expect(row!.earnedScore).toBe(20);
+  });
 });
