@@ -781,6 +781,81 @@ describe("ProctorDashboardPage", () => {
         });
         expect(apiPost).not.toHaveBeenCalled();
       });
+
+      // ── Stale-response reconciliation (review P1) ─────────────────────────
+      //
+      // A late stale indeterminate response must NOT revive a hidden local
+      // indeterminate state. Scenario:
+      //   Tab is submitting a frozen command; the request fails indeterminate.
+      //   Meanwhile another tab confirmed + CLEARED the authority (the
+      //   authority_cleared broadcast already closed this dialog). The stale
+      //   response's releaseIndeterminate returns a mismatch; reconciliation
+      //   re-reads the shared authority, sees it gone, and resets to a fresh
+      //   draft + resolvedInAnotherTab info toast. A subsequent attempt on a
+      //   DIFFERENT candidate must open without a false block.
+      it("a stale indeterminate response does not revive a hidden local state after the authority was cleared elsewhere", async () => {
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate()],
+          total: 1,
+        });
+        // Seed a released authority (NO active lease) for att-1. openGrantDialog
+        // restores it as indeterminate; retry will claimForSend (succeeds, fresh
+        // lease) then POST.
+        seedPendingAuthority({ withActiveLease: false });
+
+        // The POST resolves indeterminate (network failure). Crucially, we
+        // simulate the cross-tab clear happening DURING the in-flight request:
+        // remove the shared authority from localStorage before the request
+        // rejects, so the subsequent releaseIndeterminate sees no authority and
+        // returns a mismatch.
+        apiPost.mockImplementationOnce(async () => {
+          localStorage.removeItem("exam.pendingGrantAuthority:org-1:admin-1");
+          throw new Error("Network request failed");
+        });
+
+        renderPage();
+        await screen.findByText("张三");
+        const extendBtn = await screen.findByRole("button", {
+          name: "延长时间",
+        });
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+        // Retry the frozen command (claimForSend → POST).
+        const retryBtn = await screen.findByRole("button", {
+          name: "重试同一加时",
+        });
+        fireEvent.click(retryBtn);
+
+        // The stale indeterminate response reconciles against the (now empty)
+        // shared authority → reset + resolvedInAnotherTab info toast.
+        await waitFor(() => {
+          expect(toast.info).toHaveBeenCalledWith(
+            expect.stringContaining("其他标签页处理"),
+          );
+        });
+        // No hidden local indeterminate state survived: the dialog was reset to
+        // a fresh draft (retry affordance gone).
+        expect(
+          screen.queryByRole("button", { name: "重试同一加时" }),
+        ).not.toBeInTheDocument();
+
+        // Reopen the grant dialog for the SAME candidate. Because the local
+        // stale indeterminate state was discarded and the shared authority is
+        // now empty, openGrantDialog reads the authority first and opens a
+        // FRESH draft — NOT a retry. No blockedByPending warning either.
+        fireEvent.click(extendBtn);
+        await screen.findByText("延长考试时间");
+        // Fresh draft → confirm button shows "延长 10 分钟", NOT "重试同一加时".
+        expect(
+          screen.getByRole("button", { name: "延长 10 分钟" }),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: "重试同一加时" }),
+        ).not.toBeInTheDocument();
+        expect(toast.warning).not.toHaveBeenCalledWith(
+          expect.stringContaining("存在未确认的加时命令"),
+        );
+      });
     });
   });
 });

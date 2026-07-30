@@ -81,7 +81,7 @@ export class CompareAndClearMismatchError extends Error {
   readonly name = "CompareAndClearMismatchError";
   readonly code = "COMPARE_AND_CLEAR_MISMATCH";
   constructor() {
-    super("OperationId and revision do not match the stored authority");
+    super("Send claim does not match the stored authority");
   }
 }
 
@@ -168,9 +168,10 @@ export function isLeaseExpired(lease: InFlightLease, now: number): boolean {
 }
 
 /**
- * Structural equality over the frozen command fields. Used by `takeOver` to
- * guarantee a takeover preserves the EXACT frozen command — a caller cannot
- * reuse an expired lease to overwrite operationId / payload.
+ * Structural equality over the frozen command fields. Used by `claimForSend`
+ * (and the page's stale-release reconciliation) to guarantee a retry /
+ * reconciliation preserves the EXACT frozen command — a caller cannot reuse an
+ * expired lease to overwrite operationId / payload.
  */
 export function commandsEqual(
   a: PendingGrantCommand,

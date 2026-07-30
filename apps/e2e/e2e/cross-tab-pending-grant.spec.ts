@@ -507,16 +507,24 @@ test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
       .toBe(1);
 
     // ── Tab C's retry: claimForSend must see Tab B's active lease and return
-    //    LeaseConflict → Tab C sends NO POST. Drive the retry and assert the
-    //    conflict toast (另一个标签页正在处理…).
+    //    LeaseConflict → Tab C sends NO POST. Register a route on Tab C that
+    //    FAILS THE TEST on any time-grants POST (the only valid outcome under
+    //    Tab B's active lease is zero POSTs). The conflict toast is the reliable
+    //    barrier: it only appears once claimForSend returned LeaseConflictError
+    //    and the handler returned before POSTing — no fixed sleep needed.
+    await pageC.route("**/api/admin/attempts/*/time-grants", (route) => {
+      throw new Error(
+        "Tab C must not POST a time-grant while Tab B holds the active lease",
+      );
+    });
     await pageC.getByRole("button", { name: "重试同一加时" }).click();
     await expect(pageC.getByText("另一个标签页正在处理").first()).toBeVisible({
       timeout: 15_000,
     });
 
-    // Definitive: Tab C sent ZERO time-grants POST. Give the async claim a
-    // brief settle window, then assert zero.
-    await pageC.waitForTimeout(500);
+    // Definitive: the conflict toast fired (claimForSend returned
+    // LeaseConflictError) and the abort route was never hit → Tab C sent ZERO
+    // time-grants POST. The request listener is the count authority.
     expect(
       tabCPosts,
       "Tab C must not POST under Tab B's active lease",

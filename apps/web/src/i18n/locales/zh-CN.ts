@@ -1513,6 +1513,7 @@ const zhCN = {
           "加时结果已确认，但跨标签页待处理状态未能清除。请刷新页面或关闭其他考试管理标签页。",
         leaseConflict: "另一个标签页正在处理该加时，请稍后重试",
         releaseFailedWarning: "协调状态无法安全更新，请稍后重试同一加时命令",
+        resolvedInAnotherTab: "该加时已在其他标签页处理完成",
       },
       misconductDialog: {
         title: "标记违规",

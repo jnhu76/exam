@@ -42,6 +42,7 @@ import {
   CoordinationUnavailableError,
   AlreadyPendingError,
   LeaseConflictError,
+  commandsEqual,
   type PendingGrantSendClaim,
 } from "@/features/operator-grant/pendingGrantAuthority";
 import type {
@@ -473,15 +474,15 @@ export function ProctorDashboardPage() {
             toast.warning(
               t("admin.proctorDashboard.extendDialog.indeterminate"),
             );
-          } else {
-            // Release failed (stale claim / coordination unavailable): keep
-            // fail closed — do not fabricate a new command; the next retry
-            // must still go through claimForSend.
-            setGrantState({ phase: "indeterminate", command });
-            toast.warning(
-              t("admin.proctorDashboard.extendDialog.releaseFailedWarning"),
-            );
+            break;
           }
+          // Release MISMATCH: this claim no longer owns the authority (another
+          // tab cleared/re-claimed it while our request was in flight). Do NOT
+          // blindly revive a local indeterminate state — reconcile against the
+          // SHARED AUTHORITY (the source of truth), otherwise a late stale
+          // response arriving after an `authority_cleared` broadcast could
+          // hide a closed dialog and block every other grant until refresh.
+          await reconcileStaleRelease(orgId, user.id, command);
           break;
         }
         case "idempotency_conflict": {
@@ -514,6 +515,89 @@ export function ProctorDashboardPage() {
   }
 
   /**
+   * Reconciles local dialog state against the SHARED AUTHORITY after an
+   * indeterminate retry's `releaseIndeterminate` returned a mismatch — i.e.
+   * this tab's claim no longer owns the authority (another tab cleared it,
+   * re-claimed it, or the lease was taken over while our request was in
+   * flight). The shared authority is the source of truth; the local dialog
+   * state is only a cache. Blindly turning a mismatch back into a local
+   * `indeterminate` would risk a HIDDEN stale dialog (already-closed by an
+   * `authority_cleared` broadcast) that blocks every other grant until refresh.
+   *
+   *   - authority cleared           → the command was resolved elsewhere;
+   *                                    close the dialog and reset to a fresh
+   *                                    draft (info toast, not an error).
+   *   - same frozen command still    → it was re-claimed or re-released by
+   *     pending under a new lease      another tab; keep retrying the SAME
+   *                                    canonical command (indeterminate).
+   *   - a DIFFERENT command pending  → a newer unrelated authority exists;
+   *                                    reset to a fresh draft and point the
+   *                                    proctor at the still-pending grant.
+   *   - coordination unavailable     → cannot verify shared state; keep FAIL
+   *                                    CLOSED on the frozen command (warning).
+   *                                    The next retry re-enters this
+   *                                    reconciliation via claimForSend.
+   */
+  async function reconcileStaleRelease(
+    orgId: string,
+    actorId: string,
+    command: PendingTimeGrant,
+  ): Promise<void> {
+    const coordinator = getPendingGrantCoordinator();
+    let current;
+    try {
+      current = await coordinator.getCurrent(orgId, actorId);
+    } catch {
+      // Defensive: getCurrent returns a Result, but guard a synchronous throw
+      // the same way as CoordinationUnavailableError.
+      setGrantState({ phase: "indeterminate", command });
+      toast.warning(
+        t("admin.proctorDashboard.extendDialog.releaseFailedWarning"),
+      );
+      return;
+    }
+    if (!current.ok) {
+      // Cannot verify shared state — keep the frozen command (fail closed);
+      // a later retry re-enters this reconciliation.
+      setGrantState({ phase: "indeterminate", command });
+      toast.warning(
+        t("admin.proctorDashboard.extendDialog.releaseFailedWarning"),
+      );
+      return;
+    }
+    if (!current.authority) {
+      // The command was resolved (confirmed + cleared) in another tab.
+      resetGrantDialog();
+      toast.info(t("admin.proctorDashboard.extendDialog.resolvedInAnotherTab"));
+      return;
+    }
+    if (commandsEqual(current.authority.command, command)) {
+      // The same frozen command is still pending under a new lease/release —
+      // keep retrying the canonical identity.
+      setGrantState({
+        phase: "indeterminate",
+        command: {
+          organizationId: current.authority.organizationId,
+          attemptId: current.authority.command.attemptId,
+          operationId: current.authority.command.operationId,
+          addedSeconds: current.authority.command.addedSeconds,
+          reasonCode: current.authority.command.reasonCode,
+          reasonText: current.authority.command.reasonText,
+        },
+      });
+      return;
+    }
+    // A different command is now pending — do not revive a stale local dialog;
+    // reset to a fresh draft and surface the still-pending grant.
+    resetGrantDialog();
+    toast.warning(
+      t("admin.proctorDashboard.extendDialog.blockedByPending", {
+        minutes: current.authority.command.addedSeconds / 60,
+      }),
+    );
+  }
+
+  /**
    * Resets the grant dialog to a fresh editable draft (new operationId, default
    * fields) and clears the dialog target. Used on confirmed outcomes and
    * discardable failures. The shared authority is cleared separately via
@@ -537,6 +621,11 @@ export function ProctorDashboardPage() {
    * restore it (so the proctor retries the same operationId); if one exists for
    * a DIFFERENT attempt, block opening and direct the proctor to resolve it
    * first (prevents a second in-flight grant that would mint a new identity).
+   *
+   * The SHARED AUTHORITY is the source of truth; the local in-memory state is
+   * only a cache. The shared authority is read FIRST, before any local pre-check,
+   * so a stale local indeterminate state (e.g. a late response that arrived
+   * after another tab cleared the authority) cannot manufacture a false block.
    */
   async function openGrantDialog(candidate: CandidateStatusItem) {
     if (!user || !candidate.attemptId) return;
@@ -544,26 +633,12 @@ export function ProctorDashboardPage() {
     const attemptId = candidate.attemptId;
     const coordinator = getPendingGrantCoordinator();
 
-    // If the in-memory state is an unresolved command for a different attempt,
-    // block: that command's operationId is still live.
-    if (
-      (grantState.phase === "submitting" ||
-        grantState.phase === "indeterminate") &&
-      grantState.command.attemptId !== attemptId
-    ) {
-      toast.warning(
-        t("admin.proctorDashboard.extendDialog.blockedByPending", {
-          minutes: grantState.command.addedSeconds / 60,
-        }),
-      );
-      return;
-    }
-
     setExtendTarget(candidate);
 
-    // Check the shared authority for a pending command (REC-I4-C1).
-    // This covers cross-tab scenarios: another tab may have a pending command
-    // for this attempt or a different attempt.
+    // Read the shared authority FIRST (REC-I4-C1). This is authoritative for
+    // cross-tab scenarios: another tab may have a pending command for this
+    // attempt or a different attempt, OR may have already cleared a command
+    // this tab still believes is pending locally.
     let current;
     try {
       current = await coordinator.getCurrent(orgId, user.id);
