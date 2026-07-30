@@ -18,7 +18,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
 const getMock = vi.mocked(api.get);
@@ -599,6 +599,168 @@ describe("GradingDetailPage — one-time submission UX (Slice 2)", () => {
     expect(
       screen.queryByTestId("grading-submit-btn-q1"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("GradingDetailPage — ambiguous-result reconciliation (Slice 3)", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+    postMock.mockReset();
+    getMock.mockResolvedValue(mockDetailData);
+  });
+
+  /**
+   * Drives a submit that fails the POST: types a valid score, submits,
+   * confirms. The POST must have been rejected before reconciliation runs.
+   */
+  async function submitAndFailPost(user: ReturnType<typeof userEvent.setup>) {
+    const firstInput = screen.getAllByRole("spinbutton")[0]!;
+    await user.clear(firstInput);
+    await user.type(firstInput, "8");
+    await confirmSubmitFirstQuestion(user);
+    await vi.waitFor(() => {
+      expect(postMock).toHaveBeenCalled();
+    });
+  }
+
+  it("Case A: POST rejects but server shows entry committed → synchronized success, read-only", async () => {
+    // The POST's response was lost (network error) but the server actually
+    // committed the grade. The page must NOT show a retry error.
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    // initial load
+    getMock.mockResolvedValueOnce(mockDetailData);
+    // reconciliation GET: q1 now committed by the server
+    getMock.mockResolvedValueOnce({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请简述光合作用的过程",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "",
+            gradedBy: "server-grader",
+            gradedAt: "2025-02-01T09:30:00Z",
+          },
+        },
+        mockDetailData.questions[1],
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    // Neutral synchronized-success, NOT a failure/retry prompt.
+    await vi.waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "评分已提交，页面已同步最新状态。",
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    // The question is now read-only from the authoritative refresh.
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    // Only one POST ever fired (no auto-retry).
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Case B: POST rejects and server still pending → real failure, input preserved, editable", async () => {
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    // initial load + reconciliation GET both return the original pending state
+    getMock.mockResolvedValue(mockDetailData);
+
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    // Real failure message, NOT a synchronized-success.
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "评分未提交，请确认网络后重试。",
+      );
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+    // Operator input is preserved (the typed 8 is still in the field) and the
+    // control stays editable.
+    expect(screen.getByTestId("grading-score-input-q1")).toHaveValue(8);
+    expect(screen.getByTestId("grading-score-input-q1")).not.toBeDisabled();
+    expect(screen.getByTestId("grading-submit-btn-q1")).toBeInTheDocument();
+    // No auto-retry.
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Case C: POST rejects and attempt is now fully_graded → status-changed message", async () => {
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    getMock.mockResolvedValueOnce(mockDetailData); // initial load
+    // reconciliation GET: attempt reached terminal state (another grader closed
+    // it while our POST was in flight)
+    getMock.mockResolvedValueOnce({
+      ...mockDetailData,
+      gradingStatus: "fully_graded",
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请简述光合作用的过程",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "",
+            gradedBy: "other-grader",
+            gradedAt: "2025-02-01T09:30:00Z",
+          },
+        },
+        mockDetailData.questions[1],
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    await vi.waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith(
+        "阅卷状态已发生变化，已加载最新结果。",
+      );
+    });
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Failure-of-failure: POST and reconciliation GET both fail → unknown message, no auto-retry", async () => {
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    // initial load OK, but the reconciliation GET fails too
+    getMock.mockResolvedValueOnce(mockDetailData);
+    getMock.mockRejectedValueOnce(new Error("Network request failed"));
+
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "无法确认评分是否已提交，请刷新页面核对。",
+      );
+    });
+    // No success claim, no auto-retry.
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(postMock).toHaveBeenCalledTimes(1);
   });
 });
 

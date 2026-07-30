@@ -261,6 +261,73 @@ export function GradingDetailPage() {
   );
 
   /**
+   * Runs after a POST error. Re-GETs grading-details and reconciles local state
+   * against the server's authoritative view of the target question:
+   *
+   *   Case A — entry now completed_manual: the grade actually committed (the
+   *     response was lost, or another window/grader committed). Surface a
+   *     neutral synchronized-success message and let refreshFromServer make the
+   *     question read-only. Never show a "retry" prompt.
+   *
+   *   Case B — entry still pending_manual AND attempt still pending_manual:
+   *     real failure. Preserve the operator's input (restore the score/comment
+   *     that refreshFromServer cleared for the pending question), keep the
+   *     controls editable, and show the real failure message. No auto re-POST.
+   *
+   *   Case C — attempt became fully_graded, or the question disappeared from
+   *     the workset: load the latest state and show a status-changed message.
+   *
+   *   Failure-of-failure — the reconciliation GET itself fails: preserve input,
+   *     show the "unknown / please refresh" message, and do not auto-POST.
+   */
+  const reconcileAfterPostError = useCallback(
+    async (
+      questionId: string,
+      scoreAtSubmit: number,
+      commentAtSubmit: string,
+    ) => {
+      let refreshed: GradingDetailData | null;
+      try {
+        refreshed = await refreshFromServer();
+      } catch {
+        // Could not confirm server state — do not claim success or failure, do
+        // not clear the form, do not auto-retry. The operator's input is still
+        // in state (refreshFromServer threw before mutating it).
+        toast.error(t("admin.gradingDetail.errors.submitUnknown"));
+        return;
+      }
+      if (!refreshed) {
+        toast.error(t("admin.gradingDetail.errors.submitUnknown"));
+        return;
+      }
+      const target = refreshed.questions.find(
+        (q) => q.questionId === questionId,
+      );
+      const attemptTerminal = refreshed.gradingStatus === "fully_graded";
+      // Case C: attempt reached a terminal state, or the question is no longer
+      // in the manual workset at all.
+      if (attemptTerminal || !target) {
+        toast.info(t("admin.gradingDetail.errors.reconciledStateChanged"));
+        return;
+      }
+      // Case A: the entry was actually committed (by this request's lost
+      // response, or by another grader/window). refreshFromServer has already
+      // made it read-only with the real gradedBy/gradedAt.
+      if (target.entry !== null) {
+        toast.success(t("admin.gradingDetail.errors.reconciledCommitted"));
+        return;
+      }
+      // Case B: the entry is still pending — the POST genuinely did not commit.
+      // restore the operator's input that refreshFromServer cleared for the
+      // pending question, so the field stays editable with its typed value.
+      setScores((prev) => ({ ...prev, [questionId]: String(scoreAtSubmit) }));
+      setComments((prev) => ({ ...prev, [questionId]: commentAtSubmit }));
+      toast.error(t("admin.gradingDetail.errors.submitFailed"));
+    },
+    [t, refreshFromServer],
+  );
+
+  /**
    * Performs the irrevocable POST, then refreshes local state from the
    * authoritative GET so the submitted question immediately reflects the
    * server-committed entry (score, comment, gradedBy, gradedAt, read-only
@@ -270,13 +337,17 @@ export function GradingDetailPage() {
     async (questionId: string, score: number, maxScore: number) => {
       setConfirmTarget(null);
       setSaving((prev) => ({ ...prev, [questionId]: true }));
+      // Capture the operator's input BEFORE the POST so a Case-B reconciliation
+      // (server still pending → real failure) can restore it instead of leaving
+      // the field cleared by the authoritative refresh.
+      const commentAtSubmit = comments[questionId] ?? "";
       try {
         const result = await api.post<GradeQuestionResponse>(
           `/api/admin/attempts/${id}/grade-question`,
           {
             questionId,
             score,
-            comment: comments[questionId] ?? "",
+            comment: commentAtSubmit,
           },
         );
         // Authoritative reconciliation: replace local state from the server so
@@ -290,12 +361,18 @@ export function GradingDetailPage() {
           toast.success(t("admin.gradingDetail.toast.saved"));
         }
       } catch {
-        toast.error(t("admin.gradingDetail.errors.saveFailed"));
+        // Ambiguous result reconciliation (audit P1-5 / Slice 3). The POST may
+        // have committed on the server but lost its response (network error /
+        // timeout), so we must NOT assume failure. Re-GET grading-details and
+        // branch on the target question's authoritative server state. The
+        // classification is based on the server entry status, never on matching
+        // an English error message string.
+        await reconcileAfterPostError(questionId, score, commentAtSubmit);
       } finally {
         setSaving((prev) => ({ ...prev, [questionId]: false }));
       }
     },
-    [id, comments, t, refreshFromServer],
+    [id, comments, t, refreshFromServer, reconcileAfterPostError],
   );
 
   if (isLoading) return <LoadingState />;

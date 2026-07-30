@@ -1695,6 +1695,15 @@ const zhCN = {
         loadFailed: "加载评分详情失败",
         dataLoadFailed: "评分数据加载异常，请重试",
         saveFailed: "保存失败，请重试",
+        /** Case B: POST failed AND server confirms the entry is still pending. */
+        submitFailed: "评分未提交，请确认网络后重试。",
+        /** Case A: POST errored but the authoritative GET shows the entry was
+         *  actually committed (response lost, or another grader committed). */
+        reconciledCommitted: "评分已提交，页面已同步最新状态。",
+        /** Case C: attempt became fully graded / question changed under us. */
+        reconciledStateChanged: "阅卷状态已发生变化，已加载最新结果。",
+        /** Failure-of-failure: both POST and the reconciliation GET failed. */
+        submitUnknown: "无法确认评分是否已提交，请刷新页面核对。",
       },
       actions: {
         backToQueue: "返回队列",
