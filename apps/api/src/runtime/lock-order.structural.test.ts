@@ -227,7 +227,11 @@ function routeHandlerBody(relPath: string, anchor: string): string | null {
 //     than the seam directly).
 //   - `seamFn`: the named function whose body contains the seam mint + the
 //     engine consumer (the handler body for force-submit; the module-level
-//     runGrantTransaction for time-grant).
+//     runGrantTransaction for time-grant, which now lives in
+//     orchestrators/operatorGrantExecution.ts).
+//   - `seamFile`: optional override for the file `seamFn` lives in, when the
+//     seam function has been extracted to a different module than the route
+//     handler. Defaults to `file`.
 //   - `consumer`: the engine consumer that must run AFTER the seam mint within
 //     `seamFn`'s body.
 // Standalone-file entries (one entry per file) keep the file-level check.
@@ -237,6 +241,7 @@ const AE_ENTRY_POINTS: {
   routeAnchor?: string;
   wire?: string;
   seamFn?: string;
+  seamFile?: string;
   consumer?: string;
 }[] = [
   {
@@ -268,10 +273,13 @@ const AE_ENTRY_POINTS: {
     file: "apps/api/src/routes/attempts.admin.ts",
     label: "admin time-grant",
     // time-grant routes through a recovery wrapper; the seam lives in the
-    // module-level runGrantTransaction, not the handler body.
+    // module-level runGrantTransaction, which was extracted into the shared
+    // orchestrator module (operatorGrantExecution.ts) so the route and the
+    // deterministic concurrency test call the SAME production function.
     routeAnchor: "/admin/attempts/:attemptId/time-grants",
     wire: "grantWithOperationRaceRecovery",
     seamFn: "runGrantTransaction",
+    seamFile: "apps/api/src/orchestrators/operatorGrantExecution.ts",
     consumer: "grantAttemptTime",
   },
   {
@@ -420,11 +428,13 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
           // (b) The seam-holding function mints the capability BEFORE its
           //     engine consumer. For force-submit the seam+consumer live in
           //     the handler body (seamFn === "force-submit-handler"); for
-          //     time-grant they live in the module-level runGrantTransaction.
+          //     time-grant they live in the module-level runGrantTransaction,
+          //     which may have been extracted to a different module
+          //     (seamFile) than the route handler (file).
           const seamBody =
             ep.seamFn === "force-submit-handler"
               ? handlerBody
-              : functionBody(ep.file, ep.seamFn!);
+              : functionBody(ep.seamFile ?? ep.file, ep.seamFn!);
           expect(
             seamBody,
             `${ep.label} seam function body not found`,
