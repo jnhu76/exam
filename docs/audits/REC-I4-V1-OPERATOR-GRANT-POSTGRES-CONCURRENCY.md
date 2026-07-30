@@ -242,7 +242,7 @@ SELECT deadline_at FROM exam_attempts WHERE id = 'A2';
 
 Executed via `node scripts/test/run-operator-grant-race-repeat.mjs`:
 
-```
+```text
 [REC-I4-V1] Running 20 deterministic iterations...
 
   ✓ Iteration 1/20

@@ -55,10 +55,12 @@ export interface ConnectionEvidence {
 }
 
 /**
- * Proves two connections are (a) physically distinct (distinct PIDs) and
- * (b) running in the same isolated schema (same `current_schema()` and
- * `search_path`). This is the runtime proof the V1 race is real: two
- * distinct backends, one shared constraint, in one schema.
+ * Collects the backend identity + schema evidence for a SINGLE connection (PID,
+ * `current_schema()`, `search_path`). This function performs no comparison
+ * itself; the caller runs it twice (once per connection) and asserts the two
+ * results differ in PID but share the same schema — that comparison is what
+ * proves the V1 race is real: two distinct backends, one shared constraint, in
+ * one schema.
  */
 export async function collectConnectionEvidence(
   db: Database,
