@@ -29,6 +29,7 @@ import {
   LeaseConflictError,
   CompareAndClearMismatchError,
   isLeaseExpired,
+  commandsEqual,
 } from "./pendingGrantAuthority";
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -73,55 +74,60 @@ function createDefaultDeps(): CoordinatorDependencies {
     tabId = createContextSafeUuid();
   }
 
+  // Fail-closed dependency contract (REC-I4-C1): the cross-tab authority
+  // depends on a shared atomic lock + durable shared storage. Without Web
+  // Locks the read-check-write is not atomic, and without localStorage the
+  // "shared" authority is per-tab — both silently destroy the C1 invariant
+  // (two tabs minting different operationIds). We therefore throw instead of
+  // degrading; the throw is surfaced to callers as a CoordinationUnavailable
+  // Result so the page can refuse to send a grant that could duplicate.
+  //
+  // BroadcastChannel stays best-effort: the `storage` event is a backup
+  // cross-tab notification channel, so a missing BroadcastChannel does not
+  // break the authority contract.
+  const lockRequest = <T>(
+    name: string,
+    callback: (lock: { name: string } | null) => Promise<T>,
+  ): Promise<T> => {
+    if (typeof navigator === "undefined" || !navigator.locks) {
+      return Promise.reject(
+        new CoordinationUnavailableError(
+          "Web Locks API unavailable: cannot coordinate cross-tab grants safely",
+        ),
+      );
+    }
+    // navigator.locks.request is typed as returning Promise<any>;
+    // cast to the expected generic return type.
+    return navigator.locks.request(
+      name,
+      callback as (lock: Lock | null) => Promise<T>,
+    ) as Promise<T>;
+  };
+
+  let storage: Storage;
+  if (typeof localStorage === "undefined") {
+    throw new CoordinationUnavailableError(
+      "localStorage unavailable: cannot persist shared cross-tab grant authority",
+    );
+  }
+  storage = localStorage;
+
+  const broadcastChannel: CoordinatorDependencies["broadcastChannel"] =
+    typeof BroadcastChannel !== "undefined"
+      ? new BroadcastChannel(DEFAULT_BROADCAST_CHANNEL)
+      : {
+          postMessage: () => {},
+          close: () => {},
+          onmessage: null,
+        };
+
   return {
     tabId,
     leaseDurationMs: DEFAULT_LEASE_DURATION_MS,
-    lockRequest: <T>(
-      name: string,
-      callback: (lock: { name: string } | null) => Promise<T>,
-    ): Promise<T> => {
-      if (typeof navigator !== "undefined" && navigator.locks) {
-        // navigator.locks.request is typed as returning Promise<any>;
-        // cast to the expected generic return type.
-        return navigator.locks.request(
-          name,
-          callback as (lock: Lock | null) => Promise<T>,
-        ) as Promise<T>;
-      }
-      // Fallback: no Web Locks API available → run without lock
-      return callback({ name });
-    },
-    broadcastChannel:
-      typeof BroadcastChannel !== "undefined"
-        ? new BroadcastChannel(DEFAULT_BROADCAST_CHANNEL)
-        : {
-            postMessage: () => {},
-            close: () => {},
-            onmessage: null,
-          },
-    storage:
-      typeof localStorage !== "undefined"
-        ? localStorage
-        : createInMemoryStorage(),
+    lockRequest,
+    broadcastChannel,
+    storage,
     now: () => Date.now(),
-  };
-}
-
-function createInMemoryStorage(): Storage {
-  const store = new Map<string, string>();
-  return {
-    get length() {
-      return store.size;
-    },
-    clear: () => store.clear(),
-    getItem: (key: string) => store.get(key) ?? null,
-    key: (index: number) => [...store.keys()][index] ?? null,
-    removeItem: (key: string) => {
-      store.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      store.set(key, value);
-    },
   };
 }
 
@@ -135,7 +141,46 @@ function lockName(orgId: string, actorId: string): string {
   return `${LOCK_NAME_PREFIX}:${orgId}:${actorId}`;
 }
 
+/**
+ * Normalizes any thrown value into a CoordinationUnavailableError. Public
+ * methods use this to guarantee their declared Result return type: a rejected
+ * lockRequest / destroyed coordinator / unexpected throw is always converted to
+ * `{ ok: false, error }` rather than rejecting the public Promise.
+ */
+function toCoordinationUnavailable(err: unknown): CoordinationUnavailableError {
+  if (err instanceof CoordinationUnavailableError) return err;
+  return new CoordinationUnavailableError(
+    err instanceof Error
+      ? `Coordination unavailable: ${err.message}`
+      : "Coordination unavailable: cannot acquire shared lock",
+  );
+}
+
 // ── Coordinator ─────────────────────────────────────────────────────────────
+
+/**
+ * The full set of dependency keys, in stable order. Used to detect when a
+ * caller has injected a complete dependency set so the constructor can use it
+ * verbatim instead of building (and then discarding) real default deps — which
+ * would orphan a real BroadcastChannel and touch sessionStorage even in tests
+ * that inject a full fake environment.
+ */
+const DEPENDENCY_KEYS = [
+  "tabId",
+  "leaseDurationMs",
+  "lockRequest",
+  "broadcastChannel",
+  "storage",
+  "now",
+] as const satisfies readonly (keyof CoordinatorDependencies)[];
+
+function isCompleteDependencies(
+  deps: unknown,
+): deps is CoordinatorDependencies {
+  if (!deps || typeof deps !== "object") return false;
+  const obj = deps as Record<string, unknown>;
+  return DEPENDENCY_KEYS.every((k) => k in obj);
+}
 
 export class PendingGrantCoordinator {
   private readonly deps: CoordinatorDependencies;
@@ -144,7 +189,16 @@ export class PendingGrantCoordinator {
   private destroyed = false;
 
   constructor(deps?: Partial<CoordinatorDependencies>) {
-    this.deps = { ...createDefaultDeps(), ...deps };
+    // If the caller injected a COMPLETE dependency set (tests do this), use it
+    // verbatim — do NOT call createDefaultDeps(), which would construct a real
+    // BroadcastChannel and touch sessionStorage only to be immediately
+    // overwritten (resource leak of the orphaned channel). Only the production
+    // singleton path (no deps) and partial-deps callers build defaults.
+    if (isCompleteDependencies(deps)) {
+      this.deps = deps;
+    } else {
+      this.deps = { ...createDefaultDeps(), ...(deps ?? {}) };
+    }
     this.deps.broadcastChannel.onmessage = (event: MessageEvent) => {
       const data = event.data as BroadcastMessage;
       this.notifyListeners(data);
@@ -191,8 +245,8 @@ export class PendingGrantCoordinator {
     actorId: string,
     command: PendingGrantCommand,
   ): Promise<ReserveResult> {
-    return this.withLock(orgId, actorId, async () => {
-      try {
+    try {
+      return await this.withLock(orgId, actorId, async () => {
         // Check if an authority already exists
         const existing = this.readAuthority(orgId, actorId);
         if (existing) {
@@ -224,18 +278,10 @@ export class PendingGrantCoordinator {
           actorId,
         });
         return { ok: true as const, authority };
-      } catch (err) {
-        if (err instanceof CoordinationUnavailableError) {
-          return { ok: false as const, error: err };
-        }
-        return {
-          ok: false as const,
-          error: new CoordinationUnavailableError(
-            "Shared storage unavailable: cannot reserve time-grant command",
-          ),
-        };
-      }
-    });
+      });
+    } catch (err) {
+      return { ok: false as const, error: toCoordinationUnavailable(err) };
+    }
   }
 
   /**
@@ -251,8 +297,8 @@ export class PendingGrantCoordinator {
     actorId: string,
     command: PendingGrantCommand,
   ): Promise<TakeOverResult> {
-    return this.withLock(orgId, actorId, async () => {
-      try {
+    try {
+      return await this.withLock(orgId, actorId, async () => {
         const existing = this.readAuthority(orgId, actorId);
         if (!existing) {
           return {
@@ -274,11 +320,26 @@ export class PendingGrantCoordinator {
           };
         }
 
-        // Preserve the exact command — takeover must not change operationId
+        // Enforce frozen-command equality: a takeover must replay the EXACT
+        // command persisted by the original tab. A caller cannot reuse an
+        // expired lease to overwrite operationId / payload — that would let a
+        // crashed tab's identity be silently mutated, defeating C1. If the
+        // caller's command differs on any field, fail closed.
+        if (!commandsEqual(existing.command, command)) {
+          return {
+            ok: false as const,
+            error: new CoordinationUnavailableError(
+              "takeOver command does not match the stored frozen command",
+            ),
+          };
+        }
+
+        // Preserve the exact command — always reuse the stored frozen command
+        // (ignore the caller's copy) and bump the revision for the new lease.
         const now = this.deps.now();
         const updated: PendingGrantAuthority = {
           ...existing,
-          command, // Use the provided command (must be identical to original)
+          command: existing.command,
           revision: existing.revision + 1,
           inFlightLease: {
             tabId: this.deps.tabId,
@@ -294,18 +355,10 @@ export class PendingGrantCoordinator {
           actorId,
         });
         return { ok: true as const, authority: updated };
-      } catch (err) {
-        if (err instanceof CoordinationUnavailableError) {
-          return { ok: false as const, error: err };
-        }
-        return {
-          ok: false as const,
-          error: new CoordinationUnavailableError(
-            "Shared storage unavailable: cannot take over time-grant command",
-          ),
-        };
-      }
-    });
+      });
+    } catch (err) {
+      return { ok: false as const, error: toCoordinationUnavailable(err) };
+    }
   }
 
   /**
@@ -319,8 +372,8 @@ export class PendingGrantCoordinator {
     actorId: string,
     expected: { operationId: string; revision: number },
   ): Promise<ClearResult> {
-    return this.withLock(orgId, actorId, async () => {
-      try {
+    try {
+      return await this.withLock(orgId, actorId, async () => {
         const existing = this.readAuthority(orgId, actorId);
         if (!existing) {
           // Already cleared — that's OK
@@ -345,40 +398,24 @@ export class PendingGrantCoordinator {
           actorId,
         });
         return { ok: true as const };
-      } catch (err) {
-        if (err instanceof CoordinationUnavailableError) {
-          return { ok: false as const, error: err };
-        }
-        return {
-          ok: false as const,
-          error: new CoordinationUnavailableError(
-            "Shared storage unavailable: cannot clear time-grant command",
-          ),
-        };
-      }
-    });
+      });
+    } catch (err) {
+      return { ok: false as const, error: toCoordinationUnavailable(err) };
+    }
   }
 
   /**
    * Reads the current pending authority (if any) for the given (orgId, actorId).
    */
   async getCurrent(orgId: string, actorId: string): Promise<GetCurrentResult> {
-    return this.withLock(orgId, actorId, async () => {
-      try {
+    try {
+      return await this.withLock(orgId, actorId, async () => {
         const authority = this.readAuthority(orgId, actorId);
         return { ok: true as const, authority };
-      } catch (err) {
-        if (err instanceof CoordinationUnavailableError) {
-          return { ok: false as const, error: err };
-        }
-        return {
-          ok: false as const,
-          error: new CoordinationUnavailableError(
-            "Shared storage unavailable: cannot read time-grant status",
-          ),
-        };
-      }
-    });
+      });
+    } catch (err) {
+      return { ok: false as const, error: toCoordinationUnavailable(err) };
+    }
   }
 
   /**
@@ -409,21 +446,12 @@ export class PendingGrantCoordinator {
         return await fn();
       });
     } catch (err) {
-      if (err instanceof CoordinationUnavailableError) {
-        throw err;
-      }
-      // If the lock request itself fails (e.g., Web Locks unavailable),
-      // still try to execute without the lock — but surface as unavailable
-      // if the underlying operation fails.
-      if (this.destroyed) {
-        throw new CoordinationUnavailableError(
-          "Coordinator has been destroyed",
-        );
-      }
-      // Rethrow as coordination unavailable
-      throw new CoordinationUnavailableError(
-        "Cannot acquire shared lock: coordination unavailable",
-      );
+      // `withLock` is an internal helper and may throw (e.g. lockRequest
+      // rejects when Web Locks is unavailable, per the fail-closed default
+      // dependency). Every PUBLIC method wraps its withLock call in a
+      // try/catch that converts this throw into a Result via
+      // toCoordinationUnavailable, so the public API never rejects.
+      throw toCoordinationUnavailable(err);
     }
   }
 

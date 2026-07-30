@@ -301,25 +301,40 @@ export function ProctorDashboardPage() {
       const reserve = await coordinator.reserve(orgId, user.id, command);
       if (!reserve.ok) {
         if (reserve.error instanceof AlreadyPendingError) {
-          // Another command is already pending; restore it.
           const existing = reserve.error.existing;
-          setGrantState({
-            phase: "indeterminate",
-            command: {
-              organizationId: existing.organizationId,
-              attemptId: existing.command.attemptId,
-              operationId: existing.command.operationId,
-              addedSeconds: existing.command.addedSeconds,
-              reasonCode: existing.command.reasonCode,
-              reasonText: existing.command.reasonText,
-            },
-            revision: existing.revision,
-          });
-          toast.warning(
-            t("admin.proctorDashboard.extendDialog.blockedByPending", {
-              minutes: existing.command.addedSeconds / 60,
-            }),
-          );
+          // Only restore the pending command when it targets THIS attempt.
+          // Restoring a different attempt's frozen command would show a
+          // dialog whose retry button is a dead affordance (the attemptId
+          // guard below at the `else` branch silently returns). For a
+          // different attempt, block and reset to a fresh draft instead.
+          if (existing.command.attemptId === attemptId) {
+            setGrantState({
+              phase: "indeterminate",
+              command: {
+                organizationId: existing.organizationId,
+                attemptId: existing.command.attemptId,
+                operationId: existing.command.operationId,
+                addedSeconds: existing.command.addedSeconds,
+                reasonCode: existing.command.reasonCode,
+                reasonText: existing.command.reasonText,
+              },
+              revision: existing.revision,
+            });
+            toast.warning(
+              t("admin.proctorDashboard.extendDialog.blockedByPending", {
+                minutes: existing.command.addedSeconds / 60,
+              }),
+            );
+          } else {
+            // A different attempt's command is still pending — direct the
+            // proctor to resolve it first; do NOT open a dead dialog.
+            toast.warning(
+              t("admin.proctorDashboard.extendDialog.blockedByPending", {
+                minutes: existing.command.addedSeconds / 60,
+              }),
+            );
+            resetGrantDialog();
+          }
           return;
         }
         // CoordinationUnavailableError — fail closed.
@@ -345,6 +360,25 @@ export function ProctorDashboardPage() {
       reasonText: command.reasonText,
     };
 
+    // Clear the shared authority after a confirmed HTTP outcome (or a
+    // discardable failure). Surfaces a non-blocking warning if the clear
+    // itself failed (stale revision / coordination unavailable) WITHOUT
+    // changing the grant's HTTP result — the server is the source of truth
+    // for the deadline effect; the authority is bookkeeping. Still, a failed
+    // clear can leave a stale pending command visible to other tabs, so the
+    // proctor is told to refresh / close other exam-admin tabs.
+    const clearAuthority = async (): Promise<void> => {
+      const cleared = await coordinator.clearConfirmed(orgId, user.id, {
+        operationId: command.operationId,
+        revision,
+      });
+      if (!cleared.ok) {
+        toast.warning(
+          t("admin.proctorDashboard.extendDialog.clearStaleWarning"),
+        );
+      }
+    };
+
     try {
       const res = await api.post<TimeGrantResponse, TimeGrantRequest>(
         `/api/admin/attempts/${attemptId}/time-grants`,
@@ -354,10 +388,7 @@ export function ProctorDashboardPage() {
       // via compare-and-clear (only clears if the authority still matches our
       // operationId and revision, preventing stale tabs from deleting a newer
       // authority).
-      await coordinator.clearConfirmed(orgId, user.id, {
-        operationId: command.operationId,
-        revision,
-      });
+      await clearAuthority();
       switch (res.outcome) {
         case "granted":
           toast.success(
@@ -392,10 +423,7 @@ export function ProctorDashboardPage() {
         case "idempotency_conflict": {
           // The operationId is now unusable for this payload; clear it and
           // tell the admin a new command is required to retry.
-          await coordinator.clearConfirmed(orgId, user.id, {
-            operationId: command.operationId,
-            revision,
-          });
+          await clearAuthority();
           resetGrantDialog();
           toast.error(
             t("admin.proctorDashboard.extendDialog.idempotencyConflict"),
@@ -406,10 +434,7 @@ export function ProctorDashboardPage() {
         default: {
           // Definitive failure (validation / state / not-found): clear the
           // command and let the admin re-edit.
-          await coordinator.clearConfirmed(orgId, user.id, {
-            operationId: command.operationId,
-            revision,
-          });
+          await clearAuthority();
           resetGrantDialog();
           toast.error(
             err instanceof Error
@@ -476,7 +501,17 @@ export function ProctorDashboardPage() {
     // This covers cross-tab scenarios: another tab may have a pending command
     // for this attempt or a different attempt.
     const current = await coordinator.getCurrent(orgId, user.id);
-    if (current.ok && current.authority) {
+    if (!current.ok) {
+      // Coordination unavailable (Web Locks / localStorage / corrupted record):
+      // fail closed — do NOT open a fresh draft, which would mint a new
+      // operationId that cannot be coordinated across tabs.
+      setExtendTarget(null);
+      toast.error(
+        t("admin.proctorDashboard.extendDialog.coordinationUnavailable"),
+      );
+      return;
+    }
+    if (current.authority) {
       const pending = current.authority;
       if (pending.command.attemptId === attemptId) {
         // Same attempt — restore the exact frozen command.

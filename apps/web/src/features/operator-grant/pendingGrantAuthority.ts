@@ -134,6 +134,24 @@ export function isLeaseExpired(lease: InFlightLease, now: number): boolean {
   return now >= lease.expiresAt;
 }
 
+/**
+ * Structural equality over the frozen command fields. Used by `takeOver` to
+ * guarantee a takeover preserves the EXACT frozen command — a caller cannot
+ * reuse an expired lease to overwrite operationId / payload.
+ */
+export function commandsEqual(
+  a: PendingGrantCommand,
+  b: PendingGrantCommand,
+): boolean {
+  return (
+    a.operationId === b.operationId &&
+    a.attemptId === b.attemptId &&
+    a.addedSeconds === b.addedSeconds &&
+    a.reasonCode === b.reasonCode &&
+    a.reasonText === b.reasonText
+  );
+}
+
 export function commandDigest(command: PendingGrantCommand): string {
   // Simple content identifier for compare-and-clear.
   return `${command.operationId}:${command.attemptId}:${command.addedSeconds}`;

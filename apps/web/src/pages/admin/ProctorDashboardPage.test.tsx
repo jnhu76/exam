@@ -482,5 +482,40 @@ describe("ProctorDashboardPage", () => {
       const secondBody = apiPost.mock.calls[1]![1] as TimeGrantRequest;
       expect(secondBody.operationId).not.toBe(firstBody.operationId);
     });
+
+    it("fails closed when cross-tab coordination is unavailable (corrupt authority)", async () => {
+      // REC-I4-C1: if the shared authority cannot be read (corrupted record),
+      // openGrantDialog must NOT fall back to a fresh draft (which would mint a
+      // new uncoordinated operationId). It must show coordinationUnavailable
+      // and keep the dialog closed. Mirrors coordinator unit-test case 9.
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // adminUser = { id: "admin-1", organizationId: "org-1" } → the
+      // coordinator's shared storage key is exam.pendingGrantAuthority:org-1:admin-1.
+      // Poison it with unparseable JSON so readAuthority throws
+      // CoordinationUnavailableError, making getCurrent return { ok: false }.
+      localStorage.setItem(
+        "exam.pendingGrantAuthority:org-1:admin-1",
+        "not-valid-json{{{",
+      );
+
+      renderPage();
+      await screen.findByText("张三");
+
+      const extendBtn = await screen.findByRole("button", { name: "延长时间" });
+      fireEvent.click(extendBtn);
+
+      // Must fail closed: error toast shown, dialog NOT opened.
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("无法安全协调"),
+        );
+      });
+      expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();
+      // No grant request was ever sent.
+      expect(apiPost).not.toHaveBeenCalled();
+    });
   });
 });

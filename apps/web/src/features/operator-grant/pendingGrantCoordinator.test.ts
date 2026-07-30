@@ -586,4 +586,98 @@ describe("PendingGrantCoordinator", () => {
       Date.now(),
     );
   });
+
+  // ── 16. takeOver rejects a mutated frozen command (B4) ───────────────────
+
+  it("takeOver rejects a mutated frozen command and leaves the authority intact", async () => {
+    const env = createTestEnv();
+    const { coord: coordA } = env.createCoordinator(TAB_A);
+    const { coord: coordB } = env.createCoordinator(TAB_B);
+
+    // A reserves the canonical command (op-1 / att-1 / 600s).
+    const reserveA = await coordA.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserveA.ok).toBe(true);
+
+    // Let the lease expire so B is eligible to take over.
+    vi.advanceTimersByTime(31_000);
+
+    // B attempts a takeover with the SAME operationId but a MUTATED payload
+    // (addedSeconds 600 → 1200). This must fail closed: a takeover must replay
+    // the exact frozen command, never overwrite it.
+    const takeOver = await coordB.takeOver(
+      ORG_A,
+      ACTOR_1,
+      COMMAND_SAME_OP_DIFF_PAYLOAD,
+    );
+    expect(takeOver.ok).toBe(false);
+    if (takeOver.ok) return;
+    expect(takeOver.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    // The stored authority must be unchanged: same command, same revision (1),
+    // no new lease for B. A mutation must not silently persist.
+    const current = await coordA.getCurrent(ORG_A, ACTOR_1);
+    expect(current.ok).toBe(true);
+    if (!current.ok) return;
+    expect(current.authority).not.toBeNull();
+    expect(current.authority!.command.addedSeconds).toBe(600);
+    expect(current.authority!.revision).toBe(1);
+  });
+
+  // ── 17. A failing lock never rejects the public API (B3) ─────────────────
+  //
+  // The fail-closed default dependency rejects lockRequest when Web Locks is
+  // unavailable. This test proves the four public methods convert that
+  // rejection into a { ok: false } Result rather than rejecting the returned
+  // Promise — the page never needs a try/catch around coordinator calls.
+
+  it("public methods return a Result (never reject) when lock acquisition fails", async () => {
+    // Build a coordinator whose lockRequest always rejects, simulating a
+    // missing/unusable Web Locks API (the production fail-closed default).
+    const throwingLockRequest = vi.fn(
+      (): Promise<never> =>
+        Promise.reject(
+          new CoordinationUnavailableError(
+            "Web Locks API unavailable: cannot coordinate cross-tab grants safely",
+          ),
+        ),
+    );
+    const coord = new PendingGrantCoordinator({
+      tabId: TAB_A,
+      leaseDurationMs: 30_000,
+      lockRequest:
+        throwingLockRequest as unknown as CoordinatorDependencies["lockRequest"],
+      broadcastChannel: new MockBroadcastChannel("test"),
+      storage: new FakeStorage(),
+      now: () => Date.now(),
+    });
+
+    // reserve — returns a Result, does not reject.
+    const reserve = await coord.reserve(ORG_A, ACTOR_1, COMMAND);
+    expect(reserve.ok).toBe(false);
+    if (reserve.ok) return;
+    expect(reserve.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    // takeOver — returns a Result, does not reject.
+    const takeOver = await coord.takeOver(ORG_A, ACTOR_1, COMMAND);
+    expect(takeOver.ok).toBe(false);
+    if (takeOver.ok) return;
+    expect(takeOver.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    // clearConfirmed — returns a Result, does not reject.
+    const clear = await coord.clearConfirmed(ORG_A, ACTOR_1, {
+      operationId: "op-1",
+      revision: 1,
+    });
+    expect(clear.ok).toBe(false);
+    if (clear.ok) return;
+    expect(clear.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    // getCurrent — returns a Result, does not reject.
+    const current = await coord.getCurrent(ORG_A, ACTOR_1);
+    expect(current.ok).toBe(false);
+    if (current.ok) return;
+    expect(current.error).toBeInstanceOf(CoordinationUnavailableError);
+
+    coord.destroy();
+  });
 });

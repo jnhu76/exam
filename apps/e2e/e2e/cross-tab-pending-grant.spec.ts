@@ -1,37 +1,72 @@
 /**
  * REC-I4-C1 — Dual-tab cross-tab pending grant coordination E2E.
  *
- * Verifies that two browser tabs in the same origin share the pending command
- * authority via localStorage and that the coordinator prevents duplicate
- * operationIds.
+ * Drives the REAL production PendingGrantCoordinator (singleton) + the real
+ * ProctorDashboard UI + the real server time-grants endpoint. It does NOT
+ * hand-write localStorage or mint operationIds in-test — every authority
+ * write/read goes through the production coordinator that the page uses.
  *
- * Key traces:
- *   1. Tab A reserves command → Tab A request interrupted → Tab A closed
- *      → Tab B discovers same pending command → Tab B takes over retries
- *      → Server returns idempotent_replay → Authority cleared → Deadline
- *        only increased once.
- *   2. Tab A has pending command → Tab B tries to grant a different attempt
- *      → UI is blocked → No second HTTP request.
+ * Two traces:
+ *
+ *   1. Tab A reserves a command and submits; the server commits but the
+ *      response is masked as a 5xx so the dialog goes `indeterminate` (the
+ *      coordinator KEEPS the frozen authority). Tab A is closed. Tab B opens
+ *      the same attempt, the coordinator's getCurrent restores the frozen
+ *      command, Tab B retries → server returns idempotent_replay → authority
+ *      is cleared → the deadline increased EXACTLY ONCE (600s).
+ *
+ *   2. Tab A has a pending command for attempt A1. Tab B opens a DIFFERENT
+ *      attempt (A2) and clicks 延长时间. The coordinator detects the pending
+ *      command for a different attempt → warning toast → dialog does NOT open
+ *      → NO time-grants POST is sent.
+ *
+ * CI fix history: this spec previously never logged the Playwright page into
+ * the admin UI (only the API token was obtained), so every page.goto to
+ * /admin/.../proctor hit the auth guard and redirected to the candidate list;
+ * the 延长时间 button never rendered and the spec failed deterministically.
+ * loginAsAdmin(page) now runs before every goto, BEFORE any localStorage write
+ * (loginViaUi clears storage on /login).
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Request } from "@playwright/test";
 import { seedExam, type SeededExam } from "../lib/seed";
+import { loginAsAdmin } from "../lib/login";
 import {
   adminApiToken,
   candidateLoginApi,
   candidateStartAttempt,
-  adminPost,
-  adminGet,
 } from "../lib/flow";
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+/**
+ * Fetches a candidate's deadlineAt (ms since epoch) from the proctor status
+ * endpoint as the admin. Used to prove a single deadline effect (before vs
+ * after == 600s).
+ */
+async function readDeadlineMs(
+  request: import("@playwright/test").APIRequestContext,
+  token: string,
+  examId: string,
+  attemptId: string,
+): Promise<number> {
+  const res = await request.get(
+    `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/api/admin/exams/${examId}/candidates/status`,
+    { headers: { Cookie: `auth-token=${token}` } },
+  );
+  expect(res.ok()).toBe(true);
+  const body = (await res.json()) as {
+    candidates: Array<{ attemptId: string; deadlineAt: string | null }>;
+  };
+  const cand = body.candidates.find((c) => c.attemptId === attemptId);
+  expect(cand, "seeded attempt must appear in candidates/status").toBeTruthy();
+  expect(cand!.deadlineAt, "attempt must have a deadlineAt").toBeTruthy();
+  return Date.parse(cand!.deadlineAt!);
+}
 
 test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
   test.describe.configure({ mode: "serial" });
 
   let seeded: SeededExam;
   let adminToken: string;
-  let candidateToken: string;
   let attemptId: string;
 
   test.beforeAll(async ({ request }) => {
@@ -42,7 +77,7 @@ test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
     });
 
     adminToken = await adminApiToken(request);
-    candidateToken = await candidateLoginApi(
+    const candidateToken = await candidateLoginApi(
       request,
       seeded.candidate.username,
       seeded.candidate.password,
@@ -55,191 +90,174 @@ test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
   });
 
   /**
-   * Trace 1: Tab A reserves → request interrupted → Tab A closes
-   *          → Tab B discovers → Tab B takes over → retries same operationId
-   *          → Server idempotent_replay → Authority cleared → One deadline effect.
+   * Helper: as the admin UI on `page`, open the grant dialog for the seeded
+   * candidate, fill 10 minutes + a reason, and click the confirm button.
+   * Assumes the page is already logged in as admin and on the proctor page.
    */
-  test("Tab A interrupted → Tab B takes over → idempotent_replay", async ({
+  async function submitTenMinuteGrant(page: import("@playwright/test").Page) {
+    const extendBtn = page.getByRole("button", { name: "延长时间" });
+    await expect(extendBtn.first()).toBeVisible({ timeout: 15_000 });
+    await extendBtn.first().click();
+    // Dialog title appears once the coordinator's getCurrent resolves.
+    await expect(page.getByText("延长考试时间").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    // 10 minutes is the default; fill the reason and confirm.
+    const reason = page.getByPlaceholder("请说明延长原因");
+    await reason.fill("网络中断");
+    const confirm = page.getByRole("button", { name: "延长 10 分钟" });
+    await confirm.click();
+  }
+
+  /**
+   * Trace 1: Tab A submits → server commits but response masked as 5xx →
+   * dialog `indeterminate` (authority KEPT). Tab A closed. Tab B restores the
+   * frozen command via getCurrent → retries → idempotent_replay → authority
+   * cleared → deadline increased EXACTLY ONCE (600s).
+   */
+  test("Tab A lost-response → Tab B restores + retries → idempotent_replay, single deadline effect", async ({
     page,
     context,
+    request,
   }) => {
-    // Navigate Tab A to the proctor dashboard and reserve a grant command.
-    // We use the page's API context to simulate the coordinator behavior.
-    const operationId = crypto.randomUUID();
+    // IMPORTANT ordering: loginViaUi clears localStorage on /login. Because
+    // localStorage is SHARED across pages in one browser context, logging in
+    // Tab B AFTER Tab A has written the pending authority would wipe it. So
+    // both tabs are logged in UP FRONT, before any authority is created.
 
-    // Step 1: Tab A's admin navigates to the proctor view.
+    // ── Tab B: create + log in first (navigates to /admin/dashboard), so its
+    //    login-time localStorage.clear() runs while there is no authority yet.
+    const pageB = await context.newPage();
+    await loginAsAdmin(pageB);
+
+    // ── Tab A: log in, capture the baseline deadline, then submit with the
+    //    response masked as a 5xx so the dialog goes `indeterminate` (the
+    //    production coordinator KEEPS the authority; it is NOT cleared).
+    await loginAsAdmin(page);
+    const deadlineBefore = await readDeadlineMs(
+      request,
+      adminToken,
+      seeded.examId,
+      attemptId,
+    );
+
+    // Intercept the FIRST time-grants POST on Tab A: let the server really
+    // commit (route.fetch), then mask the response as 500 so the page's
+    // classifyGrantFailure maps it to `indeterminate` (status >= 500). The
+    // coordinator does NOT clear the authority on an indeterminate failure,
+    // so the frozen command stays persisted for Tab B to discover.
+    let tabAGrantHappened = false;
+    await page.route("**/api/admin/attempts/*/time-grants", async (route) => {
+      if (tabAGrantHappened) {
+        // Subsequent requests (e.g. Tab A retry) pass through unmodified.
+        await route.continue();
+        return;
+      }
+      tabAGrantHappened = true;
+      // Really commit on the server so a replay returns idempotent_replay.
+      await route.fetch();
+      // Mask as a 5xx failure to drive the dialog to `indeterminate`. The
+      // response body is irrelevant — classifyGrantFailure keys off status.
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "masked-for-indeterminate" }),
+      });
+    });
+
     await page.goto(`/admin/exams/${seeded.examId}/proctor`);
     await page.waitForURL("**/proctor**", { timeout: 15_000 });
 
-    // Step 2: Use the API to simulate the coordinator reserve + grant.
-    // The coordinator stores the pending command in localStorage before
-    // sending the HTTP request. We simulate this by writing directly to
-    // localStorage and then calling the API.
-    const actorId = "admin-1";
-    const orgId = "org-1";
+    await submitTenMinuteGrant(page);
 
-    const authority = {
-      schemaVersion: 1,
-      organizationId: orgId,
-      actorId,
-      command: {
-        attemptId,
-        operationId,
-        addedSeconds: 600,
-        reasonCode: "technical_incident",
-        reasonText: "Tab A grant",
-      },
-      revision: 1,
-      createdAt: Date.now(),
-      inFlightLease: {
-        tabId: "tab-a",
-        leaseId: crypto.randomUUID(),
-        // 30s lease from now
-        expiresAt: Date.now() + 30_000,
-      },
-    };
+    // The dialog must be in `indeterminate` (warning toast), and the
+    // production coordinator must have persisted the authority.
+    await expect(page.getByText("未确认加时是否成功").first()).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Store the authority in localStorage (simulating coordinator.reserve).
-    await page.evaluate(
-      ({ key, value }) => {
-        localStorage.setItem(key, JSON.stringify(value));
-      },
-      {
-        key: `exam.pendingGrantAuthority:${orgId}:${actorId}`,
-        value: authority,
-      },
+    // Verify the production coordinator actually wrote the shared authority.
+    // The admin's (org, actor) key is built from the logged-in admin's ids.
+    const authBefore = await page.evaluate(() => {
+      const keys = Object.keys(localStorage).filter((k) =>
+        k.startsWith("exam.pendingGrantAuthority:"),
+      );
+      return keys.map((k) => ({
+        key: k,
+        value: JSON.parse(localStorage.getItem(k) ?? "null"),
+      }));
+    });
+    expect(authBefore.length, "authority persisted after indeterminate").toBe(
+      1,
     );
+    expect(authBefore[0]!.value.command.attemptId).toBe(attemptId);
+    expect(authBefore[0]!.value.command.addedSeconds).toBe(600);
 
-    // Tab A sends the grant request.
-    const grantRes = await adminPost(
-      page.request,
-      adminToken,
-      `/api/admin/attempts/${attemptId}/time-grants`,
-      {
-        operationId,
-        addedSeconds: 600,
-        reasonCode: "technical_incident",
-        reasonText: "Tab A grant",
-      },
-    );
+    // ── Close Tab A (simulating the proctor walking away / closing the tab
+    //    with an unresolved command). Tab B is already logged in and shares
+    //    the same localStorage → it can discover the frozen authority.
+    await page.close();
 
-    // The server may have committed the grant (granted) or be a replay of
-    // an existing operationId. Either way, the deadline effect is bounded.
-    expect(grantRes.status()).toBe(200);
-    const grantBody = await grantRes.json();
-    expect(["granted", "idempotent_replay"]).toContain(grantBody.outcome);
-
-    // Step 3: Open Tab B in the same browser context (same localStorage).
-    const pageB = await context.newPage();
     await pageB.goto(`/admin/exams/${seeded.examId}/proctor`);
     await pageB.waitForURL("**/proctor**", { timeout: 15_000 });
 
-    // Step 4: Tab B reads the pending authority from localStorage.
-    const pendingOnB = await pageB.evaluate(
-      ({ key }) => {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : null;
-      },
-      { key: `exam.pendingGrantAuthority:${orgId}:${actorId}` },
+    // ── Tab B: open the SAME attempt's grant dialog. The production
+    //    coordinator's getCurrent must restore the frozen command
+    //    (dialog shows the indeterminate banner + 重试同一加时 button).
+    const extendBtnB = pageB.getByRole("button", { name: "延长时间" });
+    await expect(extendBtnB.first()).toBeVisible({ timeout: 15_000 });
+    await extendBtnB.first().click();
+    await expect(pageB.getByText("延长考试时间").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    // The dialog restored to indeterminate (retry affordance visible).
+    await expect(
+      pageB.getByRole("button", { name: "重试同一加时" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // ── Tab B retries the frozen command. The server already committed
+    //    (from Tab A's route.fetch), so this MUST be idempotent_replay.
+    await pageB.getByRole("button", { name: "重试同一加时" }).click();
+    await expect(
+      pageB.getByText("该加时已处理，未重复延长").first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The coordinator must have cleared the authority (compare-and-clear on
+    // the confirmed outcome).
+    const authAfter = await pageB.evaluate(
+      () =>
+        Object.keys(localStorage).filter((k) =>
+          k.startsWith("exam.pendingGrantAuthority:"),
+        ).length,
     );
+    expect(authAfter, "authority cleared after confirmed replay").toBe(0);
 
-    // Tab B must see the same pending command.
-    expect(pendingOnB).not.toBeNull();
-    expect(pendingOnB.command.operationId).toBe(operationId);
-    expect(pendingOnB.command.attemptId).toBe(attemptId);
-    expect(pendingOnB.command.addedSeconds).toBe(600);
-    expect(pendingOnB.revision).toBe(1);
-
-    // Step 5: Tab B takes over the expired lease (advance time past lease).
-    // In a real scenario, the lease would expire naturally. Here we simulate
-    // by updating the lease to be expired.
-    await pageB.evaluate(
-      ({ key, tabId, leaseId }) => {
-        const raw = localStorage.getItem(key);
-        if (!raw) return;
-        const auth = JSON.parse(raw);
-        // Set lease to expired (1 hour ago).
-        auth.inFlightLease = {
-          tabId,
-          leaseId,
-          expiresAt: Date.now() - 3600_000,
-        };
-        auth.revision = 2;
-        localStorage.setItem(key, JSON.stringify(auth));
-      },
-      {
-        key: `exam.pendingGrantAuthority:${orgId}:${actorId}`,
-        tabId: "tab-b",
-        leaseId: crypto.randomUUID(),
-      },
-    );
-
-    // Step 6: Tab B retries the SAME operationId (takeover must preserve it).
-    const retryRes = await adminPost(
-      pageB.request,
+    // ── The deadline increased EXACTLY ONCE: 600s, not 1200s. This is the
+    //    real C1 safety proof — server-side idempotency + coordinator both
+    //    prevent a duplicate effect.
+    const deadlineAfter = await readDeadlineMs(
+      request,
       adminToken,
-      `/api/admin/attempts/${attemptId}/time-grants`,
-      {
-        operationId, // SAME operationId — must not mint a new one
-        addedSeconds: 600,
-        reasonCode: "technical_incident",
-        reasonText: "Tab A grant",
-      },
+      seeded.examId,
+      attemptId,
     );
-    expect(retryRes.status()).toBe(200);
-    const retryBody = await retryRes.json();
-
-    // The server must return idempotent_replay for the exact same command.
-    expect(retryBody.outcome).toBe("idempotent_replay");
-
-    // Step 7: Clear the authority (compare-and-clear).
-    // In a real scenario, the coordinator.clearConfirmed would do this.
-    // Here we verify the authority can be cleared.
-    const clearResult = await pageB.evaluate(
-      ({ key, opId, revision }) => {
-        const raw = localStorage.getItem(key);
-        if (!raw) return { cleared: false, reason: "not_found" };
-        const auth = JSON.parse(raw);
-        if (auth.command.operationId !== opId || auth.revision !== revision) {
-          return { cleared: false, reason: "mismatch" };
-        }
-        localStorage.removeItem(key);
-        return { cleared: true };
-      },
-      {
-        key: `exam.pendingGrantAuthority:${orgId}:${actorId}`,
-        opId: operationId,
-        revision: 2,
-      },
-    );
-    expect(clearResult.cleared).toBe(true);
-
-    // Verify the deadline was only increased once (by querying the status).
-    const statusRes = await adminGet(
-      page.request,
-      adminToken,
-      `/api/admin/exams/${seeded.examId}/candidates/status`,
-    );
-    expect(statusRes.status()).toBe(200);
-    const statusBody = await statusRes.json();
-    const candidate = statusBody.candidates[0];
-    // The deadline should be exactly 600s after the original deadline
-    // (only one grant effect, not two).
-    expect(candidate.status).toBe("in_progress");
+    const deltaSec = Math.round((deadlineAfter - deadlineBefore) / 1000);
+    expect(deltaSec).toBe(600);
 
     await pageB.close();
   });
 
   /**
-   * Trace 2: Tab A has a pending command for attempt A1.
-   *          Tab B tries to open the grant dialog for a different attempt A2.
-   *          → UI is blocked → No second HTTP request → No second operationId.
+   * Trace 2: Tab A creates a real pending command for attempt A1. Tab B opens a
+   * DIFFERENT attempt (A2), clicks 延长时间 → the coordinator detects the
+   * pending command for a different attempt → warning toast → the grant dialog
+   * does NOT open → NO time-grants POST is sent.
    */
   test("Tab B blocked from granting a different attempt when Tab A has pending", async ({
     page,
     context,
   }) => {
-    // Create a second exam + candidate for the different-attempt scenario.
+    // Seed a SECOND exam + candidate + attempt for the different-attempt case.
     const seeded2 = await seedExam(page.request, `c1-block-${Date.now()}`, {
       interruptionTimePolicy: "operator_incident",
     });
@@ -254,80 +272,73 @@ test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
       seeded2.examId,
     );
 
-    const actorId = "admin-1";
-    const orgId = "org-1";
-    const operationId = crypto.randomUUID();
+    // Capture every time-grants POST from Tab B so we can assert NONE was sent.
+    const grantRequests: Request[] = [];
 
-    // Step 1: Tab A navigates and reserves a command for attemptId1.
+    // ── Tab B: create + log in FIRST. loginViaUi clears localStorage, and
+    //    storage is shared across pages in one context — so Tab B's login must
+    //    run BEFORE Tab A writes the pending authority, otherwise Tab B's login
+    //    would wipe it.
+    const pageB = await context.newPage();
+    await loginAsAdmin(pageB);
+    pageB.on("request", (req) => {
+      if (req.method() === "POST" && req.url().includes("/time-grants")) {
+        grantRequests.push(req);
+      }
+    });
+
+    // ── Tab A: log in, create a REAL pending command for attempt A1 by
+    //    submitting a grant with the response masked as 5xx (indeterminate →
+    //    the coordinator keeps the authority for A1).
     const pageA = page;
+    await loginAsAdmin(pageA);
+
+    let tabAGrantHappened = false;
+    await pageA.route("**/api/admin/attempts/*/time-grants", async (route) => {
+      if (tabAGrantHappened) {
+        await route.continue();
+        return;
+      }
+      tabAGrantHappened = true;
+      await route.fetch();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "masked-for-indeterminate" }),
+      });
+    });
+
     await pageA.goto(`/admin/exams/${seeded.examId}/proctor`);
     await pageA.waitForURL("**/proctor**", { timeout: 15_000 });
+    await submitTenMinuteGrant(pageA);
+    // Confirm the pending command for A1 is persisted before opening Tab B.
+    await expect(pageA.getByText("未确认加时是否成功").first()).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Write a pending authority for the first attempt.
-    await pageA.evaluate(
-      ({ key, attempt, opId }) => {
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            schemaVersion: 1,
-            organizationId: "org-1",
-            actorId: "admin-1",
-            command: {
-              attemptId: attempt,
-              operationId: opId,
-              addedSeconds: 600,
-              reasonCode: "technical_incident",
-              reasonText: "Pending grant for attempt 1",
-            },
-            revision: 1,
-            createdAt: Date.now(),
-            inFlightLease: {
-              tabId: "tab-a",
-              leaseId: crypto.randomUUID(),
-              expiresAt: Date.now() + 30_000,
-            },
-          }),
-        );
-      },
-      {
-        key: `exam.pendingGrantAuthority:${orgId}:${actorId}`,
-        attempt: attemptId,
-        opId: operationId,
-      },
-    );
-
-    // Step 2: Tab B opens the proctor dashboard for a DIFFERENT exam.
-    const pageB = await context.newPage();
+    // ── Tab B: go to the SECOND exam's proctor page, attempt to open the
+    //    grant dialog for attempt A2. The coordinator should detect the
+    //    pending command for A1 (a different attempt) and block.
     await pageB.goto(`/admin/exams/${seeded2.examId}/proctor`);
     await pageB.waitForURL("**/proctor**", { timeout: 15_000 });
 
-    // Step 3: Tab B tries to open the grant dialog for the second attempt.
-    // The coordinator should detect the pending authority for a different
-    // attempt and block the dialog.
-    // The extend button text is "延长时间".
-    const extendBtn = pageB.getByRole("button", { name: "延长时间" });
-    await expect(extendBtn).toBeVisible({ timeout: 15_000 });
+    const extendBtnB = pageB.getByRole("button", { name: "延长时间" });
+    await expect(extendBtnB.first()).toBeVisible({ timeout: 15_000 });
+    await extendBtnB.first().click();
 
-    // Click the extend button — the coordinator should detect the pending
-    // authority for a different attempt, show a warning toast, and NOT open
-    // the dialog.
-    await extendBtn.click();
+    // The coordinator detected the pending command for a different attempt and
+    // surfaced the blockedByPending warning (存在未确认的加时命令…).
+    await expect(pageB.getByText("存在未确认的加时命令").first()).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Wait a moment for the async coordinator check to complete.
+    // The grant dialog must NOT have opened.
+    await expect(pageB.getByText("延长考试时间")).toHaveCount(0);
+
+    // Definitive proof: NO time-grants POST was ever sent from Tab B.
+    // Give the async coordinator check a brief window, then assert zero.
     await pageB.waitForTimeout(500);
-
-    // The dialog must NOT be open (the title "延长考试时间" should not appear).
-    const dialogTitle = pageB.getByText("延长考试时间");
-    await expect(dialogTitle).not.toBeVisible();
-
-    // Verify that NO second HTTP request was sent.
-    // The proctor dashboard polls /candidates/status; we can intercept
-    // the time-grants request to ensure none was made.
-    const grantRequests = pageB.url().includes("time-grants");
-    // Just verify the dialog didn't open — the grant request is the
-    // definitive proof that no second operationId was created.
-    // The dialog not appearing means the user was blocked before
-    // they could even fill in the form and submit.
+    expect(grantRequests, "no second time-grants request").toHaveLength(0);
 
     await pageB.close();
   });
