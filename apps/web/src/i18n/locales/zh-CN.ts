@@ -1158,6 +1158,10 @@ const zhCN = {
         rubricPlaceholder:
           "请描述评分时应考虑的关键点、完整性、准确性或论证质量",
         rubricHint: "评分依据；文本作答题在考试发布时必须填写非空评分标准",
+        referenceAnswer: "参考答案（可选）",
+        referenceAnswerPlaceholder: "供阅卷人参考的示例答案，不影响自动判分",
+        referenceAnswerHint:
+          "仅供阅卷参考，不用于自动判分，考生不可见；留空则不保存",
         optionTrue: "是",
         optionFalse: "否",
         content: "题目内容",

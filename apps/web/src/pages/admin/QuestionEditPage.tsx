@@ -127,13 +127,23 @@ export function QuestionEditPage() {
     }
 
     // Normalize so incompatible fields never leak into the payload:
-    // objective types carry rubric: null; text_response keeps its rubric
-    // verbatim (newlines preserved) with options: [] / standardAnswer: null.
+    // - objective types carry rubric: null;
+    // - text_response keeps its rubric verbatim (newlines preserved) with
+    //   options: []. Its standardAnswer is an OPTIONAL reference answer:
+    //   a non-empty plain-text string is forwarded as-is, while a blank /
+    //   whitespace-only value is normalized to null so no meaningless "   "
+    //   is persisted.
+    const referenceAnswer =
+      formData.type === "text_response" &&
+      typeof formData.standardAnswer === "string" &&
+      formData.standardAnswer.trim() !== ""
+        ? formData.standardAnswer
+        : null;
     const payload: QuestionFormData = {
       ...formData,
       rubric: formData.type === "text_response" ? formData.rubric : null,
       ...(formData.type === "text_response"
-        ? { options: [], standardAnswer: null }
+        ? { options: [], standardAnswer: referenceAnswer }
         : {}),
     };
 

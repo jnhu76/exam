@@ -187,11 +187,16 @@ export function QuestionForm({
                 defaults.standardAnswer = true;
                 defaults.rubric = null;
               } else if (type === "text_response") {
-                // text_response canonical form: no options, no objective
-                // standardAnswer, rubric is the grading basis. Preserve any
-                // in-flight rubric draft when re-entering the type.
+                // text_response canonical form: no options, rubric is the
+                // grading basis, standardAnswer is an OPTIONAL reference
+                // answer (plain text | null). Preserve any in-flight rubric
+                // and reference-answer draft when re-entering the type, so
+                // toggling away and back does not silently drop author input.
                 defaults.options = [];
-                defaults.standardAnswer = null;
+                defaults.standardAnswer =
+                  typeof form.standardAnswer === "string"
+                    ? form.standardAnswer
+                    : null;
                 defaults.rubric = form.rubric ?? null;
               }
               update({ type, ...defaults });
@@ -336,6 +341,23 @@ export function QuestionForm({
           />
           <p className="text-xs text-muted-foreground">
             {t("admin.forms.question.rubricHint")}
+          </p>
+        </Field>
+      )}
+
+      {form.type === "text_response" && (
+        <Field>
+          <Label>{t("admin.forms.question.referenceAnswer")}</Label>
+          <Textarea
+            value={
+              typeof form.standardAnswer === "string" ? form.standardAnswer : ""
+            }
+            onChange={(e) => update({ standardAnswer: e.target.value })}
+            placeholder={t("admin.forms.question.referenceAnswerPlaceholder")}
+            rows={4}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("admin.forms.question.referenceAnswerHint")}
           </p>
         </Field>
       )}

@@ -219,6 +219,7 @@ describe("QuestionEditPage", () => {
 const CONTENT_PLACEHOLDER = "输入题目内容";
 const RUBRIC_PLACEHOLDER =
   "请描述评分时应考虑的关键点、完整性、准确性或论证质量";
+const REFERENCE_ANSWER_PLACEHOLDER = "供阅卷人参考的示例答案，不影响自动判分";
 
 /** Open the type <Select> (a11y-labeled 题目类型) and pick an option. */
 async function selectType(
@@ -410,7 +411,7 @@ describe("QuestionEditPage — text_response authoring", () => {
     });
   });
 
-  it("does not require standardAnswer for text_response (payload null)", async () => {
+  it("does not require standardAnswer for text_response (payload null when blank)", async () => {
     const user = userEvent.setup();
     renderNew();
     await screen.findByText("新增题目");
@@ -425,10 +426,15 @@ describe("QuestionEditPage — text_response authoring", () => {
       "按逻辑完整性给分",
     );
 
-    // No objective answer control is shown; rubric present is enough to save.
+    // The objective answer control is NOT shown for text_response. The
+    // optional reference-answer field IS shown but left blank, so the
+    // payload must normalize to standardAnswer: null.
     expect(
       screen.queryByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+    ).toBeInTheDocument();
     await user.click(screen.getByText("保存"));
 
     await waitFor(() => {
@@ -442,6 +448,78 @@ describe("QuestionEditPage — text_response authoring", () => {
       );
     });
   });
+
+  it("forwards a non-empty optional reference answer for text_response", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    const rubric = "按论证完整性给分";
+    const reference = "参考要点一\n参考要点二";
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请阐述你的观点",
+    );
+    await user.type(screen.getByPlaceholderText(RUBRIC_PLACEHOLDER), rubric);
+    await user.type(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+      reference,
+    );
+
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "text_response",
+          options: [],
+          standardAnswer: reference,
+          rubric,
+        }),
+      );
+    });
+  });
+
+  it.each([
+    ["only spaces", "   "],
+    ["only newlines", "\n\n"],
+    ["spaces and tabs", " \t \t"],
+  ])(
+    "normalizes whitespace-only reference answer to null (%s)",
+    async (_label, blank) => {
+      const user = userEvent.setup();
+      renderNew();
+      await screen.findByText("新增题目");
+
+      await selectType(user, "文本作答题");
+      await user.type(
+        screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+        "请阐述你的观点",
+      );
+      await user.type(
+        screen.getByPlaceholderText(RUBRIC_PLACEHOLDER),
+        "按论证完整性给分",
+      );
+      await user.type(
+        screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+        blank,
+      );
+
+      await user.click(screen.getByText("保存"));
+
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/api/questions",
+          expect.objectContaining({
+            type: "text_response",
+            standardAnswer: null,
+          }),
+        );
+      });
+    },
+  );
 
   it.each([
     ["empty string", ""],
@@ -591,5 +669,84 @@ describe("QuestionEditPage — text_response authoring", () => {
         expect.objectContaining({ type: "fill_blank", rubric: null }),
       );
     });
+  });
+
+  it("loads and preserves an existing text_response multiline reference answer in edit mode", async () => {
+    const existingWithReference = {
+      courseId: "c1",
+      type: "text_response",
+      content: "请阐述你的观点",
+      options: [],
+      standardAnswer: "参考要点一\n参考要点二",
+      score: 20,
+      difficulty: 3,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: "按论证完整性给分",
+    };
+    let callCount = 0;
+    apiGet.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.resolve({ items: courses });
+      return Promise.resolve(existingWithReference);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/questions/q1/edit"]}>
+        <AuthProvider
+          initialUser={{
+            id: "1",
+            username: "admin",
+            name: "Admin",
+            role: "Admin",
+            organizationId: "org1",
+            capabilities: [...permissionsForRole("Admin")],
+          }}
+        >
+          <BrandProvider>
+            <Routes>
+              <Route
+                path="/admin/questions/:id/edit"
+                element={<QuestionEditPage />}
+              />
+              <Route
+                path="/admin/questions"
+                element={<div>questions list</div>}
+              />
+            </Routes>
+          </BrandProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("编辑题目")).toBeInTheDocument();
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toBeInTheDocument();
+    expect(referenceField).toHaveValue("参考要点一\n参考要点二");
+  });
+
+  it("preserves an in-flight reference answer when re-entering text_response type", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    // text_response carries an optional reference answer. Typing one and then
+    // re-selecting the SAME type (the type-select is the canonical re-entry
+    // surface) must not silently drop the author's in-flight reference draft.
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+      "示例参考答案",
+    );
+    await selectType(user, "文本作答题");
+
+    expect(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+    ).toHaveValue("示例参考答案");
   });
 });
