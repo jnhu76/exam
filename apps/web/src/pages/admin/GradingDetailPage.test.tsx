@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { GradingDetailPage } from "./GradingDetailPage";
-import { validateScore } from "./GradingDetailPage";
+import { parseScoreInput, validateScore } from "./GradingDetailPage";
 import { permissionsForRole } from "@exam/authz";
 
 vi.mock("@/lib/api", () => ({
@@ -119,11 +119,75 @@ describe("GradingDetailPage", () => {
     expect(screen.getByDisplayValue("基本正确")).toBeInTheDocument();
   });
 
-  it("shows empty score input for ungraded questions", async () => {
+  it("shows empty score input for ungraded questions (not 0)", async () => {
+    // Slice 1: a pending question must render an EMPTY input, never 0. The old
+    // behavior (`q.entry?.score ?? 0`) conflated "not graded" with "scored 0".
     renderPage();
     await screen.findByText(/期末考试 — 张三/);
     const scoreInputs = screen.getAllByRole("spinbutton");
-    expect(scoreInputs[0]).toHaveValue(0);
+    expect(scoreInputs[0]).toHaveValue(null);
+  });
+
+  it("renders an already-completed score of 0 as 0 (not empty)", async () => {
+    // Slice 1: an explicit stored 0 is a real score and must display as 0,
+    // distinct from the empty ungraded input above.
+    getMock.mockResolvedValue({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q-zero",
+          type: "text_response",
+          content: "零分题",
+          maxScore: 10,
+          candidateAnswer: "作答",
+          entry: {
+            score: 0,
+            comment: "",
+            gradedBy: "admin-1",
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByDisplayValue("0")).toBeInTheDocument();
+  });
+
+  it("rejects an empty score with a field-level '请输入分数' error and does not POST", async () => {
+    // Slice 1: clearing/never-entering a score must block submission. The old
+    // behavior POSTed score 0 because Number("") === 0.
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // q1 starts empty (pending). Clicking the submit button must not POST.
+    const saveButtons = screen.getAllByText("保存");
+    await user.click(saveButtons[0]!);
+
+    expect(screen.getByText("请输入分数")).toBeInTheDocument();
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts an explicitly entered 0 score as a valid submission", async () => {
+    // Slice 1: explicit 0 is a legitimate grade. The grader types "0" and the
+    // POST must carry score: 0.
+    postMock.mockResolvedValue(mockGradeResponse);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const scoreInputs = screen.getAllByRole("spinbutton");
+    const firstInput = scoreInputs[0]!;
+    await user.type(firstInput, "0");
+
+    const saveButtons = screen.getAllByText("保存");
+    await user.click(saveButtons[0]!);
+
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/admin/attempts/att-1/grade-question",
+      { questionId: "q1", score: 0, comment: "" },
+    );
   });
 
   it("validates score does not exceed maxScore", async () => {
@@ -700,6 +764,42 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     expect(refEl).toHaveTextContent('"minExamples"');
     // No `[object Object]` leakage.
     expect(refEl).not.toHaveTextContent("[object Object]");
+  });
+});
+
+describe("parseScoreInput", () => {
+  it("rejects an empty string as scoreRequired (not as 0)", () => {
+    expect(parseScoreInput("", 10)).toEqual({ error: "请输入分数" });
+  });
+
+  it("rejects a whitespace-only string as scoreRequired", () => {
+    expect(parseScoreInput("   ", 10)).toEqual({ error: "请输入分数" });
+  });
+
+  it("accepts an explicit 0 as a valid score", () => {
+    expect(parseScoreInput("0", 10)).toEqual({ score: 0 });
+  });
+
+  it("accepts a positive integer score", () => {
+    expect(parseScoreInput("8", 10)).toEqual({ score: 8 });
+  });
+
+  it("accepts a score equal to maxScore", () => {
+    expect(parseScoreInput("10", 10)).toEqual({ score: 10 });
+  });
+
+  it("rejects a negative score with the range message", () => {
+    expect(parseScoreInput("-1", 10)).toEqual({ error: "分数不能为负数" });
+  });
+
+  it("rejects a score exceeding maxScore with the range message", () => {
+    expect(parseScoreInput("15", 10)).toEqual({
+      error: "分数不能超过满分 (10)",
+    });
+  });
+
+  it("rejects non-numeric input as scoreRequired", () => {
+    expect(parseScoreInput("abc", 10)).toEqual({ error: "请输入分数" });
   });
 });
 

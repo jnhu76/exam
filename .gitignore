@@ -25,3 +25,5 @@ mutation-campaign-results/
 # Local generated architecture discovery
 /.system-model/
 .code-review-graph/
+# Unattended task execution evidence (baseline/test logs, morning reports)
+.artifacts/

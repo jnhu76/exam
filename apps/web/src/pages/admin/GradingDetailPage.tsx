@@ -18,10 +18,15 @@ import { FieldError } from "@/components/shared/FieldError";
 import { ArrowLeft } from "lucide-react";
 
 /**
- * Validates a manual grading score against the question's max score.
+ * Validates a parsed manual grading score against the question's max score.
  * Error messages resolve from `admin.gradingDetail.validation.*` via the
  * default i18n instance so the exported helper stays usable outside React.
  * Returns null when the score is valid.
+ *
+ * Note: a score of `0` is valid here. The "no input yet" state is represented
+ * by an empty input string and rejected by {@link parseScoreInput} before this
+ * function is ever called, so an explicit zero is never conflated with "not
+ * graded".
  */
 export function validateScore(score: number, maxScore: number): string | null {
   if (score < 0)
@@ -31,6 +36,41 @@ export function validateScore(score: number, maxScore: number): string | null {
       max: maxScore,
     });
   return null;
+}
+
+/**
+ * Parses a raw score input string into a numeric score, enforcing that the
+ * operator has entered an explicit value. The input is the single source of
+ * truth for "graded or not":
+ *
+ *   - empty string  → "not graded yet" (rejected as scoreRequired)
+ *   - "0"           → an explicit zero score (valid)
+ *   - positive int  → valid
+ *   - non-finite    → rejected (e.g. "abc" → NaN, or "-5" caught by validateScore)
+ *
+ * Returns `{ score }` on success, or `{ error }` with an i18n message. This is
+ * deliberately separate from {@link validateScore} because parse-failure and
+ * range-failure are different states and the empty-input case must NOT be
+ * collapsed into `0` (the original `q.entry?.score ?? 0` bug).
+ */
+export function parseScoreInput(
+  raw: string,
+  maxScore: number,
+): { score: number } | { error: string } {
+  if (raw.trim() === "") {
+    return {
+      error: i18n.t("admin.gradingDetail.validation.scoreRequired" as never),
+    };
+  }
+  const score = Number(raw);
+  if (!Number.isFinite(score)) {
+    return {
+      error: i18n.t("admin.gradingDetail.validation.scoreRequired" as never),
+    };
+  }
+  const rangeError = validateScore(score, maxScore);
+  if (rangeError) return { error: rangeError };
+  return { score };
 }
 
 function formatAnswer(answer: unknown): string {
@@ -118,7 +158,10 @@ export function GradingDetailPage() {
   const [data, setData] = useState<GradingDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [scores, setScores] = useState<Record<string, number>>({});
+  // Scores are kept as raw input strings so that "not graded yet" (empty) is
+  // distinct from "explicitly scored 0". An already-completed entry renders its
+  // stored numeric score as a string; a pending entry renders "".
+  const [scores, setScores] = useState<Record<string, string>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [validationErrors, setValidationErrors] = useState<
@@ -134,10 +177,13 @@ export function GradingDetailPage() {
         `/api/admin/attempts/${id}/grading-details`,
       );
       setData(result);
-      const initialScores: Record<string, number> = {};
+      const initialScores: Record<string, string> = {};
       const initialComments: Record<string, string> = {};
       for (const q of result.questions) {
-        initialScores[q.questionId] = q.entry?.score ?? 0;
+        // Pending question → empty input (NOT 0). Completed question → the
+        // submitted score, including an explicit 0, rendered as a string.
+        initialScores[q.questionId] =
+          q.entry != null ? String(q.entry.score) : "";
         initialComments[q.questionId] = q.entry?.comment ?? "";
       }
       setScores(initialScores);
@@ -155,12 +201,15 @@ export function GradingDetailPage() {
 
   const handleSave = useCallback(
     async (questionId: string, maxScore: number) => {
-      const score = scores[questionId] ?? 0;
-      const err = validateScore(score, maxScore);
-      if (err) {
-        setValidationErrors((prev) => ({ ...prev, [questionId]: err }));
+      const parsed = parseScoreInput(scores[questionId] ?? "", maxScore);
+      if ("error" in parsed) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          [questionId]: parsed.error,
+        }));
         return;
       }
+      const { score } = parsed;
       setValidationErrors((prev) => {
         const next = { ...prev };
         delete next[questionId];
@@ -276,7 +325,7 @@ export function GradingDetailPage() {
                 onChange={(e) =>
                   setScores((prev) => ({
                     ...prev,
-                    [q.questionId]: Number(e.target.value),
+                    [q.questionId]: e.target.value,
                   }))
                 }
               />

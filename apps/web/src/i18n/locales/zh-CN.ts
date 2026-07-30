@@ -1709,6 +1709,7 @@ const zhCN = {
         gradedLabel: "已评分: {{score}} 分",
       },
       validation: {
+        scoreRequired: "请输入分数",
         scoreNegative: "分数不能为负数",
         scoreExceedsMax: "分数不能超过满分 ({{max}})",
       },
