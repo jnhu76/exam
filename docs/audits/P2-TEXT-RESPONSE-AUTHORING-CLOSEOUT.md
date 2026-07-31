@@ -53,8 +53,8 @@ Implemented (and frozen):
 - Frozen grading authority comes from the attempt's `questionSnapshot` (copied
   at publish); live-question edits after publish do not change an in-flight
   attempt's grading basis. **Proven by integration test** (API-level: publish
-  → PATCH live question → start attempt → submit → grading-details shows
-  frozen values, not live-edit values).
+  → PATCH live question → start NEW attempt (after patch) → submit →
+  grading-details shows frozen values, not live-edit values).
 - The one-time manual-scoring model and terminal closure are unchanged.
 
 ## 4. Question form changes
@@ -98,8 +98,10 @@ Already PROVEN for objective types; extended for text_response:
 - No stale fields leak when switching objective ↔ text_response. Type
   switch clears `standardAnswer` to `null` for text_response (minimal safe
   semantics — objective answers like `"A"` or `"TCP"` are never carried
-  into the reference field). Cross-type isolation tested for both directions
-  and the round-trip (text_response → objective → text_response).
+  into the reference field). Rubric is cleared when switching to objective
+  types. Cross-type isolation tested for both directions and the round-trip
+  (text_response → objective → text_response); incompatible fields are
+  cleared, not preserved.
 
 ## 6. Publish and snapshot authority
 
@@ -114,10 +116,10 @@ Already PROVEN for objective types; extended for text_response:
 - A post-publish live-question edit does NOT mutate an already-published
   snapshot (freeze authority) — proven by:
   - Engine unit test: side-by-side `buildQuestionSnapshot` comparison.
-  - **API integration test**: publish → PATCH live question → start attempt →
-    submit → grading-details shows frozen (original) values, not live-edit
-    values. This proves the snapshot persistence chain through the repository
-    and grading-details projection.
+  - **API integration test**: publish → PATCH live question → start NEW attempt
+    (after the patch) → save → submit → grading-details shows frozen
+    (original) values, not live-edit values. This proves the snapshot
+    persistence chain through the repository and grading-details projection.
 
 (Publish rejecting null/placeholder/whitespace rubric was already covered by
 the existing P3-L0-5 tests; this closeout adds the clarity + freeze guards.)
@@ -144,8 +146,8 @@ New text_response-specific API-level leak tests:
 - **negative control**: admin grading-details DO contain the frozen rubric +
   reference, proving the leak test is not a false-green from data never stored.
 - **snapshot freeze integration test**: publish → PATCH live question →
-  start attempt → submit → grading-details shows frozen values, not
-  live-edit values.
+  start NEW attempt → save → submit → grading-details shows frozen values,
+  not live-edit values.
 
 ## 8. End-to-end product proof
 
@@ -154,15 +156,14 @@ New text_response-specific API-level leak tests:
 The first E2E that creates a `text_response` through the **real QuestionForm**
 (not seedExam). The test covers the full product loop with this scope:
 
-- **Question authoring (UI)**: create + edit + readback + list filter (API)
+- **Question authoring (UI)**: create + edit + readback + list filter (UI)
 - **Candidate answering (UI)**: start exam → see prompt without rubric/reference
   → answer multiline plain text → submit
 - **Exam assembly, publishing, enrollment, grading (API)**: these steps use
   API helpers to consume the UI-authored entity
-- **Grading queue (API)**: after submit, verifies the attempt appears in the
-  admin grading queue with `pendingQuestionCount = 1`, proving the submit →
-  manual-grading pipeline works (not just direct API access to a known
-  attemptId).
+- **Grading queue discovery (UI)**: after submit, the E2E opens the real
+  Grading Queue page and navigates through its row to the detail page,
+  proving queue discovery through the actual UI (not a known-id API jump).
 
 Product flow:
 
@@ -242,7 +243,7 @@ Every command was run with a real exit code; no GREEN claim is made without a ru
 | candidate answering | CLOSED | QuestionRenderer → TextResponseInput; E2E multiline answer + submit |
 | grading queue discovery | CLOSED | E2E: Grading Queue UI row (`grading-queue-row-<id>`) → detail page; pendingQuestionCount=1 |
 | manual grading (consumes frozen answer) | CLOSED | E2E: submit → pending_manual queue → frozen answer/rubric/reference |
-| snapshot freeze (persistence) | CLOSED | API integration test: publish → PATCH live → attempt → grading-details shows frozen values |
+| snapshot freeze (persistence) | CLOSED | API integration test: publish → PATCH live → start NEW attempt (after patch) → grading-details shows frozen values |
 | final score | CLOSED | E2E: grade → graded + fully_graded; result totalScore identity |
 | course search (beyond first page) | CLOSED | CourseSearchSelect (trigger `aria-label=所属课程`) + API `?search=`; truncation hint when >100 match |
 | selector accessibility (stable names) | CLOSED | CourseSearchSelect + list type filter carry role+name; E2E targets by name, not DOM order |
@@ -264,9 +265,6 @@ Out of scope (frozen boundary), unchanged:
   the dropdown). 100+ courses matching a single term is an extreme edge case.
 - No `pg_trgm` GIN index for course search (CodeRabbit suggestion) —
   premature for Phase-1 course volumes; deferred to a future perf pass.
-- No full keyboard listbox navigation for `CourseSearchSelect`
-  (active-option state, Arrow/Enter, `aria-activedescendant`) — a genuine
-  a11y improvement, but a new behavior surface deferred to a follow-up.
 - Exam Create UI and Enrollment UI are not exercised in this E2E spec.
 
 ## 12. Files changed
