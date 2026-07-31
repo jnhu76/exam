@@ -166,11 +166,12 @@ The first E2E that creates a `text_response` through the **real QuestionForm**
 
 Product flow:
 
-```
-Admin UI: 新增题目 → select 文本作答题 via CourseSearchSelect →
+```text
+Admin UI: 新增题目 → select 文本作答题 via CourseSearchSelect (trigger
+  labelled 所属课程, targeted by name — not DOM order) →
   content + multiline rubric + multiline reference answer → save
   (payload: rubric + reference, options: [])
-  → bank list + text_response filter reach it (API filter)
+  → bank list + UI type filter (按题型筛选 → 文本作答题) reach it
   → edit round-trips rubric + reference; rubric/content edit persists across
     a fresh edit-page GET, reference preserved
 → API assembles an exam with the UI-authored question and publishes it
@@ -178,27 +179,35 @@ Admin UI: 新增题目 → select 文本作答题 via CourseSearchSelect →
 → candidate (enrolled via API) starts (UI), sees the prompt, does NOT see
   rubric / reference (UI + API-level leak guard), answers multiline plain
   text (UI), submits (UI)
-→ admin grading queue (API) shows the attempt with pendingQuestionCount = 1
+→ admin Grading Queue UI shows the attempt (queue row testid → detail page),
+  with pendingQuestionCount = 1 — real queue discovery, not a known-id API jump
 → admin grading-details (API) show the frozen UI-authored rubric + reference +
   the candidate's frozen answer
 → admin completes manual grading (API) → graded + fully_graded
 → candidate result visible (API) with score identity
 ```
 
-The E2E proves **real UI question authoring + candidate answering** with
-API-driven exam assembly + grading. Exam Create UI, Enrollment UI, and
-Grading UI are not exercised in this spec — they are covered by separate
-E2E specs (exam-lifecycle, manual-grading, etc.).
+The E2E proves **real UI question authoring + the list-page type filter +
+candidate answering + grading-queue discovery** through the actual pages.
+Exam assembly, enrollment, grading completion, and the grading-details
+projection read use API helpers — the loop may consume the UI-authored
+entity via API; the authoring, filter, answer, and queue-discovery surfaces
+are UI-driven. Exam Create UI and Enrollment UI are not exercised in this
+spec — they are covered by separate E2E specs (exam-lifecycle, etc.).
 
-The `text_response` type filter in the admin question list is verified via API
-(`GET /api/questions?type=text_response&search=...`), not via the UI type
-filter Select. This is noted as a scope limitation; the UI type filter is
-covered by other E2E specs.
+The `text_response` type filter is verified through the **real list-page UI
+Select** (`按题型筛选 → 文本作答题`), whose trigger carries an `aria-label`
+so it is targetable by role+name (not DOM order). Grading-queue discovery is
+verified through the **real Grading Queue page** (row `data-testid=
+grading-queue-row-<attemptId>` → click → detail page), not a known-id API
+jump to grading-details.
 
 The test uses a seed course ("基础安全培训") instead of creating a new one,
 avoiding CI flakiness when parallel shards may create 100+ courses. The
-**searchable CourseSearchSelect** component (used by the admin UI) can find
-courses beyond the first page, which is the proper product fix.
+**searchable CourseSearchSelect** component (used by the admin UI, trigger
+labelled `所属课程`) can find courses beyond the initial page; if more than
+100 courses match a search term (the contract page cap), the dropdown shows a
+visible truncation hint rather than silently hiding the rest.
 
 Verified GREEN via `bash scripts/e2e/run-wsl.sh text-response-authoring` on
 both shards (exit 0). CI green on PR #237.
@@ -207,13 +216,14 @@ both shards (exit 0). CI green on PR #237.
 
 | Command | Exit | Result |
 | --- | --- | --- |
-| `pnpm --filter web vitest run src/pages/admin/QuestionEditPage.test.tsx` | 0 | 30 passed (was 21; +9) |
+| `pnpm --filter web vitest run src/pages/admin/QuestionEditPage.test.tsx` | 0 | 30 passed (was 21; +9; option-A leak test fixed to a real radio selection) |
+| `pnpm --filter web vitest run src/components/question/CourseSearchSelect.test.tsx` | 0 | 3 passed (NEW: a11y label + truncation hint shown/hidden) |
 | `pnpm --filter web vitest run src/pages/admin/QuestionPage.test.tsx src/components/exam/QuestionRenderer.test.tsx` | 0 | 5 passed |
 | `pnpm --filter @exam/exam-engine vitest run src/examCommands.test.ts` | 0 | 60 passed (was 57; +3) |
-| `pnpm --filter api vitest run src/routes/attempts/candidate-take-text-response.test.ts` | 0 | 4 passed (new file; +1 snapshot freeze) |
-| `pnpm --filter api vitest run src/routes/attempts/candidate-take.test.ts` | 0 | 4 passed (no regression) |
+| `pnpm --filter api vitest run src/routes/attempts/candidate-take-text-response.test.ts` | 0 | 4 passed (now asserts publish status in beforeAll) |
+| `pnpm --filter api vitest run src/routes/course.test.ts` | 0 | 10 passed (search length bound, no regression) |
 | `pnpm verify:static` | 0 | format + lint + copy + arch + db-config + env-contract + repo-contract + ui-gates + eslint + typecheck + openapi all pass |
-| `bash scripts/e2e/run-wsl.sh text-response-authoring` | 0 | 2/2 shards pass (real-UI authoring + full product loop) |
+| `bash scripts/e2e/run-wsl.sh text-response-authoring` | 0 | 2/2 shards pass (real-UI authoring + UI type filter + UI grading-queue discovery) |
 | `pnpm verify` | 0 | (coverage + build) |
 
 Every command was run with a real exit code; no GREEN claim is made without a run.
@@ -226,15 +236,16 @@ Every command was run with a real exit code; no GREEN claim is made without a ru
 | rubric authoring | CLOSED | QuestionForm rubric Textarea; save-time + publish-time validation |
 | optional reference answer | CLOSED | (this closeout) QuestionForm reference Textarea; blank→null; edit readback |
 | create/edit/readback | CLOSED | QuestionEditPage GET/POST/PATCH; QuestionEditPage.test.tsx + E2E |
-| question list filtering | CLOSED | QuestionPage type filter includes text_response |
+| question list filtering | CLOSED | QuestionPage type filter (trigger `aria-label=按题型筛选`); E2E drives the UI Select |
 | exam publish (consumes UI-authored question) | CLOSED | E2E publishes an exam containing the UI-authored question (API) |
 | candidate metadata isolation | CLOSED | contract + projection + .parse(); candidate-take-text-response.test.ts |
 | candidate answering | CLOSED | QuestionRenderer → TextResponseInput; E2E multiline answer + submit |
-| grading queue discovery | CLOSED | E2E: after submit, grading queue shows attempt with pendingQuestionCount=1 |
+| grading queue discovery | CLOSED | E2E: Grading Queue UI row (`grading-queue-row-<id>`) → detail page; pendingQuestionCount=1 |
 | manual grading (consumes frozen answer) | CLOSED | E2E: submit → pending_manual queue → frozen answer/rubric/reference |
 | snapshot freeze (persistence) | CLOSED | API integration test: publish → PATCH live → attempt → grading-details shows frozen values |
 | final score | CLOSED | E2E: grade → graded + fully_graded; result totalScore identity |
-| course search (beyond first page) | CLOSED | CourseSearchSelect component + API `?search=` support |
+| course search (beyond first page) | CLOSED | CourseSearchSelect (trigger `aria-label=所属课程`) + API `?search=`; truncation hint when >100 match |
+| selector accessibility (stable names) | CLOSED | CourseSearchSelect + list type filter carry role+name; E2E targets by name, not DOM order |
 
 ## 11. Remaining limitations
 
@@ -248,10 +259,15 @@ Out of scope (frozen boundary), unchanged:
 - No draft grading / re-grade / reopen / revision / anonymous grading /
   double-grading / batch grading / AI-assisted grading / M11 assignment.
 - No new Question table, no second rubric table, no new score-aggregation path.
-- The `text_response` type filter in the admin question list is verified via
-  API, not via the UI type filter Select.
-- Exam Create UI, Enrollment UI, and Grading Queue UI are not exercised in
-  this E2E spec.
+- Course search is capped at the contract page size (100 matches); beyond
+  that a truncation hint is shown (no infinite-scroll / pagination loop in
+  the dropdown). 100+ courses matching a single term is an extreme edge case.
+- No `pg_trgm` GIN index for course search (CodeRabbit suggestion) —
+  premature for Phase-1 course volumes; deferred to a future perf pass.
+- No full keyboard listbox navigation for `CourseSearchSelect`
+  (active-option state, Arrow/Enter, `aria-activedescendant`) — a genuine
+  a11y improvement, but a new behavior surface deferred to a follow-up.
+- Exam Create UI and Enrollment UI are not exercised in this E2E spec.
 
 ## 12. Files changed
 

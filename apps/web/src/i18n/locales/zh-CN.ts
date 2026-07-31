@@ -1151,6 +1151,7 @@ const zhCN = {
         courseSearchPlaceholder: "搜索课程名称或代码...",
         courseSearching: "搜索中...",
         courseNoResults: "未找到匹配课程",
+        courseTruncatedHint: "仅显示前 100 条匹配，请细化搜索以找到更多课程",
         type: "题目类型",
         typeSingleChoice: "单选题",
         typeMultipleChoice: "多选题",

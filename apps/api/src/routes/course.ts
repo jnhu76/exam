@@ -40,7 +40,11 @@ const courseListResponseSchema = z.object({
 
 /** Zod schema for course list query parameters (extends PaginationParamsSchema with optional search). */
 const CourseListQuerySchema = PaginationParamsSchema.extend({
-  search: z.string().optional(),
+  // Bound the search term so a very long value cannot amplify the
+  // case-insensitive full-scan predicate. Matches the longest searchable
+  // field (course name, max 200); no trim() to avoid changing the matched
+  // value (the repo already trims internally).
+  search: z.string().max(200).optional(),
 });
 
 /** Zod schema for route params containing a UUID `id`. */

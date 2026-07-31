@@ -4406,7 +4406,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 200
             },
             "in": "query",
             "name": "search",

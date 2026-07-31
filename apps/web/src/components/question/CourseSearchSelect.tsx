@@ -18,40 +18,60 @@ interface CourseRow {
   code: string;
 }
 
+/** Course list response shape (the route returns total/totalPages too). */
+interface CourseListResponse {
+  items: CourseRow[];
+  total: number;
+  totalPages: number;
+}
+
 /** Props for the CourseSearchSelect component. */
 interface CourseSearchSelectProps {
   courses: CourseRow[];
   value: string;
   onChange: (courseId: string) => void;
   placeholder?: string;
-  /** When true, the component fetches its own results via search API. */
-  enableSearch?: boolean;
 }
+
+/** The contract caps pageSize at 100 (PaginationParamsSchema.max(100)). */
+const SEARCH_PAGE_SIZE = 100;
 
 /**
  * A searchable course selector that combines a local list (initial load) with
  * remote search (GET /api/courses?search=...). In edit mode, if the selected
- * courseId is not in the local list, it fetches it separately.
+ * courseId is not in the local list, QuestionEditPage fetches it separately.
  */
 export function CourseSearchSelect({
   courses: initialCourses,
   value,
   onChange,
   placeholder,
-  enableSearch = true,
 }: CourseSearchSelectProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CourseRow[]>(initialCourses);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const focusTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Request sequencing: only the latest search response may update state, so a
+  // slow stale response cannot overwrite a newer one (race under fast typing).
+  const searchSeq = useRef(0);
 
   // Sync local results when the initial courses prop changes.
   useEffect(() => {
     setResults(initialCourses);
   }, [initialCourses]);
+
+  // Clear both pending timers on unmount so callbacks never run after teardown.
+  useEffect(() => {
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+      if (focusTimeout.current) clearTimeout(focusTimeout.current);
+    };
+  }, []);
 
   // Derive the selected course label for display.
   const selectedLabel =
@@ -64,13 +84,16 @@ export function CourseSearchSelect({
     async (term: string) => {
       if (!term.trim()) {
         setResults(initialCourses);
+        setTruncated(false);
         return;
       }
       setLoading(true);
+      const seq = ++searchSeq.current;
       try {
-        const res = await api.get<{ items: CourseRow[] }>(
-          `/api/courses?search=${encodeURIComponent(term.trim())}&pageSize=100`,
+        const res = await api.get<CourseListResponse>(
+          `/api/courses?search=${encodeURIComponent(term.trim())}&pageSize=${SEARCH_PAGE_SIZE}`,
         );
+        if (seq !== searchSeq.current) return; // a newer search superseded this
         // Merge search results with the initial list so the currently-selected
         // course (if any) is always present in the dropdown.
         const merged = [...res.items];
@@ -80,11 +103,17 @@ export function CourseSearchSelect({
           }
         }
         setResults(merged);
+        // The contract caps a page at SEARCH_PAGE_SIZE; if more matched, the
+        // rest are unreachable through this control. Surface it rather than
+        // silently hiding courses beyond the cap.
+        setTruncated(res.total > res.items.length);
       } catch {
+        if (seq !== searchSeq.current) return;
         // Silently fall back to the initial list on network error.
         setResults(initialCourses);
+        setTruncated(false);
       } finally {
-        setLoading(false);
+        if (seq === searchSeq.current) setLoading(false);
       }
     },
     [initialCourses],
@@ -107,7 +136,7 @@ export function CourseSearchSelect({
   useEffect(() => {
     if (open && inputRef.current) {
       // Small delay to let the popover animation complete.
-      setTimeout(() => inputRef.current?.focus(), 50);
+      focusTimeout.current = setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
 
@@ -117,6 +146,7 @@ export function CourseSearchSelect({
         <Button
           variant="outline"
           role="combobox"
+          aria-label={t("admin.forms.question.course")}
           aria-expanded={open}
           className="w-full justify-between font-normal"
         >
@@ -181,6 +211,14 @@ export function CourseSearchSelect({
             </div>
           ))}
         </div>
+        {truncated && (
+          <div
+            role="status"
+            className="border-t px-3 py-2 text-xs text-muted-foreground"
+          >
+            {t("admin.forms.question.courseTruncatedHint")}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

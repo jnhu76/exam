@@ -56,7 +56,9 @@ export function createCourseRepo(db: Database) {
           .select()
           .from(courses)
           .where(where)
-          .orderBy(courses.createdAt)
+          // Tie-break on id so pagination is stable when two courses share a
+          // createdAt timestamp (matches the baseRepo ordering contract).
+          .orderBy(courses.createdAt, courses.id)
           .limit(pagination.pageSize)
           .offset(offset),
         countCourses(db, where),

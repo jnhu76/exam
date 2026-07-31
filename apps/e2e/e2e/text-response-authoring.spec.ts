@@ -30,19 +30,22 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
  * QuestionForm (NOT seedExam), then driven through the full product path:
  *
  *   Admin UI creates text_response (type + content + rubric + optional ref)
- *     → list + type filter reach it
+ *     → list + UI type filter reach it (the list-page type Select)
  *     → edit round-trips rubric + reference answer
  *     → API assembles an exam with the UI-authored question, publishes it
  *     → candidate (enrolled) starts, sees the prompt, does NOT see rubric /
  *       reference, answers multiline plain text, submits
- *     → admin grading queue shows the attempt; admin sees the frozen rubric
- *       and frozen reference answer and the frozen candidate answer
+ *     → admin Grading Queue UI shows the attempt (queue → detail discovery
+ *       through the real page, not a known-id API jump); admin sees the
+ *       frozen rubric and frozen reference answer and the frozen candidate
+ *       answer
  *     → admin completes manual grading → graded + fully_graded
  *     → final score identity
  *
- * The question is created through the UI (the authoring surface under test).
- * Exam assembly / enrollment / grading use API helpers — per the task, the
- * loop may consume the UI-authored entity via API; only question authoring
+ * Question authoring, the list-page type filter, candidate answering, and
+ * grading-queue discovery are all UI-driven. Exam assembly / enrollment /
+ * grading completion use API helpers — the loop may consume the UI-authored
+ * entity via API; only the authoring + filter + queue-discovery surfaces
  * must be UI-driven (that is the gap this task closes).
  */
 
@@ -122,14 +125,18 @@ test.describe("P2 text_response authoring + product loop", () => {
     await page.waitForURL(/\/admin\/questions\/new/);
 
     // Select the course + text_response type. The course selector is a
-    // searchable Popover (CourseSearchSelect). The type selector is a
-    // standard <Select> with aria-label "题目类型".
+    // searchable Popover (CourseSearchSelect) whose trigger carries a stable
+    // accessible name "所属课程". The type selector is a standard <Select>
+    // with aria-label "题目类型". Both are targeted by name — never by DOM
+    // order — so layout changes cannot resolve to the wrong control.
     const SEED_COURSE_NAME = seedCourse!.name;
-    await page.getByRole("combobox").first().click();
+    await page.getByRole("combobox", { name: "所属课程" }).click();
     await page.getByPlaceholder("搜索课程名称或代码...").fill(SEED_COURSE_NAME);
-    await page
-      .getByRole("option", { name: SEED_COURSE_NAME, exact: true })
-      .click();
+    // Each option's accessible name is "<name> <code>" (CourseSearchSelect
+    // renders the course code beside the name), so match by substring, not
+    // exact: an exact match on the bare name never resolves. The seed course
+    // name is unique, so the substring match is unambiguous.
+    await page.getByRole("option", { name: SEED_COURSE_NAME }).click();
     await pickQuestionType(page, "文本作答题");
 
     // Content (multiline plain text).
@@ -173,22 +180,21 @@ test.describe("P2 text_response authoring + product loop", () => {
       .getByLabel(Q_CONTENT, { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
 
-    // The type filter (authoritative API) returns the UI-authored question
-    // when filtering by text_response — proves the bank can find it by type.
-    const filteredByType = await (
-      await adminGet(
-        request,
-        adminToken,
-        `/api/questions?type=text_response&search=${encodeURIComponent(Q_CONTENT)}`,
-      )
-    ).json();
-    const foundByType = (filteredByType.items ?? []).some(
-      (q: { id: string }) => q.id === questionId,
-    );
-    expect(
-      foundByType,
-      "expected the UI-authored question under text_response filter",
-    ).toBeTruthy();
+    // Drive the list page's type filter through the real UI Select (its
+    // trigger has aria-label "按题型筛选"). Picking "文本作答题" filters the
+    // bank server-side (GET /api/questions?type=text_response); the
+    // UI-authored question must remain visible under that filter. This proves
+    // the admin UI type filter — not just the API contract — reaches it.
+    await page.getByRole("combobox", { name: "按题型筛选" }).click();
+    await page.getByRole("option", { name: "文本作答题" }).click();
+    // After the filter applies, the row (scoped to this question's content)
+    // must still be present.
+    await expect(page.getByRole("row", { name: Q_CONTENT })).toBeVisible({
+      timeout: 10_000,
+    });
+    // Clear the type filter so later list interactions are not constrained.
+    await page.getByRole("combobox", { name: "按题型筛选" }).click();
+    await page.getByRole("option", { name: "全部题型" }).click();
 
     // ── Edit: readback symmetry + rubric edit persistence. ──────────────
     // Scope the edit button to THIS question's row so a stale/unfiltered row
@@ -350,26 +356,28 @@ test.describe("P2 text_response authoring + product loop", () => {
 
     await submitExam(page);
 
-    // ── Grading queue: the attempt appears in the admin grading queue
-    // with pendingQuestionCount = 1 (proves the submit → manual-grading
-    // pipeline works, not just direct API access to a known attemptId). ──
-    const queueRes = await adminGet(
-      request,
-      adminToken,
-      `/api/admin/grading-queue?pageSize=100`,
+    // ── Grading queue discovery via the real admin UI: after submit, the
+    // attempt must appear in the Grading Queue page (not just be reachable by
+    // a known attemptId through the grading-details API). Each queue row
+    // carries data-testid=`grading-queue-row-<attemptId>`; opening it
+    // navigates to the grading detail page — proving queue → detail
+    // discovery, the real grader workflow. ──────────────────────────────
+    // Re-authenticate the browser session as admin (the candidate logged in
+    // above for the answer/submit half).
+    await loginAsAdmin(page);
+    await page.goto("/admin/grading-queue");
+    const queueRow = page.getByTestId(`grading-queue-row-${attemptIdAuth}`);
+    await expect(queueRow).toBeVisible({ timeout: 10_000 });
+    // pendingQuestionCount is rendered as a cell; "1" must appear in the row.
+    await expect(queueRow).toContainText("1");
+    // Open the row → navigates to the per-attempt grading detail page. This is
+    // the discovery path a real grader takes; the frozen-basis assertions
+    // below then read the same detail projection.
+    await queueRow.click();
+    await page.waitForURL(
+      new RegExp(`/admin/grading-queue/${attemptIdAuth}$`),
+      { timeout: 10_000 },
     );
-    expect(queueRes.status()).toBe(200);
-    const queueBody = (await queueRes.json()) as {
-      items: Array<{ attemptId: string; pendingQuestionCount?: number }>;
-    };
-    const queueItem = queueBody.items.find(
-      (i: { attemptId: string }) => i.attemptId === attemptIdAuth,
-    );
-    expect(
-      queueItem,
-      "the submitted text_response attempt must appear in the admin grading queue",
-    ).toBeTruthy();
-    expect(queueItem!.pendingQuestionCount).toBe(1);
 
     // ── Admin grading: frozen rubric + reference + candidate answer visible;
     // grading completes the attempt to graded + fully_graded. ──────────────

@@ -739,14 +739,15 @@ describe("QuestionEditPage — text_response authoring", () => {
     renderNew();
     await screen.findByText("新增题目");
 
-    // single_choice with answer "A"
+    // single_choice with a REAL answer "A" selected (standardAnswer = "A").
     await selectType(user, "单选题");
     await user.type(screen.getByPlaceholderText(CONTENT_PLACEHOLDER), "1+1=?");
-    // Radio-button for "A" is the correct answer (standardAnswer = "A").
-    // No need to type — the default single_choice form has standardAnswer
-    // as "" (empty). Switch to text_response first, then back.
-    // Actually, set a real answer: click the radio for option A.
-    await screen.getByText("A.").click();
+    // Select option A's radio (the default single_choice ships options A and
+    // B). This genuinely sets standardAnswer = "A" — without it the leak guard
+    // below would be vacuous (no answer to carry). Mirrors the create-payload
+    // test's radio-selection approach.
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]!);
     // Switch to text_response — the string "A" must NOT become the reference.
     await selectType(user, "文本作答题");
 

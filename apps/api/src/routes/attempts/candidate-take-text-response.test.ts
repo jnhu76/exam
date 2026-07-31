@@ -99,11 +99,18 @@ describe("P2: candidate take leak protection for text_response", () => {
     }
     examId = createRes.json().id;
 
-    await ctx.app.inject({
+    const publishRes = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/publish`,
       cookies: { "auth-token": ctx.adminToken },
     });
+    // Retain + assert the publish response so a silent publish failure cannot
+    // masquerade as a green run (mirrors the exam-creation assertion above).
+    if (publishRes.statusCode !== 200) {
+      throw new Error(
+        `Failed to publish exam: ${publishRes.statusCode} ${JSON.stringify(publishRes.json())}`,
+      );
+    }
     await enrollCandidateForExam(ctx, candidateProfileId, examId);
   });
 

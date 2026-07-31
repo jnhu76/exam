@@ -321,35 +321,37 @@ export function QuestionForm({
       )}
 
       {form.type === "text_response" && (
-        <Field>
-          <Label>{t("admin.forms.question.rubric")}</Label>
-          <Textarea
-            value={form.rubric ?? ""}
-            onChange={(e) => update({ rubric: e.target.value })}
-            placeholder={t("admin.forms.question.rubricPlaceholder")}
-            rows={4}
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("admin.forms.question.rubricHint")}
-          </p>
-        </Field>
-      )}
+        <>
+          <Field>
+            <Label>{t("admin.forms.question.rubric")}</Label>
+            <Textarea
+              value={form.rubric ?? ""}
+              onChange={(e) => update({ rubric: e.target.value })}
+              placeholder={t("admin.forms.question.rubricPlaceholder")}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("admin.forms.question.rubricHint")}
+            </p>
+          </Field>
 
-      {form.type === "text_response" && (
-        <Field>
-          <Label>{t("admin.forms.question.referenceAnswer")}</Label>
-          <Textarea
-            value={
-              typeof form.standardAnswer === "string" ? form.standardAnswer : ""
-            }
-            onChange={(e) => update({ standardAnswer: e.target.value })}
-            placeholder={t("admin.forms.question.referenceAnswerPlaceholder")}
-            rows={4}
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("admin.forms.question.referenceAnswerHint")}
-          </p>
-        </Field>
+          <Field>
+            <Label>{t("admin.forms.question.referenceAnswer")}</Label>
+            <Textarea
+              value={
+                typeof form.standardAnswer === "string"
+                  ? form.standardAnswer
+                  : ""
+              }
+              onChange={(e) => update({ standardAnswer: e.target.value })}
+              placeholder={t("admin.forms.question.referenceAnswerPlaceholder")}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("admin.forms.question.referenceAnswerHint")}
+            </p>
+          </Field>
+        </>
       )}
 
       <div className="grid grid-cols-3 gap-4">
