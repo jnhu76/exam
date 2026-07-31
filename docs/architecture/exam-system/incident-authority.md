@@ -31,7 +31,8 @@ authoritative operator actions. It is not an Attempt status, not an
 interruption episode, not an audit row, and not a penalty. Incident and
 Attempt lifecycles combine freely: any incident status can coexist with any
 Attempt status, an Attempt can have zero or many incidents, and an
-exam-wide incident can have no Attempt anchor.
+exam-wide incident carries no Attempt anchor — its affected attempts are
+recorded as append-only membership links.
 
 ## Incident status
 
@@ -55,9 +56,12 @@ stateDiagram-v2
 ```
 
 Terminal status is monotonic (no reopen in the initial implementation).
-`addIncidentNote()` and `linkIncidentAction()` are append-only side writes
-allowed in any status; they never change status. Severity changes are
-allowed only while non-terminal.
+`addIncidentNote()`, `linkIncidentAction()`, `linkIncidentAttempt()`, and
+`linkIncidentInterruption()` are append-only side writes allowed in any
+status; they never change status and have no unlink command. Severity
+changes are allowed only while non-terminal. Incident `type` is immutable
+after creation — a classification mistake is dismissed and replaced by a
+new incident.
 
 Closed enums: type ∈ {`network_interruption`, `device_failure`,
 `power_failure`, `candidate_unable_to_continue`, `suspected_misconduct`,
@@ -77,10 +81,15 @@ grant, or Attempt mutation.
 | `resolveExamIncident()` | `open\|investigating → resolved` | `incident.resolve` | `incident.resolved` | incident row FOR UPDATE |
 | `dismissExamIncident()` | `open\|investigating → dismissed` | `incident.resolve` | `incident.dismissed` | incident row FOR UPDATE |
 | `linkIncidentAction()` | any status (side write) | `incident.investigate` | `incident.action_linked` | none (constraint-arbiterated) |
+| `linkIncidentAttempt()` | any status (side write; exam-wide incidents only) | `incident.investigate` | `incident.attempt_linked` | none (constraint-arbiterated) |
+| `linkIncidentInterruption()` | any status (side write) | `incident.investigate` | `incident.interruption_linked` | none (constraint-arbiterated) |
 | `grantAttemptTime()` (extended) | unchanged Attempt-side | `attempt.time.grant` | `attempt.timeGrant` | ADR-013 chain; incident = non-locking read |
 
 No universal `updateIncident()` command exists. Incident commands never
-lock Attempt or Exam rows and never write `exam_attempts`.
+lock Attempt or Exam rows and never write `exam_attempts`. Every write
+command carries a client-generated `operationId` (command identity — see
+Transaction boundaries); version-bumping transitions additionally require
+`expectedVersion`.
 
 ## Permission matrix
 
@@ -100,10 +109,11 @@ unavailability returns 503 `AUTHZ_UNAVAILABLE`, never an open fallback.
 
 | Operation | Scope | Invariants |
 | --- | --- | --- |
-| Incident state transition | lock incident row → `expectedVersion` check → update materialized row + append event + atomic audit, one transaction | stale version → 409 `INCIDENT_VERSION_CONFLICT`; same-terminal replay returns the committed incident only when the required reason text is identical — different text is a conflict (no re-resolve) |
-| Note append | insert `note_added` event + audit | concurrent notes both succeed; no version required |
-| Action link | insert link + `action_linked` event + audit | `UNIQUE (organization_id, action_type, action_id)` arbiter; 23505 recognized only on that named constraint; re-link same incident = replay, different incident = 409 `INCIDENT_ACTION_ALREADY_LINKED` |
-| Time grant with incident | existing ADR-013 transaction (Enrollment → Attempt → Exam) + non-locking incident validation + action-link insert + audit, under the existing `operationId` idempotency | incident must exist in the same organization; `attemptId` null or matching; ledger remains the time authority; `incidentId` is correlation metadata, never a deadline input |
+| Incident state transition | `operationId` lookup → lock incident row → `expectedVersion` check → update materialized row + append event + atomic audit, one transaction | same `operationId` + same canonical payload → replay (`idempotent_replayed`); same `operationId` + different payload → 409 `IDEMPOTENCY_CONFLICT`; new `operationId` + stale `expectedVersion` → 409 `INCIDENT_VERSION_CONFLICT`; new `operationId` on a terminal incident → 409 `INVALID_STATE_TRANSITION` |
+| Note append | insert `note_added` event + audit | concurrent notes both succeed, each under its own `operationId`; order = `event_sequence` |
+| Action link | scope triple validated server-side → insert link + `action_linked` event + audit | `UNIQUE (organization_id, action_type, action_id)` arbiter; action types `time_grant` / `force_submit` only (`misconduct_mark` deferred — mutable jsonb flag is not a stable identity); duplicate link under a new `operationId`, or link to another incident → 409 `INCIDENT_ACTION_ALREADY_LINKED`; 23505 recognized only on the named uniques |
+| Evidence link (attempt / interruption) | scope triple validated server-side → insert junction + event + audit | `UNIQUE (incident_id, attempt_id)` / `(incident_id, interruption_id)` arbiters; attempt membership only on exam-wide incidents (anchor exclusivity → 409 `INVALID_STATE_TRANSITION`); composite FKs to existing uniques enforce org + attempt/episode consistency |
+| Time grant with incident | existing ADR-013 transaction (Enrollment → Attempt → Exam) + non-locking incident validation + action-link insert + audit, under the existing `operationId` idempotency | full link-scope triple: same organization AND same exam (derived from the locked Attempt, never the request) AND `incident.attemptId` null-or-matching; ledger remains the time authority; `incidentId` is correlation metadata, never a deadline input |
 
 If any future shared transaction locks an incident row, the lock is taken
 strictly AFTER the Exam lock — the ADR-013 order
@@ -122,53 +132,84 @@ standalone `linkIncidentAction()`.
 erDiagram
     exams ||--o{ exam_incidents : "operational context"
     exam_attempts ||--o{ exam_incidents : "optional anchor"
+    exam_attempts ||--o{ exam_incident_attempts : "affected membership"
+    exam_attempts ||--o{ exam_incident_actions : "linked actions"
+    attempt_interruptions ||--o{ exam_incident_interruption_links : "evidence links"
     exam_incidents ||--o{ exam_incident_events : "append-only history"
     exam_incidents ||--o{ exam_incident_actions : "linked operator actions"
+    exam_incidents ||--o{ exam_incident_attempts : "affected attempts"
+    exam_incidents ||--o{ exam_incident_interruption_links : "linked episodes"
     attempt_time_adjustments }o--o| exam_incidents : "nullable incidentId (correlation)"
-    attempt_time_adjustments }o--o| attempt_interruptions : "nullable interruptionId"
 
     exam_incidents {
         uuid id PK
-        uuid organization_id
-        uuid exam_id FK
-        uuid attempt_id FK "nullable"
-        uuid candidate_id "nullable"
-        text type "9-value enum"
+        text organization_id
+        text exam_id FK
+        text attempt_id FK "nullable anchor"
+        text candidate_id FK "nullable"
+        text type "9-value enum, immutable"
         text severity "info|minor|major|critical"
         text status "open|investigating|resolved|dismissed"
-        text description "immutable"
-        text resolution_summary "projection"
         integer version
     }
     exam_incident_events {
         uuid id PK
+        bigint event_sequence "IDENTITY — ordering authority"
         uuid incident_id FK
-        text event_type "7-value enum"
+        text event_type "9-value enum"
+        uuid operation_id "UNIQUE with organization_id"
+        text command_type
+        integer before_version
+        integer after_version
         jsonb payload "bounded"
     }
     exam_incident_actions {
         uuid id PK
         uuid incident_id FK
-        text action_type "time_grant|force_submit|misconduct_mark"
+        text action_type "time_grant|force_submit"
         uuid action_id "UNIQUE with action_type"
-        uuid attempt_id "nullable"
+        text attempt_id "server-derived"
+    }
+    exam_incident_attempts {
+        uuid id PK
+        uuid incident_id FK
+        text attempt_id FK "UNIQUE with incident_id"
+        text relationship_type "affected|referenced"
+    }
+    exam_incident_interruption_links {
+        uuid id PK
+        uuid incident_id FK
+        text attempt_id FK
+        uuid interruption_id FK "UNIQUE with incident_id"
     }
 ```
 
 The materialized `exam_incidents` row is a projection of
-`exam_incident_events`; incident state is reconstructable from events plus
-linked actions. Interruption correlation flows through the ledger row that
-carries both `interruptionId` and `incidentId` — there is no
-incident↔interruption junction table, and the two identities are never
-interchangeable (ADR-013).
+`exam_incident_events`, ordered by `event_sequence`
+(`BIGINT GENERATED ALWAYS AS IDENTITY` — the sole ordering authority;
+`created_at` and UUID ids define no order). State events carry
+`before_version` / `after_version`, so the materialized version is
+verifiable against the event chain. Exam-wide incidents record affected
+attempts through `exam_incident_attempts` and correlated episodes through
+`exam_incident_interruption_links`; both are append-only evidence
+relationships that never absorb Attempt or InterruptionEpisode authority.
+Compensated interruptions still correlate through the ledger row that
+carries both `interruptionId` and `incidentId`, and the two identities are
+never interchangeable (ADR-013).
 
 `exam_incident_actions.action_id` referents (ADR-014 §7): `time_grant` →
-`attempt_time_adjustments.id`; `force_submit` and `misconduct_mark` → the
-`exam_attempts.id` (force submit and misconduct flags have no dedicated
-rows; misconduct re-flag overwrites the jsonb flag without creating a new
-linkable identity). Links store action identity only, never mutable action
-state. No `ON DELETE CASCADE`: incidents are durable and parent deletion
-fails closed while incidents reference it.
+`attempt_time_adjustments.id`; `force_submit` → the force-submitted
+`exam_attempts.id` (a one-time terminal fact, hence a stable identity).
+`misconduct_mark` is NOT linkable in the initial implementation: the jsonb
+`MisconductFlag` is overwritten on re-flag, so it is a mutable field, not a
+stable action identity — linking it is deferred until a stable append-only
+misconduct receipt exists. Every link (action, attempt, interruption)
+satisfies the frozen scope triple — same organization, same exam, and
+`incident.attemptId` null-or-matching — derived server-side from
+authoritative rows, never from the request. Links store identity only,
+never mutable state. Integrity is DB-enforced by composite FKs reusing
+existing uniques, and there is no `ON DELETE CASCADE`: incidents are
+durable and parent deletion fails closed while incidents reference it.
 
 ## Sequence — time grant linked to an incident (TARGET)
 
@@ -186,7 +227,7 @@ sequenceDiagram
     API->>DB: lock Exam FOR UPDATE
     API->>DB: operation-ID lookup (replay / conflict)
     opt incidentId present
-        API->>DB: read exam_incidents (NON-LOCKING):<br/>exists, same org, attemptId null-or-matching
+        API->>DB: read exam_incidents (NON-LOCKING): exists;<br/>same org; same exam as the locked Attempt;<br/>attemptId null-or-matching
     end
     API->>DB: deadline reconciliation
     API->>DB: insert attempt_time_adjustments (incidentId)
@@ -213,7 +254,7 @@ sequenceDiagram
     X->>DB: UPDATE status = resolved, version = v+1
     X->>DB: append incident_resolved event; audit; COMMIT
     Y->>DB: (unblocked) reads status = resolved, version = v+1
-    Y-->>Y: 409 INCIDENT_VERSION_CONFLICT<br/>(or committed-incident replay if same terminal)
+    Y-->>Y: 409 INVALID_STATE_TRANSITION (terminal)<br/>— a replay requires the SAME operationId
 ```
 
 ## Relationship to the existing proctor marker

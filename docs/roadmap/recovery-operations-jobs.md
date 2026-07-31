@@ -287,12 +287,15 @@ and links to operator actions.
 
 ## Persistence
 
-Suggested tables:
+Suggested tables (five additive tables; zero changes to existing tables —
+ADR-014 §12 is authoritative):
 
 ```text
 exam_incidents
 exam_incident_events
 exam_incident_actions
+exam_incident_attempts
+exam_incident_interruption_links
 ```
 
 Possible responsibilities:
@@ -313,7 +316,13 @@ severity_changed
 incident_resolved
 incident_dismissed
 action_linked
+attempt_linked
+interruption_linked
 ```
+
+Each event row carries `event_sequence` (ordering authority), the
+`operation_id` / `command_type` pair (idempotency arbiter), and
+`before_version` / `after_version` (verifiable version chain) — ADR-014 §5.
 
 ### `exam_incident_actions`
 
@@ -322,11 +331,23 @@ Links an incident to a separately authoritative action:
 ```text
 time_grant
 force_submit
-misconduct_mark
 other_future_action
 ```
 
 Store action identity and type, not duplicated mutable action state.
+`misconduct_mark` is deferred until a stable append-only action receipt
+exists (its jsonb flag is overwritten on re-flag); J3 rejects it with
+400 — ADR-014 §7.
+
+### `exam_incident_attempts`
+
+Append-only affected-attempt membership for exam-wide incidents only
+(anchor XOR membership — ADR-014 §7).
+
+### `exam_incident_interruption_links`
+
+Append-only interruption-episode evidence links; the interruption ledger
+remains authoritative for compensated time (ADR-014 §7).
 
 ## Canonical commands
 
@@ -340,7 +361,12 @@ changeIncidentSeverity()
 resolveExamIncident()
 dismissExamIncident()
 linkIncidentAction()
+linkIncidentAttempt()
+linkIncidentInterruption()
 ```
+
+Every command carries an `operationId`; mutating transitions additionally
+carry `expectedVersion` (ADR-014 §9).
 
 Do not create one universal `updateIncident()` endpoint that can perform every
 transition and edit every field.
@@ -355,8 +381,12 @@ GET    /api/admin/exams/:examId/incidents
 GET    /api/admin/incidents/:incidentId
 POST   /api/admin/incidents/:incidentId/investigate
 POST   /api/admin/incidents/:incidentId/notes
+POST   /api/admin/incidents/:incidentId/severity
 POST   /api/admin/incidents/:incidentId/resolve
 POST   /api/admin/incidents/:incidentId/dismiss
+POST   /api/admin/incidents/:incidentId/actions
+POST   /api/admin/incidents/:incidentId/attempts
+POST   /api/admin/incidents/:incidentId/interruptions
 ```
 
 Proctor routes may reuse the same handlers after J4 provides scoped
@@ -365,11 +395,16 @@ authorization.
 ## Concurrency
 
 - Use a version or expected revision for mutable state transitions.
-- Repeated commands require operation IDs or deterministic terminal no-op
-  semantics.
+- Every write command carries an `operationId`; retries reuse it, and
+  `UNIQUE (organization_id, operation_id)` on `exam_incident_events` is the
+  single arbiter (same identity + same canonical payload → replay; same
+  identity + different payload → 409 `IDEMPOTENCY_CONFLICT`) — ADR-014 §9.
 - Two simultaneous resolve/dismiss commands must not both win.
-- Notes may be independently appendable.
-- Linked action IDs must be unique.
+- Notes may be independently appendable, each under its own `operationId`.
+- Linked action IDs must be unique; attempt and interruption evidence links
+  have their own uniques (ADR-014 §6).
+- Every link satisfies the scope triple (same organization, same exam,
+  attempt anchor null-or-matching), derived server-side — ADR-014 §7.
 
 ## Integration with J1
 
@@ -1071,10 +1106,12 @@ Only after acceptance does the next implementation Job start:
 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS
 ```
 
-J3 implements what ADR-014 §18 decomposes: the three additive tables, the
-canonical commands, the append-only event history, the action links, and the
-extended time-grant path that activates `incidentId`. It must not begin while
-ADR-014 is PROPOSED.
+J3 implements what ADR-014 §18 decomposes: the five additive tables, the
+canonical commands (`operationId` identity on every write), the append-only
+event history (`event_sequence` ordering with a verifiable before/after
+version chain), the action and evidence links (link-scope triple,
+server-derived), and the extended time-grant path that activates
+`incidentId`. It must not begin while ADR-014 is PROPOSED.
 
 ---
 
