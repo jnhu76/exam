@@ -5,9 +5,9 @@
 > Scope: LAN/on-premise, single-organization Exam deployment; future
 > multi-instance readiness
 > Planning authority: [`docs/roadmap/P7-system-readiness-and-exam-modes.md`](../roadmap/P7-system-readiness-and-exam-modes.md)
-> (Workstream B / P7-D1). This document is the evidence base for the
-> capability-by-capability adoption decision; it does not by itself change any
-> authority.
+> (Workstream B / P7-D1 decision gate). This document is the capability
+> evidence base for the P7-D1 decision — adopt or decline. It does not by
+> itself change any authority and does not presuppose adoption.
 > Related repository documents: `docs/adr/ADR-001-redis.md`,
 > `docs/contracts/redis-baseline.md`, `docs/archive/phase3/audit-current-redis.md`
 
@@ -184,11 +184,15 @@ configuration model must preserve the ability to split these workloads later.
 
 ## 6. Redis use-case assessment for Exam
 
-### 6.1 High-value first integrations
+### 6.1 Candidate integrations (if a P7-D1 trigger is met)
+
+The capabilities below are **candidates**, not a pre-ordered backlog. They are
+sequenced only after the P7-D1 decision gate accepts a corresponding measured
+trigger (see §9). The ordering reflects coupling/ephemerality, not commitment.
 
 #### A. Global rate limiting
 
-Why first:
+Candidate rationale (if a rate-limit trigger is met):
 
 - naturally ephemeral;
 - immediately proves cross-process Redis usage;
@@ -306,25 +310,44 @@ Redis/BullMQ should not replace it merely to "use Redis." Options are:
 4. **Move queue truth to Redis.** Only after a separate durability and
    migration decision; not the default recommendation.
 
-## 9. Proposed implementation sequence
+## 9. Adoption sequence (conditional on the P7-D1 decision)
+
+P7-D1 is a **decision gate**, not the first step on a fixed adoption path. This
+study does not by itself authorize any Redis implementation job. The sequence
+below is therefore branched, not linear:
 
 ```text
-P7-R0  Current-state and authority audit
-  → P7-D1  Redis capability + adoption ADR update
-  → P7-D2  Redis runtime lifecycle hardening
-  → P7-D3  Shared global rate limit
-  → P7-Q1  Admission queue design + state machine
-  → P7-Q2  Redis-backed admission queue
-  → P7-P1  Presence / real-time operational projection
-  → P7-D4  Evaluate Streams, cache, and generic job runtime from measured need
+P7-R0  Current-state and authority audit (this document)
+  → P7-D1  Measure current single-instance limits and decide
+      ├─ Adopt one or more responsibilities
+      │    → schedule only the approved D2/D3/Q2/P1 jobs (one at a time)
+      │    → P7-D2  Redis runtime lifecycle hardening (for approved responsibilities)
+      │    → P7-D3  Shared global rate limit           (only if a rate-limit trigger is met)
+      │    → P7-Q1   Admission queue design + state machine
+      │    → P7-Q2   Redis-backed admission queue       (only if an admission trigger is met)
+      │    → P7-P1   Presence / real-time projection    (only if a presence trigger is met)
+      │    → P7-D4   Evaluate Streams / cache / generic job runtime from measured need
+      └─ Decline adoption
+           → update ADR-001 with measurement evidence and re-evaluation triggers
+           → no D2/D3/Q2/P1 job is scheduled
 ```
+
+The tentative order under the "adopt" branch is rate-limit-first (naturally
+ephemeral, low coupling to exam state), but **only approved responsibilities are
+scheduled**. Decline is an equally valid P7-D1 outcome — see
+`docs/roadmap/P7-system-readiness-and-exam-modes.md` §P7-D1 for the canonical
+gate definition.
 
 ### P7-D1 acceptance
 
-- ADR-001 is updated from "baseline/deferred" to a capability-by-capability
-  adoption plan.
-- Every Redis-backed feature has a declared data class, durability, eviction,
-  failure, and fallback policy.
+- ADR-001 records the decision: **adopt** approved responsibilities (one at a
+  time, PostgreSQL remains source of truth) **OR decline** with measurement
+  evidence and re-evaluation triggers.
+- No Redis implementation job (D2/D3/Q2/P1) is authorized merely by this study
+  or by P7-D1 proceeding — only by an accepted adoption decision recorded in
+  ADR-001.
+- If adoption is approved, every approved Redis-backed feature has a declared
+  data class, durability, eviction, failure, and fallback policy.
 - cache and durable job workloads are not silently mixed.
 - no categorical claim says Redis is incapable of durable or authoritative use.
 

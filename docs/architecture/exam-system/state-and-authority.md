@@ -152,8 +152,8 @@ stateDiagram-v2
     end note
 ```
 
-**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE`
-**Evidence**: `submitAttempt()`, `markDisrupted()`, `restoreInterruptedAttempt()`, `finalizeTerminalGrading()` all use `transition()` from the state machine
+**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE` documents the intended lifecycle graph. It is **not** the only transition enforcement: `submitAttempt()` / terminal grading use the established `transition()` seams, but the REC-I4 disruption/restore transitions (`markDisrupted()`, the lifecycle-only helper `restoreAttemptState()`) enforce their transition **directly** inside the canonical locked commands — explicit status precondition + row lock + direct `attemptRepo.update(...)`, not a `TRANSITION_TABLE.transition()` call.
+**Evidence**: `submitAttempt()` calls `transition()` (`attemptCommands.ts:367`); `markDisrupted()` writes `status: "disrupted"` directly after re-checking `status === "in_progress"` under the row lock (`attemptCommands.ts:531`); `restoreAttemptState()` writes `status: "in_progress"` directly after re-checking `status === "disrupted"` (`attemptCommands.ts:598`). The `TRANSITION_TABLE` is the lifecycle *contract*, not a single chokepoint every command funnels through.
 **Known limitations**: The `grading` state is unreachable — `finalizeTerminalGrading()` writes `status = 'graded'` directly. The state machine table entries `submitted:grade → grading` and `grading:complete_grading → graded` exist but are never invoked.
 
 ### Commands owning each transition

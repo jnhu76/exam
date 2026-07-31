@@ -467,9 +467,9 @@ There is no `notifications` table, no `NotificationService`, and no business cal
 
 1. **Question deletion**: No referential integrity guard against deleting questions referenced by existing snapshots. Snapshots are copies, so historical attempts are not broken, but the question bank loses the source.
 2. **No question lifecycle**: Questions are always mutable (no publish/archive state).
-3. **Disrupted recovery UI**: Backend capability exists; candidate-facing restore flow is incomplete.
-4. **Email has no business caller**: Infrastructure exists (P5-0 merged), but no production route invokes it.
-5. **Notification Inbox**: Not implemented — only the email channel exists.
+3. **Disrupted recovery UI (candidate side)**: **IMPLEMENTED** (REC-I3, PR #219) — the candidate-facing restore flow (`useAttemptRestore()`, restoring/failed/retry surface, authoritative snapshot reload) is live. What remains open is the **operator/proctor** side: the operator time-grant route/permission + incident model (REC-I4-I3B2 / REC-I6) and a dedicated recovery center are not implemented. (P6 closed before REC-I3 landed, so older audits list this as not-productized — that is frozen history.)
+4. **Email business caller**: **IMPLEMENTED** — the `result_published` publication (P5-N1, CLOSED, PR #213) is the first production caller; additional operational notification types remain P5-N2+ scope.
+5. **Notification Inbox**: **IMPLEMENTED** (P5-N1, CLOSED, PR #213) for `result_published`; additional operational notification types remain P5-N2+ scope.
 6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`. State machine table entries for `grading` are unreachable.
 7. **`not_started` / `queued` / `voided`**: No write path — target design only.
 8. **Teacher resource scope**: Teacher has capabilities but scoped authorization (Teacher@course) is NOT IMPLEMENTED — currently flat org-wide.

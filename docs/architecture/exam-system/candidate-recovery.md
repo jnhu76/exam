@@ -184,8 +184,8 @@ sequenceDiagram
     Engine->>DB: INSERT interruption event (restored outcome)
     Note over Engine: ADR-013 implemented (REC-I4-I1/I2/I3A/I3B1):<br/>state restore and time compensation are separate.<br/>grantAttemptTime() is a separate operator command,<br/>not part of candidate restore.
     API->>DB: COMMIT
-    API-->>C: restore acknowledgement (restore ack only)
-    Note over C: REC-I3: the restore response is a command ack only.<br/>The page reloads the authoritative snapshot, NOT<br/>the restore response.
+    API-->>C: RestoreAttemptResponse (lifecycle + candidate-safe compensation summary + attempt projection)
+    Note over C: REC-I3 / ADR-013 §6: the response is a command RESULT,<br/>not the take-page authority. It carries the lifecycle outcome<br/>(restored / already_in_progress / terminal), a candidate-safe<br/>compensation summary (policy + addedSeconds), and a candidate<br/>attempt projection — enough to render a restoring/terminal state.<br/>The page then reloads the authoritative CandidateTakeSnapshot.
     C->>API: GET /candidate/attempts/:attemptId/take (reload)
     API-->>C: reloaded snapshot (in_progress OR terminal if deadline won)
     Note over C: Branch on the reloaded snapshot only.<br/>No automatic restore loop. No invented in_progress.
