@@ -133,7 +133,7 @@ ExamIncident
 - severity            closed enum (§4), default info
 - status              closed enum (§3), default open
 - occurredAt          nullable — operator-declared observation time
-- detectedAt/createdAt  server time (fastify.now())
+- createdAt           server time (fastify.now())
 - reportedBy          creating actor, NOT NULL
 - description         immutable after creation, 1–1000 chars
 - resolutionSummary   mutable projection, set at resolve, 1–1000 chars
@@ -146,6 +146,10 @@ ExamIncident
 `occurredAt` is a **recorded claim**, not a computation input. No deadline,
 grace, compensation, or any other exam logic MAY read `occurredAt`; the
 server clock remains the only time authority (ADR-006).
+
+All actor identities (`reportedBy`, `resolvedBy`, event `actor_id`) are
+**server-derived from the authenticated ctx**. Request bodies can never set
+an actor field.
 
 Multi-attempt incidents are exam-scoped (`attemptId` null). The individual
 attempts involved appear through action links (§7 — every linked operator
@@ -244,7 +248,12 @@ Rules:
   in the initial implementation it does not, so the projection is set once
   at resolve time and further clarification goes through `note_added`.
 - Event payloads are bounded jsonb (note bodies, before/after severity,
-  resolution summary, action link identity).
+  resolution summary, action link identity); the contract field limits
+  (§3) are the payload bound.
+- Event payloads are self-describing (before/after severity, note id,
+  resolution text). State reconstruction MUST NOT depend on wall-clock
+  ordering: concurrent appends can share a transaction-clock timestamp, so
+  display ordering uses a `(created_at, id)` tie-break.
 - Incident state MUST be reconstructable and explainable from events plus
   linked actions.
 
@@ -278,17 +287,43 @@ Additional authority rules:
 
 | Related concept | Relationship | Mechanism |
 | --- | --- | --- |
-| Exam | every incident belongs to exactly one exam | `exam_incidents.exam_id` NOT NULL |
+| Exam | every incident belongs to exactly one exam, regardless of exam status | `exam_incidents.exam_id` NOT NULL |
 | Attempt | optional direct anchor; many attempts via actions | `exam_incidents.attempt_id` nullable; `exam_incident_actions.attempt_id` |
-| Candidate | optional; validated against the attempt enrollment when `attemptId` is set | `exam_incidents.candidate_id` nullable |
+| Candidate | optional; always enrollment-validated (see below) | `exam_incidents.candidate_id` nullable |
 | InterruptionEpisode | correlation only — NO junction table | the time-adjustment ledger already carries BOTH `interruptionId` and `incidentId` on the same row; plus event/note text |
 | Operator actions | durable links to separately authoritative actions | `exam_incident_actions` stores action identity + type, never duplicated mutable action state |
+
+Incident creation is NOT gated by exam status: post-exam investigations
+(retrospective misconduct review, delayed disruption reports) are a primary
+use case. The exam must merely resolve in the actor organization.
+
+Candidate validation (non-locking reads; violation → 400): when `candidateId`
+is set and `attemptId` is set, the candidate MUST match the attempt's
+enrollment; when `candidateId` is set and `attemptId` is null, the candidate
+MUST hold an enrollment in the exam.
 
 `exam_incident_actions.action_type` initial values:
 
 ```text
 time_grant   force_submit   misconduct_mark
 ```
+
+Frozen `action_id` referent per type (force submit and misconduct marking
+have no dedicated rows today, so their durable identity is the attempt):
+
+| action_type | `action_id` referent | Durable truth it correlates with |
+| --- | --- | --- |
+| `time_grant` | `attempt_time_adjustments.id` | the append-only ledger row |
+| `force_submit` | the force-submitted `exam_attempts.id` | the one-time terminal submit fact + `attempt.forceSubmit` audit |
+| `misconduct_mark` | the flagged `exam_attempts.id` | the single jsonb `MisconductFlag` on the attempt |
+
+Consequences: for the attempt-level types, `attempt_id` equals `action_id`;
+for `time_grant`, `attempt_id` is the adjustment's attempt. Misconduct
+re-flagging OVERWRITES the jsonb flag (existing runtime behavior) and creates
+no new linkable identity — the link follows the attempt's current flag and is
+never invalidated or duplicated by a re-flag. This is acceptable because
+links store action identity only, never mutable action state (INV-I-001 in
+`docs/architecture/exam-system/protocol-catalog.md`).
 
 The interruption correlation decision is deliberate: ADR-013 froze
 `interruptionId` (one attempt) and `incidentId` (possibly many attempts) as
@@ -307,16 +342,21 @@ New permissions (ADR-010 dotted `domain.resource.action` convention):
 | `incident.investigate` | start investigation, add note, change severity, link an action retroactively |
 | `incident.resolve` | resolve and dismiss (terminal judgment) |
 
-Preset matrix (proposal for J3):
+Preset matrix (frozen target; activation column states who applies the grant
+and when):
 
 | Actor | view | create | investigate | resolve | Scope / activation |
 | --- | :-: | :-: | :-: | :-: | --- |
-| Admin | ✅ | ✅ | ✅ | ✅ | organization scope; active on implementation |
-| Proctor | ✅ | ✅ | ✅ | ❌ | exam scope by `defaultScope`; **product activation remains blocked until M11** provides Proctor-to-Exam scope enforcement |
+| Admin | ✅ | ✅ | ✅ | ✅ | organization scope; **granted by J3**, active on implementation |
+| Proctor | ✅ | ✅ | ✅ | ❌ | **target grant — applied by J4 (M11)** together with Proctor-to-Exam scope enforcement. J3 MUST leave the Proctor preset unchanged: without M11 scope enforcement, a granted Proctor preset would be organization-wide authority, which this design forbids |
 | Teacher | ❌ | ❌ | ❌ | ❌ | no default grant |
 | Grader | ❌ | ❌ | ❌ | ❌ | no default grant |
 | Candidate | ❌ | ❌ | ❌ | ❌ | never; a future candidate report is a separate input protocol an operator MAY convert into an incident |
 | System | reserved | reserved | ❌ | ❌ | see below |
+
+J3 adds the four permissions to the catalog and grants them to the **Admin
+preset only**. Proctor holds zero incident permissions until J4 (M11) applies
+the target grant above together with exam-scope enforcement.
 
 `incident.resolve` is flagged sensitive in the Admin preset (terminal
 judgment, same scrutiny class as `AttemptForceSubmit`).
@@ -332,11 +372,13 @@ system-incident Job wires both the permission and non-null `incidentId`
 through a System-only command path. The initial implementation is
 operator-only.
 
-**M11 boundary.** Granting incident permissions to the Proctor preset does
-not activate Proctor incident operations: without Proctor-to-Exam scope
-enforcement (M11, J4), organization-wide Proctor authority is forbidden.
-This mirrors the existing Proctor preset posture (grants exist; activation
-is blocked).
+**M11 boundary.** This design does not rely on "granted but not activated"
+for Proctor incident authority: the Proctor preset receives no incident
+permission in J3 at all, so there is no organization-wide Proctor incident
+authority to accidentally exercise. The target grant is applied by J4 (M11)
+at the same time Proctor-to-Exam scope enforcement lands. (The pre-existing
+Proctor preset grants for force submit / misconduct marking predate this ADR
+and are tracked by the M11 open item; this design does not widen that gap.)
 
 ### 9. Concurrency, idempotency, versioning
 
@@ -346,10 +388,14 @@ is blocked).
 - Two simultaneous terminal transitions: the incident row lock plus version
   check admit exactly one winner; the loser receives 409.
 - Terminal transitions are deterministic no-ops when the incident is
-  already in the **same** terminal state: the committed incident is
-  returned (replay semantics, mirroring the time-grant `terminal`
-  outcome). A conflicting transition (resolve vs dismiss) or a stale
-  version is a conflict, not a replay.
+  already in the **same** terminal state AND the command's required reason
+  text is identical to the committed event's text (canonical trimmed
+  comparison, mirroring time-grant payload canonicalization): the committed
+  incident is returned (replay semantics, mirroring the time-grant
+  `terminal` outcome). A same-terminal command with DIFFERENT reason text is
+  a conflict (409 `INCIDENT_VERSION_CONFLICT`), not a replay — there is no
+  re-resolve or re-dismiss transition. A conflicting transition (resolve vs
+  dismiss) or a stale version is likewise a conflict.
 - `createExamIncident()` carries no `operationId`. Duplicate incident
   creation is a human-workflow concern resolved by dismissal; incidents are
   investigation records, not side-effecting commands, so duplicate rows do
@@ -390,10 +436,24 @@ Grant + link model (the J3 choice required by the recovery Jobs doc):
 **one transaction**. The time-grant route accepts an optional `incidentId`,
 validates it (exists, same organization, `attemptId` null or matching the
 grant's attempt), and writes the ledger row, deadline update, action link,
-and audit atomically under the existing `operationId` idempotency.
-Retroactive linking — force submit, misconduct marks, or later correlation —
-uses standalone `linkIncidentAction()` in its own transaction. A linked
-action MUST NOT exist only in UI memory.
+and audit atomically under the existing `operationId` idempotency. The
+operation-ID lookup precedes all writes: on `idempotent_replay` the route
+returns BEFORE the link insert (the original transaction already wrote the
+link), so a replay never re-inserts and never trips the link's unique
+constraint. Retroactive linking — force submit, misconduct marks, or later
+correlation — uses standalone `linkIncidentAction()` in its own transaction.
+A linked action MUST NOT exist only in UI memory.
+
+Crash behavior:
+
+- every incident command is a single PostgreSQL transaction; a crash before
+  COMMIT leaves no incident state whatsoever;
+- incidents carry no derived or asynchronous state, so NO background
+  reconciliation is needed or introduced;
+- the combined grant+link path is atomic: a crash leaves neither the grant
+  nor the link, and a retry with the same `operationId` replays both;
+- a grant committed without a link (combined path declined, or later
+  correlation) is always recoverable via standalone `linkIncidentAction()`.
 
 ### 11. Audit and privacy
 
@@ -458,7 +518,16 @@ exam_incident_actions
   action_id uuid NOT NULL, attempt_id uuid NULL, actor_id uuid,
   linked_at timestamptz NOT NULL, operation_id uuid NULL
   UNIQUE (organization_id, action_type, action_id)   -- §9 final arbiter
+  index: (incident_id)                               -- per-incident link list
 ```
+
+`action_id` referents are frozen per type in §7 (adjustment id for
+`time_grant`; attempt id for `force_submit` / `misconduct_mark`).
+
+FK delete behavior: no `ON DELETE CASCADE` anywhere in the three tables.
+exam/attempt/candidate FKs use the default no-action, so deleting a
+referenced row fails closed while incidents reference it — incidents are
+durable records and are never destroyed by parent deletion.
 
 `attempt_time_adjustments.incident_id` already exists (nullable, zero
 non-null writers). J3 activates non-null writes exclusively through the
@@ -490,7 +559,7 @@ Error contract:
 | incident not found / cross-organization | 404 | `NOT_FOUND` |
 | stale `expectedVersion` | 409 | `INCIDENT_VERSION_CONFLICT` |
 | action already linked to another incident | 409 | `INCIDENT_ACTION_ALREADY_LINKED` |
-| invalid anchor (attempt not in exam, enum violation) | 400 | validation error |
+| invalid anchor (attempt not in exam, candidate not enrolled, enum violation) | 400 | validation error |
 | capability denied | 403 | existing authz error |
 | authorization service unavailable | 503 | `AUTHZ_UNAVAILABLE` (fail-closed) |
 
@@ -506,6 +575,9 @@ No organization-wide Proctor incident route may be introduced.
   forbidden — it would manufacture investigation state that never existed.
 - The existing nullable `attempt_time_adjustments.incident_id` column is
   not altered; J3 changes only which writers may set it.
+- Rollback is the `DROP` of the three additive tables. No up/down data
+  migration exists because no existing table is altered and no data is
+  backfilled.
 
 ### 15. Relationship to the existing proctor incident marker
 

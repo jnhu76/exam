@@ -86,8 +86,8 @@ lock Attempt or Exam rows and never write `exam_attempts`.
 
 | Actor | `incident.view` | `incident.create` | `incident.investigate` | `incident.resolve` | Activation |
 | --- | :-: | :-: | :-: | :-: | --- |
-| Admin | ✅ | ✅ | ✅ | ✅ (sensitive) | active on implementation |
-| Proctor | ✅ | ✅ | ✅ | ❌ | blocked until M11 (J4) enforces exam scope |
+| Admin | ✅ | ✅ | ✅ | ✅ (sensitive) | granted by J3; active on implementation |
+| Proctor | ✅ | ✅ | ✅ | ❌ | target grant — applied by J4 (M11) with exam-scope enforcement; J3 leaves the Proctor preset unchanged (no org-wide Proctor incident authority) |
 | Teacher | ❌ | ❌ | ❌ | ❌ | — |
 | Grader | ❌ | ❌ | ❌ | ❌ | — |
 | Candidate | ❌ | ❌ | ❌ | ❌ | never; future candidate report is a separate input protocol |
@@ -100,7 +100,7 @@ unavailability returns 503 `AUTHZ_UNAVAILABLE`, never an open fallback.
 
 | Operation | Scope | Invariants |
 | --- | --- | --- |
-| Incident state transition | lock incident row → `expectedVersion` check → update materialized row + append event + atomic audit, one transaction | stale version → 409 `INCIDENT_VERSION_CONFLICT`; same-terminal replay returns the committed incident |
+| Incident state transition | lock incident row → `expectedVersion` check → update materialized row + append event + atomic audit, one transaction | stale version → 409 `INCIDENT_VERSION_CONFLICT`; same-terminal replay returns the committed incident only when the required reason text is identical — different text is a conflict (no re-resolve) |
 | Note append | insert `note_added` event + audit | concurrent notes both succeed; no version required |
 | Action link | insert link + `action_linked` event + audit | `UNIQUE (organization_id, action_type, action_id)` arbiter; 23505 recognized only on that named constraint; re-link same incident = replay, different incident = 409 `INCIDENT_ACTION_ALREADY_LINKED` |
 | Time grant with incident | existing ADR-013 transaction (Enrollment → Attempt → Exam) + non-locking incident validation + action-link insert + audit, under the existing `operationId` idempotency | incident must exist in the same organization; `attemptId` null or matching; ledger remains the time authority; `incidentId` is correlation metadata, never a deadline input |
@@ -108,6 +108,13 @@ unavailability returns 503 `AUTHZ_UNAVAILABLE`, never an open fallback.
 If any future shared transaction locks an incident row, the lock is taken
 strictly AFTER the Exam lock — the ADR-013 order
 `Enrollment → Attempt → Exam` is never reordered.
+
+Crash behavior: every incident command is a single transaction — a crash
+before COMMIT leaves no incident state, and no background reconciliation is
+needed (incidents carry no derived or asynchronous state). The combined
+grant+link path is atomic (crash leaves neither; same-`operationId` retry
+replays both), and a grant committed without a link is recovered via
+standalone `linkIncidentAction()`.
 
 ## Data model (proposal)
 
@@ -154,6 +161,14 @@ linked actions. Interruption correlation flows through the ledger row that
 carries both `interruptionId` and `incidentId` — there is no
 incident↔interruption junction table, and the two identities are never
 interchangeable (ADR-013).
+
+`exam_incident_actions.action_id` referents (ADR-014 §7): `time_grant` →
+`attempt_time_adjustments.id`; `force_submit` and `misconduct_mark` → the
+`exam_attempts.id` (force submit and misconduct flags have no dedicated
+rows; misconduct re-flag overwrites the jsonb flag without creating a new
+linkable identity). Links store action identity only, never mutable action
+state. No `ON DELETE CASCADE`: incidents are durable and parent deletion
+fails closed while incidents reference it.
 
 ## Sequence — time grant linked to an incident (TARGET)
 

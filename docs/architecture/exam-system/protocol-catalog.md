@@ -564,8 +564,8 @@ Status: TARGET — designed by [ADR-014](../../adr/ADR-014-exam-incident-authori
 | **Protocol name** | Exam Incident Lifecycle |
 | **Business purpose** | Record one operational incident (disruption, suspected misconduct, operator error, …) and carry its investigation to resolution or dismissal |
 | **Actor** | Admin (all commands); Proctor (view/create/investigate only — activation blocked until M11 Proctor-to-Exam scope) |
-| **Required capability** | `incident.view` / `incident.create` / `incident.investigate` (start, note, severity, retroactive link) / `incident.resolve` (resolve AND dismiss; sensitive). All four are PROPOSED; no preset grants them yet. |
-| **Current preset actors** | None — permissions are proposed by ADR-014 and not added to any preset by this design Job |
+| **Required capability** | `incident.view` / `incident.create` / `incident.investigate` (start, note, severity, retroactive link) / `incident.resolve` (resolve AND dismiss; sensitive). All four are PROPOSED; J3 grants them to Admin only; Proctor grants are deferred to J4 (M11). |
+| **Current preset actors** | None today; Admin after J3. The Proctor column is a target grant applied by J4 (M11) with exam-scope enforcement — J3 leaves the Proctor preset unchanged |
 | **Route / contract** | `POST /admin/exams/:examId/incidents`, `GET /admin/exams/:examId/incidents`, `GET /admin/incidents/:incidentId`, `POST /admin/incidents/:incidentId/investigate`, `.../notes`, `.../severity`, `.../resolve`, `.../dismiss`, `.../actions` (all PROPOSED) |
 | **Preconditions** | Exam resolves in the actor organization; attempt anchor (if any) belongs to that exam; terminal incidents reject every mutation except append-only notes and action links |
 | **State transition** | `open → investigating → resolved` or `open → investigating → dismissed`; direct `open → resolved/dismissed` allowed; terminal states are monotonic (no reopen) |
@@ -582,7 +582,7 @@ Status: TARGET — designed by [ADR-014](../../adr/ADR-014-exam-incident-authori
 | **Business purpose** | Correlate an already-authoritative operator action (time grant, force submit, misconduct mark) with the incident that motivated it, without making the incident an authority over the action |
 | **Actor** | Admin |
 | **Required capability** | `incident.investigate` for retroactive links; the action's own capability for the combined grant+link path (`attempt.time.grant`) |
-| **Current preset actors** | Admin holds `attempt.time.grant` today; `incident.investigate` is PROPOSED and not yet granted |
+| **Current preset actors** | Admin (holds `attempt.time.grant` today; `incident.investigate` after J3); Proctor deferred to J4 (M11) |
 | **Route / contract** | `POST /admin/incidents/:incidentId/actions` (retroactive, PROPOSED); `POST /admin/attempts/:attemptId/time-grants` extended with an optional `incidentId` (combined path, PROPOSED) |
 | **Preconditions** | Incident exists in the same organization; `incident.attemptId` is null or matches the action's attempt; the action row exists (retroactive) or is created atomically (combined) |
 | **State transition** | None on either side; incident status and attempt status are unchanged by linking |
