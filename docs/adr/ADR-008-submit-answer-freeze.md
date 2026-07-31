@@ -6,8 +6,18 @@
 semantics the current contract can actually guarantee, the `submitAndGradeAttempt`
 single-transaction fix (J1) that closes a real stale-snapshot window, and the
 explicit non-guarantee around concurrent save-vs-submit lock ordering. Option D
-(WYSIWYG submit) is recorded as a follow-up that requires a contract change and
-is **out of Phase-2 scope**.
+(the generic final-answer submit barrier) is recorded as a follow-up that
+requires a contract change and is **out of Phase-2 scope**.
+
+> **Revision note (2026-07-31, docs-only):** Option D was originally labelled
+> "WYSIWYG submit" because rich-text answering was the expected trigger at the
+> time. The label was corrected because the barrier is **answer-type-
+> independent** — the save/submit lock-ordering race it closes can affect single
+> choice, multi-select, true/false, fill-blank, and text answers alike. The
+> contract below (a `/submit` final-answer payload or answer-version/hash
+> barrier) was always generic; only the heading/label is changed, not the
+> semantics. Closing the plain-text `text_response` authoring loop does not
+> close this barrier.
 
 ## Context
 
@@ -81,7 +91,7 @@ diagnosed:
 | **schema snapshot column (`submittedAnswerSnapshot`)** | Schema change (forbidden in this scope). Also redundant: `answers` is already immutable post-`submitted` (the answer protocol rejects saves on submitted/grading/graded rows). |
 | **fake submit priority without a payload** | Impossible. Without the client telling the server what it submitted, the server cannot prefer "the submit answer" over a save that legitimately arrived first. |
 
-### Follow-up (Option D — WYSIWYG submit)
+### Follow-up (Option D — generic final-answer submit barrier)
 
 If the product later requires "the answer visible at submit-click time is the
 grading authority":

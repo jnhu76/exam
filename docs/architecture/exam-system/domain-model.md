@@ -239,7 +239,7 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 |--------|-----------|------------|
 | `not_started` | **NO** | No write path — attempt goes directly to `in_progress` on start |
 | `queued` | **NO** | Phase 2 planned (timed_sync queue admission) |
-| `in_progress` | YES | `startOrRestoreAttempt()`, `restoreAttempt()` |
+| `in_progress` | YES | `startOrRestoreAttempt()`, `restoreInterruptedAttempt()` |
 | `disrupted` | YES | Heartbeat scanner (`markDisrupted`) |
 | `submitted` | YES | `submitAttempt()`, deadline reconciliation |
 | `grading` | **NO** | No write path — `finalizeTerminalGrading()` writes `graded` directly, bypassing the `grading` state. The state machine table has `submitted:grade → grading` entries but they are unreachable. |
@@ -281,7 +281,7 @@ Behavior: freezes draft answers into `submitted_answers`, sets `submittedAt = ef
 
 ### 8.8 Recoverable states
 
-- `disrupted` → `in_progress`: via `restoreAttempt()` (adjusts `deadlineAt` to compensate for disconnected time).
+- `disrupted` → `in_progress`: via `restoreInterruptedAttempt()` (applies the interruption-time policy, writing a `bounded_grace` adjustment only when the policy grants one; operator grants are a separate `grantAttemptTime()` command).
 - `in_progress` → `in_progress`: via `saveAnswer()` (while not expired).
 
 Once `submitted`/`graded`, the attempt is terminal — no recovery path (except `voided`, which is target design).

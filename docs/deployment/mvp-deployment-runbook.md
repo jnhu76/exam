@@ -738,7 +738,7 @@ and §24 (deferred capabilities). Highlights:
 - Additional NotificationType values beyond result_published NOT implemented
   (P5-N2 future).
 - Email template engine + backend i18n NOT started.
-- WYSIWYG final-answer Option D (ADR-008) NOT implemented.
+- Generic final-answer submit barrier — ADR-008 Option D (answer-type-independent) NOT implemented.
 - Live backup validation (pg_dump/restore) was not executed in the P6 audit;
   this runbook documents the supported procedure. Validate on first
   production deploy.

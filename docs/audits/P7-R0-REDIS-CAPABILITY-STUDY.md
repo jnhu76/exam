@@ -91,6 +91,13 @@ Therefore the accurate status is:
 | Locks/leases/leader election | `SET NX PX`, signed release, renewal, fencing token | coordinate one owner across processes | scanner leadership, singleton maintenance, migration/worker coordination |
 | Durable storage | RDB snapshots, AOF, or both | restart reconstruction and backup; durability depends on fsync, replication, failover, eviction | durable queues or streams when explicitly configured and monitored |
 
+> **JSON note:** the current baseline runs `redis:7-alpine` (see
+> `docker-compose*.yml`). RedisJSON is a RedisJSON/Redis Stack module on the
+> Redis 7 baseline and is not automatically present. JSON documents are
+> available as a plain String/parsed-client value on Redis 7; native RedisJSON
+> commands are built into Redis Open Source from Redis 8. Any JSON workload
+> must not assume native JSON commands on the 7-alpine baseline.
+
 ## 4. Lessons from mature projects
 
 ### 4.1 GitLab

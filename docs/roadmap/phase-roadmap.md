@@ -178,7 +178,10 @@ completed plain-text workflow.
 - Collaboration and scoped staff roles move to Phase 3.
 - Platform integration moves to Phase 4.
 - Optional multiTenant remains Phase 4.
-- fill-blank completion, rich-text/WYSIWYG answering, and the ADR-008 final-answer barrier remain Phase 3/P7 work.
+- fill-blank completion, rich-text/WYSIWYG answering, and the generic ADR-008
+  final-answer submit barrier (Option D — submit carries a final-answer payload
+  / version barrier for all supported answer types, not only rich text) remain
+  Phase 3/P7 work.
 
 ## Phase 3: Collaboration, Permissions, and Account Lifecycle
 
@@ -191,8 +194,8 @@ Add multi-user collaboration, scoped authorization, and account lifecycle manage
 **Phase 3 is PARTIALLY IMPLEMENTED.** The MVP role/notification/release-ready
 sequence P4 → P5-0 → P3 → P5-N1 → P6 is closed. The plain-text
 `text_response` product loop is also closed. Resource-scoped authorization,
-identity lifecycle, additional notifications, rich-text/final-answer barrier,
-and other product work remain open.
+identity lifecycle, additional notifications, rich-text/WYSIWYG answering, the
+generic final-answer submit barrier, and other product work remain open.
 
 ### In scope
 
@@ -213,7 +216,7 @@ and other product work remain open.
 - Fill-blank answer protocol, auto-grading, result flow, and E2E closeout.
 - ✅ Plain-text `text_response` authoring, optional reference answer, candidate answering, snapshot freeze, grading-queue discovery, manual grading, and result flow.
 - Rich-text/WYSIWYG authoring and answering protocol, including attachment/formula policy if adopted.
-- WYSIWYG submit final-answer barrier (Option D, ADR-008 — `/submit` carries a final-answer payload / version barrier so the UI answer at submit-click time is the grading authority).
+- Generic final-answer submit barrier (Option D, ADR-008 — `/submit` carries a final-answer payload or version/hash barrier so the UI answer at submit-click time is the grading authority). Answer-type-independent; applies to all supported answer types.
 - Remaining i18n page-level copy migration.
 - In-app notification Inbox for selected operational events (architecture: ADR-011).
 - Asynchronous PostgreSQL-outbox Email delivery with a resident, observable worker (architecture: ADR-011).
@@ -274,7 +277,7 @@ work and is not silently included in P5-N1.
 - Candidate with a configured email address receives the corresponding asynchronous result email; SMTP never participates in the result-publication transaction.
 - Email worker heartbeat and backlog are observable through diagnostics.
 - ✅ A plain-text subjective question can be authored, published, answered, manually graded, and viewed through the supported product loop without leaking rubric/reference data to the candidate.
-- A future rich-text/final-answer protocol has explicit authority and sanitization rules before activation.
+- A future rich-text/WYSIWYG authoring protocol has explicit authority and sanitization rules before activation; the generic final-answer submit barrier (ADR-008 Option D) is tracked separately from rich-text work.
 
 ### Explicitly deferred items
 
@@ -318,12 +321,16 @@ The runtime and real Admin/operator surfaces must consume the capability.
 
 #### Redis adoption
 
+- P7-D1 measures current single-instance limits, checks ADR-001 triggers, and
+  updates or supersedes ADR-001 before any Redis business responsibility;
 - recognize cache, session, rate-limit, queue, stream, Pub/Sub, presence,
   scheduling, dedupe, lock/lease, and durable persistence capabilities;
-- explicit `off | optional | required` operating modes;
+- explicit `off | optional | required` operating modes for approved responsibilities;
 - safe connection lifecycle, diagnostics, recovery events, and bounded failure;
-- first real shared use through global rate limiting;
-- admission queue and presence adoption after state semantics are frozen;
+- if a trigger is met, first real shared use through global rate limiting;
+  if not, record measurement evidence and re-evaluation conditions in ADR-001;
+- admission queue and presence adoption after state semantics are frozen and
+  the ADR-001 decision is accepted;
 - workload-specific persistence, eviction, backup, and topology policy.
 
 #### Backup and disaster recovery
@@ -369,7 +376,11 @@ The runtime and real Admin/operator surfaces must consume the capability.
 
 - roadmap/status/state documents agree with current runtime.
 - every irreversible transition has one command owner and repeat-safe behavior.
-- Redis has at least one real shared business responsibility with tested failure semantics.
+- the P7-D1 decision is recorded in ADR-001 (adopt a concern, or decline with
+  measurement evidence and re-evaluation conditions).
+- every approved Redis responsibility has a real business caller, tested
+  failure semantics, and multi-instance proof; if none is approved, Gate P7-2
+  is satisfied by the recorded decision.
 - Redis queue/cache/coordination workloads declare persistence and eviction policy.
 - a clean-host restore drill meets the declared deployment profile.
 - startup reconciliation repairs or reports supported incomplete states.

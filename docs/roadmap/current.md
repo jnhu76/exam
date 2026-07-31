@@ -57,14 +57,19 @@ PRs #237 and #238 closed the plain-text `text_response` authoring product loop:
 - manual grading and final result;
 - post-publish live-edit snapshot-freeze integration proof.
 
-This does **not** close rich-text/WYSIWYG editing or the ADR-008 final-answer
-payload barrier.
+This does **not** close rich-text/WYSIWYG editing, nor the generic ADR-008
+final-answer submit barrier (submit carries a final-answer payload or
+version/hash so the answer at submit-click is the grading authority). The
+barrier is answer-type-independent and remains open for all supported answer
+types, not only rich text.
 
 ## Current planning focus — P7
 
 The project is moving from isolated feature completion to system-level
-readiness. P7 is proposed as the next program and does not redefine M11.
-M11 remains resource-relationship authorization.
+readiness. P7 is accepted for planning as the next program and does not
+redefine M11. M11 remains resource-relationship authorization. Acceptance of
+the P7 plan does not authorize Redis adoption; every Redis item is conditional
+on the P7-D1 decision gate and an ADR-001 update.
 
 ### P7 workstreams
 
@@ -78,10 +83,15 @@ M11 remains resource-relationship authorization.
    - audit direct status writes, concurrency, idempotency, and crash points;
    - define startup reconciliation for recoverable partial work.
 
-3. **Redis capability and adoption**
+3. **Redis capability and adoption (decision-gated)**
    - recognize Redis capability beyond caching;
-   - harden lifecycle and `off | optional | required` modes;
-   - adopt a real shared capability, beginning with global rate limiting;
+   - P7-D1 measures current single-instance limits and checks ADR-001 triggers
+     before any adoption;
+   - harden lifecycle and `off | optional | required` modes only for approved
+     responsibilities;
+   - if a trigger is met, adopt one real shared capability, beginning with
+     global rate limiting; if not, record evidence and re-evaluation
+     conditions in ADR-001;
    - design admission queue, presence, Pub/Sub/Streams, and worker use from
      explicit durability/failure contracts.
 
@@ -125,10 +135,11 @@ Redis research:
 ```text
 P7-R0  reality + documentation reconciliation
   ├─ P7-S1  state-machine and authority audit
-  └─ P7-D1  Redis capability/adoption decision
+  └─ P7-D1  Redis adoption decision gate (measure → triggers → ADR-001 update)
 
 P7-S1 → crash recovery / startup reconciliation
-P7-D1 → Redis runtime hardening → shared rate limit
+P7-D1 (accepted decision only; declined ⇒ Redis items not scheduled)
+  → Redis lifecycle hardening → shared rate limit
 
 backup design → backup/restore CLI → PITR/verification → Admin surface
 configuration schema → versioned service → Admin settings UI
@@ -136,6 +147,7 @@ configuration schema → versioned service → Admin settings UI
 UI pilot → controlled family-by-family UI closeout
 ```
 
+Redis adoption is conditional on an accepted P7-D1 / ADR-001 decision.
 Redis-backed admission implementation must wait for an accepted admission state
 machine. Settings UI must wait for configuration layering and snapshot semantics.
 
@@ -148,7 +160,8 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 - REC-I4-I3B2 operator grant route/permission;
 - REC-I6 incident model and dedicated recovery UI;
 - fill-blank runtime/E2E reality re-audit;
-- rich-text/WYSIWYG answering and ADR-008 final-answer barrier.
+- rich-text/WYSIWYG answering;
+- generic ADR-008 final-answer submit barrier (all supported answer types).
 
 ### Collaboration and identity
 

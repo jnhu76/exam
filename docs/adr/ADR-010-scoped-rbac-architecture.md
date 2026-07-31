@@ -113,7 +113,7 @@ All load-bearing claims in this ADR cite a file path + line number, an audit sec
 - Do **not** introduce CASL / Casbin / Oso / Permify or any external AuthZ library.
 - Do **not** build a custom-role management UI.
 - Do **not** allow arbitrary user-defined permissions.
-- Do **not** solve Answer Protocol v2, the WYSIWYG submit barrier, the frontend exam state machine, or E2E full parallelization — these are separate Large Jobs and are only *referenced* here, fenced off as in the readiness audit §10–§11.
+- Do **not** solve Answer Protocol v2, the generic final-answer submit barrier (ADR-008 Option D — answer-type-independent), the frontend exam state machine, or E2E full parallelization — these are separate Large Jobs and are only *referenced* here, fenced off as in the readiness audit §10–§11.
 - Do **not** merge audit logs and client telemetry.
 - Do **not** use Redis for authorization.
 

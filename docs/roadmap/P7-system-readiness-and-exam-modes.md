@@ -1,10 +1,14 @@
 # P7 — System Readiness and Configurable Exam Modes
 
-> Status: PROPOSED — planning authority candidate
-> Date: 2026-07-31
+> Status: ACCEPTED FOR PLANNING (2026-07-31, docs-only PR)
+> Implementation status: NOT STARTED
 > Phase: Phase 3 hardening, after P6 MVP closeout
 > Scope: single-deployment, single-organization, LAN/on-premise
 > Does not redefine M11; M11 remains resource-relationship authorization
+>
+> Acceptance of this plan does not authorize any Redis adoption. Every Redis
+> adoption item below is conditional on the P7-D1 decision gate, which updates
+> or supersedes ADR-001 before any Redis business responsibility is introduced.
 
 ## 1. Why P7 exists
 
@@ -62,8 +66,10 @@ P7 groups eight concerns that otherwise risk being implemented independently:
   recovery are not implemented.
 - P5-N2 additional operational notification types are deferred.
 - backend Email templates/i18n are not implemented.
-- rich-text/WYSIWYG answering and ADR-008 final-answer barrier are not
-  implemented.
+- rich-text/WYSIWYG answering is not implemented.
+- the generic final-answer submit barrier (ADR-008 Option D — submit carries a
+  final-answer payload or version/hash barrier) is not implemented; it applies
+  to all supported answer types, not only rich text.
 - fill-blank full runtime/E2E status remains an open roadmap item and must be
   re-audited.
 - operator grant route, permission, incident model, and dedicated recovery UI
@@ -190,8 +196,11 @@ Detailed study: [`docs/audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](../audits/P7-R0-
 
 ### Goal
 
-Move Redis from optional diagnostics-only infrastructure to deliberately
-adopted runtime responsibilities.
+Resolve, from measured evidence, whether any Redis responsibility should be
+adopted. If measurement meets an ADR-001 trigger, adopt exactly that concern
+deliberately (one at a time, PostgreSQL remains source of truth). If it does
+not, record the measurement evidence and re-evaluation conditions instead — a
+decision either way is a valid P7 outcome.
 
 ### Capability classes
 
@@ -201,7 +210,28 @@ adopted runtime responsibilities.
 | Coordination | scanner lease, singleton jobs, admission ownership, cache invalidation |
 | Durable jobs/events | delayed work, retries, streams, generic workers |
 
-### First implementation sequence
+### P7-D1 — Adoption decision gate (mandatory, blocks all Redis adoption)
+
+P7-D1 is a decision gate, not a milestone on a fixed adoption path. It produces
+a documented decision before any Redis business responsibility is introduced:
+
+1. measure current single-instance limits (rate limiter, admission queue,
+   heartbeat/deadline scanners, presence) and record the measured headroom;
+2. confirm whether any ADR-001 trigger is concretely met by a measured limit —
+   speculative triggers are not enough;
+3. for each candidate Redis capability, state its benefit, failure model,
+   durability/RPO needs, and rollback path;
+4. update or supersede ADR-001 with the decision (adopt a concern, or decline
+   and record re-evaluation conditions).
+
+Until P7-D1 is accepted and ADR-001 is updated, Redis stays diagnostics-only
+infrastructure. The baseline plugin, Compose service, diagnostics PING, and
+test-prefix isolation are not Redis adoption.
+
+### Adoption sequence (conditional on accepted P7-D1 / ADR decision)
+
+Only approved responsibilities are sequenced. The tentative order for a
+multi-instance trigger is:
 
 1. Redis lifecycle hardening and `off | optional | required` operating modes.
 2. global rate limit shared across API instances.
@@ -209,6 +239,9 @@ adopted runtime responsibilities.
 4. Redis-backed admission queue with persistence and observability.
 5. presence and live dashboard projection.
 6. evaluate Streams/generic job queue/cache only from measured need.
+
+If P7-D1 concludes no adoption is warranted, items 2–6 are not scheduled and
+Gate P7-2 is satisfied by the recorded decision.
 
 ### Non-dogmatic authority rule
 
@@ -502,13 +535,13 @@ Continue [`docs/roadmap/ui-open-items.md`](ui-open-items.md):
 ```text
 P7-R0  Reality + documentation reconciliation
   ├─ P7-S1  State-machine and authority audit
-  └─ P7-D1  Redis capability/adoption decision
+  └─ P7-D1  Redis adoption decision gate (measure → triggers → ADR-001 update)
 
 P7-S1
   → P7-RC1  Crash-recovery and startup reconciliation
   → P7-Q1   Admission queue state-machine design
 
-P7-D1
+P7-D1 (accepted decision only; declined ⇒ D2/D3/Q2/P1 not scheduled)
   → P7-D2  Redis runtime lifecycle hardening
   → P7-D3  Global Redis-backed rate limit
   → P7-Q2  Redis-backed admission queue
@@ -531,7 +564,8 @@ P7-U1  UI pilot migration
 ```
 
 Parallelism is allowed only where authority boundaries are already frozen.
-Redis queue implementation must not begin before admission state semantics are
+P7-D2/D3/Q2/P1 are conditional on an accepted P7-D1 / ADR-001 decision. Redis
+queue implementation must not begin before admission state semantics are
 accepted. Admin settings UI must not begin before configuration layering and
 snapshot semantics are accepted.
 
@@ -551,13 +585,22 @@ snapshot semantics are accepted.
 - startup reconciliation has integration tests;
 - process-crash simulations prove idempotent completion.
 
-### Gate P7-2 — Redis is operationally real
+### Gate P7-2 — Redis decision is recorded and approved responsibilities are real
+
+If P7-D1 accepted one or more Redis responsibilities:
 
 - Redis lifecycle is safe and observable;
-- at least one real business capability uses Redis;
+- each approved responsibility has a real business caller, an explicit failure
+  policy, and tested failure semantics;
 - multi-instance test proves shared behavior;
-- failure policy is explicit and tested;
 - persistence/eviction/topology matches the workload.
+
+If P7-D1 concluded that no Redis adoption is warranted:
+
+- the measurement evidence and re-evaluation conditions are recorded in
+  ADR-001;
+- Gate P7-2 is satisfied by that recorded decision — it does not require a
+  forced Redis business integration.
 
 ### Gate P7-3 — Restore is proven
 
@@ -598,7 +641,7 @@ snapshot semantics are accepted.
 | REC-I4-I3B2 / REC-I6 | included in state/recovery UI planning, not silently declared complete |
 | P5-N2 notifications | may use configuration and Redis fan-out, but keeps PostgreSQL transaction/dedupe authority unless changed by ADR |
 | invitation/password reset | benefits from global rate limit, Email templates, settings, and recovery |
-| rich text / WYSIWYG barrier | remains a separate answer-authority feature under the policy/config framework |
+| rich text / WYSIWYG answering | remains a separate answer-authority feature; the generic final-answer submit barrier (ADR-008 Option D) is independent of answer type and stays open for all supported answer types |
 | Phase 4 integrations/multiTenant | remain Phase 4 and are not pulled into P7 |
 
 ## 14. Explicit non-goals

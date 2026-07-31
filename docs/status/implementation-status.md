@@ -107,8 +107,8 @@ The authorization **infrastructure** is live (not "not started"):
   course selection, publish validation + frozen question snapshot, candidate
   metadata isolation, candidate multiline answering + submission, real Grading
   Queue UI discovery, manual grading + final result, and post-publish live-edit
-  snapshot-freeze proof. Rich-text/WYSIWYG editing and the ADR-008 final-answer
-  payload barrier remain open.
+  snapshot-freeze proof. Rich-text/WYSIWYG editing and the generic ADR-008
+  final-answer submit barrier (answer-type-independent) remain open.
 - ✅ Candidate answering runtime (P0 CLOSED): all MVP question types render,
   save/restore/submit; `deriveTakeExamView` pure function + transient reducer.
 - ✅ Manual grading closeout (P1 CLOSED): grader views frozen submitted answers,
@@ -177,9 +177,9 @@ notification onto the now-stable result-publication transaction (P5-N1).
 - Staff invitation, SMTP password reset, and account lifecycle UI remain
   Phase 3 scope but are separate future work (not silently included in P5-N1).
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
-  (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product task is the
-  rich-text/WYSIWYG authoring and the WYSIWYG submit final-answer barrier
-  (ADR-008 Option D follow-up).
+  (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
+  rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit
+  barrier (Option D follow-up; answer-type-independent).
 - Email template engine + backend i18n remain NOT STARTED.
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
