@@ -280,11 +280,20 @@ Telemetry: `restore_started` / `restore_succeeded` / `restore_failed` are
 emitted via the existing `trackExamEvent` helper, scoped to attemptId/examId
 with `durationMs` and `errorCode` only. No answer content is recorded.
 
-Deferred from REC-I3: the time-compensation runtime has been implemented by
-ADR-013's REC-I4-I1/I2/I3A/I3B1/I3B2 work — `restoreInterruptedAttempt()` applies
-the frozen policy (strict zero-grant by default, bounded_grace only with
-explicit caps, operator grants via the separate `grantAttemptTime()` command).
-The Web client deliberately uses neutral copy
+ADR-013 is closed through REC-I4-I3B2.
+
+REC-I4-I1/I2/I3A/I3B1 implement the persistence, frozen policy, candidate
+restore compensation runtime, and canonical operator-grant engine/ledger
+semantics.
+
+REC-I4-I3B2 closes the separate Admin operator-grant product path: permission,
+Attempt-scoped route, atomic audit, PostgreSQL race recovery, and Dashboard
+retry coordination.
+
+`restoreInterruptedAttempt()` applies the frozen policy (strict zero-grant by
+default, bounded_grace only with explicit caps). `grantAttemptTime()` is a
+separate Admin operator command and is not part of candidate restore. The Web
+client deliberately uses neutral copy
 ("服务器正在确认考试状态和剩余时间") and does not duplicate time logic.
 
 ### Interruption-Time Policy (IMPLEMENTED)

@@ -1155,59 +1155,58 @@ Do not use Redis adoption as a prerequisite for completing J1–J7.
 ## 12. Recommended PR Breakdown
 
 ```text
-PR-1  REC-I4-I3B2-OPERATOR-TIME-GRANT-API
-PR-2  REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT
-PR-3  REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS
-PR-4  M11-PROCTOR-EXAM-SCOPE-MINIMUM
-PR-5  REC-OPS-ADMIN-RECOVERY-CENTER
-PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER
-PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT
-PR-8  P7-D1-REDIS-ADOPTION-DECISION
+PR-1  REC-I4-I3B2-OPERATOR-TIME-GRANT-API — CLOSED
+PR-2  REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT — NEXT
+PR-3  REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS — PLANNED
+PR-4  M11-PROCTOR-EXAM-SCOPE-MINIMUM — PLANNED
+PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — PLANNED
+PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED
+PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED
+PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 ```
 
 ## Parallelism
 
-Safe parallel work:
+J1 is closed.
+
+The next Job is:
 
 ```text
-J1 Operator grant API
-J2 Incident authority contract
+REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT
 ```
-
-may proceed in parallel if both use the existing recovery authority and avoid
-inventing overlapping semantics.
 
 After J2:
 
 ```text
-J3 Incident persistence
-J4 Proctor scope minimum
+J3 Incident persistence and commands
+J4 Proctor-to-Exam scope minimum
 ```
 
-may proceed in parallel.
+may proceed in parallel, provided both follow the accepted incident authority
+contract.
 
-After J1 + J3:
+J5 requires J1 and J3.
 
 ```text
-J5 Admin recovery center
+J6 requires J3 and J4.
+J7 requires J1 through J6.
+J8 requires the Recovery Authority Gate.
 ```
 
-may begin.
-
-J6 requires J4.
-
-J7 requires all preceding behavior to be integrated.
-
-## First Job
+## Next Job
 
 Start with:
 
 ```text
-REC-I4-I3B2-OPERATOR-TIME-GRANT-API
+REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT
 ```
 
-It has the best implementation leverage because the engine command already
-exists. The Job should expose it safely rather than redesign it.
+REC-I4-I3B2 is closed.
+
+The next task is design-first. It must freeze the incident aggregate,
+lifecycle, command ownership, actor/resource authorization, append-only
+history, and the relationship between incidents and separately authoritative
+operator actions before persistence or UI work begins.
 
 ---
 
