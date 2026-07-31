@@ -724,8 +724,12 @@ See `docs/audits/P6-MVP-READY-REALITY-AUDIT.md` §23 (accepted limitations)
 and §24 (deferred capabilities). Highlights:
 
 ```text
-- Frontend disrupted-recovery UI is NOT productized (backend capability exists;
-  frontend self-service restore button deferred to Phase 2+).
+- Frontend candidate disrupted-recovery UI IS productized (REC-I3, PR #219):
+  self-service restore from the `canResume` snapshot capability, with
+  restoring/failed/retry states and authoritative snapshot reload. The
+  operator/proctor recovery center and operator time-grant UI remain open
+  (REC-I4-I3B2 / REC-I6). (Older P6-era docs list this as not-productized —
+  that predates REC-I3.)
 - Multi-instance deployment is NOT supported (in-process scanners + admission
   queue assume a single API owner).
 - timed_sync / untimed timing modes NOT implemented (only timed_window).
@@ -738,7 +742,7 @@ and §24 (deferred capabilities). Highlights:
 - Additional NotificationType values beyond result_published NOT implemented
   (P5-N2 future).
 - Email template engine + backend i18n NOT started.
-- WYSIWYG final-answer Option D (ADR-008) NOT implemented.
+- Generic final-answer submit barrier — ADR-008 Option D (answer-type-independent) NOT implemented.
 - Live backup validation (pg_dump/restore) was not executed in the P6 audit;
   this runbook documents the supported procedure. Validate on first
   production deploy.

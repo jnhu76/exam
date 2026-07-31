@@ -127,15 +127,15 @@ Rubric is absent from the Candidate result contract.
 
 | Data | Authoritative storage | Who writes | When authoritative |
 |------|----------------------|------------|-------------------|
-| Email outbox row | `email_outbox` | Business transaction (currently NO production caller) | At enqueue |
+| Email outbox row | `email_outbox` | Business transaction (P5-N1 `result_published` publication) | At enqueue |
 | Email delivery status | `email_outbox.status` | Email worker (`markSent`/`markRetryWait`/`markDead`) | At send attempt |
 | Provider message ID | `email_outbox.providerMessageId` | Email worker (`markSent`) | At successful send |
 
 **Invariant**: INV-N-001 — Email outbox rows are written by business transactions; SMTP send happens OUTSIDE the transaction.
 
-### 8.2 Business notification-to-outbox protocol (NOT IMPLEMENTED)
+### 8.2 Business notification-to-outbox protocol (first caller IMPLEMENTED — P5-N1)
 
-No production business transaction currently inserts an outbox row. The infrastructure primitives exist but the business protocol is NOT IMPLEMENTED (P5-N1 scope).
+The first production business caller is `result_published`: the result-publication transaction atomically creates the candidate Inbox row and enqueues the Email outbox row (P5-N1, CLOSED, PR #213). Additional operational notification types remain P5-N2+ scope.
 
 ## 9. Transaction Boundaries
 
@@ -218,7 +218,7 @@ If the email worker crashes while a row is in `processing`:
 If the candidate's browser crashes:
 - The attempt remains `in_progress`.
 - After the heartbeat timeout (default 60s), the heartbeat scanner marks it `disrupted`.
-- On reconnection, the candidate can `restoreAttempt()` to resume (deadline adjusted).
+- On reconnection, the candidate can `restoreInterruptedAttempt()` to resume (deadline adjusted per the interruption-time policy; operator grants are a separate `grantAttemptTime()` command).
 - If the deadline passes while disrupted, deadline reconciliation auto-submits.
 
 ## 12. Projection versus Source-of-Truth Rules

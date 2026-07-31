@@ -104,9 +104,10 @@ For absent or proposed behavior, these explicit labels are used:
 
 - Phase 1 only implements `timed_window` timing mode; `timed_sync`, `deadline`, and `untimed` are **NOT IMPLEMENTED** as runtime modes (schema fields exist).
 - `not_started`, `queued`, `grading`, and `voided` attempt statuses have **no write path** in the current implementation — they exist as target design.
-- Disrupted recovery UI is **NOT IMPLEMENTED** — the backend capability (heartbeat scanner, `restoreAttempt`) exists, but the candidate-facing restore flow is incomplete. See [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md) for the frozen recovery contract and [candidate-recovery.md](./candidate-recovery.md) for sequence diagrams.
-- Email delivery infrastructure (outbox + worker) is **IMPLEMENTED** (P5-0 merged), but has **no production business caller** — the business notification-to-outbox protocol is **NOT IMPLEMENTED**.
-- Notification Inbox is **NOT IMPLEMENTED** — only the email outbox channel exists.
+- Candidate disrupted-recovery UI is **IMPLEMENTED** (REC-I3): the `useAttemptRestore()` hook drives restore from the `CandidateTakeSnapshot` `canResume` capability — an explicit restore command, a `restoring` state, a `failed`/retry surface with an auto-focused retry button, a generation token to prevent cross-attempt cross-writes, and an authoritative snapshot reload after the command acks. The recovery contract is implemented under ADR-012/ADR-013. See [candidate-recovery.md](./candidate-recovery.md) for sequence diagrams.
+  - What remains open is the **operator/proctor** side, not the candidate surface: the operator time-grant route/permission and incident model (REC-I4-I3B2 / REC-I6) and a dedicated operator/proctor recovery center are **NOT IMPLEMENTED**.
+- Email delivery infrastructure (outbox + worker) is **IMPLEMENTED** (P5-0 merged) and has its first production business caller: the `result_published` publication (P5-N1, CLOSED, PR #213) atomically creates the candidate Inbox row and enqueues the Email outbox row. Additional operational notification types remain P5-N2+ scope.
+- Notification Inbox is **IMPLEMENTED** (P5-N1, CLOSED, PR #213) for `result_published`; additional operational notification types remain P5-N2+ scope.
 - `Paper` is an **implicit or embedded composition concept**, not an explicit aggregate (see [domain-model.md](./domain-model.md)).
 - Candidate answer-key visibility is **fixed to hidden** — a future configurable release policy is **NOT IMPLEMENTED**.
 - Teacher role has capability grants but resource-scoped authorization (Teacher@course) is **NOT IMPLEMENTED** — Teacher permissions are currently flat org-wide.

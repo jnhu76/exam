@@ -1,118 +1,195 @@
 # Current Roadmap
 
-> What is being worked on now and what comes next. For phase scope authority,
-> see [`docs/roadmap/phase-roadmap.md`](phase-roadmap.md). For open Phase 3
-> items, see [`docs/roadmap/phase3-open-items.md`](phase3-open-items.md).
+> What is implemented now, what is being planned next, and which work remains
+> open. Phase scope authority remains
+> [`docs/roadmap/phase-roadmap.md`](phase-roadmap.md). Detailed P7 planning is in
+> [`P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
 
 ## Status snapshot
 
-| Phase | Status | Notes |
+| Phase / program | Status | Notes |
 | --- | --- | --- |
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
-| Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync`/`untimed`/queue admission deferred. |
-| Phase 3 — Collaboration/Permissions | 🟡 PARTIALLY IMPLEMENTED | Authorization **infrastructure** live; Phase 3 **product** work open. |
-| Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, optional multiTenant. |
+| Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
+| Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
+| P7 — System Readiness and Exam Modes | 🟣 PLANNING | Redis adoption, state authority, backup/restore, outage recovery, settings control plane, policy profiles, UI closeout. |
+| Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
-for the full implemented/partial/limited breakdown.
+for the implemented/partial/limited breakdown and
+[`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) for open Phase 3
+product work.
 
-## What is being worked on now
+## Recently closed
 
-- **Recovery hardening — REC-I4-I3A Contract & Authoring Surface is
-  implemented.** ADR-013 and the REC-I4-R0 reality audit define
-  strict/bounded_grace/operator_incident policies, lifecycle-only restore, and
-  pure policy evaluation. REC-I4-I1 adds the Domain, contract, PostgreSQL
-  persistence ledger. REC-I4-I2 completes the runtime: atomic scanner
-  disruption with episode creation, pure policy evaluator, composed restore
-  command with deadline reconciliation, and a phased fail-closed migration
-  (0022) with status/pointer CHECK constraint. **REC-I4-I3A** freezes the
-  public contract and authoring surface: the candidate restore HTTP response
-  contract (`RestoreAttemptResponseSchema`), Exam create/update interruption
-  policy authoring fields with ADR-013 cross-field validation and draft-only
-  mutation, confirmed attempt-snapshot immutability, no leak of internal
-  interruption evidence/ledger to candidate responses, and structural
-  regression tests preventing legacy `restoreAttempt` /
-  `disconnectedDuration` reintroduction.
-  
-  **REC-I4-I3B1 (Operator Grant Engine Seam) is implemented.** The
-  `grantAttemptTime()` engine command performs the ledger insert and deadline
-  update through transaction-bound repositories, with `operationId`-keyed
-  idempotency and ADR-013's frozen lock/reconcile order. The operator grant
-  route, `Permission.AttemptTimeGrant`, and the system incident model remain
-  deferred (REC-I4-I3B2 / REC-I6). REC-I4 does not introduce Redis.
-
-- **Phase 3, Module P6 — MVP ready closeout is CLOSED.**
-  All Phase 3 MVP prerequisites are closed: P4 (RBAC MVP role switch), P5-0
-  (Email delivery runtime hardening, PR #210), P3 (result publishing closeout,
-  PR #211), and P5-N1 (Notification Inbox + result-published Email integration,
-  **PR #213 merged 2026-07-25**). P5-N1 delivered the first operational
-  two-channel notification: candidate Inbox plus optional Email for
-  `result_published`, integrated atomically into the result-publication
-  transaction.
-
-  P6 (branch `feat/p6-mvp-ready-closeout`) has completed an independent
-  closeout review confirming that the implemented MVP subset is release-ready
-  in its documented LAN/on-premise, single-organization mode. PR #215 merged
-  the reviewed corrections; the post-merge documentation closeout is in
-  progress. See
-  [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md)
-  for the final audit and
-  [`docs/deployment/mvp-deployment-runbook.md`](../deployment/mvp-deployment-runbook.md)
-  for the deployment/recovery runbook. P6 does **not** mark all Phase 3 work
-  complete — it concerns only the implemented MVP subset.
-
-  > Phase 3 remains **PARTIALLY IMPLEMENTED**. M11, custom roles,
-  > Proctor/Grader product activation, staff invitation, password reset /
-  > account recovery, additional notification types, and Phase 4 all remain
-  > deferred.
-
-> Note: the former P2-1 Exam Authoring UI Flow has been removed from the
-> active Phase 3 plan by scope decision.
-
-## Gate status
-
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
-  `f2a7a80`, re-verified during P4-R1 closeout on `b4dc1d6`). The runtime route
-  tree reconciles exactly; full evidence in
-  [`docs/status/implementation-status.md`](../status/implementation-status.md)
-  and
-  [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
-  Nothing in the current Phase 3 module sequence is blocked on Gate 0.5.
-
-## What comes next (Phase 3 module order)
-
-The order reflects real dependencies, not narrative sequence — define
-permissions first (P4), then harden the Email base (P5-0), then close out
-result publishing (P3), then attach the first notification onto the now-stable
-result-publication transaction (P5-N1):
+### Phase 3 MVP sequence
 
 ```text
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
-  → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
+  → P5-N1 (Inbox + result-published Email) ✅ CLOSED (2026-07-25, PR #213)
   → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
 ```
 
-P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
-Inbox + Email business integration.
+The supported LAN/on-premise, single-organization MVP subset is release-ready
+within its documented boundary. P6 does **not** mean all Phase 3 product work or
+all production-hardening work is complete.
 
-| Job  | True dependency                                | Status |
-| ---- | ---------------------------------------------- | ------ |
-| P4   | Authorization infrastructure implemented        | ✅ CLOSED |
-| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | ✅ CLOSED |
-| P3   | P4 closed                                       | ✅ CLOSED |
-| P5-N1| P4 + P5-0 + P3 closed                           | ✅ CLOSED (2026-07-25, PR #213) |
-| P6   | Preceding MVP blockers closed                   | ✅ CLOSED (2026-07-26, PR #215) |
+### Recovery foundation
 
-After Phase 3 MVP closeout, the deferred design items (M11 resource-relationship
-authorization, custom roles, Proctor runtime permission boundary, etc.) may be
-revisited. None of these are authorized to start before their dependency module
-closes.
+REC-I4-I1/I2/I3A/I3B1 implemented the interruption policy persistence/runtime,
+candidate-safe restore contract, immutable policy snapshots, and the
+transaction-bound operator grant engine seam. Remaining recovery work includes
+the operator route/permission, incident model, dedicated recovery UI, and wider
+startup reconciliation.
+
+### Plain-text subjective question loop
+
+PRs #237 and #238 closed the plain-text `text_response` authoring product loop:
+
+- create/edit/readback of rubric and optional reference answer;
+- searchable accessible course selector;
+- publish validation and frozen question snapshot;
+- candidate metadata isolation;
+- candidate multiline plain-text answering and submission;
+- real Grading Queue UI discovery;
+- manual grading and final result;
+- post-publish live-edit snapshot-freeze integration proof.
+
+This does **not** close rich-text/WYSIWYG editing, nor the generic ADR-008
+final-answer submit barrier (submit carries a final-answer payload or
+version/hash so the answer at submit-click is the grading authority). The
+barrier is answer-type-independent and remains open for all supported answer
+types, not only rich text.
+
+## Current planning focus — P7
+
+The project is moving from isolated feature completion to system-level
+readiness. P7 is accepted for planning as the next program and does not
+redefine M11. M11 remains resource-relationship authorization. Acceptance of
+the P7 plan does not authorize Redis adoption; every Redis item is conditional
+on the P7-D1 decision gate and an ADR-001 update.
+
+### P7 workstreams
+
+1. **Reality and document reconciliation**
+   - reconcile current/phase/status/open-items documents with current master;
+   - update stale state-and-authority documentation;
+   - remove completed `text_response` work from open lists.
+
+2. **State-machine and authority closeout**
+   - map every lifecycle/sub-process state and transition owner;
+   - audit direct status writes, concurrency, idempotency, and crash points;
+   - define startup reconciliation for recoverable partial work.
+
+3. **Redis capability and adoption (decision-gated)**
+   - recognize Redis capability beyond caching;
+   - P7-D1 measures current single-instance limits and checks ADR-001 triggers
+     before any adoption;
+   - harden lifecycle and `off | optional | required` modes only for approved
+     responsibilities;
+   - if a trigger is met, adopt one real shared capability, beginning with
+     global rate limiting; if not, record evidence and re-evaluation
+     conditions in ADR-001;
+   - design admission queue, presence, Pub/Sub/Streams, and worker use from
+     explicit durability/failure contracts.
+
+4. **Backup and restore**
+   - define supported RPO/RTO profiles;
+   - automate PostgreSQL/files/settings backup and retention;
+   - add validation, clean-host restore, and restore drills;
+   - provide CLI and Admin visibility.
+
+5. **Crash and outage recovery**
+   - define API/host/PostgreSQL/Redis/worker/scanner failure behavior;
+   - make committed operations safely repeatable;
+   - reconcile stuck grading, notifications, workers, interruptions, and jobs.
+
+6. **Configuration control plane**
+   - keep bootstrap endpoints and secrets in deployment/secret configuration;
+   - move safe business and operational settings into versioned audited storage;
+   - expose effective values, source layer, validation, restart requirement,
+     preview, rollback, and import/export in Admin settings;
+   - freeze resolved policies at publish/attempt creation.
+
+7. **Configurable exam profiles**
+   - model timing, admission, session/device, navigation, interruption,
+     submission, randomization, result, monitoring, and audit as orthogonal
+     policies;
+   - provide minimal, standard, controlled, and strict templates over one engine;
+   - reject conflicting combinations before publish.
+
+8. **UI and operations closeout**
+   - system status, settings, backup, recovery, and exam-profile workflows;
+   - continue typography/StatsCard/PageSection/component-authority migration;
+   - responsive/mobile and accessibility closeout.
+
+Detailed scope, dependencies, and release gates:
+[`P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
+Redis research:
+[`docs/audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](../audits/P7-R0-REDIS-CAPABILITY-STUDY.md).
+
+## Proposed execution order
+
+```text
+P7-R0  reality + documentation reconciliation
+  ├─ P7-S1  state-machine and authority audit
+  └─ P7-D1  Redis adoption decision gate (measure → triggers → ADR-001 update)
+
+P7-S1 → crash recovery / startup reconciliation
+P7-D1 (accepted decision only; declined ⇒ Redis items not scheduled)
+  → Redis lifecycle hardening → shared rate limit
+
+backup design → backup/restore CLI → PITR/verification → Admin surface
+configuration schema → versioned service → Admin settings UI
+                     → exam policy schema → profiles → creation wizard
+UI pilot → controlled family-by-family UI closeout
+```
+
+Redis adoption is conditional on an accepted P7-D1 / ADR-001 decision.
+Redis-backed admission implementation must wait for an accepted admission state
+machine. Settings UI must wait for configuration layering and snapshot semantics.
+
+## Existing open work not erased by P7
+
+### Phase 2+ / Phase 3 hardening
+
+- `timed_sync`, `deadline`, and `untimed` timing modes;
+- operational queue admission;
+- REC-I4-I3B2 operator grant route/permission;
+- REC-I6 incident model and dedicated recovery UI;
+- fill-blank runtime/E2E reality re-audit;
+- rich-text/WYSIWYG answering;
+- generic ADR-008 final-answer submit barrier (all supported answer types).
+
+### Collaboration and identity
+
+- M11 resource-relationship authorization;
+- scoped Teacher/Proctor/Grader assignments and product activation;
+- custom roles;
+- staff invitation, password reset, activation/deactivation, account recovery;
+- permission audit UI;
+- P5-N2 additional operational notification types;
+- Email template engine and backend i18n.
+
+### UI debt
+
+See [`ui-open-items.md`](ui-open-items.md): typography recipes, StatsCard,
+PageSection, component collisions, Card surface decision, broader authority lint,
+metadata/read-only-long-answer components, responsive/accessibility migration.
+
+## Gate status
+
+- Gate 0.5 remains PASS; runtime route/capability inventory is reconciled.
+- P6 MVP closeout is CLOSED for the supported deployment subset.
+- P7 has not started implementation; Gate P7-0 is the truthful-plan and
+  documentation-reconciliation gate.
 
 ## Out of scope until Phase 4
 
-- pass-to-proceed API, service tokens / API keys, webhooks, external integration.
-- Optional multiTenant, SuperAdmin, tenant hierarchy/switcher, organizationSlug
-  login, cross-tenant audit.
-- Cloud-only runtime dependencies (the platform must remain LAN/offline-capable).
+- pass-to-proceed API, service tokens / API keys, webhooks, and external
+  integrations;
+- optional multiTenant, SuperAdmin, tenant hierarchy/switcher,
+  organizationSlug login, and cross-tenant audit;
+- mandatory cloud runtime dependencies.

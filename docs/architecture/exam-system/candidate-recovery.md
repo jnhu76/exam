@@ -151,7 +151,7 @@ sequenceDiagram
     New->>API: POST /attempts/:examId/start
     API->>DB: find active/disrupted attempt
     alt disrupted attempt exists
-        API->>DB: restoreAttempt (deadline reconciliation)
+        API->>DB: restoreInterruptedAttempt (deadline reconciliation)
         API-->>New: restored attempt (server-confirmed answers only)
     else in_progress attempt exists
         API-->>New: existing attempt (server-confirmed answers only)
@@ -173,18 +173,19 @@ sequenceDiagram
     API-->>C: snapshot (attemptStatus=disrupted, canResume=true)
     Note over C: REC-I3 (implemented): capability field<br/>canResume drives the explicit restore action,<br/>NOT raw attemptStatus. The restoring UI overlay<br/>is shown while the command is in flight.
     C->>API: POST /attempts/:attemptId/restore
-    API->>DB: BEGIN + lock
+    API->>DB: BEGIN + lock Enrollment → Attempt → Exam
     API->>DB: ensureAttemptDeadlineReconciled (re-check before restore)
-    API->>Engine: restoreAttempt
-    Engine->>Engine: transition(disrupted, restore)
-    Note over Engine: CURRENT_TRANSITIONAL: restoreAttempt currently<br/>computes disconnectedDuration AND adjusts deadlineAt<br/>in the same command. This is NOT the target contract.
-    Engine->>Engine: compute disconnectedDuration
-    Engine->>Engine: adjust deadlineAt (bounded by exam.closeAt)
-    Note over Engine: TARGET (ADR-013):<br/>State restore and time compensation are separate.<br/>REC-I3 (DONE): explicit restore command from Web client.<br/>REC-I4-R0 (DONE): policy contract frozen.<br/>REC-I4-I1+ (PENDING): runtime implementation.
-    Engine->>DB: UPDATE status=in_progress, deadlineAt, lastActivityAt
+    API->>Engine: restoreInterruptedAttempt()
+    Engine->>Engine: evaluateInterruptionTimePolicy() on frozen snapshot
+    Engine->>DB: INSERT bounded_grace adjustment + UPDATE deadlineAt (when policy grants)
+    Engine->>Engine: ensureAttemptDeadlineReconciled (reconcile using adjusted deadline)
+    Engine->>Engine: restoreAttemptState() (lifecycle-only helper)
+    Engine->>DB: UPDATE status=in_progress, lastActivityAt
+    Engine->>DB: INSERT interruption event (restored outcome)
+    Note over Engine: ADR-013 implemented (REC-I4-I1/I2/I3A/I3B1):<br/>state restore and time compensation are separate.<br/>grantAttemptTime() is a separate operator command,<br/>not part of candidate restore.
     API->>DB: COMMIT
-    API-->>C: restore acknowledgement (legacy LoadAttemptResponse)
-    Note over C: REC-I3: the restore response is a command ack only.<br/>The page reloads the authoritative snapshot, NOT<br/>the restore response.
+    API-->>C: RestoreAttemptResponse (lifecycle + candidate-safe compensation summary + attempt projection)
+    Note over C: REC-I3 / ADR-013 §6: the response is a command RESULT,<br/>not the take-page authority. It carries the lifecycle outcome<br/>(restored / already_in_progress / terminal), a candidate-safe<br/>compensation summary (policy + addedSeconds), and a candidate<br/>attempt projection — enough to render a restoring/terminal state.<br/>The page then reloads the authoritative CandidateTakeSnapshot.
     C->>API: GET /candidate/attempts/:attemptId/take (reload)
     API-->>C: reloaded snapshot (in_progress OR terminal if deadline won)
     Note over C: Branch on the reloaded snapshot only.<br/>No automatic restore loop. No invented in_progress.
@@ -279,13 +280,14 @@ Telemetry: `restore_started` / `restore_succeeded` / `restore_failed` are
 emitted via the existing `trackExamEvent` helper, scoped to attemptId/examId
 with `durationMs` and `errorCode` only. No answer content is recorded.
 
-Deferred from REC-I3: the time-compensation runtime is NOT modified. ADR-013
-now freezes the REC-I4 policy, but the current `restoreAttempt` engine may
-still grant full disconnected-time compensation until REC-I4-I2/I3. The Web
-client deliberately uses neutral copy
+Deferred from REC-I3: the time-compensation runtime has been implemented by
+ADR-013's REC-I4-I1/I2/I3A/I3B1 work — `restoreInterruptedAttempt()` applies
+the frozen policy (strict zero-grant by default, bounded_grace only with
+explicit caps, operator grants via the separate `grantAttemptTime()` command).
+The Web client deliberately uses neutral copy
 ("服务器正在确认考试状态和剩余时间") and does not duplicate time logic.
 
-### Interruption-Time Policy (FROZEN TARGET, NOT YET IMPLEMENTED)
+### Interruption-Time Policy (IMPLEMENTED)
 
 ADR-013 freezes:
 
@@ -339,11 +341,9 @@ sequenceDiagram
     API->>DB: COMMIT
 ```
 
-The current route does not yet satisfy this result-handling contract: it calls
-reconciliation and then calls `restoreAttempt` unconditionally. If
-reconciliation made the Attempt terminal, the later restore error can roll
-back the same transaction. REC-I4-I2 must return the terminal reconciliation
-result without invoking lifecycle restore.
+The route satisfies this contract: `restoreInterruptedAttempt()` runs the
+deadline reconciliation first and returns a terminal result without invoking
+the lifecycle restore when reconciliation made the Attempt terminal.
 
 #### Bounded-grace restore ordering
 

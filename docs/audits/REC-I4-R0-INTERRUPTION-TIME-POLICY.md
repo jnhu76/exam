@@ -7,6 +7,14 @@
 This Job changes no runtime behavior. It introduces no Redis dependency and
 does not authorize implementation beyond the follow-up PRs listed below.
 
+> **Closeout pointer (current authority):** the coupling defect frozen in
+> §"Current restore/compensation coupling" below has since been resolved. The
+> composed candidate-restore command is `restoreInterruptedAttempt()`; the
+> lifecycle-only helper is `restoreAttemptState()`; operator grants use the
+> separate `grantAttemptTime()` command. See ADR-013 and the IMPLEMENTED
+> follow-up audits REC-I4-I1 / I2 / I3A / I3B1 for the as-built contract. The
+> frozen findings below are retained unchanged as audit history.
+
 ## Base HEAD
 
 ```text

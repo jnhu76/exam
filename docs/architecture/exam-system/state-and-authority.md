@@ -4,13 +4,16 @@
 > Recovery semantics are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md). Interruption detection and time compensation are governed by [ADR-013](../../adr/ADR-013-interruption-time-compensation-policy.md). Both are described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
-Last runtime verified against: 1f337bf87ea667278ceaac10b5068956cd65f324
+Last runtime verified against: 53ac3524 (master, post-PR #238)
 Recovery contract authority: PR #218 / ADR-012
 Interruption-policy freeze: ADR-013 / REC-I4-R0
 
 Verification scope:
 Runtime behavior verified after merged PRs #218, #219, and #221.
-ADR-013 is a target contract; REC-I4-I1+ runtime work is not implemented.
+ADR-013 is implemented at REC-I4-I1/I2/I3A/I3B1: policy snapshot + caps on
+Exam/Attempt, interruption episode + time-adjustment ledger + append-only
+events in PostgreSQL, `restoreInterruptedAttempt()` as the composed restore
+command, and the canonical `grantAttemptTime` operator-grant engine.
 ```
 
 ## Why these must not be collapsed
@@ -29,8 +32,9 @@ them into attempt lifecycle:
 1. **Interruption episode** — one server-detected interruption of one Attempt.
 2. **Time adjustment** — one positive, attributable deadline change.
 
-Items 6–7 are a frozen target contract and are not present in the current
-schema at REC-I4-R0.
+Items 6–7 are part of the ADR-013 persistence model and are present in the
+schema (interruption episodes, time-adjustment ledger, append-only interruption
+events, `currentInterruptionId` / `interruptedAt` on attempts).
 
 Collapsing these into one enum would create a combinatorial explosion and make it impossible to reason about one dimension independently.
 
@@ -126,7 +130,7 @@ stateDiagram-v2
     in_progress --> submitted: submitAttempt()
     in_progress --> disrupted: markDisrupted()
     disrupted --> submitted: submitAttempt()
-    disrupted --> in_progress: restoreAttempt()
+    disrupted --> in_progress: restoreInterruptedAttempt()
     submitted --> graded: finalizeTerminalGrading()
     graded --> [*]
 
@@ -148,8 +152,8 @@ stateDiagram-v2
     end note
 ```
 
-**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE`
-**Evidence**: `submitAttempt()`, `markDisrupted()`, `restoreAttempt()`, `finalizeTerminalGrading()` all use `transition()` from the state machine
+**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE` documents the intended lifecycle graph. It is **not** the only transition enforcement: `submitAttempt()` / terminal grading use the established `transition()` seams, but the REC-I4 disruption/restore transitions (`markDisrupted()`, the lifecycle-only helper `restoreAttemptState()`) enforce their transition **directly** inside the canonical locked commands — explicit status precondition + row lock + direct `attemptRepo.update(...)`, not a `TRANSITION_TABLE.transition()` call.
+**Evidence**: `submitAttempt()` calls `transition()` (`attemptCommands.ts:367`); `markDisrupted()` writes `status: "disrupted"` directly after re-checking `status === "in_progress"` under the row lock (`attemptCommands.ts:531`); `restoreAttemptState()` writes `status: "in_progress"` directly after re-checking `status === "disrupted"` (`attemptCommands.ts:598`). The `TRANSITION_TABLE` is the lifecycle *contract*, not a single chokepoint every command funnels through.
 **Known limitations**: The `grading` state is unreachable — `finalizeTerminalGrading()` writes `status = 'graded'` directly. The state machine table entries `submitted:grade → grading` and `grading:complete_grading → graded` exist but are never invoked.
 
 ### Commands owning each transition
@@ -158,7 +162,7 @@ stateDiagram-v2
 |------------|---------|-------|
 | (enrollment) → `in_progress` | `startOrRestoreAttempt()` | Candidate |
 | `in_progress → disrupted` | `markDisrupted()` | Heartbeat scanner (System) |
-| `disrupted → in_progress` | `restoreAttempt()` | Candidate |
+| `disrupted → in_progress` | `restoreInterruptedAttempt()` | Candidate |
 | `in_progress → submitted` | `submitAttempt()` | Candidate / System (deadline) / Admin (force) |
 | `disrupted → submitted` | `submitAttempt()` | System (deadline) / Admin (force) |
 | `submitted → graded` | `finalizeTerminalGrading()` | System (auto-grade or manual-grade closure) |
@@ -244,7 +248,7 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending: business transaction (currently NO production caller)
+    [*] --> pending: business transaction (P5-N1 result_published)
     pending --> processing: claimDue()
     processing --> sent: markSent()
     processing --> retry_wait: markRetryWait()
@@ -257,7 +261,11 @@ stateDiagram-v2
 
 **Authority**: `packages/db/src/repository/emailOutboxRepo.ts` + DB CHECK constraints
 **Evidence**: `claimDue()` uses `FOR UPDATE SKIP LOCKED`; `markSent()`/`markRetryWait()`/`markDead()` are ownership-fenced
-**Known limitations**: No production business caller exists. The infrastructure is implemented (P5-0 merged) but the business notification-to-outbox protocol is NOT IMPLEMENTED (P5-N1 scope).
+**Known limitations**: The business notification-to-outbox protocol is
+implemented for result publication (P5-N1, PR #213): `notificationService`
+inserts Inbox + Email outbox rows atomically with the publication transaction,
+and the outbox insert is required when a normalized recipient email exists.
+Additional operational notification types remain P5-N2+ scope.
 
 ---
 
@@ -295,15 +303,20 @@ stateDiagram-v2
 | `attempt.startedAt` | When the attempt began | `startOrRestoreAttempt()` | Write-once |
 | `attempt.submittedAt` | When the attempt was submitted | `submitAttempt()` / deadline reconciliation | Write-once |
 | `attempt.gradedAt` | When grading finalized | `finalizeTerminalGrading()` | Write-once |
-| `attempt.deadlineAt` | Effective deadline for the attempt | `startOrRestoreAttempt()` / `extendAttemptTime()` / `restoreAttempt()` | Updated by extension/restore |
-| `attempt.lastActivityAt` | Heartbeat field | `saveAnswer()` / heartbeat route / `restoreAttempt()` | Updated on activity |
+| `attempt.deadlineAt` | Effective deadline for the attempt | `startOrRestoreAttempt()` / `grantAttemptTime()` / `restoreInterruptedAttempt()` | Updated by operator grant/restore |
+| `attempt.lastActivityAt` | Heartbeat field | `saveAnswer()` / heartbeat route / `restoreInterruptedAttempt()` | Updated on activity |
 | `emailOutbox.sentAt` | When the email was delivered | `markSent()` | Write-once |
 
-Current transitional behavior still lets `restoreAttempt()` modify
-`deadlineAt`. ADR-013 requires REC-I4-I2 to replace that coupling with
-`restoreAttemptState()` plus an independent policy decision.
+REC-I4-I2 replaced the transitional coupling: `restoreInterruptedAttempt()` is
+the composed candidate restore command — it evaluates the interruption policy
+(`evaluateInterruptionTimePolicy()`), writes a `bounded_grace` adjustment when
+policy grants one, reconciles the deadline
+(`ensureAttemptDeadlineReconciled()`), restores the lifecycle via the
+lifecycle-only helper `restoreAttemptState()`, and writes the `restored`
+outcome event. `grantAttemptTime()` is an independent operator-grant command,
+not part of candidate restore.
 
-### Target interruption and adjustment facts (ADR-013)
+### Interruption and adjustment facts (ADR-013, implemented)
 
 | Field | Meaning | Set by | Writable? |
 | --- | --- | --- | --- |
@@ -311,12 +324,12 @@ Current transitional behavior still lets `restoreAttempt()` modify
 | `attempt.interruptedAt` | Server instant when disrupted transition committed | Heartbeat disrupted scanner | Cleared with active pointer |
 | `interruption.detected.occurredAt` | Durable detection instant | Heartbeat disrupted scanner | Append-only event |
 | `interruption.detected.observedLastActivityAt` | `lastActivityAt` observed by the scanner | Heartbeat disrupted scanner | Append-only event |
-| `interruption.outcome.occurredAt` | Restore or terminal resolution instant | Composed restore command | Append-only event |
-| `adjustment.beforeDeadline` | Deadline before a positive grant | Adjustment command | Write-once |
-| `adjustment.afterDeadline` | Deadline after a positive grant | Adjustment command | Write-once |
-| `adjustment.createdAt` | Server adjustment decision instant | Adjustment command | Write-once |
+| `interruption.outcome.occurredAt` | Restore or terminal resolution instant | `restoreInterruptedAttempt()` / `resolveActiveInterruptionOnTerminalization()` | Append-only event |
+| `adjustment.beforeDeadline` | Deadline before a positive grant | `grantAttemptTime()` / `restoreInterruptedAttempt()` (bounded_grace) | Write-once |
+| `adjustment.afterDeadline` | Deadline after a positive grant | `grantAttemptTime()` / `restoreInterruptedAttempt()` (bounded_grace) | Write-once |
+| `adjustment.createdAt` | Server adjustment decision instant | `grantAttemptTime()` / `restoreInterruptedAttempt()` (bounded_grace) | Write-once |
 
-## 8. Interruption-Time Policy (target)
+## 8. Interruption-Time Policy (implemented)
 
 ### Policy states
 
@@ -359,5 +372,5 @@ deadline or irreversible attempt transition.
 | Grading status | 3 | Yes — orthogonal to attempt lifecycle |
 | Enrollment status | 4 | Yes — describes candidate qualification |
 | Email outbox status | 5 | Yes — describes delivery progress |
-| Interruption episode (target) | active/resolved evidence | Yes — identity and evidence, not lifecycle entitlement |
-| Time adjustment (target) | append-only positive facts | Yes — deadline provenance, not attempt status |
+| Interruption episode (implemented) | active/resolved evidence | Yes — identity and evidence, not lifecycle entitlement |
+| Time adjustment (implemented) | append-only positive facts | Yes — deadline provenance, not attempt status |

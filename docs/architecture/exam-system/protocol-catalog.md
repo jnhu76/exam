@@ -321,11 +321,11 @@ Each protocol is documented with:
 | **Preconditions** | Attempt exists and is owned by candidate; attempt status is `disrupted` |
 | **Authoritative reads** | Attempt row (via EA lock); exam row |
 | **State transition** | `disrupted → in_progress` |
-| **Writes** | `exam_attempts.status = 'in_progress'`; `lastActivityAt`; adjusted `deadlineAt` |
-| **Transaction boundary** | `executeInTransaction` → `lockEnrollmentAndAttempt` → `ensureAttemptDeadlineReconciled` → `restoreAttempt()` |
-| **Idempotency behavior** | **Idempotent** — if already `in_progress`, returns as-is |
-| **Audit event** | None |
-| **Security invariants** | Candidate ownership verified; deadline adjusted to compensate for disconnected time |
+| **Writes** | `exam_attempts.status = 'in_progress'`; `lastActivityAt`; interruption outcome event (`restored`); `bounded_grace` time-adjustment ledger row + adjusted `deadlineAt` only when the policy grants one |
+| **Transaction boundary** | `executeInTransaction` → `lockEnrollmentAndAttempt` → `restoreInterruptedAttempt()` (composes: `evaluateInterruptionTimePolicy()` → optional `bounded_grace` adjustment + `deadlineAt` update → `ensureAttemptDeadlineReconciled()` → lifecycle-only `restoreAttemptState()` → `restored` outcome event). `grantAttemptTime()` is a separate operator command, not part of candidate restore. |
+| **Idempotency behavior** | **Idempotent** — if already `in_progress`, reconstructs from the latest outcome; if terminal, reconstructs from outcome events without re-invoking lifecycle restore |
+| **Audit event** | Interruption `restored` outcome event (append-only) |
+| **Security invariants** | Candidate ownership verified; full episode identity (parent attempt + detected event + `interruptedAt`) validated; time compensation only via the frozen interruption-time policy |
 
 ## Protocol: Save Answer
 

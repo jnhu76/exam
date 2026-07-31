@@ -217,6 +217,14 @@ Both are enforced at the application layer by the sole command that writes the f
 
 ## 19. Accepted Limitations
 
+> **Closeout note (current authority):** items 6 and 7 below were accurate at
+> the audit base (`cac6b85c`, pre-P5-N1) and are retained as audit history.
+> Both were subsequently resolved by P5-N1 (CLOSED, PR #213): the
+> `result_published` publication is now the first production Email outbox
+> caller, and the candidate Notification Inbox is implemented. See the P6 MVP
+> Ready Closeout Reality Audit and `docs/status/implementation-status.md` for
+> the as-built state.
+
 1. **Email at-least-once delivery**: Duplicates possible on worker crash. Accepted by design.
 2. **No question deletion guard**: Snapshots are copies, so historical attempts are safe.
 3. **No DB-level constraint on totalScore or submittedAnswers**: Application-level enforcement is the accepted architecture.

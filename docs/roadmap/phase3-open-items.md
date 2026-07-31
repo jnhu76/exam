@@ -20,11 +20,19 @@ P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
-  → P6 (MVP ready closeout) ⏭ NEXT — unblocked by P5-N1 close
+  → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
+  → P7 (system readiness + configurable exam modes) 🟣 PLANNING
 ```
 
-P2-1 authoring UI flow has been removed from the active Phase 3 plan by scope
-decision.
+The former P2-1 Exam Authoring UI Flow was removed from the active Phase 3 plan
+by scope decision; the plain-text `text_response` authoring loop was later
+implemented and closed (PRs #237/#238, 2026-07-31).
+
+P7 is the next planning program — system readiness, Redis adoption,
+backup/recovery, outage recovery, configuration control plane, exam modes, and
+UI closeout. See
+[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
+P7 does not redefine M11.
 
 P5 is a two-Job module:
 
@@ -51,7 +59,7 @@ P5-N1.
 - **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes (`immediate`, `after_grading`, `manual`); frozen-question-snapshot truth; Teacher all-view (ScoreAllView) and publish (ExamResultPublish) capability behavior; browser publication UI through ExamDetailPage. The authoritative transaction seam is frozen at `apps/api/src/routes/exam.ts:1269-1279`.
 - **WHAT IS MISSING**: (none — M8/M9/M12/M13 closed by P3-R1).
 - **DEPENDENCIES**: P4 closed. P5-0 closed (not a semantic dependency of result publishing).
-- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules; WYSIWYG final-answer barrier; IP/CIDR examination policy; concurrent-session/device policy; Candidate emergency examination credentials.
+- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules; the generic final-answer submit barrier (ADR-008 Option D — answer-type-independent, not a rich-text feature); IP/CIDR examination policy; concurrent-session/device policy; Candidate emergency examination credentials.
 - **ACCEPTANCE BOUNDARY**: Under the final Admin/Teacher/Candidate role model, an authorized actor publishes results according to configured policy; the candidate can view only the candidate's own permitted result and cannot see hidden standard answers. The result-publication command and transaction boundary are stable; P5-N1 extends them without redefining result semantics.
 
 ## P4: RBAC MVP role switch — Admin / Teacher / Candidate (CLOSED)
@@ -81,7 +89,9 @@ P5-N1.
 - **CAPABILITY**: Existing PostgreSQL Email outbox runs as a resident, observable, failure-recoverable worker process.
 - **CURRENT STATE**: **CLOSED** (2026-07-25, PR #210, commit `cac6b85`). The Email delivery runtime now implements the `pending|processing|retry_wait|sent|dead` state machine with `FOR UPDATE SKIP LOCKED` claim, persisted lock ownership, abandoned-lock recovery, PostgreSQL-backed heartbeat, and backlog/liveness diagnostics.
 - **WHAT EXISTS**: `email_outbox`; `EmailDeliveryService` (renamed); SMTP, console, and disabled senders; retry policy; resident worker loop with claim/heartbeat; admin-only `POST /api/email/test`; existing Email diagnostics surface.
-- **WHAT IS MISSING**: (none for P5-0 scope — Email runtime hardened). The Email runtime is implemented, but there is not yet a real business caller.
+- **WHAT IS MISSING**: (none for P5-0 scope — Email runtime hardened). At
+  P5-0 closeout no production business caller existed; P5-N1 subsequently
+  supplied the first production caller (`result_published`, PR #213).
 - **DEPENDENCIES**: P4 closed; ADR-011 accepted.
 - **NOT AUTHORIZED ASSUMPTIONS**: Inbox; users.email; real business caller; invitation; password reset; template engine; generic queue platform; Redis/BullMQ/RabbitMQ/Kafka.
 - **ACCEPTANCE BOUNDARY**: A standalone Email worker continuously claims, retries, and terminally records outbox rows without duplicate concurrent ownership; its heartbeat and backlog are visible through existing diagnostics.
@@ -137,14 +147,42 @@ P5-N1.
 - **NOT AUTHORIZED ASSUMPTIONS**: Full marketing template editor; user-authored HTML; per-organization branding; arbitrary locale negotiation.
 - **ACCEPTANCE BOUNDARY**: Email bodies are selected by EmailType and rendered from structured payloads through a tested zh-CN backend locale path rather than route-local inline strings.
 
-## WYSIWYG submit final-answer barrier (NOT STARTED)
+## Generic final-answer submit barrier — ADR-008 Option D (NOT STARTED)
 
-- **CAPABILITY**: `/submit` carries a final-answer payload / version barrier so the UI answer at submit-click time is the grading authority (ADR-008 Option D).
-- **CURRENT STATE**: Proposed / not started. Phase 3 product task.
-- **WHAT EXISTS**: ADR-008 (submit freeze barrier, Phase 2 conservative — current `submitted_answers` freeze). The WYSIWYG barrier is the Option D follow-up.
-- **WHAT IS MISSING**: The `/submit` final-answer payload contract + UI barrier.
+- **CAPABILITY**: `/submit` carries a final-answer payload or version/hash
+  barrier so the UI answer at submit-click time is the grading authority
+  (ADR-008 Option D). This is **answer-type-independent**: single choice,
+  multi-select, true/false, fill-blank, and text answers can all hit the
+  save/submit lock-ordering race the barrier closes. It is not a rich-text
+  feature.
+- **CURRENT STATE**: Proposed / not started. Phase 3 product task. Closing the
+  plain-text `text_response` loop does not close this barrier.
+- **WHAT EXISTS**: ADR-008 (submit freeze barrier, Phase 2 conservative —
+  current `submitted_answers` freeze). The Option D barrier is the follow-up.
+- **WHAT IS MISSING**: The `/submit` final-answer payload or answer-version/hash
+  contract; server-side confirmation inside the submit transaction; frontend
+  submit payload construction; transaction contract for all supported answer
+  types.
 - **DEPENDENCIES**: None blocking.
-- **ACCEPTANCE BOUNDARY**: The answer captured at submit-click is provably the graded answer, closing the save/submit race the Phase 2 conservative barrier left open.
+- **ACCEPTANCE BOUNDARY**: The answer captured at submit-click is provably the
+  graded answer for every supported answer type, closing the save/submit race
+  the Phase 2 conservative barrier left open.
+
+## Rich-text/WYSIWYG authoring and answering protocol (NOT STARTED)
+
+- **CAPABILITY**: Rich-text/WYSIWYG question authoring and candidate answering,
+  including attachment/formula policy if adopted.
+- **CURRENT STATE**: Proposed / not started. Distinct from the generic
+  final-answer submit barrier above.
+- **WHAT EXISTS**: Plain-text `text_response` authoring + answering loop
+  (CLOSED, PRs #237/#238); `QuestionType` supports `text_response` today.
+- **WHAT IS MISSING**: Rich-text editor; storage format; sanitization; image/
+  formula/attachment handling; candidate rendering; rich-text grading basis;
+  authority and sanitization rules.
+- **DEPENDENCIES**: None blocking.
+- **ACCEPTANCE BOUNDARY**: A future rich-text protocol has explicit authority
+  and sanitization rules before activation, and does not regress the closed
+  plain-text loop.
 
 ## Remaining i18n page-level copy migration (NOT STARTED)
 
