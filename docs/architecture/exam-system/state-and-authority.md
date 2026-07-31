@@ -4,13 +4,16 @@
 > Recovery semantics are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md). Interruption detection and time compensation are governed by [ADR-013](../../adr/ADR-013-interruption-time-compensation-policy.md). Both are described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
-Last runtime verified against: 1f337bf87ea667278ceaac10b5068956cd65f324
+Last runtime verified against: 53ac3524 (master, post-PR #238)
 Recovery contract authority: PR #218 / ADR-012
 Interruption-policy freeze: ADR-013 / REC-I4-R0
 
 Verification scope:
 Runtime behavior verified after merged PRs #218, #219, and #221.
-ADR-013 is a target contract; REC-I4-I1+ runtime work is not implemented.
+ADR-013 is implemented at REC-I4-I1/I2/I3A/I3B1: policy snapshot + caps on
+Exam/Attempt, interruption episode + time-adjustment ledger + append-only
+events in PostgreSQL, `restoreAttemptState()` as the composed restore command,
+and the canonical `grantAttemptTime` engine.
 ```
 
 ## Why these must not be collapsed
@@ -29,8 +32,9 @@ them into attempt lifecycle:
 1. **Interruption episode** — one server-detected interruption of one Attempt.
 2. **Time adjustment** — one positive, attributable deadline change.
 
-Items 6–7 are a frozen target contract and are not present in the current
-schema at REC-I4-R0.
+Items 6–7 are part of the ADR-013 persistence model and are present in the
+schema (interruption episodes, time-adjustment ledger, append-only interruption
+events, `currentInterruptionId` / `interruptedAt` on attempts).
 
 Collapsing these into one enum would create a combinatorial explosion and make it impossible to reason about one dimension independently.
 
@@ -257,7 +261,11 @@ stateDiagram-v2
 
 **Authority**: `packages/db/src/repository/emailOutboxRepo.ts` + DB CHECK constraints
 **Evidence**: `claimDue()` uses `FOR UPDATE SKIP LOCKED`; `markSent()`/`markRetryWait()`/`markDead()` are ownership-fenced
-**Known limitations**: No production business caller exists. The infrastructure is implemented (P5-0 merged) but the business notification-to-outbox protocol is NOT IMPLEMENTED (P5-N1 scope).
+**Known limitations**: The business notification-to-outbox protocol is
+implemented for result publication (P5-N1, PR #213): `notificationService`
+inserts Inbox + Email outbox rows atomically with the publication transaction,
+and the outbox insert is required when a normalized recipient email exists.
+Additional operational notification types remain P5-N2+ scope.
 
 ---
 
@@ -299,9 +307,9 @@ stateDiagram-v2
 | `attempt.lastActivityAt` | Heartbeat field | `saveAnswer()` / heartbeat route / `restoreAttempt()` | Updated on activity |
 | `emailOutbox.sentAt` | When the email was delivered | `markSent()` | Write-once |
 
-Current transitional behavior still lets `restoreAttempt()` modify
-`deadlineAt`. ADR-013 requires REC-I4-I2 to replace that coupling with
-`restoreAttemptState()` plus an independent policy decision.
+REC-I4-I2 replaced the transitional coupling: `restoreAttempt()` now composes
+`restoreAttemptState()` (lifecycle) with an independent interruption-policy
+decision (`grantAttemptTime` / deadline reconciliation), per ADR-013.
 
 ### Target interruption and adjustment facts (ADR-013)
 

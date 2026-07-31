@@ -30,6 +30,8 @@ When documents conflict, higher precedence wins:
 | [`roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) | Phase 1/2/3/4 scope and acceptance (phase authority) |
 | [`roadmap/current.md`](roadmap/current.md) | Current work and what comes next |
 | [`roadmap/phase3-open-items.md`](roadmap/phase3-open-items.md) | Open Phase 3 product work (capability, state, dependencies, acceptance boundary) |
+| [`roadmap/P7-system-readiness-and-exam-modes.md`](roadmap/P7-system-readiness-and-exam-modes.md) | P7 planning authority — system readiness, Redis adoption, backup/recovery, outage recovery, config control plane, exam policy profiles, UI/ops |
+| [`audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](audits/P7-R0-REDIS-CAPABILITY-STUDY.md) | P7-R0 Redis capability fact-base (capabilities, durability/RPO, workload classes, references) |
 
 ### Architecture (current implemented design)
 

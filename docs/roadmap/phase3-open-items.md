@@ -20,11 +20,19 @@ P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
-  → P6 (MVP ready closeout) ⏭ NEXT — unblocked by P5-N1 close
+  → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
+  → P7 (system readiness + configurable exam modes) 🟣 PLANNING
 ```
 
-P2-1 authoring UI flow has been removed from the active Phase 3 plan by scope
-decision.
+The former P2-1 Exam Authoring UI Flow was removed from the active Phase 3 plan
+by scope decision; the plain-text `text_response` authoring loop was later
+implemented and closed (PRs #237/#238, 2026-07-31).
+
+P7 is the next planning program — system readiness, Redis adoption,
+backup/recovery, outage recovery, configuration control plane, exam modes, and
+UI closeout. See
+[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
+P7 does not redefine M11.
 
 P5 is a two-Job module:
 
@@ -140,7 +148,9 @@ P5-N1.
 ## WYSIWYG submit final-answer barrier (NOT STARTED)
 
 - **CAPABILITY**: `/submit` carries a final-answer payload / version barrier so the UI answer at submit-click time is the grading authority (ADR-008 Option D).
-- **CURRENT STATE**: Proposed / not started. Phase 3 product task.
+- **CURRENT STATE**: Proposed / not started. Phase 3 product task. The
+  plain-text `text_response` authoring loop is CLOSED (PRs #237/#238,
+  2026-07-31); only the rich-text/WYSIWYG form of this barrier remains.
 - **WHAT EXISTS**: ADR-008 (submit freeze barrier, Phase 2 conservative — current `submitted_answers` freeze). The WYSIWYG barrier is the Option D follow-up.
 - **WHAT IS MISSING**: The `/submit` final-answer payload contract + UI barrier.
 - **DEPENDENCIES**: None blocking.
