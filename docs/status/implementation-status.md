@@ -215,9 +215,14 @@ audit, external log shipping. All Phase 4; none started.
   transaction-bound repositories, with `operationId`-keyed idempotency and
   ADR-013's frozen lock/reconcile order. REC-I4-I3B2 closes the Admin
   operator time-grant route, permission, audit transaction, and Dashboard
-  product path. The system incident model, M11 Proctor resource scope, and
-  Admin/Proctor recovery-center workflows remain deferred (REC-I6 / M11 /
-  REC-OPS).
+  product path. The exam incident authority is designed but not implemented:
+  REC-I6-R0 froze it in
+  [ADR-014](../adr/ADR-014-exam-incident-authority.md) (Status: PROPOSED,
+  pending human acceptance) as a documentation-only contract; the incident
+  tables, commands, and routes are NOT STARTED, and J3
+  (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) remains blocked until ADR-014
+  is accepted. M11 Proctor resource scope and Admin/Proctor recovery-center
+  workflows remain deferred (M11 / REC-OPS).
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the

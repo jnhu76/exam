@@ -377,3 +377,4 @@ deadline or irreversible attempt transition.
 | Email outbox status | 5 | Yes — describes delivery progress |
 | Interruption episode (implemented) | active/resolved evidence | Yes — identity and evidence, not lifecycle entitlement |
 | Time adjustment (implemented) | append-only positive facts | Yes — deadline provenance, not attempt status |
+| Incident (proposed, ADR-014) | 4 | Yes — operational case orthogonal to Attempt; PROPOSED, NOT IMPLEMENTED |

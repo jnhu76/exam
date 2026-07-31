@@ -53,6 +53,9 @@ Each protocol is documented with:
 | INV-MAIL-001 | Email worker claim uses `FOR UPDATE SKIP LOCKED` to prevent concurrent workers from claiming the same row. |
 | INV-SEC-001 | Authorization is resolved from active `user_role_assignments` rows, never from `users.role` or JWT claims. |
 | INV-SEC-002 | Cross-candidate attempt access MUST return 404 (not 403) to prevent enumeration. |
+| INV-I-001 | (PROPOSED, ADR-014) An ExamIncident is an orthogonal operational case: its status MUST NOT drive Attempt status, grading, score, deadline, or punishment; resolving or dismissing an incident MUST NOT trigger any exam effect. |
+| INV-I-002 | (PROPOSED, ADR-014) Incident status is terminal-monotonic (`open → investigating → resolved/dismissed`, with direct `open → resolved/dismissed` allowed); terminal incidents MUST NOT reopen; mutating transitions MUST carry `expectedVersion` and fail closed with 409 on mismatch. |
+| INV-I-003 | (PROPOSED, ADR-014) Incident commands lock ONLY the incident row; they MUST NOT lock Attempt or Exam; any future shared transaction that also locks an incident MUST lock it strictly after Exam in the Enrollment → Attempt → Exam order. |
 
 ---
 
@@ -549,3 +552,41 @@ facts; new positive operator decisions use this protocol and
 ### Business Notification-to-Outbox Protocol (NOT IMPLEMENTED)
 
 No production business transaction currently inserts an outbox row atomically. The infrastructure primitives (table, repo, service, worker) exist, but the business protocol that enqueues notification emails is NOT IMPLEMENTED. This is the P5-N1 scope.
+
+## Protocol: Incident Authority (TARGET — NOT IMPLEMENTED)
+
+Status: TARGET — designed by [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (PROPOSED, pending human acceptance); runtime implementation NOT STARTED. The entries below are the proposed contracts that J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) will implement after ADR-014 is accepted; they are not live protocols. The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
+
+### Incident Lifecycle
+
+| Field | Value |
+|-------|-------|
+| **Protocol name** | Exam Incident Lifecycle |
+| **Business purpose** | Record one operational incident (disruption, suspected misconduct, operator error, …) and carry its investigation to resolution or dismissal |
+| **Actor** | Admin (all commands); Proctor (view/create/investigate only — activation blocked until M11 Proctor-to-Exam scope) |
+| **Required capability** | `incident.view` / `incident.create` / `incident.investigate` (start, note, severity, retroactive link) / `incident.resolve` (resolve AND dismiss; sensitive). All four are PROPOSED; no preset grants them yet. |
+| **Current preset actors** | None — permissions are proposed by ADR-014 and not added to any preset by this design Job |
+| **Route / contract** | `POST /admin/exams/:examId/incidents`, `GET /admin/exams/:examId/incidents`, `GET /admin/incidents/:incidentId`, `POST /admin/incidents/:incidentId/investigate`, `.../notes`, `.../severity`, `.../resolve`, `.../dismiss`, `.../actions` (all PROPOSED) |
+| **Preconditions** | Exam resolves in the actor organization; attempt anchor (if any) belongs to that exam; terminal incidents reject every mutation except append-only notes and action links |
+| **State transition** | `open → investigating → resolved` or `open → investigating → dismissed`; direct `open → resolved/dismissed` allowed; terminal states are monotonic (no reopen) |
+| **Writes** | `exam_incidents` materialized row (version increment from 1); one append-only `exam_incident_events` row; atomic `incident.created/investigated/note_added/severity_changed/resolved/dismissed` compliance audit |
+| **Transaction boundary** | One transaction per command; `SELECT ... FOR UPDATE` on ONLY the incident row; never lock Attempt or Exam (non-locking validation reads) |
+| **Idempotency / conflict** | `expectedVersion` optimistic concurrency → 409 `INCIDENT_VERSION_CONFLICT`; replay of an already-committed terminal command returns the committed incident; notes are append-only and concurrent-safe; create has no operationId (duplicates are resolved by dismissal) |
+| **Security invariants** | INV-I-001 (orthogonality), INV-I-002 (terminal monotonicity + version), INV-I-003 (incident-only locking); no candidate-facing API; note/description bodies are never duplicated into audit metadata |
+
+### Incident-to-Action Link
+
+| Field | Value |
+|-------|-------|
+| **Protocol name** | Incident Action Link |
+| **Business purpose** | Correlate an already-authoritative operator action (time grant, force submit, misconduct mark) with the incident that motivated it, without making the incident an authority over the action |
+| **Actor** | Admin |
+| **Required capability** | `incident.investigate` for retroactive links; the action's own capability for the combined grant+link path (`attempt.time.grant`) |
+| **Current preset actors** | Admin holds `attempt.time.grant` today; `incident.investigate` is PROPOSED and not yet granted |
+| **Route / contract** | `POST /admin/incidents/:incidentId/actions` (retroactive, PROPOSED); `POST /admin/attempts/:attemptId/time-grants` extended with an optional `incidentId` (combined path, PROPOSED) |
+| **Preconditions** | Incident exists in the same organization; `incident.attemptId` is null or matches the action's attempt; the action row exists (retroactive) or is created atomically (combined) |
+| **State transition** | None on either side; incident status and attempt status are unchanged by linking |
+| **Writes** | One `exam_incident_actions` row (action identity + type ∈ `time_grant` / `force_submit` / `misconduct_mark`); `attempt_time_adjustments.incidentId` set only on the combined grant path; append-only `action_linked` event + atomic audit |
+| **Transaction boundary** | Combined grant+link runs inside the existing time-grant transaction (Enrollment → Attempt → Exam lock order unchanged; the incident row is validated without a lock); retroactive link locks only the incident row |
+| **Idempotency / conflict** | `UNIQUE (organization_id, action_type, action_id)` — one action links to at most one incident; 23505 on the named constraint → 409 `INCIDENT_ACTION_ALREADY_LINKED`; the combined path keeps the grant's `operationId` idempotency (`granted` / `idempotent_replay` / `terminal`) |
+| **Security invariants** | INV-I-001: the link is correlation, not authority — incident resolution never triggers, modifies, or reverses the action; INV-I-003: no Attempt/Exam lock is added to incident commands |
