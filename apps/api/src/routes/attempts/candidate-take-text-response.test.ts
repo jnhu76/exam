@@ -248,28 +248,134 @@ describe("P2: candidate take leak protection for text_response", () => {
     expect(serialized).toContain("关键概念正确");
     expect(serialized).toContain("参考要点一");
   });
+});
 
-  it("snapshot freeze: live question edit after publish does not affect attempt grading basis", async () => {
-    // This test proves that the QuestionSnapshot created at publish time is
-    // the authoritative source for grading, not the live questions table. A
-    // post-publish PATCH to the live question's rubric or reference answer
-    // must NOT change what the grader sees.
+/**
+ * Dedicated snapshot-freeze integration test with isolated entities.
+ *
+ * This test creates its own course, question, exam, and enrollment to avoid
+ * any dependency on the shared fixture above. It proves the stronger boundary:
+ * publish → PATCH live question → start NEW attempt (after patch) → save →
+ * submit → grading-details shows frozen (original) values.
+ */
+describe("snapshot freeze: post-publish live edit does not affect grading", () => {
+  let ctx: TestContext;
+  let snapshotExamId: string;
+  let snapshotQuestionId: string;
 
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(questionRoutes, { prefix: "" });
+    });
+
+    // Create dedicated course.
+    const courseId = randomUUID();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Snapshot Freeze Course",
+      code: `SFRZ-${randomUUID().slice(0, 8)}`,
+      description: "Snapshot freeze test",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Create dedicated text_response question with original rubric/reference.
+    snapshotQuestionId = randomUUID();
+    await ctx.db.insert(schema.questions).values({
+      id: snapshotQuestionId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "text_response",
+      content: "快照冻结测试题",
+      options: [],
+      standardAnswer: "原始参考答案",
+      attachments: [],
+      score: 20,
+      difficulty: 2,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: "原始评分标准",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Create and publish exam.
+    const candidateProfileId = await ensureCandidateProfile(ctx);
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: buildExamPayload({
+        title: "Snapshot Freeze Exam",
+        courseId,
+        questionIds: [snapshotQuestionId],
+        totalScore: 20,
+        passingScore: 10,
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    snapshotExamId = createRes.json().id as string;
+
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${snapshotExamId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(publishRes.statusCode).toBe(200);
+
+    await enrollCandidateForExam(ctx, candidateProfileId, snapshotExamId);
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  it("publish → PATCH live → start NEW attempt → submit → grading-details shows frozen values", async () => {
+    // 1. PATCH the live question AFTER publish but BEFORE starting an attempt.
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${snapshotQuestionId}`,
+      payload: {
+        rubric: "已被修改的评分标准",
+        standardAnswer: "已被修改的参考答案",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    // 2. Verify the live question now carries the patched values.
+    const liveQRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions/${snapshotQuestionId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(liveQRes.statusCode).toBe(200);
+    const liveQ = liveQRes.json();
+    expect(liveQ.rubric).toBe("已被修改的评分标准");
+    expect(liveQ.standardAnswer).toBe("已被修改的参考答案");
+
+    // 3. Start a NEW attempt only after the live edit.
     const startRes = await ctx.app.inject({
       method: "POST",
-      url: `/api/attempts/${examId}/start`,
+      url: `/api/attempts/${snapshotExamId}/start`,
       cookies: { "auth-token": ctx.candidateToken },
     });
     expect([200, 201]).toContain(startRes.statusCode);
     const attemptId = startRes.json().id as string;
 
-    // Save + submit.
+    // 4. Save + submit.
     const saveRes = await ctx.app.inject({
       method: "POST",
-      url: `/api/attempts/${attemptId}/answers/${textQuestionId}`,
+      url: `/api/attempts/${attemptId}/answers/${snapshotQuestionId}`,
       payload: {
         attemptId,
-        questionId: textQuestionId,
+        questionId: snapshotQuestionId,
         answer: "考生作答内容",
         clientSeq: 1,
         clientSavedAt: new Date().toISOString(),
@@ -285,20 +391,8 @@ describe("P2: candidate take leak protection for text_response", () => {
     });
     expect(submitRes.statusCode).toBe(200);
 
-    // Now PATCH the live question — change rubric and reference answer.
-    const patchRes = await ctx.app.inject({
-      method: "PATCH",
-      url: `/api/questions/${textQuestionId}`,
-      payload: {
-        rubric: "已被修改的评分标准",
-        standardAnswer: "已被修改的参考答案",
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(patchRes.statusCode).toBe(200);
-
-    // The grading-details must still show the frozen (original) values,
-    // not the live-edit values.
+    // 5. Grading-details must show the FROZEN (original, pre-patch) values,
+    // not the live-edit values — proving the snapshot was frozen at publish.
     const detailsRes = await ctx.app.inject({
       method: "GET",
       url: `/api/admin/attempts/${attemptId}/grading-details`,
@@ -308,8 +402,8 @@ describe("P2: candidate take leak protection for text_response", () => {
     const details = detailsRes.json();
     const serialized = JSON.stringify(details);
 
-    expect(serialized).toContain("关键概念正确");
-    expect(serialized).toContain("参考要点一");
+    expect(serialized).toContain("原始评分标准");
+    expect(serialized).toContain("原始参考答案");
     expect(serialized).not.toContain("已被修改的评分标准");
     expect(serialized).not.toContain("已被修改的参考答案");
   });
