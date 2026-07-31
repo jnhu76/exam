@@ -182,7 +182,7 @@ sequenceDiagram
     Engine->>Engine: restoreAttemptState() (lifecycle-only helper)
     Engine->>DB: UPDATE status=in_progress, lastActivityAt
     Engine->>DB: INSERT interruption event (restored outcome)
-    Note over Engine: ADR-013 implemented (REC-I4-I1/I2/I3A/I3B1):<br/>state restore and time compensation are separate.<br/>grantAttemptTime() is a separate operator command,<br/>not part of candidate restore.
+    Note over Engine: ADR-013 implemented (REC-I4-I1/I2/I3A/I3B1/I3B2):<br/>state restore and time compensation are separate.<br/>grantAttemptTime() is a separate Admin operator command,<br/>not part of candidate restore.
     API->>DB: COMMIT
     API-->>C: RestoreAttemptResponse (lifecycle + candidate-safe compensation summary + attempt projection)
     Note over C: REC-I3 / ADR-013 §6: the response is a command RESULT,<br/>not the take-page authority. It carries the lifecycle outcome<br/>(restored / already_in_progress / terminal), a candidate-safe<br/>compensation summary (policy + addedSeconds), and a candidate<br/>attempt projection — enough to render a restoring/terminal state.<br/>The page then reloads the authoritative CandidateTakeSnapshot.
@@ -281,7 +281,7 @@ emitted via the existing `trackExamEvent` helper, scoped to attemptId/examId
 with `durationMs` and `errorCode` only. No answer content is recorded.
 
 Deferred from REC-I3: the time-compensation runtime has been implemented by
-ADR-013's REC-I4-I1/I2/I3A/I3B1 work — `restoreInterruptedAttempt()` applies
+ADR-013's REC-I4-I1/I2/I3A/I3B1/I3B2 work — `restoreInterruptedAttempt()` applies
 the frozen policy (strict zero-grant by default, bounded_grace only with
 explicit caps, operator grants via the separate `grantAttemptTime()` command).
 The Web client deliberately uses neutral copy

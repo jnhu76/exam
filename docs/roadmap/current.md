@@ -38,11 +38,12 @@ all production-hardening work is complete.
 
 ### Recovery foundation
 
-REC-I4-I1/I2/I3A/I3B1 implemented the interruption policy persistence/runtime,
-candidate-safe restore contract, immutable policy snapshots, and the
-transaction-bound operator grant engine seam. Remaining recovery work includes
-the operator route/permission, incident model, dedicated recovery UI, and wider
-startup reconciliation.
+REC-I4-I1/I2/I3A/I3B1/I3B2 implemented the interruption policy
+persistence/runtime, candidate-safe restore contract, immutable policy
+snapshots, and the Admin operator time-grant product path (permission,
+Attempt-scoped route, atomic audit, and Dashboard retry coordination).
+Remaining recovery work begins with the REC-I6 incident authority, M11 Proctor
+resource scope, dedicated recovery centers, and wider startup reconciliation.
 
 ### Plain-text subjective question loop
 
@@ -157,8 +158,8 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 
 - `timed_sync`, `deadline`, and `untimed` timing modes;
 - operational queue admission;
-- REC-I4-I3B2 operator grant route/permission;
-- REC-I6 incident model and dedicated recovery UI;
+- REC-I6 incident model and Admin/Proctor recovery-center workflows;
+- M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;
 - fill-blank runtime/E2E reality re-audit;
 - rich-text/WYSIWYG answering;
 - generic ADR-008 final-answer submit barrier (all supported answer types).

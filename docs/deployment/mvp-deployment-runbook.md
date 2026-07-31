@@ -641,9 +641,10 @@ docker compose exec app node dist/scripts/reset-admin-password.js
 # Candidate interrupted attempt
 # REC-I3 implements direct-entry candidate restore: the Web client calls the
 # explicit restore command and reloads the authoritative take snapshot.
-# If confirmation fails, use the candidate retry control and inspect app logs
-# by requestId. ADR-013 is contract-only at this baseline: the backend still
-# has transitional full-gap compensation until REC-I4-I2/I3.
+# ADR-013 recovery policy is implemented: strict is the default and
+# bounded_grace follows the frozen caps. Admin operator time grants are a
+# separate audited command; use the Dashboard action only when the Attempt's
+# frozen policy is operator_incident.
 
 # Log / requestId investigation
 docker compose logs app | jq 'select(.reqId == "<REQ_ID>")'
@@ -727,9 +728,11 @@ and §24 (deferred capabilities). Highlights:
 - Frontend candidate disrupted-recovery UI IS productized (REC-I3, PR #219):
   self-service restore from the `canResume` snapshot capability, with
   restoring/failed/retry states and authoritative snapshot reload. The
-  operator/proctor recovery center and operator time-grant UI remain open
-  (REC-I4-I3B2 / REC-I6). (Older P6-era docs list this as not-productized —
-  that predates REC-I3.)
+  Admin operator time-grant action is also productized (REC-I4-I3B2): it uses
+  an Attempt-scoped API with a frozen operation ID and authoritative refresh.
+  Admin/Proctor recovery centers, REC-I6 incident authority, and Proctor time
+  grants remain open. (Older P6-era docs list this as not-productized — that
+  predates REC-I3 / REC-I4-I3B2.)
 - Multi-instance deployment is NOT supported (in-process scanners + admission
   queue assume a single API owner).
 - timed_sync / untimed timing modes NOT implemented (only timed_window).

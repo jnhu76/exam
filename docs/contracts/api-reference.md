@@ -12,7 +12,6 @@
 >
 > See `api-contract.md` for the full runtime-first API contract policy,
 > error envelope, and ErrorCode conventions.
-
 > **Phase realignment note**: `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` are authoritative for product phase scope. Phase 1 current product roles are Admin + Candidate only. The API reference below has been updated to reflect Phase 1 permissions. Fields like `queue`, `restrictIp` remain in response schemas as structural residue from the exam model but are not Phase 1 product paths. `controlFlags.retakePolicy` and `controlFlags.scoreStrategy` are implemented Phase 2 gate items (retake policy + score strategy). Optional multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed, service tokens, and external integration are Phase 4 capabilities unless explicitly re-scoped.
 
 ## 概述
@@ -1061,11 +1060,19 @@
 - `compensation.policy`：本次恢复遵循的中断时间补偿策略（`strict` | `bounded_grace` | `operator_incident`），来自 attempt 创建时冻结的不可变快照。
 - `compensation.addedSeconds`：本次恢复授予的整秒数。`strict` 与 `operator_incident` 的候选人恢复恒为 `0`；`bounded_grace` 按四重最小值（eligible、单次上限、剩余聚合上限、closeAt 余量）计算。
 
-**不暴露的内部字段**：响应刻意不暴露中断取证细节——不包含中断 episode id、detected event、调整账本行 id、`eligibleSeconds`、before/after deadline、`reasonCode` 或任何 operator/system-incident 归因。这些保留为服务端权威（operator 授权路由、`Permission.AttemptTimeGrant` 与系统事件模型为 REC-I4-I3B / REC-I6 延期项）。
+**不暴露的内部字段**：候选人恢复响应刻意不暴露中断取证细节——不包含中断 episode id、detected event、调整账本行 id、`eligibleSeconds`、before/after deadline、`reasonCode` 或任何 operator/system-incident 归因。Admin 的独立 operator-time-grant API 可在授权后返回已提交的 adjustment 事实；REC-I6 系统事件模型仍是延期项。
 
 **错误响应** (409)：仅用于真正的状态冲突（如并发提交竞争）或不可恢复的并发错误。`terminal` lifecycle outcome 不会返回 409。
 
 > ADR-013 策略语义：默认 `strict` 恢复仅还原生命周期、授予 0 秒；服务器静默不等于应得时间。`bounded_grace` 必须在考试上显式配置且两端 cap 为正整数（`perIncident <= perAttempt`），在 attempt 创建时冻结。
+
+### POST /admin/attempts/:attemptId/time-grants
+
+**权限**：Admin；`attempt.time.grant`，以目标 Attempt 为 scoped resolver。
+
+请求使用 `TimeGrantRequest`：`operationId`（UUID）、`addedSeconds`（正整数）、`reasonCode`、`reasonText` 和可选 `interruptionId`。actor、source、policy、deadline 与 `incidentId` 均为服务器字段，不能由客户端提供。
+
+响应使用 `TimeGrantResponse`，以 `outcome` 区分 `granted`、`idempotent_replay` 与 `terminal`。前两者返回已提交的 adjustment 及 Attempt 投影；`terminal` 返回 `adjustment: null`。相同 operation ID 与相同 canonical payload 返回 `idempotent_replay`；不同 payload 返回 409 `IDEMPOTENCY_CONFLICT`。
 
 ---
 
@@ -1082,7 +1089,7 @@
 
 **CSV 格式**:
 
-```
+```csv
 考生姓名,学号,院系,年级,成绩,及格状态,尝试次数,提交时间
 张三,20240001,计算机系,2024级,85,及格,1,2024-06-01T10:05:00.000Z
 李四,20240002,软件工程,2024级,72,不及格,2,2024-06-01T10:08:00.000Z
