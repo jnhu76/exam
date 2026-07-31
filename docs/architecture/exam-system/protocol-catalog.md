@@ -407,20 +407,27 @@ Each protocol is documented with:
 | **Transaction boundary** | `executeInTransaction` → `lockEnrollmentAndAttempt` → `submitAttempt()` (source `proctor`) |
 | **Audit event** | `attempt.forceSubmit` (atomic) |
 
-## Protocol: Attempt Time Extend
+## Protocol: Operator Time Grant
 
 | Field | Value |
 |-------|-------|
-| **Protocol name** | Attempt Time Extend |
-| **Business purpose** | Extend an attempt's deadline |
-| **Actor** | Admin, Proctor |
-| **Required capability** | `attempt.time.extend` |
-| **Current preset actors** | Admin, Proctor |
-| **Preconditions** | Attempt is `in_progress` or `disrupted`; new deadline ≤ exam.closeAt |
-| **State transition** | None (only `deadlineAt` changes) |
-| **Writes** | `exam_attempts.deadlineAt = newDeadline` |
-| **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → `extendAttemptTime()` |
-| **Audit event** | `attempt.extendTime` (atomic) |
+| **Protocol name** | Operator Time Grant |
+| **Business purpose** | Record one explicit Admin decision to add positive time to an eligible Attempt |
+| **Actor** | Admin only; Proctor is not activated before M11 resource scope |
+| **Required capability** | `attempt.time.grant` at Attempt scope |
+| **Current preset actors** | Admin |
+| **Route / contract** | `POST /admin/attempts/:attemptId/time-grants`; `TimeGrantRequest` / `TimeGrantResponse` |
+| **Preconditions** | Target Attempt resolves in the actor organization; frozen policy is `operator_incident`; Attempt remains `in_progress` or `disrupted` after deadline reconciliation; `afterDeadline ≤ exam.closeAt` |
+| **State transition** | None; terminal reconciliation wins and returns `terminal` without a grant |
+| **Writes** | One append-only `attempt_time_adjustments` row; `exam_attempts.deadlineAt`; atomic `attempt.timeGrant` compliance audit on a real grant only |
+| **Transaction boundary** | `grantWithOperationRaceRecovery()` → `executeInTransaction` → lock Enrollment → Attempt → Exam → `grantAttemptTime()` → adjustment insert → deadline update → atomic audit → commit |
+| **Idempotency / conflict** | Same `operationId` + canonical payload returns `idempotent_replay`; different payload returns `IDEMPOTENCY_CONFLICT`; the exact `(organization_id, operation_id)` unique violation triggers one fresh-transaction recovery run for cross-Attempt races |
+| **Security invariants** | The route uses `requireScopedCapability(AttemptTimeGrant, Attempt)`; client cannot set actor, source, policy, deadlines, or `incidentId`; no route-level deadline or ledger write exists |
+
+The former `POST /admin/attempts/:id/extend-time` protocol is removed. Its
+deprecated `attempt.extendTime` audit vocabulary is retained only for historical
+facts; new positive operator decisions use this protocol and
+`attempt.timeGrant`.
 
 ## Protocol: Automatic Grading
 

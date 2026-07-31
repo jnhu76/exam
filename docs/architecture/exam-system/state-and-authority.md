@@ -9,11 +9,14 @@ Recovery contract authority: PR #218 / ADR-012
 Interruption-policy freeze: ADR-013 / REC-I4-R0
 
 Verification scope:
-Runtime behavior verified after merged PRs #218, #219, and #221.
-ADR-013 is implemented at REC-I4-I1/I2/I3A/I3B1: policy snapshot + caps on
+Runtime behavior verified after merged PRs #218, #219, #221, and REC-I4-I3B2
+closeout evidence.
+ADR-013 is implemented at REC-I4-I1/I2/I3A/I3B1/I3B2: policy snapshot + caps on
 Exam/Attempt, interruption episode + time-adjustment ledger + append-only
 events in PostgreSQL, `restoreInterruptedAttempt()` as the composed restore
-command, and the canonical `grantAttemptTime` operator-grant engine.
+command, the canonical `grantAttemptTime()` operator-grant engine, and the
+Admin-only Attempt-scoped time-grant route/product path. Proctor time grants
+remain inactive until M11 resource scope exists.
 ```
 
 ## Why these must not be collapsed

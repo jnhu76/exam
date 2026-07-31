@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
-import { eq, like } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
@@ -295,6 +295,40 @@ describe("attempt routes", () => {
       };
     }
 
+    async function installTimeGrantAuditFailure(): Promise<
+      () => Promise<void>
+    > {
+      const suffix = crypto.randomUUID().replaceAll("-", "");
+      const functionName = `fail_time_grant_audit_${suffix}`;
+      const triggerName = `fail_time_grant_audit_trigger_${suffix}`;
+      await ctx.db.execute(
+        sql.raw(`
+          CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+          BEGIN
+            RAISE EXCEPTION 'injected time-grant audit failure';
+          END;
+          $$ LANGUAGE plpgsql
+        `),
+      );
+      await ctx.db.execute(
+        sql.raw(`
+          CREATE TRIGGER ${triggerName}
+          BEFORE INSERT ON audit_logs
+          FOR EACH ROW
+          WHEN (NEW.action = 'attempt.timeGrant')
+          EXECUTE FUNCTION ${functionName}()
+        `),
+      );
+      return async () => {
+        await ctx.db.execute(
+          sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+        );
+        await ctx.db.execute(
+          sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`),
+        );
+      };
+    }
+
     beforeEach(async () => {
       await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
@@ -385,6 +419,62 @@ describe("attempt routes", () => {
         addedSeconds: 600,
         reasonCode: "technical_incident",
       });
+    });
+
+    it("rolls back the ledger and deadline when the atomic time-grant audit insert fails", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Grant Audit Rollback",
+      );
+      const before = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      const beforeDeadline = before!.deadlineAt!;
+      const operationId = crypto.randomUUID();
+      const removeFailure = await installTimeGrantAuditFailure();
+
+      try {
+        const res = await ctx.app.inject({
+          method: "POST",
+          url: `/api/admin/attempts/${attemptId}/time-grants`,
+          payload: {
+            operationId,
+            addedSeconds: 600,
+            reasonCode: "technical_incident",
+            reasonText: "Injected audit failure must roll back the grant",
+          },
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(res.statusCode).toBe(500);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          makeAdminCtx(t),
+          attemptId,
+        );
+        expect(after?.deadlineAt?.getTime()).toBe(beforeDeadline.getTime());
+
+        const adjustments = await ctx.db
+          .select({ id: schema.attemptTimeAdjustments.id })
+          .from(schema.attemptTimeAdjustments)
+          .where(eq(schema.attemptTimeAdjustments.operationId, operationId));
+        expect(adjustments).toHaveLength(0);
+
+        const grantAudits = (
+          await ctx.db
+            .select({
+              id: schema.auditLogs.id,
+              action: schema.auditLogs.action,
+            })
+            .from(schema.auditLogs)
+            .where(eq(schema.auditLogs.targetId, attemptId))
+        ).filter((audit) => audit.action === "attempt.timeGrant");
+        expect(grantAudits).toHaveLength(0);
+      } finally {
+        await removeFailure();
+      }
     });
 
     it("replays idempotently for the same operationId + payload (200 idempotent_replay, no duplicate ledger/audit)", async () => {

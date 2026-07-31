@@ -340,8 +340,15 @@ const RestoreCompensationSchema = z
  *     or `reasonCode`;
  *   - any operator/system-incident attribution.
  *
- * Those internal details remain server-side authority (REC-I4-I3A non-goal:
- * operator grant route and `Permission.AttemptTimeGrant` are deferred).
+ * Those internal details remain absent from the candidate restore response.
+ *
+ * The separate Admin operator time-grant route and
+ * `Permission.AttemptTimeGrant` are implemented under REC-I4-I3B2.
+ * Operator-grant details remain available only through the authorized Admin
+ * surface and committed adjustment ledger.
+ *
+ * Incident attribution and incident-linked operator actions remain deferred to
+ * REC-I6.
  *
  * The `terminal` lifecycle outcome is a legitimate 200 response: the attempt
  * was already terminal on entry, or deadline reconciliation submitted it

@@ -55,13 +55,18 @@ Phase 2+ hardening.
   REC-I4-I3B1 (Operator Grant Engine Seam) implements the `grantAttemptTime()`
   engine command for operator-initiated time grants with `operationId`-keyed
   idempotency, ADR-013's frozen lock/reconcile order, and the append-only
-  adjustment ledger. The operator grant route and `Permission.AttemptTimeGrant`
-  remain deferred (REC-I4-I3B2).
+  adjustment ledger. REC-I4-I3B2 closes the Admin product path:
+  `Permission.AttemptTimeGrant`, the Attempt-scoped
+  `POST /admin/attempts/:attemptId/time-grants` route, atomic compliance audit,
+  PostgreSQL operation-ID race recovery, and Dashboard retry/cross-tab
+  coordination. Proctor activation remains deferred until M11 provides
+  resource scope.
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
-- ✅ Extend time (`POST /admin/attempts/:id/extend-time`,
-  `requireCapability(AttemptTimeExtend)`).
+- ✅ Admin operator time grant (`POST /admin/attempts/:id/time-grants`,
+  `requireScopedCapability(AttemptTimeGrant, Attempt)`); Proctor is denied
+  until M11 resource scope is implemented.
 - ✅ Misconduct marking (`POST /admin/attempts/:id/misconduct` +
   `/proctor-incident`, `requireCapability(AttemptMisconductMark)`).
 - ✅ Proctor monitoring: visibility, polling (5s), event timeline, incident logging.
@@ -208,9 +213,11 @@ audit, external log shipping. All Phase 4; none started.
   post-creation. REC-I4-I3B1 (Operator Grant Engine Seam) implements the
   `grantAttemptTime()` command: the ledger insert and deadline update through
   transaction-bound repositories, with `operationId`-keyed idempotency and
-  ADR-013's frozen lock/reconcile order. The operator grant route,
-  `Permission.AttemptTimeGrant`, the system incident model, and a dedicated
-  proctor recovery/incident UI remain deferred (REC-I4-I3B2 / REC-I6).
+  ADR-013's frozen lock/reconcile order. REC-I4-I3B2 closes the Admin
+  operator time-grant route, permission, audit transaction, and Dashboard
+  product path. The system incident model, M11 Proctor resource scope, and
+  Admin/Proctor recovery-center workflows remain deferred (REC-I6 / M11 /
+  REC-OPS).
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
