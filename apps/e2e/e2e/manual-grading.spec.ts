@@ -167,7 +167,10 @@ test.describe("manual grading (P3-MOD-P1-2)", () => {
     await page
       .getByTestId(`grading-comment-input-${essayQuestionId}`)
       .fill("good effort");
-    await page.getByTestId(`grading-save-btn-${essayQuestionId}`).click();
+    // Slice 2: submission now goes through a confirmation dialog before the
+    // irrevocable POST (button label is 提交评分, not 保存).
+    await page.getByTestId(`grading-submit-btn-${essayQuestionId}`).click();
+    await page.getByRole("button", { name: "确认提交" }).click();
     // "评分已完成" (exact) is the finalized toast — the last pending-manual
     // entry is now completed_manual and finalizeTerminalGrading ran.
     await expect(page.getByText("评分已完成", { exact: true })).toBeVisible({

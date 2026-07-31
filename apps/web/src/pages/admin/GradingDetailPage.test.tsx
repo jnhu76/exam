@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { GradingDetailPage } from "./GradingDetailPage";
-import { validateScore } from "./GradingDetailPage";
+import { parseScoreInput, validateScore } from "./GradingDetailPage";
 import { permissionsForRole } from "@exam/authz";
 
 vi.mock("@/lib/api", () => ({
@@ -18,7 +18,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
 const getMock = vi.mocked(api.get);
@@ -98,6 +98,22 @@ function renderPage(attemptId = "att-1") {
   );
 }
 
+/**
+ * Drives the full submit flow for the first question: clicks "提交评分", then
+ * clicks "确认提交" in the confirmation dialog. Returns once the confirm
+ * action has fired. Used by tests that need the POST to actually be sent.
+ */
+async function confirmSubmitFirstQuestion(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  const submitButtons = screen.getAllByText("提交评分");
+  await user.click(submitButtons[0]!);
+  const confirmBtn = await screen.findByRole("button", {
+    name: "确认提交",
+  });
+  await user.click(confirmBtn);
+}
+
 describe("GradingDetailPage", () => {
   beforeEach(() => {
     getMock.mockReset();
@@ -119,11 +135,78 @@ describe("GradingDetailPage", () => {
     expect(screen.getByDisplayValue("基本正确")).toBeInTheDocument();
   });
 
-  it("shows empty score input for ungraded questions", async () => {
+  it("shows empty score input for ungraded questions (not 0)", async () => {
+    // Slice 1: a pending question must render an EMPTY input, never 0. The old
+    // behavior (`q.entry?.score ?? 0`) conflated "not graded" with "scored 0".
     renderPage();
     await screen.findByText(/期末考试 — 张三/);
     const scoreInputs = screen.getAllByRole("spinbutton");
-    expect(scoreInputs[0]).toHaveValue(0);
+    expect(scoreInputs[0]).toHaveValue(null);
+  });
+
+  it("renders an already-completed score of 0 as 0 (not empty)", async () => {
+    // Slice 1: an explicit stored 0 is a real score and must display as 0,
+    // distinct from the empty ungraded input above.
+    getMock.mockResolvedValue({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q-zero",
+          type: "text_response",
+          content: "零分题",
+          maxScore: 10,
+          candidateAnswer: "作答",
+          entry: {
+            score: 0,
+            comment: "",
+            gradedBy: "admin-1",
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByDisplayValue("0")).toBeInTheDocument();
+  });
+
+  it("rejects an empty score with a field-level '请输入分数' error and does not POST", async () => {
+    // Slice 1: clearing/never-entering a score must block submission. The old
+    // behavior POSTed score 0 because Number("") === 0.
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // q1 starts empty (pending). Clicking the submit button must not POST and
+    // must not open the confirmation dialog (validation fails first).
+    const submitButtons = screen.getAllByText("提交评分");
+    await user.click(submitButtons[0]!);
+
+    expect(screen.getByText("请输入分数")).toBeInTheDocument();
+    expect(postMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "确认提交" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("accepts an explicitly entered 0 score as a valid submission", async () => {
+    // Slice 1: explicit 0 is a legitimate grade. The grader types "0", confirms,
+    // and the POST must carry score: 0.
+    postMock.mockResolvedValue(mockGradeResponse);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const scoreInputs = screen.getAllByRole("spinbutton");
+    const firstInput = scoreInputs[0]!;
+    await user.type(firstInput, "0");
+
+    await confirmSubmitFirstQuestion(user);
+
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/admin/attempts/att-1/grade-question",
+      { questionId: "q1", score: 0, comment: "" },
+    );
   });
 
   it("validates score does not exceed maxScore", async () => {
@@ -136,18 +219,22 @@ describe("GradingDetailPage", () => {
     await user.clear(firstInput);
     await user.type(firstInput, "15");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    const submitButtons = screen.getAllByText("提交评分");
+    await user.click(submitButtons[0]!);
 
     expect(screen.getByText("分数不能超过满分 (10)")).toBeInTheDocument();
     expect(postMock).not.toHaveBeenCalled();
+    // Validation failure must not open the confirmation dialog.
+    expect(
+      screen.queryByRole("button", { name: "确认提交" }),
+    ).not.toBeInTheDocument();
   });
 
   it("clears the field validation error after a subsequent valid save", async () => {
     // Characterization: the validation error is routed through the score
     // control's field-error role, and is cleared from that control once a
-    // valid save succeeds (handleSave deletes the error key on the success
-    // path). Protects observable behavior, not the primitive class stack.
+    // valid submission proceeds (handleSubmitClick deletes the error key on the
+    // success path). Protects observable behavior, not the primitive class stack.
     postMock.mockResolvedValue(mockGradeResponse);
     const user = userEvent.setup();
     renderPage();
@@ -155,18 +242,17 @@ describe("GradingDetailPage", () => {
 
     const scoreInputs = screen.getAllByRole("spinbutton");
     const firstInput = scoreInputs[0]!;
-    const saveButtons = () => screen.getAllByText("保存");
 
     // Trigger a validation failure on q1.
     await user.clear(firstInput);
     await user.type(firstInput, "15");
-    await user.click(saveButtons()[0]!);
+    await user.click(screen.getAllByText("提交评分")[0]!);
     expect(screen.getByText("分数不能超过满分 (10)")).toBeInTheDocument();
 
-    // Correct the score and save successfully.
+    // Correct the score and submit successfully (submit + confirm).
     await user.clear(firstInput);
     await user.type(firstInput, "8");
-    await user.click(saveButtons()[0]!);
+    await confirmSubmitFirstQuestion(user);
     await vi.waitFor(() => {
       expect(postMock).toHaveBeenCalled();
     });
@@ -189,8 +275,8 @@ describe("GradingDetailPage", () => {
     await user.clear(firstInput);
     await user.type(firstInput, "15");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    const submitButtons = screen.getAllByText("提交评分");
+    await user.click(submitButtons[0]!);
 
     // q1 (maxScore 10) over-max → exactly one field-error text node present.
     const errors = screen.getAllByText("分数不能超过满分 (10)");
@@ -208,8 +294,7 @@ describe("GradingDetailPage", () => {
     await user.clear(firstInput);
     await user.type(firstInput, "8");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    await confirmSubmitFirstQuestion(user);
 
     expect(postMock).toHaveBeenCalledWith(
       "/api/admin/attempts/att-1/grade-question",
@@ -229,8 +314,7 @@ describe("GradingDetailPage", () => {
     await user.clear(firstInput);
     await user.type(firstInput, "8");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    await confirmSubmitFirstQuestion(user);
 
     await vi.waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith("评分已保存");
@@ -249,8 +333,7 @@ describe("GradingDetailPage", () => {
     await user.clear(firstInput);
     await user.type(firstInput, "8");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    await confirmSubmitFirstQuestion(user);
 
     await vi.waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith("评分已完成");
@@ -283,8 +366,7 @@ describe("GradingDetailPage", () => {
     const commentInputs = screen.getAllByPlaceholderText("输入评语...");
     await user.type(commentInputs[0]!, "回答基本完整，但缺少细节");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    await confirmSubmitFirstQuestion(user);
 
     expect(postMock).toHaveBeenCalledWith(
       "/api/admin/attempts/att-1/grade-question",
@@ -296,7 +378,7 @@ describe("GradingDetailPage", () => {
     );
   });
 
-  it("disables save button and shows saving text during save", async () => {
+  it("disables submit button and shows submitting text during save", async () => {
     let resolvePost: (v: unknown) => void;
     postMock.mockImplementation(
       () =>
@@ -313,18 +395,464 @@ describe("GradingDetailPage", () => {
     await user.clear(firstInput);
     await user.type(firstInput, "8");
 
-    const saveButtons = screen.getAllByText("保存");
-    await user.click(saveButtons[0]!);
+    await confirmSubmitFirstQuestion(user);
 
-    expect(await screen.findByText("保存中...")).toBeInTheDocument();
+    expect(await screen.findByText("提交中...")).toBeInTheDocument();
     expect(
-      screen.getAllByText("保存中...")[0]!.closest("button"),
+      screen.getAllByText("提交中...")[0]!.closest("button"),
     ).toBeDisabled();
 
     resolvePost!(mockGradeResponse);
     await vi.waitFor(() => {
-      expect(screen.queryByText("保存中...")).not.toBeInTheDocument();
+      expect(screen.queryByText("提交中...")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("GradingDetailPage — one-time submission UX (Slice 2)", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+    postMock.mockReset();
+    getMock.mockResolvedValue(mockDetailData);
+  });
+
+  it("shows the irrevocability notice while grading is in progress", async () => {
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-irrevocable-notice")).toHaveTextContent(
+      "评分提交后不可修改",
+    );
+  });
+
+  it("shows the fully-graded notice and hides the irrevocability notice once terminal", async () => {
+    getMock.mockResolvedValue({
+      ...mockDetailData,
+      gradingStatus: "fully_graded",
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "已评分题",
+          maxScore: 10,
+          candidateAnswer: "ans",
+          entry: {
+            score: 8,
+            comment: "",
+            gradedBy: "admin-1",
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-fully-graded-notice")).toHaveTextContent(
+      "评分已完成",
+    );
+    expect(
+      screen.queryByTestId("grading-irrevocable-notice"),
+    ).not.toBeInTheDocument();
+    // No executable submit button once fully graded.
+    expect(
+      screen.queryByRole("button", { name: "提交评分" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a completed question as read-only with submitted metadata", async () => {
+    getMock.mockResolvedValue({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q-done",
+          type: "text_response",
+          content: "已完成题",
+          maxScore: 10,
+          candidateAnswer: "作答",
+          entry: {
+            score: 7,
+            comment: "不错的回答",
+            gradedBy: "admin-1",
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // Score + comment inputs are disabled.
+    expect(screen.getByTestId("grading-score-input-q-done")).toBeDisabled();
+    expect(screen.getByTestId("grading-comment-input-q-done")).toBeDisabled();
+    // No submit button for the completed question.
+    expect(
+      screen.queryByTestId("grading-submit-btn-q-done"),
+    ).not.toBeInTheDocument();
+    // Submitted metadata block is present.
+    expect(screen.getByText("已提交评分")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("grading-submitted-meta-q-done"),
+    ).toHaveTextContent("已评分: 7 分");
+    expect(
+      screen.getByTestId("grading-submitted-comment-q-done"),
+    ).toHaveTextContent("不错的回答");
+    // gradedBy is shown as-is (actor id), not a fabricated name.
+    expect(
+      screen.getByTestId("grading-submitted-grader-q-done"),
+    ).toHaveTextContent("admin-1");
+    // gradedAt is rendered via the project date formatter.
+    expect(
+      screen.getByTestId("grading-submitted-time-q-done"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens a confirmation dialog showing score, max, and irrevocability before posting", async () => {
+    postMock.mockResolvedValue(mockGradeResponse);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const firstInput = screen.getAllByRole("spinbutton")[0]!;
+    await user.clear(firstInput);
+    await user.type(firstInput, "8");
+
+    // Clicking submit opens the dialog but does NOT post yet.
+    await user.click(screen.getAllByText("提交评分")[0]!);
+    expect(postMock).not.toHaveBeenCalled();
+
+    expect(
+      await screen.findByRole("button", { name: "确认提交" }),
+    ).toBeInTheDocument();
+    // The dialog shows the score, max score, and the irrevocable statement.
+    const dialog = screen
+      .getByText("确认提交评分？")
+      .closest("[role='alertdialog']")!;
+    expect(dialog).toHaveTextContent("分数: 8");
+    expect(dialog).toHaveTextContent("满分: 10");
+    expect(dialog).toHaveTextContent("提交后不可通过普通阅卷流程修改");
+    expect(dialog).toHaveTextContent("取消");
+
+    // Confirming runs the POST.
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await vi.waitFor(() => {
+      expect(postMock).toHaveBeenCalled();
+    });
+  });
+
+  it("canceling the confirmation dialog does not POST", async () => {
+    postMock.mockResolvedValue(mockGradeResponse);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const firstInput = screen.getAllByRole("spinbutton")[0]!;
+    await user.clear(firstInput);
+    await user.type(firstInput, "8");
+    await user.click(screen.getAllByText("提交评分")[0]!);
+
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(postMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "确认提交" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("refreshes from the authoritative GET after a successful POST (no client-fabricated state)", async () => {
+    // After POST the page must re-GET grading-details and reflect the
+    // server-committed entry, not a locally fabricated one.
+    postMock.mockResolvedValue(mockGradeResponse);
+    getMock.mockResolvedValueOnce(mockDetailData); // initial load
+    getMock.mockResolvedValueOnce({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请简述光合作用的过程",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "",
+            gradedBy: "server-grader",
+            gradedAt: "2025-02-01T09:30:00Z",
+          },
+        },
+        mockDetailData.questions[1],
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const firstInput = screen.getAllByRole("spinbutton")[0]!;
+    await user.clear(firstInput);
+    await user.type(firstInput, "8");
+    await confirmSubmitFirstQuestion(user);
+
+    // The refreshed server entry is now shown (server grader id + read-only).
+    await vi.waitFor(() => {
+      expect(
+        screen.getByTestId("grading-submitted-grader-q1"),
+      ).toHaveTextContent("server-grader");
+    });
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves draft input on other pending questions after submitting one question", async () => {
+    // Regression: submitting one question must not clear draft scores/comments
+    // on other still-pending questions (refreshFromServer must not overwrite
+    // local draft with the server's empty entry).
+    const twoPending = {
+      attemptId: "att-1",
+      examId: "exam-1",
+      examTitle: "期末考试",
+      candidateId: "c1",
+      candidateName: "张三",
+      gradingStatus: "pending_manual",
+      questions: [
+        {
+          questionId: "q-p1",
+          type: "fill_blank",
+          content: "第一题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null,
+        },
+        {
+          questionId: "q-p2",
+          type: "fill_blank",
+          content: "第二题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null,
+        },
+      ],
+    };
+    postMock.mockResolvedValue(mockGradeResponse);
+    // initial load: both pending
+    getMock.mockResolvedValueOnce(twoPending);
+    // reconciliation GET: q-p1 completed, q-p2 still pending
+    getMock.mockResolvedValueOnce({
+      ...twoPending,
+      questions: [
+        {
+          questionId: "q-p1",
+          type: "fill_blank",
+          content: "第一题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "好",
+            gradedBy: "admin-1",
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+        {
+          questionId: "q-p2",
+          type: "fill_blank",
+          content: "第二题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null, // still pending on server
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // Fill draft on BOTH questions.
+    const scoreInputs = screen.getAllByRole("spinbutton");
+    const q1Input = scoreInputs[0]!;
+    const q2Input = scoreInputs[1]!;
+    await user.clear(q1Input);
+    await user.type(q1Input, "8");
+    await user.clear(q2Input);
+    await user.type(q2Input, "6");
+    // Also fill a comment on q2.
+    const commentInputs = screen.getAllByPlaceholderText("输入评语...");
+    await user.type(commentInputs[1]!, "q2 draft comment");
+
+    // Submit q1 (first question).
+    await confirmSubmitFirstQuestion(user);
+
+    // q1 is now read-only with server data.
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("grading-score-input-q-p1")).toBeDisabled();
+    });
+    // q2 draft is preserved: score 6, comment "q2 draft comment".
+    expect(screen.getByTestId("grading-score-input-q-p2")).toHaveValue(6);
+    expect(screen.getByTestId("grading-comment-input-q-p2")).toHaveValue(
+      "q2 draft comment",
+    );
+    expect(screen.getByTestId("grading-score-input-q-p2")).not.toBeDisabled();
+    expect(screen.getByTestId("grading-submit-btn-q-p2")).toBeVisible();
+  });
+});
+
+describe("GradingDetailPage — ambiguous-result reconciliation (Slice 3)", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+    postMock.mockReset();
+    getMock.mockResolvedValue(mockDetailData);
+  });
+
+  /**
+   * Drives a submit that fails the POST: types a valid score, submits,
+   * confirms. The POST must have been rejected before reconciliation runs.
+   */
+  async function submitAndFailPost(user: ReturnType<typeof userEvent.setup>) {
+    const firstInput = screen.getAllByRole("spinbutton")[0]!;
+    await user.clear(firstInput);
+    await user.type(firstInput, "8");
+    await confirmSubmitFirstQuestion(user);
+    await vi.waitFor(() => {
+      expect(postMock).toHaveBeenCalled();
+    });
+  }
+
+  it("Case A: POST rejects but server shows entry committed → synchronized success, read-only", async () => {
+    // The POST's response was lost (network error) but the server actually
+    // committed the grade. The page must NOT show a retry error.
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    // initial load
+    getMock.mockResolvedValueOnce(mockDetailData);
+    // reconciliation GET: q1 now committed by the server
+    getMock.mockResolvedValueOnce({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请简述光合作用的过程",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "",
+            gradedBy: "server-grader",
+            gradedAt: "2025-02-01T09:30:00Z",
+          },
+        },
+        mockDetailData.questions[1],
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    // Neutral synchronized-success, NOT a failure/retry prompt.
+    await vi.waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "评分已提交，页面已同步最新状态。",
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    // The question is now read-only from the authoritative refresh.
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    // Only one POST ever fired (no auto-retry).
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Case B: POST rejects and server still pending → real failure, input preserved, editable", async () => {
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    // initial load + reconciliation GET both return the original pending state
+    getMock.mockResolvedValue(mockDetailData);
+
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    // Real failure message, NOT a synchronized-success.
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "评分未提交，请确认网络后重试。",
+      );
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+    // Operator input is preserved (the typed 8 is still in the field) and the
+    // control stays editable.
+    expect(screen.getByTestId("grading-score-input-q1")).toHaveValue(8);
+    expect(screen.getByTestId("grading-score-input-q1")).not.toBeDisabled();
+    expect(screen.getByTestId("grading-submit-btn-q1")).toBeInTheDocument();
+    // No auto-retry.
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Case C: POST rejects and attempt is now fully_graded → status-changed message", async () => {
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    getMock.mockResolvedValueOnce(mockDetailData); // initial load
+    // reconciliation GET: attempt reached terminal state (another grader closed
+    // it while our POST was in flight)
+    getMock.mockResolvedValueOnce({
+      ...mockDetailData,
+      gradingStatus: "fully_graded",
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请简述光合作用的过程",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "",
+            gradedBy: "other-grader",
+            gradedAt: "2025-02-01T09:30:00Z",
+          },
+        },
+        mockDetailData.questions[1],
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    await vi.waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith(
+        "阅卷状态已发生变化，已加载最新结果。",
+      );
+    });
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Failure-of-failure: POST and reconciliation GET both fail → unknown message, no auto-retry", async () => {
+    const { toast } = await import("sonner");
+    postMock.mockRejectedValue(new Error("Network request failed"));
+    // initial load OK, but the reconciliation GET fails too
+    getMock.mockResolvedValueOnce(mockDetailData);
+    getMock.mockRejectedValueOnce(new Error("Network request failed"));
+
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await submitAndFailPost(user);
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "无法确认评分是否已提交，请刷新页面核对。",
+      );
+    });
+    // No success claim, no auto-retry.
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(postMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -536,7 +1064,7 @@ describe("candidateAnswer rendering", () => {
     renderPage();
     await screen.findByText(/期末考试 — 张三/);
     expect(screen.getByTestId("grading-score-input-q1")).toBeInTheDocument();
-    expect(screen.getByTestId("grading-save-btn-q1")).toBeInTheDocument();
+    expect(screen.getByTestId("grading-submit-btn-q1")).toBeInTheDocument();
   });
 });
 
@@ -700,6 +1228,42 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     expect(refEl).toHaveTextContent('"minExamples"');
     // No `[object Object]` leakage.
     expect(refEl).not.toHaveTextContent("[object Object]");
+  });
+});
+
+describe("parseScoreInput", () => {
+  it("rejects an empty string as scoreRequired (not as 0)", () => {
+    expect(parseScoreInput("", 10)).toEqual({ error: "请输入分数" });
+  });
+
+  it("rejects a whitespace-only string as scoreRequired", () => {
+    expect(parseScoreInput("   ", 10)).toEqual({ error: "请输入分数" });
+  });
+
+  it("accepts an explicit 0 as a valid score", () => {
+    expect(parseScoreInput("0", 10)).toEqual({ score: 0 });
+  });
+
+  it("accepts a positive integer score", () => {
+    expect(parseScoreInput("8", 10)).toEqual({ score: 8 });
+  });
+
+  it("accepts a score equal to maxScore", () => {
+    expect(parseScoreInput("10", 10)).toEqual({ score: 10 });
+  });
+
+  it("rejects a negative score with the range message", () => {
+    expect(parseScoreInput("-1", 10)).toEqual({ error: "分数不能为负数" });
+  });
+
+  it("rejects a score exceeding maxScore with the range message", () => {
+    expect(parseScoreInput("15", 10)).toEqual({
+      error: "分数不能超过满分 (10)",
+    });
+  });
+
+  it("rejects non-numeric input as scoreRequired", () => {
+    expect(parseScoreInput("abc", 10)).toEqual({ error: "请输入分数" });
   });
 });
 
