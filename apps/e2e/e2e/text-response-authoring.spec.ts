@@ -130,7 +130,7 @@ test.describe("P2 text_response authoring + product loop", () => {
     // with aria-label "题目类型". Both are targeted by name — never by DOM
     // order — so layout changes cannot resolve to the wrong control.
     const SEED_COURSE_NAME = seedCourse!.name;
-    await page.getByRole("combobox", { name: "所属课程" }).click();
+    await page.getByRole("button", { name: "所属课程" }).click();
     await page.getByPlaceholder("搜索课程名称或代码...").fill(SEED_COURSE_NAME);
     // Each option's accessible name is "<name> <code>" (CourseSearchSelect
     // renders the course code beside the name), so match by substring, not

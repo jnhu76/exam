@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -36,12 +36,6 @@ interface CourseSearchSelectProps {
 /** The contract caps pageSize at 100 (PaginationParamsSchema.max(100)). */
 const SEARCH_PAGE_SIZE = 100;
 
-const LISTBOX_ID = "course-search-listbox";
-
-function optionId(courseId: string) {
-  return `course-option-${courseId}`;
-}
-
 /**
  * A searchable course selector that combines a local list (initial load) with
  * remote search (GET /api/courses?search=...). In edit mode, if the selected
@@ -58,12 +52,15 @@ export function CourseSearchSelect({
   placeholder,
 }: CourseSearchSelectProps) {
   const { t } = useTranslation();
+  const generatedId = useId();
+  const listboxId = `course-search-listbox-${generatedId}`;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CourseRow[]>(initialCourses);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focusTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,10 +82,12 @@ export function CourseSearchSelect({
     };
   }, []);
 
-  // Derive the selected course label directly from initialCourses — independent
-  // of the current results list, which no longer contains initialCourses by
-  // default during a remote search.
-  const selectedLabel = initialCourses.find((c) => c.id === value)?.name ?? "";
+  // Derive the selected course label: prefer the cached selected course (which
+  // may come from a remote search), then fall back to initialCourses.
+  const selectedLabel =
+    selectedCourse?.id === value
+      ? selectedCourse.name
+      : (initialCourses.find((c) => c.id === value)?.name ?? "");
 
   // Reset the active index when the result set changes, the popover opens or
   // closes, or a new value is selected.
@@ -106,14 +105,40 @@ export function CourseSearchSelect({
     }
   }, [activeIndex]);
 
-  /** Select a course, close the popover, and reset search state. */
+  /** Unified close-and-reset: invalidates in-flight requests, clears debounce,
+   * restores initial state. Used by select, Escape, and popover close. */
+  const closeAndReset = useCallback(() => {
+    searchSeq.current += 1;
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+      searchTimeout.current = undefined;
+    }
+    setSearch("");
+    setResults(initialCourses);
+    setTruncated(false);
+    setLoading(false);
+    setActiveIndex(-1);
+    setOpen(false);
+  }, [initialCourses]);
+
+  /** Select a course, cache it for label display, and close. */
   const selectCourse = useCallback(
-    (courseId: string) => {
-      onChange(courseId);
-      setOpen(false);
+    (course: CourseRow) => {
+      setSelectedCourse(course);
+      onChange(course.id);
+      searchSeq.current += 1;
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+        searchTimeout.current = undefined;
+      }
       setSearch("");
+      setResults(initialCourses);
+      setTruncated(false);
+      setLoading(false);
+      setActiveIndex(-1);
+      setOpen(false);
     },
-    [onChange],
+    [onChange, initialCourses],
   );
 
   /** Move the active index clamped to [0, results.length). */
@@ -212,33 +237,41 @@ export function CourseSearchSelect({
         case "Enter": {
           e.preventDefault();
           const active = results[activeIndex];
-          if (active) selectCourse(active.id);
+          if (active) selectCourse(active);
           break;
         }
         case "Escape":
           e.preventDefault();
-          setOpen(false);
-          setSearch("");
+          closeAndReset();
           break;
       }
     },
-    [open, activeIndex, results, moveActive, selectCourse],
+    [open, activeIndex, results, moveActive, selectCourse, closeAndReset],
   );
 
+  function optionId(courseId: string) {
+    return `${listboxId}-option-${courseId}`;
+  }
+
+  const activeDescendant =
+    activeIndex >= 0 && activeIndex < results.length
+      ? optionId(results[activeIndex]!.id)
+      : undefined;
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) closeAndReset();
+        else setOpen(true);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          role="combobox"
-          aria-label={t("admin.forms.question.course")}
+          aria-haspopup="listbox"
           aria-expanded={open}
-          aria-controls={LISTBOX_ID}
-          aria-activedescendant={
-            activeIndex >= 0 && activeIndex < results.length
-              ? optionId(results[activeIndex]!.id)
-              : undefined
-          }
+          aria-label={t("admin.forms.question.course")}
           className="w-full justify-between font-normal"
         >
           {selectedLabel ||
@@ -263,6 +296,11 @@ export function CourseSearchSelect({
           />
           <Input
             ref={inputRef}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls={listboxId}
+            aria-activedescendant={activeDescendant}
             value={search}
             onChange={handleSearchChange}
             onKeyDown={handleInputKeyDown}
@@ -272,7 +310,7 @@ export function CourseSearchSelect({
         </div>
         <div
           ref={listRef}
-          id={LISTBOX_ID}
+          id={listboxId}
           role="listbox"
           aria-label={t("admin.forms.question.course")}
           className="max-h-[300px] overflow-y-auto"
@@ -297,8 +335,8 @@ export function CourseSearchSelect({
                 role="option"
                 aria-selected={isSelected}
                 data-active={isActive}
-                onClick={() => selectCourse(c.id)}
-                className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground"
+                onClick={() => selectCourse(c)}
+                className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
               >
                 <AppIcon
                   icon={Check}
