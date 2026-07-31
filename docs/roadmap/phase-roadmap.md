@@ -232,20 +232,10 @@ delivery, resident worker, atomic business mutation + Inbox + outbox
 transaction for operational events, and a validated `PUBLIC_WEB_ORIGIN` /
 site-relative `actionPath`.
 
-The completed MVP sequence is:
-
-```text
-P4 (RBAC MVP role switch) ✅ CLOSED
-  → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
-  → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
-  → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
-  → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
-  → P7 (system readiness + configurable exam modes) 🟣 PLANNING
-```
-
-P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
-Inbox + Email business integration. Identity lifecycle remains separate future
-work and is not silently included in P5-N1.
+The completed MVP sequence (P4 → P5-0 → P3 → P5-N1 → P6) and its closeout
+evidence are recorded in [`docs/roadmap/current.md`](current.md) and
+[`docs/status/implementation-status.md`](../status/implementation-status.md).
+Identity lifecycle remains separate future work.
 
 | Job | True dependency | Status |
 | --- | --- | --- |

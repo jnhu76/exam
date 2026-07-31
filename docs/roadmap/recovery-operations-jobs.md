@@ -69,180 +69,32 @@ REC-I6-R0 Incident Authority Contract
 
 ## 3. J1 — REC-I4-I3B2 Operator Time Grant API
 
-## Status
-
-**CLOSED.** See
+**CLOSED.** Closeout audit (closeout docs merged in PR #240):
 [`REC-I4-I3B2-OPERATOR-TIME-GRANT-API-CLOSEOUT.md`](../audits/REC-I4-I3B2-OPERATOR-TIME-GRANT-API-CLOSEOUT.md).
 
-## Purpose
+Authority result:
 
-Expose the existing `grantAttemptTime()` engine command through a real
-Admin-facing API with explicit permission, idempotency, audit evidence, and
-transaction boundaries.
+- `Permission.AttemptTimeGrant` is activated for the Admin preset only. Do not
+  grant it organization-wide to Proctor before J4 establishes Proctor-to-Exam
+  scope.
+- Attempt-scoped `POST /api/admin/attempts/:attemptId/time-grants` calls the
+  canonical `grantAttemptTime()` command inside one locked transaction
+  (Enrollment → Attempt → Exam lock order), with operation-ID idempotency
+  (`granted` / `idempotent_replay` / `terminal`), cross-Attempt race recovery,
+  and an atomic `attempt.timeGrant` audit. No route-local deadline calculation
+  exists.
+- `incidentId` remains null end to end; incident linkage is reserved for
+  J2/J3 (REC-I6).
 
-## Current reality
+Remaining dependencies handed forward:
 
-Already implemented:
+- Proctor time grant requires J4 (M11 Proctor-to-Exam scope).
+- Non-null `incidentId` requires J2 authority and J3 persistence.
+- Admin/Proctor Recovery Center UI (J5/J6) and Redis (J8) remain out of scope.
 
-- `grantAttemptTime()` engine seam;
-- deadline adjustment ledger;
-- operation-ID idempotency semantics;
-- locked transaction execution;
-- deadline reconciliation;
-- interruption association support;
-- operator-grant policy/source metadata.
-- `Permission.AttemptTimeGrant` in the Admin preset only;
-- Attempt-scoped `POST /api/admin/attempts/:attemptId/time-grants` route;
-- public `TimeGrantRequest` / `TimeGrantResponse` contracts and OpenAPI;
-- one transaction for the ledger, deadline update, and `attempt.timeGrant`
-  audit;
-- same-operation replay / conflict and PostgreSQL cross-Attempt race recovery;
-- Admin Dashboard dialog with frozen operation identity, indeterminate retry,
-  pending-command reload recovery, and cross-tab send coordination.
-
-Still intentionally not activated:
-
-- Proctor time grant (requires M11 Proctor-to-Exam resource scope);
-- incident linkage (`incidentId` remains null until REC-I6);
-- Admin/Proctor Recovery Center workflows;
-- Redis.
-
-## Closed boundary
-
-### Permission (actual)
-
-Registered as:
-
-```text
-Permission.AttemptTimeGrant
-```
-
-Initial activation:
-
-```text
-Admin: allowed
-Proctor: not yet globally allowed
-Teacher: denied
-Grader: denied
-Candidate: denied
-```
-
-Do not grant this permission organization-wide to Proctor before J4 establishes
-Proctor-to-Exam scope.
-
-### API (actual)
-
-Route:
-
-```http
-POST /api/admin/attempts/:attemptId/time-grants
-```
-
-Request:
-
-```json
-{
-  "operationId": "uuid",
-  "addedSeconds": 300,
-  "reasonCode": "device_failure",
-  "reasonText": "Candidate workstation restarted after a power fault.",
-  "interruptionId": "optional-uuid"
-}
-```
-
-Response:
-
-```json
-{
-  "outcome": "granted",
-  "adjustment": {
-    "id": "uuid",
-    "operationId": "uuid",
-    "attemptId": "uuid",
-    "source": "operator",
-    "beforeDeadline": "timestamp",
-    "afterDeadline": "timestamp",
-    "addedSeconds": 300,
-    "reasonCode": "device_failure",
-    "reasonText": "Candidate workstation restarted after a power fault.",
-    "interruptionId": null,
-    "incidentId": null
-  },
-  "attempt": {
-    "id": "uuid",
-    "status": "in_progress",
-    "deadlineAt": "timestamp"
-  }
-}
-```
-
-Results include the engine outcomes:
-
-```text
-granted
-idempotent_replay
-terminal
-```
-
-### Audit (actual)
-
-The route records an auditable operator action with:
-
-- actor;
-- target Attempt;
-- operation ID;
-- adjustment ID;
-- interruption ID, when present;
-- added seconds;
-- reason code;
-- request/correlation context;
-- timestamp.
-
-The audit metadata deliberately does not duplicate reason text, before/after
-deadlines, or command outcome. Those facts remain in the committed adjustment
-and operation response under the audit policy.
-
-## Non-goals
-
-- incident model;
-- Proctor activation;
-- recovery center UI;
-- generic background jobs;
-- Redis;
-- changing the existing grant engine semantics;
-- allowing the route to update `deadlineAt` directly.
-
-## Required invariants
-
-- The route must call the canonical `grantAttemptTime()` command.
-- No route-local deadline calculation is allowed.
-- Same operation ID plus same payload returns the committed result.
-- Same operation ID plus different payload returns an idempotency conflict.
-- Terminal attempts cannot be reopened.
-- The grant remains bounded by the existing Exam/Attempt deadline rules.
-- An interruption ID, when supplied, must belong to the same Attempt.
-- All timestamps come from one server operation time.
-
-## Acceptance
-
-- Admin can grant time through the API.
-- Unauthorized roles are denied.
-- Duplicate delivery does not duplicate the adjustment.
-- A concurrent deadline transition produces one deterministic committed result.
-- The adjustment ledger, Attempt deadline, and audit evidence agree.
-- No direct route-level `deadlineAt` write exists.
-- OpenAPI and contracts are updated.
-- Unit, integration, permission, idempotency, and concurrency tests pass.
-
-## Evidence
-
-- engine tests;
-- route integration tests;
-- structural test proving the route calls the canonical command;
-- permission matrix test;
-- operation-ID replay/conflict tests;
-- deadline-race test;
-- audit row/event assertion.
+The full contract, request/response examples, invariants, acceptance, and test
+inventory are owned by the closeout audit, OpenAPI, and
+[`docs/contracts/api-reference.md`](../contracts/api-reference.md).
 
 ---
 

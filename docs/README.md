@@ -109,7 +109,7 @@ See also the root [`DESIGN.md`](../DESIGN.md) (project-owned visual authority) a
 and phase-history material. It is reference-only. Subdirectories:
 `archive/plans/`, `archive/reviews/`, `archive/audits/`,
 `archive/implementation-reports/`, `archive/frontend/`, `archive/phase3/`,
-`archive/followups/`, `archive/prompts/`, plus the pre-existing
+`archive/roadmap/`, `archive/followups/`, `archive/prompts/`, plus the pre-existing
 `archive/phase1-archive/`, `archive/phase2-archive/`, `archive/phase3-archive/`,
 `archive/ui/`, `archive/dev/`.
 
