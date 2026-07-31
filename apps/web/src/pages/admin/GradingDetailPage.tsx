@@ -189,11 +189,20 @@ export function GradingDetailPage() {
   } | null>(null);
 
   /**
-   * Re-fetches the authoritative grading-details and replaces ALL local state
-   * (data, scores, comments) from the server response. Used both for the
-   * initial load and for the post-POST reconciliation, so the page never shows
-   * a client-fabricated gradedBy/gradedAt/terminal state — it always reflects
-   * what the server committed.
+   * Re-fetches the authoritative grading-details and replaces local state from
+   * the server response. Used for initial load and post-POST reconciliation.
+   *
+   * For **completed** questions (entry !== null) the server value is authoritative
+   * and always overwrites local state, making the question read-only with the
+   * real gradedBy/gradedAt.
+   *
+   * For **pending** questions (entry === null) the local draft is preserved so
+   * that submitting one question does not discard the operator's in-progress
+   * scores and comments on other still-pending questions.
+   *
+   * `data` (the top-level GradingDetailData) is always replaced wholesale since
+   * it carries the attempt-level gradingStatus and question metadata that are
+   * server-authoritative.
    */
   const refreshFromServer =
     useCallback(async (): Promise<GradingDetailData | null> => {
@@ -201,15 +210,34 @@ export function GradingDetailPage() {
       const result = await api.get<GradingDetailData>(
         `/api/admin/attempts/${id}/grading-details`,
       );
+      if (!result) return null;
       setData(result);
-      const nextScores: Record<string, string> = {};
-      const nextComments: Record<string, string> = {};
-      for (const q of result.questions) {
-        nextScores[q.questionId] = q.entry != null ? String(q.entry.score) : "";
-        nextComments[q.questionId] = q.entry?.comment ?? "";
-      }
-      setScores(nextScores);
-      setComments(nextComments);
+      // For scores: only overwrite completed questions from the server; keep
+      // local draft for pending questions so multi-question grading is safe.
+      setScores((current) => {
+        const next = { ...current };
+        for (const q of result.questions) {
+          if (q.entry != null) {
+            next[q.questionId] = String(q.entry.score);
+          } else if (!(q.questionId in next)) {
+            next[q.questionId] = "";
+          }
+        }
+        return next;
+      });
+      // Comments: same logic — completed questions get the committed comment,
+      // pending questions keep their local draft.
+      setComments((current) => {
+        const next = { ...current };
+        for (const q of result.questions) {
+          if (q.entry != null) {
+            next[q.questionId] = q.entry.comment ?? "";
+          } else if (!(q.questionId in next)) {
+            next[q.questionId] = "";
+          }
+        }
+        return next;
+      });
       return result;
     }, [id]);
 
@@ -318,8 +346,9 @@ export function GradingDetailPage() {
         return;
       }
       // Case B: the entry is still pending — the POST genuinely did not commit.
-      // restore the operator's input that refreshFromServer cleared for the
-      // pending question, so the field stays editable with its typed value.
+      // refreshFromServer now preserves local draft for pending questions, so
+      // the operator's input is already intact. The explicit restore below is
+      // defense-in-depth for the submitted question's score/comment.
       setScores((prev) => ({ ...prev, [questionId]: String(scoreAtSubmit) }));
       setComments((prev) => ({ ...prev, [questionId]: commentAtSubmit }));
       toast.error(t("admin.gradingDetail.errors.submitFailed"));

@@ -600,6 +600,98 @@ describe("GradingDetailPage — one-time submission UX (Slice 2)", () => {
       screen.queryByTestId("grading-submit-btn-q1"),
     ).not.toBeInTheDocument();
   });
+
+  it("preserves draft input on other pending questions after submitting one question", async () => {
+    // Regression: submitting one question must not clear draft scores/comments
+    // on other still-pending questions (refreshFromServer must not overwrite
+    // local draft with the server's empty entry).
+    const twoPending = {
+      attemptId: "att-1",
+      examId: "exam-1",
+      examTitle: "期末考试",
+      candidateId: "c1",
+      candidateName: "张三",
+      gradingStatus: "pending_manual",
+      questions: [
+        {
+          questionId: "q-p1",
+          type: "fill_blank",
+          content: "第一题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null,
+        },
+        {
+          questionId: "q-p2",
+          type: "fill_blank",
+          content: "第二题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null,
+        },
+      ],
+    };
+    postMock.mockResolvedValue(mockGradeResponse);
+    // initial load: both pending
+    getMock.mockResolvedValueOnce(twoPending);
+    // reconciliation GET: q-p1 completed, q-p2 still pending
+    getMock.mockResolvedValueOnce({
+      ...twoPending,
+      questions: [
+        {
+          questionId: "q-p1",
+          type: "fill_blank",
+          content: "第一题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: {
+            score: 8,
+            comment: "好",
+            gradedBy: "admin-1",
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+        {
+          questionId: "q-p2",
+          type: "fill_blank",
+          content: "第二题",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null, // still pending on server
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // Fill draft on BOTH questions.
+    const scoreInputs = screen.getAllByRole("spinbutton");
+    const q1Input = scoreInputs[0]!;
+    const q2Input = scoreInputs[1]!;
+    await user.clear(q1Input);
+    await user.type(q1Input, "8");
+    await user.clear(q2Input);
+    await user.type(q2Input, "6");
+    // Also fill a comment on q2.
+    const commentInputs = screen.getAllByPlaceholderText("输入评语...");
+    await user.type(commentInputs[1]!, "q2 draft comment");
+
+    // Submit q1 (first question).
+    await confirmSubmitFirstQuestion(user);
+
+    // q1 is now read-only with server data.
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("grading-score-input-q-p1")).toBeDisabled();
+    });
+    // q2 draft is preserved: score 6, comment "q2 draft comment".
+    expect(screen.getByTestId("grading-score-input-q-p2")).toHaveValue(6);
+    expect(screen.getByTestId("grading-comment-input-q-p2")).toHaveValue(
+      "q2 draft comment",
+    );
+    expect(screen.getByTestId("grading-score-input-q-p2")).not.toBeDisabled();
+    expect(screen.getByTestId("grading-submit-btn-q-p2")).toBeVisible();
+  });
 });
 
 describe("GradingDetailPage — ambiguous-result reconciliation (Slice 3)", () => {
