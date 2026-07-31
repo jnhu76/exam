@@ -47,7 +47,6 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
  */
 
 const STAMP = `${Date.now()}`;
-const COURSE_NAME = `E2E-P2-AUTH-${STAMP}`;
 const Q_CONTENT = `P2论述题-${STAMP}-请阐述考试安全边界`;
 const Q_CONTENT_EDITED = `P2论述题-${STAMP}-已修改`;
 const RUBRIC = `评分标准：\n1. 关键概念正确\n2. 论证逻辑完整\n3. 结合实际场景`;
@@ -68,14 +67,23 @@ test.describe("P2 text_response authoring + product loop", () => {
     page,
     request,
   }) => {
-    // ── Setup: dedicated course for this run (API; not the surface tested). ─
+    // ── Setup: reuse an existing seed course (avoiding CI pagination flakiness
+    // when many parallel E2E tests create courses). The seed data guarantees
+    // "基础安全培训" (SAFETY-101) is always present. ──
     const adminToken = await adminApiToken(request);
-    const courseRes = await request.post(`${BASE_URL}/api/courses`, {
-      headers: { Cookie: `auth-token=${adminToken}` },
-      data: { name: COURSE_NAME, code: `P2AUTH-${STAMP}`, description: "" },
-    });
-    expect(courseRes.ok()).toBeTruthy();
-    const courseId = (await courseRes.json()).id as string;
+    const coursesRes = await adminGet(
+      request,
+      adminToken,
+      `/api/courses?pageSize=100`,
+    );
+    const coursesBody = (await coursesRes.json()) as {
+      items: Array<{ id: string; name: string }>;
+    };
+    const seedCourse = coursesBody.items.find(
+      (c: { name: string }) => c.name === "基础安全培训",
+    );
+    expect(seedCourse, "seed course 基础安全培训 must exist").toBeTruthy();
+    const courseId = seedCourse!.id;
 
     // Also provision a candidate (API) for the product-loop half.
     const candStamp = STAMP;
@@ -118,8 +126,12 @@ test.describe("P2 text_response authoring + product loop", () => {
     // placeholder) and has no aria-label. Target it as the first combobox on
     // the page (course renders before the type selector); the type <Select>
     // has an aria-label and is driven by pickQuestionType below.
+    // The course name is from the seed data: "基础安全培训".
+    const SEED_COURSE_NAME = seedCourse!.name;
     await page.getByRole("combobox").first().click();
-    await page.getByRole("option", { name: COURSE_NAME }).click();
+    await page
+      .getByRole("option", { name: SEED_COURSE_NAME, exact: true })
+      .click();
     await pickQuestionType(page, "文本作答题");
 
     // Content (multiline plain text).

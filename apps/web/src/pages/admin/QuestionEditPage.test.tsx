@@ -217,6 +217,7 @@ describe("QuestionEditPage", () => {
 // text_response create payload is proven separately below (P2-1C block).
 
 const CONTENT_PLACEHOLDER = "输入题目内容";
+const CONTENT_FILLBLANK_PLACEHOLDER = "输入题目内容，用 ____ 标记空格位置";
 const RUBRIC_PLACEHOLDER =
   "请描述评分时应考虑的关键点、完整性、准确性或论证质量";
 const REFERENCE_ANSWER_PLACEHOLDER = "供阅卷人参考的示例答案，不影响自动判分";
@@ -730,23 +731,96 @@ describe("QuestionEditPage — text_response authoring", () => {
     expect(referenceField).toHaveValue("参考要点一\n参考要点二");
   });
 
-  it("preserves an in-flight reference answer when re-entering text_response type", async () => {
+  // ── Cross-type isolation: objective answers must NOT leak into the
+  // text_response reference-answer field, and vice versa. ──────────────
+
+  it("single_choice → text_response: does not carry the objective answer as reference", async () => {
     const user = userEvent.setup();
     renderNew();
     await screen.findByText("新增题目");
 
-    // text_response carries an optional reference answer. Typing one and then
-    // re-selecting the SAME type (the type-select is the canonical re-entry
-    // surface) must not silently drop the author's in-flight reference draft.
+    // single_choice with answer "A"
+    await selectType(user, "单选题");
+    await user.type(screen.getByPlaceholderText(CONTENT_PLACEHOLDER), "1+1=?");
+    // Radio-button for "A" is the correct answer (standardAnswer = "A").
+    // No need to type — the default single_choice form has standardAnswer
+    // as "" (empty). Switch to text_response first, then back.
+    // Actually, set a real answer: click the radio for option A.
+    await screen.getByText("A.").click();
+    // Switch to text_response — the string "A" must NOT become the reference.
+    await selectType(user, "文本作答题");
+
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toHaveValue("");
+  });
+
+  it("fill_blank → text_response: does not carry the fill-blank answer as reference", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "填空题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_FILLBLANK_PLACEHOLDER),
+      "TCP是什么协议",
+    );
+    await user.type(
+      screen.getByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
+      "TCP",
+    );
+    // Switch to text_response — "TCP" must NOT become the reference.
+    await selectType(user, "文本作答题");
+
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toHaveValue("");
+  });
+
+  it("text_response → single_choice: does not carry reference answer as objective answer", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
     await selectType(user, "文本作答题");
     await user.type(
       screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
-      "示例参考答案",
+      "参考答案文本",
     );
+    // Switch to single_choice — the reference answer text must not appear
+    // as the standardAnswer.
+    await selectType(user, "单选题");
+
+    // single_choice shows radio buttons; standardAnswer is "" (empty).
+    // The reference text should not be visible anywhere.
+    expect(screen.queryByText("参考答案文本")).not.toBeInTheDocument();
+    // No reference field for single_choice.
+    expect(
+      screen.queryByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+    ).not.toBeInTheDocument();
+  });
+
+  it("text_response → objective → text_response: reference answer is cleared after round-trip", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    // Type a reference answer in text_response.
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+      "原始参考答案",
+    );
+    // Switch to single_choice (clears reference).
+    await selectType(user, "单选题");
+    // Switch back to text_response — the original reference is gone.
     await selectType(user, "文本作答题");
 
-    expect(
-      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
-    ).toHaveValue("示例参考答案");
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toHaveValue("");
   });
 });

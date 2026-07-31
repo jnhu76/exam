@@ -46,7 +46,9 @@ export function QuestionEditPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const cData = await api.get<{ items: CourseRow[] }>("/api/courses");
+      const cData = await api.get<{ items: CourseRow[] }>(
+        "/api/courses?pageSize=100",
+      );
       setCourses(cData.items);
 
       if (isEdit) {

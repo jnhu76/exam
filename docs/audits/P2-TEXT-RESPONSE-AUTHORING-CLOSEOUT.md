@@ -61,18 +61,24 @@ Implemented (and frozen):
 `feat(question): support text_response authoring` (`08f45d95`)
 
 - `QuestionForm.tsx`: render an optional multiline **reference-answer**
-  Textarea for `text_response`; type-switch into `text_response` now
-  preserves an in-flight reference draft (`string | null`) instead of forcing
-  `null` (mirrors the rubric-preservation logic).
+  Textarea for `text_response`; type-switch into `text_response` always
+  clears `standardAnswer` to `null` (minimal safe semantics — preserving
+  the string would carry objective answers like `"A"` from single_choice
+  into the reference field). Rubric IS preserved across type switches
+  because it is text_response-specific.
 - `QuestionEditPage.tsx`: forward a non-empty reference answer verbatim;
   normalize blank/whitespace-only to `null` so no meaningless `"   "` is
-  persisted (objective types still carry `rubric: null`).
+  persisted (objective types still carry `rubric: null`). Course list
+  requests `?pageSize=100` (backend max) so newly created courses are
+  always visible in the selector.
 - i18n (`zh-CN.ts`): `referenceAnswer` / placeholder / hint — candidate-
   invisible, not used for auto-grading.
 
-Tests (`QuestionEditPage.test.tsx`, +6 net): forward reference answer;
+Tests (`QuestionEditPage.test.tsx`, +10 net): forward reference answer;
 whitespace→null (parameterized); edit readback of multiline reference;
-re-entry preservation; updated the existing "not required" test.
+cross-type isolation (single_choice→text_response, fill_blank→text_response,
+text_response→single_choice, text_response→objective→text_response round-trip);
+updated the re-entry test to match the new clear-on-switch semantics.
 
 ## 5. Create/edit/readback symmetry
 
@@ -80,12 +86,14 @@ Already PROVEN for objective types; extended for text_response:
 
 - Create payload reaches POST with `type/options/standardAnswer/rubric`
   correct (existing + updated tests).
-- Edit GET reads `rubric` (P3-MOD-P2-1C) AND now preserves the reference
-  answer across edit (new tests + E2E).
+- Edit GET reads `rubric` (P3-MOD-P2-1C) AND the optional reference answer
+  (new tests + E2E).
 - PATCH round-trips; reload-after-edit confirms persistence (E2E).
-- No stale fields leak when switching objective ↔ text_response (existing
-  normalization tests retained; type switch no longer clears an in-flight
-  reference answer when re-entering `text_response`).
+- No stale fields leak when switching objective ↔ text_response. Type
+  switch clears `standardAnswer` to `null` for text_response (minimal safe
+  semantics — objective answers like `"A"` or `"TCP"` are never carried
+  into the reference field). Cross-type isolation tested for both directions
+  and the round-trip (text_response → objective → text_response).
 
 ## 6. Publish and snapshot authority
 
@@ -130,7 +138,15 @@ New text_response-specific API-level leak tests:
 `test(e2e): cover subjective authoring product loop` (`2db07a12`)
 
 The first E2E that creates a `text_response` through the **real QuestionForm**
-(not seedExam). Full product loop in one spec:
+(not seedExam). The test covers the full product loop with this scope:
+
+- **Question authoring (UI)**: create + edit + readback + list filter
+- **Candidate answering (UI)**: start exam → see prompt without rubric/reference
+  → answer multiline plain text → submit
+- **Exam assembly, publishing, enrollment, grading (API)**: these steps use
+  API helpers to consume the UI-authored entity
+
+Product flow:
 
 ```
 Admin UI: 新增题目 → select 文本作答题 → content + multiline rubric +
@@ -140,13 +156,19 @@ Admin UI: 新增题目 → select 文本作答题 → content + multiline rubric
     a fresh edit-page GET, reference preserved
 → API assembles an exam with the UI-authored question and publishes it
   (publishExam accepts the non-empty UI rubric)
-→ candidate (enrolled) starts, sees the prompt, does NOT see rubric /
-  reference (UI + API-level leak guard), answers multiline plain text, submits
-→ admin grading-details show the frozen UI-authored rubric + reference +
+→ candidate (enrolled via API) starts (UI), sees the prompt, does NOT see
+  rubric / reference (UI + API-level leak guard), answers multiline plain
+  text (UI), submits (UI)
+→ admin grading-details (API) show the frozen UI-authored rubric + reference +
   the candidate's frozen answer
-→ admin completes manual grading → graded + fully_graded
-→ candidate result visible (immediate) with score identity
+→ admin completes manual grading (API) → graded + fully_graded
+→ candidate result visible (API) with score identity
 ```
+
+The E2E proves **real UI question authoring + candidate answering** with
+API-driven exam assembly + grading. Exam Create UI, Enrollment UI, and
+Grading UI are not exercised in this spec — they are covered by separate
+E2E specs (exam-lifecycle, manual-grading, etc.).
 
 Verified GREEN via `bash scripts/e2e/run-wsl.sh text-response-authoring` on
 both shards (exit 0).
@@ -155,7 +177,7 @@ both shards (exit 0).
 
 | Command | Exit | Result |
 | --- | --- | --- |
-| `pnpm --filter web exec vitest run src/pages/admin/QuestionEditPage.test.tsx` | 0 | 27 passed (was 21; +6) |
+| `pnpm --filter web exec vitest run src/pages/admin/QuestionEditPage.test.tsx` | 0 | 31 passed (was 21; +10) |
 | `pnpm --filter web exec vitest run src/pages/admin/QuestionPage.test.tsx src/components/exam/QuestionRenderer.test.tsx` | 0 | 5 passed |
 | `pnpm --filter @exam/exam-engine exec vitest run src/examCommands.test.ts` | 0 | 60 passed (was 57; +3) |
 | `pnpm --filter api exec vitest run src/routes/attempts/candidate-take-text-response.test.ts` | 0 | 3 passed (new file) |
@@ -175,10 +197,10 @@ Every command was run with a real exit code; no GREEN claim is made without a ru
 | optional reference answer | CLOSED | (this closeout) QuestionForm reference Textarea; blank→null; edit readback |
 | create/edit/readback | CLOSED | QuestionEditPage GET/POST/PATCH; QuestionEditPage.test.tsx + E2E |
 | question list filtering | CLOSED | QuestionPage type filter includes text_response |
-| exam publish through UI | CLOSED | E2E publishes an exam containing the UI-authored question |
+| exam publish (consumes UI-authored question) | CLOSED | E2E publishes an exam containing the UI-authored question (API) |
 | candidate metadata isolation | CLOSED | contract + projection + .parse(); candidate-take-text-response.test.ts |
 | candidate answering | CLOSED | QuestionRenderer → TextResponseInput; E2E multiline answer + submit |
-| submit → manual grading product loop | CLOSED | E2E: submit → pending_manual queue → frozen answer/rubric/reference |
+| manual grading queue (consumes frozen answer) | CLOSED | E2E: submit → pending_manual queue → frozen answer/rubric/reference (API) |
 | final score | CLOSED | E2E: grade → graded + fully_graded; result totalScore identity |
 
 ## 11. Remaining limitations
@@ -196,22 +218,23 @@ Out of scope (frozen boundary), unchanged:
 
 ## 12. Files changed
 
-Production (1):
+Production (3):
 - `apps/web/src/components/question/QuestionForm.tsx` — optional reference-
-  answer field + type-switch preservation.
+  answer field; type-switch clears standardAnswer (minimal safe semantics).
 - `apps/web/src/pages/admin/QuestionEditPage.tsx` — reference-answer blank→null
-  normalization in the save payload.
+  normalization in the save payload; course list uses `?pageSize=100`.
 - `apps/web/src/i18n/locales/zh-CN.ts` — referenceAnswer label/placeholder/hint.
 
 Tests (4):
-- `apps/web/src/pages/admin/QuestionEditPage.test.tsx` — +6 text_response
-  reference-answer tests.
+- `apps/web/src/pages/admin/QuestionEditPage.test.tsx` — +10 text_response
+  reference-answer tests (forward, whitespace→null, edit readback, cross-type
+  isolation for both directions, round-trip cleanup).
 - `packages/exam-engine/src/examCommands.test.ts` — +3 publish-clarity +
   snapshot-freeze tests.
 - `apps/api/src/routes/attempts/candidate-take-text-response.test.ts` — NEW,
   3 API-level leak tests + negative control.
 - `apps/e2e/e2e/text-response-authoring.spec.ts` — NEW, real-UI authoring +
-  full product loop E2E.
+  candidate answering + API-driven assembly/grading E2E.
 
 ## 13. Commands and results
 

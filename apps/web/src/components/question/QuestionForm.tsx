@@ -189,14 +189,14 @@ export function QuestionForm({
               } else if (type === "text_response") {
                 // text_response canonical form: no options, rubric is the
                 // grading basis, standardAnswer is an OPTIONAL reference
-                // answer (plain text | null). Preserve any in-flight rubric
-                // and reference-answer draft when re-entering the type, so
-                // toggling away and back does not silently drop author input.
+                // answer (plain text | null). Always clear standardAnswer
+                // on type switch — preserving it would carry objective
+                // answers (e.g. "A" from single_choice) into the reference
+                // field, leaking grading metadata. Rubric IS preserved
+                // because it is text_response-specific and an in-flight
+                // draft is valuable.
                 defaults.options = [];
-                defaults.standardAnswer =
-                  typeof form.standardAnswer === "string"
-                    ? form.standardAnswer
-                    : null;
+                defaults.standardAnswer = null;
                 defaults.rubric = form.rubric ?? null;
               }
               update({ type, ...defaults });
