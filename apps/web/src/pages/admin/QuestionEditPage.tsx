@@ -46,8 +46,10 @@ export function QuestionEditPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const cData = await api.get<{ items: CourseRow[] }>("/api/courses");
-      setCourses(cData.items);
+      const cData = await api.get<{ items: CourseRow[] }>(
+        "/api/courses?pageSize=20",
+      );
+      let loadedCourses = cData.items;
 
       if (isEdit) {
         const q = await api.get<{
@@ -65,6 +67,22 @@ export function QuestionEditPage() {
           };
           rubric?: string | null;
         }>(`/api/questions/${id}`);
+
+        // If the question's course is not in the loaded list, fetch it
+        // separately so the CourseSearchSelect can display the correct label.
+        const courseExists = loadedCourses.some((c) => c.id === q.courseId);
+        if (!courseExists) {
+          try {
+            const course = await api.get<CourseRow>(
+              `/api/courses/${q.courseId}`,
+            );
+            loadedCourses = [course, ...loadedCourses];
+          } catch {
+            // Course not found or deleted; proceed with the loaded list.
+          }
+        }
+
+        setCourses(loadedCourses);
         setFormData({
           courseId: q.courseId,
           type: q.type as QuestionFormData["type"],
@@ -80,8 +98,9 @@ export function QuestionEditPage() {
           rubric: q.rubric ?? null,
         });
       } else {
+        setCourses(loadedCourses);
         setFormData({
-          courseId: cData.items[0]?.id ?? "",
+          courseId: loadedCourses[0]?.id ?? "",
           type: "single_choice",
           content: "",
           options: [
@@ -127,13 +146,23 @@ export function QuestionEditPage() {
     }
 
     // Normalize so incompatible fields never leak into the payload:
-    // objective types carry rubric: null; text_response keeps its rubric
-    // verbatim (newlines preserved) with options: [] / standardAnswer: null.
+    // - objective types carry rubric: null;
+    // - text_response keeps its rubric verbatim (newlines preserved) with
+    //   options: []. Its standardAnswer is an OPTIONAL reference answer:
+    //   a non-empty plain-text string is forwarded as-is, while a blank /
+    //   whitespace-only value is normalized to null so no meaningless "   "
+    //   is persisted.
+    const referenceAnswer =
+      formData.type === "text_response" &&
+      typeof formData.standardAnswer === "string" &&
+      formData.standardAnswer.trim() !== ""
+        ? formData.standardAnswer
+        : null;
     const payload: QuestionFormData = {
       ...formData,
       rubric: formData.type === "text_response" ? formData.rubric : null,
       ...(formData.type === "text_response"
-        ? { options: [], standardAnswer: null }
+        ? { options: [], standardAnswer: referenceAnswer }
         : {}),
     };
 

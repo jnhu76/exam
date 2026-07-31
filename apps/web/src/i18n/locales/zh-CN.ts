@@ -1148,6 +1148,10 @@ const zhCN = {
       question: {
         course: "所属课程",
         coursePlaceholder: "选择课程",
+        courseSearchPlaceholder: "搜索课程名称或代码...",
+        courseSearching: "搜索中...",
+        courseNoResults: "未找到匹配课程",
+        courseTruncatedHint: "仅显示前 100 条匹配，请细化搜索以找到更多课程",
         type: "题目类型",
         typeSingleChoice: "单选题",
         typeMultipleChoice: "多选题",
@@ -1158,6 +1162,10 @@ const zhCN = {
         rubricPlaceholder:
           "请描述评分时应考虑的关键点、完整性、准确性或论证质量",
         rubricHint: "评分依据；文本作答题在考试发布时必须填写非空评分标准",
+        referenceAnswer: "参考答案（可选）",
+        referenceAnswerPlaceholder: "供阅卷人参考的示例答案，不影响自动判分",
+        referenceAnswerHint:
+          "仅供阅卷参考，不用于自动判分，考生不可见；留空则不保存",
         optionTrue: "是",
         optionFalse: "否",
         content: "题目内容",

@@ -217,8 +217,10 @@ describe("QuestionEditPage", () => {
 // text_response create payload is proven separately below (P2-1C block).
 
 const CONTENT_PLACEHOLDER = "输入题目内容";
+const CONTENT_FILLBLANK_PLACEHOLDER = "输入题目内容，用 ____ 标记空格位置";
 const RUBRIC_PLACEHOLDER =
   "请描述评分时应考虑的关键点、完整性、准确性或论证质量";
+const REFERENCE_ANSWER_PLACEHOLDER = "供阅卷人参考的示例答案，不影响自动判分";
 
 /** Open the type <Select> (a11y-labeled 题目类型) and pick an option. */
 async function selectType(
@@ -410,7 +412,7 @@ describe("QuestionEditPage — text_response authoring", () => {
     });
   });
 
-  it("does not require standardAnswer for text_response (payload null)", async () => {
+  it("does not require standardAnswer for text_response (payload null when blank)", async () => {
     const user = userEvent.setup();
     renderNew();
     await screen.findByText("新增题目");
@@ -425,10 +427,15 @@ describe("QuestionEditPage — text_response authoring", () => {
       "按逻辑完整性给分",
     );
 
-    // No objective answer control is shown; rubric present is enough to save.
+    // The objective answer control is NOT shown for text_response. The
+    // optional reference-answer field IS shown but left blank, so the
+    // payload must normalize to standardAnswer: null.
     expect(
       screen.queryByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+    ).toBeInTheDocument();
     await user.click(screen.getByText("保存"));
 
     await waitFor(() => {
@@ -442,6 +449,78 @@ describe("QuestionEditPage — text_response authoring", () => {
       );
     });
   });
+
+  it("forwards a non-empty optional reference answer for text_response", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    const rubric = "按论证完整性给分";
+    const reference = "参考要点一\n参考要点二";
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请阐述你的观点",
+    );
+    await user.type(screen.getByPlaceholderText(RUBRIC_PLACEHOLDER), rubric);
+    await user.type(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+      reference,
+    );
+
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "text_response",
+          options: [],
+          standardAnswer: reference,
+          rubric,
+        }),
+      );
+    });
+  });
+
+  it.each([
+    ["only spaces", "   "],
+    ["only newlines", "\n\n"],
+    ["spaces and tabs", " \t \t"],
+  ])(
+    "normalizes whitespace-only reference answer to null (%s)",
+    async (_label, blank) => {
+      const user = userEvent.setup();
+      renderNew();
+      await screen.findByText("新增题目");
+
+      await selectType(user, "文本作答题");
+      await user.type(
+        screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+        "请阐述你的观点",
+      );
+      await user.type(
+        screen.getByPlaceholderText(RUBRIC_PLACEHOLDER),
+        "按论证完整性给分",
+      );
+      await user.type(
+        screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+        blank,
+      );
+
+      await user.click(screen.getByText("保存"));
+
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/api/questions",
+          expect.objectContaining({
+            type: "text_response",
+            standardAnswer: null,
+          }),
+        );
+      });
+    },
+  );
 
   it.each([
     ["empty string", ""],
@@ -591,5 +670,158 @@ describe("QuestionEditPage — text_response authoring", () => {
         expect.objectContaining({ type: "fill_blank", rubric: null }),
       );
     });
+  });
+
+  it("loads and preserves an existing text_response multiline reference answer in edit mode", async () => {
+    const existingWithReference = {
+      courseId: "c1",
+      type: "text_response",
+      content: "请阐述你的观点",
+      options: [],
+      standardAnswer: "参考要点一\n参考要点二",
+      score: 20,
+      difficulty: 3,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: "按论证完整性给分",
+    };
+    let callCount = 0;
+    apiGet.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.resolve({ items: courses });
+      return Promise.resolve(existingWithReference);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/questions/q1/edit"]}>
+        <AuthProvider
+          initialUser={{
+            id: "1",
+            username: "admin",
+            name: "Admin",
+            role: "Admin",
+            organizationId: "org1",
+            capabilities: [...permissionsForRole("Admin")],
+          }}
+        >
+          <BrandProvider>
+            <Routes>
+              <Route
+                path="/admin/questions/:id/edit"
+                element={<QuestionEditPage />}
+              />
+              <Route
+                path="/admin/questions"
+                element={<div>questions list</div>}
+              />
+            </Routes>
+          </BrandProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("编辑题目")).toBeInTheDocument();
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toBeInTheDocument();
+    expect(referenceField).toHaveValue("参考要点一\n参考要点二");
+  });
+
+  // ── Cross-type isolation: objective answers must NOT leak into the
+  // text_response reference-answer field, and vice versa. ──────────────
+
+  it("single_choice → text_response: does not carry the objective answer as reference", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    // single_choice with a REAL answer "A" selected (standardAnswer = "A").
+    await selectType(user, "单选题");
+    await user.type(screen.getByPlaceholderText(CONTENT_PLACEHOLDER), "1+1=?");
+    // Select option A's radio (the default single_choice ships options A and
+    // B). This genuinely sets standardAnswer = "A" — without it the leak guard
+    // below would be vacuous (no answer to carry). Mirrors the create-payload
+    // test's radio-selection approach.
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]!);
+    // Switch to text_response — the string "A" must NOT become the reference.
+    await selectType(user, "文本作答题");
+
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toHaveValue("");
+  });
+
+  it("fill_blank → text_response: does not carry the fill-blank answer as reference", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "填空题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_FILLBLANK_PLACEHOLDER),
+      "TCP是什么协议",
+    );
+    await user.type(
+      screen.getByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
+      "TCP",
+    );
+    // Switch to text_response — "TCP" must NOT become the reference.
+    await selectType(user, "文本作答题");
+
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toHaveValue("");
+  });
+
+  it("text_response → single_choice: does not carry reference answer as objective answer", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+      "参考答案文本",
+    );
+    // Switch to single_choice — the reference answer text must not appear
+    // as the standardAnswer.
+    await selectType(user, "单选题");
+
+    // single_choice shows radio buttons; standardAnswer is "" (empty).
+    // The reference text should not be visible anywhere.
+    expect(screen.queryByText("参考答案文本")).not.toBeInTheDocument();
+    // No reference field for single_choice.
+    expect(
+      screen.queryByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+    ).not.toBeInTheDocument();
+  });
+
+  it("text_response → objective → text_response: reference answer is cleared after round-trip", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    // Type a reference answer in text_response.
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(REFERENCE_ANSWER_PLACEHOLDER),
+      "原始参考答案",
+    );
+    // Switch to single_choice (clears reference).
+    await selectType(user, "单选题");
+    // Switch back to text_response — the original reference is gone.
+    await selectType(user, "文本作答题");
+
+    const referenceField = screen.getByPlaceholderText(
+      REFERENCE_ANSWER_PLACEHOLDER,
+    );
+    expect(referenceField).toHaveValue("");
   });
 });

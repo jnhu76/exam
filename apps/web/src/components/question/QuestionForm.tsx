@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { CourseSearchSelect } from "./CourseSearchSelect";
 
 /** A single option within a question, with an ID, display content, and correctness flag. */
 interface Option {
@@ -51,7 +52,7 @@ export interface QuestionFormData {
 
 /** Props for the QuestionForm component. */
 interface QuestionFormProps {
-  courses: Array<{ id: string; name: string }>;
+  courses: Array<{ id: string; name: string; code: string }>;
   initial?: Partial<QuestionFormData>;
   onChange: (data: QuestionFormData) => void;
 }
@@ -138,23 +139,12 @@ export function QuestionForm({
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <Label>{t("admin.forms.question.course")}</Label>
-          <Select
+          <CourseSearchSelect
+            courses={courses}
             value={form.courseId}
-            onValueChange={(v) => update({ courseId: v })}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={t("admin.forms.question.coursePlaceholder")}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {courses.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(v) => update({ courseId: v })}
+            placeholder={t("admin.forms.question.coursePlaceholder")}
+          />
         </Field>
 
         <Field>
@@ -187,9 +177,14 @@ export function QuestionForm({
                 defaults.standardAnswer = true;
                 defaults.rubric = null;
               } else if (type === "text_response") {
-                // text_response canonical form: no options, no objective
-                // standardAnswer, rubric is the grading basis. Preserve any
-                // in-flight rubric draft when re-entering the type.
+                // text_response canonical form: no options, rubric is the
+                // grading basis, standardAnswer is an OPTIONAL reference
+                // answer (plain text | null). Always clear standardAnswer
+                // on type switch — preserving it would carry objective
+                // answers (e.g. "A" from single_choice) into the reference
+                // field, leaking grading metadata. Rubric IS preserved
+                // because it is text_response-specific and an in-flight
+                // draft is valuable.
                 defaults.options = [];
                 defaults.standardAnswer = null;
                 defaults.rubric = form.rubric ?? null;
@@ -326,18 +321,37 @@ export function QuestionForm({
       )}
 
       {form.type === "text_response" && (
-        <Field>
-          <Label>{t("admin.forms.question.rubric")}</Label>
-          <Textarea
-            value={form.rubric ?? ""}
-            onChange={(e) => update({ rubric: e.target.value })}
-            placeholder={t("admin.forms.question.rubricPlaceholder")}
-            rows={4}
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("admin.forms.question.rubricHint")}
-          </p>
-        </Field>
+        <>
+          <Field>
+            <Label>{t("admin.forms.question.rubric")}</Label>
+            <Textarea
+              value={form.rubric ?? ""}
+              onChange={(e) => update({ rubric: e.target.value })}
+              placeholder={t("admin.forms.question.rubricPlaceholder")}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("admin.forms.question.rubricHint")}
+            </p>
+          </Field>
+
+          <Field>
+            <Label>{t("admin.forms.question.referenceAnswer")}</Label>
+            <Textarea
+              value={
+                typeof form.standardAnswer === "string"
+                  ? form.standardAnswer
+                  : ""
+              }
+              onChange={(e) => update({ standardAnswer: e.target.value })}
+              placeholder={t("admin.forms.question.referenceAnswerPlaceholder")}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("admin.forms.question.referenceAnswerHint")}
+            </p>
+          </Field>
+        </>
       )}
 
       <div className="grid grid-cols-3 gap-4">

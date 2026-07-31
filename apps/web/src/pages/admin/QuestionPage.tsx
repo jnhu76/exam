@@ -391,7 +391,10 @@ export function QuestionPage() {
                       setPage(1);
                     }}
                   >
-                    <SelectTrigger className="w-auto lg:w-[150px]">
+                    <SelectTrigger
+                      aria-label={t("admin.questions.filterType" as never)}
+                      className="w-auto lg:w-[150px]"
+                    >
                       <SelectValue
                         placeholder={t("admin.questions.filterType" as never)}
                       />
