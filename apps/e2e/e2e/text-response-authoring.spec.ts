@@ -74,7 +74,7 @@ test.describe("P2 text_response authoring + product loop", () => {
     const coursesRes = await adminGet(
       request,
       adminToken,
-      `/api/courses?pageSize=100`,
+      `/api/courses?search=${encodeURIComponent("基础安全")}`,
     );
     const coursesBody = (await coursesRes.json()) as {
       items: Array<{ id: string; name: string }>;
@@ -121,14 +121,12 @@ test.describe("P2 text_response authoring + product loop", () => {
     await page.getByRole("button", { name: /新增题目/ }).click();
     await page.waitForURL(/\/admin\/questions\/new/);
 
-    // Select the course + text_response type. The create form pre-selects the
-    // first course, so the course <Select> shows that course's name (not the
-    // placeholder) and has no aria-label. Target it as the first combobox on
-    // the page (course renders before the type selector); the type <Select>
-    // has an aria-label and is driven by pickQuestionType below.
-    // The course name is from the seed data: "基础安全培训".
+    // Select the course + text_response type. The course selector is a
+    // searchable Popover (CourseSearchSelect). The type selector is a
+    // standard <Select> with aria-label "题目类型".
     const SEED_COURSE_NAME = seedCourse!.name;
     await page.getByRole("combobox").first().click();
+    await page.getByPlaceholder("搜索课程名称或代码...").fill(SEED_COURSE_NAME);
     await page
       .getByRole("option", { name: SEED_COURSE_NAME, exact: true })
       .click();
@@ -351,6 +349,27 @@ test.describe("P2 text_response authoring + product loop", () => {
     expect(JSON.stringify(takeBody)).not.toContain("三方面论述");
 
     await submitExam(page);
+
+    // ── Grading queue: the attempt appears in the admin grading queue
+    // with pendingQuestionCount = 1 (proves the submit → manual-grading
+    // pipeline works, not just direct API access to a known attemptId). ──
+    const queueRes = await adminGet(
+      request,
+      adminToken,
+      `/api/admin/grading-queue?pageSize=100`,
+    );
+    expect(queueRes.status()).toBe(200);
+    const queueBody = (await queueRes.json()) as {
+      items: Array<{ attemptId: string; pendingQuestionCount?: number }>;
+    };
+    const queueItem = queueBody.items.find(
+      (i: { attemptId: string }) => i.attemptId === attemptIdAuth,
+    );
+    expect(
+      queueItem,
+      "the submitted text_response attempt must appear in the admin grading queue",
+    ).toBeTruthy();
+    expect(queueItem!.pendingQuestionCount).toBe(1);
 
     // ── Admin grading: frozen rubric + reference + candidate answer visible;
     // grading completes the attempt to graded + fully_graded. ──────────────

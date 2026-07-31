@@ -3,6 +3,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildTestApp, type TestContext } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
+import questionRoutes from "../question.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import {
   buildExamPayload,
@@ -38,6 +39,7 @@ describe("P2: candidate take leak protection for text_response", () => {
     ctx = await buildTestApp(async (fastify) => {
       await fastify.register(examRoutes, { prefix: "" });
       await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(questionRoutes, { prefix: "" });
     });
 
     const courseId = randomUUID();
@@ -162,8 +164,10 @@ describe("P2: candidate take leak protection for text_response", () => {
     });
     const attemptId = startRes.json().id as string;
 
-    // Save a text answer, then submit.
-    await ctx.app.inject({
+    // Save a text answer, then submit. Assert each step's response status
+    // to avoid false-green where save/submit silently failed and the
+    // attempt remains in_progress (which would also pass the leak check).
+    const saveRes = await ctx.app.inject({
       method: "POST",
       url: `/api/attempts/${attemptId}/answers/${textQuestionId}`,
       payload: {
@@ -176,11 +180,16 @@ describe("P2: candidate take leak protection for text_response", () => {
       },
       cookies: { "auth-token": ctx.candidateToken },
     });
-    await ctx.app.inject({
+    expect(saveRes.statusCode).toBe(200);
+
+    const submitRes = await ctx.app.inject({
       method: "POST",
       url: `/api/attempts/${attemptId}/submit`,
       cookies: { "auth-token": ctx.candidateToken },
     });
+    expect(submitRes.statusCode).toBe(200);
+    const submitBody = submitRes.json();
+    expect(submitBody.status).toBe("submitted");
 
     const takeRes = await ctx.app.inject({
       method: "GET",
@@ -231,5 +240,70 @@ describe("P2: candidate take leak protection for text_response", () => {
     // The grader-facing projection DOES contain the grading basis.
     expect(serialized).toContain("关键概念正确");
     expect(serialized).toContain("参考要点一");
+  });
+
+  it("snapshot freeze: live question edit after publish does not affect attempt grading basis", async () => {
+    // This test proves that the QuestionSnapshot created at publish time is
+    // the authoritative source for grading, not the live questions table. A
+    // post-publish PATCH to the live question's rubric or reference answer
+    // must NOT change what the grader sees.
+
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect([200, 201]).toContain(startRes.statusCode);
+    const attemptId = startRes.json().id as string;
+
+    // Save + submit.
+    const saveRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${textQuestionId}`,
+      payload: {
+        attemptId,
+        questionId: textQuestionId,
+        answer: "考生作答内容",
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(saveRes.statusCode).toBe(200);
+    const submitRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/submit`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(submitRes.statusCode).toBe(200);
+
+    // Now PATCH the live question — change rubric and reference answer.
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${textQuestionId}`,
+      payload: {
+        rubric: "已被修改的评分标准",
+        standardAnswer: "已被修改的参考答案",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    // The grading-details must still show the frozen (original) values,
+    // not the live-edit values.
+    const detailsRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(detailsRes.statusCode).toBe(200);
+    const details = detailsRes.json();
+    const serialized = JSON.stringify(details);
+
+    expect(serialized).toContain("关键概念正确");
+    expect(serialized).toContain("参考要点一");
+    expect(serialized).not.toContain("已被修改的评分标准");
+    expect(serialized).not.toContain("已被修改的参考答案");
   });
 });

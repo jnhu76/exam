@@ -1148,6 +1148,9 @@ const zhCN = {
       question: {
         course: "所属课程",
         coursePlaceholder: "选择课程",
+        courseSearchPlaceholder: "搜索课程名称或代码...",
+        courseSearching: "搜索中...",
+        courseNoResults: "未找到匹配课程",
         type: "题目类型",
         typeSingleChoice: "单选题",
         typeMultipleChoice: "多选题",

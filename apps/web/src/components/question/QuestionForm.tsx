@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { CourseSearchSelect } from "./CourseSearchSelect";
 
 /** A single option within a question, with an ID, display content, and correctness flag. */
 interface Option {
@@ -51,7 +52,7 @@ export interface QuestionFormData {
 
 /** Props for the QuestionForm component. */
 interface QuestionFormProps {
-  courses: Array<{ id: string; name: string }>;
+  courses: Array<{ id: string; name: string; code: string }>;
   initial?: Partial<QuestionFormData>;
   onChange: (data: QuestionFormData) => void;
 }
@@ -138,23 +139,12 @@ export function QuestionForm({
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <Label>{t("admin.forms.question.course")}</Label>
-          <Select
+          <CourseSearchSelect
+            courses={courses}
             value={form.courseId}
-            onValueChange={(v) => update({ courseId: v })}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={t("admin.forms.question.coursePlaceholder")}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {courses.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(v) => update({ courseId: v })}
+            placeholder={t("admin.forms.question.coursePlaceholder")}
+          />
         </Field>
 
         <Field>

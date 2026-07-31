@@ -7,6 +7,7 @@ import {
   ErrorResponseSchema,
 } from "@exam/contracts";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
+import type { CourseListFilters } from "@exam/db/src/repository/courseRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { Permission } from "@exam/authz";
@@ -37,6 +38,11 @@ const courseListResponseSchema = z.object({
   totalPages: z.number().int(),
 });
 
+/** Zod schema for course list query parameters (extends PaginationParamsSchema with optional search). */
+const CourseListQuerySchema = PaginationParamsSchema.extend({
+  search: z.string().optional(),
+});
+
 /** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -50,18 +56,25 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireCapability(Permission.CourseView),
       ],
       schema: {
-        querystring: PaginationParamsSchema,
+        querystring: CourseListQuerySchema,
         security: cookieAuth,
         "x-role": ["Admin", "Teacher"],
         response: { 200: courseListResponseSchema },
       },
     },
-    /** List courses with pagination. Returns paginated course items. */
+    /** List courses with pagination and optional search. Returns paginated course items. */
     async (request: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
-      const { page, pageSize } = PaginationParamsSchema.parse(request.query);
+      const { page, pageSize, search } = CourseListQuerySchema.parse(
+        request.query,
+      );
       const repo = createCourseRepo(fastify.db);
-      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
+      const filters: CourseListFilters = {};
+      if (search) filters.search = search;
+      const { items, total } = await repo.listFiltered(ctx, filters, {
+        page,
+        pageSize,
+      });
 
       return {
         items: items.map((c) => ({

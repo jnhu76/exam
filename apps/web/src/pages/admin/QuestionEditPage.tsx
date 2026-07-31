@@ -47,9 +47,9 @@ export function QuestionEditPage() {
     setError(null);
     try {
       const cData = await api.get<{ items: CourseRow[] }>(
-        "/api/courses?pageSize=100",
+        "/api/courses?pageSize=20",
       );
-      setCourses(cData.items);
+      let loadedCourses = cData.items;
 
       if (isEdit) {
         const q = await api.get<{
@@ -67,6 +67,22 @@ export function QuestionEditPage() {
           };
           rubric?: string | null;
         }>(`/api/questions/${id}`);
+
+        // If the question's course is not in the loaded list, fetch it
+        // separately so the CourseSearchSelect can display the correct label.
+        const courseExists = loadedCourses.some((c) => c.id === q.courseId);
+        if (!courseExists) {
+          try {
+            const course = await api.get<CourseRow>(
+              `/api/courses/${q.courseId}`,
+            );
+            loadedCourses = [course, ...loadedCourses];
+          } catch {
+            // Course not found or deleted; proceed with the loaded list.
+          }
+        }
+
+        setCourses(loadedCourses);
         setFormData({
           courseId: q.courseId,
           type: q.type as QuestionFormData["type"],
@@ -82,8 +98,9 @@ export function QuestionEditPage() {
           rubric: q.rubric ?? null,
         });
       } else {
+        setCourses(loadedCourses);
         setFormData({
-          courseId: cData.items[0]?.id ?? "",
+          courseId: loadedCourses[0]?.id ?? "",
           type: "single_choice",
           content: "",
           options: [

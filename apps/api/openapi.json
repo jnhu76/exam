@@ -4403,6 +4403,14 @@
             "in": "query",
             "name": "pageSize",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
           }
         ],
         "security": [
