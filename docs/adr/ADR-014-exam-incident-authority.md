@@ -2,27 +2,31 @@
 
 ## Status
 
-Proposed
+**Accepted** — 2026-08-01
 
-This ADR is recorded for human review. It becomes binding only when a human
-decision owner marks it **Accepted**. Until then:
+This ADR is Accepted and is the binding authority for
+`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` (J3).
 
-- no incident table, migration, domain type, repository, route, permission
-  constant, preset change, or UI may be implemented on its authority;
-- `grantAttemptTime()` must keep rejecting non-null `incidentId`;
-- `source=system_incident` time adjustments remain disabled;
-- the existing audit-event-only `proctor.incident_marked` route remains the
-  only live incident surface.
+Runtime implementation remains **NOT STARTED**. Acceptance authorizes J3 to
+implement this contract; it does not itself implement any schema, command,
+route, permission, preset, or UI behavior.
 
-Runtime implementation: **NOT STARTED**. Implementation is authorized only by
-the follow-up Job `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` (J3) after this
-ADR is accepted. This ADR authorizes no runtime change by itself.
+The following boundaries remain unchanged by this acceptance:
+
+- `grantAttemptTime()` still rejects non-null `incidentId` until J3 implements
+  the validated path.
+- `source=system_incident` remains disabled.
+- `system.incident.create` remains reserved and does NOT satisfy the ADR-013
+  runtime activation gate.
+- The existing `proctor.incident_marked` route remains unchanged.
+- Proctor receives no Incident permission until J4/M11 lands scoped authority.
 
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Date | 2026-08-01 |
+| Accepted | 2026-08-01 |
 | Decision owners | jnhu76 |
 | Supersedes | none |
 | Superseded by | — |
@@ -32,6 +36,10 @@ ADR is accepted. This ADR authorizes no runtime change by itself.
 
 ### Revision notes
 
+- **Acceptance (2026-08-01)** — accepted by the recorded decision owner after
+  PR #241 review rounds R2–R5 closed the command identity, concurrency,
+  relationship, action identity, migration, and rollback blockers. J2 is
+  CLOSED and J3 is unblocked. Runtime implementation remains NOT STARTED.
 - **R5 (2026-08-01)** — hardened per PR #241 re-review round 2 (3 blockers):
   - state-command replay: split concurrency into two algorithms — append-only
     (event-first) and version-bumping (lock-first, re-check operationId inside
@@ -1144,6 +1152,6 @@ When accepted and implemented by J3:
   organization/exam/anchor consistency is DB-enforced by composite FKs
   plus server-derived validation.
 
-Acceptance of this ADR is a human review act. J3 remains blocked until that
-acceptance is recorded in this Status section and in
-`docs/roadmap/recovery-operations-jobs.md`.
+ADR-014 is Accepted. J3 is authorized to implement the frozen contract in
+this ADR. Acceptance does not authorize J4/M11, recovery-center UI, system
+incidents, Redis, or any other future work.

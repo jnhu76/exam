@@ -2,8 +2,8 @@
 
 <!-- markdownlint-disable MD024 -->
 
-> Status: ACTIVE — J1 CLOSED; J2 (REC-I6-R0) DESIGN COMPLETE — PENDING HUMAN
-> ACCEPTANCE of ADR-014 (PROPOSED); J3 BLOCKED until ADR-014 is accepted.
+> Status: ACTIVE — J1 CLOSED; J2 CLOSED (ADR-014 ACCEPTED);
+> J3 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS is NEXT.
 >
 > Updated: 2026-08-01
 >
@@ -57,8 +57,8 @@ REC-I6-R0 Incident Authority Contract
 | Job | Name | Primary result | Depends on |
 | --- | --- | --- | --- |
 | J1 | `REC-I4-I3B2-OPERATOR-TIME-GRANT-API` | **CLOSED** — Admin authorized, idempotent API and Dashboard product path | Existing `grantAttemptTime()` engine seam |
-| J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | **DESIGN COMPLETE — PENDING HUMAN ACCEPTANCE** — incident lifecycle, authority, relationships, and action semantics frozen in ADR-014 (PROPOSED) | J1 design knowledge; no implementation dependency |
-| J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | Incident model, event history, commands, and action links are persisted | J2 — **BLOCKED until ADR-014 is accepted** |
+| J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | **CLOSED** — incident lifecycle, authority, relationships, and action semantics accepted in ADR-014 (ACCEPTED) | J1 design knowledge; no implementation dependency |
+| J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **NEXT — UNBLOCKED** — incident model, event history, commands, and action links are persisted | J2 |
 | J4 | `M11-PROCTOR-EXAM-SCOPE-MINIMUM` | Proctors are restricted to explicitly assigned exams | J2; existing RBAC baseline |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
@@ -101,16 +101,14 @@ inventory are owned by the closeout audit, OpenAPI, and
 
 ## 4. J2 — REC-I6-R0 Incident Authority Contract
 
-**DESIGN COMPLETE — PENDING HUMAN ACCEPTANCE.** The frozen authority is
-[`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md)
-(Status: PROPOSED), with the architecture projection in
-[`incident-authority.md`](../architecture/exam-system/incident-authority.md)
-and the source-proven baseline in
-[`REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md).
-J2 is not CLOSED: it closes only when a human accepts ADR-014. Until then, no
-implementation may begin on its authority, and J3 remains blocked. The sketch
-below is the pre-ADR planning text; where it differs from ADR-014, the ADR
-wins.
+**CLOSED.**
+
+ADR-014 was accepted on 2026-08-01.
+
+Authority:
+- [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md) (ACCEPTED)
+- [`incident-authority.md`](../architecture/exam-system/incident-authority.md) (TARGET)
+- [`REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) (baseline)
 
 ## Purpose
 
@@ -272,9 +270,10 @@ J2 must freeze:
 
 ## 5. J3 — REC-I6-I1 Incident Persistence and Commands
 
-**BLOCKED until ADR-014 is accepted.** Do not start J3 implementation while
-ADR-014 is PROPOSED. The sections below are the pre-ADR planning sketch; where
-they differ from
+**NEXT — UNBLOCKED.**
+
+Implement the accepted ADR-014 contract. Runtime implementation has not started.
+The sections below are the pre-ADR planning sketch; where they differ from
 [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md)
 (§12–§14 persistence/API/migration, §18 decomposition) and
 [`incident-authority.md`](../architecture/exam-system/incident-authority.md),
@@ -1062,9 +1061,9 @@ Do not use Redis adoption as a prerequisite for completing J1–J7.
 ## 12. Recommended PR Breakdown
 
 ```text
-PR-1  REC-I4-I3B2-OPERATOR-TIME-GRANT-API — CLOSED
-PR-2  REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT — DESIGN COMPLETE — PENDING HUMAN ACCEPTANCE (ADR-014 PROPOSED)
-PR-3  REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS — BLOCKED (until ADR-014 is accepted)
+PR-1  J1 — CLOSED
+PR-2  J2 — CLOSED — ADR-014 ACCEPTED
+PR-3  J3 — NEXT — UNBLOCKED
 PR-4  M11-PROCTOR-EXAM-SCOPE-MINIMUM — PLANNED
 PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — PLANNED
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED
@@ -1074,44 +1073,13 @@ PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 
 ## Parallelism
 
-J1 is closed. J2 (REC-I6-R0) is DESIGN COMPLETE — PENDING HUMAN ACCEPTANCE of
-ADR-014 (PROPOSED).
+J1 is closed. J2 (REC-I6-R0) is CLOSED — ADR-014 is ACCEPTED.
 
-After ADR-014 is accepted:
-
-```text
-J3 Incident persistence and commands
-J4 Proctor-to-Exam scope minimum
-```
-
-may proceed in parallel, provided both follow the accepted incident authority
-contract.
-
-J5 requires J1 and J3.
-
-```text
-J6 requires J3 and J4.
-J7 requires J1 through J6.
-J8 requires the Recovery Authority Gate.
-```
+J3 and J4
 
 ## Next Job
 
-REC-I6-R0 design work is complete; ADR-014 is PROPOSED and awaits human
-acceptance. The next step is human review of
-[`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md).
-Only after acceptance does the next implementation Job start:
-
-```text
 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS
-```
-
-J3 implements what ADR-014 §18 decomposes: the five additive tables, the
-canonical commands (`operationId` identity on every write), the append-only
-event history (`event_sequence` ordering with a verifiable before/after
-version chain), the action and evidence links (link-scope quadruple,
-server-derived), and the extended time-grant path that activates
-`incidentId`. It must not begin while ADR-014 is PROPOSED.
 
 ---
 

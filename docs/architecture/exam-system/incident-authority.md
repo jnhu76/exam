@@ -1,14 +1,15 @@
 # Exam Incident Authority
 
-> Status: TARGET — ADR-014 PROPOSED
+> Status: TARGET — ADR-014 ACCEPTED
 >
 > Runtime implementation: NOT STARTED
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
-> (Proposed). This document provides the state tables, command inventory,
-> permission matrix, transaction boundaries, and sequence diagrams for that
-> contract. Nothing described here is implemented; every table, route,
-> permission, and command below is a frozen proposal for the follow-up Job
+> (Accepted). This document is the accepted target contract for J3. It provides
+> the state tables, command inventory, permission matrix, transaction
+> boundaries, and sequence diagrams for that contract. Nothing described here
+> is implemented; every table, route, permission, and command below is a
+> frozen proposal for the follow-up Job
 > `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` (J3).
 
 Reality baseline: [`REC-I6-R0 reality audit`](../../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md).
@@ -272,7 +273,7 @@ mapping guidance lives in ADR-014 §15.
 
 ## Related documents
 
-- [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md) — normative contract (Proposed).
+- [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md) — normative contract (Accepted).
 - [`state-and-authority.md`](state-and-authority.md) — orthogonal state dimensions.
 - [`candidate-recovery.md`](candidate-recovery.md) — ADR-012/ADR-013 recovery sequences.
 - [`protocol-catalog.md`](protocol-catalog.md) — proposed Incident protocols (TARGET).

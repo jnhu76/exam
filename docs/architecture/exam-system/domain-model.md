@@ -462,13 +462,13 @@ There is no `notifications` table, no `NotificationService`, and no business cal
 | Notification | **NOT IMPLEMENTED** | No table, no service |
 | ExamRoom | **NOT IMPLEMENTED** | Phase 2 planned |
 | QuestionVersion | **NOT IMPLEMENTED** | Snapshots serve this role |
-| Incident | **DESIGNED — NOT IMPLEMENTED** | Not absent by design: ADR-014 (PROPOSED, pending human acceptance) freezes the aggregate, lifecycle, and relationships; see [incident-authority.md](./incident-authority.md). J3 implements it only after acceptance |
+| Incident | **DESIGNED — NOT IMPLEMENTED** | Not absent by design: ADR-014 (ACCEPTED, runtime NOT STARTED) freezes the aggregate, lifecycle, and relationships; see [incident-authority.md](./incident-authority.md). J3 is the next authorized Job |
 
 ## 15. Accepted Limitations
 
 1. **Question deletion**: No referential integrity guard against deleting questions referenced by existing snapshots. Snapshots are copies, so historical attempts are not broken, but the question bank loses the source.
 2. **No question lifecycle**: Questions are always mutable (no publish/archive state).
-3. **Disrupted recovery UI (candidate side)**: **IMPLEMENTED** (REC-I3, PR #219) — the candidate-facing restore flow (`useAttemptRestore()`, restoring/failed/retry surface, authoritative snapshot reload) is live. What remains open is the **operator/proctor** side: the operator time-grant route/permission is implemented (REC-I4-I3B2 CLOSED); the incident authority is designed but not implemented (ADR-014 PROPOSED, pending human acceptance — see [incident-authority.md](./incident-authority.md)); a dedicated recovery center is not implemented (REC-OPS). (P6 closed before REC-I3 landed, so older audits list this as not-productized — that is frozen history.)
+3. **Disrupted recovery UI (candidate side)**: **IMPLEMENTED** (REC-I3, PR #219) — the candidate-facing restore flow (`useAttemptRestore()`, restoring/failed/retry surface, authoritative snapshot reload) is live. What remains open is the **operator/proctor** side: the operator time-grant route/permission is implemented (REC-I4-I3B2 CLOSED); the incident authority is designed and accepted but not implemented (ADR-014 ACCEPTED, runtime NOT STARTED — see [incident-authority.md](./incident-authority.md)); a dedicated recovery center is not implemented (REC-OPS). (P6 closed before REC-I3 landed, so older audits list this as not-productized — that is frozen history.)
 4. **Email business caller**: **IMPLEMENTED** — the `result_published` publication (P5-N1, CLOSED, PR #213) is the first production caller; additional operational notification types remain P5-N2+ scope.
 5. **Notification Inbox**: **IMPLEMENTED** (P5-N1, CLOSED, PR #213) for `result_published`; additional operational notification types remain P5-N2+ scope.
 6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`. State machine table entries for `grading` are unreachable.

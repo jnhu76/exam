@@ -42,7 +42,7 @@ Every ADR carries this metadata (in its Status section or header):
 | [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | PROPOSED | Current | none | none |
 | [ADR-012](ADR-012-candidate-recovery-contract.md) | Candidate Recovery Contract and Threat Model | ACCEPTED | Current | none | none |
 | [ADR-013](ADR-013-interruption-time-compensation-policy.md) | Interruption Detection and Time-Compensation Policy | ACCEPTED | Current | ADR-012's incomplete time-policy direction | none |
-| [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | PROPOSED (runtime NOT STARTED) | Current | none | none |
+| [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED (runtime NOT STARTED) | Current | none | none |
 
 ## Numbering
 
