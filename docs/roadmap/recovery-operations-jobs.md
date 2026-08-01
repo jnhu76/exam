@@ -78,7 +78,7 @@ Authority result:
 - `Permission.AttemptTimeGrant` is activated for the Admin preset only. Do not
   grant it organization-wide to Proctor before J4 establishes Proctor-to-Exam
   scope.
-- Attempt-scoped `POST /api/admin/attempts/:attemptId/time-grants` calls the
+- Attempt-scoped `POST /admin/attempts/:attemptId/time-grants` calls the
   canonical `grantAttemptTime()` command inside one locked transaction
   (Enrollment → Attempt → Exam lock order), with operation-ID idempotency
   (`granted` / `idempotent_replay` / `terminal`), cross-Attempt race recovery,
@@ -331,7 +331,6 @@ Links an incident to a separately authoritative action:
 ```text
 time_grant
 force_submit
-other_future_action
 ```
 
 Store action identity and type, not duplicated mutable action state.
@@ -376,17 +375,17 @@ transition and edit every field.
 Suggested routes:
 
 ```http
-POST   /api/admin/exams/:examId/incidents
-GET    /api/admin/exams/:examId/incidents
-GET    /api/admin/incidents/:incidentId
-POST   /api/admin/incidents/:incidentId/investigate
-POST   /api/admin/incidents/:incidentId/notes
-POST   /api/admin/incidents/:incidentId/severity
-POST   /api/admin/incidents/:incidentId/resolve
-POST   /api/admin/incidents/:incidentId/dismiss
-POST   /api/admin/incidents/:incidentId/actions
-POST   /api/admin/incidents/:incidentId/attempts
-POST   /api/admin/incidents/:incidentId/interruptions
+POST   /admin/exams/:examId/incidents
+GET    /admin/exams/:examId/incidents
+GET    /admin/incidents/:incidentId
+POST   /admin/incidents/:incidentId/investigate
+POST   /admin/incidents/:incidentId/notes
+POST   /admin/incidents/:incidentId/severity
+POST   /admin/incidents/:incidentId/resolve
+POST   /admin/incidents/:incidentId/dismiss
+POST   /admin/incidents/:incidentId/actions
+POST   /admin/incidents/:incidentId/attempts
+POST   /admin/incidents/:incidentId/interruptions
 ```
 
 Proctor routes may reuse the same handlers after J4 provides scoped
@@ -403,8 +402,8 @@ authorization.
 - Notes may be independently appendable, each under its own `operationId`.
 - Linked action IDs must be unique; attempt and interruption evidence links
   have their own uniques (ADR-014 §6).
-- Every link satisfies the scope triple (same organization, same exam,
-  attempt anchor null-or-matching), derived server-side — ADR-014 §7.
+- Every link satisfies the scope quadruple (same organization, same exam,
+  attempt anchor null-or-matching, candidate null-or-matching), derived server-side — ADR-014 §7.
 
 ## Integration with J1
 
@@ -417,13 +416,14 @@ incidentId
 The grant remains authoritative in the time-adjustment ledger. The incident
 only records the relationship.
 
-The incident transaction and action transaction may be:
-
-1. one transaction when both are initiated together; or
-2. separate idempotent transactions with reconciliation.
-
-Choose and document one model. Do not allow a linked action to exist only in UI
-memory.
+The combined grant+link model is **one transaction** (ADR-014 §10): the
+time-grant route accepts an optional `incidentId`, validates the full scope
+quadruple (org, exam, attempt, candidate) against the authoritative rows,
+then writes the ledger row, deadline update, action link, and audit
+atomically under the grant's existing `operationId` idempotency. A
+retroactive link without a concurrent grant uses a separate idempotent
+`linkIncidentAction()` transaction. A linked action MUST NOT exist only in
+UI memory.
 
 ## Audit
 
@@ -1109,7 +1109,7 @@ REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS
 J3 implements what ADR-014 §18 decomposes: the five additive tables, the
 canonical commands (`operationId` identity on every write), the append-only
 event history (`event_sequence` ordering with a verifiable before/after
-version chain), the action and evidence links (link-scope triple,
+version chain), the action and evidence links (link-scope quadruple,
 server-derived), and the extended time-grant path that activates
 `incidentId`. It must not begin while ADR-014 is PROPOSED.
 

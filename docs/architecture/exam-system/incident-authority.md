@@ -228,7 +228,7 @@ sequenceDiagram
     API->>DB: lock Exam FOR UPDATE
     API->>DB: operation-ID lookup (replay / conflict)
     opt incidentId present
-        API->>DB: read exam_incidents (NON-LOCKING): exists;<br/>same org; same exam as the locked Attempt;<br/>attemptId null-or-matching
+        API->>DB: read exam_incidents (NON-LOCKING): exists;<br/>same org; same exam as the locked Attempt;<br/>attemptId null-or-matching;<br/>candidateId null-or-matching the grant attempt's candidate
     end
     API->>DB: deadline reconciliation
     API->>DB: insert attempt_time_adjustments (incidentId)
@@ -245,17 +245,21 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant X as Operator A (resolve)
-    participant Y as Operator B (dismiss)
+    participant X as Operator A (resolve, operationId=X)
+    participant Y as Operator B (dismiss, same operationId=X — retry)
     participant DB as PostgreSQL
 
+    X->>DB: pre-read operationId → not found
+    Y->>DB: pre-read operationId → not found
     X->>DB: BEGIN; SELECT ... FOR UPDATE (incident row)
     Y->>DB: BEGIN; SELECT ... FOR UPDATE (blocked)
+    X->>DB: re-check operationId inside lock → uncommitted
     X->>DB: version check (expectedVersion = v) ✓
     X->>DB: UPDATE status = resolved, version = v+1
     X->>DB: append incident_resolved event; audit; COMMIT
-    Y->>DB: (unblocked) reads status = resolved, version = v+1
-    Y-->>Y: 409 INVALID_STATE_TRANSITION (terminal)<br/>— a replay requires the SAME operationId
+    Y->>DB: (unblocked) re-check operationId inside lock
+    Y->>DB: → committed matching operation X found
+    Y-->>Y: rollback, return idempotent_replayed
 ```
 
 ## Relationship to the existing proctor marker

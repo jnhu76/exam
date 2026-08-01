@@ -32,6 +32,19 @@ ADR is accepted. This ADR authorizes no runtime change by itself.
 
 ### Revision notes
 
+- **R5 (2026-08-01)** — hardened per PR #241 re-review round 2 (3 blockers):
+  - state-command replay: split concurrency into two algorithms — append-only
+    (event-first) and version-bumping (lock-first, re-check operationId inside
+    lock, rollback-on-conflict → fresh-transaction query) (§9);
+  - scope quadruple fully propagated: §10 combined grant, §13 error table,
+    §18 decomposition, architecture sequence diagram, and
+    recovery-operations-jobs.md all use "quadruple" instead of "triple";
+  - rollback semantics: destructive DROP prohibited after the first non-null
+    `incidentId` write; pre-activation guard required (§14);
+  - recovery-operations-jobs.md synced: `other_future_action` removed,
+    `/api/admin/` → `/admin/`, scope triple → quadruple, combined grant
+    model frozen to "one transaction" (no longer "choose later");
+  - force-submit audit query conditions explicitly frozen (§7).
 - **R4 (2026-08-01)** — hardened per PR #241 review round 3 (P1 blocking):
   - `force_submit` verification uses `attempt.forceSubmit` audit fact existence instead of non-persistent `submissionSource` (§7);
   - `operationId` concurrency recovery: removed "cannot happen" claim; defined real recovery flow (rollback → fresh-transaction query → replay/conflict) (§9);
@@ -481,17 +494,26 @@ id denotes an immutable event. For `force_submit`, `attempt_id` equals
 **`force_submit` verification.** Before accepting a `force_submit` action
 link, the server MUST verify that the target attempt was actually
 force-submitted. The verification is a non-locking read for the existence of
-a committed `attempt.forceSubmit` audit fact for that attempt (the force-submit
-route writes `action: "attempt.forceSubmit"` atomically only when the
-`in_progress/disrupted → submitted` transition actually commits). The
-`exam_attempts` row alone is insufficient: the only persisted submission
-metadata is `submissionReason` ∈ {`manual`, `deadline`}, which does not
-distinguish force-submit from candidate self-submit. If no
-`attempt.forceSubmit` audit fact exists, the command returns 400
-`VALIDATION_ERROR` with a message indicating that the attempt was not
-force-submitted. This prevents false correlation: a `force_submit` link
-represents a durable assertion that a force submit did occur, not merely an
-attempt ID reference.
+a committed `attempt.forceSubmit` audit fact for that attempt:
+
+```text
+audit.organization_id = ctx.organizationId
+audit.action          = 'attempt.forceSubmit'
+audit.target_type     = 'attempt'
+audit.target_id       = attemptId
+```
+
+The force-submit route writes `action: "attempt.forceSubmit"` atomically
+only when the `in_progress/disrupted → submitted` transition actually
+commits. The `exam_attempts` row alone is insufficient: the only persisted
+submission metadata is `submissionReason` ∈ {`manual`, `deadline`}, which
+does not distinguish force-submit from candidate self-submit. The audit
+fact is existence evidence only — it is NOT the action identity (the
+`action_id` remains the `exam_attempts.id`). If no matching audit row
+exists, the command returns 400 `VALIDATION_ERROR` with a message
+indicating that the attempt was not force-submitted. This prevents false
+correlation: a `force_submit` link represents a durable assertion that a
+force submit did occur, not merely an attempt ID reference.
 
 **Deferred action identity: `misconduct_mark`.** Misconduct marking is NOT
 linkable in the initial implementation. The current runtime stores a single
@@ -629,7 +651,11 @@ links) carry no `expectedVersion`.
 DB unique-constraint races. Two concurrent transactions can both pass the
 pre-read (same `operationId` not found), then one inserts and commits while
 the other hits `23505` on the event table's
-`UNIQUE (organization_id, operation_id)`. The recovery flow is:
+`UNIQUE (organization_id, operation_id)`. The recovery flow differs for
+append-only commands and version-bumping commands:
+
+**Append-only commands (create, note, links)** — no `expectedVersion`, no
+incident row lock:
 
 ```text
 1. pre-read operationId (non-locking)
@@ -645,7 +671,7 @@ the other hits `23505` on the event table's
 
 4. insert event row first (carries the operation unique constraint)
 
-5. insert link / mutate incident state (only after event insert succeeds)
+5. insert link / mutate state (only after event insert succeeds)
 
 6. atomic audit
 
@@ -661,11 +687,59 @@ On 23505 at step 5 (link unique):
   → the entire transaction, including the event insert, rolls back
   → return 409 INCIDENT_ACTION_ALREADY_LINKED
   (the event is not committed, so no orphaned event exists)
+```
+
+**Version-bumping commands (investigate, resolve, dismiss, severity change)**
+— carry `expectedVersion`, lock the incident row:
+
+```text
+1. pre-read operationId (non-locking)
+   →  found: matching operationId + matching command_type + matching
+      canonical payload
+      → idempotent_replayed (return committed incident, NO write)
+   →  found: matching operationId + DIFFERENT command_type or payload
+      → 409 IDEMPOTENCY_CONFLICT (NO write)
+
+2. validate scope, preconditions (non-locking)
+
+3. BEGIN transaction (repeatable read)
+
+4. lock incident row FOR UPDATE
+
+5. INSIDE the lock, re-check operationId:
+   →  a committed matching operation exists (T1 committed while T2 waited)
+      → rollback, return idempotent_replayed
+   →  operationId belongs to a different committed payload
+      → rollback, return 409 IDEMPOTENCY_CONFLICT
+   →  otherwise: fresh operationId, proceed
+
+6. check expectedVersion / status:
+   →  stale expectedVersion → 409 INCIDENT_VERSION_CONFLICT
+   →  transition invalid in current status (including terminal)
+      → 409 INVALID_STATE_TRANSITION
+
+7. update incident row (status, version bump)
+
+8. append event (carries operation unique; 23505 cannot happen
+   because step 5 confirmed the operationId is uncommitted)
+
+9. atomic audit
+
+10. COMMIT
+
+On any 23505 (unexpected):
+  → surfaced, never swallowed
+```
+
+After a conflict (stale version, terminal status, or serialization failure),
+the server MUST rollback and check the `operationId` in a fresh transaction
+before returning a business error. If the same `operationId` committed
+successfully during the wait, the business error is superseded by
+`idempotent_replayed`. This rule applies to ALL version-bumping commands.
 
 On any other 23505:
   → surfaced, never swallowed (mirrors the operatorGrantExecution
      cross-Attempt race pattern)
-```
 
 This means `IDEMPOTENCY_CONFLICT` always takes priority over
 `INCIDENT_ACTION_ALREADY_LINKED`: if a client sends a new `operationId` to
@@ -707,7 +781,7 @@ under its own `operationId`; their order is their `event_sequence` (§5).
 | linkIncidentAction | scope validation (non-locking, §7) → insert link (unique arbiter) + `action_linked` event + audit | none (constraint-arbiterated, no incident row lock) |
 | linkIncidentAttempt | scope validation (non-locking, §7; anchor exclusivity) → insert junction (unique arbiter) + `attempt_linked` event + audit | none (constraint-arbiterated, no incident row lock) |
 | linkIncidentInterruption | scope validation (non-locking, §7) → insert junction (unique arbiter) + `interruption_linked` event + audit | none (constraint-arbiterated, no incident row lock) |
-| grantAttemptTime (extended by J3) | existing ADR-013 chain + optional incident validation (§7 triple) + action-link insert | unchanged: Enrollment → Attempt → Exam; incident validation is a NON-LOCKING read |
+| grantAttemptTime (extended by J3) | existing ADR-013 chain + optional incident validation (§7 quadruple) + action-link insert | unchanged: Enrollment → Attempt → Exam; incident validation is a NON-LOCKING read |
 
 Notes and links do not lock the incident row because they do not change
 version (§5). Their `event_sequence` is interleavable with version-bumping
@@ -733,11 +807,8 @@ Orthogonality locks:
 
 Grant + link model (the J3 choice required by the recovery Jobs doc):
 **one transaction**. The time-grant route accepts an optional `incidentId`
-and validates the full §7 link-scope triple against the authoritative rows
-— incident exists; `incident.organizationId` and `incident.examId` equal
-the grant attempt's organization and exam (derived from the locked Attempt
-row, never from the request); `incident.attemptId` is null or equal to the
-grant attempt — then writes the ledger row, deadline update, action link,
+and validates the full §7 link-scope quadruple (org, exam, attempt,
+candidate) against the authoritative rows — then writes the ledger row, deadline update, action link,
 and audit atomically under the grant's existing `operationId` idempotency.
 The operation-ID lookup precedes all writes: on `idempotent_replay` the
 route returns BEFORE the link insert (the original transaction already
@@ -934,7 +1005,7 @@ the domain-internal `NOT_FOUND` surfaces on the wire as
 | --- | --- | --- |
 | incident / action / attempt / episode not found; cross-organization access (deliberately 404, not 403) | 404 | `RESOURCE_NOT_FOUND` |
 | capability denied | 403 | `PERMISSION_DENIED` |
-| enum violation (including deferred `misconduct_mark`), field bounds, link-scope triple failure, candidate not enrolled | 400 | `VALIDATION_ERROR` |
+| enum violation (including deferred `misconduct_mark`), field bounds, link-scope quadruple failure, candidate not enrolled | 400 | `VALIDATION_ERROR` |
 | transition invalid in current status; any new-`operationId` transition on a terminal incident; evidence link on an anchored incident | 409 | `INVALID_STATE_TRANSITION` |
 | `operationId` reused with a different command type or canonical payload | 409 | `IDEMPOTENCY_CONFLICT` |
 | stale `expectedVersion` under a new `operationId` | 409 | `INCIDENT_VERSION_CONFLICT` (new, added by J3) |
@@ -961,8 +1032,16 @@ No organization-wide Proctor incident route may be introduced.
 - The existing nullable `attempt_time_adjustments.incident_id` column is
   not altered (no FK added); J3 changes only which writers may set it.
 - Rollback is the `DROP` of the five additive tables in reverse dependency
-  order. No up/down data migration exists because no existing table is
-  altered and no data is backfilled.
+  order **only before the first non-null `incidentId` write**. After
+  activation or any production write that sets `incident_id` to non-null,
+  a destructive down migration is prohibited: the ledger would retain
+  dangling correlation UUIDs with no referential integrity guard. A
+  rollback of the incident feature after activation MUST be a data-preserving
+  migration (e.g. marking the five tables as deprecated, or adding a
+  CHECK constraint that prevents new writes while preserving history),
+  not a plain DROP. J3 implementation MUST include a pre-activation check
+  that refuses destructive DROP when any `attempt_time_adjustments.incident_id`
+  is non-null.
 
 ### 15. Relationship to the existing proctor incident marker
 
@@ -1026,11 +1105,14 @@ J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements, after acceptance:
    the Proctor preset is NOT touched;
 5. repositories (ctx-first, organization-scoped, tx-bound factory);
 6. canonical commands (§3, §5, §9, §10) — `operationId` on every write,
-   `event_sequence` + before/after versions on every event, the link-scope
-   triple on every link; no universal `updateIncident()`;
+	   `event_sequence` + before/after versions on every event, the link-scope
+	   quadruple on every link, with separate concurrency algorithms for
+	   append-only and version-bumping commands (§9); no universal
+	   `updateIncident()`;
 7. routes under `requireScopedCapability` (§13);
 8. extension of the time-grant route/command for optional `incidentId`
-   (§10 one-transaction model, full link-scope triple) and removal of the
+	   (§10 one-transaction model, full link-scope quadruple with org, exam,
+	   attempt, and candidate validation) and removal of the
    "reserved until REC-I6" guard for the validated path only;
 9. audit actions under the existing audit policy (§11);
 10. unit, integration, permission-matrix, concurrency, idempotency-replay,
