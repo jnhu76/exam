@@ -101,6 +101,24 @@ export interface GrantAttemptTimeInput {
   now: Date;
 }
 
+/**
+ * Optional Incident validation port for the combined grant+link path
+ * (ADR-014 §10). When `input.incidentId` is non-null, the grant command MUST
+ * validate the Incident scope BEFORE deadline reconciliation runs — never after.
+ *
+ * The lookup is ctx-organization-scoped at the adapter layer, so a null result
+ * proves both "missing" and "cross-org" (→ 404 RESOURCE_NOT_FOUND). The
+ * returned values are server-derived from the authoritative Incident row; the
+ * request body carries only the identifier.
+ */
+export interface IncidentGrantValidator {
+  findForGrantValidation(incidentId: string): Promise<{
+    examId: string;
+    attemptId: string | null;
+    candidateId: string | null;
+  } | null>;
+}
+
 /** Outcome of {@link grantAttemptTime}. */
 export type GrantOutcome = "granted" | "terminal" | "idempotent_replay";
 
@@ -135,6 +153,9 @@ export interface GrantAttemptTimeResult {
  *   3. normalize + validate inputs;
  *   4. operationId replay/conflict check;
  *   5. validate the `operator_incident` policy snapshot;
+ *   5b. validate the optional Incident scope quadruple (ADR-014 §10) — BEFORE
+ *       deadline reconciliation, so an expired Attempt + invalid incidentId
+ *       cannot terminalize and skip validation;
  *   6. reconcile the deadline (may terminalize);
  *   7. if terminal: return, no grant;
  *   8. validate optional interruption episode ownership;
@@ -146,9 +167,9 @@ export interface GrantAttemptTimeResult {
  *   14. re-read the attempt and return it with the adjustment.
  *
  * @throws {Error} EA capability transaction-affinity violation.
- * @throws {NotFoundError} attempt or exam not found under lock.
+ * @throws {NotFoundError} attempt, exam, or incident not found under lock.
  * @throws {ValidationError} malformed input, missing/wrong policy snapshot,
- *   interruption episode not owned, or non-null incidentId.
+ *   interruption episode not owned, or Incident scope-quadruple mismatch.
  * @throws {InvalidStateTransitionError} attempt snapshot policy is not
  *   `operator_incident`, or post-reconcile status is not grantable.
  * @throws {IdempotencyConflictError} operationId replayed with a differing
@@ -164,6 +185,7 @@ export async function grantAttemptTime(
   eventRepo: InterruptionEventRepository,
   adjustmentRepo: TimeAdjustmentRepository,
   gradingWorksetRepo: GradingWorksetRepository,
+  incidentGrantValidator: IncidentGrantValidator | null,
   capability: LockedEnrollmentAttemptIdentity,
   input: GrantAttemptTimeInput,
 ): Promise<GrantAttemptTimeResult> {
@@ -276,6 +298,47 @@ export async function grantAttemptTime(
     throw new InvalidStateTransitionError(
       "Operator time grant requires operator_incident policy",
     );
+  }
+
+  // 5b. Validate the Incident scope quadruple (ADR-014 §10/§7) BEFORE deadline
+  //     reconciliation. This must run BEFORE reconciliation so that an expired
+  //     Attempt + invalid incidentId cannot terminalize the Attempt and then
+  //     skip validation via the terminal-outcome short-circuit. The frozen
+  //     order is: operationId replay → policy snapshot → Incident validation
+  //     → deadline reconciliation → terminal/grant.
+  //
+  //     This is a NON-LOCKING read of the authoritative Incident row; it does
+  //     not introduce a reverse lock order against the ADR-013 chain.
+  //     Missing/cross-org Incident → 404 RESOURCE_NOT_FOUND; same-org but wrong
+  //     exam/attempt/candidate → 400 VALIDATION_ERROR.
+  if (input.incidentId != null) {
+    if (!incidentGrantValidator) {
+      throw new ValidationError(
+        "incidentId requires an incident grant validator",
+      );
+    }
+    const incident = await incidentGrantValidator.findForGrantValidation(
+      input.incidentId,
+    );
+    if (!incident) {
+      throw new NotFoundError("Incident not found");
+    }
+    if (incident.examId !== attempt.examId) {
+      throw new ValidationError(
+        "Incident belongs to a different exam than the attempt",
+      );
+    }
+    if (incident.attemptId != null && incident.attemptId !== attempt.id) {
+      throw new ValidationError("Incident is anchored to a different attempt");
+    }
+    if (
+      incident.candidateId != null &&
+      incident.candidateId !== attempt.candidateId
+    ) {
+      throw new ValidationError(
+        "Incident candidate does not match the attempt candidate",
+      );
+    }
   }
 
   // 6. Reconcile the deadline. Expired in_progress → terminalized via

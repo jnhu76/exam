@@ -44,6 +44,7 @@ import type { TimeAdjustmentRepository } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createIncidentGrantValidatorAdapter,
   createInterruptionEpisodeRepoAdapter,
   createInterruptionEventRepoAdapter,
   createTimeAdjustmentRepoAdapter,
@@ -339,6 +340,15 @@ async function runGrantTransaction(
         createAttemptGradingEntryRepo(tx),
         ctx,
       );
+      // Build the Incident grant validator when an incidentId is present.
+      // The grant command validates the Incident scope quadruple (ADR-014 §10)
+      // BEFORE deadline reconciliation, so an expired attempt + invalid
+      // incidentId cannot terminalize and skip validation.
+      const incidentRepo = input.incidentId ? createIncidentRepo(tx) : null;
+      const incidentGrantValidator = incidentRepo
+        ? createIncidentGrantValidatorAdapter(incidentRepo, ctx)
+        : null;
+
       const grantResult = await grantAttemptTime(
         exams,
         attempts,
@@ -347,26 +357,23 @@ async function runGrantTransaction(
         eventRepo,
         adjustmentRepo,
         gradingWorksetRepo,
+        incidentGrantValidator,
         cap,
         input,
       );
 
-      // If incidentId is present, link the action to the incident
-      // inside the same transaction (combined grant+link path).
+      // If incidentId is present, link the action to the incident inside the
+      // same transaction (combined grant+link path). The Incident's existence
+      // and scope quadruple were already validated inside grantAttemptTime
+      // (step 5b) BEFORE reconciliation; here we only insert the action link
+      // (which appends its own event + audit) on a real grant or replay.
       if (
         input.incidentId &&
+        incidentRepo &&
         grantResult.adjustment &&
         (grantResult.outcome === "granted" ||
           grantResult.outcome === "idempotent_replay")
       ) {
-        const incidentRepo = createIncidentRepo(tx);
-
-        // Validate scope quadruple
-        const incident = await incidentRepo.findById(ctx, input.incidentId);
-        if (!incident) {
-          throw new Error("Incident not found");
-        }
-
         // For time_grant, actionId = adjustment.id
         const actionId = grantResult.adjustment.id;
 

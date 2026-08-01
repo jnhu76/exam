@@ -14,11 +14,13 @@ import type { createAttemptGradingEntryRepo } from "@exam/db/src/repository/atte
 import type { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
 import type { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import type { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
+import type { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import type {
   ExamRepository,
   AttemptRepository,
   EnrollmentRepository,
   GradingWorksetRepository,
+  IncidentGrantValidator,
   InterruptionEpisodeRepository,
   InterruptionEventRepository,
   TimeAdjustmentRepository,
@@ -318,6 +320,30 @@ export function createGradingWorksetRepoAdapter(
       ) as Promise<AttemptGradingEntry | null>,
     countPendingManualForAttempt: async (attemptId) =>
       repo.countPendingManualForAttempt(ctx, attemptId),
+  };
+}
+
+/**
+ * Adapts the DB incident repo to the {@link IncidentGrantValidator} port used
+ * by `grantAttemptTime` for the combined grant+link path (ADR-014 §10). The
+ * lookup is ctx-organization-scoped (`incidentRepo.findById` filters by org),
+ * so a null result proves both "missing" and "cross-org". Binds the request
+ * context so the engine never imports Drizzle row shapes.
+ */
+export function createIncidentGrantValidatorAdapter(
+  repo: ReturnType<typeof createIncidentRepo>,
+  ctx: RequestContext,
+): IncidentGrantValidator {
+  return {
+    findForGrantValidation: async (incidentId) => {
+      const incident = await repo.findById(ctx, incidentId);
+      if (!incident) return null;
+      return {
+        examId: incident.examId,
+        attemptId: incident.attemptId,
+        candidateId: incident.candidateId,
+      };
+    },
   };
 }
 
