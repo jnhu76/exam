@@ -41,6 +41,14 @@ if (!URL.revokeObjectURL) {
 // download test). Polyfill stream() to return a spec-shaped ReadableStream
 // over the Blob's bytes so Response<Blob> round-trips. Production browsers
 // provide a real Blob.prototype.stream(); this is test-infra only.
+//
+// IMPORTANT: read bytes via the PUBLIC `arrayBuffer()` (jsdom copies the impl
+// `_bytes` into the target realm and returns them — see Blob-impl.js
+// `arrayBuffer()`). Do NOT reach into the private `_bytes` field: it lives on
+// the internal `BlobImpl`, not the public wrapper, so `(blob as any)._bytes`
+// is `undefined` on the user-facing object (jsdom explicitly documents that it
+// "never expose[s] this._bytes ... directly to the user"). Reading it silently
+// yields an empty stream, which makes every Blob Response body appear empty.
 if (
   typeof Blob !== "undefined" &&
   typeof Blob.prototype.stream !== "function"
@@ -49,12 +57,10 @@ if (
     configurable: true,
     writable: true,
     value: function stream(): ReadableStream<Uint8Array> {
-      // jsdom stores bytes on the impl symbol `_bytes`; fall back to slicing
-      // the public size if the impl field is unavailable.
-      const bytes = (this as unknown as { _bytes?: Uint8Array })._bytes;
+      const blob = this as Blob;
       return new ReadableStream<Uint8Array>({
-        start(controller) {
-          if (bytes) controller.enqueue(bytes);
+        async start(controller) {
+          controller.enqueue(new Uint8Array(await blob.arrayBuffer()));
           controller.close();
         },
       });

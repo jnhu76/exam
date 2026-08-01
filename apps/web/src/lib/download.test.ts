@@ -13,10 +13,19 @@ describe("downloadFile", () => {
   });
 
   it("sends cookie credentials and triggers a blob download with the filename", async () => {
-    const blob = new Blob(["csv"], { type: "text/csv" });
+    // Provide the body as a Uint8Array, not a Blob. The vitest jsdom env
+    // exposes Node/undici's global `Response`, and `new Response(blob)` runs
+    // undici's extractBody. Its `webidl.is.Blob` brand check is bound to the
+    // Blob in undici's module-realm (Node's global), but the Blob constructor
+    // visible to this jsdom test is jsdom's realm-Blob — so a jsdom Blob fed
+    // to the global Response fails the check and undici falls back to
+    // `String(object)` -> "[object Blob]" (silent garbage bytes; flaky across
+    // Node-bundled undici versions). The BufferSource (Uint8Array) path is
+    // brand-check-free and realm-stable, so the bytes round-trip on every Node.
+    const body = new TextEncoder().encode("csv");
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(new Response(blob, { status: 200 }));
+      .mockResolvedValue(new Response(body, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const createObjectURL = vi
@@ -45,6 +54,12 @@ describe("downloadFile", () => {
       expect.objectContaining({ credentials: "include" }),
     );
     expect(createObjectURL).toHaveBeenCalledTimes(1);
+    // Regression guard: the Blob handed to createObjectURL must preserve the
+    // response body bytes ("csv"), not a cross-realm fallback like
+    // "[object Blob]". Feeding the Response a Uint8Array keeps the body path
+    // realm-stable so this assertion holds across Node-bundled undici versions.
+    const downloadedBlob = createObjectURL.mock.calls[0]![0] as Blob;
+    await expect(downloadedBlob.text()).resolves.toBe("csv");
     expect(anchorEl.download).toBe("attempt-abc.csv");
     expect(anchorClick).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
