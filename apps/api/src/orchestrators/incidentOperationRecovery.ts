@@ -44,6 +44,7 @@ import {
 import type { Database, TransactionDatabase } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
+import { payloadsEqual } from "@exam/exam-engine";
 import type { IncidentCommandResult } from "@exam/exam-engine";
 
 /**
@@ -180,23 +181,6 @@ async function resolveCommittedOperation(
   });
 }
 
-/** Recursively sort object keys for order-insensitive JSON comparison. */
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (value !== null && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      out[key] = sortKeys((value as Record<string, unknown>)[key]);
-    }
-    return out;
-  }
-  return value;
-}
-
-function payloadsEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-}
-
 /**
  * Runs an incident command with full ADR-014 §9 conflict recovery.
  *
@@ -234,8 +218,28 @@ export async function withIncidentOperationRecovery(
 
   // Case 1: named operation-unique 23505 (append-only race). Re-run the SAME
   // command once in a fresh transaction; its pre-read resolves the winner.
+  // The fresh re-run can itself lose a second race, so its error is caught and
+  // a final read-only committed-operation lookup decides: matching committed
+  // op → idempotent_replayed; committed with a different payload →
+  // IdempotencyConflictError; otherwise the retry error is preserved. The
+  // command is never executed more than twice (no recursion, no infinite
+  // retry).
   if (isIncidentOperationUniqueViolation(primaryError)) {
-    return executeInTransaction(db, run);
+    try {
+      return await executeInTransaction(db, run);
+    } catch (retryError: unknown) {
+      const resolved = await resolveCommittedOperation(
+        db,
+        ctx,
+        operationId,
+        commandType,
+        canonicalPayload,
+      );
+      if (resolved.kind === "replay") {
+        return resolved.result;
+      }
+      throw retryError;
+    }
   }
 
   // Case 2: recoverable version/state conflict, or serialization failure

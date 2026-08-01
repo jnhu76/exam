@@ -223,6 +223,12 @@ export async function grantAttemptTime(
   if (!UUID_RE.test(operationId)) {
     throw new ValidationError("operationId must be a valid UUID");
   }
+  // Validate incidentId as a UUID BEFORE any Incident lookup or deadline
+  // reconciliation (P2-E): a malformed identifier must fail closed with a
+  // clean VALIDATION_ERROR, never reach the DB or the audit path.
+  if (input.incidentId != null && !UUID_RE.test(input.incidentId)) {
+    throw new ValidationError("incidentId must be a valid UUID");
+  }
   if (actorId.trim().length === 0) {
     throw new ValidationError("actorId must not be empty");
   }

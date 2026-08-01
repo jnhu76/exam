@@ -1,4 +1,8 @@
-import type { ExamIncident, RequestContext } from "@exam/domain";
+import type {
+  ExamIncident,
+  IncidentOutcome,
+  RequestContext,
+} from "@exam/domain";
 import {
   IdempotencyConflictError,
   IncidentActionAlreadyLinkedError,
@@ -6,6 +10,12 @@ import {
   InvalidStateTransitionError,
   NotFoundError,
   ValidationError,
+} from "@exam/domain";
+import {
+  IncidentActionType,
+  IncidentRelationshipType,
+  IncidentSeverity,
+  IncidentType,
 } from "@exam/domain";
 
 // ── Repository interface ──
@@ -143,20 +153,13 @@ export interface IncidentRepo {
 // ── Constants ──
 
 const TERMINAL_STATUSES = ["resolved", "dismissed"] as const;
-const VALID_INCIDENT_TYPES = [
-  "network_interruption",
-  "device_failure",
-  "power_failure",
-  "candidate_unable_to_continue",
-  "suspected_misconduct",
-  "operator_error",
-  "system_outage",
-  "environmental_disruption",
-  "other",
-] as const;
-const VALID_SEVERITIES = ["info", "minor", "major", "critical"] as const;
-const VALID_ACTION_TYPES = ["time_grant", "force_submit"] as const;
-const VALID_RELATIONSHIP_TYPES = ["affected", "referenced"] as const;
+
+// Canonical runtime values come from @exam/domain (single source of truth);
+// these sets exist so commands validate at runtime, not only at compile time.
+const VALID_INCIDENT_TYPES = Object.values(IncidentType);
+const VALID_SEVERITIES = Object.values(IncidentSeverity);
+const VALID_ACTION_TYPES = Object.values(IncidentActionType);
+const VALID_RELATIONSHIP_TYPES = Object.values(IncidentRelationshipType);
 
 const COMMAND_CREATE = "createExamIncident";
 const COMMAND_INVESTIGATE = "startIncidentInvestigation";
@@ -175,8 +178,8 @@ export interface CreateIncidentInput {
   examId: string;
   attemptId?: string | null;
   candidateId?: string | null;
-  type: string;
-  severity?: string;
+  type: IncidentType;
+  severity?: IncidentSeverity;
   occurredAt?: string | null;
   description: string;
 }
@@ -196,7 +199,7 @@ export interface AddNoteInput {
 export interface ChangeSeverityInput {
   operationId: string;
   expectedVersion: number;
-  severity: string;
+  severity: IncidentSeverity;
   reasonCode?: string | null;
   reasonText?: string | null;
 }
@@ -217,14 +220,14 @@ export interface DismissIncidentInput {
 
 export interface LinkActionInput {
   operationId: string;
-  actionType: string;
+  actionType: IncidentActionType;
   actionId: string;
 }
 
 export interface LinkAttemptInput {
   operationId: string;
   attemptId: string;
-  relationshipType: string;
+  relationshipType: IncidentRelationshipType;
 }
 
 export interface LinkInterruptionInput {
@@ -234,7 +237,7 @@ export interface LinkInterruptionInput {
 
 // ── Command outcome ──
 
-export type IncidentOutcome = "applied" | "idempotent_replayed";
+export type { IncidentOutcome };
 
 export interface IncidentCommandResult {
   outcome: IncidentOutcome;
@@ -298,13 +301,19 @@ function normalizeRequiredString(
   return trimmed;
 }
 
-function payloadsEqual(a: unknown, b: unknown): boolean {
-  // PostgreSQL jsonb canonicalizes key order, so compare canonically.
+/**
+ * Canonical payload equality for the idempotency contract (ADR-014 §9).
+ * Object-key order insensitive (PostgreSQL jsonb canonicalizes key order),
+ * array order preserved, null/undefined semantics preserved. This is the ONE
+ * implementation: `incidentOperationRecovery` reuses it via the public API
+ * instead of maintaining a copy.
+ */
+export function payloadsEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 }
 
 /** Recursively sort object keys for order-insensitive JSON comparison. */
-function sortKeys(value: unknown): unknown {
+export function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
@@ -345,21 +354,33 @@ async function preReadOperationId(
   );
 }
 
-/** Check if a DB error is a named unique constraint violation. */
+/**
+ * Check if a DB error is a named unique constraint violation.
+ *
+ * PostgreSQL drivers surface the violation fields on the error object or
+ * deep inside its `cause` chain (postgres-js wraps the original error as
+ * `cause`). The walker is cycle-safe and only matches when the SQLSTATE is
+ * exactly 23505 AND the constraint name matches — an unrelated unique
+ * violation or any non-23505 error propagates unchanged.
+ */
 function isConstraintViolation(err: unknown, constraintName: string): boolean {
-  if (err && typeof err === "object" && "code" in err) {
-    const e = err as {
-      code?: string;
-      constraint?: string;
-      constraint_name?: string;
-      cause?: { code?: string; constraint?: string; constraint_name?: string };
-    };
-    const constraint =
-      e.constraint ??
-      e.constraint_name ??
-      e.cause?.constraint ??
-      e.cause?.constraint_name;
-    return e.code === "23505" && constraint === constraintName;
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+
+  while (current && !visited.has(current)) {
+    visited.add(current);
+
+    if (typeof current === "object" && current !== null) {
+      const e = current as Record<string, unknown>;
+      if (e.code === "23505") {
+        const constraint = String(e.constraint ?? e.constraint_name ?? "");
+        if (constraint === constraintName) return true;
+      }
+
+      current = "cause" in e ? e.cause : null;
+    } else {
+      current = null;
+    }
   }
   return false;
 }
@@ -439,11 +460,11 @@ export async function createExamIncident(
   const commandType = COMMAND_CREATE;
 
   // 1. Validate type up front (cheap, before any authority lookup).
-  if (!(VALID_INCIDENT_TYPES as readonly string[]).includes(input.type)) {
+  if (!VALID_INCIDENT_TYPES.includes(input.type)) {
     throw new ValidationError(`Invalid incident type: ${input.type}`);
   }
   if (input.severity != null) {
-    if (!(VALID_SEVERITIES as readonly string[]).includes(input.severity)) {
+    if (!VALID_SEVERITIES.includes(input.severity)) {
       throw new ValidationError(`Invalid severity: ${input.severity}`);
     }
   }
@@ -655,7 +676,7 @@ export async function linkIncidentAction(
     audit: IncidentAuditFn;
     lookupAdjustmentAttempt?: (adjustmentId: string) => Promise<string | null>;
     lookupForceSubmitAudit?: (attemptId: string) => Promise<boolean>;
-    lookupAttempt?: (attemptId: string) => Promise<AttemptScopeRow | null>;
+    lookupAttempt: (attemptId: string) => Promise<AttemptScopeRow | null>;
     lookupActionLink?: (
       actionType: string,
       actionId: string,
@@ -669,13 +690,14 @@ export async function linkIncidentAction(
     actionId: input.actionId,
   };
 
-  // Reject misconduct_mark (deferred per ADR-014 §7).
-  if (input.actionType === "misconduct_mark") {
+  // Reject misconduct_mark (deferred per ADR-014 §7). The input union cannot
+  // express the deferred value, so compare through the runtime string domain.
+  if ((input.actionType as string) === "misconduct_mark") {
     throw new ValidationError("misconduct_mark action links are deferred");
   }
 
   // Validate action type
-  if (!(VALID_ACTION_TYPES as readonly string[]).includes(input.actionType)) {
+  if (!VALID_ACTION_TYPES.includes(input.actionType)) {
     throw new ValidationError(`Invalid action type: ${input.actionType}`);
   }
 
@@ -718,16 +740,17 @@ export async function linkIncidentAction(
   }
 
   // Validate scope quadruple (non-locking read of authoritative attempt).
-  if (deps.lookupAttempt) {
-    const attempt = await deps.lookupAttempt(attemptId);
-    if (!attempt) throw new NotFoundError("Target attempt not found");
-    await validateScopeQuadruple(
-      incident,
-      attempt,
-      attemptId,
-      ctx.organizationId,
-    );
-  }
+  // lookupAttempt is REQUIRED: the caller cannot skip server-derived scope
+  // authority (ADR-014 §7 fail-closed). Missing/cross-org attempt → 404;
+  // wrong exam / candidate mismatch / anchor mismatch → 400.
+  const attempt = await deps.lookupAttempt(attemptId);
+  if (!attempt) throw new NotFoundError("Target attempt not found");
+  await validateScopeQuadruple(
+    incident,
+    attempt,
+    attemptId,
+    ctx.organizationId,
+  );
 
   // For force_submit, verify the audit existence fact (ADR-014 §7).
   if (input.actionType === "force_submit") {
@@ -798,7 +821,7 @@ export async function linkIncidentAttempt(
   deps: {
     now: Date;
     audit: IncidentAuditFn;
-    lookupAttempt?: (attemptId: string) => Promise<AttemptScopeRow | null>;
+    lookupAttempt: (attemptId: string) => Promise<AttemptScopeRow | null>;
   },
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_LINK_ATTEMPT;
@@ -828,27 +851,23 @@ export async function linkIncidentAttempt(
   }
 
   // Validate relationship type
-  if (
-    !(VALID_RELATIONSHIP_TYPES as readonly string[]).includes(
-      input.relationshipType,
-    )
-  ) {
+  if (!VALID_RELATIONSHIP_TYPES.includes(input.relationshipType)) {
     throw new ValidationError(
       `Invalid relationship type: ${input.relationshipType}`,
     );
   }
 
-  // Validate scope quadruple (non-locking read).
-  if (deps.lookupAttempt) {
-    const attempt = await deps.lookupAttempt(input.attemptId);
-    if (!attempt) throw new NotFoundError("Target attempt not found");
-    await validateScopeQuadruple(
-      incident,
-      attempt,
-      input.attemptId,
-      ctx.organizationId,
-    );
-  }
+  // Validate scope quadruple (non-locking read). lookupAttempt is REQUIRED:
+  // the caller cannot skip server-derived scope authority (fail-closed).
+  // Missing/cross-org attempt → 404; wrong exam / candidate mismatch → 400.
+  const attempt = await deps.lookupAttempt(input.attemptId);
+  if (!attempt) throw new NotFoundError("Target attempt not found");
+  await validateScopeQuadruple(
+    incident,
+    attempt,
+    input.attemptId,
+    ctx.organizationId,
+  );
 
   const now = deps.now;
 
@@ -912,7 +931,7 @@ export async function linkIncidentInterruption(
     lookupInterruptionAttempt?: (
       interruptionId: string,
     ) => Promise<string | null>;
-    lookupAttempt?: (attemptId: string) => Promise<AttemptScopeRow | null>;
+    lookupAttempt: (attemptId: string) => Promise<AttemptScopeRow | null>;
   },
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_LINK_INTERRUPTION;
@@ -947,17 +966,17 @@ export async function linkIncidentInterruption(
     throw new Error("lookupInterruptionAttempt required");
   }
 
-  // Validate scope quadruple (non-locking read).
-  if (deps.lookupAttempt) {
-    const attempt = await deps.lookupAttempt(attemptId);
-    if (!attempt) throw new NotFoundError("Target attempt not found");
-    await validateScopeQuadruple(
-      incident,
-      attempt,
-      attemptId,
-      ctx.organizationId,
-    );
-  }
+  // Validate scope quadruple (non-locking read). lookupAttempt is REQUIRED:
+  // the caller cannot skip server-derived scope authority (fail-closed).
+  // Missing/cross-org attempt → 404; wrong exam / candidate mismatch → 400.
+  const attempt = await deps.lookupAttempt(attemptId);
+  if (!attempt) throw new NotFoundError("Target attempt not found");
+  await validateScopeQuadruple(
+    incident,
+    attempt,
+    attemptId,
+    ctx.organizationId,
+  );
 
   // Anchored incidents: require episode.attemptId == incident.attemptId.
   if (incident.attemptId != null && incident.attemptId !== attemptId) {
@@ -1199,7 +1218,7 @@ export async function changeIncidentSeverity(
     audit: IncidentAuditFn;
   },
 ): Promise<IncidentCommandResult> {
-  if (!(VALID_SEVERITIES as readonly string[]).includes(input.severity)) {
+  if (!VALID_SEVERITIES.includes(input.severity)) {
     throw new ValidationError(`Invalid severity: ${input.severity}`);
   }
 

@@ -9,6 +9,12 @@ import {
   NotFoundError,
   ValidationError,
 } from "@exam/domain";
+import type {
+  IncidentActionType,
+  IncidentRelationshipType,
+  IncidentSeverity,
+  IncidentType,
+} from "@exam/domain";
 import {
   addIncidentNote,
   changeIncidentSeverity,
@@ -133,7 +139,7 @@ describe("incidentCommands — createExamIncident", () => {
         {
           operationId: randomUUID(),
           examId: EXAM_ID,
-          type: "invalid_type",
+          type: "invalid_type" as IncidentType,
           description: "test",
         },
         { now: NOW, audit: noopAudit, lookupExam: lookupExamInOrg },
@@ -467,7 +473,7 @@ describe("incidentCommands — changeIncidentSeverity", () => {
         {
           operationId: randomUUID(),
           expectedVersion: 1,
-          severity: "catastrophic",
+          severity: "catastrophic" as IncidentSeverity,
         },
         { now: NOW, audit: noopAudit },
       ),
@@ -576,7 +582,7 @@ describe("incidentCommands — linkIncidentAction", () => {
         randomUUID(),
         {
           operationId: randomUUID(),
-          actionType: "misconduct_mark",
+          actionType: "misconduct_mark" as IncidentActionType,
           actionId: "attempt-1",
         },
         {
@@ -600,7 +606,7 @@ describe("incidentCommands — linkIncidentAction", () => {
         randomUUID(),
         {
           operationId: randomUUID(),
-          actionType: "invalid_action",
+          actionType: "invalid_action" as IncidentActionType,
           actionId: "x",
         },
         {
@@ -660,7 +666,7 @@ describe("incidentCommands — linkIncidentAttempt", () => {
           attemptId: "other-attempt",
           relationshipType: "affected",
         },
-        { now: NOW, audit: noopAudit },
+        { now: NOW, audit: noopAudit, lookupAttempt: vi.fn() },
       ),
     ).rejects.toThrow(InvalidStateTransitionError);
   });
@@ -679,9 +685,9 @@ describe("incidentCommands — linkIncidentAttempt", () => {
         {
           operationId: randomUUID(),
           attemptId: ATTEMPT_ID,
-          relationshipType: "invalid",
+          relationshipType: "invalid" as IncidentRelationshipType,
         },
-        { now: NOW, audit: noopAudit },
+        { now: NOW, audit: noopAudit, lookupAttempt: vi.fn() },
       ),
     ).rejects.toThrow(ValidationError);
   });
@@ -703,7 +709,7 @@ describe("incidentCommands — linkIncidentInterruption", () => {
           operationId: randomUUID(),
           interruptionId: randomUUID(),
         },
-        { now: NOW, audit: noopAudit },
+        { now: NOW, audit: noopAudit, lookupAttempt: vi.fn() },
       ),
     ).rejects.toThrow();
   });
@@ -1007,5 +1013,469 @@ describe("incidentCommands — canonical operationId identity", () => {
         { now: NOW, audit: noopAudit },
       ),
     ).rejects.toThrow(IdempotencyConflictError);
+  });
+});
+
+describe("incidentCommands — link scope authority (fail-closed lookupAttempt)", () => {
+  /** Exam-wide incident fixture (no anchor, no candidate focus). */
+  function examWideIncident(): ExamIncident {
+    return makeIncident({ attemptId: null, candidateId: null });
+  }
+
+  describe("linkIncidentAction", () => {
+    const deps = (overrides: Record<string, unknown> = {}) => ({
+      now: NOW,
+      audit: noopAudit,
+      lookupAdjustmentAttempt: vi.fn().mockResolvedValue(ATTEMPT_ID),
+      lookupAttempt: vi.fn().mockResolvedValue({
+        examId: EXAM_ID,
+        candidateId: CANDIDATE_ID,
+        organizationId: ORG_ID,
+      }),
+      lookupActionLink: vi.fn().mockResolvedValue(false),
+      ...overrides,
+    });
+
+    it("rejects a cross-exam target attempt (400)", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentAction(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            actionType: "time_grant",
+            actionId: "adjustment-1",
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: "other-exam",
+              candidateId: CANDIDATE_ID,
+              organizationId: ORG_ID,
+            }),
+          }),
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+
+    it("rejects a candidate mismatch against the incident candidate focus (400)", async () => {
+      const repo = makeRepo({
+        findById: vi
+          .fn()
+          .mockResolvedValue(
+            makeIncident({ attemptId: null, candidateId: "candidate-A" }),
+          ) as never,
+      });
+      await expect(
+        linkIncidentAction(
+          repo,
+          ctx(),
+          randomUUID(),
+          {
+            operationId: randomUUID(),
+            actionType: "time_grant",
+            actionId: "adjustment-1",
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: EXAM_ID,
+              candidateId: "candidate-B",
+              organizationId: ORG_ID,
+            }),
+          }),
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+
+    it("rejects a cross-org target attempt (engine fail-closed; API 404 via org-scoped lookup)", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentAction(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            actionType: "time_grant",
+            actionId: "adjustment-1",
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: EXAM_ID,
+              candidateId: CANDIDATE_ID,
+              organizationId: "other-org",
+            }),
+          }),
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+
+    it("404s when the authoritative attempt is missing", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentAction(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            actionType: "time_grant",
+            actionId: "adjustment-1",
+          },
+          deps({ lookupAttempt: vi.fn().mockResolvedValue(null) }),
+        ),
+      ).rejects.toThrow(NotFoundError);
+      expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+
+    it("unconditionally validates the scope quadruple (lookupAttempt cannot be skipped)", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      const lookupAttempt = vi.fn().mockResolvedValue({
+        examId: "other-exam",
+        candidateId: null,
+        organizationId: ORG_ID,
+      });
+      await expect(
+        linkIncidentAction(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            actionType: "time_grant",
+            actionId: "adjustment-1",
+          },
+          {
+            now: NOW,
+            audit: noopAudit,
+            lookupAdjustmentAttempt: vi.fn().mockResolvedValue(ATTEMPT_ID),
+            lookupAttempt,
+            lookupActionLink: vi.fn().mockResolvedValue(false),
+          },
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(lookupAttempt).toHaveBeenCalledWith(ATTEMPT_ID);
+      expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("linkIncidentAttempt", () => {
+    const deps = (overrides: Record<string, unknown> = {}) => ({
+      now: NOW,
+      audit: noopAudit,
+      lookupAttempt: vi.fn().mockResolvedValue({
+        examId: EXAM_ID,
+        candidateId: CANDIDATE_ID,
+        organizationId: ORG_ID,
+      }),
+      ...overrides,
+    });
+
+    it("rejects a target attempt from a different exam (400)", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentAttempt(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            attemptId: ATTEMPT_ID,
+            relationshipType: "affected",
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: "other-exam",
+              candidateId: CANDIDATE_ID,
+              organizationId: ORG_ID,
+            }),
+          }),
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(repo.insertAttemptMembership).not.toHaveBeenCalled();
+    });
+
+    it("rejects a candidate mismatch against the incident candidate focus (400)", async () => {
+      const repo = makeRepo({
+        findById: vi
+          .fn()
+          .mockResolvedValue(
+            makeIncident({ attemptId: null, candidateId: "candidate-A" }),
+          ) as never,
+      });
+      await expect(
+        linkIncidentAttempt(
+          repo,
+          ctx(),
+          randomUUID(),
+          {
+            operationId: randomUUID(),
+            attemptId: ATTEMPT_ID,
+            relationshipType: "referenced",
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: EXAM_ID,
+              candidateId: "candidate-B",
+              organizationId: ORG_ID,
+            }),
+          }),
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(repo.insertAttemptMembership).not.toHaveBeenCalled();
+    });
+
+    it("404s when the target attempt is missing", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentAttempt(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            attemptId: ATTEMPT_ID,
+            relationshipType: "affected",
+          },
+          deps({ lookupAttempt: vi.fn().mockResolvedValue(null) }),
+        ),
+      ).rejects.toThrow(NotFoundError);
+      expect(repo.insertAttemptMembership).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("linkIncidentInterruption", () => {
+    const deps = (overrides: Record<string, unknown> = {}) => ({
+      now: NOW,
+      audit: noopAudit,
+      lookupInterruptionAttempt: vi.fn().mockResolvedValue(ATTEMPT_ID),
+      lookupAttempt: vi.fn().mockResolvedValue({
+        examId: EXAM_ID,
+        candidateId: CANDIDATE_ID,
+        organizationId: ORG_ID,
+      }),
+      ...overrides,
+    });
+
+    it("rejects an episode whose attempt scope does not match (400)", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentInterruption(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            interruptionId: randomUUID(),
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: "other-exam",
+              candidateId: CANDIDATE_ID,
+              organizationId: ORG_ID,
+            }),
+          }),
+        ),
+      ).rejects.toThrow(ValidationError);
+      expect(repo.insertInterruptionLink).not.toHaveBeenCalled();
+    });
+
+    it("404s when the target attempt is missing", async () => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWideIncident()) as never,
+      });
+      await expect(
+        linkIncidentInterruption(
+          repo,
+          ctx(),
+          examWideIncident().id,
+          {
+            operationId: randomUUID(),
+            interruptionId: randomUUID(),
+          },
+          deps({ lookupAttempt: vi.fn().mockResolvedValue(null) }),
+        ),
+      ).rejects.toThrow(NotFoundError);
+      expect(repo.insertInterruptionLink).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("incidentCommands — wrapped PostgreSQL constraint detection (P1-B)", () => {
+  const ACTION_UNIQUE = "exam_incident_actions_org_action_unique";
+  const ATTEMPT_UNIQUE = "exam_incident_attempts_incident_attempt_unique";
+  const INTERRUPTION_UNIQUE =
+    "exam_incident_interruption_links_incident_interruption_unique";
+
+  const examWide = makeIncident({ attemptId: null, candidateId: null });
+  const matchAttempt = {
+    examId: EXAM_ID,
+    candidateId: CANDIDATE_ID,
+    organizationId: ORG_ID,
+  };
+
+  describe("linkIncidentAction", () => {
+    const baseDeps = {
+      now: NOW,
+      audit: noopAudit,
+      lookupAdjustmentAttempt: vi.fn().mockResolvedValue(ATTEMPT_ID),
+      lookupAttempt: vi.fn().mockResolvedValue(matchAttempt),
+      lookupActionLink: vi.fn().mockResolvedValue(false),
+    };
+    const input = {
+      operationId: randomUUID(),
+      actionType: "time_grant" as IncidentActionType,
+      actionId: "adjustment-1",
+    };
+
+    it.each([
+      ["top-level 23505", { code: "23505", constraint: ACTION_UNIQUE }],
+      [
+        "one-level wrapped 23505",
+        new Error("dup", {
+          cause: { code: "23505", constraint_name: ACTION_UNIQUE },
+        }),
+      ],
+      [
+        "multi-level wrapped 23505",
+        new Error("outer", {
+          cause: new Error("mid", {
+            cause: { code: "23505", constraint: ACTION_UNIQUE },
+          }),
+        }),
+      ],
+    ])("%s maps to INCIDENT_ACTION_ALREADY_LINKED", async (_label, err) => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertActionLink: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentAction(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toThrow(IncidentActionAlreadyLinkedError);
+    });
+
+    it("an unrelated 23505 propagates unchanged", async () => {
+      const err = { code: "23505", constraint: "users_org_username_unique" };
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertActionLink: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentAction(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toBe(err);
+    });
+
+    it("a non-23505 error propagates unchanged", async () => {
+      const err = { code: "42P01", message: "undefined_table" };
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertActionLink: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentAction(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toBe(err);
+    });
+  });
+
+  describe("linkIncidentAttempt", () => {
+    const baseDeps = {
+      now: NOW,
+      audit: noopAudit,
+      lookupAttempt: vi.fn().mockResolvedValue(matchAttempt),
+    };
+    const input = {
+      operationId: randomUUID(),
+      attemptId: ATTEMPT_ID,
+      relationshipType: "affected" as IncidentRelationshipType,
+    };
+
+    it.each([
+      [
+        "multi-level wrapped 23505",
+        new Error("outer", {
+          cause: { code: "23505", constraint_name: ATTEMPT_UNIQUE },
+        }),
+      ],
+    ])("%s maps to INCIDENT_ACTION_ALREADY_LINKED", async (_label, err) => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertAttemptMembership: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentAttempt(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toThrow(IncidentActionAlreadyLinkedError);
+    });
+
+    it("an unrelated 23505 propagates unchanged", async () => {
+      const err = { code: "23505", constraint: "other_unique" };
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertAttemptMembership: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentAttempt(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toBe(err);
+    });
+  });
+
+  describe("linkIncidentInterruption", () => {
+    const baseDeps = {
+      now: NOW,
+      audit: noopAudit,
+      lookupInterruptionAttempt: vi.fn().mockResolvedValue(ATTEMPT_ID),
+      lookupAttempt: vi.fn().mockResolvedValue(matchAttempt),
+    };
+    const input = {
+      operationId: randomUUID(),
+      interruptionId: randomUUID(),
+    };
+
+    it.each([
+      [
+        "multi-level wrapped 23505",
+        new Error("outer", {
+          cause: new Error("mid", {
+            cause: { code: "23505", constraint: INTERRUPTION_UNIQUE },
+          }),
+        }),
+      ],
+    ])("%s maps to INCIDENT_ACTION_ALREADY_LINKED", async (_label, err) => {
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertInterruptionLink: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentInterruption(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toThrow(IncidentActionAlreadyLinkedError);
+    });
+
+    it("an unrelated 23505 propagates unchanged", async () => {
+      const err = { code: "23505", constraint: "other_unique" };
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(examWide) as never,
+        insertInterruptionLink: vi.fn().mockRejectedValue(err) as never,
+      });
+      await expect(
+        linkIncidentInterruption(repo, ctx(), examWide.id, input, baseDeps),
+      ).rejects.toBe(err);
+    });
   });
 });

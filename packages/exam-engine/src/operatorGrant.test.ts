@@ -956,6 +956,26 @@ describe("grantAttemptTime", () => {
       ).rejects.toThrow(NotFoundError);
     });
 
+    it("malformed incidentId fails closed before any Incident lookup or mutation (P2-E)", async () => {
+      const ctx = setupMocks({});
+      const validator: IncidentGrantValidator = {
+        findForGrantValidation: vi.fn(async () => ({
+          examId: "exam-1",
+          attemptId: null,
+          candidateId: null,
+        })),
+      };
+      await expect(
+        runGrant(ctx, baseInput({ incidentId: "not-a-uuid" }), validator),
+      ).rejects.toThrow(ValidationError);
+      // No Incident query (validator untouched), no attempt mutation, no
+      // adjustment ledger row, no interruption event, no audit-visible write.
+      expect(validator.findForGrantValidation).not.toHaveBeenCalled();
+      expect(ctx.attemptUpdates).toHaveLength(0);
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+      expect(ctx.insertedEvents).toHaveLength(0);
+    });
+
     it("now must be a valid Date", async () => {
       const ctx = setupMocks({});
       await expect(
