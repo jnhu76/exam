@@ -217,13 +217,18 @@ audit, external log shipping. All Phase 4; none started.
   operator time-grant route, permission, audit transaction, and Dashboard
   product path. The exam incident authority (ADR-014 ACCEPTED) is now
   implemented for the Admin surface by J3
-  (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`, in review on PR): five
-  additive tables (migration `0023`), domain types/errors, repositories,
-  nine canonical write commands, Admin-only permissions, API routes, audit
-  actions, and the `grantAttemptTime()` optional `incidentId` operator
-  path. Recovery Center UI (J5/J6), Proctor incident permissions and
-  Proctor-to-Exam resource scope (J4/M11), and system-generated incidents
-  remain NOT IMPLEMENTED and deferred.
+  (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) — **J3 is CLOSED on master**
+  via PR #242 (merge commit `5b653c13`, 2026-08-01; see
+  [`docs/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md`](../audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md)).
+  The Admin Incident runtime is implemented: five additive tables
+  (migration `0023`), domain types/errors, repositories, nine canonical
+  write commands, Admin-only permissions, API routes, audit actions, and
+  the `grantAttemptTime()` optional `incidentId` operator path. The Admin
+  Incident authority path is live. Proctor Incident runtime is NOT
+  implemented — Proctor activation still requires M11 Proctor-to-Exam
+  scope (J4; next authority job is the M11-R0 design contract). Recovery
+  Center UI (J5/J6), Proctor-to-Exam resource scope (J4/M11), and
+  system-generated incidents remain NOT IMPLEMENTED and deferred.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the

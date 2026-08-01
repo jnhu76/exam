@@ -1,14 +1,15 @@
 # Exam Incident Authority
 
-> Status: IMPLEMENTED — ADR-014 ACCEPTED
+> Status: IMPLEMENTED — ADR-014 ACCEPTED; J3 CLOSED (PR #242 merged)
 >
 > Runtime implementation: J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) is
-> implemented and IN REVIEW on PR. Five incident tables (migration `0023`),
-> domain types, repositories, nine canonical write commands, Admin-only
-> permissions, API routes, audit actions, and the `grantAttemptTime()`
-> optional `incidentId` operator path are live. The Recovery Center UI (J5),
-> Proctor incident permissions and Proctor-to-Exam scope (J4/M11), and
-> system-generated incidents remain NOT IMPLEMENTED.
+> implemented and merged on master (PR #242, merge commit `5b653c13`,
+> 2026-08-01). Five incident tables (migration `0023`), domain types,
+> repositories, nine canonical write commands, Admin-only permissions, API
+> routes, audit actions, and the `grantAttemptTime()` optional `incidentId`
+> operator path are live. The Recovery Center UI (J5), Proctor incident
+> permissions and Proctor-to-Exam scope (J4/M11), and system-generated
+> incidents remain NOT IMPLEMENTED.
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
 > (Accepted). This document is the accepted target contract for J3. It provides
