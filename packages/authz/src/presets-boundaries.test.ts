@@ -107,10 +107,10 @@ describe("RBAC-M2 boundary #4/#5 — Proctor cannot view answers / grade / publi
     expect([ans, grade, pub, scores]).toEqual([false, false, false, false]);
   });
 
-  it("Proctor CAN operate runtime authority (force-submit / misconduct / room) but NOT grant time", () => {
-    // REC-I4-I3B2: operator time grant is Admin-only. Proctor retains
-    // force-submit / misconduct / room but must NOT hold AttemptTimeGrant
-    // (the old AttemptTimeExtend route was cut; no grant path remains).
+  it("Proctor operates room monitoring but NOT grant time / force-submit / misconduct (J4-I1B)", () => {
+    // J4-I1B (ADR-015 §13): AttemptForceSubmit + AttemptMisconductMark are
+    // REMOVED from the Proctor preset — Proctor keeps the room-monitoring
+    // reads only. Operator time grant (AttemptTimeGrant) stays Admin-only.
     const [force, grant, misconduct, room] = has(
       Role.Proctor,
       Permission.AttemptForceSubmit,
@@ -118,7 +118,12 @@ describe("RBAC-M2 boundary #4/#5 — Proctor cannot view answers / grade / publi
       Permission.AttemptMisconductMark,
       Permission.ExamRoomView,
     );
-    expect([force, grant, misconduct, room]).toEqual([true, false, true, true]);
+    expect([force, grant, misconduct, room]).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ]);
   });
 });
 

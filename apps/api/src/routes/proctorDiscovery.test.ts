@@ -21,13 +21,13 @@ describe("GET /api/admin/proctor/exams", () => {
     // RBAC-M10-E: delegate to createFutureRoleUserForTest so the user gets an
     // active primary role assignment — without it, authenticate denies 401 and
     // the future-role capability decisions under test never run.
-    const { token } = await createFutureRoleUserForTest(
+    const { user, token } = await createFutureRoleUserForTest(
       ctx.db,
       ctx.org.id,
       role,
       `${role.toLowerCase()}-proctor-discovery`,
     );
-    return token;
+    return { user, token };
   }
 
   async function seedCourse(organizationId: string, suffix: string) {
@@ -86,11 +86,14 @@ describe("GET /api/admin/proctor/exams", () => {
 
   beforeAll(async () => {
     ctx = await buildTestApp(proctorMonitoringRoutes);
-    [proctorToken, teacherToken, graderToken] = await Promise.all([
+    const [proctor, teacher, grader] = await Promise.all([
       createRoleToken("Proctor"),
       createRoleToken("Teacher"),
       createRoleToken("Grader"),
     ]);
+    proctorToken = proctor.token;
+    teacherToken = teacher.token;
+    graderToken = grader.token;
 
     const ownCourseId = await seedCourse(ctx.org.id, "own");
     for (const status of ["published", "open", "closed"] as const) {
@@ -100,6 +103,25 @@ describe("GET /api/admin/proctor/exams", () => {
     }
     await seedExam(ctx.org.id, ownCourseId, "draft", "draft exam");
     await seedExam(ctx.org.id, ownCourseId, "archived", "archived exam");
+
+    // J4-I1B (ADR-015 §8): the Proctor sees ONLY exams with an active
+    // Proctor-to-Exam assignment (assignment_filtered_collection, enforced in
+    // the backend query). Assign the Proctor to exactly the three visible
+    // exams.
+    const now = new Date();
+    for (const examId of visibleExamIds) {
+      await ctx.db.insert(schema.examProctorAssignments).values({
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        examId,
+        proctorUserId: proctor.user.id,
+        status: "active",
+        assignedBy: ctx.admin.id,
+        assignedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     const foreignOrganizationId = randomUUID();
     await ctx.db.insert(schema.organizations).values({
@@ -202,5 +224,17 @@ describe("GET /api/admin/proctor/exams", () => {
       url: "/api/admin/proctor/exams",
     });
     expect(response.statusCode).toBe(401);
+  });
+
+  it("J4-I1B: an UNASSIGNED Proctor sees zero exams (assignment_filtered_collection)", async () => {
+    const { token } = await createRoleToken("Proctor");
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/proctor/exams",
+      cookies: { "auth-token": token },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(0);
+    expect(response.json().items).toEqual([]);
   });
 });

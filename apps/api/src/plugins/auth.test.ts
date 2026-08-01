@@ -185,7 +185,9 @@ describe("auth plugin: requireCapability (RBAC runtime activation, PR #3)", () =
 
   it("Proctor passes a proctor capability but is denied a grading capability", async () => {
     mockRole = "Proctor";
-    const proctorApp = await buildCapabilityApp(Permission.AttemptForceSubmit);
+    // J4-I1B (ADR-015 §13): AttemptForceSubmit is REMOVED from the Proctor
+    // preset — use the retained AttemptTimelineView as the Proctor capability.
+    const proctorApp = await buildCapabilityApp(Permission.AttemptTimelineView);
     const ok = await proctorApp.inject({
       method: "GET",
       url: "/cap",

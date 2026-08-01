@@ -15,11 +15,14 @@ import type {
 } from "@exam/domain";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
+  courses,
   examIncidentActions,
   examIncidentAttempts,
   examIncidentEvents,
   examIncidentInterruptionLinks,
   examIncidents,
+  exams,
+  organizations,
 } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
@@ -139,6 +142,43 @@ export function createIncidentRepo(db: Database) {
           eq(examIncidents.id, incidentId),
         ),
       );
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Incident → Exam → Course → Organization authorization chain (J4-I1B,
+   * ADR-015 §8). Tenant-scoped by the incident's org anchor; the parent-chain
+   * org consistency (incident.org == exam.org == course.org == org) is
+   * verified by the resolver.
+   */
+  async function findAuthorizationChain(
+    ctx: TenantContext | RequestContext,
+    incidentId: string,
+  ) {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select({
+        incidentId: examIncidents.id,
+        incidentOrganizationId: examIncidents.organizationId,
+        linkedExamId: examIncidents.examId,
+        examId: exams.id,
+        examOrganizationId: exams.organizationId,
+        linkedCourseId: exams.courseId,
+        courseId: courses.id,
+        courseOrganizationId: courses.organizationId,
+        organizationId: organizations.id,
+      })
+      .from(examIncidents)
+      .leftJoin(exams, eq(examIncidents.examId, exams.id))
+      .leftJoin(courses, eq(exams.courseId, courses.id))
+      .leftJoin(organizations, eq(courses.organizationId, organizations.id))
+      .where(
+        and(
+          eq(examIncidents.organizationId, orgId),
+          eq(examIncidents.id, incidentId),
+        ),
+      )
+      .limit(1);
     return rows[0] ?? null;
   }
 
@@ -452,6 +492,7 @@ export function createIncidentRepo(db: Database) {
   return {
     insert,
     findById,
+    findAuthorizationChain,
     findByIdForUpdate,
     listByExam,
     update,

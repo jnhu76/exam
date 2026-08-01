@@ -71,7 +71,7 @@ function denyInconsistentChain(
   return { denied: true, reason };
 }
 
-async function resolveAuthorizationChain(args: {
+export async function resolveAuthorizationChain(args: {
   logger: FastifyBaseLogger | undefined;
   ctx: ResolverContext;
   resourceId: string;

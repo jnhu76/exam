@@ -211,7 +211,16 @@ function norm(s: string | null | undefined): string | null {
 
 /**
  * Registers admin incident routes (ADR-014).
- * All routes are gated by incident.* permissions using flat requireCapability.
+ *
+ * J4-I1B (ADR-015 §8): every route is scope-gated via
+ * `requireScopedCapability`. Exam-path routes (`/admin/exams/:examId/incidents`)
+ * resolve through the Exam resolver; incident-path routes
+ * (`/admin/incidents/:incidentId/...`) resolve through the NEW Incident→Exam
+ * resolver (the incident's examId is server-derived from the authoritative
+ * row, never from the request body). View/create/investigate routes carry
+ * `proctorAccess = assignment_scoped` (Proctor assignment enforcement);
+ * resolve/dismiss remain `admin_only` (terminal judgment) while staying
+ * scoped for target existence, tenant, and parent-chain validation.
  */
 export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
   // ── Create Incident ──
@@ -220,7 +229,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentCreate),
+        fastify.requireScopedCapability(
+          Permission.IncidentCreate,
+          "exam",
+          "examId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: ExamIdParamsSchema,
@@ -327,7 +341,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentView),
+        fastify.requireScopedCapability(
+          Permission.IncidentView,
+          "exam",
+          "examId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: ExamIdParamsSchema,
@@ -360,7 +379,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentView),
+        fastify.requireScopedCapability(
+          Permission.IncidentView,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -390,7 +414,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentInvestigate),
+        fastify.requireScopedCapability(
+          Permission.IncidentInvestigate,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -459,7 +488,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentInvestigate),
+        fastify.requireScopedCapability(
+          Permission.IncidentInvestigate,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -518,7 +552,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentInvestigate),
+        fastify.requireScopedCapability(
+          Permission.IncidentInvestigate,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -589,7 +628,11 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentResolve),
+        fastify.requireScopedCapability(
+          Permission.IncidentResolve,
+          "incident",
+          "incidentId",
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -658,7 +701,11 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentResolve),
+        fastify.requireScopedCapability(
+          Permission.IncidentResolve,
+          "incident",
+          "incidentId",
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -727,7 +774,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentInvestigate),
+        fastify.requireScopedCapability(
+          Permission.IncidentInvestigate,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -834,7 +886,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentInvestigate),
+        fastify.requireScopedCapability(
+          Permission.IncidentInvestigate,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -914,7 +971,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.IncidentInvestigate),
+        fastify.requireScopedCapability(
+          Permission.IncidentInvestigate,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: IncidentIdParamsSchema,

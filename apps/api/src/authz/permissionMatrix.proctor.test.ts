@@ -29,11 +29,6 @@ const routes: readonly MatrixRoute[] = [
   ["GET", "/api/admin/proctor/exams"],
   ["GET", `/api/admin/exams/${EXAM_ID}/proctor/attempts`],
   ["GET", `/api/admin/attempts/${ATTEMPT_ID}/proctor-events`],
-  [
-    "POST",
-    `/api/admin/attempts/${ATTEMPT_ID}/proctor-incident`,
-    INCIDENT_PAYLOAD,
-  ],
 ];
 
 describe("RBAC permission matrix — proctor routes", () => {
@@ -69,4 +64,51 @@ describe("RBAC permission matrix — proctor routes", () => {
       }
     },
   );
+
+  // J4-I1B (ADR-015 §13): AttemptMisconductMark is REMOVED from the Proctor
+  // preset, so the legacy audit-only proctor-incident marker is Admin-only.
+  // A Proctor call now fails the capability gate (403 PERMISSION_DENIED) —
+  // the route itself stays scoped for Admin (missing attempt → 404 → passed).
+  it("Proctor is denied the legacy proctor-incident marker after J4-I1B (grant removed)", async () => {
+    const verdict = await fixture.verdict(
+      "Proctor",
+      "POST",
+      `/api/admin/attempts/${ATTEMPT_ID}/proctor-incident`,
+      INCIDENT_PAYLOAD,
+    );
+    expect(verdict).toBe("denied");
+    const adminVerdict = await fixture.verdict(
+      "Admin",
+      "POST",
+      `/api/admin/attempts/${ATTEMPT_ID}/proctor-incident`,
+      INCIDENT_PAYLOAD,
+    );
+    // Admin holds the grant; the scoped resolver still runs (missing attempt →
+    // 404 RESOURCE_NOT_FOUND, classified "passed" = capability gate passed).
+    expect(adminVerdict).toBe("passed");
+  });
+
+  // J4-I1B (ADR-015 §13): AttemptForceSubmit is REMOVED from the Proctor
+  // preset — force-submit is Admin-only while staying scoped.
+  it("Proctor is denied force-submit after J4-I1B (grant removed)", async () => {
+    const verdict = await fixture.verdict(
+      "Proctor",
+      "POST",
+      `/api/admin/attempts/${ATTEMPT_ID}/force-submit`,
+      {},
+    );
+    expect(verdict).toBe("denied");
+  });
+
+  // J4-I1B (ADR-015 §13): AttemptMisconductMark is REMOVED from the Proctor
+  // preset — misconduct marking is Admin-only while staying scoped.
+  it("Proctor is denied misconduct marking after J4-I1B (grant removed)", async () => {
+    const verdict = await fixture.verdict(
+      "Proctor",
+      "POST",
+      `/api/admin/attempts/${ATTEMPT_ID}/misconduct`,
+      { severity: "warning", notes: "test misconduct note" },
+    );
+    expect(verdict).toBe("denied");
+  });
 });
