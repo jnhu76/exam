@@ -2,29 +2,37 @@
 
 ## Status
 
-**Proposed** — 2026-08-02
+**Accepted** — 2026-08-02
 
-This ADR is **Proposed**. It is the candidate authority contract for
-`M11-PROCTOR-EXAM-ASSIGNMENTS` (J4-I1). It must not be marked **Accepted**
-by the same implementation agent that authors it; acceptance requires an
-independent review that closes the §26 acceptance checklist. Until
-Accepted, J4-I1 is BLOCKED.
+This ADR is **Accepted** and is the binding authority contract for
+`M11-PROCTOR-EXAM-ASSIGNMENTS` (J4-I1).
 
-Acceptance, when it happens, authorizes J4-I1 to implement the frozen
-contract below. Acceptance does **not** itself implement any schema,
+It was authored as Proposed and reviewed through four independent
+review rounds on PR #245 (head `58777282`), each round closing specific
+contract-level blockers; the final independent review (the acceptance
+evidence) confirmed all §26 checklist items. Acceptance authorizes J4-I1
+to implement the frozen contract below per the §23 decomposition
+(A → B → C → D). Acceptance does **not** itself implement any schema,
 command, route, permission, preset, resolver, or UI behavior, and it does
 not authorize J5/J6, system incidents, Redis, custom roles,
 multiTenant, or SuperAdmin.
 
-If the project's house practice is later judged to allow a design PR to
-enter master as Accepted, the acceptance record must still state: decision
-owner, review evidence, and acceptance date (see §26).
+### Acceptance record
+
+| Field | Value |
+| --- | --- |
+| Accepted | 2026-08-02 |
+| Decision owner | jnhu76 |
+| Review evidence | PR #245 final independent review (head `58777282`, 6 commits) — four review rounds; three-document adversarial consistency audit (10 criteria, all PASS) |
+| Reality audit | [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md) |
+| Acceptance checklist | §26 (all items closed) |
 
 ## Metadata
 
 | Field | Value |
 | --- | --- |
 | Date | 2026-08-02 |
+| Accepted | 2026-08-02 |
 | Decision owners | jnhu76 |
 | Supersedes | none |
 | Superseded by | — |
@@ -1367,61 +1375,62 @@ custom roles, multiTenant, SuperAdmin, Redis, or any Phase 4 work.
 
 ## 26. Acceptance checklist (§12)
 
-An ADR-015 reviewer MUST confirm every item before marking Accepted.
+All items were confirmed closed by the final independent review on PR #245
+(head `58777282`, 2026-08-02) before this ADR was marked Accepted.
 
 ```text
-[ ] assignment aggregate frozen (§4)
-[ ] role + permission + resource triple frozen (§3)
-[ ] Admin bypass policy frozen (§2)
-[ ] 403/404 policy frozen (§9)
-[ ] assign/revoke commands frozen (§5)
-[ ] operationId semantics frozen (§6)
-[ ] concurrency and unique arbiters frozen (§7)
-[ ] revocation timing frozen (§10)
-[ ] Exam/Attempt/Incident resolvers frozen (§8)
-[ ] initial Proctor permission set frozen (§13)
-[ ] dangerous permissions explicitly deferred or decided (§13)
-[ ] audit payload frozen (§14)
-[ ] persistence proposal frozen (§15)
-[ ] API proposal frozen (§16)
-[ ] migration/backfill policy frozen (§18)
-[ ] retention/delete policy frozen (§19)
-[ ] test matrix frozen (§22 threat model + §23 decomposition)
-[ ] J4-I1 decomposition frozen (§23)
-[ ] Redis explicitly excluded from authorization authority (§24)
+[x] assignment aggregate frozen (§4)
+[x] role + permission + resource triple frozen (§3)
+[x] Admin bypass policy frozen (§2)
+[x] 403/404 policy frozen (§9)
+[x] assign/revoke commands frozen (§5)
+[x] operationId semantics frozen (§6)
+[x] concurrency and unique arbiters frozen (§7)
+[x] revocation timing frozen (§10)
+[x] Exam/Attempt/Incident resolvers frozen (§8)
+[x] initial Proctor permission set frozen (§13)
+[x] dangerous permissions explicitly deferred or decided (§13)
+[x] audit payload frozen (§14)
+[x] persistence proposal frozen (§15)
+[x] API proposal frozen (§16)
+[x] migration/backfill policy frozen (§18)
+[x] retention/delete policy frozen (§19)
+[x] test matrix frozen (§22 threat model + §23 decomposition)
+[x] J4-I1 decomposition frozen (§23)
+[x] Redis explicitly excluded from authorization authority (§24)
 
 Reviewer-driven items (added during the design-contract revision):
-[ ] two-table persistence frozen: exam_proctor_assignments (episode
+[x] two-table persistence frozen: exam_proctor_assignments (episode
     state, named status/revocation CHECKs, partial active-unique,
     (org,id) unique) + exam_proctor_assignment_events (append-only,
     (org,opId) unique = idempotency arbiter, NOT NULL assignment_id +
     composite FK, NOT NULL actor_id + FK→users(id)) (§4, §15)
-[ ] audit_logs is NOT the idempotency arbiter (no operation_id column);
+[x] audit_logs is NOT the idempotency arbiter (no operation_id column);
     the events table is the sole replay/conflict authority (§7)
-[ ] episode-resolution table frozen incl. multi-episode already-revoked
+[x] episode-resolution table frozen incl. multi-episode already-revoked
     tie-break (revoked_at DESC, id DESC) and 404 when no episode exists
     (§6)
-[ ] 23505 loser writes its own no_change event receipt in a fresh
+[x] 23505 loser writes its own no_change event receipt in a fresh
     transaction (§7 recovery algorithm)
-[ ] full Proctor-reachable route inventory frozen with the 5-valued
+[x] full Proctor-reachable route inventory frozen with the 5-valued
     proctorAccess field + machine-checkable structural conformance test
-    (§8)
-[ ] AttemptForceSubmit + AttemptMisconductMark removed from the Proctor
+    enumerating every route-registry entry (§8)
+[x] AttemptForceSubmit + AttemptMisconductMark removed from the Proctor
     preset by J4-I1B (§13, §23)
-[ ] legacy POST /admin/attempts/:attemptId/proctor-incident Admin-only +
+[x] legacy POST /admin/attempts/:attemptId/proctor-incident Admin-only +
     deprecated, STAYS requireScopedCapability (NOT flat) (§16, §23)
-[ ] tenant FK = plain users(id) + command/repository tenant check; no
+[x] tenant FK = plain users(id) + command/repository tenant check; no
     user-composite FK; "no changes to existing tables" retained (§15, §19)
-[ ] revoke canonical identity frozen to {operationId, examId,
+[x] revoke canonical identity frozen to {operationId, examId,
     proctorUserId}; revoke API = POST .../proctors/:id/revoke (§5, §16)
-[ ] mandated delivery order A → B → C → D (true graph A→B, A→C, B+C→D)
+[x] mandated delivery order A → B → C → D (true graph A→B, A→C, B+C→D)
     (§23)
-[ ] assignment-API capability = new exam.proctor_assignment.manage/view;
+[x] assignment-API capability = new exam.proctor_assignment.manage/view;
     registry scope=Exam/resolver="exam"; NO per-permission defaultScope
     (§16)
-[ ] listExamProctors active-default + history (all|revoked, Admin-only)
+[x] listExamProctors active-default + history (all|revoked, Admin-only)
     + keyset pagination frozen (§5, §17)
-[ ] named assignment CHECKs frozen verbatim
+[x] named assignment CHECKs frozen verbatim
     (exam_proctor_assignments_status_check,
     exam_proctor_assignments_revocation_shape_check) (§4)
 ```

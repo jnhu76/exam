@@ -5,7 +5,7 @@
 > **Date:** 2026-08-02
 > **Branch:** `docs/m11-r0-proctor-exam-scope-contract`
 > **Base SHA:** `e9fa1969131c0976622ebd3c83465a97f771e5be` (master, post #244)
-> **Authority chain this audit feeds:** ADR-015 (Proposed) → J4-I1 runtime
+> **Authority chain this audit feeds:** ADR-015 (Accepted 2026-08-02, PR #245) → J4-I1 runtime
 
 This audit answers, from **real master code**, what exists today for
 Proctor→Exam resource-relationship authority. It exists to be cited by

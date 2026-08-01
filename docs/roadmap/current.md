@@ -52,11 +52,11 @@ commands, API, audit, and optional time-grant linkage paths are implemented on
 Remaining recovery work — all explicitly NOT IMPLEMENTED: Proctor Incident
 permissions and Proctor-to-Exam resource scope (M11 / J4), dedicated recovery
 centers (J5/J6), system-generated incidents, and wider startup reconciliation.
-The J4 design contract (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **IN REVIEW**
-as ADR-015 (Proposed) with its reality audit
+The J4 design contract (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **CLOSED**
+as ADR-015 (**Accepted** 2026-08-02, PR #245) with its reality audit
 ([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
-no J4 runtime implementation is authorized before that R0 contract is
-independently reviewed and accepted.
+the J4-I1 runtime is NEXT, authorized to implement per ADR-015 §23
+(A → B → C → D).
 
 ### Plain-text subjective question loop
 
