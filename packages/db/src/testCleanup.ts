@@ -47,6 +47,25 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.importJobLogs)
     .where(eq(schema.importJobLogs.organizationId, organizationId));
+  // Incident tables (ADR-014): delete FK-leaf tables before parent
+  // examAttempts/examIncidents to avoid composite-FK violations.
+  await tx
+    .delete(schema.examIncidentActions)
+    .where(eq(schema.examIncidentActions.organizationId, organizationId));
+  await tx
+    .delete(schema.examIncidentAttempts)
+    .where(eq(schema.examIncidentAttempts.organizationId, organizationId));
+  await tx
+    .delete(schema.examIncidentInterruptionLinks)
+    .where(
+      eq(schema.examIncidentInterruptionLinks.organizationId, organizationId),
+    );
+  await tx
+    .delete(schema.examIncidentEvents)
+    .where(eq(schema.examIncidentEvents.organizationId, organizationId));
+  await tx
+    .delete(schema.examIncidents)
+    .where(eq(schema.examIncidents.organizationId, organizationId));
   // attemptGradingEntries has a FK → examAttempts.id (onDelete: no action);
   // must be deleted before examAttempts to avoid FK violation.
   await tx

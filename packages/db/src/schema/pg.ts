@@ -20,6 +20,7 @@ import type {
   InterruptionTimePolicy,
 } from "@exam/domain";
 import {
+  bigint,
   boolean,
   check,
   doublePrecision,
@@ -1200,6 +1201,251 @@ export const notifications = pgTable(
   ],
 );
 
+// ── Exam Incident Tables (ADR-014) ──────────────────────────────────
+
+/**
+ * Exam incidents — durable operational case records.
+ * ADR-014: orthogonal state dimension alongside Attempt lifecycle.
+ */
+export const examIncidents = pgTable(
+  "exam_incidents",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: organizationId().references(() => organizations.id),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id),
+    attemptId: text("attempt_id"),
+    candidateId: text("candidate_id").references(() => candidateProfiles.id),
+    type: text("type").notNull(),
+    severity: text("severity").notNull().default("info"),
+    status: text("status").notNull().default("open"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }),
+    description: text("description").notNull(),
+    resolutionSummary: text("resolution_summary"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+    resolvedBy: text("resolved_by"),
+    reportedBy: text("reported_by").notNull(),
+    version: integer("version").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("exam_incidents_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    index("exam_incidents_org_attempt_idx").on(
+      table.organizationId,
+      table.attemptId,
+    ),
+    index("exam_incidents_org_exam_status_idx").on(
+      table.organizationId,
+      table.examId,
+      table.status,
+    ),
+    index("exam_incidents_active_status_idx")
+      .on(table.organizationId, table.status)
+      .where(sql`${table.status} IN ('open', 'investigating')`),
+    check(
+      "exam_incidents_type_check",
+      sql`${table.type} IN ('network_interruption','device_failure','power_failure','candidate_unable_to_continue','suspected_misconduct','operator_error','system_outage','environmental_disruption','other')`,
+    ),
+    check(
+      "exam_incidents_severity_check",
+      sql`${table.severity} IN ('info','minor','major','critical')`,
+    ),
+    check(
+      "exam_incidents_status_check",
+      sql`${table.status} IN ('open','investigating','resolved','dismissed')`,
+    ),
+    check(
+      "exam_incidents_description_check",
+      sql`length(btrim(${table.description})) BETWEEN 1 AND 1000`,
+    ),
+    check(
+      "exam_incidents_resolution_summary_check",
+      sql`${table.resolutionSummary} IS NULL OR length(btrim(${table.resolutionSummary})) BETWEEN 1 AND 1000`,
+    ),
+    check("exam_incidents_version_check", sql`${table.version} >= 1`),
+    // Composite FK to exam_attempts when attempt_id is set
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "exam_incidents_org_attempt_fk",
+    }),
+  ],
+);
+
+/**
+ * Exam incident events — append-only event history.
+ * `event_sequence` (BIGINT GENERATED ALWAYS AS IDENTITY) is the sole ordering authority.
+ */
+export const examIncidentEvents = pgTable(
+  "exam_incident_events",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: organizationId().references(() => organizations.id),
+    incidentId: uuid("incident_id").notNull(),
+    eventSequence: bigint("event_sequence", {
+      mode: "number",
+    }).generatedAlwaysAsIdentity(),
+    eventType: text("event_type").notNull(),
+    commandType: text("command_type").notNull(),
+    operationId: uuid("operation_id").notNull(),
+    actorId: text("actor_id"),
+    beforeVersion: integer("before_version").notNull(),
+    afterVersion: integer("after_version").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("exam_incident_events_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    index("exam_incident_events_incident_sequence_idx").on(
+      table.incidentId,
+      table.eventSequence,
+    ),
+    check(
+      "exam_incident_events_event_type_check",
+      sql`${table.eventType} IN ('incident_created','investigation_started','note_added','severity_changed','incident_resolved','incident_dismissed','action_linked','attempt_linked','interruption_linked')`,
+    ),
+    check(
+      "exam_incident_events_version_check",
+      sql`${table.beforeVersion} >= 0 AND ${table.afterVersion} >= 0`,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.incidentId],
+      foreignColumns: [examIncidents.organizationId, examIncidents.id],
+      name: "exam_incident_events_incident_fk",
+    }),
+  ],
+);
+
+/**
+ * Exam incident actions — links to separately authoritative operator actions.
+ * action_type ∈ {time_grant, force_submit} (misconduct_mark deferred).
+ */
+export const examIncidentActions = pgTable(
+  "exam_incident_actions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: organizationId().references(() => organizations.id),
+    incidentId: uuid("incident_id").notNull(),
+    actionType: text("action_type").notNull(),
+    actionId: text("action_id").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    actorId: text("actor_id"),
+    linkedAt: timestamp("linked_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    operationId: uuid("operation_id").notNull(),
+  },
+  (table) => [
+    uniqueIndex("exam_incident_actions_org_action_unique").on(
+      table.organizationId,
+      table.actionType,
+      table.actionId,
+    ),
+    index("exam_incident_actions_incident_idx").on(table.incidentId),
+    check(
+      "exam_incident_actions_action_type_check",
+      sql`${table.actionType} IN ('time_grant', 'force_submit')`,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.incidentId],
+      foreignColumns: [examIncidents.organizationId, examIncidents.id],
+      name: "exam_incident_actions_incident_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "exam_incident_actions_attempt_fk",
+    }),
+  ],
+);
+
+/**
+ * Exam incident attempts — affected-attempt membership for exam-wide incidents.
+ * Only allowed when incident.attemptId IS NULL (anchor exclusivity).
+ */
+export const examIncidentAttempts = pgTable(
+  "exam_incident_attempts",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: organizationId().references(() => organizations.id),
+    incidentId: uuid("incident_id").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    relationshipType: text("relationship_type").notNull(),
+    linkedAt: timestamp("linked_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    linkedBy: text("linked_by").notNull(),
+    operationId: uuid("operation_id").notNull(),
+  },
+  (table) => [
+    uniqueIndex("exam_incident_attempts_incident_attempt_unique").on(
+      table.incidentId,
+      table.attemptId,
+    ),
+    check(
+      "exam_incident_attempts_relationship_type_check",
+      sql`${table.relationshipType} IN ('affected', 'referenced')`,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.incidentId],
+      foreignColumns: [examIncidents.organizationId, examIncidents.id],
+      name: "exam_incident_attempts_incident_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "exam_incident_attempts_attempt_fk",
+    }),
+  ],
+);
+
+/**
+ * Exam incident interruption links — evidence links to interruption episodes.
+ * The interruption ledger remains authoritative for compensated time.
+ */
+export const examIncidentInterruptionLinks = pgTable(
+  "exam_incident_interruption_links",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: organizationId().references(() => organizations.id),
+    incidentId: uuid("incident_id").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    interruptionId: uuid("interruption_id").notNull(),
+    linkedAt: timestamp("linked_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    linkedBy: text("linked_by").notNull(),
+    operationId: uuid("operation_id").notNull(),
+  },
+  (table) => [
+    uniqueIndex(
+      "exam_incident_interruption_links_incident_interruption_unique",
+    ).on(table.incidentId, table.interruptionId),
+    foreignKey({
+      columns: [table.organizationId, table.incidentId],
+      foreignColumns: [examIncidents.organizationId, examIncidents.id],
+      name: "exam_incident_interruption_links_incident_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId, table.interruptionId],
+      foreignColumns: [
+        attemptInterruptions.organizationId,
+        attemptInterruptions.attemptId,
+        attemptInterruptions.id,
+      ],
+      name: "exam_incident_interruption_links_interruption_fk",
+    }),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -1222,4 +1468,9 @@ export const schema = {
   importJobLogs,
   emailOutbox,
   notifications,
+  examIncidents,
+  examIncidentEvents,
+  examIncidentActions,
+  examIncidentAttempts,
+  examIncidentInterruptionLinks,
 };
