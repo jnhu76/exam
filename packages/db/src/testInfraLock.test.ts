@@ -91,6 +91,20 @@ interface AdvisoryLockRow {
 }
 
 /**
+ * Settle every not-yet-settled deferred (resolve + clear its timer) so a
+ * stuck or failed test can never leave an armed 30-second rejection timer or
+ * an unawaited gate promise behind. Mirrors the barrier `dispose()` used by
+ * the incident concurrency test.
+ */
+function disposeAll(
+  ...deferreds: Array<ReturnType<typeof createDeferred<void>>>
+): void {
+  for (const d of deferreds) {
+    if (!d.isSettled()) d.resolve();
+  }
+}
+
+/**
  * Split a 64-bit advisory-lock key into its two int4 halves as PostgreSQL
  * stores them in pg_locks (classid = high 32 bits, objid = low 32 bits,
  * both signed int4).
@@ -331,9 +345,11 @@ PG_DESCRIBE(
         // never overlapped.
         expect(maxConcurrent).toBe(1);
       } finally {
-        // Release every deferred + settle every promise even on assertion
-        // failure, so no lock session or connection is left hanging.
-        releaseHolder.resolve();
+        // Dispose EVERY deferred (holderEntered / contenderEntered /
+        // releaseHolder) + settle every promise even on assertion failure, so
+        // no lock session, connection, or armed rejection timer is left
+        // behind.
+        disposeAll(holderEntered, contenderEntered, releaseHolder);
         await Promise.allSettled([
           holderPromise,
           ...(contenderPromise ? [contenderPromise] : []),
@@ -438,9 +454,11 @@ PG_DESCRIBE(
         await contenderPromise;
         expect(contenderEntered.isSettled()).toBe(true);
       } finally {
-        // Release every deferred + settle every promise even on assertion
-        // failure, so no lock session or connection is left hanging.
-        releaseHolder.resolve();
+        // Dispose EVERY deferred (holderEntered / contenderEntered /
+        // releaseHolder) + settle every promise even on assertion failure, so
+        // no lock session, connection, or armed rejection timer is left
+        // behind.
+        disposeAll(holderEntered, contenderEntered, releaseHolder);
         await Promise.allSettled([
           holderPromise,
           ...(contenderPromise ? [contenderPromise] : []),

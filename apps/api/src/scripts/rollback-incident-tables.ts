@@ -7,7 +7,7 @@
  * the db layer without a reverse package dependency. This entrypoint owns only
  * env resolution, the `--confirm` flag, and the database-name safety guard.
  *
- * It runs ONLY when invoked explicitly with `--confirm`, and ONLY when no
+ * It runs ONLY when invoked directly with `--confirm`, and ONLY when no
  * `attempt_time_adjustments.incident_id` is non-null. After the first non-null
  * incident correlation write, a destructive DROP is prohibited (it would leave
  * dangling correlation UUIDs with no referential guard); the script fails
@@ -16,12 +16,40 @@
  * Invocation:
  *   pnpm db:rollback:incidents -- --confirm
  *
- * Never run by migrate, build, or test.
+ * Never run by migrate, build, or test. All failure modes (missing env,
+ * malformed URL, connection failure, guard trip, close failure) exit non-zero
+ * with a clear stderr message; nothing is ever silently dropped.
  */
 
+import { pathToFileURL } from "node:url";
 import { createDatabase, rollbackIncidentTables } from "@exam/db";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
+
+/**
+ * Extracts the database name from a connection URL. Query params are
+ * excluded, a trailing slash is handled, and the final non-empty pathname
+ * segment is used (percent-decoded). Throws on a malformed URL.
+ */
+export function parseDatabaseName(databaseUrl: string): string {
+  const parsed = new URL(databaseUrl);
+  const lastSegment = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  try {
+    return decodeURIComponent(lastSegment);
+  } catch {
+    // Malformed percent-encoding: fall back to the raw segment so the name
+    // guard can still evaluate it.
+    return lastSegment;
+  }
+}
+
+/** Error message for the database-name safety guard. */
+function refuseDbName(dbName: string): string {
+  return (
+    `Refusing to run against database "${dbName}": name must start with ` +
+    "exam, or contain e2e/test/ci. Set DATABASE_URL to a guarded target."
+  );
+}
 
 async function main(): Promise<void> {
   loadRootEnv();
@@ -34,26 +62,48 @@ async function main(): Promise<void> {
         "never run by migrate, build, or test. Usage:\n" +
         "  pnpm db:rollback:incidents -- --confirm\n",
     );
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
 
-  const databaseUrl = resolveDatabaseUrlFromEnv(process.env);
+  let databaseUrl: string;
+  try {
+    databaseUrl = resolveDatabaseUrlFromEnv(process.env);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
 
   // Database-name safety guard: refuse to target a DB whose name does not
   // contain a recognized signal. This prevents accidental runs against an
-  // unknown production-shaped database.
-  const dbName = databaseUrl.split("/").pop() ?? "";
+  // unknown production-shaped database. URL-based parsing (not string
+  // splitting) so query params / trailing slashes cannot confuse the name.
+  let dbName: string;
+  try {
+    dbName = parseDatabaseName(databaseUrl);
+  } catch (err) {
+    process.stderr.write(`Invalid DATABASE_URL: ${(err as Error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
   if (!/^(exam|.*e2e|.*test|.*ci)/i.test(dbName)) {
-    process.stderr.write(
-      `Refusing to run against database "${dbName}": name must start with ` +
-        "exam, or contain e2e/test/ci. Set DATABASE_URL to a guarded target.\n",
-    );
-    process.exit(2);
+    process.stderr.write(`${refuseDbName(dbName)}\n`);
+    process.exitCode = 2;
+    return;
   }
 
   process.stdout.write(`Guarded incident rollback against "${dbName}"...\n`);
 
-  const conn = await createDatabase(databaseUrl);
+  let conn: Awaited<ReturnType<typeof createDatabase>>;
+  try {
+    conn = await createDatabase(databaseUrl);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   try {
     const result = await rollbackIncidentTables(conn.db);
     process.stdout.write(
@@ -64,9 +114,29 @@ async function main(): Promise<void> {
     process.stderr.write(`${(err as Error).message}\n`);
     process.exitCode = 1;
   } finally {
-    await conn.sql.end();
+    try {
+      await conn.sql.end();
+    } catch (err) {
+      process.stderr.write(
+        `Failed to close the connection: ${(err as Error).message}\n`,
+      );
+      if (process.exitCode === 0) process.exitCode = 1;
+    }
   }
 }
 
-// Run only when invoked directly as a script (not when imported).
-void main();
+// Real direct-entry guard: run only when this module is the executed script,
+// never when imported (e.g. by tests). Rejections are routed to the controlled
+// error path (stderr + nonzero exit), so no unhandledRejection can escape.
+const isDirectRun =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  main().catch((err: unknown) => {
+    process.stderr.write(
+      `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exitCode = 1;
+  });
+}

@@ -35,6 +35,7 @@ describe("admin incident routes — integration", () => {
   beforeAll(async () => {
     Object.assign(ctx, await buildTestApp(plugin, { prefix: "/api" }));
     orgId = ctx.org.id;
+    cleanupOrgId = orgId;
     adminToken = ctx.adminToken;
     candidateToken = ctx.candidateToken;
 

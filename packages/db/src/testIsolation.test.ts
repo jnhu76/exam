@@ -199,7 +199,7 @@ describe(
   // heavy sections under parallel load.
   { timeout: 60_000 },
   () => {
-    const testSchema = `test_isolation_migrate_${Date.now()}`;
+    const testSchema = generateUniqueSchemaName("isolation_migrate");
 
     beforeAll(async () => {
       await createTestSchema(TEST_DB_URL, testSchema);
@@ -215,14 +215,14 @@ describe(
     it("creates core business tables in the isolated schema", async () => {
       const sql = postgres(TEST_DB_URL);
       try {
-        const tables = await sql`
+        const tables = (await sql`
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = ${testSchema}
           AND table_type = 'BASE TABLE'
         ORDER BY table_name
-      `;
-        const tableNames = tables.map((r: any) => r.table_name);
+      `) as Array<{ table_name: string }>;
+        const tableNames = tables.map((r) => r.table_name);
 
         expect(tableNames).toContain("organizations");
         expect(tableNames).toContain("users");
@@ -264,7 +264,7 @@ describe(
   // createTestSchema (locked) + a full migrate + seed.
   { timeout: 60_000 },
   () => {
-    const testSchema = `test_isolation_seed_${Date.now()}`;
+    const testSchema = generateUniqueSchemaName("isolation_seed");
 
     beforeAll(async () => {
       await createTestSchema(TEST_DB_URL, testSchema);

@@ -204,6 +204,7 @@ describe("incident version-race recovery (ADR-014 §9)", () => {
   let dbShared: Database;
   let db1: Database;
   let db2: Database;
+  let sqlShared: { end(): Promise<void> };
   let sql1: { end(): Promise<void> };
   let sql2: { end(): Promise<void> };
   let examId: string;
@@ -225,6 +226,7 @@ describe("incident version-race recovery (ADR-014 §9)", () => {
       iso.schemaName,
     );
     dbShared = shared.db;
+    sqlShared = shared.sql;
     // Migrate the isolated schema under the test-infra lifecycle lock (the
     // canonical coordination DB serializes it against sibling CREATE/DROP
     // SCHEMA + CREATE/DROP DATABASE under parallel runs).
@@ -340,9 +342,14 @@ describe("incident version-race recovery (ADR-014 §9)", () => {
   }, 120_000);
 
   afterAll(async () => {
-    await sql2?.end();
-    await sql1?.end();
-    await iso?.cleanup();
+    // Close every connection before dropping the schema; fail-safe so one
+    // close failure cannot block the remaining resource releases.
+    await Promise.allSettled([
+      sql2?.end() ?? Promise.resolve(),
+      sql1?.end() ?? Promise.resolve(),
+      sqlShared?.end() ?? Promise.resolve(),
+    ]);
+    await iso?.cleanup().catch(() => {});
   });
 
   it("same operationId concurrent resolve → one applied + one idempotent_replayed", async () => {
