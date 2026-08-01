@@ -30,6 +30,7 @@ import {
   grantAttemptTime,
   type GrantAttemptTimeInput,
   type GrantAttemptTimeResult,
+  type IncidentGrantValidator,
 } from "./operatorGrant.js";
 
 const NOW = new Date("2026-01-01T01:00:00.000Z");
@@ -304,6 +305,7 @@ async function mintCapability(ctx: MockContext) {
 async function runGrant(
   ctx: MockContext,
   input: GrantAttemptTimeInput,
+  incidentGrantValidator: IncidentGrantValidator | null = null,
 ): Promise<GrantAttemptTimeResult> {
   const capability = await mintCapability(ctx);
   return grantAttemptTime(
@@ -314,6 +316,7 @@ async function runGrant(
     ctx.eventRepo,
     ctx.adjustmentRepo,
     ctx.gradingWorksetRepo,
+    incidentGrantValidator,
     capability,
     input,
   );
@@ -839,6 +842,7 @@ describe("grantAttemptTime", () => {
           ctx.eventRepo,
           ctx.adjustmentRepo,
           ctx.gradingWorksetRepo,
+          null,
           capability,
           baseInput(),
         ),
@@ -892,16 +896,84 @@ describe("grantAttemptTime", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it("incidentId must be null (reserved for REC-I6)", async () => {
+    it("incidentId is accepted (ADR-014 activated the operator path)", async () => {
       const ctx = setupMocks({});
+      // ADR-014 §10: a non-null incidentId requires a validator, and the
+      // Incident scope quadruple is validated BEFORE reconciliation.
+      const validator: IncidentGrantValidator = {
+        findForGrantValidation: async () => ({
+          examId: "exam-1",
+          attemptId: null,
+          candidateId: null,
+        }),
+      };
+      const result = await runGrant(
+        ctx,
+        baseInput({
+          incidentId: "22222222-2222-2222-2222-222222222222",
+        }),
+        validator,
+      );
+      expect(result.outcome).toBe("granted");
+      expect(ctx.insertedAdjustments[0]?.incidentId).toBe(
+        "22222222-2222-2222-2222-222222222222",
+      );
+    });
+
+    it("incidentId with wrong exam is rejected (scope quadruple, 400)", async () => {
+      const ctx = setupMocks({});
+      const validator: IncidentGrantValidator = {
+        findForGrantValidation: async () => ({
+          examId: "other-exam",
+          attemptId: null,
+          candidateId: null,
+        }),
+      };
       await expect(
         runGrant(
           ctx,
           baseInput({
             incidentId: "22222222-2222-2222-2222-222222222222",
           }),
+          validator,
         ),
       ).rejects.toThrow(ValidationError);
+    });
+
+    it("incidentId with missing incident is rejected (404)", async () => {
+      const ctx = setupMocks({});
+      const validator: IncidentGrantValidator = {
+        findForGrantValidation: async () => null,
+      };
+      await expect(
+        runGrant(
+          ctx,
+          baseInput({
+            incidentId: "22222222-2222-2222-2222-222222222222",
+          }),
+          validator,
+        ),
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it("malformed incidentId fails closed before any Incident lookup or mutation (P2-E)", async () => {
+      const ctx = setupMocks({});
+      const validator: IncidentGrantValidator = {
+        findForGrantValidation: vi.fn(async () => ({
+          examId: "exam-1",
+          attemptId: null,
+          candidateId: null,
+        })),
+      };
+      await expect(
+        runGrant(ctx, baseInput({ incidentId: "not-a-uuid" }), validator),
+      ).rejects.toThrow(ValidationError);
+      // No Incident query (validator untouched), no attempt mutation, no
+      // adjustment ledger row, no interruption event, no audit-visible write.
+      expect(validator.findForGrantValidation).not.toHaveBeenCalled();
+      expect(ctx.attemptUpdates).toHaveLength(0);
+      expect(ctx.insertedAdjustments).toHaveLength(0);
+      expect(ctx.insertedEvents).toHaveLength(0);
     });
 
     it("now must be a valid Date", async () => {

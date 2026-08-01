@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { AuditAction, type AuditActionKey } from "@exam/authz";
+import {
+  IncidentActionType,
+  IncidentRelationshipType,
+  IncidentSeverity,
+  IncidentType,
+} from "@exam/domain";
 
 export type AuditLifecycle = "active" | "reserved" | "deprecated";
 export type AuditDurability =
@@ -36,6 +42,29 @@ const shortText = z.string().max(100);
 const identifier = z.string().max(128);
 const freeText = z.string().max(1_000);
 const emptyPayload: AuditPayloadSchema = z.object({}).strict();
+
+// Canonical Incident domain values (ADR-014) — single source: @exam/domain
+// runtime const objects. Arbitrary strings are rejected at the audit boundary.
+const incidentTypeSchema = z.enum(
+  Object.values(IncidentType) as [IncidentType, ...IncidentType[]],
+);
+const incidentSeveritySchema = z.enum(
+  Object.values(IncidentSeverity) as [IncidentSeverity, ...IncidentSeverity[]],
+);
+const incidentActionTypeSchema = z.enum(
+  Object.values(IncidentActionType) as [
+    IncidentActionType,
+    ...IncidentActionType[],
+  ],
+);
+const incidentRelationshipTypeSchema = z.enum(
+  Object.values(IncidentRelationshipType) as [
+    IncidentRelationshipType,
+    ...IncidentRelationshipType[],
+  ],
+);
+// Incident versions are monotonically increasing and start at 1.
+const incidentVersion = z.number().int().positive();
 const usernamePayload: AuditPayloadSchema = z
   .object({ username: z.string().max(50), source: z.literal("local_script") })
   .strict();
@@ -565,6 +594,133 @@ export const AUDIT_ACTION_DEFINITIONS = {
         attemptId: identifier,
         reasonCode: z.string().max(100).nullable(),
         note: z.string().max(500).nullable(),
+      })
+      .strict(),
+  ),
+
+  // ── Incident audit actions (ADR-014) ──
+  [AuditAction.IncidentCreated]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        examId: identifier,
+        attemptId: identifier.optional(),
+        type: incidentTypeSchema,
+        version: incidentVersion,
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentInvestigated]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        version: incidentVersion,
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentNoteAdded]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        noteId: identifier,
+        version: incidentVersion,
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentSeverityChanged]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        beforeSeverity: incidentSeveritySchema,
+        afterSeverity: incidentSeveritySchema,
+        version: incidentVersion,
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentResolved]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        version: incidentVersion,
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentDismissed]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        version: incidentVersion,
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentActionLinked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        actionType: incidentActionTypeSchema,
+        actionId: identifier,
+        attemptId: identifier,
+        version: incidentVersion,
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentAttemptLinked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        attemptId: identifier,
+        relationshipType: incidentRelationshipTypeSchema,
+        version: incidentVersion,
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentInterruptionLinked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        interruptionId: identifier,
+        attemptId: identifier,
+        version: incidentVersion,
       })
       .strict(),
   ),

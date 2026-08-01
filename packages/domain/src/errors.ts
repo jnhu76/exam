@@ -327,3 +327,31 @@ export class ExamPublishResultsNotAllowedError extends AppError {
     super(message, "EXAM_PUBLISH_RESULTS_NOT_ALLOWED", 409);
   }
 }
+
+// ── Incident Errors (ADR-014) ────────────────────────────────────
+
+/**
+ * The incident's expectedVersion does not match the current version (HTTP 409).
+ * Another actor committed a state change since the caller read the incident.
+ */
+export class IncidentVersionConflictError extends AppError {
+  constructor(
+    message = "Incident version conflict",
+    details?: { expectedVersion: number; currentVersion: number },
+  ) {
+    super(message, "INCIDENT_VERSION_CONFLICT", 409, details);
+  }
+}
+
+/**
+ * An incident action link, attempt membership, or interruption link already
+ * exists (HTTP 409). Covers all three link uniques.
+ */
+export class IncidentActionAlreadyLinkedError extends AppError {
+  constructor(
+    message = "Incident action already linked",
+    details?: { linkType: string },
+  ) {
+    super(message, "INCIDENT_ACTION_ALREADY_LINKED", 409, details);
+  }
+}

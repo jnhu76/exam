@@ -361,6 +361,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         reasonCode,
         reasonText,
         interruptionId,
+        incidentId,
       } = body.data;
       // One authoritative command timestamp threaded through the ledger insert,
       // the deadline update, and the audit so the three agree in this request.
@@ -378,6 +379,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           reasonCode,
           reasonText,
           interruptionId: interruptionId ?? null,
+          incidentId: incidentId ?? null,
           actorId: ctx.actorId,
           now,
         },

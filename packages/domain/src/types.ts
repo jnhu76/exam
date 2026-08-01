@@ -15,6 +15,12 @@ import type {
   MisconductSeverity,
   GradingStatus,
   ResultPublicationMode,
+  IncidentStatus,
+  IncidentType,
+  IncidentSeverity,
+  IncidentEventType,
+  IncidentActionType,
+  IncidentRelationshipType,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -635,4 +641,80 @@ export interface RequestContext {
 export interface PublicBrandingContext {
   purpose: "public_branding";
   organizationId?: string;
+}
+
+// ── Exam Incident (ADR-014) ──────────────────────────────────────
+
+/** Exam incident — durable operational case record. */
+export interface ExamIncident {
+  id: string;
+  organizationId: string;
+  examId: string;
+  attemptId: string | null;
+  candidateId: string | null;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  occurredAt: Date | null;
+  description: string;
+  resolutionSummary: string | null;
+  resolvedAt: Date | null;
+  resolvedBy: string | null;
+  reportedBy: string;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Exam incident event — append-only history entry. */
+export interface ExamIncidentEvent {
+  id: string;
+  organizationId: string;
+  incidentId: string;
+  eventSequence: number;
+  eventType: IncidentEventType;
+  commandType: string;
+  operationId: string;
+  actorId: string | null;
+  beforeVersion: number;
+  afterVersion: number;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+}
+
+/** Exam incident action link — correlation to an authoritative operator action. */
+export interface ExamIncidentAction {
+  id: string;
+  organizationId: string;
+  incidentId: string;
+  actionType: IncidentActionType;
+  actionId: string;
+  attemptId: string;
+  actorId: string | null;
+  linkedAt: Date;
+  operationId: string;
+}
+
+/** Exam incident attempt membership — affected/referenced attempt for exam-wide incidents. */
+export interface ExamIncidentAttempt {
+  id: string;
+  organizationId: string;
+  incidentId: string;
+  attemptId: string;
+  relationshipType: IncidentRelationshipType;
+  linkedAt: Date;
+  linkedBy: string;
+  operationId: string;
+}
+
+/** Exam incident interruption link — evidence correlation. */
+export interface ExamIncidentInterruptionLink {
+  id: string;
+  organizationId: string;
+  incidentId: string;
+  attemptId: string;
+  interruptionId: string;
+  linkedAt: Date;
+  linkedBy: string;
+  operationId: string;
 }

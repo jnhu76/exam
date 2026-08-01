@@ -73,11 +73,11 @@ P7 groups eight concerns that otherwise risk being implemented independently:
 - fill-blank full runtime/E2E status remains an open roadmap item and must be
   re-audited.
 - the Admin operator time-grant route, permission, atomic audit path, and
-  Dashboard workflow are closed (REC-I4-I3B2); the exam incident authority is
-  designed and accepted but not implemented (REC-I6-R0 froze it in ADR-014,
-  ACCEPTED, runtime NOT STARTED; J3 persistence/commands are the next
-  acceptance); M11 Proctor resource scope and dedicated recovery centers
-  remain deferred.
+  Dashboard workflow are closed (REC-I4-I3B2); the exam incident authority
+  Admin runtime is implemented (ADR-014 ACCEPTED; J3
+  REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS in review on PR); M11 Proctor
+  resource scope, Proctor incident grants, recovery-center UI, and
+  system-generated incidents remain deferred.
 - broad UI component-authority migration remains incomplete.
 - automated backup, PITR, restore verification, and recovery drills are not
   productized.

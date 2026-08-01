@@ -24,6 +24,7 @@
 import { sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import type { RequestContext } from "@exam/domain";
+import type { IncidentActionType } from "@exam/domain";
 import type { Database, TransactionDatabase } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -33,6 +34,8 @@ import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptIn
 import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
+import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
+import { linkIncidentAction } from "@exam/exam-engine";
 import { grantAttemptTime, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import type {
   GrantAttemptTimeInput,
@@ -42,6 +45,7 @@ import type { TimeAdjustmentRepository } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
+  createIncidentGrantValidatorAdapter,
   createInterruptionEpisodeRepoAdapter,
   createInterruptionEventRepoAdapter,
   createTimeAdjustmentRepoAdapter,
@@ -337,6 +341,15 @@ async function runGrantTransaction(
         createAttemptGradingEntryRepo(tx),
         ctx,
       );
+      // Build the Incident grant validator when an incidentId is present.
+      // The grant command validates the Incident scope quadruple (ADR-014 §10)
+      // BEFORE deadline reconciliation, so an expired attempt + invalid
+      // incidentId cannot terminalize and skip validation.
+      const incidentRepo = input.incidentId ? createIncidentRepo(tx) : null;
+      const incidentGrantValidator = incidentRepo
+        ? createIncidentGrantValidatorAdapter(incidentRepo, ctx)
+        : null;
+
       const grantResult = await grantAttemptTime(
         exams,
         attempts,
@@ -345,9 +358,71 @@ async function runGrantTransaction(
         eventRepo,
         adjustmentRepo,
         gradingWorksetRepo,
+        incidentGrantValidator,
         cap,
         input,
       );
+
+      // If incidentId is present, link the action to the incident inside the
+      // same transaction (combined grant+link path). The Incident's existence
+      // and scope quadruple were already validated inside grantAttemptTime
+      // (step 5b) BEFORE reconciliation; here we only insert the action link
+      // (which appends its own event + audit) on a real grant or replay.
+      if (
+        input.incidentId &&
+        incidentRepo &&
+        grantResult.adjustment &&
+        (grantResult.outcome === "granted" ||
+          grantResult.outcome === "idempotent_replay")
+      ) {
+        // For time_grant, actionId = adjustment.id
+        const actionId = grantResult.adjustment.id;
+
+        // Link the action (this will also append the event and audit)
+        await linkIncidentAction(
+          incidentRepo as never,
+          ctx,
+          input.incidentId,
+          {
+            operationId: input.operationId,
+            actionType: "time_grant",
+            actionId,
+          },
+          {
+            now: input.now,
+            audit: async (action, metadata) => {
+              if (options.audit) {
+                await recordAtomicHttpAudit(tx, options.audit.request, ctx, {
+                  action: action as never,
+                  targetType: "incident",
+                  targetId: input.incidentId!,
+                  metadata,
+                });
+              }
+            },
+            lookupAdjustmentAttempt: async () => input.attemptId,
+            lookupForceSubmitAudit: async () => false,
+            lookupAttempt: async (aid) => {
+              const attempt = await createAttemptRepo(tx).findById(ctx, aid);
+              return attempt
+                ? {
+                    examId: attempt.examId,
+                    candidateId: attempt.candidateId,
+                    organizationId: attempt.organizationId,
+                  }
+                : null;
+            },
+            lookupActionLink: async (actionType, actionId) => {
+              const existing = await incidentRepo.findActionLinkByAction(
+                ctx,
+                actionType as IncidentActionType,
+                actionId,
+              );
+              return existing != null;
+            },
+          },
+        );
+      }
       // Compliance audit (atomic with the ledger insert + deadline update).
       // Recorded only on a real grant; idempotent replay returns the
       // already-committed result without a duplicate audit row. Project the

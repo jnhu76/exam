@@ -19,6 +19,7 @@ import clientEventRoutes from "./clientEvents.js";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
 import { emailRoutes } from "./email.js";
 import notificationRoutes from "./notifications.js";
+import { adminIncidentRoutes } from "./incidents.admin.js";
 
 /**
  * Registers all API route modules on a Fastify instance.
@@ -55,4 +56,5 @@ export async function registerApiRoutes(
   await app.register(proctorMonitoringRoutes, { prefix });
   await app.register(emailRoutes, { prefix });
   await app.register(notificationRoutes, { prefix });
+  await app.register(adminIncidentRoutes, { prefix });
 }

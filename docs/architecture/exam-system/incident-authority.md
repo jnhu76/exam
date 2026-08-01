@@ -1,21 +1,28 @@
 # Exam Incident Authority
 
-> Status: TARGET — ADR-014 ACCEPTED
+> Status: IMPLEMENTED — ADR-014 ACCEPTED
 >
-> Runtime implementation: NOT STARTED
+> Runtime implementation: J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) is
+> implemented and IN REVIEW on PR. Five incident tables (migration `0023`),
+> domain types, repositories, nine canonical write commands, Admin-only
+> permissions, API routes, audit actions, and the `grantAttemptTime()`
+> optional `incidentId` operator path are live. The Recovery Center UI (J5),
+> Proctor incident permissions and Proctor-to-Exam scope (J4/M11), and
+> system-generated incidents remain NOT IMPLEMENTED.
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
 > (Accepted). This document is the accepted target contract for J3. It provides
 > the state tables, command inventory, permission matrix, transaction
-> boundaries, and sequence diagrams for that contract. Nothing described here
-> is implemented; every table, route, permission, and command below is a
-> frozen proposal for the follow-up Job
-> `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` (J3).
+> boundaries, and sequence diagrams for that contract. The commands, tables,
+> and Admin routes below are implemented per this contract; sections that
+> remain proposals are marked explicitly.
 
 Reality baseline: [`REC-I6-R0 reality audit`](../../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md).
-The only live incident surface today is the audit-event-only
+The pre-J3 live incident surface was the audit-event-only
 `proctor.incident_marked` marker; `attempt_time_adjustments.incident_id` is
-the only `incident_id` column and has zero non-null writers.
+the only `incident_id` column. J3 adds the incident tables and the Admin
+incident API; the proctor marker is NOT dual-written to incidents (see
+"Relationship to the existing proctor marker" below).
 
 ---
 
@@ -127,7 +134,7 @@ grant+link path is atomic (crash leaves neither; same-`operationId` retry
 replays both), and a grant committed without a link is recovered via
 standalone `linkIncidentAction()`.
 
-## Data model (proposal)
+## Data model
 
 ```mermaid
 erDiagram
@@ -213,7 +220,7 @@ never mutable state. Integrity is DB-enforced by composite FKs reusing
 existing uniques, and there is no `ON DELETE CASCADE`: incidents are
 durable and parent deletion fails closed while incidents reference it.
 
-## Sequence — time grant linked to an incident (TARGET)
+## Sequence — time grant linked to an incident
 
 ```mermaid
 sequenceDiagram
@@ -242,7 +249,7 @@ sequenceDiagram
     API-->>A: GrantOutcome (granted | idempotent_replay | terminal)
 ```
 
-## Sequence — concurrent terminal transitions (TARGET)
+## Sequence — concurrent terminal transitions
 
 ```mermaid
 sequenceDiagram
@@ -276,6 +283,6 @@ mapping guidance lives in ADR-014 §15.
 - [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md) — normative contract (Accepted).
 - [`state-and-authority.md`](state-and-authority.md) — orthogonal state dimensions.
 - [`candidate-recovery.md`](candidate-recovery.md) — ADR-012/ADR-013 recovery sequences.
-- [`protocol-catalog.md`](protocol-catalog.md) — proposed Incident protocols (TARGET).
+- [`protocol-catalog.md`](protocol-catalog.md) — Incident protocols (Admin runtime implemented in J3; Proctor protocols deferred).
 - [`domain-model.md`](domain-model.md) — explicitly absent / designed aggregates.
 - [`../../roadmap/recovery-operations-jobs.md`](../../roadmap/recovery-operations-jobs.md) — J2/J3 workstream.

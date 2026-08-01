@@ -60,6 +60,8 @@ export const errorMessages = {
   MAX_ATTEMPTS_REACHED: "已达到最大考试次数",
   EXAM_ALREADY_PASSED: "本场考试已通过",
   IDEMPOTENCY_CONFLICT: "操作标识符与已有请求冲突",
+  INCIDENT_VERSION_CONFLICT: "事件版本冲突，请刷新后重试",
+  INCIDENT_ACTION_ALREADY_LINKED: "该操作已关联到其他事件",
   CSRF_ORIGIN_REJECTED: "请求来源不被允许",
   AUTH_REGISTER_DISABLED: "Phase 1 不支持公开注册",
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",

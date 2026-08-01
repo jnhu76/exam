@@ -115,6 +115,17 @@ export const AuditAction = {
 
   // ── Proctor incidents (P3-M9) ──
   ProctorIncidentMarked: "proctor.incident_marked",
+
+  // ── Exam incidents (ADR-014) ──
+  IncidentCreated: "incident.created",
+  IncidentInvestigated: "incident.investigated",
+  IncidentNoteAdded: "incident.note_added",
+  IncidentSeverityChanged: "incident.severity_changed",
+  IncidentResolved: "incident.resolved",
+  IncidentDismissed: "incident.dismissed",
+  IncidentActionLinked: "incident.action_linked",
+  IncidentAttemptLinked: "incident.attempt_linked",
+  IncidentInterruptionLinked: "incident.interruption_linked",
 } as const;
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];

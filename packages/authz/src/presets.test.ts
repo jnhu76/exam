@@ -49,3 +49,58 @@ describe("RBAC-M2 boundary #7 — Candidate is always own-scope only", () => {
     expect(ROLE_PRESETS[Role.Candidate].defaultScope).toBe(Scope.OwnAttempt);
   });
 });
+
+describe("ADR-014 — Incident permission matrix", () => {
+  it("Admin holds all four incident permissions", () => {
+    const adminPerms = asSet(permissionsForRole(Role.Admin));
+    expect(adminPerms.has(Permission.IncidentView)).toBe(true);
+    expect(adminPerms.has(Permission.IncidentCreate)).toBe(true);
+    expect(adminPerms.has(Permission.IncidentInvestigate)).toBe(true);
+    expect(adminPerms.has(Permission.IncidentResolve)).toBe(true);
+  });
+
+  it("incident.resolve is flagged sensitive for Admin", () => {
+    const sensitive = asSet(ROLE_PRESETS[Role.Admin].sensitivePermissions);
+    expect(sensitive.has(Permission.IncidentResolve)).toBe(true);
+  });
+
+  it("Proctor holds ZERO incident permissions (deferred to J4/M11)", () => {
+    const proctorPerms = asSet(permissionsForRole(Role.Proctor));
+    expect(proctorPerms.has(Permission.IncidentView)).toBe(false);
+    expect(proctorPerms.has(Permission.IncidentCreate)).toBe(false);
+    expect(proctorPerms.has(Permission.IncidentInvestigate)).toBe(false);
+    expect(proctorPerms.has(Permission.IncidentResolve)).toBe(false);
+  });
+
+  it("Teacher holds ZERO incident permissions", () => {
+    const teacherPerms = asSet(permissionsForRole(Role.Teacher));
+    expect(teacherPerms.has(Permission.IncidentView)).toBe(false);
+    expect(teacherPerms.has(Permission.IncidentCreate)).toBe(false);
+    expect(teacherPerms.has(Permission.IncidentInvestigate)).toBe(false);
+    expect(teacherPerms.has(Permission.IncidentResolve)).toBe(false);
+  });
+
+  it("Grader holds ZERO incident permissions", () => {
+    const graderPerms = asSet(permissionsForRole(Role.Grader));
+    expect(graderPerms.has(Permission.IncidentView)).toBe(false);
+    expect(graderPerms.has(Permission.IncidentCreate)).toBe(false);
+    expect(graderPerms.has(Permission.IncidentInvestigate)).toBe(false);
+    expect(graderPerms.has(Permission.IncidentResolve)).toBe(false);
+  });
+
+  it("Candidate holds ZERO incident permissions", () => {
+    const candidatePerms = asSet(permissionsForRole(Role.Candidate));
+    expect(candidatePerms.has(Permission.IncidentView)).toBe(false);
+    expect(candidatePerms.has(Permission.IncidentCreate)).toBe(false);
+    expect(candidatePerms.has(Permission.IncidentInvestigate)).toBe(false);
+    expect(candidatePerms.has(Permission.IncidentResolve)).toBe(false);
+  });
+
+  it("System holds ZERO incident permissions (system.incident.create is reserved, NOT in catalog)", () => {
+    const systemPerms = asSet(permissionsForRole(Role.System));
+    expect(systemPerms.has(Permission.IncidentView)).toBe(false);
+    expect(systemPerms.has(Permission.IncidentCreate)).toBe(false);
+    expect(systemPerms.has(Permission.IncidentInvestigate)).toBe(false);
+    expect(systemPerms.has(Permission.IncidentResolve)).toBe(false);
+  });
+});

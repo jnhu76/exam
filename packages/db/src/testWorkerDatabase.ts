@@ -41,7 +41,10 @@
 import postgres from "postgres";
 import { parseAppMode, resolveTestBranchUrl } from "./databaseUrl.js";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
-import { withTestInfraLifecycleLock } from "./testInfraLock.js";
+import {
+  resolveTestInfraCoordinationUrl,
+  withTestInfraLifecycleLock,
+} from "./testInfraLock.js";
 import {
   resolveTestScope,
   type ResolvedTestScope,
@@ -180,13 +183,13 @@ export function withDatabaseName(
  * Build the maintenance-DB URL (the server's `postgres` or configured DB) used
  * for the admin connection that runs `CREATE DATABASE`. We connect to the same
  * server as the base URL but target a DB the role is guaranteed to reach for
- * DDL. `postgres` is the conventional maintenance DB; we fall back to the base
- * URL's own database if `TEST_ADMIN_DATABASE` is unset (the test role usually
- * can reach its own DB for catalog queries).
+ * DDL. Delegates to the shared coordination-URL resolver so the advisory lock
+ * sessions (and this admin session) all land on the SAME coordination database
+ * (`TEST_ADMIN_DATABASE` ?? `postgres`) — advisory locks are database-local,
+ * so splitting them across databases would silently break coordination.
  */
 function resolveAdminUrl(env: ResolverEnv, baseUrl: string): string {
-  const adminDb = env.TEST_ADMIN_DATABASE ?? "postgres";
-  return withDatabaseName(baseUrl, adminDb);
+  return resolveTestInfraCoordinationUrl(baseUrl, env);
 }
 
 /**
