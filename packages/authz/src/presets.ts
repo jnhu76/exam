@@ -115,6 +115,11 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // System / diagnostics (current /system/diagnostics is Admin-gated)
   Permission.SystemHealthView,
   Permission.SystemDiagnosticsView,
+  // Incident management (ADR-014)
+  Permission.IncidentView,
+  Permission.IncidentCreate,
+  Permission.IncidentInvestigate,
+  Permission.IncidentResolve,
 ];
 
 // ───────────────────────── Teacher (course/exam manager) ─────────────────────────
@@ -205,6 +210,7 @@ export const ROLE_PRESETS: Record<RoleKey, RolePreset> = {
       Permission.AttemptForceSubmit,
       Permission.AttemptTimeGrant,
       Permission.AttemptMisconductMark,
+      Permission.IncidentResolve,
       Permission.GradingAnswerView,
       Permission.GradingScoreWrite,
       Permission.ScoreExport,

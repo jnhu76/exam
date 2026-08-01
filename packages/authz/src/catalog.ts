@@ -127,6 +127,12 @@ export const Permission = {
   SystemAutoSubmit: "system.auto_submit",
   SystemHeartbeatScan: "system.heartbeat_scan",
   SystemLifecycleReconcile: "system.lifecycle_reconcile",
+
+  // §4.10 Incident Management (ADR-014)
+  IncidentView: "incident.view",
+  IncidentCreate: "incident.create",
+  IncidentInvestigate: "incident.investigate",
+  IncidentResolve: "incident.resolve",
 } as const;
 
 /** Closed permission union. A typo is a compile error. */
