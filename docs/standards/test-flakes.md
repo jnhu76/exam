@@ -149,6 +149,46 @@
   polling"放大（那是 BUG-FLAKE-001 auth amplification 子类的另一用例），也未声称
   根因是固定的"argon2 400ms"。
 
+### 2026-08-01 — PR #242 flake closeout: advisory-lock database scope + time-based concurrency sync（REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS）
+
+- **现象**：PR #242 的本地全套测试曾出现失败后重跑通过（`incidents.admin.concurrency.test.ts`、
+  `0023-incident-fk-and-rollback.test.ts`、`testInfraLock.test.ts`、`testWorkerDatabase.test.ts`）。
+  本次 closeout 未能复现原始失败（baseline 全部通过），但按源码证据修复了三处确定的非确定性。
+- **根因 1（advisory lock 是 database-local）**：`withTestInfraLifecycleLock` 直接连接调用者传入的
+  任意数据库。schema lifecycle 调用者锁在 `exam_test`，database lifecycle 调用者锁在 `postgres`，
+  worker-DB 调用者锁在 worker database——即使 key 相同也**不能相互协调**（PostgreSQL advisory lock
+  只在同一 database 内互斥）。修复：`testInfraLock.ts` 新增 `resolveTestInfraCoordinationUrl`，
+  把任意输入 URL 规范化到单一 coordination database（`TEST_ADMIN_DATABASE` ?? `postgres`，剥离
+  search_path/options，校验名字安全），`withTestInfraLifecycleLock` 内部统一到该 URL；
+  `testWorkerDatabase.ts` 的 `resolveAdminUrl` 复用同一 resolver。
+- **根因 2（incident 并发测试用时间同步）**：`incidents.admin.concurrency.test.ts` 用
+  `setTimeout(150)` / `setTimeout(100)` head-start 制造竞态，`t1Committed`/`t2Release` 两个 deferred
+  创建但不承担调度。修复：test-only `IncidentRepo` proxy 在事务内精确门控（T2 pre-read 完成后等待 →
+  T1 获取行锁后等待 → T2 在真实 `findByIdForUpdate` 前 signal `t2LockAttempted` → 释放 T1 提交 →
+  T2 用旧 REPEATABLE READ snapshot 醒来冲突 → recovery → idempotent_replayed），并记录两个 primary
+  transaction 的 `pg_backend_pid()` / `txid_current()` 断言；resolve-vs-dismiss 改为双 pre-read
+  完成后同时释放、行锁选胜者。全部 `setTimeout` / head-start 删除，deferred 在 `finally` 中
+  dispose（断言失败也不留挂起事务/连接/timer）。
+- **根因 3（新 migration tests 未进 lifecycle lock）**：0023 的 `applyAllMigrations`、
+  `incidents.admin.concurrency.test.ts` 的 `migratePostgres`、`getIsolatedTestDb()` 的
+  `migratePostgres` 都在 lock 外。修复：全部包进 `withTestInfraLifecycleLock`（canonical 到同一
+  coordination DB，与 CREATE/DROP DATABASE、CREATE/DROP SCHEMA 真正互斥）。
+- **根因 4（catalog 查询跨 schema 误读）**：0023 的 FK 断言按 `conname` 查全库并读 `rows[0]`，
+  可能读到并行 schema 的同名 constraint。修复：`pg_constraint JOIN pg_class JOIN pg_namespace`
+  限定 `nspname = iso.schemaName`、`relname = exam_incidents`，`rows.length === 1`。
+- **修复 5（testInfraLock sleep 测试）**：串行化测试的 `setTimeout(120)` hold 改为
+  deferred-gated critical section + 真实 `pg_locks` 证据（one granted holder + ≥1 ungranted waiter，
+  classid/objid 重构 key 一致）；新增跨数据库真实 PostgreSQL 回归测试（holder 走 `exam_test` URL、
+  contender 走 `postgres` URL，同一把锁）。
+- **单队列预算（hang protection，非掩盖）**：统一 coordination DB 后所有 heavy DDL 在同一队列
+  串行；并行 `@exam/db` 下快操作可能排在秒级 CREATE/DROP DATABASE 之后，默认 5s testTimeout
+  不够。为参与队列的测试/describe 增加显式 timeout（testIsolation 30s/60s、testWorkerDatabase 30s、
+  testInfraLock 30s、0023 60s、seed/testCleanup 60s），注释明确这是确定性队列的 hang protection，
+  不参与排序。实测修复前 full `@exam/db` 4 次中 1 次击穿 5s；修复后连续 5/5 PASS。
+- **没有掩盖**：未用 retry / skip / quarantine；未仅调 timeout 掩盖竞态（竞态已由确定性 barrier /
+  统一锁根除）；无固定 sleep 作为排序机制（`pg_locks` 轮询是 bounded polling，谓词必须被真实锁
+  状态满足才继续）。
+
 ---
 
 ## 已升级条目
