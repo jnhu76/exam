@@ -267,3 +267,78 @@ export const MisconductSeverity = {
 } as const;
 export type MisconductSeverity =
   (typeof MisconductSeverity)[keyof typeof MisconductSeverity];
+
+// ── Incident (ADR-014) ────────────────────────────────────────────
+
+/** Incident status (terminal-monotonic). */
+export const IncidentStatus = {
+  Open: "open",
+  Investigating: "investigating",
+  Resolved: "resolved",
+  Dismissed: "dismissed",
+} as const;
+export type IncidentStatus =
+  (typeof IncidentStatus)[keyof typeof IncidentStatus];
+
+/** Incident type (immutable after creation). */
+export const IncidentType = {
+  NetworkInterruption: "network_interruption",
+  DeviceFailure: "device_failure",
+  PowerFailure: "power_failure",
+  CandidateUnableToContinue: "candidate_unable_to_continue",
+  SuspectedMisconduct: "suspected_misconduct",
+  OperatorError: "operator_error",
+  SystemOutage: "system_outage",
+  EnvironmentalDisruption: "environmental_disruption",
+  Other: "other",
+} as const;
+export type IncidentType = (typeof IncidentType)[keyof typeof IncidentType];
+
+/** Incident severity (informs prioritization only). */
+export const IncidentSeverity = {
+  Info: "info",
+  Minor: "minor",
+  Major: "major",
+  Critical: "critical",
+} as const;
+export type IncidentSeverity =
+  (typeof IncidentSeverity)[keyof typeof IncidentSeverity];
+
+/** Incident event type (append-only). */
+export const IncidentEventType = {
+  IncidentCreated: "incident_created",
+  InvestigationStarted: "investigation_started",
+  NoteAdded: "note_added",
+  SeverityChanged: "severity_changed",
+  IncidentResolved: "incident_resolved",
+  IncidentDismissed: "incident_dismissed",
+  ActionLinked: "action_linked",
+  AttemptLinked: "attempt_linked",
+  InterruptionLinked: "interruption_linked",
+} as const;
+export type IncidentEventType =
+  (typeof IncidentEventType)[keyof typeof IncidentEventType];
+
+/** Incident action type (linkable operator actions). */
+export const IncidentActionType = {
+  TimeGrant: "time_grant",
+  ForceSubmit: "force_submit",
+} as const;
+export type IncidentActionType =
+  (typeof IncidentActionType)[keyof typeof IncidentActionType];
+
+/** Incident attempt relationship type. */
+export const IncidentRelationshipType = {
+  Affected: "affected",
+  Referenced: "referenced",
+} as const;
+export type IncidentRelationshipType =
+  (typeof IncidentRelationshipType)[keyof typeof IncidentRelationshipType];
+
+/** Wire outcome for incident write commands. */
+export const IncidentOutcome = {
+  Applied: "applied",
+  IdempotentReplayed: "idempotent_replayed",
+} as const;
+export type IncidentOutcome =
+  (typeof IncidentOutcome)[keyof typeof IncidentOutcome];

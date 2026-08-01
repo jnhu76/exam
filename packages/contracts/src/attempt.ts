@@ -473,6 +473,8 @@ export const TimeGrantRequestSchema = z.object({
   reasonCode: z.string().trim().min(1).max(100),
   reasonText: z.string().trim().min(1).max(1000),
   interruptionId: z.string().uuid().optional(),
+  /** Optional incident correlation (REC-I6, ADR-014). Only active for Admin operator path. */
+  incidentId: z.string().uuid().optional(),
 });
 
 /** Type for an operator time grant request body. */
