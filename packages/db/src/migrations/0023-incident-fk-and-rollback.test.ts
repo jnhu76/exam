@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../database.js";
 import { setupIsolatedTestDb, type IsolatedTestDb } from "../testIsolation.js";
+import { withTestInfraLifecycleLock } from "../testInfraLock.js";
 import { rollbackIncidentTables } from "../scripts/rollbackIncidentTables.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -60,11 +61,30 @@ async function executeMigrationFile(
   });
 }
 
-async function applyAllMigrations(sql: SqlDriver): Promise<void> {
-  const journal = readJournal();
-  for (const entry of journal.entries) {
-    await executeMigrationFile(sql, entry.tag);
-  }
+/**
+ * Apply the ENTIRE migration journal to the given connection.
+ *
+ * Full migration application is heavy catalog DDL and MUST run under the
+ * test-infra lifecycle lock: sibling workers concurrently CREATE/DROP SCHEMA
+ * and CREATE/DROP DATABASE, and an unlocked full migrate both contends with
+ * them and (via `withTestInfraLifecycleLock`'s canonical coordination DB) is
+ * serialized against them. Without the lock a full migrate can be starved past
+ * the test timeout under parallel `@exam/db` runs.
+ *
+ * @param sql Connection bound to the isolated schema being migrated.
+ * @param lockUrl Base (non-search_path) URL of that isolated schema — used
+ *   only to host the lock session; canonicalized to the coordination DB.
+ */
+async function applyAllMigrations(
+  sql: SqlDriver,
+  lockUrl: string,
+): Promise<void> {
+  await withTestInfraLifecycleLock(lockUrl, async () => {
+    const journal = readJournal();
+    for (const entry of journal.entries) {
+      await executeMigrationFile(sql, entry.tag);
+    }
+  });
 }
 
 const ts = (d: Date) => `'${d.toISOString()}'`;
@@ -185,128 +205,142 @@ async function tableExists(sql: SqlDriver, name: string): Promise<boolean> {
   return rows[0]?.reg != null;
 }
 
-describe("0023 incident composite FK + guarded rollback", () => {
-  let iso: IsolatedTestDb;
-  let conn: Awaited<ReturnType<typeof createDatabase>>;
-  let alpha: FixtureIds;
-  let beta: FixtureIds;
+describe(
+  "0023 incident composite FK + guarded rollback",
+  { timeout: 60_000 },
+  () => {
+    let iso: IsolatedTestDb;
+    let conn: Awaited<ReturnType<typeof createDatabase>>;
+    let alpha: FixtureIds;
+    let beta: FixtureIds;
 
-  beforeAll(async () => {
-    iso = await setupIsolatedTestDb({ namespace: "mig0023fk" });
-    conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-    await applyAllMigrations(conn.sql);
-    alpha = await seedFixture(conn.sql, "org-alpha-0023", "alpha");
-    beta = await seedFixture(conn.sql, "org-beta-0023", "beta");
-  }, 120_000);
+    beforeAll(async () => {
+      iso = await setupIsolatedTestDb({ namespace: "mig0023fk" });
+      conn = await createDatabase(iso.databaseUrl, iso.schemaName);
+      await applyAllMigrations(conn.sql, iso.databaseUrl);
+      alpha = await seedFixture(conn.sql, "org-alpha-0023", "alpha");
+      beta = await seedFixture(conn.sql, "org-beta-0023", "beta");
+    }, 120_000);
 
-  afterAll(async () => {
-    await conn?.sql.end();
-    await iso?.cleanup();
-  });
-
-  describe("composite FK exam_incidents_org_attempt_fk", () => {
-    it("accepts a same-org existing attempt anchor", async () => {
-      await expect(
-        insertIncident(
-          conn.sql,
-          alpha.orgId,
-          alpha.examId,
-          alpha.attemptId,
-          alpha.userId,
-        ),
-      ).resolves.toBeDefined();
+    afterAll(async () => {
+      await conn?.sql.end();
+      await iso?.cleanup();
     });
 
-    it("accepts a null attempt_id (exam-wide incident)", async () => {
-      await expect(
-        insertIncident(conn.sql, alpha.orgId, alpha.examId, null, alpha.userId),
-      ).resolves.toBeDefined();
-    });
+    describe("composite FK exam_incidents_org_attempt_fk", () => {
+      it("accepts a same-org existing attempt anchor", async () => {
+        await expect(
+          insertIncident(
+            conn.sql,
+            alpha.orgId,
+            alpha.examId,
+            alpha.attemptId,
+            alpha.userId,
+          ),
+        ).resolves.toBeDefined();
+      });
 
-    it("rejects a cross-org attempt (composite FK organization mismatch)", async () => {
-      // Alpha incident referencing a Beta attempt — the composite FK
-      // (organization_id, attempt_id) → exam_attempts rejects this.
-      await expect(
-        insertIncident(
-          conn.sql,
-          alpha.orgId,
-          alpha.examId,
-          beta.attemptId,
-          alpha.userId,
-        ),
-      ).rejects.toThrow(/violates foreign key constraint/);
-    });
+      it("accepts a null attempt_id (exam-wide incident)", async () => {
+        await expect(
+          insertIncident(
+            conn.sql,
+            alpha.orgId,
+            alpha.examId,
+            null,
+            alpha.userId,
+          ),
+        ).resolves.toBeDefined();
+      });
 
-    it("rejects a nonexistent attempt", async () => {
-      await expect(
-        insertIncident(
-          conn.sql,
-          alpha.orgId,
-          alpha.examId,
-          "no-such-attempt-9999",
-          alpha.userId,
-        ),
-      ).rejects.toThrow(/violates foreign key constraint/);
-    });
+      it("rejects a cross-org attempt (composite FK organization mismatch)", async () => {
+        // Alpha incident referencing a Beta attempt — the composite FK
+        // (organization_id, attempt_id) → exam_attempts rejects this.
+        await expect(
+          insertIncident(
+            conn.sql,
+            alpha.orgId,
+            alpha.examId,
+            beta.attemptId,
+            alpha.userId,
+          ),
+        ).rejects.toThrow(/violates foreign key constraint/);
+      });
 
-    it("the FK constraint exists by name (schema/pg.ts parity)", async () => {
-      // pg_constraint is database-global, so isolated test schemas created by
-      // parallel workers all contribute rows with this name. Assert at least
-      // one exists and that it is a foreign key on exam_incidents.
-      const rows = (await conn.sql.unsafe(`
-        SELECT conname, contype
-        FROM pg_constraint
-        WHERE conname = 'exam_incidents_org_attempt_fk'
+      it("rejects a nonexistent attempt", async () => {
+        await expect(
+          insertIncident(
+            conn.sql,
+            alpha.orgId,
+            alpha.examId,
+            "no-such-attempt-9999",
+            alpha.userId,
+          ),
+        ).rejects.toThrow(/violates foreign key constraint/);
+      });
+
+      it("the FK constraint exists by name (schema/pg.ts parity)", async () => {
+        // pg_constraint is database-global, so isolated test schemas created by
+        // parallel workers all contribute rows with this name. Scope the query
+        // to THIS schema + THIS table so a sibling schema's identical constraint
+        // cannot be mistaken for ours: exactly one row must match.
+        const rows = (await conn.sql.unsafe(`
+        SELECT con.conname, con.contype
+        FROM pg_constraint AS con
+        JOIN pg_class AS cls ON cls.oid = con.conrelid
+        JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
+        WHERE ns.nspname = ${s(iso.schemaName)}
+          AND cls.relname = 'exam_incidents'
+          AND con.conname = 'exam_incidents_org_attempt_fk'
       `)) as Array<{ conname: string; contype: string }>;
-      expect(rows.length).toBeGreaterThanOrEqual(1);
-      expect(rows[0]!.conname).toBe("exam_incidents_org_attempt_fk");
-      expect(rows[0]!.contype).toBe("f");
-    });
-  });
-
-  describe("guarded rollback (ADR-014 §14)", () => {
-    it("drops the five tables when no non-null incident_id exists", async () => {
-      const dropIso = await setupIsolatedTestDb({
-        namespace: "mig0023rb1",
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.conname).toBe("exam_incidents_org_attempt_fk");
+        expect(rows[0]!.contype).toBe("f");
       });
-      const dropConn = await createDatabase(
-        dropIso.databaseUrl,
-        dropIso.schemaName,
-      );
-      try {
-        await applyAllMigrations(dropConn.sql);
-        const result = await rollbackIncidentTables(dropConn.db);
-        expect(result.dropped).toBe(true);
-        for (const table of [
-          "exam_incidents",
-          "exam_incident_events",
-          "exam_incident_actions",
-          "exam_incident_attempts",
-          "exam_incident_interruption_links",
-        ]) {
-          expect(await tableExists(dropConn.sql, table)).toBe(false);
+    });
+
+    describe("guarded rollback (ADR-014 §14)", () => {
+      it("drops the five tables when no non-null incident_id exists", async () => {
+        const dropIso = await setupIsolatedTestDb({
+          namespace: "mig0023rb1",
+        });
+        const dropConn = await createDatabase(
+          dropIso.databaseUrl,
+          dropIso.schemaName,
+        );
+        try {
+          await applyAllMigrations(dropConn.sql, dropIso.databaseUrl);
+          const result = await rollbackIncidentTables(dropConn.db);
+          expect(result.dropped).toBe(true);
+          for (const table of [
+            "exam_incidents",
+            "exam_incident_events",
+            "exam_incident_actions",
+            "exam_incident_attempts",
+            "exam_incident_interruption_links",
+          ]) {
+            expect(await tableExists(dropConn.sql, table)).toBe(false);
+          }
+        } finally {
+          await dropConn.sql.end();
+          await dropIso.cleanup();
         }
-      } finally {
-        await dropConn.sql.end();
-        await dropIso.cleanup();
-      }
-    });
-
-    it("fails closed and preserves all five tables when a non-null incident_id exists", async () => {
-      const dropIso = await setupIsolatedTestDb({
-        namespace: "mig0023rb2",
       });
-      const dropConn = await createDatabase(
-        dropIso.databaseUrl,
-        dropIso.schemaName,
-      );
-      try {
-        await applyAllMigrations(dropConn.sql);
-        const fix = await seedFixture(dropConn.sql, "org-rb-0023", "rb");
-        // Insert an adjustment with a NON-NULL incident_id — activation has
-        // occurred, so a destructive DROP must be refused.
-        const incidentId = randomUUID();
-        await dropConn.sql.unsafe(`
+
+      it("fails closed and preserves all five tables when a non-null incident_id exists", async () => {
+        const dropIso = await setupIsolatedTestDb({
+          namespace: "mig0023rb2",
+        });
+        const dropConn = await createDatabase(
+          dropIso.databaseUrl,
+          dropIso.schemaName,
+        );
+        try {
+          await applyAllMigrations(dropConn.sql, dropIso.databaseUrl);
+          const fix = await seedFixture(dropConn.sql, "org-rb-0023", "rb");
+          // Insert an adjustment with a NON-NULL incident_id — activation has
+          // occurred, so a destructive DROP must be refused.
+          const incidentId = randomUUID();
+          await dropConn.sql.unsafe(`
           INSERT INTO "exam_incidents" (
             "id", "organization_id", "exam_id", "type", "severity", "status",
             "description", "reported_by", "version", "created_at", "updated_at"
@@ -315,7 +349,7 @@ describe("0023 incident composite FK + guarded rollback", () => {
             'activation', ${s(fix.userId)}, 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
           )
         `);
-        await dropConn.sql.unsafe(`
+          await dropConn.sql.unsafe(`
           INSERT INTO "attempt_time_adjustments" (
             "id", "organization_id", "operation_id", "attempt_id", "incident_id",
             "policy", "source", "before_deadline", "after_deadline",
@@ -328,27 +362,28 @@ describe("0023 incident composite FK + guarded rollback", () => {
           )
         `);
 
-        await expect(rollbackIncidentTables(dropConn.db)).rejects.toThrow(
-          /Guard tripped/,
-        );
-        // All five tables still exist; the adjustment row remains.
-        for (const table of [
-          "exam_incidents",
-          "exam_incident_events",
-          "exam_incident_actions",
-          "exam_incident_attempts",
-          "exam_incident_interruption_links",
-        ]) {
-          expect(await tableExists(dropConn.sql, table)).toBe(true);
-        }
-        const adjRows = (await dropConn.sql.unsafe(`
+          await expect(rollbackIncidentTables(dropConn.db)).rejects.toThrow(
+            /Guard tripped/,
+          );
+          // All five tables still exist; the adjustment row remains.
+          for (const table of [
+            "exam_incidents",
+            "exam_incident_events",
+            "exam_incident_actions",
+            "exam_incident_attempts",
+            "exam_incident_interruption_links",
+          ]) {
+            expect(await tableExists(dropConn.sql, table)).toBe(true);
+          }
+          const adjRows = (await dropConn.sql.unsafe(`
           SELECT count(*)::int AS n FROM attempt_time_adjustments WHERE incident_id IS NOT NULL
         `)) as Array<{ n: number }>;
-        expect(Number(adjRows[0]?.n ?? 0)).toBe(1);
-      } finally {
-        await dropConn.sql.end();
-        await dropIso.cleanup();
-      }
+          expect(Number(adjRows[0]?.n ?? 0)).toBe(1);
+        } finally {
+          await dropConn.sql.end();
+          await dropIso.cleanup();
+        }
+      });
     });
-  });
-});
+  },
+);
