@@ -113,6 +113,7 @@ inventory are owned by the closeout audit, OpenAPI, and
 ADR-014 was accepted on 2026-08-01.
 
 Authority:
+
 - [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md) (ACCEPTED)
 - [`incident-authority.md`](../architecture/exam-system/incident-authority.md) (Admin runtime IMPLEMENTED — J3 CLOSED, PR #242)
 - [`REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) (baseline)
