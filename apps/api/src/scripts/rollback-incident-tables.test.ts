@@ -10,7 +10,16 @@
  * never touch dev/test database state outside their own schema.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -193,6 +202,145 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     expect(res.stderr.length).toBeGreaterThan(0);
     expect(res.stderr).not.toMatch(/unhandledRejection/i);
   }, 45_000);
+});
+
+// ── Exit-code regression (in-process, no DB) ────────────────────────────
+//
+// The subprocess PG tests above cannot force `conn.sql.end()` to reject on a
+// clean schema, so the close-failure exit-code bug is invisible to them. These
+// in-process tests drive `main()` directly with `@exam/db` mocked, so the
+// three exit-code branches are deterministic. They mock the barrel `@exam/db`
+// (the script's own import surface); existing tests use deep-path imports and
+// subprocess spawning, neither of which is affected by this barrel mock.
+const recoveryMocks = vi.hoisted(() => ({
+  createDatabase: vi.fn(),
+  rollbackIncidentTables: vi.fn(),
+}));
+
+vi.mock("@exam/db", () => ({
+  createDatabase: (...args: unknown[]) => recoveryMocks.createDatabase(...args),
+  rollbackIncidentTables: (...args: unknown[]) =>
+    recoveryMocks.rollbackIncidentTables(...args),
+}));
+
+// loadRootEnv is a no-op for these tests (env is controlled); runtimeConfig
+// returns a guard-passing URL so the parse/guard stages never short-circuit.
+vi.mock("../config/loadRootEnv.js", () => ({
+  loadRootEnv: () => {},
+}));
+vi.mock("../config/runtimeConfig.js", () => ({
+  resolveDatabaseUrlFromEnv: () => "postgres://exam:exam@localhost:15432/exam",
+}));
+
+// Imported after the mocks are registered. `main` is exported precisely so it
+// can be unit-tested in-process without spawning a subprocess.
+const { main } = await import("./rollback-incident-tables.js");
+
+describe("rollback CLI main() — close-failure exit code (no DB needed)", () => {
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let capturedStdout: string[];
+  let capturedStderr: string[];
+
+  beforeEach(() => {
+    // Reset the process-wide exit code before each case. `undefined` is the
+    // Node default and is exactly the state the bug hid in.
+    process.exitCode = undefined;
+    capturedStdout = [];
+    capturedStderr = [];
+    // Suppress real output AND capture it. Returning true satisfies the
+    // WriteSync callback contract.
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        capturedStdout.push(typeof chunk === "string" ? chunk : "");
+        return true;
+      });
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        capturedStderr.push(typeof chunk === "string" ? chunk : "");
+        return true;
+      });
+    recoveryMocks.createDatabase.mockReset();
+    recoveryMocks.rollbackIncidentTables.mockReset();
+    // --confirm is required; the env mock makes the URL pass the name guard.
+    process.argv = ["node", "rollback-incident-tables.ts", "--confirm"];
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    process.exitCode = undefined;
+    process.argv = ["node", "rollback-incident-tables.ts"];
+  });
+
+  it("exit 1 when rollback succeeds but sql.end() rejects (the bug)", async () => {
+    const sqlEnd = vi.fn().mockRejectedValue(new Error("pool teardown failed"));
+    recoveryMocks.createDatabase.mockResolvedValue({
+      db: {},
+      sql: { end: sqlEnd },
+    });
+    recoveryMocks.rollbackIncidentTables.mockResolvedValue({
+      nonNullIncidentCount: 0,
+      dropped: true,
+      blocked: false,
+    });
+
+    await main();
+
+    expect(recoveryMocks.rollbackIncidentTables).toHaveBeenCalledTimes(1);
+    expect(sqlEnd).toHaveBeenCalledTimes(1);
+    // The regression: before the fix exitCode stayed `undefined` → process
+    // exits 0. The fix must surface close failure as non-zero.
+    expect(process.exitCode).toBe(1);
+    expect(capturedStderr.join("")).toMatch(/Failed to close the connection/);
+    expect(capturedStdout.join("")).toMatch(/Dropped incident tables/);
+  });
+
+  it("preserves an existing non-zero exit code when sql.end() also fails", async () => {
+    const sqlEnd = vi
+      .fn()
+      .mockRejectedValue(new Error("secondary close failure"));
+    recoveryMocks.createDatabase.mockResolvedValue({
+      db: {},
+      sql: { end: sqlEnd },
+    });
+    recoveryMocks.rollbackIncidentTables.mockRejectedValue(
+      new Error("rollback boom"),
+    );
+
+    await main();
+
+    // Rollback failure sets exitCode 1; the subsequent close failure must NOT
+    // clobber it back to undefined or leave it untouched-as-undefined.
+    expect(process.exitCode).toBe(1);
+    expect(capturedStderr.join("")).toMatch(/rollback boom/);
+    expect(capturedStderr.join("")).toMatch(/Failed to close the connection/);
+  });
+
+  it("exit 0 on full success with clean close (no false non-zero)", async () => {
+    const sqlEnd = vi.fn().mockResolvedValue(undefined);
+    recoveryMocks.createDatabase.mockResolvedValue({
+      db: {},
+      sql: { end: sqlEnd },
+    });
+    recoveryMocks.rollbackIncidentTables.mockResolvedValue({
+      nonNullIncidentCount: 0,
+      dropped: true,
+      blocked: false,
+    });
+
+    await main();
+
+    // Guards against an over-fix that always sets non-zero. On the clean
+    // success path exitCode stays `undefined`, which the OS treats as 0.
+    expect(process.exitCode).toBeUndefined();
+    expect(capturedStdout.join("")).toMatch(/Dropped incident tables/);
+    expect(capturedStderr.join("")).not.toMatch(
+      /Failed to close the connection/,
+    );
+  });
 });
 
 PG_DESCRIBE(

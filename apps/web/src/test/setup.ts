@@ -31,6 +31,37 @@ if (!URL.revokeObjectURL) {
   URL.revokeObjectURL = vi.fn();
 }
 
+// jsdom's Blob implements arrayBuffer()/text()/bytes() but NOT stream()
+// (verified against jsdom@29.1.1 living/file-api/Blob-impl.js). The vitest
+// jsdom env exposes Node/undici's native global `Response`, and constructing
+// `new Response(blob)` consumes the Blob body via the WHATWG Body init, which
+// calls `blob.stream()` — throwing `object.stream is not a function` at
+// construction time. This cross-realm mismatch (jsdom Blob + Node Response)
+// breaks any test that builds a Response from a Blob body (e.g. the CSV
+// download test). Polyfill stream() to return a spec-shaped ReadableStream
+// over the Blob's bytes so Response<Blob> round-trips. Production browsers
+// provide a real Blob.prototype.stream(); this is test-infra only.
+if (
+  typeof Blob !== "undefined" &&
+  typeof Blob.prototype.stream !== "function"
+) {
+  Object.defineProperty(Blob.prototype, "stream", {
+    configurable: true,
+    writable: true,
+    value: function stream(): ReadableStream<Uint8Array> {
+      // jsdom stores bytes on the impl symbol `_bytes`; fall back to slicing
+      // the public size if the impl field is unavailable.
+      const bytes = (this as unknown as { _bytes?: Uint8Array })._bytes;
+      return new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (bytes) controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+    },
+  });
+}
+
 // jsdom does not implement the Web Locks API, but the cross-tab pending-grant
 // coordinator (REC-I4-C1) hard-requires `navigator.locks` — without it the
 // read-check-write over localStorage is not atomic, so the coordinator fails

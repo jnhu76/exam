@@ -184,22 +184,29 @@ async function resolveCommittedOperation(
 /**
  * Runs an incident command with full ADR-014 §9 conflict recovery.
  *
- * `run` executes the engine command inside a primary transaction. On any of:
- *   - the named operation-unique 23505,
- *   - a recoverable version/state conflict (IncidentVersionConflictError /
- *     InvalidStateTransitionError),
- *   - serialization failure (40001) after retry exhaustion,
+ * `run` executes the engine command inside a primary transaction. Recovery is
+ * BRANCH-SPECIFIC, not uniform:
  *
- * the primary is rolled back and the SAME command is re-run ONCE in a fresh
- * transaction. The fresh run's own pre-read resolves replay/conflict exactly
- * as the engine does — so this wrapper does NOT duplicate idempotency logic,
- * it simply guarantees a fresh snapshot sees the winner.
+ * Case 1 — named operation-unique 23505 (append-only race):
+ *   the primary rolls back and the SAME command is re-run ONCE in a fresh
+ *   transaction. The fresh run's own pre-read resolves replay/conflict exactly
+ *   as the engine does, so this wrapper does NOT duplicate idempotency logic.
+ *   The fresh re-run can itself lose a second race; if so, a final read-only
+ *   committed-operation lookup decides: matching committed op →
+ *   `idempotent_replayed`; committed with a different payload →
+ *   `IdempotencyConflictError`; otherwise the retry error is preserved. The
+ *   command is never executed more than twice (no recursion).
  *
- * For the recoverable-conflict path, if the fresh re-run still throws the same
- * conflict, a final fresh-transaction lookup checks whether the operation
- * committed during the recovery attempt (replay) or is genuinely absent
- * (preserve the original business error). This guards the case where the
- * fresh re-run's pre-read ran before the winner committed.
+ * Case 2 — recoverable version/state conflict (IncidentVersionConflictError /
+ *   InvalidStateTransitionError) or serialization failure (40001) after retry
+ *   exhaustion:
+ *   the command is NOT re-run. Instead a single fresh-transaction read-only
+ *   lookup checks whether the operation committed during the wait: matching
+ *   committed op → `idempotent_replayed`; different payload →
+ *   `IdempotencyConflictError`; absent → the original business error is
+ *   preserved (a genuine lost-update / invalid transition, not a masked retry).
+ *
+ * Any other error propagates unchanged (see the trailing fall-through).
  */
 export async function withIncidentOperationRecovery(
   db: Database,

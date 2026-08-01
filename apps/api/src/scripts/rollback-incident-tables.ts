@@ -51,7 +51,7 @@ function refuseDbName(dbName: string): string {
   );
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   loadRootEnv();
 
   const args = process.argv.slice(2);
@@ -120,7 +120,15 @@ async function main(): Promise<void> {
       process.stderr.write(
         `Failed to close the connection: ${(err as Error).message}\n`,
       );
-      if (process.exitCode === 0) process.exitCode = 1;
+      // On the success path exitCode is never set, so its default is
+      // `undefined` (NOT 0). The loose `=== 0` guard therefore missed the
+      // close-failure-after-success case and let the process exit 0, masking a
+      // resource-close failure as success. Treat undefined as 0 here so a
+      // close failure always surfaces as non-zero, while preserving any
+      // already-set non-zero code from an earlier failure path.
+      if (process.exitCode === undefined || process.exitCode === 0) {
+        process.exitCode = 1;
+      }
     }
   }
 }
