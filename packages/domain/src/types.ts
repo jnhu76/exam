@@ -21,6 +21,10 @@ import type {
   IncidentEventType,
   IncidentActionType,
   IncidentRelationshipType,
+  ExamProctorAssignmentStatus,
+  ExamProctorAssignmentCommandType,
+  ExamProctorAssignmentEventOutcome,
+  ExamProctorAssignmentCommandOutcome,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -717,4 +721,49 @@ export interface ExamIncidentInterruptionLink {
   linkedAt: Date;
   linkedBy: string;
   operationId: string;
+}
+
+// ── Proctor-to-Exam assignment (ADR-015) ──────────────────────────
+
+/**
+ * Proctor-to-Exam assignment episode — current state row.
+ * At most one active episode per (organization, exam, proctor); revoked
+ * episodes remain as history (append-preserving aggregate, ADR-015 §4).
+ */
+export interface ExamProctorAssignment {
+  id: string;
+  organizationId: string;
+  examId: string;
+  proctorUserId: string;
+  status: ExamProctorAssignmentStatus;
+  assignedBy: string;
+  assignedAt: Date;
+  revokedBy: string | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Append-only command receipt for a proctor-assignment write command.
+ * `UNIQUE (organization_id, operation_id)` on this table is the sole
+ * idempotency arbiter (ADR-015 §4.2); `canonical_payload` carries
+ * reasonCode (never a separate column) and no operationId.
+ */
+export interface ExamProctorAssignmentEvent {
+  id: string;
+  organizationId: string;
+  assignmentId: string;
+  commandType: ExamProctorAssignmentCommandType;
+  operationId: string;
+  canonicalPayload: Record<string, unknown>;
+  outcome: ExamProctorAssignmentEventOutcome;
+  actorId: string;
+  createdAt: Date;
+}
+
+/** Command result for assignProctorToExam / revokeProctorFromExam. */
+export interface ExamProctorAssignmentCommandResult {
+  outcome: ExamProctorAssignmentCommandOutcome;
+  assignment: ExamProctorAssignment;
 }

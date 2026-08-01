@@ -26,3 +26,4 @@ export * from "./repository/attemptInterruptionRepo.js";
 export * from "./repository/attemptInterruptionEventRepo.js";
 export * from "./repository/attemptTimeAdjustmentRepo.js";
 export * from "./repository/incidentRepo.js";
+export * from "./repository/proctorAssignmentRepo.js";

@@ -724,6 +724,47 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
+
+  // ── Proctor-to-Exam assignment audit actions (ADR-015 §14) ──
+  // Atomic compliance facts written ONLY when the assignment state change
+  // actually applies (outcome=applied). Metadata is bounded and carries
+  // identifiers only — never candidate answers or candidate PII.
+  [AuditAction.ExamProctorAssigned]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        organizationId: identifier,
+        examId: identifier,
+        proctorUserId: identifier,
+        assignmentId: identifier,
+        actorId: identifier,
+        operationId: identifier,
+        assignedAt: z.string().datetime(),
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.ExamProctorRevoked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        organizationId: identifier,
+        examId: identifier,
+        proctorUserId: identifier,
+        assignmentId: identifier,
+        actorId: identifier,
+        operationId: identifier,
+        revokedAt: z.string().datetime(),
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
 } as const satisfies Record<AuditActionKey, AuditActionDefinition>;
 
 export type AuditActionForDurability<Durability extends AuditDurability> = {

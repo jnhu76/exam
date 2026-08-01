@@ -25,3 +25,21 @@ export * from "./operatorGrant.js";
 export * from "./lockSeam.js";
 export * from "./systemMonitor.js";
 export * from "./incidentCommands.js";
+export {
+  assignProctorToExam,
+  revokeProctorFromExam,
+  canonicalAssignmentPayload,
+  normalizeReasonCode,
+  isConstraintViolation,
+  PROCTOR_ASSIGNMENT_ACTIVE_UNIQUE_CONSTRAINT,
+  PROCTOR_ASSIGNMENT_EVENTS_OPERATION_UNIQUE_CONSTRAINT,
+} from "./proctorAssignmentCommands.js";
+export type {
+  AssignProctorToExamInput,
+  RevokeProctorFromExamInput,
+  ProctorAssignmentRepo,
+  ProctorAssignmentAuditFn,
+  ProctorUserLookup,
+  ExamProctorAssignmentCommandOutcome,
+  ExamProctorAssignmentCommandResult,
+} from "./proctorAssignmentCommands.js";

@@ -126,6 +126,10 @@ export const AuditAction = {
   IncidentActionLinked: "incident.action_linked",
   IncidentAttemptLinked: "incident.attempt_linked",
   IncidentInterruptionLinked: "incident.interruption_linked",
+
+  // ── Proctor-to-Exam assignments (ADR-015) ──
+  ExamProctorAssigned: "exam.proctor_assigned",
+  ExamProctorRevoked: "exam.proctor_revoked",
 } as const;
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
