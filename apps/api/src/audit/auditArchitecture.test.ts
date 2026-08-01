@@ -97,6 +97,65 @@ function emittedActions(file: ProductionSource): AuditActionKey[] {
   return actions;
 }
 
+/**
+ * Collects audit action string literals emitted from the exam-engine's
+ * audit-callback seam: `deps.audit("incident.created" as string, ...)`.
+ * The engine MUST NOT import @exam/authz (dependency rule), so these
+ * emitters live outside apps/api and cannot appear as `AuditAction.X`
+ * references; the scanner grounds them by literal instead.
+ */
+function engineAuditLiterals(file: ProductionSource): AuditActionKey[] {
+  if (!file.source.includes("deps.audit(")) return [];
+  const sourceFile = ts.createSourceFile(
+    file.path,
+    file.source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const actions: AuditActionKey[] = [];
+  const collect = (text: string): void => {
+    if (Object.values(AuditAction).includes(text as AuditActionKey)) {
+      actions.push(text as AuditActionKey);
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "audit" &&
+      node.arguments.length > 0
+    ) {
+      const first = node.arguments[0]!;
+      const literal = ts.isStringLiteral(first)
+        ? first
+        : ts.isAsExpression(first) && ts.isStringLiteral(first.expression)
+          ? first.expression
+          : null;
+      if (literal) collect(literal.text);
+    }
+    // Version-bump commands pass the audit action through the
+    // `auditAction: "incident.investigated" as string` option property.
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "auditAction"
+    ) {
+      const init =
+        ts.isAsExpression(node.initializer) &&
+        ts.isStringLiteral(node.initializer.expression)
+          ? node.initializer.expression
+          : ts.isStringLiteral(node.initializer)
+            ? node.initializer
+            : null;
+      if (init) collect(init.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return actions;
+}
+
 describe("audit architecture", () => {
   it("defines every declared action across independent policy dimensions", () => {
     expect(Object.keys(AUDIT_ACTION_DEFINITIONS).sort()).toEqual(
@@ -116,10 +175,34 @@ describe("audit architecture", () => {
   });
 
   it("keeps a narrow atomic set and excludes exam runtime domain history", () => {
+    // REC-I6 (ADR-014): the nine incident write commands record atomic
+    // compliance audits inside their command transaction. That contract
+    // block is pinned exactly below; the ratio guard applies to the rest so
+    // atomic durability cannot grow unbounded outside a documented contract.
+    const INCIDENT_ATOMIC: AuditActionKey[] = [
+      AuditAction.IncidentCreated,
+      AuditAction.IncidentInvestigated,
+      AuditAction.IncidentNoteAdded,
+      AuditAction.IncidentSeverityChanged,
+      AuditAction.IncidentResolved,
+      AuditAction.IncidentDismissed,
+      AuditAction.IncidentActionLinked,
+      AuditAction.IncidentAttemptLinked,
+      AuditAction.IncidentInterruptionLinked,
+    ];
     const atomic = Object.entries(AUDIT_ACTION_DEFINITIONS)
       .filter(([, value]) => value.durability === "atomic")
-      .map(([action]) => action);
-    expect(atomic.length).toBeLessThan(Object.keys(AuditAction).length / 2);
+      .map(([action]) => action as AuditActionKey);
+    expect(
+      atomic.filter((action) => INCIDENT_ATOMIC.includes(action)).sort(),
+      "REC-I6 incident atomic block must match the pinned contract set",
+    ).toEqual([...INCIDENT_ATOMIC].sort());
+    const nonIncidentAtomic = atomic.filter(
+      (action) => !INCIDENT_ATOMIC.includes(action),
+    );
+    expect(nonIncidentAtomic.length).toBeLessThan(
+      Object.keys(AuditAction).length / 2,
+    );
     for (const action of [
       AuditAction.AttemptStart,
       AuditAction.AttemptSaveAnswer,
@@ -138,12 +221,24 @@ describe("audit architecture", () => {
 
   it("grounds active coverage in recursive production emitter inventory", async () => {
     const root = resolve(import.meta.dirname, "..");
+    const engineRoot = resolve(
+      import.meta.dirname,
+      "../../../../packages/exam-engine/src",
+    );
     const sources = await collectProductionSources(root);
+    const engineSources = await collectProductionSources(engineRoot);
     const owners = new Map<AuditActionKey, string[]>();
     for (const file of sources) {
       for (const action of emittedActions(file)) {
         const paths = owners.get(action) ?? [];
         paths.push(relative(root, file.path));
+        owners.set(action, paths);
+      }
+    }
+    for (const file of engineSources) {
+      for (const action of engineAuditLiterals(file)) {
+        const paths = owners.get(action) ?? [];
+        paths.push(`exam-engine/${relative(engineRoot, file.path)}`);
         owners.set(action, paths);
       }
     }

@@ -33,6 +33,8 @@ import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptIn
 import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
+import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
+import { linkIncidentAction } from "@exam/exam-engine";
 import { grantAttemptTime, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import type {
   GrantAttemptTimeInput,
@@ -348,6 +350,71 @@ async function runGrantTransaction(
         cap,
         input,
       );
+
+      // If incidentId is present, link the action to the incident
+      // inside the same transaction (combined grant+link path).
+      if (
+        input.incidentId &&
+        grantResult.adjustment &&
+        (grantResult.outcome === "granted" ||
+          grantResult.outcome === "idempotent_replay")
+      ) {
+        const incidentRepo = createIncidentRepo(tx);
+
+        // Validate scope quadruple
+        const incident = await incidentRepo.findById(ctx, input.incidentId);
+        if (!incident) {
+          throw new Error("Incident not found");
+        }
+
+        // For time_grant, actionId = adjustment.id
+        const actionId = grantResult.adjustment.id;
+
+        // Link the action (this will also append the event and audit)
+        await linkIncidentAction(
+          incidentRepo as never,
+          ctx,
+          input.incidentId,
+          {
+            operationId: input.operationId,
+            actionType: "time_grant",
+            actionId,
+          },
+          {
+            now: input.now,
+            audit: async (action, metadata) => {
+              if (options.audit) {
+                await recordAtomicHttpAudit(tx, options.audit.request, ctx, {
+                  action: action as never,
+                  targetType: "incident",
+                  targetId: input.incidentId!,
+                  metadata,
+                });
+              }
+            },
+            lookupAdjustmentAttempt: async () => input.attemptId,
+            lookupForceSubmitAudit: async () => false,
+            lookupAttempt: async (aid) => {
+              const attempt = await createAttemptRepo(tx).findById(ctx, aid);
+              return attempt
+                ? {
+                    examId: attempt.examId,
+                    candidateId: attempt.candidateId,
+                    organizationId: attempt.organizationId,
+                  }
+                : null;
+            },
+            lookupActionLink: async (actionType, actionId) => {
+              const existing = await incidentRepo.findActionLinkByAction(
+                ctx,
+                actionType,
+                actionId,
+              );
+              return existing != null;
+            },
+          },
+        );
+      }
       // Compliance audit (atomic with the ledger insert + deadline update).
       // Recorded only on a real grant; idempotent replay returns the
       // already-committed result without a duplicate audit row. Project the

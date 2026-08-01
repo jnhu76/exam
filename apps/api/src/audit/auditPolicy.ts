@@ -568,6 +568,133 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
+
+  // ── Incident audit actions (ADR-014) ──
+  [AuditAction.IncidentCreated]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        examId: identifier,
+        attemptId: identifier.optional(),
+        type: z.string().max(50),
+        version: z.number().int().nonnegative(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentInvestigated]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        version: z.number().int().nonnegative(),
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentNoteAdded]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        noteId: identifier,
+        version: z.number().int().nonnegative(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentSeverityChanged]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        beforeSeverity: z.string().max(20),
+        afterSeverity: z.string().max(20),
+        version: z.number().int().nonnegative(),
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentResolved]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        version: z.number().int().nonnegative(),
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentDismissed]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        version: z.number().int().nonnegative(),
+        reasonCode: z.string().max(100).nullable(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentActionLinked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        actionType: z.string().max(50),
+        actionId: identifier,
+        attemptId: identifier,
+        version: z.number().int().nonnegative(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentAttemptLinked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        attemptId: identifier,
+        relationshipType: z.string().max(20),
+        version: z.number().int().nonnegative(),
+      })
+      .strict(),
+  ),
+  [AuditAction.IncidentInterruptionLinked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        incidentId: identifier,
+        interruptionId: identifier,
+        attemptId: identifier,
+        version: z.number().int().nonnegative(),
+      })
+      .strict(),
+  ),
 } as const satisfies Record<AuditActionKey, AuditActionDefinition>;
 
 export type AuditActionForDurability<Durability extends AuditDurability> = {
