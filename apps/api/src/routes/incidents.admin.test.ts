@@ -470,3 +470,337 @@ describe("admin incident routes — integration", () => {
     expect(relinkRes.json().error.code).toBe("INCIDENT_ACTION_ALREADY_LINKED");
   });
 });
+
+describe("admin incident routes — creation authority + error contract", () => {
+  const ctx = {} as Awaited<ReturnType<typeof buildTestApp>>;
+  let examId: string;
+  let orgId: string;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    Object.assign(ctx, await buildTestApp(plugin, { prefix: "/api" }));
+    orgId = ctx.org.id;
+    adminToken = ctx.adminToken;
+
+    const prefix = uniquePrefix();
+    const courseId = randomUUID();
+    examId = randomUUID();
+    const now = new Date();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: orgId,
+      name: "Incident Auth Course",
+      code: `IAC-${prefix}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.exams).values({
+      id: examId,
+      organizationId: orgId,
+      title: "Incident Auth Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      interruptionTimePolicy: "operator_incident",
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  afterAll(async () => {
+    await cleanupOrganizationTestData(ctx.db, orgId);
+    await ctx.cleanup();
+  });
+
+  it("missing exam returns 404 RESOURCE_NOT_FOUND (not 400/500)", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${randomUUID()}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "no such exam",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
+  });
+
+  it("whitespace-only description returns 400 VALIDATION_ERROR", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "   ",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("candidate not enrolled returns 400 VALIDATION_ERROR", async () => {
+    // A candidate profile id that has no enrollment in this exam.
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "candidate focus",
+        candidateId: "no-such-candidate",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("anchored incident derives candidateId from the attempt", async () => {
+    // Create a candidate, enroll, start an attempt, then anchor an incident
+    // with attemptId set + candidateId null. The persisted incident must
+    // carry the attempt's candidateId.
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      adminToken,
+      `auth-cand-${uniquePrefix()}`,
+      orgId,
+    );
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidate.candidateProfileId] },
+      cookies: { "auth-token": adminToken },
+    });
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidate.token },
+    });
+    expect(startRes.statusCode).toBe(201);
+    const attemptId = startRes.json().id;
+
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "anchored derive",
+        attemptId,
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(createRes.statusCode).toBe(200);
+    // The persisted candidateId is server-derived from the attempt.
+    expect(createRes.json().incident.candidateId).toBe(
+      candidate.candidateProfileId,
+    );
+  });
+
+  it("missing time-grant action returns 404 RESOURCE_NOT_FOUND", async () => {
+    // Create an exam-wide incident, then try to link a nonexistent adjustment.
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "missing action test",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    const incidentId = createRes.json().incident.id;
+
+    const linkRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/incidents/${incidentId}/actions`,
+      payload: {
+        operationId: randomUUID(),
+        actionType: "time_grant",
+        actionId: "nonexistent-adjustment-id",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(linkRes.statusCode).toBe(404);
+    expect(linkRes.json().error.code).toBe("RESOURCE_NOT_FOUND");
+  });
+
+  it("self-submit attempt as force_submit returns 400 (not force-submitted)", async () => {
+    // An attempt that was candidate-submitted (not force-submitted) cannot be
+    // linked as force_submit.
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      adminToken,
+      `fs-cand-${uniquePrefix()}`,
+      orgId,
+    );
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidate.candidateProfileId] },
+      cookies: { "auth-token": adminToken },
+    });
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidate.token },
+    });
+    const attemptId = startRes.json().id;
+
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "force submit test",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    const incidentId = createRes.json().incident.id;
+
+    const linkRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/incidents/${incidentId}/actions`,
+      payload: {
+        operationId: randomUUID(),
+        actionType: "force_submit",
+        actionId: attemptId,
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(linkRes.statusCode).toBe(400);
+    expect(linkRes.json().error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("same opId + different payload returns 409 IDEMPOTENCY_CONFLICT", async () => {
+    const opId = randomUUID();
+    // First create succeeds.
+    const r1 = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: opId,
+        type: "other",
+        description: "first",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(r1.statusCode).toBe(200);
+    // Same opId, different description (different canonical payload).
+    const r2 = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: opId,
+        type: "other",
+        description: "second — different payload",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(r2.statusCode).toBe(409);
+    expect(r2.json().error.code).toBe("IDEMPOTENCY_CONFLICT");
+  });
+
+  it("grant replay with incidentId does not duplicate the action link", async () => {
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      adminToken,
+      `replay-cand-${uniquePrefix()}`,
+      orgId,
+    );
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidate.candidateProfileId] },
+      cookies: { "auth-token": adminToken },
+    });
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidate.token },
+    });
+    const attemptId = startRes.json().id;
+
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/exams/${examId}/incidents`,
+      payload: {
+        operationId: randomUUID(),
+        type: "other",
+        description: "replay test",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    const incidentId = createRes.json().incident.id;
+
+    await disruptAttempt(ctx.db, orgId, attemptId, {
+      policy: "operator_incident",
+    });
+
+    const opId = randomUUID();
+    const g1 = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/time-grants`,
+      payload: {
+        operationId: opId,
+        addedSeconds: 120,
+        reasonCode: "network_issue",
+        reasonText: "replay test",
+        incidentId,
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(g1.statusCode).toBe(200);
+    // Replay with the SAME opId → idempotent_replay, no duplicate link.
+    const g2 = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/time-grants`,
+      payload: {
+        operationId: opId,
+        addedSeconds: 120,
+        reasonCode: "network_issue",
+        reasonText: "replay test",
+        incidentId,
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(g2.statusCode).toBe(200);
+    expect(g2.json().outcome).toBe("idempotent_replay");
+
+    const links = await ctx.db
+      .select()
+      .from(schema.examIncidentActions)
+      .where(eq(schema.examIncidentActions.incidentId, incidentId));
+    expect(links).toHaveLength(1);
+  });
+});
