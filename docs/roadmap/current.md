@@ -42,27 +42,20 @@ REC-I4-I1/I2/I3A/I3B1/I3B2 implemented the interruption policy
 persistence/runtime, candidate-safe restore contract, immutable policy
 snapshots, and the Admin operator time-grant product path (permission,
 Attempt-scoped route, atomic audit, and Dashboard retry coordination).
-Remaining recovery work begins with the REC-I6 incident authority, M11 Proctor
-resource scope, dedicated recovery centers, and wider startup reconciliation.
+REC-I6-R0 has frozen the exam incident authority in
+[ADR-014](../adr/ADR-014-exam-incident-authority.md) (Status: ACCEPTED;
+runtime implementation NOT STARTED). Remaining
+recovery work begins with J3 incident
+persistence and commands, M11 Proctor resource scope, dedicated recovery
+centers, and wider startup reconciliation.
 
 ### Plain-text subjective question loop
 
-PRs #237 and #238 closed the plain-text `text_response` authoring product loop:
-
-- create/edit/readback of rubric and optional reference answer;
-- searchable accessible course selector;
-- publish validation and frozen question snapshot;
-- candidate metadata isolation;
-- candidate multiline plain-text answering and submission;
-- real Grading Queue UI discovery;
-- manual grading and final result;
-- post-publish live-edit snapshot-freeze integration proof.
-
+PRs #237 and #238 (2026-07-31) closed the plain-text `text_response` authoring,
+answering, manual-grading, and result loop. Closeout evidence:
+[`docs/audits/P2-TEXT-RESPONSE-AUTHORING-CLOSEOUT.md`](../audits/P2-TEXT-RESPONSE-AUTHORING-CLOSEOUT.md).
 This does **not** close rich-text/WYSIWYG editing, nor the generic ADR-008
-final-answer submit barrier (submit carries a final-answer payload or
-version/hash so the answer at submit-click is the grading authority). The
-barrier is answer-type-independent and remains open for all supported answer
-types, not only rich text.
+final-answer submit barrier; both remain open for all supported answer types.
 
 ## Current planning focus — P7
 
@@ -158,7 +151,8 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 
 - `timed_sync`, `deadline`, and `untimed` timing modes;
 - operational queue admission;
-- REC-I6 incident model and Admin/Proctor recovery-center workflows;
+- REC-I6 incident persistence and commands (J3 — NEXT; the REC-I6-R0 authority design is accepted) and
+  Admin/Proctor recovery-center workflows;
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;
 - fill-blank runtime/E2E reality re-audit;
 - rich-text/WYSIWYG answering;

@@ -2,9 +2,10 @@
 
 <!-- markdownlint-disable MD024 -->
 
-> Status: ACTIVE — J1 CLOSED; the next Job is REC-I6-R0.
+> Status: ACTIVE — J1 CLOSED; J2 CLOSED (ADR-014 ACCEPTED);
+> J3 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS is NEXT.
 >
-> Updated: 2026-07-31
+> Updated: 2026-08-01
 >
 > Context: PR #239 has been merged. This document defines the recommended work
 > order for completing the interruption-recovery and operator-response system
@@ -56,8 +57,8 @@ REC-I6-R0 Incident Authority Contract
 | Job | Name | Primary result | Depends on |
 | --- | --- | --- | --- |
 | J1 | `REC-I4-I3B2-OPERATOR-TIME-GRANT-API` | **CLOSED** — Admin authorized, idempotent API and Dashboard product path | Existing `grantAttemptTime()` engine seam |
-| J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | Incident lifecycle, authority, relationships, and action semantics are frozen | J1 design knowledge; no implementation dependency |
-| J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | Incident model, event history, commands, and action links are persisted | J2 |
+| J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | **CLOSED** — incident lifecycle, authority, relationships, and action semantics accepted in ADR-014 (ACCEPTED) | J1 design knowledge; no implementation dependency |
+| J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **NEXT — UNBLOCKED** — incident model, event history, commands, and action links are persisted | J2 |
 | J4 | `M11-PROCTOR-EXAM-SCOPE-MINIMUM` | Proctors are restricted to explicitly assigned exams | J2; existing RBAC baseline |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
@@ -69,184 +70,45 @@ REC-I6-R0 Incident Authority Contract
 
 ## 3. J1 — REC-I4-I3B2 Operator Time Grant API
 
-## Status
-
-**CLOSED.** See
+**CLOSED.** Closeout audit (closeout docs merged in PR #240):
 [`REC-I4-I3B2-OPERATOR-TIME-GRANT-API-CLOSEOUT.md`](../audits/REC-I4-I3B2-OPERATOR-TIME-GRANT-API-CLOSEOUT.md).
 
-## Purpose
+Authority result:
 
-Expose the existing `grantAttemptTime()` engine command through a real
-Admin-facing API with explicit permission, idempotency, audit evidence, and
-transaction boundaries.
+- `Permission.AttemptTimeGrant` is activated for the Admin preset only. Do not
+  grant it organization-wide to Proctor before J4 establishes Proctor-to-Exam
+  scope.
+- Attempt-scoped `POST /admin/attempts/:attemptId/time-grants` calls the
+  canonical `grantAttemptTime()` command inside one locked transaction
+  (Enrollment → Attempt → Exam lock order), with operation-ID idempotency
+  (`granted` / `idempotent_replay` / `terminal`), cross-Attempt race recovery,
+  and an atomic `attempt.timeGrant` audit. No route-local deadline calculation
+  exists.
+- `incidentId` remains null end to end; incident linkage is reserved for
+  J2/J3 (REC-I6).
 
-## Current reality
+Remaining dependencies handed forward:
 
-Already implemented:
+- Proctor time grant requires J4 (M11 Proctor-to-Exam scope).
+- Non-null `incidentId` requires J2 authority and J3 persistence.
+- Admin/Proctor Recovery Center UI (J5/J6) and Redis (J8) remain out of scope.
 
-- `grantAttemptTime()` engine seam;
-- deadline adjustment ledger;
-- operation-ID idempotency semantics;
-- locked transaction execution;
-- deadline reconciliation;
-- interruption association support;
-- operator-grant policy/source metadata.
-- `Permission.AttemptTimeGrant` in the Admin preset only;
-- Attempt-scoped `POST /api/admin/attempts/:attemptId/time-grants` route;
-- public `TimeGrantRequest` / `TimeGrantResponse` contracts and OpenAPI;
-- one transaction for the ledger, deadline update, and `attempt.timeGrant`
-  audit;
-- same-operation replay / conflict and PostgreSQL cross-Attempt race recovery;
-- Admin Dashboard dialog with frozen operation identity, indeterminate retry,
-  pending-command reload recovery, and cross-tab send coordination.
-
-Still intentionally not activated:
-
-- Proctor time grant (requires M11 Proctor-to-Exam resource scope);
-- incident linkage (`incidentId` remains null until REC-I6);
-- Admin/Proctor Recovery Center workflows;
-- Redis.
-
-## Closed boundary
-
-### Permission (actual)
-
-Registered as:
-
-```text
-Permission.AttemptTimeGrant
-```
-
-Initial activation:
-
-```text
-Admin: allowed
-Proctor: not yet globally allowed
-Teacher: denied
-Grader: denied
-Candidate: denied
-```
-
-Do not grant this permission organization-wide to Proctor before J4 establishes
-Proctor-to-Exam scope.
-
-### API (actual)
-
-Route:
-
-```http
-POST /api/admin/attempts/:attemptId/time-grants
-```
-
-Request:
-
-```json
-{
-  "operationId": "uuid",
-  "addedSeconds": 300,
-  "reasonCode": "device_failure",
-  "reasonText": "Candidate workstation restarted after a power fault.",
-  "interruptionId": "optional-uuid"
-}
-```
-
-Response:
-
-```json
-{
-  "outcome": "granted",
-  "adjustment": {
-    "id": "uuid",
-    "operationId": "uuid",
-    "attemptId": "uuid",
-    "source": "operator",
-    "beforeDeadline": "timestamp",
-    "afterDeadline": "timestamp",
-    "addedSeconds": 300,
-    "reasonCode": "device_failure",
-    "reasonText": "Candidate workstation restarted after a power fault.",
-    "interruptionId": null,
-    "incidentId": null
-  },
-  "attempt": {
-    "id": "uuid",
-    "status": "in_progress",
-    "deadlineAt": "timestamp"
-  }
-}
-```
-
-Results include the engine outcomes:
-
-```text
-granted
-idempotent_replay
-terminal
-```
-
-### Audit (actual)
-
-The route records an auditable operator action with:
-
-- actor;
-- target Attempt;
-- operation ID;
-- adjustment ID;
-- interruption ID, when present;
-- added seconds;
-- reason code;
-- request/correlation context;
-- timestamp.
-
-The audit metadata deliberately does not duplicate reason text, before/after
-deadlines, or command outcome. Those facts remain in the committed adjustment
-and operation response under the audit policy.
-
-## Non-goals
-
-- incident model;
-- Proctor activation;
-- recovery center UI;
-- generic background jobs;
-- Redis;
-- changing the existing grant engine semantics;
-- allowing the route to update `deadlineAt` directly.
-
-## Required invariants
-
-- The route must call the canonical `grantAttemptTime()` command.
-- No route-local deadline calculation is allowed.
-- Same operation ID plus same payload returns the committed result.
-- Same operation ID plus different payload returns an idempotency conflict.
-- Terminal attempts cannot be reopened.
-- The grant remains bounded by the existing Exam/Attempt deadline rules.
-- An interruption ID, when supplied, must belong to the same Attempt.
-- All timestamps come from one server operation time.
-
-## Acceptance
-
-- Admin can grant time through the API.
-- Unauthorized roles are denied.
-- Duplicate delivery does not duplicate the adjustment.
-- A concurrent deadline transition produces one deterministic committed result.
-- The adjustment ledger, Attempt deadline, and audit evidence agree.
-- No direct route-level `deadlineAt` write exists.
-- OpenAPI and contracts are updated.
-- Unit, integration, permission, idempotency, and concurrency tests pass.
-
-## Evidence
-
-- engine tests;
-- route integration tests;
-- structural test proving the route calls the canonical command;
-- permission matrix test;
-- operation-ID replay/conflict tests;
-- deadline-race test;
-- audit row/event assertion.
+The full contract, request/response examples, invariants, acceptance, and test
+inventory are owned by the closeout audit, OpenAPI, and
+[`docs/contracts/api-reference.md`](../contracts/api-reference.md).
 
 ---
 
 ## 4. J2 — REC-I6-R0 Incident Authority Contract
+
+**CLOSED.**
+
+ADR-014 was accepted on 2026-08-01.
+
+Authority:
+- [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md) (ACCEPTED)
+- [`incident-authority.md`](../architecture/exam-system/incident-authority.md) (TARGET)
+- [`REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) (baseline)
 
 ## Purpose
 
@@ -408,6 +270,15 @@ J2 must freeze:
 
 ## 5. J3 — REC-I6-I1 Incident Persistence and Commands
 
+**NEXT — UNBLOCKED.**
+
+Implement the accepted ADR-014 contract. Runtime implementation has not started.
+The sections below are the pre-ADR planning sketch; where they differ from
+[`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md)
+(§12–§14 persistence/API/migration, §18 decomposition) and
+[`incident-authority.md`](../architecture/exam-system/incident-authority.md),
+the ADR and architecture document win.
+
 ## Purpose
 
 Implement the incident aggregate, append-only event history, canonical commands,
@@ -415,12 +286,15 @@ and links to operator actions.
 
 ## Persistence
 
-Suggested tables:
+Suggested tables (five additive tables; zero changes to existing tables —
+ADR-014 §12 is authoritative):
 
 ```text
 exam_incidents
 exam_incident_events
 exam_incident_actions
+exam_incident_attempts
+exam_incident_interruption_links
 ```
 
 Possible responsibilities:
@@ -441,7 +315,13 @@ severity_changed
 incident_resolved
 incident_dismissed
 action_linked
+attempt_linked
+interruption_linked
 ```
+
+Each event row carries `event_sequence` (ordering authority), the
+`operation_id` / `command_type` pair (idempotency arbiter), and
+`before_version` / `after_version` (verifiable version chain) — ADR-014 §5.
 
 ### `exam_incident_actions`
 
@@ -450,11 +330,22 @@ Links an incident to a separately authoritative action:
 ```text
 time_grant
 force_submit
-misconduct_mark
-other_future_action
 ```
 
 Store action identity and type, not duplicated mutable action state.
+`misconduct_mark` is deferred until a stable append-only action receipt
+exists (its jsonb flag is overwritten on re-flag); J3 rejects it with
+400 — ADR-014 §7.
+
+### `exam_incident_attempts`
+
+Append-only affected-attempt membership for exam-wide incidents only
+(anchor XOR membership — ADR-014 §7).
+
+### `exam_incident_interruption_links`
+
+Append-only interruption-episode evidence links; the interruption ledger
+remains authoritative for compensated time (ADR-014 §7).
 
 ## Canonical commands
 
@@ -468,7 +359,12 @@ changeIncidentSeverity()
 resolveExamIncident()
 dismissExamIncident()
 linkIncidentAction()
+linkIncidentAttempt()
+linkIncidentInterruption()
 ```
+
+Every command carries an `operationId`; mutating transitions additionally
+carry `expectedVersion` (ADR-014 §9).
 
 Do not create one universal `updateIncident()` endpoint that can perform every
 transition and edit every field.
@@ -478,13 +374,17 @@ transition and edit every field.
 Suggested routes:
 
 ```http
-POST   /api/admin/exams/:examId/incidents
-GET    /api/admin/exams/:examId/incidents
-GET    /api/admin/incidents/:incidentId
-POST   /api/admin/incidents/:incidentId/investigate
-POST   /api/admin/incidents/:incidentId/notes
-POST   /api/admin/incidents/:incidentId/resolve
-POST   /api/admin/incidents/:incidentId/dismiss
+POST   /admin/exams/:examId/incidents
+GET    /admin/exams/:examId/incidents
+GET    /admin/incidents/:incidentId
+POST   /admin/incidents/:incidentId/investigate
+POST   /admin/incidents/:incidentId/notes
+POST   /admin/incidents/:incidentId/severity
+POST   /admin/incidents/:incidentId/resolve
+POST   /admin/incidents/:incidentId/dismiss
+POST   /admin/incidents/:incidentId/actions
+POST   /admin/incidents/:incidentId/attempts
+POST   /admin/incidents/:incidentId/interruptions
 ```
 
 Proctor routes may reuse the same handlers after J4 provides scoped
@@ -493,11 +393,16 @@ authorization.
 ## Concurrency
 
 - Use a version or expected revision for mutable state transitions.
-- Repeated commands require operation IDs or deterministic terminal no-op
-  semantics.
+- Every write command carries an `operationId`; retries reuse it, and
+  `UNIQUE (organization_id, operation_id)` on `exam_incident_events` is the
+  single arbiter (same identity + same canonical payload → replay; same
+  identity + different payload → 409 `IDEMPOTENCY_CONFLICT`) — ADR-014 §9.
 - Two simultaneous resolve/dismiss commands must not both win.
-- Notes may be independently appendable.
-- Linked action IDs must be unique.
+- Notes may be independently appendable, each under its own `operationId`.
+- Linked action IDs must be unique; attempt and interruption evidence links
+  have their own uniques (ADR-014 §6).
+- Every link satisfies the scope quadruple (same organization, same exam,
+  attempt anchor null-or-matching, candidate null-or-matching), derived server-side — ADR-014 §7.
 
 ## Integration with J1
 
@@ -510,13 +415,14 @@ incidentId
 The grant remains authoritative in the time-adjustment ledger. The incident
 only records the relationship.
 
-The incident transaction and action transaction may be:
-
-1. one transaction when both are initiated together; or
-2. separate idempotent transactions with reconciliation.
-
-Choose and document one model. Do not allow a linked action to exist only in UI
-memory.
+The combined grant+link model is **one transaction** (ADR-014 §10): the
+time-grant route accepts an optional `incidentId`, validates the full scope
+quadruple (org, exam, attempt, candidate) against the authoritative rows,
+then writes the ledger row, deadline update, action link, and audit
+atomically under the grant's existing `operationId` idempotency. A
+retroactive link without a concurrent grant uses a separate idempotent
+`linkIncidentAction()` transaction. A linked action MUST NOT exist only in
+UI memory.
 
 ## Audit
 
@@ -1155,9 +1061,9 @@ Do not use Redis adoption as a prerequisite for completing J1–J7.
 ## 12. Recommended PR Breakdown
 
 ```text
-PR-1  REC-I4-I3B2-OPERATOR-TIME-GRANT-API — CLOSED
-PR-2  REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT — NEXT
-PR-3  REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS — PLANNED
+PR-1  J1 — CLOSED
+PR-2  J2 — CLOSED — ADR-014 ACCEPTED
+PR-3  J3 — NEXT — UNBLOCKED
 PR-4  M11-PROCTOR-EXAM-SCOPE-MINIMUM — PLANNED
 PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — PLANNED
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED
@@ -1167,46 +1073,13 @@ PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 
 ## Parallelism
 
-J1 is closed.
+J1 is closed. J2 (REC-I6-R0) is CLOSED — ADR-014 is ACCEPTED.
 
-The next Job is:
-
-```text
-REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT
-```
-
-After J2:
-
-```text
-J3 Incident persistence and commands
-J4 Proctor-to-Exam scope minimum
-```
-
-may proceed in parallel, provided both follow the accepted incident authority
-contract.
-
-J5 requires J1 and J3.
-
-```text
-J6 requires J3 and J4.
-J7 requires J1 through J6.
-J8 requires the Recovery Authority Gate.
-```
+J3 and J4
 
 ## Next Job
 
-Start with:
-
-```text
-REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT
-```
-
-REC-I4-I3B2 is closed.
-
-The next task is design-first. It must freeze the incident aggregate,
-lifecycle, command ownership, actor/resource authorization, append-only
-history, and the relationship between incidents and separately authoritative
-operator actions before persistence or UI work begins.
+REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS
 
 ---
 

@@ -32,81 +32,23 @@ P7 is the next planning program — system readiness, Redis adoption,
 backup/recovery, outage recovery, configuration control plane, exam modes, and
 UI closeout. See
 [`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
-P7 does not redefine M11.
-
-P5 is a two-Job module:
-
-```text
-P5-0 = Email delivery infrastructure
-P5-N1 = first real Inbox + Email business integration
-```
-
-P5-0 has no dependency on P3 and may be completed before result-publishing
-closeout. P5-N1 depends on both P5-0 and P3 because it integrates directly with
-the authoritative result-publication transaction and candidate result route.
-
-Identity lifecycle remains separate future work and is not silently included in
-P5-N1.
+P7 does not redefine M11. Identity lifecycle remains separate future work.
 
 ---
 
-## P3: Result publishing closeout (CLOSED)
+## Closed programs (closeout references only)
 
-- **CAPABILITY**: Results are published under the configured strategy; candidates see only what policy permits; Admin and Teacher access is verified under the final MVP role model.
-- **CURRENT STATE**: **CLOSED** (2026-07-25, PR #211). P4, P5-0, and P3 are all closed (2026-07-25). The result-publication boundary is audited (P3-R0 reality audit) and test-only closed (P3-R1: M8 Teacher publish API proof, M9 Teacher all-view result proof, M12 Teacher browser publication E2E, M13 concurrent publication idempotency; no production behavior changes). Independent closeout review is satisfied; P5-N1-R0 owns the next contract correction.
-  - P3-R0 reality audit: [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md).
-  - P3-R1 test-only closeout: [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md).
-- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes (`immediate`, `after_grading`, `manual`); frozen-question-snapshot truth; Teacher all-view (ScoreAllView) and publish (ExamResultPublish) capability behavior; browser publication UI through ExamDetailPage. The authoritative transaction seam is frozen at `apps/api/src/routes/exam.ts:1269-1279`.
-- **WHAT IS MISSING**: (none — M8/M9/M12/M13 closed by P3-R1).
-- **DEPENDENCIES**: P4 closed. P5-0 closed (not a semantic dependency of result publishing).
-- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules; the generic final-answer submit barrier (ADR-008 Option D — answer-type-independent, not a rich-text feature); IP/CIDR examination policy; concurrent-session/device policy; Candidate emergency examination credentials.
-- **ACCEPTANCE BOUNDARY**: Under the final Admin/Teacher/Candidate role model, an authorized actor publishes results according to configured policy; the candidate can view only the candidate's own permitted result and cannot see hidden standard answers. The result-publication command and transaction boundary are stable; P5-N1 extends them without redefining result semantics.
+Detailed capability, evidence, and acceptance history for closed programs lives
+in the closeout audits and
+[`docs/status/implementation-status.md`](../status/implementation-status.md).
+The archived job plans under `docs/archive/roadmap/` are reference-only.
 
-## P4: RBAC MVP role switch — Admin / Teacher / Candidate (CLOSED)
-
-- **CAPABILITY**: Three product roles enforced on MVP routes.
-- **CURRENT STATE**: **CLOSED** (2026-07-24, tested commit `b4dc1d6`). The final
-  Admin/Teacher/Candidate product-role model is activated on MVP routes. Final
-  independent re-audit and closeout:
-  [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md).
-  Gate 0.5 remains PASS; runtime inventory 91/81/10 with 81/81 registry MATCH;
-  0 `requireRole` / 0 `requirePermission` / 0 `users.role`-authority;
-  assignment-backed authority fail-closed; C1 residue cleanup, C2 frontend
-  capability gating, and C3 three-role E2E all complete; six-spec E2E passes
-  with zero skips; `pnpm verify` passes (exit 0). Accepted-deferred items
-  (`CandidateDelete` / `SystemInfoView` product decisions; `GradingFinalize` /
-  `GradingIdentityView` → M11; `System*` → System actor; `users.role` /
-  `legacyMap.ts` compatibility residue) remain visible with owners and do not
-  widen access.
-- **WHAT EXISTS**: Capability catalog, role presets, assignment-backed authority, `requireCapability` gates on all routes; frontend route/action gating (`adminRouteCapabilities.ts` + `AdminLayout` per-route guard); explicit result-publish and result-view capability ownership frozen for P3.
-- **WHAT IS MISSING**: (none — closed).
-- **DEPENDENCIES**: Authorization infrastructure implemented. P3 closeout is not a prerequisite; P3 will verify the result flow after this role switch.
-- **NOT AUTHORIZED ASSUMPTIONS**: Proctor role activation; independent Grader role activation; custom roles; tenant/course/exam scope; `teacher_exam_assignments`; scoped role dispatch (teacher@course, proctor@exam).
-- **ACCEPTANCE BOUNDARY**: Admin/Teacher/Candidate each complete their MVP duties; unauthorized MVP-route access is rejected by the backend; result publication and result viewing have final, explicit role/capability ownership for P3 verification.
-
-## P5-0: Email delivery runtime hardening (CLOSED)
-
-- **CAPABILITY**: Existing PostgreSQL Email outbox runs as a resident, observable, failure-recoverable worker process.
-- **CURRENT STATE**: **CLOSED** (2026-07-25, PR #210, commit `cac6b85`). The Email delivery runtime now implements the `pending|processing|retry_wait|sent|dead` state machine with `FOR UPDATE SKIP LOCKED` claim, persisted lock ownership, abandoned-lock recovery, PostgreSQL-backed heartbeat, and backlog/liveness diagnostics.
-- **WHAT EXISTS**: `email_outbox`; `EmailDeliveryService` (renamed); SMTP, console, and disabled senders; retry policy; resident worker loop with claim/heartbeat; admin-only `POST /api/email/test`; existing Email diagnostics surface.
-- **WHAT IS MISSING**: (none for P5-0 scope — Email runtime hardened). At
-  P5-0 closeout no production business caller existed; P5-N1 subsequently
-  supplied the first production caller (`result_published`, PR #213).
-- **DEPENDENCIES**: P4 closed; ADR-011 accepted.
-- **NOT AUTHORIZED ASSUMPTIONS**: Inbox; users.email; real business caller; invitation; password reset; template engine; generic queue platform; Redis/BullMQ/RabbitMQ/Kafka.
-- **ACCEPTANCE BOUNDARY**: A standalone Email worker continuously claims, retries, and terminally records outbox rows without duplicate concurrent ownership; its heartbeat and backlog are visible through existing diagnostics.
-
-## P5-N1: Notification Inbox + result-published Email integration (CLOSED)
-
-- **CAPABILITY**: First operational two-channel notification: candidate Inbox plus optional Email for `result_published`.
-- **CURRENT STATE**: **CLOSED** (2026-07-25, PR #213, merge commit `0b36aab`). P3, P4, and P5-0 are all closed; the P5-N1-R0 audit owns the V1 contract correction and the frozen implementation scope. ADR-011 is the architecture authority (status corrected to **Accepted** by this audit). The final review corrective cycle is complete — the CI FK-flake (`audit_logs_organization_id_*` from late best-effort audit writes racing org cleanup) is resolved and `pnpm verify` is green (127/127 API test files).
-  - Implementation closeout: [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md).
-  - Reality audit: [`docs/audits/P5-N1-R0-NOTIFICATION-INBOX-RESULT-PUBLISHED-REALITY-AUDIT.md`](../audits/P5-N1-R0-NOTIFICATION-INBOX-RESULT-PUBLISHED-REALITY-AUDIT.md).
-- **WHAT EXISTS**: notifications migration + Drizzle schema; notification repository; NotificationService and result_published policy; optional users.email; grade_notification renderer; atomic publication → audit → Inbox → outbox flow; Inbox APIs; Candidate NotificationBell UI; API/unit/integration/E2E coverage; PUBLIC_WEB_ORIGIN and action-path validation.
-- **WHAT IS MISSING**: (none for P5-N1 scope — closed).
-- **DEPENDENCIES**: P3, P4, and P5-0 closed.
-- **NOT AUTHORIZED ASSUMPTIONS**: invitation/password reset migration; additional notification types; user preferences; announcements; WebSocket/SSE; stale-message skip; template engine; generic queue platform; `publicationVersion`; opaque-cursor pagination (repo uses offset/page); generic URL-security framework; removal of a nonexistent old Email caller.
-- **ACCEPTANCE BOUNDARY**: Authorized manual result publication atomically commits result state, one candidate Inbox record, and a linked Email outbox row when an email exists; candidate can read the Inbox item and open the authoritative result at `/exam/:attemptId/result`; SMTP remains asynchronous.
+| Program | Closed | Closeout evidence |
+| --- | --- | --- |
+| P4 — RBAC MVP role switch (Admin / Teacher / Candidate) | 2026-07-24, tested commit `b4dc1d6` | [`P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md) |
+| P5-0 — Email delivery runtime hardening | 2026-07-25, PR #210 (`cac6b85`) | archived plan [`P5-0-email-delivery-runtime-hardening-job.md`](../archive/roadmap/P5-0-email-delivery-runtime-hardening-job.md) |
+| P3 — Result publishing closeout | 2026-07-25, PR #211 | [`P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md) |
+| P5-N1 — Notification Inbox + result-published Email | 2026-07-25, PR #213 (`0b36aab`) | [`P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md), [`P5-N1-R0-NOTIFICATION-INBOX-RESULT-PUBLISHED-REALITY-AUDIT.md`](../audits/P5-N1-R0-NOTIFICATION-INBOX-RESULT-PUBLISHED-REALITY-AUDIT.md); archived plan [`P5-N1-notification-inbox-result-published-job-v2.md`](../archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md) |
 
 ## P5-N2: Operational notification expansion (DEFERRED — NOT STARTED)
 
@@ -194,30 +136,9 @@ P5-N1.
 
 ---
 
-## Phase-roadmap alignment (applied)
+## Phase-roadmap alignment
 
-The notification/Email scope and acceptance signals below were added to
-`docs/roadmap/phase-roadmap.md` Phase 3 **In scope** and **Acceptance signals**
-during the notification/email delivery module work. They are recorded here as
-the applied alignment; the phase-scope authority remains
-[`docs/roadmap/phase-roadmap.md`](phase-roadmap.md).
-
-Phase 3 **In scope** (notification/Email lines):
-
-```text
-- In-app notification Inbox for selected operational events.
-- Asynchronous PostgreSQL-outbox Email delivery with a resident observable worker.
-- First operational notification integration for result publication.
-```
-
-Phase 3 **Acceptance signals** (notification/Email lines):
-
-```text
-- Candidate can receive and read a result-publication Inbox notification.
-- A configured candidate email address receives the corresponding asynchronous
-  result notification without SMTP participating in the result transaction.
-- Email worker liveness and backlog are observable through diagnostics.
-```
-
-Do not move identity invitation/password-reset scope out of Phase 3. Do not add
-multiTenant behavior.
+Notification/Email scope and acceptance signals are owned by
+[`docs/roadmap/phase-roadmap.md`](phase-roadmap.md) Phase 3 **In scope** and
+**Acceptance signals**. Do not move identity invitation/password-reset scope out
+of Phase 3. Do not add multiTenant behavior.

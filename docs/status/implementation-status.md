@@ -156,7 +156,7 @@ P4 (RBAC MVP role switch) ✅ CLOSED
 | P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes. **CLOSED** (2026-07-24, tested commit `b4dc1d6`); see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md). |
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. **CLOSED** (2026-07-25, PR #210). |
 | P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **CLOSED** (P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API, M9 Teacher all-view result, M12 Teacher browser E2E, M13 concurrent idempotency). See [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md). |
-| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **CLOSED** (2026-07-25, PR #213 merged; final review corrective merged in the same PR). See [`docs/roadmap/P5-N1-notification-inbox-result-published-job-v2.md`](../roadmap/P5-N1-notification-inbox-result-published-job-v2.md) and [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md). |
+| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **CLOSED** (2026-07-25, PR #213 merged; final review corrective merged in the same PR). See [`docs/archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md`](../archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md) and [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md). |
 | P6   | Preceding MVP blockers closed                   | MVP ready closeout. **CLOSED — implemented MVP subset release-ready** (2026-07-26, PR #215 merged; independent closeout PASS). See [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md). |
 
 **P6 release readiness:** the supported LAN/on-premise, single-organization
@@ -215,9 +215,15 @@ audit, external log shipping. All Phase 4; none started.
   transaction-bound repositories, with `operationId`-keyed idempotency and
   ADR-013's frozen lock/reconcile order. REC-I4-I3B2 closes the Admin
   operator time-grant route, permission, audit transaction, and Dashboard
-  product path. The system incident model, M11 Proctor resource scope, and
-  Admin/Proctor recovery-center workflows remain deferred (REC-I6 / M11 /
-  REC-OPS).
+  product path. The exam incident authority is designed and accepted but not
+  implemented:
+  REC-I6-R0 froze it in
+  [ADR-014](../adr/ADR-014-exam-incident-authority.md) (Status: ACCEPTED,
+  runtime NOT STARTED) as a documentation-only contract; the incident
+  tables, commands, and routes are NOT STARTED, and J3
+  (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) is the next authorized Job.
+  M11 Proctor resource scope and Admin/Proctor recovery-center
+  workflows remain deferred (M11 / REC-OPS).
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
