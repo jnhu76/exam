@@ -44,11 +44,17 @@ snapshots, and the Admin operator time-grant product path (permission,
 Attempt-scoped route, atomic audit, and Dashboard retry coordination).
 REC-I6-R0 froze the exam incident authority in
 [ADR-014](../adr/ADR-014-exam-incident-authority.md) (Status: ACCEPTED).
-J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) has implemented the incident
-persistence layer and Admin command/API surface (in review on PR). Remaining
-recovery work: Proctor incident permissions and Proctor-to-Exam resource
-scope (M11 / J4), dedicated recovery centers (J5/J6), system-generated
-incidents, and wider startup reconciliation.
+**J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) is CLOSED following PR #242**
+(merge commit `5b653c13`, 2026-08-01). The Admin Incident persistence,
+commands, API, audit, and optional time-grant linkage paths are implemented on
+`master`; see
+[`docs/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md`](../audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md).
+Remaining recovery work — all explicitly NOT IMPLEMENTED: Proctor Incident
+permissions and Proctor-to-Exam resource scope (M11 / J4), dedicated recovery
+centers (J5/J6), system-generated incidents, and wider startup reconciliation.
+The next authority job is the J4 design contract
+(M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT); no J4 runtime implementation is
+authorized before that R0 contract is accepted.
 
 ### Plain-text subjective question loop
 
@@ -152,8 +158,14 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 
 - `timed_sync`, `deadline`, and `untimed` timing modes;
 - operational queue admission;
-- REC-I6 incident persistence and commands (J3 — implemented, in review on PR) and
-  Admin/Proctor recovery-center workflows (J5/J6 — NOT IMPLEMENTED);
+- REC-I6 incident persistence and commands (J3 — **CLOSED on master** via
+  PR #242); Admin/Proctor recovery-center workflows remain open:
+  - J4 — Proctor-to-Exam resource scope (NOT IMPLEMENTED; next authority job is
+    M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT, a design contract — no runtime
+    implementation authorized before R0 acceptance);
+  - J5 — Admin Recovery Center (NOT IMPLEMENTED);
+  - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
+  - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;
 - fill-blank runtime/E2E reality re-audit;
 - rich-text/WYSIWYG answering;

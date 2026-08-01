@@ -75,8 +75,8 @@ P7 groups eight concerns that otherwise risk being implemented independently:
 - the Admin operator time-grant route, permission, atomic audit path, and
   Dashboard workflow are closed (REC-I4-I3B2); the exam incident authority
   Admin runtime is implemented (ADR-014 ACCEPTED; J3
-  REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS in review on PR); M11 Proctor
-  resource scope, Proctor incident grants, recovery-center UI, and
+  `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` CLOSED on master via PR #242);
+  M11 Proctor resource scope, Proctor incident grants, recovery-center UI, and
   system-generated incidents remain deferred.
 - broad UI component-authority migration remains incomplete.
 - automated backup, PITR, restore verification, and recovery drills are not
@@ -643,7 +643,7 @@ If P7-D1 concluded that no Redis adoption is warranted:
 | `timed_sync` / `untimed` | incorporated into policy schema and profiles |
 | queue admission | becomes P7-Q1/Q2 |
 | REC-I4-I3B2 | CLOSED: Admin route/permission/product path; does not activate Proctor |
-| REC-I6 / M11 / REC-OPS | REC-I6-R0 incident authority is accepted (ADR-014 ACCEPTED) but NOT IMPLEMENTED; J3, M11, and REC-OPS remain in state/recovery planning and must not be silently declared complete |
+| REC-I6 / M11 / REC-OPS | REC-I6-R0 incident authority is accepted (ADR-014 ACCEPTED); the J3 Admin incident runtime is CLOSED on master (PR #242). M11 Proctor-to-Exam scope and REC-OPS (J5/J6 recovery-center UI, J7 closeout) remain in state/recovery planning and must not be silently declared complete |
 | P5-N2 notifications | may use configuration and Redis fan-out, but keeps PostgreSQL transaction/dedupe authority unless changed by ADR |
 | invitation/password reset | benefits from global rate limit, Email templates, settings, and recovery |
 | rich text / WYSIWYG answering | remains a separate answer-authority feature; the generic final-answer submit barrier (ADR-008 Option D) is independent of answer type and stays open for all supported answer types |

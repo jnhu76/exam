@@ -557,7 +557,7 @@ No production business transaction currently inserts an outbox row atomically. T
 
 ## Protocol: Incident Authority (ADR-014 ACCEPTED — Admin runtime IMPLEMENTED by J3)
 
-Status: IMPLEMENTED — [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (ACCEPTED); J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the Admin surface (commands, tables, routes, permissions, audit) and is IN REVIEW on PR. The entries below are live for Admin. Proctor grants (J4/M11), the recovery-center UI (J5/J6), and system-generated incidents remain NOT IMPLEMENTED. The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
+Status: IMPLEMENTED — [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (ACCEPTED); J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the Admin surface (commands, tables, routes, permissions, audit) and is merged on master (PR #242, CLOSED). The entries below are live for Admin. Proctor grants (J4/M11), the recovery-center UI (J5/J6), and system-generated incidents remain NOT IMPLEMENTED. The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
 
 ### Incident Lifecycle
 
