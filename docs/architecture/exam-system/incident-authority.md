@@ -9,7 +9,11 @@
 > routes, audit actions, and the `grantAttemptTime()` optional `incidentId`
 > operator path are live. The Recovery Center UI (J5), Proctor incident
 > permissions and Proctor-to-Exam scope (J4/M11), and system-generated
-> incidents remain NOT IMPLEMENTED.
+> incidents remain NOT IMPLEMENTED. The J4-R0 design contract
+> (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **IN REVIEW** as ADR-015
+> (Proposed) with reality audit `M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`;
+> it is documentation-only and J4-I1 runtime is BLOCKED until ADR-015 is
+> independently reviewed and accepted.
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
 > (Accepted). This document is the accepted target contract for J3. It provides
