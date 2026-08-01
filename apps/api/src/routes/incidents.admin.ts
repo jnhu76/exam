@@ -5,14 +5,12 @@ import { NotFoundError } from "@exam/domain";
 import { Permission } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attemptTimeAdjustmentRepo.js";
 import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import {
-  executeInTransaction,
-  type Database,
-  type TransactionDatabase,
-} from "@exam/db/src/types.js";
+import type { TransactionDatabase } from "@exam/db/src/types.js";
 import {
   createExamIncident,
   startIncidentInvestigation,
@@ -25,6 +23,7 @@ import {
   linkIncidentInterruption,
 } from "@exam/exam-engine";
 import type { IncidentRepo } from "@exam/exam-engine";
+import { withIncidentOperationRecovery } from "../orchestrators/incidentOperationRecovery.js";
 import {
   ensureTargetOrg,
   formatZodError,
@@ -51,7 +50,7 @@ const CreateIncidentBodySchema = z.object({
     "environmental_disruption",
     "other",
   ]),
-  description: z.string().min(1).max(1000),
+  description: z.string().trim().min(1).max(1000),
   attemptId: z.string().uuid().optional().nullable(),
   candidateId: z.string().optional().nullable(),
   severity: z.enum(["info", "minor", "major", "critical"]).optional(),
@@ -67,7 +66,7 @@ const InvestigateBodySchema = z.object({
 
 const AddNoteBodySchema = z.object({
   operationId: z.string().uuid(),
-  body: z.string().min(1).max(500),
+  body: z.string().trim().min(1).max(500),
 });
 
 const ChangeSeverityBodySchema = z.object({
@@ -81,14 +80,14 @@ const ChangeSeverityBodySchema = z.object({
 const ResolveBodySchema = z.object({
   operationId: z.string().uuid(),
   expectedVersion: z.number().int().positive(),
-  resolutionSummary: z.string().min(1).max(1000),
+  resolutionSummary: z.string().trim().min(1).max(1000),
   reasonCode: z.string().max(100).optional().nullable(),
 });
 
 const DismissBodySchema = z.object({
   operationId: z.string().uuid(),
   expectedVersion: z.number().int().positive(),
-  reasonText: z.string().min(1).max(1000),
+  reasonText: z.string().trim().min(1).max(1000),
   reasonCode: z.string().max(100).optional().nullable(),
 });
 
@@ -198,55 +197,15 @@ function makeAudit(
   };
 }
 
-/** Operation-unique index on `exam_incident_events` (ADR-014 idempotency arbiter). */
-const INCIDENT_OPERATION_UNIQUE_CONSTRAINT =
-  "exam_incident_events_org_operation_unique";
-
 /**
- * Walks the error cause chain for the incident event operation-unique 23505.
- * Mirrors `matchOrgOperationUniqueViolation` in operatorGrantExecution
- * (postgres-js surfaces the constraint as `constraint_name` on the cause).
+ * Trims and null-normalizes an optional string for canonical payload assembly.
+ * Mirrors the engine's `normalizeString` so the route-built canonical payload
+ * matches what the engine stores in the event.
  */
-function isIncidentOperationUniqueViolation(err: unknown): boolean {
-  let current: unknown = err;
-  const visited = new Set<unknown>();
-  while (current && !visited.has(current)) {
-    visited.add(current);
-    if (typeof current === "object" && current !== null) {
-      const e = current as Record<string, unknown>;
-      if (e.code === "23505") {
-        const constraint = String(e.constraint ?? e.constraint_name ?? "");
-        if (constraint === INCIDENT_OPERATION_UNIQUE_CONSTRAINT) {
-          return true;
-        }
-      }
-    }
-    current =
-      typeof current === "object" && current !== null && "cause" in current
-        ? (current as { cause: unknown }).cause
-        : null;
-  }
-  return false;
-}
-
-/**
- * Runs an incident command in a transaction; on the operation-unique 23505
- * re-runs the SAME command once in a FRESH transaction (the aborted primary
- * transaction cannot be queried — postgres.js surfaces 25P02). The fresh
- * transaction's pre-read resolves the winner's committed event to
- * `idempotent_replayed`, or throws `IdempotencyConflictError`. Every other
- * error propagates unchanged; recovery happens at most once.
- */
-async function withOperationRaceRecovery<T>(
-  db: Database,
-  fn: (tx: TransactionDatabase) => Promise<T>,
-): Promise<T> {
-  try {
-    return await executeInTransaction(db, fn);
-  } catch (err: unknown) {
-    if (!isIncidentOperationUniqueViolation(err)) throw err;
-    return await executeInTransaction(db, fn);
-  }
+function norm(s: string | null | undefined): string | null {
+  if (s == null) return null;
+  const t = s.trim();
+  return t.length === 0 ? null : t;
 }
 
 /**
@@ -281,30 +240,76 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { examId } = params;
       const now = fastify.now();
+      const occurredAtCanonical = body.occurredAt
+        ? new Date(body.occurredAt).toISOString()
+        : null;
+      const descriptionCanonical = body.description.trim();
+      const severityCanonical = body.severity ?? "info";
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, "pending");
+      // Canonical payload mirrors the engine's stored event payload so the
+      // recovery wrapper's fresh-transaction lookup compares byte-identically.
+      const canonicalPayload = {
+        examId,
+        attemptId: body.attemptId ?? null,
+        candidateId: body.candidateId ?? null,
+        type: body.type,
+        severity: severityCanonical,
+        occurredAt: occurredAtCanonical,
+        description: descriptionCanonical,
+      };
 
-        return createExamIncident(
-          repo as unknown as IncidentRepo,
-          ctx,
-          {
-            operationId: body.operationId,
-            examId,
-            attemptId: body.attemptId ?? null,
-            candidateId: body.candidateId ?? null,
-            type: body.type,
-            severity: body.severity ?? "info",
-            occurredAt: body.occurredAt ?? null,
-            description: body.description,
-          },
-          {
-            now,
-            audit,
-          },
-        );
-      });
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "createExamIncident",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, "pending");
+
+          return createExamIncident(
+            repo as unknown as IncidentRepo,
+            ctx,
+            {
+              operationId: body.operationId,
+              examId,
+              attemptId: body.attemptId ?? null,
+              candidateId: body.candidateId ?? null,
+              type: body.type,
+              severity: severityCanonical,
+              occurredAt: body.occurredAt ?? null,
+              description: body.description,
+            },
+            {
+              now,
+              audit,
+              lookupExam: async (eid) => {
+                const exam = await createExamRepo(tx).findById(ctx, eid);
+                return exam
+                  ? { organizationId: exam.organizationId, id: exam.id }
+                  : null;
+              },
+              lookupAttempt: async (aid) => {
+                const attempt = await createAttemptRepo(tx).findById(ctx, aid);
+                return attempt
+                  ? {
+                      examId: attempt.examId,
+                      candidateId: attempt.candidateId,
+                      organizationId: attempt.organizationId,
+                    }
+                  : null;
+              },
+              lookupEnrollment: async (eid, candidateId) => {
+                const enrollment = await createEnrollmentRepo(
+                  tx,
+                ).findByExamAndCandidate(ctx, eid, candidateId);
+                return enrollment != null;
+              },
+            },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -406,23 +411,37 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        expectedVersion: body.expectedVersion,
+        reasonCode: norm(body.reasonCode),
+        reasonText: norm(body.reasonText),
+      };
 
-        return startIncidentInvestigation(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            expectedVersion: body.expectedVersion,
-            reasonCode: body.reasonCode ?? null,
-            reasonText: body.reasonText ?? null,
-          },
-          { now, audit },
-        );
-      });
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "startIncidentInvestigation",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return startIncidentInvestigation(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              expectedVersion: body.expectedVersion,
+              reasonCode: body.reasonCode ?? null,
+              reasonText: body.reasonText ?? null,
+            },
+            { now, audit },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -461,18 +480,27 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = { incidentId, body: body.body.trim() };
 
-        return addIncidentNote(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          { operationId: body.operationId, body: body.body },
-          { now, audit },
-        );
-      });
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "addIncidentNote",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return addIncidentNote(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            { operationId: body.operationId, body: body.body },
+            { now, audit },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -511,24 +539,39 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        expectedVersion: body.expectedVersion,
+        severity: body.severity,
+        reasonCode: norm(body.reasonCode),
+        reasonText: norm(body.reasonText),
+      };
 
-        return changeIncidentSeverity(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            expectedVersion: body.expectedVersion,
-            severity: body.severity,
-            reasonCode: body.reasonCode ?? null,
-            reasonText: body.reasonText ?? null,
-          },
-          { now, audit },
-        );
-      });
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "changeIncidentSeverity",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return changeIncidentSeverity(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              expectedVersion: body.expectedVersion,
+              severity: body.severity,
+              reasonCode: body.reasonCode ?? null,
+              reasonText: body.reasonText ?? null,
+            },
+            { now, audit },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -567,23 +610,37 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        expectedVersion: body.expectedVersion,
+        resolutionSummary: body.resolutionSummary.trim(),
+        reasonCode: norm(body.reasonCode),
+      };
 
-        return resolveExamIncident(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            expectedVersion: body.expectedVersion,
-            resolutionSummary: body.resolutionSummary,
-            reasonCode: body.reasonCode ?? null,
-          },
-          { now, audit },
-        );
-      });
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "resolveExamIncident",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return resolveExamIncident(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              expectedVersion: body.expectedVersion,
+              resolutionSummary: body.resolutionSummary,
+              reasonCode: body.reasonCode ?? null,
+            },
+            { now, audit },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -622,23 +679,37 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        expectedVersion: body.expectedVersion,
+        reasonText: body.reasonText.trim(),
+        reasonCode: norm(body.reasonCode),
+      };
 
-        return dismissExamIncident(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            expectedVersion: body.expectedVersion,
-            reasonText: body.reasonText,
-            reasonCode: body.reasonCode ?? null,
-          },
-          { now, audit },
-        );
-      });
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "dismissExamIncident",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return dismissExamIncident(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              expectedVersion: body.expectedVersion,
+              reasonText: body.reasonText,
+              reasonCode: body.reasonCode ?? null,
+            },
+            { now, audit },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -677,59 +748,75 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        actionType: body.actionType,
+        actionId: body.actionId,
+      };
 
-        return linkIncidentAction(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            actionType: body.actionType,
-            actionId: body.actionId,
-          },
-          {
-            now,
-            audit,
-            lookupAdjustmentAttempt: async (adjustmentId: string) => {
-              const adjustment = await createAttemptTimeAdjustmentRepo(
-                tx,
-              ).findById(ctx, adjustmentId);
-              return adjustment?.attemptId ?? null;
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "linkIncidentAction",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return linkIncidentAction(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              actionType: body.actionType,
+              actionId: body.actionId,
             },
-            lookupForceSubmitAudit: async (attemptId: string) => {
-              const rows = await createAuditLogRepo(tx).listByTarget(
-                ctx,
-                "attempt",
-                attemptId,
-              );
-              return rows.some(
-                (r) => r.auditLog.action === "attempt.forceSubmit",
-              );
+            {
+              now,
+              audit,
+              lookupAdjustmentAttempt: async (adjustmentId: string) => {
+                const adjustment = await createAttemptTimeAdjustmentRepo(
+                  tx,
+                ).findById(ctx, adjustmentId);
+                return adjustment?.attemptId ?? null;
+              },
+              lookupForceSubmitAudit: async (attemptId: string) => {
+                const rows = await createAuditLogRepo(tx).listByTarget(
+                  ctx,
+                  "attempt",
+                  attemptId,
+                );
+                return rows.some(
+                  (r) => r.auditLog.action === "attempt.forceSubmit",
+                );
+              },
+              lookupAttempt: async (aid: string) => {
+                const attempt = await createAttemptRepo(tx).findById(ctx, aid);
+                return attempt
+                  ? {
+                      examId: attempt.examId,
+                      candidateId: attempt.candidateId,
+                      organizationId: attempt.organizationId,
+                    }
+                  : null;
+              },
+              lookupActionLink: async (
+                actionType: string,
+                actionId: string,
+              ) => {
+                const existing = await repo.findActionLinkByAction(
+                  ctx,
+                  actionType,
+                  actionId,
+                );
+                return existing != null;
+              },
             },
-            lookupAttempt: async (aid: string) => {
-              const attempt = await createAttemptRepo(tx).findById(ctx, aid);
-              return attempt
-                ? {
-                    examId: attempt.examId,
-                    candidateId: attempt.candidateId,
-                    organizationId: attempt.organizationId,
-                  }
-                : null;
-            },
-            lookupActionLink: async (actionType: string, actionId: string) => {
-              const existing = await repo.findActionLinkByAction(
-                ctx,
-                actionType,
-                actionId,
-              );
-              return existing != null;
-            },
-          },
-        );
-      });
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -768,35 +855,48 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        attemptId: body.attemptId,
+        relationshipType: body.relationshipType,
+      };
 
-        return linkIncidentAttempt(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            attemptId: body.attemptId,
-            relationshipType: body.relationshipType,
-          },
-          {
-            now,
-            audit,
-            lookupAttempt: async (aid: string) => {
-              const attempt = await createAttemptRepo(tx).findById(ctx, aid);
-              return attempt
-                ? {
-                    examId: attempt.examId,
-                    candidateId: attempt.candidateId,
-                    organizationId: attempt.organizationId,
-                  }
-                : null;
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "linkIncidentAttempt",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return linkIncidentAttempt(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              attemptId: body.attemptId,
+              relationshipType: body.relationshipType,
             },
-          },
-        );
-      });
+            {
+              now,
+              audit,
+              lookupAttempt: async (aid: string) => {
+                const attempt = await createAttemptRepo(tx).findById(ctx, aid);
+                return attempt
+                  ? {
+                      examId: attempt.examId,
+                      candidateId: attempt.candidateId,
+                      organizationId: attempt.organizationId,
+                    }
+                  : null;
+              },
+            },
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({
@@ -835,41 +935,52 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const { incidentId } = params;
       const now = fastify.now();
 
-      const result = await withOperationRaceRecovery(fastify.db, async (tx) => {
-        const repo = createIncidentRepo(tx);
-        const audit = makeAudit(tx, request, ctx, incidentId);
+      const canonicalPayload = {
+        incidentId,
+        interruptionId: body.interruptionId,
+      };
 
-        return linkIncidentInterruption(
-          repo as unknown as IncidentRepo,
-          ctx,
-          incidentId,
-          {
-            operationId: body.operationId,
-            interruptionId: body.interruptionId,
-          },
-          {
-            now,
-            audit,
-            lookupInterruptionAttempt: async (interruptionId: string) => {
-              const episode = await createAttemptInterruptionRepo(tx).findById(
-                ctx,
-                interruptionId,
-              );
-              return episode?.attemptId ?? null;
+      const result = await withIncidentOperationRecovery(
+        fastify.db,
+        ctx,
+        body.operationId,
+        "linkIncidentInterruption",
+        canonicalPayload,
+        async (tx: TransactionDatabase) => {
+          const repo = createIncidentRepo(tx);
+          const audit = makeAudit(tx, request, ctx, incidentId);
+
+          return linkIncidentInterruption(
+            repo as unknown as IncidentRepo,
+            ctx,
+            incidentId,
+            {
+              operationId: body.operationId,
+              interruptionId: body.interruptionId,
             },
-            lookupAttempt: async (aid: string) => {
-              const attempt = await createAttemptRepo(tx).findById(ctx, aid);
-              return attempt
-                ? {
-                    examId: attempt.examId,
-                    candidateId: attempt.candidateId,
-                    organizationId: attempt.organizationId,
-                  }
-                : null;
+            {
+              now,
+              audit,
+              lookupInterruptionAttempt: async (interruptionId: string) => {
+                const episode = await createAttemptInterruptionRepo(
+                  tx,
+                ).findById(ctx, interruptionId);
+                return episode?.attemptId ?? null;
+              },
+              lookupAttempt: async (aid: string) => {
+                const attempt = await createAttemptRepo(tx).findById(ctx, aid);
+                return attempt
+                  ? {
+                      examId: attempt.examId,
+                      candidateId: attempt.candidateId,
+                      organizationId: attempt.organizationId,
+                    }
+                  : null;
+              },
             },
-          },
-        );
-      });
+          );
+        },
+      );
 
       return reply.send(
         IncidentWriteResponseSchema.parse({

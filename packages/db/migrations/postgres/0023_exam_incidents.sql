@@ -1,6 +1,6 @@
 -- REC-I6-I1: Exam Incident Persistence — migration 0023
 -- Five additive tables; zero changes to existing tables.
--- Down migration guard: refuses DROP if any attempt_time_adjustments.incident_id is non-null.
+-- Rollback guard: see apps/api/src/scripts/rollback-incident-tables.ts (ADR-014 §14).
 --> statement-breakpoint
 
 -- ============================================================
@@ -52,8 +52,14 @@ ALTER TABLE "exam_incidents" ADD CONSTRAINT "exam_incidents_version_check"
 -- Unique constraint for child composite FK target
 CREATE UNIQUE INDEX "exam_incidents_org_id_unique" ON "exam_incidents" ("organization_id", "id");
 
--- Composite FK to exam_attempts when attempt_id is set
+-- Composite FK to exam_attempts when attempt_id is set (reuses exam_attempts_org_id_unique).
+-- The index above supports the FK lookup; this constraint enforces that a non-null
+-- attempt_id references an existing same-organization attempt. Nullable attempt_id
+-- rows skip FK enforcement (MATCH SIMPLE default), so exam-wide incidents insert cleanly.
 CREATE INDEX "exam_incidents_org_attempt_idx" ON "exam_incidents" ("organization_id", "attempt_id");
+
+ALTER TABLE "exam_incidents" ADD CONSTRAINT "exam_incidents_org_attempt_fk"
+  FOREIGN KEY ("organization_id", "attempt_id") REFERENCES "exam_attempts"("organization_id", "id");
 
 -- Query indexes
 CREATE INDEX "exam_incidents_org_exam_status_idx" ON "exam_incidents" ("organization_id", "exam_id", "status");
@@ -209,8 +215,17 @@ ALTER TABLE "exam_incident_interruption_links" ADD CONSTRAINT "exam_incident_int
 --> statement-breakpoint
 
 -- ============================================================
--- Down migration guard
+-- Rollback guard (ADR-014 §14)
 -- ============================================================
--- The destructive DROP is only allowed when no non-null incident_id exists
--- in attempt_time_adjustments. After the first non-null write, the down
--- migration MUST fail closed to prevent dangling correlation UUIDs.
+-- The migration runner is forward-only: there is no automatic down migration.
+-- A destructive DROP of these five tables is permitted ONLY before the first
+-- non-null attempt_time_adjustments.incident_id write. After activation, a
+-- plain DROP would leave dangling correlation UUIDs with no referential guard,
+-- so it is prohibited.
+--
+-- The executable, opt-in, pre-activation guard lives in
+-- apps/api/src/scripts/rollback-incident-tables.ts (invoked via
+-- `pnpm db:rollback:incidents -- --confirm`). It checks
+-- attempt_time_adjustments.incident_id in a single transaction and refuses to
+-- DROP anything when any non-null value exists. It is never run by migrate,
+-- build, or test. See ADR-014 §14 and packages/db/src/migrations/0023-rollback-guard.test.ts.

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExamIncident, RequestContext } from "@exam/domain";
 import {
   IdempotencyConflictError,
@@ -70,7 +70,7 @@ function makeRepo(overrides: Partial<IncidentRepo> = {}): IncidentRepo {
     findByIdForUpdate: vi.fn().mockResolvedValue(null) as never,
     listByExam: vi.fn().mockResolvedValue([]) as never,
     update: vi.fn().mockResolvedValue(makeIncident()) as never,
-    appendEvent: vi.fn().mockResolvedValue(undefined) as never,
+    appendEvent: vi.fn().mockResolvedValue({ id: randomUUID() }) as never,
     findEventByOperationId: vi.fn().mockResolvedValue(null) as never,
     listEventsByIncident: vi.fn().mockResolvedValue([]) as never,
     insertActionLink: vi.fn().mockResolvedValue(undefined) as never,
@@ -91,7 +91,18 @@ function makeRepo(overrides: Partial<IncidentRepo> = {}): IncidentRepo {
 
 const noopAudit = vi.fn().mockResolvedValue(undefined);
 
+/** lookupExam that resolves the exam in ctx org (fail-closed default). */
+const lookupExamInOrg = vi.fn().mockResolvedValue({
+  organizationId: ORG_ID,
+  id: EXAM_ID,
+});
+
 describe("incidentCommands — createExamIncident", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lookupExamInOrg.mockResolvedValue({ organizationId: ORG_ID, id: EXAM_ID });
+  });
+
   it("creates an incident and returns applied outcome", async () => {
     const repo = makeRepo();
     const result = await createExamIncident(
@@ -105,7 +116,7 @@ describe("incidentCommands — createExamIncident", () => {
         type: "network_interruption",
         description: "Network down",
       },
-      { now: NOW, audit: noopAudit },
+      { now: NOW, audit: noopAudit, lookupExam: lookupExamInOrg },
     );
 
     expect(result.outcome).toBe("applied");
@@ -125,9 +136,134 @@ describe("incidentCommands — createExamIncident", () => {
           type: "invalid_type",
           description: "test",
         },
-        { now: NOW, audit: noopAudit },
+        { now: NOW, audit: noopAudit, lookupExam: lookupExamInOrg },
       ),
     ).rejects.toThrow(ValidationError);
+  });
+
+  it("throws NotFoundError when exam is missing (404 RESOURCE_NOT_FOUND)", async () => {
+    const repo = makeRepo();
+    const missing = vi.fn().mockResolvedValue(null);
+    await expect(
+      createExamIncident(
+        repo,
+        ctx(),
+        {
+          operationId: randomUUID(),
+          examId: EXAM_ID,
+          type: "other",
+          description: "test",
+        },
+        { now: NOW, audit: noopAudit, lookupExam: missing },
+      ),
+    ).rejects.toThrow(NotFoundError);
+    expect(repo.insert).not.toHaveBeenCalled();
+  });
+
+  it("throws NotFoundError on cross-org exam", async () => {
+    const repo = makeRepo();
+    const crossOrg = vi.fn().mockResolvedValue({
+      organizationId: "other-org",
+      id: EXAM_ID,
+    });
+    await expect(
+      createExamIncident(
+        repo,
+        ctx(),
+        {
+          operationId: randomUUID(),
+          examId: EXAM_ID,
+          type: "other",
+          description: "test",
+        },
+        { now: NOW, audit: noopAudit, lookupExam: crossOrg },
+      ),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("derives candidateId from the authoritative attempt (set/null matrix)", async () => {
+    const inserted = makeIncident({
+      attemptId: ATTEMPT_ID,
+      candidateId: CANDIDATE_ID,
+    });
+    const repo = makeRepo({
+      insert: vi.fn().mockResolvedValue(inserted) as never,
+    });
+    const lookupAttempt = vi.fn().mockResolvedValue({
+      examId: EXAM_ID,
+      candidateId: CANDIDATE_ID,
+      organizationId: ORG_ID,
+    });
+    await createExamIncident(
+      repo,
+      ctx(),
+      {
+        operationId: randomUUID(),
+        examId: EXAM_ID,
+        attemptId: ATTEMPT_ID,
+        candidateId: null,
+        type: "other",
+        description: "anchored",
+      },
+      {
+        now: NOW,
+        audit: noopAudit,
+        lookupExam: lookupExamInOrg,
+        lookupAttempt,
+      },
+    );
+    expect(repo.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        attemptId: ATTEMPT_ID,
+        candidateId: CANDIDATE_ID,
+      }),
+    );
+  });
+
+  it("rejects candidate not enrolled when attemptId null + candidateId set", async () => {
+    const repo = makeRepo();
+    const notEnrolled = vi.fn().mockResolvedValue(false);
+    await expect(
+      createExamIncident(
+        repo,
+        ctx(),
+        {
+          operationId: randomUUID(),
+          examId: EXAM_ID,
+          candidateId: CANDIDATE_ID,
+          type: "other",
+          description: "candidate focus",
+        },
+        {
+          now: NOW,
+          audit: noopAudit,
+          lookupExam: lookupExamInOrg,
+          lookupEnrollment: notEnrolled,
+        },
+      ),
+    ).rejects.toThrow(ValidationError);
+    expect(repo.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects when description is empty/whitespace (fail closed)", async () => {
+    const repo = makeRepo();
+    for (const bad of ["", "   ", "\n\t"]) {
+      await expect(
+        createExamIncident(
+          repo,
+          ctx(),
+          {
+            operationId: randomUUID(),
+            examId: EXAM_ID,
+            type: "other",
+            description: bad,
+          },
+          { now: NOW, audit: noopAudit, lookupExam: lookupExamInOrg },
+        ),
+      ).rejects.toThrow(ValidationError);
+    }
+    expect(repo.insert).not.toHaveBeenCalled();
   });
 
   it("replays same operationId + same payload as idempotent_replayed", async () => {
@@ -164,7 +300,7 @@ describe("incidentCommands — createExamIncident", () => {
         type: "other",
         description: "test",
       },
-      { now: NOW, audit: noopAudit },
+      { now: NOW, audit: noopAudit, lookupExam: lookupExamInOrg },
     );
 
     expect(result.outcome).toBe("idempotent_replayed");
@@ -196,7 +332,7 @@ describe("incidentCommands — createExamIncident", () => {
           type: "other",
           description: "test",
         },
-        { now: NOW, audit: noopAudit },
+        { now: NOW, audit: noopAudit, lookupExam: lookupExamInOrg },
       ),
     ).rejects.toThrow(IdempotencyConflictError);
   });
@@ -662,5 +798,214 @@ describe("incidentCommands — scope quadruple validation", () => {
     await expect(
       validateScopeQuadruple(incident, target, ATTEMPT_ID, ORG_ID),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("incidentCommands — required string normalization (fail closed)", () => {
+  it("addIncidentNote rejects empty/whitespace body with no event", async () => {
+    const incident = makeIncident({ version: 3 });
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+    });
+    for (const bad of ["", "  ", "\n\t"]) {
+      await expect(
+        addIncidentNote(
+          repo,
+          ctx(),
+          incident.id,
+          { operationId: randomUUID(), body: bad },
+          { now: NOW, audit: noopAudit },
+        ),
+      ).rejects.toThrow(ValidationError);
+    }
+    expect(repo.appendEvent).not.toHaveBeenCalled();
+  });
+
+  it("resolveExamIncident rejects empty/whitespace resolutionSummary", async () => {
+    const incident = makeIncident({ status: "open", version: 1 });
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+      findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
+    });
+    for (const bad of ["", "  "]) {
+      await expect(
+        resolveExamIncident(
+          repo,
+          ctx(),
+          incident.id,
+          {
+            operationId: randomUUID(),
+            expectedVersion: 1,
+            resolutionSummary: bad,
+          },
+          { now: NOW, audit: noopAudit },
+        ),
+      ).rejects.toThrow(ValidationError);
+    }
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it("dismissExamIncident rejects empty/whitespace reasonText", async () => {
+    const incident = makeIncident({ status: "open", version: 1 });
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+      findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
+    });
+    for (const bad of ["", "  "]) {
+      await expect(
+        dismissExamIncident(
+          repo,
+          ctx(),
+          incident.id,
+          {
+            operationId: randomUUID(),
+            expectedVersion: 1,
+            reasonText: bad,
+          },
+          { now: NOW, audit: noopAudit },
+        ),
+      ).rejects.toThrow(ValidationError);
+    }
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("incidentCommands — event/audit evidence accuracy", () => {
+  it("addIncidentNote audit references the real event id, not operationId", async () => {
+    const incident = makeIncident({ version: 3 });
+    const eventId = randomUUID();
+    const opId = randomUUID();
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+      appendEvent: vi.fn().mockResolvedValue({ id: eventId }) as never,
+    });
+    const audit = vi.fn().mockResolvedValue(undefined);
+    await addIncidentNote(
+      repo,
+      ctx(),
+      incident.id,
+      { operationId: opId, body: "note" },
+      { now: NOW, audit },
+    );
+    expect(audit).toHaveBeenCalledWith(
+      "incident.note_added",
+      expect.objectContaining({ noteId: eventId }),
+    );
+    // The operationId must NOT masquerade as noteId.
+    const meta = audit.mock.calls[0]![1] as Record<string, unknown>;
+    expect(meta.noteId).not.toBe(opId);
+  });
+
+  it("changeIncidentSeverity event payload carries before/after severity", async () => {
+    const incident = makeIncident({
+      status: "investigating",
+      version: 2,
+      severity: "info",
+    });
+    const updated = makeIncident({
+      status: "investigating",
+      version: 3,
+      severity: "critical",
+    });
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+      findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
+      update: vi.fn().mockResolvedValue(updated) as never,
+    });
+    const audit = vi.fn().mockResolvedValue(undefined);
+    await changeIncidentSeverity(
+      repo,
+      ctx(),
+      incident.id,
+      {
+        operationId: randomUUID(),
+        expectedVersion: 2,
+        severity: "critical",
+      },
+      { now: NOW, audit },
+    );
+    // Audit before/after come from authoritative locked vs updated rows.
+    expect(audit).toHaveBeenCalledWith(
+      "incident.severity_changed",
+      expect.objectContaining({
+        beforeSeverity: "info",
+        afterSeverity: "critical",
+      }),
+    );
+    // Event payload also self-describes before/after.
+    expect(repo.appendEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "severity_changed",
+        beforeVersion: 2,
+        afterVersion: 3,
+        payload: expect.objectContaining({
+          beforeSeverity: "info",
+          afterSeverity: "critical",
+        }),
+      }),
+    );
+  });
+
+  it("audit metadata does not copy free-text bodies (privacy)", async () => {
+    const incident = makeIncident({ status: "open", version: 1 });
+    const updated = makeIncident({ status: "resolved", version: 2 });
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+      findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
+      update: vi.fn().mockResolvedValue(updated) as never,
+    });
+    const audit = vi.fn().mockResolvedValue(undefined);
+    await resolveExamIncident(
+      repo,
+      ctx(),
+      incident.id,
+      {
+        operationId: randomUUID(),
+        expectedVersion: 1,
+        resolutionSummary: "secret PII content",
+      },
+      { now: NOW, audit },
+    );
+    const meta = audit.mock.calls[0]![1] as Record<string, unknown>;
+    expect(meta.resolutionSummary).toBeUndefined();
+    expect(meta.reasonText).toBeUndefined();
+  });
+});
+
+describe("incidentCommands — canonical operationId identity", () => {
+  it("version command canonical payload includes incidentId + expectedVersion", async () => {
+    const incident = makeIncident({ status: "open", version: 1 });
+    const opId = randomUUID();
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue(incident) as never,
+      findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
+      update: vi
+        .fn()
+        .mockResolvedValue(
+          makeIncident({ status: "investigating", version: 2 }),
+        ) as never,
+      // A prior commit with the SAME opId but a payload missing incidentId /
+      // expectedVersion must count as a DIFFERENT payload → conflict.
+      findEventByOperationId: vi.fn().mockResolvedValue({
+        id: randomUUID(),
+        incidentId: incident.id,
+        eventType: "investigation_started",
+        commandType: "startIncidentInvestigation",
+        operationId: opId,
+        beforeVersion: 1,
+        afterVersion: 2,
+        payload: { reasonCode: null, reasonText: null },
+      }) as never,
+    });
+    await expect(
+      startIncidentInvestigation(
+        repo,
+        ctx(),
+        incident.id,
+        { operationId: opId, expectedVersion: 1 },
+        { now: NOW, audit: noopAudit },
+      ),
+    ).rejects.toThrow(IdempotencyConflictError);
   });
 });

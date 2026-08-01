@@ -57,7 +57,7 @@ export interface IncidentRepo {
       payload: Record<string, unknown>;
       createdAt: Date;
     },
-  ): Promise<unknown>;
+  ): Promise<{ id: string } & Record<string, unknown>>;
   findEventByOperationId(
     ctx: RequestContext,
     operationId: string,
@@ -247,12 +247,55 @@ export interface IncidentAuditFn {
   (action: string, metadata: Record<string, unknown>): Promise<void>;
 }
 
+// ── Lookup dependency shapes (fail-closed: server-derived authority) ──
+
+/** Authoritative exam existence + org scope. Required by create. */
+export interface ExamLookup {
+  (examId: string): Promise<{ organizationId: string; id: string } | null>;
+}
+
+/** Authoritative attempt row for anchor/scope derivation. */
+export interface AttemptLookup {
+  (attemptId: string): Promise<AttemptScopeRow | null>;
+}
+
+/** Authoritative enrollment existence (candidate enrolled in exam). */
+export interface EnrollmentLookup {
+  (examId: string, candidateId: string): Promise<boolean>;
+}
+
 // ── Canonical payload helpers ──
 
+/**
+ * Trims a string and returns null when empty after trim. Used for OPTIONAL
+ * string fields where empty === absent. Required fields use
+ * {@link normalizeRequiredString} which throws on empty.
+ */
 function normalizeString(s: string | undefined | null): string | null {
   if (s == null) return null;
   const trimmed = s.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Trims a REQUIRED string and throws ValidationError when empty after trim.
+ * Bounds apply after trim. Used for description / note body / resolution
+ * summary / dismiss reasonText. The DB CHECK is the last line of defense;
+ * this is the engine-level fail-closed guard.
+ */
+function normalizeRequiredString(
+  s: string | undefined | null,
+  field: string,
+  max: number,
+): string {
+  const trimmed = (s ?? "").trim();
+  if (trimmed.length === 0) {
+    throw new ValidationError(`${field} must not be empty`);
+  }
+  if (trimmed.length > max) {
+    throw new ValidationError(`${field} must be at most ${max} chars`);
+  }
+  return trimmed;
 }
 
 function payloadsEqual(a: unknown, b: unknown): boolean {
@@ -370,6 +413,16 @@ export async function validateScopeQuadruple(
 
 /**
  * Create an exam incident. Append-only: no row lock, event-first insert.
+ *
+ * Frozen creation matrix (ADR-014 §7):
+ *   attemptId=null, candidateId=null  → exam-wide, no candidate focus
+ *   attemptId=null, candidateId=set   → candidate MUST be enrolled in exam
+ *   attemptId=set,   candidateId=null → candidate DERIVED from attempt (same org+exam)
+ *   attemptId=set,   candidateId=set  → supplied candidate MUST equal attempt.candidateId
+ *
+ * Exam existence is REQUIRED (404 if missing/cross-org). Attempt/candidate
+ * authority is server-derived from authoritative rows, never trusted from
+ * the request beyond identifiers.
  */
 export async function createExamIncident(
   repo: IncidentRepo,
@@ -378,25 +431,46 @@ export async function createExamIncident(
   deps: {
     now: Date;
     audit: IncidentAuditFn;
-    lookupAttempt?: (attemptId: string) => Promise<AttemptScopeRow | null>;
-    lookupEnrollment?: (
-      examId: string,
-      candidateId: string,
-    ) => Promise<boolean>;
+    lookupExam: ExamLookup;
+    lookupAttempt?: AttemptLookup;
+    lookupEnrollment?: EnrollmentLookup;
   },
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_CREATE;
+
+  // 1. Validate type up front (cheap, before any authority lookup).
+  if (!(VALID_INCIDENT_TYPES as readonly string[]).includes(input.type)) {
+    throw new ValidationError(`Invalid incident type: ${input.type}`);
+  }
+  if (input.severity != null) {
+    if (!(VALID_SEVERITIES as readonly string[]).includes(input.severity)) {
+      throw new ValidationError(`Invalid severity: ${input.severity}`);
+    }
+  }
+
+  // 2. Normalize description (fail closed) and build canonical payload.
+  const description = normalizeRequiredString(
+    input.description,
+    "description",
+    1000,
+  );
+  const severity = input.severity ?? "info";
+  const occurredAtRaw = input.occurredAt ?? null;
+  const occurredAtCanonical = occurredAtRaw
+    ? new Date(occurredAtRaw).toISOString()
+    : null;
+
   const canonicalPayload = {
     examId: input.examId,
     attemptId: input.attemptId ?? null,
     candidateId: input.candidateId ?? null,
     type: input.type,
-    severity: input.severity ?? "info",
-    occurredAt: input.occurredAt ?? null,
-    description: normalizeString(input.description) ?? "",
+    severity,
+    occurredAt: occurredAtCanonical,
+    description,
   };
 
-  // Pre-read operationId
+  // 3. Pre-read operationId (replay / idempotency conflict).
   const replay = await preReadOperationId(
     repo,
     ctx,
@@ -406,30 +480,57 @@ export async function createExamIncident(
   );
   if (replay) return replay;
 
-  // Validate type
-  if (!(VALID_INCIDENT_TYPES as readonly string[]).includes(input.type)) {
-    throw new ValidationError(`Invalid incident type: ${input.type}`);
+  // 4. Exam existence + org scope (REQUIRED — 404 if missing/cross-org).
+  //    A plain exam_id REFERENCES exams(id) FK cannot prove the Incident's
+  //    organization matches the Exam's organization; this lookup does.
+  const exam = await deps.lookupExam(input.examId);
+  if (!exam || exam.organizationId !== ctx.organizationId) {
+    throw new NotFoundError("Exam not found");
   }
 
-  // Validate candidateId if set
-  if (input.candidateId) {
-    if (input.attemptId && deps.lookupAttempt) {
-      const attempt = await deps.lookupAttempt(input.attemptId);
-      if (attempt && attempt.candidateId !== input.candidateId) {
-        throw new ValidationError(
-          "Candidate does not match attempt enrollment",
-        );
-      }
-    } else if (deps.lookupEnrollment) {
-      const enrolled = await deps.lookupEnrollment(
-        input.examId,
-        input.candidateId,
+  // 5. Freeze Attempt/Candidate creation matrix (server-derived authority).
+  let resolvedAttemptId = input.attemptId ?? null;
+  let resolvedCandidateId = input.candidateId ?? null;
+
+  if (resolvedAttemptId != null) {
+    // Anchored incident: Attempt MUST exist in ctx org (404 if missing),
+    // belong to the same exam (400 if wrong exam), and candidateId is
+    // DERIVED from the authoritative attempt row.
+    if (!deps.lookupAttempt) {
+      throw new Error("lookupAttempt is required when attemptId is set");
+    }
+    const attempt = await deps.lookupAttempt(resolvedAttemptId);
+    if (!attempt) {
+      throw new NotFoundError("Attempt not found");
+    }
+    if (attempt.examId !== input.examId) {
+      throw new ValidationError("Anchored attempt belongs to a different exam");
+    }
+    if (
+      input.candidateId != null &&
+      attempt.candidateId !== input.candidateId
+    ) {
+      throw new ValidationError("Candidate does not match attempt enrollment");
+    }
+    // Derive candidateId from the authoritative attempt row.
+    resolvedCandidateId = attempt.candidateId;
+  } else if (resolvedCandidateId != null) {
+    // Exam-wide, candidate-specific: candidate MUST hold an enrollment in
+    // this exam (400 VALIDATION_ERROR if not enrolled).
+    if (!deps.lookupEnrollment) {
+      throw new Error(
+        "lookupEnrollment is required when candidateId is set without attemptId",
       );
-      if (!enrolled) {
-        throw new ValidationError("Candidate is not enrolled in this exam");
-      }
+    }
+    const enrolled = await deps.lookupEnrollment(
+      input.examId,
+      resolvedCandidateId,
+    );
+    if (!enrolled) {
+      throw new ValidationError("Candidate is not enrolled in this exam");
     }
   }
+  // else: exam-wide, no candidate focus — no further candidate validation.
 
   const now = deps.now;
 
@@ -437,12 +538,12 @@ export async function createExamIncident(
     // Insert incident
     const incident = await repo.insert(ctx, {
       examId: input.examId,
-      attemptId: input.attemptId ?? null,
-      candidateId: input.candidateId ?? null,
+      attemptId: resolvedAttemptId,
+      candidateId: resolvedCandidateId,
       type: input.type,
-      severity: input.severity ?? "info",
-      occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
-      description: input.description,
+      severity,
+      occurredAt: occurredAtCanonical ? new Date(occurredAtCanonical) : null,
+      description,
       reportedBy: ctx.actorId,
       createdAt: now,
       updatedAt: now,
@@ -461,26 +562,29 @@ export async function createExamIncident(
       createdAt: now,
     });
 
-    // Atomic audit
-    await deps.audit("incident.created" as string, {
+    // Atomic audit (identifiers + type + version only; no free-text body).
+    await deps.audit("incident.created", {
       incidentId: incident.id,
       examId: input.examId,
-      attemptId: input.attemptId ?? undefined,
+      ...(resolvedAttemptId ? { attemptId: resolvedAttemptId } : {}),
       type: input.type,
       version: 1,
     });
 
     return { outcome: "applied", incident };
   } catch (err: unknown) {
-    // operation-unique 23505 propagates unchanged: the orchestrator re-runs
-    // the command in a fresh transaction (same pattern as the operator
-    // time-grant race recovery), where the pre-read resolves the winner.
+    // operation-unique 23505 propagates unchanged: the recovery wrapper
+    // re-runs the command in a fresh transaction (same pattern as the
+    // operator time-grant race recovery), where the pre-read resolves the
+    // winner.
     throw err;
   }
 }
 
 /**
  * Add an incident note. Append-only: no row lock, no version bump.
+ * The audit metadata references the REAL event id (captured from
+ * appendEvent), never the operationId.
  */
 export async function addIncidentNote(
   repo: IncidentRepo,
@@ -493,7 +597,8 @@ export async function addIncidentNote(
   },
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_NOTE;
-  const canonicalPayload = { body: normalizeString(input.body) ?? "" };
+  const body = normalizeRequiredString(input.body, "body", 500);
+  const canonicalPayload = { incidentId, body };
 
   const replay = await preReadOperationId(
     repo,
@@ -510,7 +615,8 @@ export async function addIncidentNote(
   const now = deps.now;
 
   try {
-    await repo.appendEvent(ctx, {
+    // Capture the real event id for audit identity (never use operationId).
+    const event = await repo.appendEvent(ctx, {
       incidentId,
       eventType: "note_added",
       commandType,
@@ -522,15 +628,15 @@ export async function addIncidentNote(
       createdAt: now,
     });
 
-    await deps.audit("incident.note_added" as string, {
+    await deps.audit("incident.note_added", {
       incidentId,
-      noteId: input.operationId,
+      noteId: event.id,
       version: incident.version,
     });
 
     return { outcome: "applied", incident };
   } catch (err: unknown) {
-    // operation-unique 23505 propagates unchanged (orchestrator recovery).
+    // operation-unique 23505 propagates unchanged (recovery wrapper).
     throw err;
   }
 }
@@ -558,11 +664,12 @@ export async function linkIncidentAction(
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_LINK_ACTION;
   const canonicalPayload = {
+    incidentId,
     actionType: input.actionType,
     actionId: input.actionId,
   };
 
-  // Reject misconduct_mark
+  // Reject misconduct_mark (deferred per ADR-014 §7).
   if (input.actionType === "misconduct_mark") {
     throw new ValidationError("misconduct_mark action links are deferred");
   }
@@ -584,7 +691,7 @@ export async function linkIncidentAction(
   const incident = await repo.findById(ctx, incidentId);
   if (!incident) throw new NotFoundError("Incident not found");
 
-  // Pre-check action link uniqueness
+  // Pre-check action link uniqueness (the DB unique is the final arbiter).
   if (deps.lookupActionLink) {
     const existing = await deps.lookupActionLink(
       input.actionType,
@@ -597,23 +704,23 @@ export async function linkIncidentAction(
     }
   }
 
-  // Derive attemptId
+  // Derive attemptId from the authoritative action referent.
   let attemptId: string;
   if (input.actionType === "time_grant") {
     if (!deps.lookupAdjustmentAttempt) {
       throw new Error("lookupAdjustmentAttempt required for time_grant links");
     }
     const adjAttemptId = await deps.lookupAdjustmentAttempt(input.actionId);
-    if (!adjAttemptId) throw new ValidationError("Time adjustment not found");
+    if (!adjAttemptId) throw new NotFoundError("Time adjustment not found");
     attemptId = adjAttemptId;
   } else {
     attemptId = input.actionId; // force_submit: actionId = attemptId
   }
 
-  // Validate scope quadruple
+  // Validate scope quadruple (non-locking read of authoritative attempt).
   if (deps.lookupAttempt) {
     const attempt = await deps.lookupAttempt(attemptId);
-    if (!attempt) throw new ValidationError("Target attempt not found");
+    if (!attempt) throw new NotFoundError("Target attempt not found");
     await validateScopeQuadruple(
       incident,
       attempt,
@@ -622,7 +729,7 @@ export async function linkIncidentAction(
     );
   }
 
-  // For force_submit, verify audit existence
+  // For force_submit, verify the audit existence fact (ADR-014 §7).
   if (input.actionType === "force_submit") {
     if (!deps.lookupForceSubmitAudit) {
       throw new Error("lookupForceSubmitAudit required for force_submit links");
@@ -636,7 +743,7 @@ export async function linkIncidentAction(
   const now = deps.now;
 
   try {
-    // Append event first
+    // Append event first (carries the operation unique constraint).
     await repo.appendEvent(ctx, {
       incidentId,
       eventType: "action_linked",
@@ -660,7 +767,7 @@ export async function linkIncidentAction(
       linkedAt: now,
     });
 
-    await deps.audit("incident.action_linked" as string, {
+    await deps.audit("incident.action_linked", {
       incidentId,
       actionType: input.actionType,
       actionId: input.actionId,
@@ -675,9 +782,7 @@ export async function linkIncidentAction(
         linkType: `action:${input.actionType}:${input.actionId}`,
       });
     }
-    // operation-unique 23505 propagates unchanged: the orchestrator re-runs
-    // the command in a fresh transaction (same pattern as the operator
-    // time-grant race recovery), where the pre-read resolves the winner.
+    // operation-unique 23505 propagates unchanged (recovery wrapper).
     throw err;
   }
 }
@@ -698,6 +803,7 @@ export async function linkIncidentAttempt(
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_LINK_ATTEMPT;
   const canonicalPayload = {
+    incidentId,
     attemptId: input.attemptId,
     relationshipType: input.relationshipType,
   };
@@ -732,10 +838,10 @@ export async function linkIncidentAttempt(
     );
   }
 
-  // Validate scope quadruple
+  // Validate scope quadruple (non-locking read).
   if (deps.lookupAttempt) {
     const attempt = await deps.lookupAttempt(input.attemptId);
-    if (!attempt) throw new ValidationError("Target attempt not found");
+    if (!attempt) throw new NotFoundError("Target attempt not found");
     await validateScopeQuadruple(
       incident,
       attempt,
@@ -768,7 +874,7 @@ export async function linkIncidentAttempt(
       linkedAt: now,
     });
 
-    await deps.audit("incident.attempt_linked" as string, {
+    await deps.audit("incident.attempt_linked", {
       incidentId,
       attemptId: input.attemptId,
       relationshipType: input.relationshipType,
@@ -787,7 +893,7 @@ export async function linkIncidentAttempt(
         linkType: `attempt:${input.attemptId}`,
       });
     }
-    // operation-unique 23505 propagates unchanged (orchestrator recovery).
+    // operation-unique 23505 propagates unchanged (recovery wrapper).
     throw err;
   }
 }
@@ -810,7 +916,10 @@ export async function linkIncidentInterruption(
   },
 ): Promise<IncidentCommandResult> {
   const commandType = COMMAND_LINK_INTERRUPTION;
-  const canonicalPayload = { interruptionId: input.interruptionId };
+  const canonicalPayload = {
+    incidentId,
+    interruptionId: input.interruptionId,
+  };
 
   const replay = await preReadOperationId(
     repo,
@@ -824,23 +933,24 @@ export async function linkIncidentInterruption(
   const incident = await repo.findById(ctx, incidentId);
   if (!incident) throw new NotFoundError("Incident not found");
 
-  // Look up interruption episode to get attemptId
+  // Look up interruption episode to derive attemptId (404 if missing).
   let attemptId: string;
   if (deps.lookupInterruptionAttempt) {
     const epAttemptId = await deps.lookupInterruptionAttempt(
       input.interruptionId,
     );
-    if (!epAttemptId)
-      throw new ValidationError("Interruption episode not found");
+    if (!epAttemptId) {
+      throw new NotFoundError("Interruption episode not found");
+    }
     attemptId = epAttemptId;
   } else {
     throw new Error("lookupInterruptionAttempt required");
   }
 
-  // Validate scope quadruple
+  // Validate scope quadruple (non-locking read).
   if (deps.lookupAttempt) {
     const attempt = await deps.lookupAttempt(attemptId);
-    if (!attempt) throw new ValidationError("Target attempt not found");
+    if (!attempt) throw new NotFoundError("Target attempt not found");
     await validateScopeQuadruple(
       incident,
       attempt,
@@ -849,7 +959,7 @@ export async function linkIncidentInterruption(
     );
   }
 
-  // Anchored incidents: require episode.attemptId == incident.attemptId
+  // Anchored incidents: require episode.attemptId == incident.attemptId.
   if (incident.attemptId != null && incident.attemptId !== attemptId) {
     throw new ValidationError(
       "Interruption episode does not belong to the incident's anchored attempt",
@@ -880,7 +990,7 @@ export async function linkIncidentInterruption(
       linkedAt: now,
     });
 
-    await deps.audit("incident.interruption_linked" as string, {
+    await deps.audit("incident.interruption_linked", {
       incidentId,
       interruptionId: input.interruptionId,
       attemptId,
@@ -899,7 +1009,7 @@ export async function linkIncidentInterruption(
         linkType: `interruption:${input.interruptionId}`,
       });
     }
-    // operation-unique 23505 propagates unchanged (orchestrator recovery).
+    // operation-unique 23505 propagates unchanged (recovery wrapper).
     throw err;
   }
 }
@@ -907,7 +1017,13 @@ export async function linkIncidentInterruption(
 // ── Version-bumping commands ──
 
 /**
- * Start an incident investigation. Version-bumping: open → investigating.
+ * Shared version-bumping command core. Locks the incident row FOR UPDATE,
+ * re-checks operationId inside the lock, validates expectedVersion + status,
+ * bumps version, appends a self-describing event, and records audit.
+ *
+ * The audit-metadata callback receives BOTH the before (locked) and after
+ * (updated) incident rows so it can read authoritative before/after values
+ * (e.g. severity before/after) — never re-derive "before" from the updated row.
  */
 async function versionBumpCommand(
   repo: IncidentRepo,
@@ -915,16 +1031,21 @@ async function versionBumpCommand(
   incidentId: string,
   input: { operationId: string; expectedVersion: number },
   commandType: string,
-  canonicalPayload: unknown,
+  bodyFields: Record<string, unknown>,
   deps: {
     now: Date;
     audit: IncidentAuditFn;
     allowedStatuses: readonly string[];
-    targetStatus: string;
     eventType: string;
     auditAction: string;
     auditMetadata: (
-      incident: ExamIncident,
+      before: ExamIncident,
+      after: ExamIncident,
+      newVersion: number,
+    ) => Record<string, unknown>;
+    eventPayload: (
+      before: ExamIncident,
+      after: ExamIncident,
       newVersion: number,
     ) => Record<string, unknown>;
     updateFields: (
@@ -934,6 +1055,13 @@ async function versionBumpCommand(
     ) => Record<string, unknown>;
   },
 ): Promise<IncidentCommandResult> {
+  // Canonical payload includes incidentId + expectedVersion + body fields.
+  const canonicalPayload = {
+    incidentId,
+    expectedVersion: input.expectedVersion,
+    ...bodyFields,
+  };
+
   const replay = await preReadOperationId(
     repo,
     ctx,
@@ -943,86 +1071,79 @@ async function versionBumpCommand(
   );
   if (replay) return replay;
 
-  const incident = await repo.findById(ctx, incidentId);
-  if (!incident) throw new NotFoundError("Incident not found");
-
   const now = deps.now;
 
-  try {
-    // Lock incident row FOR UPDATE
-    const locked = await repo.findByIdForUpdate(ctx, incidentId);
-    if (!locked) throw new NotFoundError("Incident not found");
+  // Lock incident row FOR UPDATE
+  const locked = await repo.findByIdForUpdate(ctx, incidentId);
+  if (!locked) throw new NotFoundError("Incident not found");
 
-    // Inside lock, re-check operationId
-    const lockedEvent = await repo.findEventByOperationId(
-      ctx,
-      input.operationId,
+  // Inside lock, re-check operationId (T1 may have committed while T2 waited).
+  const lockedEvent = await repo.findEventByOperationId(ctx, input.operationId);
+  if (lockedEvent) {
+    if (
+      lockedEvent.commandType === commandType &&
+      payloadsEqual(
+        lockedEvent.payload,
+        canonicalPayload as Record<string, unknown>,
+      )
+    ) {
+      return { outcome: "idempotent_replayed", incident: locked };
+    }
+    throw new IdempotencyConflictError(
+      `Operation ${input.operationId} already used for ${lockedEvent.commandType}`,
     );
-    if (lockedEvent) {
-      if (
-        lockedEvent.commandType === commandType &&
-        payloadsEqual(
-          lockedEvent.payload,
-          canonicalPayload as Record<string, unknown>,
-        )
-      ) {
-        return { outcome: "idempotent_replayed", incident: locked };
-      }
-      throw new IdempotencyConflictError(
-        `Operation ${input.operationId} already used for ${lockedEvent.commandType}`,
-      );
-    }
-
-    // Check expectedVersion
-    if (locked.version !== input.expectedVersion) {
-      throw new IncidentVersionConflictError(undefined, {
-        expectedVersion: input.expectedVersion,
-        currentVersion: locked.version,
-      });
-    }
-
-    // Check terminal status
-    if ((TERMINAL_STATUSES as readonly string[]).includes(locked.status)) {
-      throw new InvalidStateTransitionError(
-        "Incident is already in a terminal state",
-      );
-    }
-
-    // Check allowed status
-    if (!(deps.allowedStatuses as readonly string[]).includes(locked.status)) {
-      throw new InvalidStateTransitionError(
-        `Cannot transition incident from status: ${locked.status}`,
-      );
-    }
-
-    const newVersion = locked.version + 1;
-    const updates = deps.updateFields(locked, newVersion, now);
-    const updated = await repo.update(ctx, incidentId, updates);
-    if (!updated) throw new NotFoundError("Incident not found");
-
-    // Append event
-    await repo.appendEvent(ctx, {
-      incidentId,
-      eventType: deps.eventType,
-      commandType,
-      operationId: input.operationId,
-      actorId: ctx.actorId,
-      beforeVersion: locked.version,
-      afterVersion: newVersion,
-      payload: canonicalPayload as Record<string, unknown>,
-      createdAt: now,
-    });
-
-    // Atomic audit
-    await deps.audit(deps.auditAction, deps.auditMetadata(updated, newVersion));
-
-    return { outcome: "applied", incident: updated };
-  } catch (err: unknown) {
-    // Domain errors (IdempotencyConflict / VersionConflict / InvalidState)
-    // and the operation-unique 23505 all propagate unchanged; the 23505 is
-    // recovered by the orchestrator in a fresh transaction.
-    throw err;
   }
+
+  // Check expectedVersion
+  if (locked.version !== input.expectedVersion) {
+    throw new IncidentVersionConflictError(undefined, {
+      expectedVersion: input.expectedVersion,
+      currentVersion: locked.version,
+    });
+  }
+
+  // Check terminal status (any transition on a terminal incident is rejected).
+  if ((TERMINAL_STATUSES as readonly string[]).includes(locked.status)) {
+    throw new InvalidStateTransitionError(
+      "Incident is already in a terminal state",
+    );
+  }
+
+  // Check allowed source status
+  if (!(deps.allowedStatuses as readonly string[]).includes(locked.status)) {
+    throw new InvalidStateTransitionError(
+      `Cannot transition incident from status: ${locked.status}`,
+    );
+  }
+
+  const newVersion = locked.version + 1;
+  const updates = deps.updateFields(locked, newVersion, now);
+  const updated = await repo.update(ctx, incidentId, updates);
+  if (!updated) throw new NotFoundError("Incident not found");
+
+  // Append self-describing event (before/after where relevant).
+  await repo.appendEvent(ctx, {
+    incidentId,
+    eventType: deps.eventType,
+    commandType,
+    operationId: input.operationId,
+    actorId: ctx.actorId,
+    beforeVersion: locked.version,
+    afterVersion: newVersion,
+    payload: {
+      ...canonicalPayload,
+      ...deps.eventPayload(locked, updated, newVersion),
+    } as Record<string, unknown>,
+    createdAt: now,
+  });
+
+  // Atomic audit (before/after + identifiers + reasonCode only; no free-text).
+  await deps.audit(
+    deps.auditAction,
+    deps.auditMetadata(locked, updated, newVersion),
+  );
+
+  return { outcome: "applied", incident: updated };
 }
 
 export async function startIncidentInvestigation(
@@ -1042,21 +1163,24 @@ export async function startIncidentInvestigation(
     input,
     COMMAND_INVESTIGATE,
     {
-      reasonCode: input.reasonCode ?? null,
-      reasonText: input.reasonText ?? null,
+      reasonCode: normalizeString(input.reasonCode),
+      reasonText: normalizeString(input.reasonText),
     },
     {
       ...deps,
       allowedStatuses: ["open"],
-      targetStatus: "investigating",
       eventType: "investigation_started",
-      auditAction: "incident.investigated" as string,
-      auditMetadata: (incident, newVersion) => ({
-        incidentId: incident.id,
+      auditAction: "incident.investigated",
+      auditMetadata: (_before, after, newVersion) => ({
+        incidentId: after.id,
         version: newVersion,
-        reasonCode: input.reasonCode ?? null,
+        reasonCode: normalizeString(input.reasonCode),
       }),
-      updateFields: (incident, newVersion, now) => ({
+      eventPayload: () => ({
+        reasonCode: normalizeString(input.reasonCode),
+        reasonText: normalizeString(input.reasonText),
+      }),
+      updateFields: (_incident, newVersion, now) => ({
         status: "investigating",
         version: newVersion,
         updatedAt: now,
@@ -1087,23 +1211,29 @@ export async function changeIncidentSeverity(
     COMMAND_SEVERITY,
     {
       severity: input.severity,
-      reasonCode: input.reasonCode ?? null,
-      reasonText: input.reasonText ?? null,
+      reasonCode: normalizeString(input.reasonCode),
+      reasonText: normalizeString(input.reasonText),
     },
     {
       ...deps,
       allowedStatuses: ["open", "investigating"], // non-terminal
-      targetStatus: "", // not used for severity change
       eventType: "severity_changed",
-      auditAction: "incident.severity_changed" as string,
-      auditMetadata: (incident, newVersion) => ({
-        incidentId: incident.id,
-        beforeSeverity: incident.severity,
-        afterSeverity: input.severity,
+      auditAction: "incident.severity_changed",
+      // before/after severity from authoritative locked vs updated rows.
+      auditMetadata: (before, after, newVersion) => ({
+        incidentId: after.id,
+        beforeSeverity: before.severity,
+        afterSeverity: after.severity,
         version: newVersion,
-        reasonCode: input.reasonCode ?? null,
+        reasonCode: normalizeString(input.reasonCode),
       }),
-      updateFields: (incident, newVersion, now) => ({
+      eventPayload: (before, after) => ({
+        beforeSeverity: before.severity,
+        afterSeverity: after.severity,
+        reasonCode: normalizeString(input.reasonCode),
+        reasonText: normalizeString(input.reasonText),
+      }),
+      updateFields: (_incident, newVersion, now) => ({
         severity: input.severity,
         version: newVersion,
         updatedAt: now,
@@ -1122,6 +1252,12 @@ export async function resolveExamIncident(
     audit: IncidentAuditFn;
   },
 ): Promise<IncidentCommandResult> {
+  const resolutionSummary = normalizeRequiredString(
+    input.resolutionSummary,
+    "resolutionSummary",
+    1000,
+  );
+
   return versionBumpCommand(
     repo,
     ctx,
@@ -1129,24 +1265,27 @@ export async function resolveExamIncident(
     input,
     COMMAND_RESOLVE,
     {
-      resolutionSummary: normalizeString(input.resolutionSummary) ?? "",
-      reasonCode: input.reasonCode ?? null,
+      resolutionSummary,
+      reasonCode: normalizeString(input.reasonCode),
     },
     {
       ...deps,
       allowedStatuses: ["open", "investigating"],
-      targetStatus: "resolved",
       eventType: "incident_resolved",
-      auditAction: "incident.resolved" as string,
-      auditMetadata: (incident, newVersion) => ({
-        incidentId: incident.id,
+      auditAction: "incident.resolved",
+      auditMetadata: (_before, after, newVersion) => ({
+        incidentId: after.id,
         version: newVersion,
-        reasonCode: input.reasonCode ?? null,
+        reasonCode: normalizeString(input.reasonCode),
       }),
-      updateFields: (incident, newVersion, now) => ({
+      eventPayload: () => ({
+        resolutionSummary,
+        reasonCode: normalizeString(input.reasonCode),
+      }),
+      updateFields: (_incident, newVersion, now) => ({
         status: "resolved",
         version: newVersion,
-        resolutionSummary: input.resolutionSummary,
+        resolutionSummary,
         resolvedBy: ctx.actorId,
         resolvedAt: now,
         updatedAt: now,
@@ -1165,6 +1304,12 @@ export async function dismissExamIncident(
     audit: IncidentAuditFn;
   },
 ): Promise<IncidentCommandResult> {
+  const reasonText = normalizeRequiredString(
+    input.reasonText,
+    "reasonText",
+    1000,
+  );
+
   return versionBumpCommand(
     repo,
     ctx,
@@ -1172,21 +1317,24 @@ export async function dismissExamIncident(
     input,
     COMMAND_DISMISS,
     {
-      reasonText: normalizeString(input.reasonText) ?? "",
-      reasonCode: input.reasonCode ?? null,
+      reasonText,
+      reasonCode: normalizeString(input.reasonCode),
     },
     {
       ...deps,
       allowedStatuses: ["open", "investigating"],
-      targetStatus: "dismissed",
       eventType: "incident_dismissed",
-      auditAction: "incident.dismissed" as string,
-      auditMetadata: (incident, newVersion) => ({
-        incidentId: incident.id,
+      auditAction: "incident.dismissed",
+      auditMetadata: (_before, after, newVersion) => ({
+        incidentId: after.id,
         version: newVersion,
-        reasonCode: input.reasonCode ?? null,
+        reasonCode: normalizeString(input.reasonCode),
       }),
-      updateFields: (incident, newVersion, now) => ({
+      eventPayload: () => ({
+        reasonText,
+        reasonCode: normalizeString(input.reasonCode),
+      }),
+      updateFields: (_incident, newVersion, now) => ({
         status: "dismissed",
         version: newVersion,
         resolvedBy: ctx.actorId,
