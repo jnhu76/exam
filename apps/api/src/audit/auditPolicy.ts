@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { AuditAction, type AuditActionKey } from "@exam/authz";
+import {
+  IncidentActionType,
+  IncidentRelationshipType,
+  IncidentSeverity,
+  IncidentType,
+} from "@exam/domain";
 
 export type AuditLifecycle = "active" | "reserved" | "deprecated";
 export type AuditDurability =
@@ -36,6 +42,29 @@ const shortText = z.string().max(100);
 const identifier = z.string().max(128);
 const freeText = z.string().max(1_000);
 const emptyPayload: AuditPayloadSchema = z.object({}).strict();
+
+// Canonical Incident domain values (ADR-014) — single source: @exam/domain
+// runtime const objects. Arbitrary strings are rejected at the audit boundary.
+const incidentTypeSchema = z.enum(
+  Object.values(IncidentType) as [IncidentType, ...IncidentType[]],
+);
+const incidentSeveritySchema = z.enum(
+  Object.values(IncidentSeverity) as [IncidentSeverity, ...IncidentSeverity[]],
+);
+const incidentActionTypeSchema = z.enum(
+  Object.values(IncidentActionType) as [
+    IncidentActionType,
+    ...IncidentActionType[],
+  ],
+);
+const incidentRelationshipTypeSchema = z.enum(
+  Object.values(IncidentRelationshipType) as [
+    IncidentRelationshipType,
+    ...IncidentRelationshipType[],
+  ],
+);
+// Incident versions are monotonically increasing and start at 1.
+const incidentVersion = z.number().int().positive();
 const usernamePayload: AuditPayloadSchema = z
   .object({ username: z.string().max(50), source: z.literal("local_script") })
   .strict();
@@ -580,8 +609,8 @@ export const AUDIT_ACTION_DEFINITIONS = {
         incidentId: identifier,
         examId: identifier,
         attemptId: identifier.optional(),
-        type: z.string().max(50),
-        version: z.number().int().nonnegative(),
+        type: incidentTypeSchema,
+        version: incidentVersion,
       })
       .strict(),
   ),
@@ -593,7 +622,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         incidentId: identifier,
-        version: z.number().int().nonnegative(),
+        version: incidentVersion,
         reasonCode: z.string().max(100).nullable(),
       })
       .strict(),
@@ -607,7 +636,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .object({
         incidentId: identifier,
         noteId: identifier,
-        version: z.number().int().nonnegative(),
+        version: incidentVersion,
       })
       .strict(),
   ),
@@ -619,9 +648,9 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         incidentId: identifier,
-        beforeSeverity: z.string().max(20),
-        afterSeverity: z.string().max(20),
-        version: z.number().int().nonnegative(),
+        beforeSeverity: incidentSeveritySchema,
+        afterSeverity: incidentSeveritySchema,
+        version: incidentVersion,
         reasonCode: z.string().max(100).nullable(),
       })
       .strict(),
@@ -634,7 +663,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         incidentId: identifier,
-        version: z.number().int().nonnegative(),
+        version: incidentVersion,
         reasonCode: z.string().max(100).nullable(),
       })
       .strict(),
@@ -647,7 +676,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         incidentId: identifier,
-        version: z.number().int().nonnegative(),
+        version: incidentVersion,
         reasonCode: z.string().max(100).nullable(),
       })
       .strict(),
@@ -660,10 +689,10 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         incidentId: identifier,
-        actionType: z.string().max(50),
+        actionType: incidentActionTypeSchema,
         actionId: identifier,
         attemptId: identifier,
-        version: z.number().int().nonnegative(),
+        version: incidentVersion,
       })
       .strict(),
   ),
@@ -676,8 +705,8 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .object({
         incidentId: identifier,
         attemptId: identifier,
-        relationshipType: z.string().max(20),
-        version: z.number().int().nonnegative(),
+        relationshipType: incidentRelationshipTypeSchema,
+        version: incidentVersion,
       })
       .strict(),
   ),
@@ -691,7 +720,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
         incidentId: identifier,
         interruptionId: identifier,
         attemptId: identifier,
-        version: z.number().int().nonnegative(),
+        version: incidentVersion,
       })
       .strict(),
   ),

@@ -1349,6 +1349,13 @@ export const examIncidentActions = pgTable(
       table.actionType,
       table.actionId,
     ),
+    // operationId idempotency lookup: (organization_id, operation_id) — the
+    // tenant predicate is part of the query, so a bare (operation_id) index
+    // would not cover it.
+    index("exam_incident_actions_org_operation_idx").on(
+      table.organizationId,
+      table.operationId,
+    ),
     index("exam_incident_actions_incident_idx").on(table.incidentId),
     check(
       "exam_incident_actions_action_type_check",
@@ -1390,6 +1397,13 @@ export const examIncidentAttempts = pgTable(
       table.incidentId,
       table.attemptId,
     ),
+    // operationId idempotency lookup: (organization_id, operation_id) — the
+    // tenant predicate is part of the query, so a bare (operation_id) index
+    // would not cover it.
+    index("exam_incident_attempts_org_operation_idx").on(
+      table.organizationId,
+      table.operationId,
+    ),
     check(
       "exam_incident_attempts_relationship_type_check",
       sql`${table.relationshipType} IN ('affected', 'referenced')`,
@@ -1429,6 +1443,13 @@ export const examIncidentInterruptionLinks = pgTable(
     uniqueIndex(
       "exam_incident_interruption_links_incident_interruption_unique",
     ).on(table.incidentId, table.interruptionId),
+    // operationId idempotency lookup: (organization_id, operation_id) — the
+    // tenant predicate is part of the query, so a bare (operation_id) index
+    // would not cover it.
+    index("exam_incident_interruption_links_org_operation_idx").on(
+      table.organizationId,
+      table.operationId,
+    ),
     foreignKey({
       columns: [table.organizationId, table.incidentId],
       foreignColumns: [examIncidents.organizationId, examIncidents.id],

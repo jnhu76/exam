@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ErrorResponseSchema } from "@exam/contracts";
 import { NotFoundError } from "@exam/domain";
+import type { IncidentActionType } from "@exam/domain";
 import { Permission } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -808,7 +809,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
               ) => {
                 const existing = await repo.findActionLinkByAction(
                   ctx,
-                  actionType,
+                  actionType as IncidentActionType,
                   actionId,
                 );
                 return existing != null;

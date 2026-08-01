@@ -24,6 +24,7 @@
 import { sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import type { RequestContext } from "@exam/domain";
+import type { IncidentActionType } from "@exam/domain";
 import type { Database, TransactionDatabase } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -414,7 +415,7 @@ async function runGrantTransaction(
             lookupActionLink: async (actionType, actionId) => {
               const existing = await incidentRepo.findActionLinkByAction(
                 ctx,
-                actionType,
+                actionType as IncidentActionType,
                 actionId,
               );
               return existing != null;

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
+import type { IncidentSeverity, IncidentType } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
 import { getIsolatedTestDb } from "../testDb.js";
@@ -215,7 +216,7 @@ describe("incident persistence foundation", () => {
         examId: alpha.examId,
         attemptId: null,
         candidateId: null,
-        type: "invalid_type",
+        type: "invalid_type" as IncidentType,
         severity: "info",
         occurredAt: null,
         description: "test",
@@ -234,7 +235,7 @@ describe("incident persistence foundation", () => {
         attemptId: null,
         candidateId: null,
         type: "other",
-        severity: "catastrophic",
+        severity: "catastrophic" as IncidentSeverity,
         occurredAt: null,
         description: "test",
         reportedBy: alpha.actorId,

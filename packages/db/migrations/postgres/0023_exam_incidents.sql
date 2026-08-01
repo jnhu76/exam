@@ -135,6 +135,12 @@ ALTER TABLE "exam_incident_actions" ADD CONSTRAINT "exam_incident_actions_action
 CREATE UNIQUE INDEX "exam_incident_actions_org_action_unique"
   ON "exam_incident_actions" ("organization_id", "action_type", "action_id");
 
+-- operationId idempotency lookup: (organization_id, operation_id) — the
+-- tenant predicate is part of the query, so a bare (operation_id) index
+-- would not cover it.
+CREATE INDEX "exam_incident_actions_org_operation_idx"
+  ON "exam_incident_actions" ("organization_id", "operation_id");
+
 -- Per-incident link list
 CREATE INDEX "exam_incident_actions_incident_idx"
   ON "exam_incident_actions" ("incident_id");
@@ -173,6 +179,12 @@ ALTER TABLE "exam_incident_attempts" ADD CONSTRAINT "exam_incident_attempts_rela
 CREATE UNIQUE INDEX "exam_incident_attempts_incident_attempt_unique"
   ON "exam_incident_attempts" ("incident_id", "attempt_id");
 
+-- operationId idempotency lookup: (organization_id, operation_id) — the
+-- tenant predicate is part of the query, so a bare (operation_id) index
+-- would not cover it.
+CREATE INDEX "exam_incident_attempts_org_operation_idx"
+  ON "exam_incident_attempts" ("organization_id", "operation_id");
+
 -- Composite FK to exam_incidents
 ALTER TABLE "exam_incident_attempts" ADD CONSTRAINT "exam_incident_attempts_incident_fk"
   FOREIGN KEY ("organization_id", "incident_id") REFERENCES "exam_incidents"("organization_id", "id");
@@ -203,6 +215,12 @@ CREATE TABLE "exam_incident_interruption_links" (
 CREATE UNIQUE INDEX "exam_incident_interruption_links_incident_interruption_unique"
   ON "exam_incident_interruption_links" ("incident_id", "interruption_id");
 
+-- operationId idempotency lookup: (organization_id, operation_id) — the
+-- tenant predicate is part of the query, so a bare (operation_id) index
+-- would not cover it.
+CREATE INDEX "exam_incident_interruption_links_org_operation_idx"
+  ON "exam_incident_interruption_links" ("organization_id", "operation_id");
+
 -- Composite FK to exam_incidents
 ALTER TABLE "exam_incident_interruption_links" ADD CONSTRAINT "exam_incident_interruption_links_incident_fk"
   FOREIGN KEY ("organization_id", "incident_id") REFERENCES "exam_incidents"("organization_id", "id");
@@ -228,4 +246,4 @@ ALTER TABLE "exam_incident_interruption_links" ADD CONSTRAINT "exam_incident_int
 -- `pnpm db:rollback:incidents -- --confirm`). It checks
 -- attempt_time_adjustments.incident_id in a single transaction and refuses to
 -- DROP anything when any non-null value exists. It is never run by migrate,
--- build, or test. See ADR-014 §14 and packages/db/src/migrations/0023-rollback-guard.test.ts.
+-- build, or test. See ADR-014 §14 and packages/db/src/migrations/0023-incident-fk-and-rollback.test.ts.

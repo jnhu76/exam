@@ -10,10 +10,10 @@ import type {
   IncidentRelationshipType,
   IncidentSeverity,
   IncidentStatus,
+  IncidentType,
   RequestContext,
 } from "@exam/domain";
-import { NotFoundError } from "@exam/domain";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   examIncidentActions,
   examIncidentAttempts,
@@ -35,8 +35,8 @@ export interface CreateIncidentInput {
   examId: string;
   attemptId?: string | null;
   candidateId?: string | null;
-  type: string;
-  severity?: string;
+  type: IncidentType;
+  severity?: IncidentSeverity;
   occurredAt?: Date | null;
   description: string;
   reportedBy: string;
@@ -45,8 +45,8 @@ export interface CreateIncidentInput {
 }
 
 export interface UpdateIncidentInput {
-  status?: string;
-  severity?: string;
+  status?: IncidentStatus;
+  severity?: IncidentSeverity;
   version?: number;
   resolutionSummary?: string | null;
   resolvedBy?: string | null;
@@ -56,7 +56,7 @@ export interface UpdateIncidentInput {
 
 export interface AppendEventInput {
   incidentId: string;
-  eventType: string;
+  eventType: IncidentEventType;
   commandType: string;
   operationId: string;
   actorId?: string | null;
@@ -68,7 +68,7 @@ export interface AppendEventInput {
 
 export interface InsertActionLinkInput {
   incidentId: string;
-  actionType: string;
+  actionType: IncidentActionType;
   actionId: string;
   attemptId: string;
   actorId?: string | null;
@@ -79,7 +79,7 @@ export interface InsertActionLinkInput {
 export interface InsertAttemptMembershipInput {
   incidentId: string;
   attemptId: string;
-  relationshipType: string;
+  relationshipType: IncidentRelationshipType;
   linkedBy: string;
   operationId: string;
   linkedAt: Date;
@@ -162,7 +162,7 @@ export function createIncidentRepo(db: Database) {
   async function listByExam(
     ctx: TenantContext | RequestContext,
     examId: string,
-    statusFilter?: string[],
+    statusFilter?: IncidentStatus[],
   ): Promise<ExamIncidentRow[]> {
     const conditions = [
       eq(examIncidents.organizationId, resolveOrganizationId(ctx)),
@@ -306,7 +306,7 @@ export function createIncidentRepo(db: Database) {
 
   async function findActionLinkByAction(
     ctx: TenantContext | RequestContext,
-    actionType: string,
+    actionType: IncidentActionType,
     actionId: string,
   ): Promise<ExamIncidentActionRow | null> {
     const rows = await db

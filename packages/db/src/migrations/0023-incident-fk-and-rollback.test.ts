@@ -298,6 +298,57 @@ describe(
       });
     });
 
+    describe("operationId composite indexes (pg.ts parity)", () => {
+      // The three link tables' operationId idempotency lookups filter by
+      // (organization_id, operation_id); the composite index must exist with
+      // that exact column order (a bare operation_id index would not cover
+      // the tenant predicate).
+      const EXPECTED: Array<{ indexName: string; columns: string }> = [
+        {
+          indexName: "exam_incident_actions_org_operation_idx",
+          columns: "(organization_id, operation_id)",
+        },
+        {
+          indexName: "exam_incident_attempts_org_operation_idx",
+          columns: "(organization_id, operation_id)",
+        },
+        {
+          indexName: "exam_incident_interruption_links_org_operation_idx",
+          columns: "(organization_id, operation_id)",
+        },
+      ];
+
+      it.each(EXPECTED.map((e) => [e.indexName, e.columns] as const))(
+        "%s exists with columns %s",
+        async (indexName, columns) => {
+          const rows = (await conn.sql.unsafe(`
+          SELECT indexdef
+          FROM pg_indexes
+          WHERE schemaname = ${s(iso.schemaName)}
+            AND indexname = ${s(indexName)}
+        `)) as Array<{ indexdef: string }>;
+          expect(rows).toHaveLength(1);
+          expect(rows[0]!.indexdef).toContain(`ON ${iso.schemaName}`);
+          expect(rows[0]!.indexdef).toContain(columns);
+          // Non-unique: the idempotency arbiter is the events table's unique
+          // index; these support lookups only.
+          expect(rows[0]!.indexdef).toMatch(/^CREATE INDEX /);
+        },
+      );
+
+      it("the events operationId arbiter remains the unique index", async () => {
+        const rows = (await conn.sql.unsafe(`
+        SELECT indexdef
+        FROM pg_indexes
+        WHERE schemaname = ${s(iso.schemaName)}
+          AND indexname = 'exam_incident_events_org_operation_unique'
+      `)) as Array<{ indexdef: string }>;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.indexdef).toMatch(/^CREATE UNIQUE INDEX /);
+        expect(rows[0]!.indexdef).toContain("(organization_id, operation_id)");
+      });
+    });
+
     describe("guarded rollback (ADR-014 §14)", () => {
       it("drops the five tables when no non-null incident_id exists", async () => {
         const dropIso = await setupIsolatedTestDb({
