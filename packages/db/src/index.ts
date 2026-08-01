@@ -4,6 +4,7 @@ export * from "./databaseUrl.js";
 export * from "./postgres.js";
 export * from "./types.js";
 export * from "./testScope.js";
+export * from "./scripts/rollbackIncidentTables.js";
 export * from "./repository/baseRepo.js";
 export * from "./repository/attemptRepo.js";
 export * from "./repository/auditLogRepo.js";

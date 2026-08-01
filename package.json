@@ -32,6 +32,7 @@
     "db:seed:demo": "pnpm --filter @exam/api db:seed:demo",
     "db:seed:demo:verify": "pnpm --filter @exam/api db:seed:demo:verify",
     "db:seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
+    "db:rollback:incidents": "pnpm --filter @exam/api db:rollback:incidents",
     "seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
