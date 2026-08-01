@@ -497,8 +497,9 @@ Every command records:
 > [`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md).
 > The design PR is documentation-only and changes no runtime code. **J4-I1
 > (runtime) is BLOCKED until ADR-015 is independently reviewed and
-> Accepted.** Where the planning sketch below differs from ADR-015, the ADR
-> wins.
+> Accepted.** Once ADR-015 is Accepted, where the planning sketch below
+> differs from ADR-015, the ADR wins; until then the ADR remains Proposed
+> and J4-I1 stays BLOCKED.
 
 ## Purpose
 

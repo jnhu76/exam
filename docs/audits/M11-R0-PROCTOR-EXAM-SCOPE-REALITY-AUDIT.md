@@ -104,15 +104,32 @@ The Proctor preset **already grants** `AttemptForceSubmit` and
 `AttemptMisconductMark` organization-wide (they predate ADR-014 — see the
 ADR-014 §8 note: "The pre-existing Proctor preset grants for force submit /
 misconduct marking predate this ADR and are tracked by the M11 open item").
-Today this is **not an active product risk** because no Proctor *product
-role* is activated in the MVP (P4 closed only Admin/Teacher/Candidate —
-`docs/architecture/authorization.md` "MVP product-role boundary"). But the
-moment J4 activates a Proctor product role, those two grants become
-**organization-wide Proctor authority** over every attempt in the
-deployment — exactly what ADR-014 forbade for incidents. J4-R0 must freeze
-the policy that closes this gap before any Proctor activation
-(ADR-015 §6.13 + §10 ordering rule: resolver enforcement must land before
-permission activation).
+
+**Risk classification (corrected during the ADR-015 design-contract
+revision):** this is a **current, reachable** risk, not a future-only one.
+The Proctor preset marks the role `assignable: true` and
+`loginAllowed: true` (`packages/authz/src/presets.ts:238-249`),
+`loadAssignmentAuthority` resolves capabilities per request from active
+`user_role_assignments` rows, and Admin can assign the Proctor role via the
+role-assignment API today. Therefore any user granted the Proctor role can
+**already** exercise `AttemptForceSubmit` and `AttemptMisconductMark`
+organization-wide — there is no "Proctor product role not activated" state
+that mitigates this on master. The earlier "not currently an active
+product risk because no Proctor product role is activated in the MVP"
+framing is withdrawn; it conflated *product UI exposure* with *API-level
+authority*, and the latter is live.
+
+ADR-015 §13 freezes the closure: **J4-I1B removes
+`AttemptForceSubmit` and `AttemptMisconductMark` from `PROCTOR_PERMISSIONS`
+atomically with the resolver flip** (the grants are removed from the
+preset, not "kept-but-inactive"). The four affected routes
+(`POST /admin/attempts/:attemptId/misconduct`,
+`POST /admin/attempts/:attemptId/force-submit`,
+`POST /admin/attempts/:attemptId/proctor-incident`, and incident
+`resolve`/`dismiss`) become `proctorAccess = admin_only` while keeping
+their scoped gate (§16). Until that lands, this is an open,
+organization-wide Proctor-authority gap on every attempt in the
+deployment — exactly what ADR-014 forbade for incidents.
 
 ---
 
@@ -193,18 +210,20 @@ marker touches Proctor.
    `/admin/.../proctor...` routes are scoped to **organization + ownership
    chain** only. The exam/attempt resolver verifies the resource belongs to
    the actor's organization — it does **not** verify any Proctor→Exam
-   assignment, because no such assignment exists (§4.5). A Proctor user (if
-   one existed as a product role) would today be able to read live status of
-   **every** exam in the organization, not just assigned ones.
+   assignment, because no such assignment exists (§4.5). A user granted the
+   Proctor role can **today** read live status of **every** exam in the
+   organization, not just assigned ones (the "if one existed as a product
+   role" hedge is withdrawn — the preset is assignable and the role can be
+   granted via the Admin API).
 
 2. **`misconduct` and `force-submit` are flat, not scoped.** Their registry
    entries declare `resolver: "attempt"` / `Scope.Attempt`, but the route
-   files wire `requireCapability` (flat). The drift is harmless *today*
-   because only Admin holds a path to them in the MVP, but the moment a
-   Proctor product role is activated, the flat gate grants org-wide
-   `AttemptForceSubmit` / `AttemptMisconductMark` with **no** attempt-chain
-   check at all. J4-I1B must flip these to `requireScopedCapability` as part
-   of resolver landing.
+   files wire `requireCapability` (flat). The drift is **not** harmless: a
+   user granted the Proctor role can today exercise the flat
+   `AttemptForceSubmit` / `AttemptMisconductMark` grants with **no**
+   attempt-chain check at all. J4-I1B must flip these to
+   `requireScopedCapability` AND remove the grants from the Proctor preset
+   (ADR-015 §13).
 
 3. **All 11 incident routes are flat.** ADR-014 §13 lists
    `GET /admin/exams/:examId/incidents` etc. as scoped-by-exam in its API
@@ -216,9 +235,29 @@ marker touches Proctor.
    returning null for cross-org incidents. There is no Incident→Exam
    resolver. J4-I1 must add one before any Proctor incident grant.
 
-4. **No Proctor UI exists.** P4 closed Admin/Teacher/Candidate only
+4. **`POST /admin/attempts/:attemptId/proctor-incident` is an audit-only
+   marker, not an Incident creation path.** The route is scoped
+   (`requireScopedCapability(AttemptMisconductMark, "attempt", "attemptId")`
+   — `proctorMonitoring.ts:200-286`) but its handler writes only an
+   audit-only `ProctorIncidentMarked` row via `recordAtomicHttpAudit`; it
+   does **not** call the ADR-014 `createExamIncident()` command. It is
+   therefore not a safe Incident creation path. ADR-015 §16 freezes its
+   J4-I1B disposition: Admin-only (`x-role:["Admin"]`) + OpenAPI
+   `deprecated:true`, STAYS scoped (not downgraded to flat); the sole
+   Proctor incident-creation path becomes `createExamIncident()` via
+   `POST /admin/exams/:examId/incidents`.
+
+5. **No Proctor UI exists.** P4 closed Admin/Teacher/Candidate only
    (`docs/architecture/authorization.md`). The Proctor workspace is future
-   J6 work.
+   J6 work. (Note: "no Proctor product UI" does **not** mean "no Proctor
+   API authority" — see §4.2 and G1/G2.)
+
+The route table above is the authoritative Proctor-reachable inventory and
+matches ADR-015 §8/§23 one-to-one, including the five additional routes
+(`/admin/proctor/exams`, `/admin/exams/:examId/proctor/attempts`,
+`/admin/attempts/:attemptId/proctor-events`,
+`/admin/attempts/:attemptId/proctor-incident`,
+`/admin/attempts/:attemptId/timeline`) that an earlier ADR draft omitted.
 
 **Required conclusion (§4.4):** no route on master enforces a
 Proctor-to-Exam assignment. The Proctor-named routes enforce only
@@ -258,7 +297,7 @@ Each gap below is a concrete failure mode that exists on master *or* that
 J4-R0 must close before J4-I1 activates a Proctor product role. Format:
 `file · symbol/route/table · current behavior · risk`.
 
-### G1 — Proctor can read live status of unassigned Exams (latent)
+### G1 — Proctor can read live status of unassigned Exams (active latent)
 
 - **file/symbol:** `apps/api/src/routes/proctorMonitoring.ts:92-126`
   (`GET /admin/exams/:examId/proctor/attempts`); resolver
@@ -266,15 +305,20 @@ J4-R0 must close before J4-I1 activates a Proctor product role. Format:
 - **current behavior:** the exam resolver verifies the exam belongs to the
   actor's **organization**. It does not consult any Proctor→Exam assignment
   (none exists).
-- **risk:** a Proctor user (once activated as a product role) can monitor
-  live attempt status of any exam in the deployment, including exams they
-  are not assigned to. This is exactly the "organization-wide Proctor
-  authority" ADR-014 forbade for incidents, extended to monitoring reads.
-- **today:** not exploitable because no Proctor product role is active
-  (P4 = Admin/Teacher/Candidate). Becomes a live defect the moment J4
-  activates Proctor without resolver enforcement.
+- **risk (reclassified — active latent):** this is **reachable today** by
+  any user granted the Proctor role (the preset is `assignable: true`,
+  `loginAllowed: true`, capabilities loaded per request — §4.2). Such a
+  user can monitor live attempt status of any exam in the deployment,
+  including exams they are not assigned to. This is exactly the
+  "organization-wide Proctor authority" ADR-014 forbade for incidents,
+  extended to monitoring reads. The earlier "latent / not exploitable
+  because no Proctor product role is active" label conflated product-UI
+  exposure with API-level authority and is withdrawn.
+- **closure:** ADR-015 §8 + §23 — J4-I1B adds the Proctor-assignment
+  enforcement layer and the route becomes `proctorAccess =
+  assignment_scoped`.
 
-### G2 — `misconduct` and `force-submit` are flat (no chain check at all)
+### G2 — `misconduct` and `force-submit` are flat (no chain check at all) (active latent)
 
 - **file/symbol:** `apps/api/src/routes/attempts.admin.ts:66-77, 130-141`
   (`POST /admin/attempts/:attemptId/misconduct`, `.../force-submit`).
@@ -282,14 +326,18 @@ J4-R0 must close before J4-I1 activates a Proctor product role. Format:
   and `requireCapability(AttemptForceSubmit)` — flat. No resolver, no
   ownership-chain check. The handler trusts `ctx` org scoping inside
   `flagMisconduct` / `submitAttempt` repo calls.
-- **risk:** the registry *says* these are `Scope.Attempt` /
-  `resolver: "attempt"`, but runtime does not enforce it. A Proctor with
-  the preset grant could force-submit or flag misconduct on **any**
-  attempt id in the org (subject only to the repo's org filter). The
-  force-submit grant is in the Proctor preset today (`presets.ts:156`).
-- **today:** mitigated because only Admin exercises these routes in the MVP.
-  J4-I1B must flip both to `requireScopedCapability(..., "attempt", ...)`
-  before any Proctor activation.
+- **risk (reclassified — active latent):** the registry *says* these are
+  `Scope.Attempt` / `resolver: "attempt"`, but runtime does not enforce
+  it. A user granted the Proctor role can **today** force-submit or flag
+  misconduct on **any** attempt id in the org (subject only to the repo's
+  org filter), because both grants are live in the Proctor preset
+  (`presets.ts:151-160`). The earlier "mitigated because only Admin
+  exercises these routes in the MVP" label is withdrawn for the same
+  reason as G1.
+- **closure:** ADR-015 §13 + §23 — J4-I1B removes
+  `AttemptForceSubmit`/`AttemptMisconductMark` from `PROCTOR_PERMISSIONS`
+  AND flips both routes to `requireScopedCapability(..., "attempt", ...)`;
+  `proctorAccess` becomes `admin_only` (the scoped gate is retained).
 
 ### G3 — Incident routes have no Incident→Exam resolver
 
@@ -429,25 +477,33 @@ J4-R0 must close before J4-I1 activates a Proctor product role. Format:
 ```text
 Identity:        Proctor preset exists; assignment is ORG-WIDE only (no resource scope).
 Permissions:     Proctor holds ExamRoomView, AttemptStatusView, AttemptTimelineView,
-                 AttemptMisconductMark, AttemptForceSubmit — all org-wide.
+                 AttemptMisconductMark, AttemptForceSubmit — all org-wide and ACTIVE
+                 (assignable + loginAllowed + per-request load). The "deferred/inactive"
+                 framing is withdrawn: this is a current, reachable grant set.
                  Proctor holds ZERO incident.* permissions (ADR-014 boundary holds).
                  AttemptTimeGrant is Admin-only by design.
 Resolvers:       exam + attempt resolvers exist and are sound (org + chain).
                  NO Incident→Exam resolver. NO Proctor-assignment resolver.
 Routes:          4 /proctor routes scope only to org+chain, NOT to assignment.
-                 misconduct + force-submit are FLAT (registry lies).
+                 misconduct + force-submit + timeline are FLAT (registry lies).
                  all 11 incident routes are FLAT.
+                 POST /admin/attempts/:attemptId/proctor-incident is scoped but writes
+                 an audit-only ProctorIncidentMarked marker — NOT createExamIncident().
 Assignment:      NONE. No exam_proctor_assignments, no scope columns, no staff tables.
-Security gaps:   G1 (latent Proctor org-wide monitor), G2 (flat sensitive routes),
+Security gaps:   G1 (ACTIVE LATENT — Proctor org-wide monitor, reachable today),
+                 G2 (ACTIVE LATENT — flat sensitive routes, reachable today),
                  G3 (no incident resolver), G5/G8/G9 (new-J4 concurrency/decoupling),
                  G6 (fake-Admin-assignment shortcut must be refused),
                  G7 (403/404 uniformity requires scoped preHandler on all sensitive routes).
 ```
 
-J4-I1 must therefore: (a) add `exam_proctor_assignments` persistence;
-(b) add a Proctor-assignment enforcement layer into the per-request
-authority/resolver path; (c) add an Incident→Exam resolver; (d) flip the
-flat sensitive routes (`misconduct`, `force-submit`, incident family) to
-`requireScopedCapability`; (e) only then activate any Proctor product role.
-ADR-015 freezes the contract for all five; it must not let J4-I1 activate
-permissions before (a)–(d) land.
+J4-I1 must therefore: (a) add the two-table `exam_proctor_assignments` +
+`exam_proctor_assignment_events` persistence; (b) add a Proctor-assignment
+enforcement layer into the per-request authority/resolver path; (c) add an
+Incident→Exam resolver; (d) flip the flat sensitive routes (`misconduct`,
+`force-submit`, `timeline`, incident family) to `requireScopedCapability`;
+(e) **remove `AttemptForceSubmit` + `AttemptMisconductMark` from the
+Proctor preset** (closing the current G1/G2 risk) and make the legacy
+`proctor-incident` route Admin-only + deprecated; (f) only then activate
+any new Proctor incident grant. ADR-015 freezes the contract for all six;
+it must not let J4-I1 activate permissions before (a)–(e) land.
