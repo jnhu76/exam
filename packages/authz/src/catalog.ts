@@ -133,6 +133,10 @@ export const Permission = {
   IncidentCreate: "incident.create",
   IncidentInvestigate: "incident.investigate",
   IncidentResolve: "incident.resolve",
+
+  // §4.11 Proctor-to-Exam assignments (ADR-015)
+  ExamProctorAssignmentView: "exam.proctor_assignment.view",
+  ExamProctorAssignmentManage: "exam.proctor_assignment.manage",
 } as const;
 
 /** Closed permission union. A typo is a compile error. */

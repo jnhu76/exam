@@ -357,18 +357,19 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // REC-I6-I1 (ADR-014): 10 Admin incident routes added by the incident
     // persistence Job (create/list/get + investigate/notes/severity/resolve/
     // dismiss + action/attempt/interruption links) — 106 primary = 92
-    // protected + 14 non-protected. This is a regression anchor, not a
-    // hard-coded PASS: if a route is added/removed the counts move and the
-    // failure message names the delta so the regression is triaged, not
-    // silently swallowed.
+    // protected + 14 non-protected. J4-I1C adds 3 Admin proctor-assignment
+    // routes → 109 primary = 95 protected + 14 non-protected. This is a
+    // regression anchor, not a hard-coded PASS: if a route is added/removed
+    // the counts move and the failure message names the delta so the
+    // regression is triaged, not silently swallowed.
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(92);
+    ).toBe(95);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       14,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(106);
+    expect(capturedRoutes.length, "total primary routes").toBe(109);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

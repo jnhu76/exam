@@ -120,6 +120,10 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   Permission.IncidentCreate,
   Permission.IncidentInvestigate,
   Permission.IncidentResolve,
+  // Proctor-to-Exam assignment management (ADR-015 §16) — Admin only; never
+  // granted to Proctor/Teacher/Grader/Candidate.
+  Permission.ExamProctorAssignmentView,
+  Permission.ExamProctorAssignmentManage,
 ];
 
 // ───────────────────────── Teacher (course/exam manager) ─────────────────────────
