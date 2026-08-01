@@ -418,7 +418,7 @@ bulkAssignProctors()        (a batch is N operationId-keyed assign calls)
 | Replay | same operationId + same canonical payload → `idempotent_replayed`, return the **original** episode the operation created/resolved, NO write | same operationId + same canonical payload → `idempotent_replayed`, return the **original** episode the operation revoked (the event row's `assignment_id`), NO write |
 | Conflict | same operationId + different `commandType` or different canonical payload → 409 `IDEMPOTENCY_CONFLICT` | same |
 | Duplicate assign (new operationId, already active) | write a `no_change` event receipt referencing the current active episode; return that active episode; NO episode mutation, NO audit (§6) | n/a |
-| Revoke when already revoked (new operationId) | n/a | write a `no_change` event receipt referencing the most-recent revoked episode; return that episode; NO write (§6) |
+| Revoke when already revoked (new operationId) | n/a | write one `no_change` event receipt referencing the most-recent revoked episode; return that episode; NO assignment mutation; NO compliance audit (§6) |
 | Actor | `ctx.actorId` (server-derived; NEVER from request body; recorded as event `actor_id`, NOT NULL) | `ctx.actorId` (server-derived; NOT NULL) |
 | Audit | `exam.proctor_assigned` (atomic, ONLY when applied) | `exam.proctor_revoked` (atomic, ONLY when applied) |
 | Transaction boundary | one transaction: validate → INSERT episode (active) → read id → INSERT event(applied) → audit (§8) | one transaction: lock resolved episode → set revoked → INSERT event(applied) → audit (§8) |
@@ -451,7 +451,8 @@ new operationId + revoke + active episode exists
 new operationId + revoke + NO active episode but ≥1 revoked episode
   → no_change receipt: resolve the most-recent revoked episode by
     (revoked_at DESC, id DESC) for (org, exam, proctor); INSERT event(
-    outcome=no_change, assignment_id=that episode); return it; NO write.
+    outcome=no_change, assignment_id=that episode); return it; NO
+    assignment mutation; NO compliance audit.
 
 new operationId + revoke + NO episode of any kind for (org, exam, proctor)
   → 404 RESOURCE_NOT_FOUND.
@@ -663,17 +664,33 @@ reality audit §4.4) and each route's `proctorAccess` + gate:
 ### Structural `proctorAccess` conformance test (frozen, machine-checkable)
 
 J4-I1B ships a conformance test that replaces hand-maintained route counts.
-For every permission in `PROCTOR_PERMISSIONS` ∪ the J4-I1D new grants:
+**Every route-registry entry MUST declare a `proctorAccess` value, and the
+conformance test enumerates EVERY registry entry** — not only permissions
+currently granted to Proctor. This is deliberate: J4-I1B *removes*
+`AttemptForceSubmit`/`AttemptMisconductMark` from `PROCTOR_PERMISSIONS`, so
+enumerating only the post-removal preset would silently drop the three
+`admin_only` attempt routes (`misconduct`, `force-submit`,
+`proctor-incident`) from coverage. The registry is the enumeration source
+of truth; the preset is not.
 
-1. enumerate every registry consumer of that permission;
-2. each consumer MUST declare a `proctorAccess` value;
-3. `assignment_scoped` consumers MUST wire
+Per-value checks, applied to every registry entry:
+
+1. every entry MUST declare a `proctorAccess` value;
+2. `assignment_scoped` consumers MUST wire
    `requireScopedCapability` + the Proctor-assignment enforcement layer;
-4. `assignment_filtered_collection` consumers MUST prove their query
+3. `assignment_filtered_collection` consumers MUST prove their query
    contains the active-assignment filter (the Admin branch MAY
    organization-wide short-circuit);
-5. `admin_only` permissions MUST NOT appear in the Proctor preset;
-6. `deferred` permissions MUST NOT be Proctor-reachable at runtime.
+4. `admin_only` routes' permissions MUST NOT appear in the Proctor preset
+   (so the route is unreachable to a Proctor actor);
+5. `deferred` routes MUST NOT be Proctor-reachable at runtime;
+6. `not_applicable` routes carry no Proctor-specific invariant.
+
+The test MUST cover — at minimum — every route in the §8 matrix, including
+the three `admin_only` attempt routes and the incident terminal routes. If
+the registry is not extended globally, an explicit frozen allow-list
+`PROCTOR_ACCESS_POLICY_ROUTES` (containing exactly the §8 matrix routes)
+MAY substitute; the post-removal `PROCTOR_PERMISSIONS` alone MUST NOT.
 
 Dedicated assertions:
 
@@ -861,11 +878,11 @@ The frozen policy is:
   are *removed from the preset*, not "kept-but-inactive". A future
   dangerous-permissions policy profile must re-add them with its own
   activation gate; that profile is out of J4 scope.
-- The four affected routes
-  (`POST /admin/attempts/:attemptId/misconduct`,
+- The affected route groups (the three attempt routes
+  `POST /admin/attempts/:attemptId/misconduct`,
   `POST /admin/attempts/:attemptId/force-submit`,
-  `POST /admin/attempts/:attemptId/proctor-incident`, and the
-  incident `resolve`/`dismiss` routes) become `proctorAccess = admin_only`
+  `POST /admin/attempts/:attemptId/proctor-incident`, and the incident
+  terminal routes `resolve`/`dismiss`) become `proctorAccess = admin_only`
   (§8 matrix). They keep `requireScopedCapability` (the attempt/exam
   resolver still validates target existence, tenant, and parent chain) —
   `admin_only` does NOT downgrade the gate to flat.
@@ -1212,12 +1229,12 @@ Exam lock (append-only extension; no reordering of the existing three).
 | Assignment-only bypass (active assignment but no Proctor role) | Triple (§3) | Per-request role load; assignment row without active role denies | User with active assignment but deactivated Proctor role → 404/403 |
 | Stale session (JWT carries stale role/assignment) | Authority is per-request, not JWT-cached | `loadAssignmentAuthority` per request; assignment resolver per request (§10) | Revoke assignment → next request 404 (not 200) |
 | Revocation race | Revocation effective on next request | Per-request resolver; no cross-request cache (§10) | Concurrent revoke + request → request either completes (gate already passed) or 404 (gate after revoke) |
-| Duplicate assignment (two concurrent assigns) | One active row per (org, exam, proctor) | Partial unique index + 23505 recovery (§7) | Two concurrent assign → one winner, one `idempotent_replayed`, single active row |
+| Duplicate assignment (two concurrent assigns) | One active row per (org, exam, proctor) | Partial unique index + 23505 loser-receipt recovery (§7) | Two concurrent assign (different operationIds) → one `applied` + one `no_change`, one active assignment row, **two** durable operation receipts (the loser writes its own `no_change` event in a fresh tx) |
 | Concurrent assign/revoke | No split-brain active | Active-unique + row lock on revoke (§7) | assign vs revoke on same (exam,proctor) → ends in exactly one consistent state |
 | Admin represented as fake assignment rows | Admin bypasses via short-circuit, not via rows | Resolver short-circuits Admin (§2); no `exam_proctor_assignments` row for Admin | Admin token works with zero assignment rows; assert no Admin assignment row exists |
 | Route metadata not consumed at runtime (registry lies) | Wired preHandler matches registry | J4-I1B flips flat sensitive routes to `requireScopedCapability`; conformance test guards drift | Route-registry ↔ runtime conformance test (extend the existing whole-app lock) |
 | UI-only filtering (backend does not enforce) | Backend resolver is authority | Resolver enforces regardless of UI | Direct API call by Proctor to unassigned exam → 404 (UI-independent) |
-| Audit omission | Every assign/revoke audited exactly once | Atomic audit in same tx; skipped on replay | Concurrent assign → exactly one `exam.proctor_assigned` audit row |
+| Audit omission | Every **applied** assign/revoke is audited exactly once; `no_change` and replay produce **no** compliance audit | Atomic audit in same tx, only when `outcome=applied`; skipped on `no_change` and replay | Two concurrent assign → one `applied` event + one `no_change` event + exactly one `exam.proctor_assigned` audit row |
 
 ## 23. Implementation decomposition (§10)
 
@@ -1335,7 +1352,7 @@ When accepted and implemented by J4-I1 (A→D):
   close reality-audit gaps G1–G3, G7;
 - the pre-existing org-wide `AttemptForceSubmit`/`AttemptMisconductMark`
   Proctor grants are **removed from the Proctor preset** by J4-I1B
-  (closing the current, reachable risk), and the four affected routes
+  (closing the current, reachable risk), and the affected route groups
   become `proctorAccess = admin_only` while keeping their scoped gate;
 - ADR-014's "Proctor receives incident permission when J4/M11 lands scoped
   authority" condition is satisfied by J4-I1D;

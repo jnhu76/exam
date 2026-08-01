@@ -122,7 +122,7 @@ authority*, and the latter is live.
 ADR-015 §13 freezes the closure: **J4-I1B removes
 `AttemptForceSubmit` and `AttemptMisconductMark` from `PROCTOR_PERMISSIONS`
 atomically with the resolver flip** (the grants are removed from the
-preset, not "kept-but-inactive"). The four affected routes
+preset, not "kept-but-inactive"). The affected route groups
 (`POST /admin/attempts/:attemptId/misconduct`,
 `POST /admin/attempts/:attemptId/force-submit`,
 `POST /admin/attempts/:attemptId/proctor-incident`, and incident
