@@ -42,12 +42,13 @@ REC-I4-I1/I2/I3A/I3B1/I3B2 implemented the interruption policy
 persistence/runtime, candidate-safe restore contract, immutable policy
 snapshots, and the Admin operator time-grant product path (permission,
 Attempt-scoped route, atomic audit, and Dashboard retry coordination).
-REC-I6-R0 has frozen the exam incident authority in
-[ADR-014](../adr/ADR-014-exam-incident-authority.md) (Status: ACCEPTED;
-runtime implementation NOT STARTED). Remaining
-recovery work begins with J3 incident
-persistence and commands, M11 Proctor resource scope, dedicated recovery
-centers, and wider startup reconciliation.
+REC-I6-R0 froze the exam incident authority in
+[ADR-014](../adr/ADR-014-exam-incident-authority.md) (Status: ACCEPTED).
+J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) has implemented the incident
+persistence layer and Admin command/API surface (in review on PR). Remaining
+recovery work: Proctor incident permissions and Proctor-to-Exam resource
+scope (M11 / J4), dedicated recovery centers (J5/J6), system-generated
+incidents, and wider startup reconciliation.
 
 ### Plain-text subjective question loop
 
@@ -151,8 +152,8 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 
 - `timed_sync`, `deadline`, and `untimed` timing modes;
 - operational queue admission;
-- REC-I6 incident persistence and commands (J3 — NEXT; the REC-I6-R0 authority design is accepted) and
-  Admin/Proctor recovery-center workflows;
+- REC-I6 incident persistence and commands (J3 — implemented, in review on PR) and
+  Admin/Proctor recovery-center workflows (J5/J6 — NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;
 - fill-blank runtime/E2E reality re-audit;
 - rich-text/WYSIWYG answering;

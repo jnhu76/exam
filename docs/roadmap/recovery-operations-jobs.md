@@ -3,7 +3,7 @@
 <!-- markdownlint-disable MD024 -->
 
 > Status: ACTIVE — J1 CLOSED; J2 CLOSED (ADR-014 ACCEPTED);
-> J3 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS is NEXT.
+> J3 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS IMPLEMENTED (in review on PR).
 >
 > Updated: 2026-08-01
 >
@@ -58,7 +58,7 @@ REC-I6-R0 Incident Authority Contract
 | --- | --- | --- | --- |
 | J1 | `REC-I4-I3B2-OPERATOR-TIME-GRANT-API` | **CLOSED** — Admin authorized, idempotent API and Dashboard product path | Existing `grantAttemptTime()` engine seam |
 | J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | **CLOSED** — incident lifecycle, authority, relationships, and action semantics accepted in ADR-014 (ACCEPTED) | J1 design knowledge; no implementation dependency |
-| J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **NEXT — UNBLOCKED** — incident model, event history, commands, and action links are persisted | J2 |
+| J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **IMPLEMENTED — IN REVIEW on PR** — incident model, event history, commands, and action links are persisted; Admin API live | J2 |
 | J4 | `M11-PROCTOR-EXAM-SCOPE-MINIMUM` | Proctors are restricted to explicitly assigned exams | J2; existing RBAC baseline |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
@@ -107,7 +107,7 @@ ADR-014 was accepted on 2026-08-01.
 
 Authority:
 - [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md) (ACCEPTED)
-- [`incident-authority.md`](../architecture/exam-system/incident-authority.md) (TARGET)
+- [`incident-authority.md`](../architecture/exam-system/incident-authority.md) (IMPLEMENTED — J3, in review on PR)
 - [`REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) (baseline)
 
 ## Purpose
@@ -270,9 +270,13 @@ J2 must freeze:
 
 ## 5. J3 — REC-I6-I1 Incident Persistence and Commands
 
-**NEXT — UNBLOCKED.**
+**IMPLEMENTED — IN REVIEW on PR.**
 
-Implement the accepted ADR-014 contract. Runtime implementation has not started.
+The accepted ADR-014 contract is implemented: five additive tables (migration `0023`),
+domain types/errors, repositories, nine canonical write commands, Admin-only
+permissions, API routes, audit actions, and the `grantAttemptTime()` optional
+`incidentId` operator path. Recovery Center UI (J5), Proctor scope (J4/M11),
+and system incidents remain NOT IMPLEMENTED.
 The sections below are the pre-ADR planning sketch; where they differ from
 [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md)
 (§12–§14 persistence/API/migration, §18 decomposition) and
@@ -1063,7 +1067,7 @@ Do not use Redis adoption as a prerequisite for completing J1–J7.
 ```text
 PR-1  J1 — CLOSED
 PR-2  J2 — CLOSED — ADR-014 ACCEPTED
-PR-3  J3 — NEXT — UNBLOCKED
+PR-3  J3 — IMPLEMENTED — IN REVIEW (Draft PR open)
 PR-4  M11-PROCTOR-EXAM-SCOPE-MINIMUM — PLANNED
 PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — PLANNED
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED
@@ -1074,6 +1078,7 @@ PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 ## Parallelism
 
 J1 is closed. J2 (REC-I6-R0) is CLOSED — ADR-014 is ACCEPTED.
+J3 (REC-I6-I1) is IMPLEMENTED and in review on PR. J4 (M11) is not started.
 
 J3 and J4
 
