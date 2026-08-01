@@ -109,11 +109,11 @@ unavailability returns 503 `AUTHZ_UNAVAILABLE`, never an open fallback.
 
 | Operation | Scope | Invariants |
 | --- | --- | --- |
-| Incident state transition | `operationId` lookup → lock incident row → `expectedVersion` check → update materialized row + append event + atomic audit, one transaction | same `operationId` + same canonical payload → replay (`idempotent_replayed`); same `operationId` + different payload → 409 `IDEMPOTENCY_CONFLICT`; new `operationId` + stale `expectedVersion` → 409 `INCIDENT_VERSION_CONFLICT`; new `operationId` on a terminal incident → 409 `INVALID_STATE_TRANSITION` |
-| Note append | insert `note_added` event + audit | concurrent notes both succeed, each under its own `operationId`; order = `event_sequence` |
-| Action link | scope triple validated server-side → insert link + `action_linked` event + audit | `UNIQUE (organization_id, action_type, action_id)` arbiter; action types `time_grant` / `force_submit` only (`misconduct_mark` deferred — mutable jsonb flag is not a stable identity); duplicate link under a new `operationId`, or link to another incident → 409 `INCIDENT_ACTION_ALREADY_LINKED`; 23505 recognized only on the named uniques |
-| Evidence link (attempt / interruption) | scope triple validated server-side → insert junction + event + audit | `UNIQUE (incident_id, attempt_id)` / `(incident_id, interruption_id)` arbiters; attempt membership only on exam-wide incidents (anchor exclusivity → 409 `INVALID_STATE_TRANSITION`); composite FKs to existing uniques enforce org + attempt/episode consistency |
-| Time grant with incident | existing ADR-013 transaction (Enrollment → Attempt → Exam) + non-locking incident validation + action-link insert + audit, under the existing `operationId` idempotency | full link-scope triple: same organization AND same exam (derived from the locked Attempt, never the request) AND `incident.attemptId` null-or-matching; ledger remains the time authority; `incidentId` is correlation metadata, never a deadline input |
+| Incident state transition | `operationId` lookup → lock incident row → `expectedVersion` check → update materialized row + append event + atomic audit, one transaction | same `operationId` + same canonical payload → replay (wire outcome `idempotent_replayed`); same `operationId` + different payload → 409 `IDEMPOTENCY_CONFLICT`; new `operationId` + stale `expectedVersion` → 409 `INCIDENT_VERSION_CONFLICT`; new `operationId` on a terminal incident → 409 `INVALID_STATE_TRANSITION`. On `23505` operation-unique: rollback → fresh-transaction query → replay/conflict. |
+| Note append | insert `note_added` event + audit; no incident row lock, no `updatedAt` update | concurrent notes both succeed, each under its own `operationId`; order = `event_sequence`; `23505` operation-unique triggers rollback + fresh-transaction recovery |
+| Action link | scope quadruple validated server-side (org, exam, attempt, candidate) → insert link + `action_linked` event + audit; no incident row lock | `UNIQUE (organization_id, action_type, action_id)` arbiter; action types `time_grant` / `force_submit` only (`force_submit` requires committed `attempt.forceSubmit` audit fact; `misconduct_mark` deferred); duplicate link under a new `operationId` → 409 `INCIDENT_ACTION_ALREADY_LINKED`; `23505` on operation-unique → rollback + fresh-transaction recovery; `23505` on link-unique → entire transaction rolls back (no orphaned event); other `23505` surfaced |
+| Evidence link (attempt / interruption) | scope quadruple validated server-side (org, exam, attempt, candidate) → insert junction + event + audit; no incident row lock | `UNIQUE (incident_id, attempt_id)` / `(incident_id, interruption_id)` arbiters; attempt membership only on exam-wide incidents (anchor exclusivity → 409 `INVALID_STATE_TRANSITION`); composite FKs to existing uniques enforce org + attempt/episode consistency; `23505` on operation-unique → rollback + fresh-transaction recovery |
+| Time grant with incident | existing ADR-013 transaction (Enrollment → Attempt → Exam) + non-locking incident validation + action-link insert + audit, under the existing `operationId` idempotency | full link-scope quadruple: same organization AND same exam (derived from the locked Attempt, never the request) AND `incident.attemptId` null-or-matching AND `incident.candidateId` null-or-matching the grant attempt's candidate; ledger remains the time authority; `incidentId` is correlation metadata, never a deadline input |
 
 If any future shared transaction locks an incident row, the lock is taken
 strictly AFTER the Exam lock — the ADR-013 order
@@ -204,8 +204,9 @@ never interchangeable (ADR-013).
 `MisconductFlag` is overwritten on re-flag, so it is a mutable field, not a
 stable action identity — linking it is deferred until a stable append-only
 misconduct receipt exists. Every link (action, attempt, interruption)
-satisfies the frozen scope triple — same organization, same exam, and
-`incident.attemptId` null-or-matching — derived server-side from
+satisfies the frozen scope quadruple — same organization, same exam,
+`incident.attemptId` null-or-matching, and `incident.candidateId`
+null-or-matching the target attempt's candidate — derived server-side from
 authoritative rows, never from the request. Links store identity only,
 never mutable state. Integrity is DB-enforced by composite FKs reusing
 existing uniques, and there is no `ON DELETE CASCADE`: incidents are
