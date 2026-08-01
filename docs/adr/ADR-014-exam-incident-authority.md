@@ -32,6 +32,12 @@ ADR is accepted. This ADR authorizes no runtime change by itself.
 
 ### Revision notes
 
+- **R3 (2026-08-01)** — frozen per decision-owner review round 3:
+  - `action_id` type changed from `uuid` to `text` to match the house entity-id convention (`text`, via the `id()` helper) — both referents (`attempt_time_adjustments.id`, `exam_attempts.id`) are `text` (§12);
+  - notes/links version-chain contiguity is explicitly excluded — they carry `after=before` and do not participate in chain verification (§5);
+  - `operationId` vs link-unique arbitration priority is frozen: `operationId` lookup precedes all writes, and `IDEMPOTENCY_CONFLICT` takes priority over `INCIDENT_ACTION_ALREADY_LINKED` (§9);
+  - `force_submit` action links require server-side verification that the attempt was actually force-submitted (§7);
+  - `candidateId` semantic matrix frozen: when `attemptId` is null and `candidateId` is set, membership links are restricted to that candidate's attempts (§7).
 - **R2 (2026-08-01)** — hardened after PR #241 review round 2:
   - `operationId` is command identity on **every** write command, arbitrated
     by `UNIQUE (organization_id, operation_id)` on the event table; the
@@ -323,7 +329,12 @@ Rules:
   verifiable: per incident, the `event_sequence`-ordered version chain is
   contiguous (`incident_created` starts at 1; each bump satisfies
   `before == previous after`; the materialized `version` equals the latest
-  `after_version`). J3 asserts this chain in integration tests.
+  `after_version`). **Notes and links do not participate in chain
+  contiguity**: they carry `after = before` and their `event_sequence` is
+  interleavable with version-bumping events from concurrent transactions.
+  The contiguity assertion skips events where `before == after` and only
+  validates that the bump chain is contiguous. J3 asserts this skipping
+  logic in integration tests.
 
 ### 6. Authority rules (orthogonality contract)
 
@@ -370,10 +381,33 @@ Incident creation is NOT gated by exam status: post-exam investigations
 (retrospective misconduct review, delayed disruption reports) are a primary
 use case. The exam must merely resolve in the actor organization.
 
-Candidate validation (non-locking reads; violation → 400): when `candidateId`
-is set and `attemptId` is set, the candidate MUST match the attempt's
-enrollment; when `candidateId` is set and `attemptId` is null, the candidate
-MUST hold an enrollment in the exam.
+**Candidate validation (frozen V1 semantic matrix).**
+
+```text
+| attemptId | candidateId | 语义 (semantics)                            | membership 规则                         |
+|-----------|-------------|---------------------------------------------|-----------------------------------------|
+| null      | null        | 全考试范围 incident，无特定考生焦点           | 可添加任意 enrolled attempt             |
+|           |             | Exam-wide incident, no specific candidate   | Any enrolled attempt may be linked      |
+| null      | set         | 考试范围但聚焦于特定考生                     | 仅可添加该 candidate 的 attempt         |
+|           |             | Exam-wide, candidate-specific focus         | Only the candidate's attempts may link  |
+| set       | null        | 单 attempt incident，candidate 从 attempt 派生 | 锚定，拒绝 membership（互斥）          |
+|           |             | Single-attempt, candidate derived           | Anchored, no membership                 |
+| set       | set         | 单 attempt incident，显式 candidate          | 锚定，拒绝 membership（互斥）          |
+|           |             | Single-attempt, explicit candidate          | Anchored, no membership                 |
+```
+
+Validation rules (non-locking reads; violation → 400 `VALIDATION_ERROR`):
+
+- When `candidateId` is set AND `attemptId` is set: the candidate MUST match
+  the attempt's enrollment candidate.
+- When `candidateId` is set AND `attemptId` is null: the candidate MUST hold
+  an enrollment in the exam.
+- When `candidateId` is null AND `attemptId` is set: the candidate is derived
+  server-side from the attempt's enrollment; no separate validation.
+- `linkIncidentAttempt()` on an exam-wide incident where `candidateId` is set:
+  the target attempt's candidate MUST match `incident.candidateId`. Violation
+  → 400 `VALIDATION_ERROR`. This ensures that a candidate-specific exam-wide
+  incident does not accumulate membership rows for other candidates.
 
 **Anchor vs membership.** An incident expresses attempt involvement in
 exactly one way. The `attemptId` anchor is the single subject of a
@@ -426,6 +460,17 @@ terminal fact — an attempt is force-submitted at most once — so the attempt
 id denotes an immutable event. For `force_submit`, `attempt_id` equals
 `action_id`; for `time_grant`, `attempt_id` is the adjustment's attempt
 (derived from the ledger row).
+
+**`force_submit` verification.** Before accepting a `force_submit` action
+link, the server MUST verify that the target attempt was actually
+force-submitted. The verification is a non-locking read of the authoritative
+`exam_attempts` row: the attempt MUST be in a terminal submitted state
+(`submitted`, `graded`, or `published`) AND the submission source MUST be
+`proctor` (the `submitAttempt({ source: "proctor" })` path). If the
+verification fails, the command returns 400 `VALIDATION_ERROR` with a
+message indicating that the attempt was not force-submitted. This prevents
+false correlation: a `force_submit` link represents a durable assertion
+that a force submit did occur, not merely an attempt ID reference.
 
 **Deferred action identity: `misconduct_mark`.** Misconduct marking is NOT
 linkable in the initial implementation. The current runtime stores a single
@@ -558,8 +603,37 @@ exactly one winner; losers receive 409 `INCIDENT_VERSION_CONFLICT` (new
 message-registry code, added by J3). Append-only commands (create, note,
 links) carry no `expectedVersion`.
 
+**operationId vs link-unique arbitration priority (frozen).** The
+`operationId` lookup precedes all writes (§10). The priority is:
+
+```text
+1. operationId lookup (read-before-write)
+   →  found: matching operationId + matching command_type + matching
+      canonical payload
+      → idempotent_replay (return committed incident, NO write)
+   →  found: matching operationId + DIFFERENT command_type or payload
+      → 409 IDEMPOTENCY_CONFLICT (NO write)
+
+2. scope validation + write (only if step 1 yields no match)
+   →  link unique constraint violation
+      → 409 INCIDENT_ACTION_ALREADY_LINKED (covers all three link uniques)
+   →  operation unique constraint violation
+      → cannot happen (step 1 already excluded the operationId)
+```
+
+This means `IDEMPOTENCY_CONFLICT` always takes priority over
+`INCIDENT_ACTION_ALREADY_LINKED`: if a client sends a new `operationId` to
+link an action that is already linked to any incident, the link unique
+constraint fires and the client receives `INCIDENT_ACTION_ALREADY_LINKED`.
+If the same client retries the same `operationId`, step 1 catches it as
+`idempotent_replay` before any insert. The two error codes are never
+ambiguous: `IDEMPOTENCY_CONFLICT` = "this operationId is already consumed
+by a different command"; `INCIDENT_ACTION_ALREADY_LINKED` = "this action is
+already linked (by any operationId)".
+
 **Link arbiters.** Action links: `UNIQUE (organization_id, action_type,
-action_id)` is the final arbiter. Under a new `operationId`, any duplicate
+action_id)` is the final arbiter for step 2. Under a new `operationId`, any
+duplicate
 — re-linking the same action to the same incident, or linking an
 already-linked action to a different incident — returns 409
 `INCIDENT_ACTION_ALREADY_LINKED`; a true replay carries the same
@@ -580,13 +654,20 @@ under its own `operationId`; their order is their `event_sequence` (§5).
 | --- | --- | --- |
 | createExamIncident | insert incident + `incident_created` event + audit | none beyond the new row |
 | startIncidentInvestigation | lock incident row → version check → update + event + audit | `exam_incidents` FOR UPDATE |
-| addIncidentNote | insert `note_added` event (+ optional incident `updatedAt`) | none (append-only) |
+| addIncidentNote | insert `note_added` event (+ optional incident `updatedAt`) | none (append-only, no incident row lock) |
 | changeIncidentSeverity | lock incident row → version check → update + event + audit | `exam_incidents` FOR UPDATE |
 | resolveExamIncident / dismissExamIncident | lock incident row → version/terminal check → update + event + audit | `exam_incidents` FOR UPDATE |
-| linkIncidentAction | scope validation (non-locking, §7) → insert link (unique arbiter) + `action_linked` event + audit | none (constraint-arbiterated) |
-| linkIncidentAttempt | scope validation (non-locking, §7; anchor exclusivity) → insert junction (unique arbiter) + `attempt_linked` event + audit | none (constraint-arbiterated) |
-| linkIncidentInterruption | scope validation (non-locking, §7) → insert junction (unique arbiter) + `interruption_linked` event + audit | none (constraint-arbiterated) |
+| linkIncidentAction | scope validation (non-locking, §7) → insert link (unique arbiter) + `action_linked` event + audit | none (constraint-arbiterated, no incident row lock) |
+| linkIncidentAttempt | scope validation (non-locking, §7; anchor exclusivity) → insert junction (unique arbiter) + `attempt_linked` event + audit | none (constraint-arbiterated, no incident row lock) |
+| linkIncidentInterruption | scope validation (non-locking, §7) → insert junction (unique arbiter) + `interruption_linked` event + audit | none (constraint-arbiterated, no incident row lock) |
 | grantAttemptTime (extended by J3) | existing ADR-013 chain + optional incident validation (§7 triple) + action-link insert | unchanged: Enrollment → Attempt → Exam; incident validation is a NON-LOCKING read |
+
+Notes and links do not lock the incident row because they do not change
+version (§5). Their `event_sequence` is interleavable with version-bumping
+events from concurrent transactions; the contiguity assertion skips events
+where `before == after` (§5). This is the frozen design — notes/links
+append under their own transaction without `FOR UPDATE`, and the version
+chain is validated only across bump events.
 
 Orthogonality locks:
 
@@ -709,7 +790,9 @@ exam_incident_events
 exam_incident_actions
   id uuid PK, organization_id text NOT NULL, incident_id uuid NOT NULL,
   action_type text CHECK (time_grant | force_submit),  -- misconduct_mark DEFERRED (§7)
-  action_id uuid NOT NULL, attempt_id text NOT NULL,   -- both server-derived
+  action_id text NOT NULL, attempt_id text NOT NULL,   -- both server-derived; action_id is text
+                                                       -- to match the house id() convention
+                                                       -- (both referents are text)
   actor_id text, linked_at timestamptz NOT NULL, operation_id uuid NOT NULL
   UNIQUE (organization_id, action_type, action_id)     -- §9 link arbiter
   composite FK (organization_id, incident_id)
