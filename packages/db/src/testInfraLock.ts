@@ -18,10 +18,10 @@
  *
  * Mitigation:
  *   Wrap ONLY the heavy test-infra lifecycle sections (database ensure/drop,
- *   schema create+migrate) in a single cluster-wide PostgreSQL advisory lock so
- *   that across all Vitest workers (separate Node processes) at most one worker
- *   performs heavy DDL/migration at a time. Ordinary business queries are NOT
- *   locked, so the bulk of each test still runs in parallel.
+ *   schema create+migrate) in a single PostgreSQL advisory lock so that across
+ *   all Vitest workers (separate Node processes) at most one worker performs
+ *   heavy DDL/migration at a time. Ordinary business queries are NOT locked, so
+ *   the bulk of each test still runs in parallel.
  *
  * Why a PostgreSQL advisory lock (not a JS mutex):
  *   A JS mutex only serializes within one Node process. Vitest file-parallelism
@@ -29,6 +29,16 @@
  *   would not coordinate across them. A PG advisory lock is held in the shared
  *   PostgreSQL server and therefore serializes across all test processes on the
  *   same instance.
+ *
+ * PostgreSQL advisory locks are DATABASE-LOCAL, not cluster-wide: a
+ * `pg_advisory_lock` key only coordinates among sessions connected to the SAME
+ * database. Test-infra callers historically locked while connected to
+ * different databases (`exam_test` for schema lifecycle, `postgres` for
+ * database lifecycle, worker DBs for worker-database lifecycle), so their
+ * locks never coordinated with each other even though the key matched.
+ * `withTestInfraLifecycleLock` therefore normalizes every caller onto ONE
+ * coordination database via {@link resolveTestInfraCoordinationUrl}
+ * (TEST_ADMIN_DATABASE, default `postgres`) before acquiring the lock.
  *
  * Semantics:
  *   - `pg_advisory_lock(bigint)` is a session-level, non-transactional,
@@ -47,6 +57,74 @@
  */
 
 import postgres from "postgres";
+
+/**
+ * Resolve the canonical test-infra coordination database URL.
+ *
+ * PostgreSQL advisory locks are database-local, so every test-infra lifecycle
+ * lock must be hosted on the SAME database or the lock cannot coordinate
+ * callers that connect to different databases. This helper maps any caller
+ * URL onto the one coordination database:
+ *
+ *   - protocol: postgres:// or postgresql:// only (rejects anything else);
+ *   - host / port / credentials: inherited from the input URL;
+ *   - database pathname: replaced with `TEST_ADMIN_DATABASE`
+ *     (default `postgres`);
+ *   - query params: `options` / `search_path` removed (a lock session must not
+ *     inherit a caller's isolated search_path); other params preserved.
+ *
+ * The coordination database name is validated against `^[a-zA-Z0-9_]+$` and
+ * the PostgreSQL identifier length limit (63) so an env value can never be
+ * interpolated into a SQL identifier raw.
+ *
+ * @param inputDatabaseUrl - Any caller-provided PG URL (any database).
+ * @param env - Environment used to resolve TEST_ADMIN_DATABASE (defaults to
+ *   `process.env`).
+ * @throws When the protocol is unsupported or the coordination database name
+ *   is unsafe.
+ */
+export function resolveTestInfraCoordinationUrl(
+  inputDatabaseUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (
+    !inputDatabaseUrl.startsWith("postgres://") &&
+    !inputDatabaseUrl.startsWith("postgresql://")
+  ) {
+    throw new Error(
+      `[testInfraLock] coordination URL must be postgres:// or postgresql://, got: ${inputDatabaseUrl}`,
+    );
+  }
+  const coordinationDatabase = env.TEST_ADMIN_DATABASE ?? "postgres";
+  if (!/^[a-zA-Z0-9_]+$/.test(coordinationDatabase)) {
+    throw new Error(
+      `[testInfraLock] unsafe TEST_ADMIN_DATABASE "${coordinationDatabase}" (allowed: [a-zA-Z0-9_])`,
+    );
+  }
+  if (coordinationDatabase.length === 0) {
+    throw new Error("[testInfraLock] TEST_ADMIN_DATABASE must not be empty");
+  }
+  if (coordinationDatabase.length > 63) {
+    throw new Error(
+      `[testInfraLock] TEST_ADMIN_DATABASE exceeds 63 chars: "${coordinationDatabase}"`,
+    );
+  }
+  const url = new URL(inputDatabaseUrl);
+  url.pathname = `/${coordinationDatabase}`;
+  // Strip search_path / options so the lock session never inherits an isolated
+  // schema's search_path. Keep unrelated params (e.g. sslmode).
+  const retained: Array<[string, string]> = [];
+  for (const [key, value] of url.searchParams.entries()) {
+    if (key !== "options" && key !== "search_path") {
+      retained.push([key, value]);
+    }
+  }
+  url.search = "";
+  for (const [key, value] of retained) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
 
 /**
  * Deterministic 64-bit advisory-lock key for all test-infra heavy lifecycle.
@@ -117,6 +195,11 @@ async function releaseAdvisoryLock(
  * lock is free — this is the serialization point across workers), runs `fn`,
  * and always releases the lock in `finally` (even on throw).
  *
+ * PostgreSQL advisory locks are database-local. The `adminUrl` is normalized
+ * via {@link resolveTestInfraCoordinationUrl} so ALL callers — regardless of
+ * which database they otherwise connect to (`exam_test`, `postgres`, a worker
+ * database) — coordinate on the SAME coordination database.
+ *
  * The `fn` receives nothing; it should perform the heavy DDL/migration via its
  * OWN connections (the lock connection is dedicated and not exposed). The lock
  * is held for the duration of `fn` regardless of which connections `fn` uses —
@@ -130,7 +213,8 @@ export async function withTestInfraLifecycleLock<T>(
   adminUrl: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const admin = postgres(adminUrl, { max: 1 });
+  const coordinationUrl = resolveTestInfraCoordinationUrl(adminUrl);
+  const admin = postgres(coordinationUrl, { max: 1 });
   await acquireAdvisoryLock(admin, TEST_INFRA_LIFECYCLE_LOCK_KEY);
   try {
     return await fn();

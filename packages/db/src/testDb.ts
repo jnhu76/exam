@@ -1,6 +1,7 @@
 import { createDatabase } from "./database.js";
 import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { migratePostgres } from "./postgres.js";
+import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 import {
   isTestDbIsolationEnabled,
   setupIsolatedTestDb,
@@ -111,7 +112,14 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
   let conn: Awaited<ReturnType<typeof createDatabase>>;
   try {
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
+    // The full migration runs under the test-infra lifecycle lock (same
+    // coordination DB as CREATE/DROP SCHEMA + CREATE/DROP DATABASE, via
+    // canonicalization in testInfraLock.ts). Without it, parallel workers'
+    // migrations contend with sibling CREATE DATABASE / CREATE SCHEMA traffic
+    // and a single migrate can be starved past the test timeout.
+    await withTestInfraLifecycleLock(iso.databaseUrl, () =>
+      migratePostgres(conn.db, { migrationsSchema: iso.schemaName }),
+    );
   } catch (err) {
     await iso.cleanup();
     throw err;

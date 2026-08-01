@@ -134,8 +134,10 @@ async function withAdminConnection<T>(
  * concurrently CREATE SCHEMA + migrate against the same PG instance, contending
  * with `testWorkerDatabase.test.ts`'s CREATE DATABASE. The lock serializes the
  * heavy catalog DDL so no single CREATE SCHEMA / migrate is starved past the 5s
- * testTimeout. The lock is server-global (key-identity), so hosting it on the
- * target DB's connection still coordinates across all workers.
+ * testTimeout. PostgreSQL advisory locks are database-local: the helper
+ * normalizes every caller to ONE coordination database (TEST_ADMIN_DATABASE,
+ * default `postgres`), so a schema-lifecycle caller locking on `exam_test`
+ * still coordinates with a database-lifecycle caller locking on `postgres`.
  */
 export async function createTestSchema(
   databaseUrl: string,

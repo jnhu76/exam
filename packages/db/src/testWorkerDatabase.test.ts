@@ -192,118 +192,134 @@ PG_DESCRIBE("ensureDatabaseExists", { timeout: 15_000 }, () => {
   });
 });
 
-PG_DESCRIBE("dropDatabaseIfExists — robust drop", () => {
-  it("is idempotent when the database is missing", async () => {
-    const missing = uniqueLifecycleDbName("missing");
-    // No CREATE — drop a DB that does not exist; must not throw with keepMissing.
-    await dropDatabaseIfExists(ADMIN_URL, missing, { keepMissing: true });
-    // And again — repeated drop on missing is still a no-op.
-    await dropDatabaseIfExists(ADMIN_URL, missing, { keepMissing: true });
-  });
+PG_DESCRIBE(
+  "dropDatabaseIfExists — robust drop",
+  // Hang-protection budget: these tests hold the lifecycle lock for
+  // DROP DATABASE (seconds each) and queue behind sibling heavy sections on
+  // the single coordination DB under parallel runs.
+  { timeout: 30_000 },
+  () => {
+    it("is idempotent when the database is missing", async () => {
+      const missing = uniqueLifecycleDbName("missing");
+      // No CREATE — drop a DB that does not exist; must not throw with keepMissing.
+      await dropDatabaseIfExists(ADMIN_URL, missing, { keepMissing: true });
+      // And again — repeated drop on missing is still a no-op.
+      await dropDatabaseIfExists(ADMIN_URL, missing, { keepMissing: true });
+    });
 
-  it("refuses an unsafe database name without issuing DDL", async () => {
-    await expect(
-      dropDatabaseIfExists(ADMIN_URL, "exam_test; DROP TABLE x"),
-    ).rejects.toThrow(/unsafe database name/);
-  });
+    it("refuses an unsafe database name without issuing DDL", async () => {
+      await expect(
+        dropDatabaseIfExists(ADMIN_URL, "exam_test; DROP TABLE x"),
+      ).rejects.toThrow(/unsafe database name/);
+    });
 
-  it("drops a database that exists", async () => {
-    const workerDb = uniqueLifecycleDbName("dropdrop");
-    try {
-      await ensureDatabaseExists(ADMIN_URL, workerDb);
-      await dropDatabaseIfExists(ADMIN_URL, workerDb);
-      const admin = postgres(ADMIN_URL);
+    it("drops a database that exists", async () => {
+      const workerDb = uniqueLifecycleDbName("dropdrop");
       try {
-        const rows = await admin`
+        await ensureDatabaseExists(ADMIN_URL, workerDb);
+        await dropDatabaseIfExists(ADMIN_URL, workerDb);
+        const admin = postgres(ADMIN_URL);
+        try {
+          const rows = await admin`
           SELECT 1 FROM pg_database WHERE datname = ${workerDb}
         `;
-        expect(rows.length).toBe(0);
+          expect(rows.length).toBe(0);
+        } finally {
+          await admin.end();
+        }
       } finally {
-        await admin.end();
+        await dropDatabaseIfExists(ADMIN_URL, workerDb, {
+          keepMissing: true,
+        }).catch(() => {
+          /* best-effort */
+        });
       }
-    } finally {
-      await dropDatabaseIfExists(ADMIN_URL, workerDb, {
-        keepMissing: true,
-      }).catch(() => {
-        /* best-effort */
-      });
-    }
-  });
-});
-
-PG_DESCRIBE("setupWorkerTestDatabase — full lifecycle", () => {
-  it("migrates, connects, truncates, preserves migration metadata, closes cleanly", async () => {
-    // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name
-    // (`exam_test_wphase6d_proto_<tag>`), so no leftover-collision on cold start.
-    const runTag = Math.random().toString(36).slice(2, 8);
-    const workerId = `phase6d_proto_${runTag}`.replace(/[^a-z0-9_]/g, "_");
-    const handle = await setupWorkerTestDatabase({
-      env: {
-        TEST_DB_ISOLATION: "worker-database",
-        TEST_INFRA_SCOPE: "local",
-        TEST_WORKER_ID: workerId,
-        TEST_DATABASE_URL: BASE_URL,
-      },
     });
-    try {
-      // Derived name follows the resolver's local-worker rule (`exam_test_w<id>`).
-      expect(handle.databaseName).toBe(`exam_test_w${workerId}`);
-      expect(handle.scope.dbIsolation).toBe("worker-database");
-      expect(handle.databaseUrl.endsWith(`/${handle.databaseName}`)).toBe(true);
+  },
+);
 
-      // Migration metadata must be present (real migration ran).
-      const meta = postgres(handle.databaseUrl);
+PG_DESCRIBE(
+  "setupWorkerTestDatabase — full lifecycle",
+  // Same lifecycle-queue budget: ensureDatabaseExists (CREATE DATABASE) +
+  // migrate + drop all run under the lock, and a single CREATE DATABASE can
+  // take seconds under sibling load on the coordination DB.
+  { timeout: 30_000 },
+  () => {
+    it("migrates, connects, truncates, preserves migration metadata, closes cleanly", async () => {
+      // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name
+      // (`exam_test_wphase6d_proto_<tag>`), so no leftover-collision on cold start.
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `phase6d_proto_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const handle = await setupWorkerTestDatabase({
+        env: {
+          TEST_DB_ISOLATION: "worker-database",
+          TEST_INFRA_SCOPE: "local",
+          TEST_WORKER_ID: workerId,
+          TEST_DATABASE_URL: BASE_URL,
+        },
+      });
       try {
-        const tables = await meta`
+        // Derived name follows the resolver's local-worker rule (`exam_test_w<id>`).
+        expect(handle.databaseName).toBe(`exam_test_w${workerId}`);
+        expect(handle.scope.dbIsolation).toBe("worker-database");
+        expect(handle.databaseUrl.endsWith(`/${handle.databaseName}`)).toBe(
+          true,
+        );
+
+        // Migration metadata must be present (real migration ran).
+        const meta = postgres(handle.databaseUrl);
+        try {
+          const tables = await meta`
           SELECT tablename FROM pg_tables WHERE schemaname = 'drizzle'
         `;
-        const names = tables.map((t) =>
-          "tablename" in (t as object)
-            ? (t as { tablename: string }).tablename
-            : "",
-        );
-        expect(names).toContain("__drizzle_migrations");
-      } finally {
-        await meta.end();
-      }
+          const names = tables.map((t) =>
+            "tablename" in (t as object)
+              ? (t as { tablename: string }).tablename
+              : "",
+          );
+          expect(names).toContain("__drizzle_migrations");
+        } finally {
+          await meta.end();
+        }
 
-      // Insert a business row into a migrated table (organizations), then
-      // confirm resetPostgres() clears it while preserving migration metadata.
-      const biz = postgres(handle.databaseUrl);
-      try {
-        await biz`
+        // Insert a business row into a migrated table (organizations), then
+        // confirm resetPostgres() clears it while preserving migration metadata.
+        const biz = postgres(handle.databaseUrl);
+        try {
+          await biz`
           INSERT INTO organizations (id, name, slug, display_name, created_at, updated_at)
           VALUES ('org-test-phase3a', 'Test Org', 'org-test-phase3a', 'Test Org', now(), now())
         `;
-        let rows = await biz`SELECT count(*)::int AS c FROM organizations`;
-        expect((rows[0] as { c: number }).c).toBeGreaterThanOrEqual(1);
+          let rows = await biz`SELECT count(*)::int AS c FROM organizations`;
+          expect((rows[0] as { c: number }).c).toBeGreaterThanOrEqual(1);
 
-        await handle.resetPostgres();
-        rows = await biz`SELECT count(*)::int AS c FROM organizations`;
-        expect((rows[0] as { c: number }).c).toBe(0);
-      } finally {
-        await biz.end();
-      }
+          await handle.resetPostgres();
+          rows = await biz`SELECT count(*)::int AS c FROM organizations`;
+          expect((rows[0] as { c: number }).c).toBe(0);
+        } finally {
+          await biz.end();
+        }
 
-      // Migration metadata MUST survive resetPostgres().
-      const meta2 = postgres(handle.databaseUrl);
-      try {
-        const after = await meta2`
+        // Migration metadata MUST survive resetPostgres().
+        const meta2 = postgres(handle.databaseUrl);
+        try {
+          const after = await meta2`
           SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations
         `;
-        expect((after[0] as { c: number }).c).toBeGreaterThan(0);
+          expect((after[0] as { c: number }).c).toBeGreaterThan(0);
+        } finally {
+          await meta2.end();
+        }
       } finally {
-        await meta2.end();
+        await handle.close();
+        await handle.close(); // idempotent
+        await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+          keepMissing: true,
+        });
       }
-    } finally {
-      await handle.close();
-      await handle.close(); // idempotent
-      await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
-        keepMissing: true,
-      });
-    }
-  });
-});
+    });
+  },
+);
 
 describe("truncateBusinessTables — guard", () => {
   it("rejects an unsafe schema name without touching PG", async () => {
@@ -318,26 +334,31 @@ describe("truncateBusinessTables — guard", () => {
   });
 });
 
-PG_DESCRIBE("truncateBusinessTables — no-op path", () => {
-  it("does not error when there are zero business rows", async () => {
-    // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name.
-    const runTag = Math.random().toString(36).slice(2, 8);
-    const workerId = `phase6d_noop_${runTag}`.replace(/[^a-z0-9_]/g, "_");
-    const handle = await setupWorkerTestDatabase({
-      env: {
-        TEST_DB_ISOLATION: "worker-database",
-        TEST_WORKER_ID: workerId,
-        TEST_DATABASE_URL: BASE_URL,
-      },
-    });
-    try {
-      await handle.resetPostgres();
-      await handle.resetPostgres(); // no business rows -> no-op, no error
-    } finally {
-      await handle.close();
-      await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
-        keepMissing: true,
+PG_DESCRIBE(
+  "truncateBusinessTables — no-op path",
+  // Same lifecycle-queue budget as the other worker-database describes.
+  { timeout: 30_000 },
+  () => {
+    it("does not error when there are zero business rows", async () => {
+      // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name.
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `phase6d_noop_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const handle = await setupWorkerTestDatabase({
+        env: {
+          TEST_DB_ISOLATION: "worker-database",
+          TEST_WORKER_ID: workerId,
+          TEST_DATABASE_URL: BASE_URL,
+        },
       });
-    }
-  });
-});
+      try {
+        await handle.resetPostgres();
+        await handle.resetPostgres(); // no business rows -> no-op, no error
+      } finally {
+        await handle.close();
+        await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+          keepMissing: true,
+        });
+      }
+    });
+  },
+);
