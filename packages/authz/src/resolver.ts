@@ -52,7 +52,8 @@ export type ResourceType =
   | "score"
   | "audit_log"
   | "client_event"
-  | "system_diagnostics";
+  | "system_diagnostics"
+  | "incident";
 
 /** A reference to a concrete resource passed to a resolver. */
 export interface ResourceRef {
@@ -76,7 +77,8 @@ export type ResolverKey =
   | "score"
   | "audit_log"
   | "client_event"
-  | "system_diagnostics";
+  | "system_diagnostics"
+  | "incident";
 
 export type ResourceResolverKey = Extract<ResolverKey, ResourceType>;
 

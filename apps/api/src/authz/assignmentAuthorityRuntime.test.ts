@@ -640,6 +640,25 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
       `e17-cand-${uniquePrefix()}`,
     );
 
+    // J4-I1B (ADR-015 §4.3): the proctor monitoring route is
+    // proctorAccess = assignment_scoped — a non-Admin actor additionally needs
+    // an ACTIVE Proctor-to-Exam assignment. Grant one so the assertion below
+    // isolates the capability-union behavior (200), not the assignment miss
+    // (404). The assignment row is inserted directly (mirroring the E17
+    // adversarial-state style).
+    const now = new Date();
+    await ctx.db.insert(schema.examProctorAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      examId,
+      proctorUserId: user.id,
+      status: "active",
+      assignedBy: ctx.admin.id,
+      assignedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     // GET /api/admin/exams/:examId/proctor/attempts is gated by
     // requireScopedCapability(Permission.ExamRoomView, "exam", "examId")
     // (proctorMonitoring.ts) — a real scoped gate. The union includes

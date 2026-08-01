@@ -66,6 +66,17 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.examIncidents)
     .where(eq(schema.examIncidents.organizationId, organizationId));
+  // Proctor-to-Exam assignment tables (ADR-015): the events table composite-
+  // FKs to the assignment table, which composite-FKs to exams — delete both
+  // before exams to avoid composite-FK violations.
+  await tx
+    .delete(schema.examProctorAssignmentEvents)
+    .where(
+      eq(schema.examProctorAssignmentEvents.organizationId, organizationId),
+    );
+  await tx
+    .delete(schema.examProctorAssignments)
+    .where(eq(schema.examProctorAssignments.organizationId, organizationId));
   // attemptGradingEntries has a FK → examAttempts.id (onDelete: no action);
   // must be deleted before examAttempts to avoid FK violation.
   await tx

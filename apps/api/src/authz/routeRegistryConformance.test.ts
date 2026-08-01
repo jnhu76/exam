@@ -365,26 +365,12 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     path: string;
     permission: string;
   }> = [
-    // 6 admin attempt routes
-    {
-      method: "POST",
-      path: "/admin/attempts/:attemptId/misconduct",
-      permission: "attempt.misconduct.mark",
-    },
-    {
-      method: "POST",
-      path: "/admin/attempts/:attemptId/force-submit",
-      permission: "attempt.force_submit",
-    },
-    // NOTE: POST /admin/attempts/:attemptId/time-grants is intentionally NOT in
-    // this M10-B (flat-gate) list — it is a resource-aware route that resolves
-    // the target Attempt scope (ADR-013 / ADR-010 §3.9). Its scoped-gate
-    // conformance is asserted in the dedicated block below.
-    {
-      method: "GET",
-      path: "/admin/attempts/:attemptId/timeline",
-      permission: "attempt.timeline.view",
-    },
+    // 3 admin attempt routes that REMAIN flat after J4-I1B:
+    //   - POST /admin/attempts/:attemptId/misconduct,
+    //   - POST /admin/attempts/:attemptId/force-submit,
+    //   - GET  /admin/attempts/:attemptId/timeline
+    // were flipped to requireScopedCapability by J4-I1B (ADR-015 §8) and are
+    // asserted in the scoped-grant block below — NOT here.
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/export",
@@ -452,8 +438,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   ];
 
-  it("has exactly 27 M10-B routes defined", () => {
-    expect(m10bRouteSpecs).toHaveLength(27);
+  it("has exactly 24 M10-B routes defined", () => {
+    expect(m10bRouteSpecs).toHaveLength(24);
   });
 
   /**
@@ -537,6 +523,70 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       permission: "attempt.time.grant",
       resolverKey: "attempt",
       resourceIdKey: "attemptId",
+    });
+  });
+
+  // ──────────────────── J4-I1B flipped attempt gates ────────────────────
+
+  /**
+   * J4-I1B (ADR-015 §8): misconduct / force-submit were flipped from flat to
+   * `requireScopedCapability` — they stay scoped for target existence, tenant,
+   * and parent-chain validation even though their grants are REMOVED from the
+   * Proctor preset (proctorAccess = admin_only). timeline additionally carries
+   * the Proctor-assignment enforcement (proctorAccess = assignment_scoped).
+   */
+  it.each([
+    {
+      method: "POST",
+      path: "/admin/attempts/:attemptId/misconduct",
+      permission: "attempt.misconduct.mark",
+    },
+    {
+      method: "POST",
+      path: "/admin/attempts/:attemptId/force-submit",
+      permission: "attempt.force_submit",
+    },
+  ])(
+    "[J4-I1B] $method $path — scoped Attempt resolver gate, no Proctor assignment enforcement (admin_only)",
+    ({ method, path, permission }) => {
+      const matches = capturedRoutes.filter(
+        (r) => r.method === method && r.url.endsWith(path),
+      );
+      expect(matches, `no captured route for ${method} ${path}`).toHaveLength(
+        1,
+      );
+      const route = matches[0]!;
+      expect(route.scopedCapabilityHandlerCount).toBe(1);
+      expect(route.flatCapabilityHandlerCount).toBe(0);
+      expect(route.roleHandlerCount).toBe(0);
+      expect(route.permissionListHandlerCount).toBe(0);
+      expect(route.authzHandlers[0]).toEqual({
+        kind: "scoped",
+        permission,
+        resolverKey: "attempt",
+        resourceIdKey: "attemptId",
+      });
+    },
+  );
+
+  it("[J4-I1B] GET /admin/attempts/:attemptId/timeline — scoped Attempt resolver gate WITH Proctor assignment enforcement", () => {
+    const matches = capturedRoutes.filter(
+      (r) =>
+        r.method === "GET" &&
+        r.url.endsWith("/admin/attempts/:attemptId/timeline"),
+    );
+    expect(matches).toHaveLength(1);
+    const route = matches[0]!;
+    expect(route.scopedCapabilityHandlerCount).toBe(1);
+    expect(route.flatCapabilityHandlerCount).toBe(0);
+    expect(route.roleHandlerCount).toBe(0);
+    expect(route.permissionListHandlerCount).toBe(0);
+    expect(route.authzHandlers[0]).toEqual({
+      kind: "scoped",
+      permission: "attempt.timeline.view",
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      proctorAccess: "assignment_scoped",
     });
   });
 

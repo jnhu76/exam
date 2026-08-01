@@ -3,6 +3,7 @@ import {
   candidateProfiles,
   courses,
   examEnrollments,
+  examProctorAssignments,
   exams,
   organizations,
 } from "../schema/pg.js";
@@ -12,7 +13,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, exists, inArray } from "drizzle-orm";
 
 type ExamSelect = typeof exams.$inferSelect;
 
@@ -25,8 +26,41 @@ export function createExamRepo(db: Database) {
 
   return {
     ...repo,
-    async listProctorDiscoverable(ctx: TenantContext | RequestContext) {
+    /**
+     * Proctor-discoverable exams (J4-I1B, ADR-015 §8). Admin callers list all
+     * in-org exams; when `assignedProctorUserId` is provided the query filters
+     * to exams with an ACTIVE Proctor-to-Exam assignment for that user — the
+     * enforcement lives in the backend query (never UI-only filtering).
+     */
+    async listProctorDiscoverable(
+      ctx: TenantContext | RequestContext,
+      options: { assignedProctorUserId?: string } = {},
+    ) {
       const orgId = resolveOrganizationId(ctx);
+      const conditions = [
+        eq(exams.organizationId, orgId),
+        inArray(exams.status, ["published", "open", "closed"]),
+      ];
+      if (options.assignedProctorUserId) {
+        conditions.push(
+          exists(
+            db
+              .select({ id: examProctorAssignments.id })
+              .from(examProctorAssignments)
+              .where(
+                and(
+                  eq(examProctorAssignments.organizationId, orgId),
+                  eq(examProctorAssignments.examId, exams.id),
+                  eq(
+                    examProctorAssignments.proctorUserId,
+                    options.assignedProctorUserId,
+                  ),
+                  eq(examProctorAssignments.status, "active"),
+                ),
+              ),
+          ),
+        );
+      }
       return db
         .select({
           examId: exams.id,
@@ -36,12 +70,7 @@ export function createExamRepo(db: Database) {
           closeAt: exams.closeAt,
         })
         .from(exams)
-        .where(
-          and(
-            eq(exams.organizationId, orgId),
-            inArray(exams.status, ["published", "open", "closed"]),
-          ),
-        )
+        .where(and(...conditions))
         .orderBy(asc(exams.openAt), asc(exams.id));
     },
     async findAuthorizationChain(

@@ -19817,12 +19817,13 @@
             "required": true
           }
         ],
+        "deprecated": true,
         "security": [
           {
             "cookieAuth": []
           }
         ],
-        "x-role": ["Admin", "Proctor"],
+        "x-role": ["Admin"],
         "responses": {
           "200": {
             "description": "Default Response",

@@ -43,8 +43,9 @@ const proctorPerms = [
   Permission.ExamRoomView,
   Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
-  Permission.AttemptMisconductMark,
-  Permission.AttemptForceSubmit,
+  // J4-I1B (ADR-015 §13): AttemptMisconductMark + AttemptForceSubmit REMOVED
+  // from the Proctor preset — they are no longer part of the expected
+  // Proctor capability set.
 ];
 const graderPerms = [
   Permission.GradingQueueView,

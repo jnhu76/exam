@@ -34,6 +34,13 @@ export type AuthzMetadata =
       permission: PermissionKey;
       resolverKey: ResourceResolverKey;
       resourceIdKey: string;
+      /**
+       * J4-I1B (ADR-015 §8): present when the route enforces the
+       * Proctor-to-Exam assignment for Proctor actors (`assignment_scoped`).
+       * The route registry carries the full 5-valued `proctorAccess` policy;
+       * this metadata proves the runtime wiring matches the registry.
+       */
+      proctorAccess?: "assignment_scoped";
     }
   | { kind: "candidate_context"; permission: PermissionKey }
   | {
@@ -98,11 +105,16 @@ declare module "fastify" {
      * that verifies the resource's organization anchor + existence (ADR §3.4,
      * §3.9). Resolver denial mapping: resource_not_found -> 404;
      * org/ownership/broken-chain -> 403; resolver_error -> 503 AUTHZ_UNAVAILABLE.
+     *
+     * J4-I1B (ADR-015 §4.3): pass `{ proctorAccess: "assignment_scoped" }` to
+     * additionally require an active Proctor-to-Exam assignment to the resolved
+     * Exam for non-Admin actors (missing assignment -> 404 RESOURCE_NOT_FOUND).
      */
     requireScopedCapability: (
       permission: PermissionKey,
       resolverKey: ResourceResolverKey,
       resourceIdKey: string,
+      options?: { proctorAccess?: "assignment_scoped" },
     ) => AuthzPreHandler;
     /**
      * Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
