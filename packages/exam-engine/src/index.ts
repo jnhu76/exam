@@ -24,3 +24,4 @@ export * from "./restoreInterruption.js";
 export * from "./operatorGrant.js";
 export * from "./lockSeam.js";
 export * from "./systemMonitor.js";
+export * from "./incidentCommands.js";

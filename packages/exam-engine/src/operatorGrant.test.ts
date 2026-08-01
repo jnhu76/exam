@@ -892,16 +892,18 @@ describe("grantAttemptTime", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it("incidentId must be null (reserved for REC-I6)", async () => {
+    it("incidentId is accepted (ADR-014 activated the operator path)", async () => {
       const ctx = setupMocks({});
-      await expect(
-        runGrant(
-          ctx,
-          baseInput({
-            incidentId: "22222222-2222-2222-2222-222222222222",
-          }),
-        ),
-      ).rejects.toThrow(ValidationError);
+      const result = await runGrant(
+        ctx,
+        baseInput({
+          incidentId: "22222222-2222-2222-2222-222222222222",
+        }),
+      );
+      expect(result.outcome).toBe("granted");
+      expect(ctx.insertedAdjustments[0]?.incidentId).toBe(
+        "22222222-2222-2222-2222-222222222222",
+      );
     });
 
     it("now must be a valid Date", async () => {

@@ -58,6 +58,7 @@ function isSameOperatorGrantOperation(
   reasonText: string,
   actorId: string,
   interruptionId: string | null,
+  incidentId: string | null,
 ): boolean {
   return (
     existing.attemptId === attemptId &&
@@ -66,9 +67,9 @@ function isSameOperatorGrantOperation(
     existing.reasonText === reasonText &&
     existing.actorId === actorId &&
     (existing.interruptionId ?? null) === interruptionId &&
+    (existing.incidentId ?? null) === incidentId &&
     existing.source === "operator" &&
     existing.policy === "operator_incident" &&
-    existing.incidentId === null &&
     existing.eligibleSeconds === null
   );
 }
@@ -226,9 +227,6 @@ export async function grantAttemptTime(
       "addedSeconds must be a positive PostgreSQL integer",
     );
   }
-  if (input.incidentId != null) {
-    throw new ValidationError("incidentId is reserved until REC-I6");
-  }
   const interruptionId = input.interruptionId ?? null;
 
   // 4. operationId replay / conflict check. `operationId` is command
@@ -247,6 +245,7 @@ export async function grantAttemptTime(
         reasonText,
         actorId,
         interruptionId,
+        input.incidentId ?? null,
       )
     ) {
       throw new IdempotencyConflictError();
@@ -393,7 +392,7 @@ export async function grantAttemptTime(
     operationId,
     attemptId,
     interruptionId,
-    incidentId: null,
+    incidentId: input.incidentId ?? null,
     policy: snapshot.policy,
     source: "operator",
     beforeDeadline,
