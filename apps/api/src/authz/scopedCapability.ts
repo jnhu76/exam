@@ -63,16 +63,19 @@ export interface ProctorAssignmentGate {
 }
 
 /**
- * Extracts the resolved Exam id from a successful scope resolution. For
- * `Scope.Exam` resolutions the resourceId IS the exam id; for attempt-scoped
- * resolutions the exam id comes from the parent chain node.
+ * Extracts the resolved Exam id from a successful scope resolution. The
+ * parent chain's `exam` node is authoritative when present (the incident
+ * resolver reduces to Scope.Exam but its resourceId is the INCIDENT id, not
+ * the exam id); for plain Exam-scoped resolutions the resourceId IS the exam
+ * id.
  */
 function resolvedExamId(resolution: ResolvedScope): string | null {
+  const examNode = resolution.chain?.find((n) => n.type === "exam");
+  if (examNode?.id) return examNode.id;
   if (resolution.scope === Scope.Exam) {
     return resolution.resourceId ?? null;
   }
-  const examNode = resolution.chain?.find((n) => n.type === "exam");
-  return examNode?.id ?? null;
+  return null;
 }
 
 /** Input to the resource-aware preHandler builder. */
