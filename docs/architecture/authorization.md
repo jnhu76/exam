@@ -135,7 +135,13 @@ resource gates remain the security authority.
 The following are not implemented in the current MVP authorization model:
 
 - Resource-relationship authorization (M11), including Teacher→Course,
-  Teacher→Exam, Proctor→Exam, and Grader→Work assignment.
+  Teacher→Exam, Proctor→Exam, and Grader→Work assignment. The Proctor→Exam
+  slice **design contract is ACCEPTED** as ADR-015 (2026-08-02, PR #245)
+  ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
+  with reality audit
+  ([`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
+  the runtime (J4-I1) is NEXT but not yet implemented. The Teacher and
+  Grader slices remain deferred.
 - Scoped role-assignment storage such as `scope_type`, `scope_resource_id`,
   `course_staff`, `teacher_exam_assignments`, `exam_proctor`, and
   `grading_assignment`.

@@ -4,7 +4,10 @@
 
 > Status: ACTIVE — J1 CLOSED; J2 CLOSED (ADR-014 ACCEPTED);
 > J3 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS **CLOSED** (PR #242 merged);
-> **J4-R0 NEXT** — Proctor-to-Exam Scope Authority Contract.
+> **J4-R0 CLOSED** — Proctor-to-Exam Scope Authority Contract
+> (ADR-015 **Accepted** 2026-08-02, PR #245;
+> `M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`).
+> **J4-I1 NEXT** — runtime unblocked by ADR-015 acceptance.
 >
 > Updated: 2026-08-02
 >
@@ -61,8 +64,8 @@ REC-I6-R0 Incident Authority Contract
 | J1 | `REC-I4-I3B2-OPERATOR-TIME-GRANT-API` | **CLOSED** — Admin authorized, idempotent API and Dashboard product path | Existing `grantAttemptTime()` engine seam |
 | J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | **CLOSED** — incident lifecycle, authority, relationships, and action semantics accepted in ADR-014 (ACCEPTED) | J1 design knowledge; no implementation dependency |
 | J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **CLOSED — PR #242 merged** — Admin incident model, event history, commands, action links, and API are live on master | J2 |
-| J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **NEXT** — Proctor-to-Exam scope authority design contract only (no runtime implementation before acceptance) | J2; existing RBAC baseline |
-| J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement | J4-R0 accepted |
+| J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **CLOSED** — Proctor-to-Exam scope authority design contract accepted in ADR-015 (ACCEPTED 2026-08-02, PR #245) | J2; existing RBAC baseline |
+| J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **NEXT** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Unblocked by ADR-015 acceptance. | J4-R0 accepted |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
 | J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | Real incident scenarios, crash recovery, audit, and E2E are closed | J1–J6 |
@@ -111,6 +114,7 @@ inventory are owned by the closeout audit, OpenAPI, and
 ADR-014 was accepted on 2026-08-01.
 
 Authority:
+
 - [`ADR-014-exam-incident-authority.md`](../adr/ADR-014-exam-incident-authority.md) (ACCEPTED)
 - [`incident-authority.md`](../architecture/exam-system/incident-authority.md) (Admin runtime IMPLEMENTED — J3 CLOSED, PR #242)
 - [`REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) (baseline)
@@ -488,6 +492,15 @@ Every command records:
 ---
 
 ## 6. J4 — M11 Proctor-to-Exam Scope Minimum
+
+> **J4-R0 (design contract) is CLOSED.** ADR-015
+> ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
+> is **Accepted** (2026-08-02, PR #245) and is the binding authority
+> contract. Reality audit:
+> [`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md).
+> **J4-I1 (runtime) is NEXT** — unblocked by acceptance; implement per the
+> ADR-015 §23 decomposition (A → B → C → D). Where the planning sketch
+> below differs from ADR-015, the ADR wins.
 
 ## Purpose
 
@@ -1093,8 +1106,11 @@ Do not use Redis adoption as a prerequisite for completing J1–J7.
 PR-1  J1 — CLOSED
 PR-2  J2 — CLOSED — ADR-014 ACCEPTED
 PR-3  J3 — CLOSED — PR #242 merged
-PR-4  J4-R0 — M11-PROCTOR-EXAM-SCOPE-CONTRACT — NEXT (design contract only)
-       ↳ after R0 acceptance: J4-I1 — M11-PROCTOR-EXAM-ASSIGNMENTS (runtime)
+PR-4  J4-R0 — M11-PROCTOR-EXAM-SCOPE-CONTRACT — CLOSED (design contract;
+       ADR-015 Accepted 2026-08-02, PR #245; reality audit landed; no runtime code)
+       ↳ J4-I1 — M11-PROCTOR-EXAM-ASSIGNMENTS (runtime) — NEXT, unblocked
+         J4-I1 is sliced A→B→C→D per ADR-015 §23; the hard ordering rule is
+         "do not activate Proctor permissions before resolver enforcement exists"
 PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — PLANNED
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED
@@ -1104,15 +1120,15 @@ PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 ## Parallelism
 
 J1 is closed. J2 (REC-I6-R0) is CLOSED — ADR-014 is ACCEPTED.
-J3 (REC-I6-I1) is CLOSED on master via PR #242. J4 (M11) is not started.
-
-J4 begins with the mandatory R0 design contract; J4 runtime implementation
-follows only after R0 acceptance.
+J3 (REC-I6-I1) is CLOSED on master via PR #242. J4-R0 (design contract) is
+CLOSED — ADR-015 is ACCEPTED (2026-08-02, PR #245); J4-I1 (runtime) is
+NEXT, unblocked by acceptance.
 
 ## Next Job
 
-`M11-PROCTOR-EXAM-SCOPE-CONTRACT` (J4-R0) — Proctor-to-Exam scope authority
-design contract. No runtime implementation is authorized before R0 acceptance.
+J4-I1 (`M11-PROCTOR-EXAM-ASSIGNMENTS`) runtime implementation per the
+ADR-015 §23 decomposition (A → B → C → D). ADR-015 acceptance authorizes
+the runtime; no further design review is required.
 
 ---
 

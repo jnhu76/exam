@@ -60,13 +60,27 @@ The archived job plans under `docs/archive/roadmap/` are reference-only.
 - **NOT AUTHORIZED ASSUMPTIONS**: bulk organization announcements; generic fan-out; notification preferences; identity lifecycle migration.
 - **ACCEPTANCE BOUNDARY**: Each migrated event has one authoritative old/new path, explicit NotificationType→EmailType mapping, recipient-scoped dedupe, transaction tests, and no double-send.
 
-## M11: Resource-relationship authorization (DEFERRED — NOT STARTED)
+## M11: Resource-relationship authorization (Proctor→Exam slice CONTRACT ACCEPTED; rest NOT STARTED)
 
 - **CAPABILITY**: Scoped resource assignment — Teacher→course, Proctor→exam, Grader→work.
-- **CURRENT STATE**: DEFERRED. Design backlog only. **Verified unimplemented**: no junction tables (`teacher_course`, `exam_proctor`, `grading_assignment`, `course_staff`), no `scope_type`/`scope_resource_id` columns on `user_role_assignments`, no resource-scope resolver code.
-- **WHAT EXISTS**: Design note (`docs/archive/phase3/RBAC-M11-RESOURCE-RELATIONSHIP-AUTHORIZATION-DESIGN-1.md`).
-- **WHAT IS MISSING**: Everything (schema, resolvers, assignment UI, scope enforcement).
-- **DEPENDENCIES**: P4 closed.
+- **CURRENT STATE**: The **Proctor→Exam slice** design contract (J4-R0) is
+  **CLOSED** — ADR-015 is **Accepted** (2026-08-02, PR #245)
+  ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
+  with reality audit
+  ([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
+  it is documentation-only and changes no runtime code. J4-I1 (runtime) is
+  **NEXT**, unblocked by acceptance, to implement per ADR-015 §23 (A → B → C
+  → D). The Teacher→Course, Teacher→Exam, and Grader→Work slices remain
+  DEFERRED — explicitly out of J4 scope. **Verified unimplemented**: no
+  junction tables (`teacher_course`, `exam_proctor`,
+  `grading_assignment`, `course_staff`), no `scope_type`/
+  `scope_resource_id` columns on `user_role_assignments`, no
+  Incident→Exam resolver, no Proctor-assignment resolver.
+- **WHAT EXISTS**: ADR-015 (Accepted, Proctor→Exam slice); design note
+  (`docs/archive/phase3/RBAC-M11-RESOURCE-RELATIONSHIP-AUTHORIZATION-DESIGN-1.md`).
+- **WHAT IS MISSING**: Everything runtime (schema, resolvers, assignment UI,
+  scope enforcement) — owned by J4-I1 after ADR-015 acceptance.
+- **DEPENDENCIES**: P4 closed; ADR-015 acceptance for the Proctor→Exam slice.
 - **ACCEPTANCE BOUNDARY**: Scoped staff can be assigned to resources and see only their assigned scope.
 
 ## Staff invitation + SMTP password reset + account lifecycle (NOT STARTED)
