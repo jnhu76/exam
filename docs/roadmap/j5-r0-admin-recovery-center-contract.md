@@ -72,8 +72,8 @@ sketch in `recovery-operations-jobs.md` §7 wished for.
 | Incident resolve / dismiss | `POST /admin/incidents/:incidentId/{resolve,dismiss}` (`incident.resolve`, Admin-only terminal judgment) | none | yes, unchanged | UI |
 | Link Incident action / attempt / interruption | `POST /admin/incidents/:incidentId/{actions,attempts,interruptions}` (`incident.investigate` + Incident resolver + `proctorAccess: assignment_scoped`, scope-quadruple-validated) | none | yes, unchanged | UI |
 | Attempt timeline | `GET /admin/attempts/:attemptId/timeline` (scoped+enforced) | none (no Recovery Center) | yes, unchanged | UI |
-| Attempt force submit | `POST /admin/attempts/:attemptId/force-submit` (`attempt.force_submit`, Admin-only; no `operationId` — state-idempotent for `submitted`/`grading`/`graded`, audit written only on a real transition, no operation receipt) | none | yes, unchanged | UI; reason optionality — see §8.1; operation identity — see §8.2 (J5-I1C pre-gate) |
-| Attempt misconduct mark | `POST /admin/attempts/:attemptId/misconduct` (`attempt.misconduct.mark`, Admin-only; no `operationId` — re-flag overwrites the misconduct fact, every call writes a new audit, the server cannot distinguish a retry from an intentional re-mark) | none | yes, unchanged | UI; confirmation; operation identity — see §8.2 (J5-I1C pre-gate) |
+| Attempt force submit | `POST /admin/attempts/:attemptId/force-submit` (`attempt.force_submit`, Admin-only; no `operationId` — state-idempotent for `submitted`/`grading`/`graded`, audit written only on a real transition, no operation receipt) | none | yes, unchanged | UI; reason optionality — see §8.1; operation identity — see §8.2 (J5-I1C0) |
+| Attempt misconduct mark | `POST /admin/attempts/:attemptId/misconduct` (`attempt.misconduct.mark`, Admin-only; no `operationId` — re-flag overwrites the misconduct fact, every call writes a new audit, the server cannot distinguish a retry from an intentional re-mark) | none | yes, unchanged | UI; confirmation; operation identity — see §8.2 (J5-I1C0) |
 | Admin operator time grant (+ optional `incidentId` link) | `POST /admin/attempts/:attemptId/time-grants` (`requireScopedCapability(AttemptTimeGrant)`); atomic audit + action link | none in Recovery Center | yes, unchanged | UI; reload target |
 | Proctor→Exam assignment management | `POST /admin/exams/:examId/proctors`, `GET /admin/exams/:examId/proctors` (keyset), `POST /admin/exams/:examId/proctors/:proctorUserId/revoke` (Admin-only) | none | yes, unchanged | UI (Admin assignment surface) |
 | Assigned-Proctor filter (queue) | `proctorAssignmentRepo.hasActiveAssignment` / `getProctorExamAssignment` exist; no Incident-list filter joins them | n/a | partially — filter requires an additive read query | additive read API |
@@ -291,12 +291,18 @@ and follows the existing product-query route style (`/admin/proctor/exams`):
 
 ```text
 GET /admin/recovery/incidents
-permission:      incident.view
+permission:      incident.recovery.view
 scope:           Organization
+resolver:        organization
 proctorAccess:   admin_only
 default order:   createdAt DESC, id DESC
 cursor:          opaque keyset cursor encoding (createdAt, id)
 ```
+
+`incident.recovery.view` is a dedicated Admin-only capability (J5-R0
+adjudication). It is NOT `incident.view` — that permission is shared with
+the Proctor preset (assignment-scoped), and the conformance test forbids an
+`admin_only` route whose permission leaks into the Proctor preset.
 
 The queue endpoint is Recovery-Center-specific enriched read model, NOT a
 plain Incident CRUD collection — it must NOT be confused with the
@@ -309,10 +315,18 @@ fetching names/status per row:
 ```text
 - incident (core row)
 - exam summary (title, status)
-- candidate summary (identity fields)
-- attempt summary (current status, effective deadline)
-- active assigned Proctors summary
+- primaryAttempt: AttemptSummary | null
+- primaryCandidate: CandidateSummary | null
+- linkedAttemptCount: number
+- linkedCandidateCount: number
+- activeProctors: ProctorSummary[]
 ```
+
+Incident's `attemptId` / `candidateId` may be null; the queue row projects
+the primary (anchor) attempt/candidate when present, plus counts for the
+full membership. Complete linked-attempt/candidate detail is reserved for
+the aggregate detail projection (§6.3) — do NOT embed all linked Attempts
+in every queue row.
 
 **`assignedProctorUserId` semantics (frozen).** The first version defines the
 filter as **the current active assignment** — NOT the historical Proctor at
@@ -388,8 +402,11 @@ decision is **frozen to A**:
 ```text
 GET /admin/recovery/incidents/:incidentId
 
-- Admin-only (permission incident.view, scope Organization,
-  proctorAccess admin_only)
+- Admin-only (permission incident.recovery.view, scope Exam,
+  resolver incident, resourceIdKey incidentId,
+  proctorAccess admin_only, sensitive true)
+- resolves Incident → Exam → Course → Organization (same parent-chain
+  validation as every other Incident resource route)
 - reads Incident + events + notes + actions + Attempt memberships +
   interruptions + Exam/Attempt/Candidate summaries + audit references +
   allowed actions in ONE consistent snapshot (single aggregate SQL, or a
@@ -421,8 +438,8 @@ that is explicitly mapped to one). Route-local mutation is forbidden.
 | Resolve incident | `POST /admin/incidents/:incidentId/resolve` → `resolveExamIncident()` | `incident.resolve` (Admin sensitive) | `incident` | `open` \| `investigating` | required (`resolutionSummary`) — see §8.1 | **yes** (terminal judgment) | yes + `expectedVersion` | replay / version / invalid-transition | Incident Detail |
 | Dismiss incident | `POST /admin/incidents/:incidentId/dismiss` → `dismissExamIncident()` | `incident.resolve` (Admin sensitive) | `incident` | `open` \| `investigating` | required (`reasonText`) — see §8.1 | **yes** (terminal judgment) | yes + `expectedVersion` | replay / version / invalid-transition | Incident Detail |
 | Grant Attempt time | `POST /admin/attempts/:attemptId/time-grants` → `grantAttemptTime()` | `attempt.time.grant` (Admin) | `attempt` (attemptId) | non-terminal Attempt | per ADR-013 | no | yes | replay / `terminal` | Attempt Operations Context + Incident Detail |
-| Force submit Attempt | `POST /admin/attempts/:attemptId/force-submit` → canonical force-submit | `attempt.force_submit` (Admin) | `attempt` | non-terminal Attempt | optional today — see §8.1 | **yes** | **No** | state-idempotent for `submitted`/`grading`/`graded`; audit written only on a real transition; **no operation receipt** (J5-I1C pre-gate) | Attempt Operations Context |
-| Mark Attempt misconduct | `POST /admin/attempts/:attemptId/misconduct` → canonical misconduct mark | `attempt.misconduct.mark` (Admin) | `attempt` | per existing contract | required (`notes`, min 1) | **yes** | **No** | re-flag overwrites the misconduct fact; every call writes a new audit; server cannot distinguish retry from intentional re-mark (J5-I1C pre-gate) | Attempt Operations Context |
+| Force submit Attempt | `POST /admin/attempts/:attemptId/force-submit` → canonical force-submit | `attempt.force_submit` (Admin) | `attempt` | non-terminal Attempt | optional today — see §8.1 | **yes** | **No** | state-idempotent for `submitted`/`grading`/`graded`; audit written only on a real transition; **no operation receipt** (J5-I1C0) | Attempt Operations Context |
+| Mark Attempt misconduct | `POST /admin/attempts/:attemptId/misconduct` → canonical misconduct mark | `attempt.misconduct.mark` (Admin) | `attempt` | per existing contract | required (`notes`, min 1) | **yes** | **No** | re-flag overwrites the misconduct fact; every call writes a new audit; server cannot distinguish retry from intentional re-mark (J5-I1C0) | Attempt Operations Context |
 | Assign Proctor | `POST /admin/exams/:examId/proctors` → `assignProctorToExam()` | `exam.proctor_assignment.manage` (Admin) | `exam` | n/a | per ADR-015 (`reasonCode` in payload only) | no | yes | replay / `no_change` | Exam Recovery Detail |
 | Revoke Proctor | `POST /admin/exams/:examId/proctors/:proctorUserId/revoke` → `revokeProctorFromExam()` | `exam.proctor_assignment.manage` (Admin) | `exam` | n/a | per ADR-015 (`reasonCode` in payload only) | no | yes | replay / `no_change` / 404 | Exam Recovery Detail |
 
@@ -430,13 +447,14 @@ Notes:
 
 - "Allowed states" for Attempt actions is bounded by the canonical command's
   own contract; the UI never widens it.
-- **J5-I1C pre-gate (frozen):** force submit and misconduct mark must complete
+- **J5-I1C0 (frozen):** force submit and misconduct mark must complete
   the operation identity / retry-contract adjudication before they may enter
-  the Recovery Center operations UI. Today both are **state-idempotent only**
-  (no `operationId`, no operation receipt); the recommendation for J5-I1C is
-  to add `operationId` to both — especially misconduct mark, which without
+  the Recovery Center operations UI (J5-I1C1). Today both are
+  **state-idempotent only**
+  (no `operationId`, no operation receipt); J5-I1C0 adds `operationId`
+  to both — especially misconduct mark, which without
   server-side operation identity cannot satisfy the "safe retry after network
-  failure" requirement (§8.2). Until the adjudication lands, the UI MUST NOT
+  failure" requirement (§8.2). Until J5-I1C0 lands, the UI MUST NOT
   present them as operationId-replayable.
 
 ---
@@ -487,7 +505,7 @@ These rules apply to every command that carries operation identity today (all
 Incident commands, time grant, Proctor assignment commands). **Force submit and
 misconduct mark are the two exceptions** — they have no `operationId` and are
 state-idempotent only; they are NOT covered by the replay rules below until the
-J5-I1C pre-gate adjudication (see §7 notes) lands.
+J5-I1C0 adjudication (see §7 notes) lands.
 
 ```text
 - operationId is generated client-side
@@ -609,7 +627,8 @@ J5-R0   Admin Recovery Center reality audit + product/API/read-model contract
 
 J5-I1A  Recovery queue + required authoritative read APIs / projections
         (the additive organization-wide Incident queue endpoint from §5.4,
-         plus the §6.3 aggregate-vs-multifetch decision for Incident Detail)
+         plus implement the frozen aggregate endpoint for Incident Detail
+         per §6.3)
 
 J5-I1B  Read-only Admin Recovery Center UI
         - queue (with filters)
@@ -618,7 +637,15 @@ J5-I1B  Read-only Admin Recovery Center UI
         - attempt operations context (read-only)
         - loading / empty / error / permission-denied states
 
-J5-I1C  Admin operations UI
+J5-I1C0 Dangerous command identity contract
+        - force-submit operationId
+        - misconduct-mark operationId
+        - durable receipts
+        - retry/race tests
+        - no UI
+
+J5-I1C1 Admin operations UI
+        - consumes the already-closed I1C0 contracts
         - incident commands (investigate / note / severity / resolve / dismiss)
         - time grant
         - force submit
@@ -626,9 +653,6 @@ J5-I1C  Admin operations UI
         - Proctor assignment management
         - operationId / retry safety per §8.2
         - dangerous-action confirmation per §8
-        - PRE-GATE: force-submit / misconduct-mark operation identity +
-          retry-contract adjudication (§7 notes, §8.2) must complete before
-          these two actions may ship in the UI
 
 J5-I1D  Browser E2E + accessibility/responsive closeout
         + status documentation
@@ -641,7 +665,8 @@ Dependencies:
 J5-R0 accepted
   → J5-I1A
   → J5-I1B
-  → J5-I1C
+  → J5-I1C0
+  → J5-I1C1
   → J5-I1D
 ```
 
@@ -733,16 +758,20 @@ reviewer's call.
 
 ## 15. Adjudications recorded (PR #251 review, 2026-08-02)
 
-The four previously-open decisions are now frozen in this contract:
+All previously-open decisions are now frozen in this contract:
 
 | # | Open question | Adjudication | Frozen in |
 | --- | --- | --- | --- |
-| 1 | Organization-wide Incident queue route | Keep `GET /admin/recovery/incidents` (NOT `/admin/incidents`); `incident.view`, Organization scope, `admin_only`, `createdAt DESC, id DESC`, opaque keyset cursor | §5.4 |
-| 2 | Incident Detail: aggregate vs multi-fetch | Single aggregate endpoint `GET /admin/recovery/incidents/:incidentId` (Admin-only, one consistent snapshot); existing `GET /admin/incidents/:incidentId` stays the assignment-scoped core read | §6.3 |
+| 1 | Organization-wide Incident queue route | Keep `GET /admin/recovery/incidents` (NOT `/admin/incidents`); `incident.recovery.view` (Admin-only capability), Organization scope, resolver `organization`, `admin_only`, `createdAt DESC, id DESC`, opaque keyset cursor | §5.4 |
+| 2 | Incident Detail: aggregate vs multi-fetch | Single aggregate endpoint `GET /admin/recovery/incidents/:incidentId` (Admin-only, `incident.recovery.view`, scope Exam, resolver `incident`, one consistent snapshot); existing `GET /admin/incidents/:incidentId` stays the assignment-scoped core read | §6.3 |
 | 3 | Dangerous-operation reason | No blanket upgrade; only force-submit `reason` becomes server-required (`trim` + min 1 + max 500) | §8.1 |
 | 4 | Bounded polling interval | Concrete values deferred to J5-I1B; R0 freezes the behavioral constraints only | §9 |
+| 5 | Recovery API permission model | New `incident.recovery.view` capability (Admin preset only, NOT Proctor); resolves the conformance-test conflict where `admin_only` + `incident.view` would leak into the Proctor preset | §5.4, §6.3 |
+| 6 | Queue item Attempt/Candidate semantics | `primaryAttempt` / `primaryCandidate` (nullable) + `linkedAttemptCount` / `linkedCandidateCount` + `activeProctors[]`; full membership reserved for detail projection | §5.4 |
+| 7 | J5-I1C slice split | Split into J5-I1C0 (dangerous command identity: operationId + receipts + retry/race tests, no UI) and J5-I1C1 (Admin operations UI consuming closed I1C0 contracts) | §12 |
 
 Queue contract completeness (frozen): `sort = createdAt DESC, id DESC`;
 `cursor = opaque encoding of (createdAt, id)`; queue items must embed
-Exam/Candidate/Attempt/active-assigned-Proctor summaries to prevent a
+Exam summary + primaryAttempt/primaryCandidate (nullable) +
+linkedAttemptCount/linkedCandidateCount + activeProctors to prevent a
 front-end N+1 (see §5.4).

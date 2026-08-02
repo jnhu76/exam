@@ -133,6 +133,10 @@ export const Permission = {
   IncidentCreate: "incident.create",
   IncidentInvestigate: "incident.investigate",
   IncidentResolve: "incident.resolve",
+  // Admin-only Recovery Center read (J5-R0): organization-wide recovery queue
+  // and aggregate incident detail. NOT granted to Proctor (Proctor uses
+  // IncidentView via assignment_scoped on the core incident routes).
+  IncidentRecoveryView: "incident.recovery.view",
 
   // §4.11 Proctor-to-Exam assignments (ADR-015)
   ExamProctorAssignmentView: "exam.proctor_assignment.view",

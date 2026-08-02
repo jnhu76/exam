@@ -630,7 +630,7 @@ investigate an incident.
 > model, Incident Detail projection, Admin action matrix, dangerous-action UX,
 > and refresh model; classifies every queue filter into
 > already-implemented / reusable / requires-additive-read-API / deferred; and
-> decomposes J5 into `J5-R0 → J5-I1A → J5-I1B → J5-I1C → J5-I1D`. The sketch
+> decomposes J5 into `J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D`. The sketch
 > below is retained as the original planning narrative.
 
 ## Purpose
@@ -1154,7 +1154,7 @@ PR-4  J4-R0 — M11-PROCTOR-EXAM-SCOPE-CONTRACT — CLOSED (design contract;
          PR #250, merge commit 62f84407); sliced A→B→C→D per ADR-015 §23.
 PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — IN REVIEW (R0 contract);
          authoritative contract: j5-r0-admin-recovery-center-contract.md
-         implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C → J5-I1D
+         implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
          (J5-I1A–I1D: NOT STARTED, BLOCKED pending J5-R0 acceptance)
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)

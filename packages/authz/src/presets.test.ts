@@ -51,12 +51,13 @@ describe("RBAC-M2 boundary #7 — Candidate is always own-scope only", () => {
 });
 
 describe("ADR-014 — Incident permission matrix", () => {
-  it("Admin holds all four incident permissions", () => {
+  it("Admin holds all four incident permissions + recovery view", () => {
     const adminPerms = asSet(permissionsForRole(Role.Admin));
     expect(adminPerms.has(Permission.IncidentView)).toBe(true);
     expect(adminPerms.has(Permission.IncidentCreate)).toBe(true);
     expect(adminPerms.has(Permission.IncidentInvestigate)).toBe(true);
     expect(adminPerms.has(Permission.IncidentResolve)).toBe(true);
+    expect(adminPerms.has(Permission.IncidentRecoveryView)).toBe(true);
   });
 
   it("incident.resolve is flagged sensitive for Admin", () => {
@@ -64,13 +65,15 @@ describe("ADR-014 — Incident permission matrix", () => {
     expect(sensitive.has(Permission.IncidentResolve)).toBe(true);
   });
 
-  it("Proctor holds the J4-I1D low-risk incident set but NOT resolve (ADR-015 §13)", () => {
+  it("Proctor holds the J4-I1D low-risk incident set but NOT resolve/recovery (ADR-015 §13)", () => {
     const proctorPerms = asSet(permissionsForRole(Role.Proctor));
     expect(proctorPerms.has(Permission.IncidentView)).toBe(true);
     expect(proctorPerms.has(Permission.IncidentCreate)).toBe(true);
     expect(proctorPerms.has(Permission.IncidentInvestigate)).toBe(true);
     // Terminal judgment stays Admin-only.
     expect(proctorPerms.has(Permission.IncidentResolve)).toBe(false);
+    // Recovery Center read is Admin-only (J5-R0).
+    expect(proctorPerms.has(Permission.IncidentRecoveryView)).toBe(false);
   });
 
   it("Teacher holds ZERO incident permissions", () => {

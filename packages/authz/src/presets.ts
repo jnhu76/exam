@@ -120,6 +120,8 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   Permission.IncidentCreate,
   Permission.IncidentInvestigate,
   Permission.IncidentResolve,
+  // Admin-only Recovery Center read (J5-R0): NOT granted to Proctor.
+  Permission.IncidentRecoveryView,
   // Proctor-to-Exam assignment management (ADR-015 §16) — Admin only; never
   // granted to Proctor/Teacher/Grader/Candidate.
   Permission.ExamProctorAssignmentView,
