@@ -46,6 +46,7 @@ import {
 import { collectConnectionEvidence } from "../testing/operatorGrantConcurrencyHarness.js";
 import {
   createProctorRaceBarrier,
+  extractSqlState,
   onceAsync,
   wrapRepoForRace,
   type ProctorRaceHooks,
@@ -240,10 +241,12 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
    * Builds a runner whose inner repo is decorated with race hooks. The one-shot
    * gate wrappers are frozen once per racer (outside the transaction callback),
    * so they survive `executeInTransaction`'s 40001/40P01 auto-retry. Pass
-   * `hooks = undefined` to run on the un-decorated production path.
+   * `hooks = undefined` to run on the un-decorated production path. The
+   * connection the racer runs on is chosen by the caller when it passes the
+   * runner to `withProctorAssignmentOperationRecovery(db, ...)` — the runner
+   * itself is connection-agnostic.
    */
   function raceRunner(
-    racerDb: Database,
     examId: string,
     proctorId: string,
     operationId: string,
@@ -271,6 +274,12 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
               : {}),
             ...(hooks.onAppendEventError
               ? { onAppendEventError: hooks.onAppendEventError }
+              : {}),
+            ...(hooks.onResolveRevokeTargetError
+              ? { onResolveRevokeTargetError: hooks.onResolveRevokeTargetError }
+              : {}),
+            ...(hooks.onResolveRevokeTargetEntry
+              ? { onResolveRevokeTargetEntry: hooks.onResolveRevokeTargetEntry }
               : {}),
           })
         : rawRepo;
@@ -392,7 +401,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db1, examId, proctorId, op1, hooks1, "assign"),
+      raceRunner(examId, proctorId, op1, hooks1, "assign"),
     );
     const t2Promise = withProctorAssignmentOperationRecovery(
       db2,
@@ -401,7 +410,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db2, examId, proctorId, op2, hooks2, "assign"),
+      raceRunner(examId, proctorId, op2, hooks2, "assign"),
     );
 
     try {
@@ -455,11 +464,12 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
 
   // ── Case 2a: same-opId concurrent assign → real events operation-unique 23505 ──
 
-  it("concurrent assign with the SAME operationId (replay) → one applied + one idempotent_replayed, ONE receipt, ONE audit", async () => {
+  it("concurrent duplicate assign with the SAME operationId → one no_change + one idempotent_replayed, ONE racing receipt, NO additional audit", async () => {
     const { examId, proctorId, payload } = await newExamProctor("same-op");
-    // Pre-build an active E1 so neither racer creates an assignment (the
-    // active-unique is never involved). Both append no_change events for the
-    // same operationId; the second appends → events operation-unique 23505.
+    // Pre-build an active E1 via a SEED operation (the `applied` belongs to
+    // the seed, not to the two racing commands below). Both racers are
+    // duplicate assigns that see E1 and append a no_change event for the same
+    // operationId; the second append → events operation-unique 23505.
     const seedOp = randomUUID();
     await withProctorAssignmentOperationRecovery(
       db,
@@ -468,7 +478,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, seedOp, undefined, "assign"),
+      raceRunner(examId, proctorId, seedOp, undefined, "assign"),
     );
 
     const op = randomUUID();
@@ -497,7 +507,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db1, examId, proctorId, op, hooks1, "assign"),
+      raceRunner(examId, proctorId, op, hooks1, "assign"),
     );
     const t2Promise = withProctorAssignmentOperationRecovery(
       db2,
@@ -506,7 +516,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db2, examId, proctorId, op, hooks2, "assign"),
+      raceRunner(examId, proctorId, op, hooks2, "assign"),
     );
 
     try {
@@ -531,19 +541,20 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
         ),
       ).toBe(true);
 
-      // Final outcome: both replay the seed E1 (both no_change for the same op).
+      // Final outcome: T1 writes the no_change receipt; T2 replays it. The
+      // `applied` belongs to the seed operation, not to the racers.
       expect([r1.outcome, r2.outcome].sort()).toEqual([
         "idempotent_replayed",
         "no_change",
       ]);
       expect(r1.assignment.id).toBe(r2.assignment.id);
 
-      // Exactly ONE receipt for the racing operationId.
+      // Exactly ONE receipt for the racing operationId, and it is a no_change
+      // (replay writes no event — it returns the original receipt).
       const events = await eventsByOpIds([op]);
       expect(events).toHaveLength(1);
-      expect(
-        ["no_change", "idempotent_replayed"].includes(events[0]!.outcome),
-      ).toBe(true);
+      expect(events[0]!.outcome).toBe("no_change");
+      // Only the seed's applied audit; neither racer wrote an audit.
       expect(await countAuditRows("exam.proctor_assigned", examId)).toBe(1);
     } finally {
       barrier.dispose();
@@ -569,7 +580,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       seedPayload,
       NOW,
-      raceRunner(db, examId, proctorId, seedOp, undefined, "assign"),
+      raceRunner(examId, proctorId, seedOp, undefined, "assign"),
     );
 
     // Same operationId, but two different reasonCodes → two different canonical
@@ -602,7 +613,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payloadA,
       NOW,
-      raceRunner(db1, examId, proctorId, op, hooks1, "assign", NOW, "a"),
+      raceRunner(examId, proctorId, op, hooks1, "assign", NOW, "a"),
     );
     const t2Promise = withProctorAssignmentOperationRecovery(
       db2,
@@ -611,7 +622,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payloadB,
       NOW,
-      raceRunner(db2, examId, proctorId, op, hooks2, "assign", NOW, "b"),
+      raceRunner(examId, proctorId, op, hooks2, "assign", NOW, "b"),
     );
 
     try {
@@ -654,12 +665,14 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, seedOp, undefined, "assign"),
+      raceRunner(examId, proctorId, seedOp, undefined, "assign"),
     );
 
     const op1 = randomUUID();
     const op2 = randomUUID();
     const barrier = createProctorRaceBarrier();
+    // Non-one-shot retry counter for T2's resolveRevokeTarget entries.
+    let t2ResolveAttempts = 0;
 
     const hooks1: ProctorRaceHooks = {
       afterOperationLookupAbsent: async () => {
@@ -677,8 +690,18 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
         barrier.t2OpAbsent.resolve({ label: "T2", operationId: op2 });
         await barrier.releaseT2.promise;
       },
+      // Pure gate: signal that the first attempt has entered the lock acquire.
+      // Stays one-shot via the runner's onceAsync so retries do not re-gate.
       beforeResolveRevokeTarget: async () => {
         barrier.t2LockStarted.resolve();
+      },
+      // Non-one-shot entry counter: proves the command re-ran after the 40001
+      // (fires on EVERY attempt, including the retry; not wrapped in onceAsync).
+      onResolveRevokeTargetEntry: () => {
+        t2ResolveAttempts++;
+      },
+      onResolveRevokeTargetError: (error) => {
+        barrier.revokeSerializationFailure.resolve({ label: "T2", error });
       },
     };
 
@@ -689,7 +712,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "revoke",
       payload,
       NOW,
-      raceRunner(db1, examId, proctorId, op1, hooks1, "revoke"),
+      raceRunner(examId, proctorId, op1, hooks1, "revoke"),
     );
     const t2Promise = withProctorAssignmentOperationRecovery(
       db2,
@@ -698,7 +721,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "revoke",
       payload,
       NOW,
-      raceRunner(db2, examId, proctorId, op2, hooks2, "revoke"),
+      raceRunner(examId, proctorId, op2, hooks2, "revoke"),
     );
 
     try {
@@ -713,10 +736,22 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       barrier.releaseT2.resolve();
       await barrier.t2LockStarted.promise;
 
-      // Let T1 commit its revoke. T2's old RR snapshot hits the revoked row →
-      // 40001 → auto-retry → new snapshot sees revoked E1 → no_change.
+      // Let T1 commit its revoke. T2's first attempt holds an RR snapshot
+      // taken before T1's commit; when its SELECT FOR UPDATE unblocks it sees
+      // the concurrently-updated row → 40001 serialization_failure. The
+      // production wrapper's executeInTransaction auto-retries; the retry uses
+      // a fresh snapshot that sees revoked E1 → no_change.
       barrier.releaseT1Lock.resolve();
       const [r1, r2] = await Promise.all([t1Promise, t2Promise]);
+
+      // T2's first attempt really hit 40001 (observed on the caught error;
+      // Drizzle wraps it so the SQLSTATE is on `cause.code`).
+      const serialization = await barrier.revokeSerializationFailure.promise;
+      expect(extractSqlState(serialization.error)).toBe("40001");
+
+      // executeInTransaction really re-ran T2's command (≥2 resolveRevokeTarget
+      // entries), and the one-shot op-absent gate did not re-gate on retry.
+      expect(t2ResolveAttempts).toBeGreaterThanOrEqual(2);
 
       expect([r1.outcome, r2.outcome].sort()).toEqual(["applied", "no_change"]);
       expect(r1.assignment.id).toBe(r2.assignment.id);
@@ -756,7 +791,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, e1Op, undefined, "assign"),
+      raceRunner(examId, proctorId, e1Op, undefined, "assign"),
     );
     expect(e1.outcome).toBe("applied");
 
@@ -768,7 +803,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "revoke",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, revokeOp, undefined, "revoke"),
+      raceRunner(examId, proctorId, revokeOp, undefined, "revoke"),
     );
     const e2 = await withProctorAssignmentOperationRecovery(
       db,
@@ -777,7 +812,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, e2Op, undefined, "assign"),
+      raceRunner(examId, proctorId, e2Op, undefined, "assign"),
     );
     expect(e2.outcome).toBe("applied");
     expect(e2.assignment.id).not.toBe(e1.assignment.id);
@@ -816,7 +851,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "assign",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, e1Op, undefined, "assign"),
+      raceRunner(examId, proctorId, e1Op, undefined, "assign"),
     );
     await withProctorAssignmentOperationRecovery(
       db,
@@ -825,7 +860,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
       "revoke",
       payload,
       NOW,
-      raceRunner(db, examId, proctorId, revokeOp, undefined, "revoke"),
+      raceRunner(examId, proctorId, revokeOp, undefined, "revoke"),
     );
 
     // R starts recovery on db1. The SQL-free seam fires AFTER the event lookup
@@ -864,7 +899,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
         "assign",
         payload,
         NOW,
-        raceRunner(db2, examId, proctorId, e2Op, undefined, "assign"),
+        raceRunner(examId, proctorId, e2Op, undefined, "assign"),
       );
       expect(e2.outcome).toBe("applied");
       expect(e2.assignment.status).toBe("active");

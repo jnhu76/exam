@@ -44,6 +44,15 @@ export interface ProctorRaceHooks {
   onInsertAssignmentError?: (error: unknown) => void;
   /** Observes a real 23505 from `appendEvent` (events operation-unique loser). */
   onAppendEventError?: (error: unknown) => void;
+  /** Observes a real error from `resolveRevokeTarget` (a 40001 serialization_failure under RR). */
+  onResolveRevokeTargetError?: (error: unknown) => void;
+  /**
+   * Non-one-shot entry observer for `resolveRevokeTarget` — fires on EVERY
+   * attempt (including after `executeInTransaction`'s auto-retry). Unlike the
+   * gate hooks, this is NOT wrapped in `onceAsync` by the runner, so it can
+   * count attempts across retries. Pure observation; executes no SQL.
+   */
+  onResolveRevokeTargetEntry?: () => void;
 }
 
 /**
@@ -93,10 +102,16 @@ export function wrapRepoForRace(
       return result;
     },
     resolveRevokeTarget: async (...args) => {
+      hooks.onResolveRevokeTargetEntry?.();
       await hooks.beforeResolveRevokeTarget?.();
-      const result = await repo.resolveRevokeTarget(...args);
-      await hooks.afterResolveRevokeTarget?.();
-      return result;
+      try {
+        const result = await repo.resolveRevokeTarget(...args);
+        await hooks.afterResolveRevokeTarget?.();
+        return result;
+      } catch (error) {
+        hooks.onResolveRevokeTargetError?.(error);
+        throw error;
+      }
     },
     insertAssignment: async (...args) => {
       try {
@@ -117,6 +132,29 @@ export function wrapRepoForRace(
   };
 }
 
+/**
+ * Extracts a PostgreSQL SQLSTATE from an error, walking the `cause` chain.
+ * Drizzle wraps driver errors (e.g. the FOR-UPDATE serialization failure) so
+ * the `code` lives on `cause`, not the outer wrapper. Returns undefined when
+ * no SQLSTATE is found.
+ */
+export function extractSqlState(error: unknown): string | undefined {
+  let current: unknown = error;
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current === "object" && current !== null) {
+      const code = (current as { code?: unknown }).code;
+      if (typeof code === "string") return code;
+    }
+    current =
+      typeof current === "object" && current !== null && "cause" in current
+        ? (current as { cause: unknown }).cause
+        : null;
+  }
+  return undefined;
+}
+
 // ── Barrier ────────────────────────────────────────────────────────────────
 
 /** Observation recorded when a racer's operationId pre-read returns absent. */
@@ -133,6 +171,12 @@ export interface ActiveUniqueViolationObservation {
 
 /** Observation recorded when a racer hits a 23505 on the events operation-unique. */
 export interface EventUniqueViolationObservation {
+  label: "T1" | "T2";
+  error: unknown;
+}
+
+/** Observation recorded when a racer's `resolveRevokeTarget` throws (40001 under RR). */
+export interface RevokeSerializationFailureObservation {
   label: "T1" | "T2";
   error: unknown;
 }
@@ -167,6 +211,8 @@ export interface ProctorRaceBarrier {
   activeUniqueViolation: Deferred<ActiveUniqueViolationObservation>;
   /** Fired when a racer's `appendEvent` throws (the events operation-unique loser evidence). */
   eventUniqueViolation: Deferred<EventUniqueViolationObservation>;
+  /** Fired when a racer's `resolveRevokeTarget` throws (the 40001 serialization_failure evidence). */
+  revokeSerializationFailure: Deferred<RevokeSerializationFailureObservation>;
   /** Settle every outstanding deferred and clear every timer. */
   dispose(reason?: string): void;
 }
@@ -187,6 +233,10 @@ export function createProctorRaceBarrier(): ProctorRaceBarrier {
     eventUniqueViolation: createDeferred<EventUniqueViolationObservation>(
       "event-unique violation",
     ),
+    revokeSerializationFailure:
+      createDeferred<RevokeSerializationFailureObservation>(
+        "revoke serialization failure",
+      ),
   };
 
   return {

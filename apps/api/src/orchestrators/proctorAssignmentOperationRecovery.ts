@@ -148,7 +148,9 @@ async function resolveCommittedOperation(
  * after the event lookup returns absent (i.e. after the RR snapshot is
  * established) and before the episode lookup, letting a test pause recovery to
  * prove the snapshot-window boundary. It executes no SQL and does not change
- * the snapshot establishment point. Production callers omit it.
+ * the snapshot establishment point.
+ *
+ * @internal opts is a test-only seam; production callers omit it.
  */
 export async function formLoserReceipt(
   db: Database,
