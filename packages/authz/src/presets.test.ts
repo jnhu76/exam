@@ -64,11 +64,12 @@ describe("ADR-014 — Incident permission matrix", () => {
     expect(sensitive.has(Permission.IncidentResolve)).toBe(true);
   });
 
-  it("Proctor holds ZERO incident permissions (deferred to J4/M11)", () => {
+  it("Proctor holds the J4-I1D low-risk incident set but NOT resolve (ADR-015 §13)", () => {
     const proctorPerms = asSet(permissionsForRole(Role.Proctor));
-    expect(proctorPerms.has(Permission.IncidentView)).toBe(false);
-    expect(proctorPerms.has(Permission.IncidentCreate)).toBe(false);
-    expect(proctorPerms.has(Permission.IncidentInvestigate)).toBe(false);
+    expect(proctorPerms.has(Permission.IncidentView)).toBe(true);
+    expect(proctorPerms.has(Permission.IncidentCreate)).toBe(true);
+    expect(proctorPerms.has(Permission.IncidentInvestigate)).toBe(true);
+    // Terminal judgment stays Admin-only.
     expect(proctorPerms.has(Permission.IncidentResolve)).toBe(false);
   });
 

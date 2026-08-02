@@ -134,18 +134,22 @@ resource gates remain the security authority.
 
 The following are not implemented in the current MVP authorization model:
 
-- Resource-relationship authorization (M11), including Teacher→Course,
-  Teacher→Exam, Proctor→Exam, and Grader→Work assignment. The Proctor→Exam
-  slice **design contract is ACCEPTED** as ADR-015 (2026-08-02, PR #245)
-  ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
-  with reality audit
-  ([`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
-  the runtime (J4-I1) is NEXT but not yet implemented. The Teacher and
-  Grader slices remain deferred.
+- Resource-relationship authorization (M11) beyond the Proctor→Exam slice:
+  Teacher→Course, Teacher→Exam, and Grader→Work assignment remain deferred.
+  The Proctor→Exam slice **is implemented** per ADR-015 (Accepted 2026-08-02,
+  PR #245; reality audit
+  [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)):
+  `exam_proctor_assignments` + `exam_proctor_assignment_events` persistence,
+  the `assignProctorToExam` / `revokeProctorFromExam` commands, the Admin
+  assignment API, the Incident→Exam resolver, per-request Proctor-assignment
+  enforcement (Admin short-circuit; missing assignment → 404), the
+  `proctorAccess` route-registry policy, and the minimum Proctor incident
+  activation (view/create/investigate — resolve stays Admin-only). Closeout:
+  [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
 - Scoped role-assignment storage such as `scope_type`, `scope_resource_id`,
-  `course_staff`, `teacher_exam_assignments`, `exam_proctor`, and
-  `grading_assignment`.
-- Full scoped Proctor and Grader product workflows.
+  `course_staff`, `teacher_exam_assignments`, and `grading_assignment`.
+- Full scoped Proctor and Grader product workflows (Proctor Recovery Center
+  UI is J6; Grader scoping is a separate M11 slice).
 - Staff invitation, SMTP password reset, and account-lifecycle UI.
 - Custom roles, permission-management UI, multi-tenant switching,
   SuperAdmin, and cross-tenant authorization.
