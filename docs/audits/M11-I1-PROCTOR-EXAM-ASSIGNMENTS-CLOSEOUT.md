@@ -160,3 +160,55 @@ The concurrent-assign loser forms its own durable `no_change` receipt in a fresh
 | Proctor Recovery Center UI | Not implemented |
 | Redis authorization | Not used |
 | J5 / J6 | Not started |
+
+## 17. Post-closeout review finding — loser receipt when the winner is already revoked (M11-I1-R1)
+
+**Finding (PR #246 review):** the §7 loser-receipt recovery resolved the
+collision episode with a single read of the committed ACTIVE assignment. When
+the winning episode was revoked between the loser's rollback and its fresh
+transaction, the read came back empty and `formLoserReceipt` failed with
+`NotFoundError`. The losing `operationId` then left no permanent evidence — a
+later retry of the same operationId was treated as a fresh command, violating
+ADR-015's core invariant ("every racing operationId must form permanent
+evidence"). The shipped concurrency test only covered two concurrent assigns
+while the winner stays active.
+
+**Fix (PR #246, `94f683bf`):** `formLoserReceipt` no longer requires the
+episode to be active. It resolves the collision episode within the recovery's
+race window:
+
+1. own operation event (unchanged — replay/conflict);
+2. committed active assignment, bounded by the window;
+3. fallback: most-recent episode of ANY status by the frozen
+   `(created_at DESC, id DESC)` order, bounded by the same window;
+4. the loser's `no_change` receipt references that episode — active or
+   already revoked;
+5. no compliance audit (unchanged).
+
+The window bound is the fresh transaction's own snapshot time (`SELECT now()`
+as the first statement; under the house REPEATABLE READ isolation it equals
+the snapshot). The winning episode committed before the collision, hence
+strictly before the bound; a reassignment round created at/after the bound is
+never referenced. The bound can be pinned explicitly (`opts.createdBefore`) —
+tests pin the window semantics deterministically. ADR-015 §7 gained amendment
+A1 documenting the fallback.
+
+**New real-PostgreSQL tests (recovery suite + repo suite):**
+
+- loser collides (real 23505), winner's episode revoked before the loser's
+  fresh recovery → the loser still writes its `no_change` receipt, the
+  receipt's `assignment_id` points at the winning episode (now revoked), and
+  a later retry of the loser's operationId replays instead of creating a
+  fresh assignment; exactly one `exam.proctor_assigned` and one
+  `exam.proctor_revoked` audit.
+- race-window boundary: with the bound pinned between the original round and
+  a later reassignment, the receipt references the ORIGINAL episode; without
+  a pinned bound the default window is the recovery snapshot and the active
+  later round is referenced.
+- repo: `findMostRecentEpisodeByExamAndProctor` ordering
+  (`created_at DESC, id DESC`), bound filter, cross-org fail-closed, id
+  tie-break.
+
+**No other PR affected:** the fix is confined to PR #246's files
+(orchestrator, repo, engine contract, tests, ADR-015 §7); PRs #247–#249
+inherit it when #246 lands.
