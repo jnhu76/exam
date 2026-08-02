@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   Permission,
+  Role,
   Scope,
   type PermissionKey,
   type ResolvedScope,
@@ -267,5 +268,129 @@ describe("scoped capability preHandler — resolver selection + resource id", ()
     await ph(makeReq({ attemptId: "a1" }, "Admin"), reply);
     expect(reply.sentCode).toBe(503);
     expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+});
+
+describe("scoped capability preHandler — Proctor assignment gate (J4-I1B)", () => {
+  const allow = () => true;
+
+  /** A request whose ctx carries the authoritative runtime roles (RBAC-M10-E). */
+  function makeRuntimeReq(roles: readonly string[]): FastifyRequest {
+    return {
+      ctx: {
+        actorId: "actor-1",
+        organizationId: "org-1",
+        role: "Proctor",
+        permissions: [] as never,
+        sessionId: "s",
+        roles,
+        capabilities: [],
+      },
+      params: { attemptId: "a1" },
+      log: {
+        child: () => ({}),
+        error: () => {},
+        warn: () => {},
+        info: () => {},
+      },
+    } as unknown as FastifyRequest;
+  }
+
+  /** Resolves to Scope.Exam with an exam id — the gate's enforcement input. */
+  const examResolver: ScopeResolver = {
+    key: "attempt",
+    async resolve() {
+      return {
+        scope: Scope.Exam,
+        organizationId: "org-1",
+        resourceId: "exam-1",
+        chain: [
+          { type: "attempt", id: "a1" },
+          { type: "exam", id: "exam-1" },
+        ],
+      };
+    },
+  };
+
+  it("proctorAssignment.check throws -> 503 AUTHZ_UNAVAILABLE (operational failure never 403/404, handler does not run)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.ExamRoomView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: examResolver }),
+      presetAllows: allow,
+      proctorAccess: "assignment_scoped",
+      proctorAssignment: {
+        async check() {
+          throw new Error("db connection refused");
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Proctor"]), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+
+  it("an active assignment passes the gate (no reply sent; handler runs)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.ExamRoomView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: examResolver }),
+      presetAllows: allow,
+      proctorAccess: "assignment_scoped",
+      proctorAssignment: {
+        async check() {
+          return true;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Proctor"]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(reply.sentBody).toBeUndefined();
+  });
+
+  it("a missing assignment is folded into 404 RESOURCE_NOT_FOUND (anti-enumeration)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.ExamRoomView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: examResolver }),
+      presetAllows: allow,
+      proctorAccess: "assignment_scoped",
+      proctorAssignment: {
+        async check() {
+          return false;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Proctor"]), reply);
+    expect(reply.sentCode).toBe(404);
+    expect(JSON.stringify(reply.sentBody)).toContain("RESOURCE_NOT_FOUND");
+  });
+
+  it("Admin short-circuits the assignment requirement (resolver still ran)", async () => {
+    let checked = false;
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.ExamRoomView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: examResolver }),
+      presetAllows: allow,
+      proctorAccess: "assignment_scoped",
+      proctorAssignment: {
+        async check() {
+          checked = true;
+          return false;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq([Role.Admin]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(checked).toBe(false);
   });
 });
