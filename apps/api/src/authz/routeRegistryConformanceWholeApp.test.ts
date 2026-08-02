@@ -347,7 +347,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 106 primary routes (92 protected + 14 non-protected)", () => {
+  it("the full composition reconciles to 109 primary routes (95 protected + 14 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
