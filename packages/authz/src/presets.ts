@@ -156,6 +156,12 @@ const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
   Permission.ExamRoomView,
   Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
+  // J4-I1D (ADR-015 §13 / ADR-014 §8 target grant): the low-risk incident
+  // read/create/investigate set, activated ONLY behind the J4-I1B resolver
+  // enforcement. incident.resolve stays Admin-only (terminal judgment).
+  Permission.IncidentView,
+  Permission.IncidentCreate,
+  Permission.IncidentInvestigate,
   // AttemptMisconductMark + AttemptForceSubmit REMOVED in J4-I1B (ADR-015
   // §13): the pre-existing org-wide grants were a current, reachable risk
   // (M11-R0 reality audit G1/G2). The routes stay scoped

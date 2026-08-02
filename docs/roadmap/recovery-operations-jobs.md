@@ -7,7 +7,10 @@
 > **J4-R0 CLOSED** — Proctor-to-Exam Scope Authority Contract
 > (ADR-015 **Accepted** 2026-08-02, PR #245;
 > `M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`).
-> **J4-I1 NEXT** — runtime unblocked by ADR-015 acceptance.
+> **J4-I1 CLOSED** — runtime implemented per ADR-015 §23 (A→B→C→D,
+> 2026-08-02); closeout:
+> `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`.
+> **J5 NEXT** — `REC-OPS-ADMIN-RECOVERY-CENTER`.
 >
 > Updated: 2026-08-02
 >
@@ -65,7 +68,7 @@ REC-I6-R0 Incident Authority Contract
 | J2 | `REC-I6-R0-INCIDENT-AUTHORITY-CONTRACT` | **CLOSED** — incident lifecycle, authority, relationships, and action semantics accepted in ADR-014 (ACCEPTED) | J1 design knowledge; no implementation dependency |
 | J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **CLOSED — PR #242 merged** — Admin incident model, event history, commands, action links, and API are live on master | J2 |
 | J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **CLOSED** — Proctor-to-Exam scope authority design contract accepted in ADR-015 (ACCEPTED 2026-08-02, PR #245) | J2; existing RBAC baseline |
-| J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **NEXT** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Unblocked by ADR-015 acceptance. | J4-R0 accepted |
+| J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **CLOSED** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Closeout: `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`. | J4-R0 accepted |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
 | J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | Real incident scenarios, crash recovery, audit, and E2E are closed | J1–J6 |
@@ -498,8 +501,10 @@ Every command records:
 > is **Accepted** (2026-08-02, PR #245) and is the binding authority
 > contract. Reality audit:
 > [`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md).
-> **J4-I1 (runtime) is NEXT** — unblocked by acceptance; implement per the
-> ADR-015 §23 decomposition (A → B → C → D). Where the planning sketch
+> **J4-I1 (runtime) is CLOSED** — implemented per the
+> ADR-015 §23 decomposition (A → B → C → D, 2026-08-02); closeout:
+> [`M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+> **J5 (Admin Recovery Center) is NEXT.** Where the planning sketch
 > below differs from ADR-015, the ADR wins.
 
 ## Purpose
