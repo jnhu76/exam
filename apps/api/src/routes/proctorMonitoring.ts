@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Permission } from "@exam/authz";
+import { Permission, Role } from "@exam/authz";
 import { AuditAction } from "@exam/authz";
 import type { FastifyPluginAsync } from "fastify";
 import {
@@ -50,6 +50,12 @@ const attemptEventsQuerySchema = z.object({
 });
 
 const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /admin/proctor/exams — Admin sees all in-org Exams; a Proctor sees
+   * ONLY Exams with an active Proctor-to-Exam assignment (J4-I1B,
+   * proctorAccess = assignment_filtered_collection). The filter is enforced in
+   * the BACKEND query — never UI-only filtering (ADR-015 §4.5).
+   */
   fastify.get(
     "/admin/proctor/exams",
     {
@@ -69,8 +75,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
+      const runtimeCtx = getRequestContext(request);
+      const isAdmin = runtimeCtx.roles.includes(Role.Admin);
       const exams = await createExamRepo(fastify.db).listProctorDiscoverable(
         ctx,
+        isAdmin ? {} : { assignedProctorUserId: ctx.actorId },
       );
       const items = exams.map((exam) => ({
         ...exam,
@@ -94,10 +103,13 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
+        // J4-I1B (ADR-015 §8): Proctor actors additionally need an active
+        // assignment to this Exam (proctorAccess = assignment_scoped).
         fastify.requireScopedCapability(
           Permission.ExamRoomView,
           "exam",
           "examId",
+          { proctorAccess: "assignment_scoped" },
         ),
       ],
       schema: {
@@ -139,10 +151,13 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
+        // J4-I1B (ADR-015 §8): Proctor actors additionally need an active
+        // assignment to the attempt's Exam (proctorAccess = assignment_scoped).
         fastify.requireScopedCapability(
           Permission.AttemptTimelineView,
           "attempt",
           "attemptId",
+          { proctorAccess: "assignment_scoped" },
         ),
       ],
       schema: {
@@ -190,12 +205,13 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
-   * POST /admin/attempts/:attemptId/proctor-incident — Proctor/Admin records
-   * an incident observation on an attempt. Audit-event-only storage (no
-   * dedicated incident table). Payload must not contain candidate answers.
-   *
-   * M9 v0: lightweight incident recording only. Full proctor authority
-   * boundary (force-submit, time-grant, dashboard) is L7.
+   * POST /admin/attempts/:attemptId/proctor-incident — legacy audit-only
+   * incident marker (J4-I1B disposition, ADR-015 §16): `AttemptMisconductMark`
+   * is REMOVED from the Proctor preset, so the route is effectively Admin-only.
+   * It STAYS scoped (`requireScopedCapability`) — NOT downgraded to flat — and
+   * is marked `deprecated: true` in OpenAPI. It remains an old audit-only
+   * marker and does NOT create ADR-014 incidents; the sole incident-creation
+   * path is `createExamIncident()` via POST /admin/exams/:examId/incidents.
    */
   fastify.post(
     "/admin/attempts/:attemptId/proctor-incident",
@@ -212,7 +228,8 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         params: attemptEventsParamsSchema,
         body: MarkProctorIncidentRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin", "Proctor"],
+        "x-role": ["Admin"],
+        deprecated: true,
         response: {
           200: MarkProctorIncidentResponseSchema,
           400: ErrorResponseSchema,

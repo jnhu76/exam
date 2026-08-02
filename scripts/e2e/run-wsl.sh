@@ -11,7 +11,8 @@
 # 固化完整链路，让任何开发者（含 AI agent）一键复现。
 #
 # 关键：dev server 必须带 E2E 专用 env，与 docker-compose.test.yml 对齐：
-#   - RATE_LIMIT_DISABLED=1         E2E 连续登录/请求不能被限流
+#   - APP_MODE=e2e              开启 e2e fixture 路由 + 自动关闭限流（与 CI 一致）
+#   - RATE_LIMIT_DISABLED=1     E2E 连续登录/请求不能被限流（双保险，同 CI）
 #   - HEARTBEAT_TIMEOUT_MS=15000    disconnect-restore spec 依赖 15s 超时
 #   - HEARTBEAT_SCAN_INTERVAL_MS=5000 / DEADLINE_SCAN_INTERVAL_MS=5000
 # 缺这些 env，disconnect/restore 类 spec 会因 scanner 时序不符而 timeout。
@@ -83,17 +84,20 @@ done
 # E2E 专用 env（与 docker-compose.test.yml 对齐）。导出给 dev server + migrate +
 # seed 进程。WSL 快速 E2E 走独立的 exam_e2e 库（不是 dev 的 exam，也不是 vitest 的
 # exam_test），这样 reseed 只覆盖 e2e 数据，绝不污染 dev/vitest 库（AGENTS.md
-# "Local Database Discipline"）。TEST_DATABASE_URL 显式不设，使 resolver 走 dev
-# 分支连 DATABASE_URL（exam_e2e 库），与 E2E seed 的目标库一致。
+# "Local Database Discipline"）。APP_MODE=e2e 使 resolver 强制走
+# TEST_DATABASE_URL（test/e2e/ci 分支，绝不停退 DATABASE_URL），并开启
+# e2e fixture 路由 + 自动关闭限流；DATABASE_URL 显式 unset，防止残留的 dev URL
+# 干扰（e2e 模式下 resolver 本来也不会读它）。
 E2E_DB_NAME="exam_e2e"
-export APP_MODE=development
-export DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-15432}/${E2E_DB_NAME}"
+export APP_MODE=e2e
+export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-15432}/${E2E_DB_NAME}"
 export RATE_LIMIT_DISABLED=1
 export HEARTBEAT_TIMEOUT_MS=15000
 export HEARTBEAT_SCAN_INTERVAL_MS=5000
 export DEADLINE_SCAN_INTERVAL_MS=5000
-# 防止 shell 残留的 TEST_* 变量让 resolver 误走 test 分支。
-unset TEST_DATABASE_URL TEST_DB_URL 2>/dev/null || true
+# 防止 shell 残留的 dev/prod DB 变量让 resolver 误走 dev 分支。
+# 不吞 unset 错误：readonly 变量会使 unset 失败，此时应停止而非带污染 env 继续。
+unset DATABASE_URL TEST_DB_URL
 
 # ── 共享 helper（串行 / 并行 shard 路径复用）──────────────────────────
 DB_HOST_PORT_VAL="${DB_HOST_PORT:-15432}"
@@ -126,10 +130,11 @@ drop_db_if_allowed() {
 }
 
 # migrate_db <db_url>：对指定库跑 migrate（stderr 保留）。
-migrate_db() { DATABASE_URL="$1" pnpm --filter @exam/api exec tsx src/scripts/migrate.ts 1>/dev/null; }
+# APP_MODE=e2e 下 resolver 走 TEST_DATABASE_URL（test/e2e/ci 分支）。
+migrate_db() { TEST_DATABASE_URL="$1" pnpm --filter @exam/api exec tsx src/scripts/migrate.ts 1>/dev/null; }
 
 # seed_db <db_url>：对指定库跑 e2e seed（idempotent）。
-seed_db()   { DATABASE_URL="$1" pnpm --filter @exam/api exec tsx src/e2e-seed.ts >/dev/null; }
+seed_db()   { TEST_DATABASE_URL="$1" pnpm --filter @exam/api exec tsx src/e2e-seed.ts >/dev/null; }
 
 # launch_api <db_url> <port> <log_file>：后台起一个 dev server，pid 写入全局
 # launch_api <db_url> <port> <log_file> <mode>：后台起一个 API server，pid 写入
@@ -147,8 +152,8 @@ launch_api() {
   else
     cmd=(pnpm --filter @exam/api dev)
   fi
-  APP_PORT="$port" DATABASE_URL="$db_url" \
-    APP_MODE=development RATE_LIMIT_DISABLED=1 \
+  APP_PORT="$port" TEST_DATABASE_URL="$db_url" \
+    APP_MODE=e2e RATE_LIMIT_DISABLED=1 \
     HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
     setsid "${cmd[@]}" >"$logfile" 2>&1 &
   LAUNCHED_PID=$!
@@ -276,7 +281,7 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
     warn "跳过 seed（--no-reseed），复用现有数据"
   fi
 
-  log "启动 api dev server (:$APP_PORT, RATE_LIMIT_DISABLED, fast scanners)..."
+  log "启动 api dev server (:$APP_PORT, APP_MODE=e2e, fast scanners)..."
   launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$APP_PORT" /tmp/e2e-wsl-api.log
   API_PID="$LAUNCHED_PID"
 

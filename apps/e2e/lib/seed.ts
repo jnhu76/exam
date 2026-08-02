@@ -107,6 +107,34 @@ async function adminPost(
   throw new Error(`admin POST ${path} exhausted retries`);
 }
 
+/**
+ * Creates an active Proctor-to-Exam assignment via the E2E fixture route
+ * (J4-I1B). Test-only channel: the production assignment API ships in
+ * M11-I1C, so the API exposes `/api/e2e-fixtures/proctor-assignments` only
+ * on E2E-configured servers (see apps/api/src/routes/e2eFixtures.ts). The
+ * route runs the real `assignProctorToExam` domain command.
+ */
+export async function createProctorAssignmentFixture(
+  request: APIRequestContext,
+  adminToken: string,
+  examId: string,
+  proctorUserId: string,
+): Promise<void> {
+  const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+  const res = await request.post(
+    `${baseURL}/api/e2e-fixtures/proctor-assignments`,
+    {
+      headers: { Cookie: `auth-token=${adminToken}` },
+      data: { examId, proctorUserId },
+    },
+  );
+  if (!res.ok()) {
+    throw new Error(
+      `proctor-assignment fixture failed: ${res.status()} ${await res.text()}`,
+    );
+  }
+}
+
 export interface SeededCandidate {
   profileId: string;
   userId: string;

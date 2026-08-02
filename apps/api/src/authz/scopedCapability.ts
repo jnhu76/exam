@@ -26,9 +26,13 @@
  */
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import type { RuntimeRequestContext } from "../types/requestContext.js";
 import {
   isScopeDenied,
+  Role,
+  Scope,
   type PermissionKey,
+  type ResolvedScope,
   type ResourceRef,
   type ResourceResolverKey,
   type ScopeResolver,
@@ -48,6 +52,32 @@ export type PresetAllows = (
   permission: PermissionKey,
 ) => boolean;
 
+/**
+ * Proctor-to-Exam assignment gate (J4-I1B, ADR-015 §4.3). Injected by the
+ * authz plugin; consults `exam_proctor_assignments` (active row for
+ * organizationId + resolvedExamId + actorId) per request. NEVER cached across
+ * requests and never placed into JWTs.
+ */
+export interface ProctorAssignmentGate {
+  check(request: FastifyRequest, resolvedExamId: string): Promise<boolean>;
+}
+
+/**
+ * Extracts the resolved Exam id from a successful scope resolution. The
+ * parent chain's `exam` node is authoritative when present (the incident
+ * resolver reduces to Scope.Exam but its resourceId is the INCIDENT id, not
+ * the exam id); for plain Exam-scoped resolutions the resourceId IS the exam
+ * id.
+ */
+function resolvedExamId(resolution: ResolvedScope): string | null {
+  const examNode = resolution.chain?.find((n) => n.type === "exam");
+  if (examNode?.id) return examNode.id;
+  if (resolution.scope === Scope.Exam) {
+    return resolution.resourceId ?? null;
+  }
+  return null;
+}
+
 /** Input to the resource-aware preHandler builder. */
 export interface ScopedCapabilityInput {
   /** The Phase 3 permission this route requires. */
@@ -60,6 +90,16 @@ export interface ScopedCapabilityInput {
   resolvers: ResolverRegistry;
   /** Flat role-preset predicate (injected; wraps @exam/authz permissionsForRole). */
   presetAllows: PresetAllows;
+  /**
+   * J4-I1B (ADR-015 §4.3): when `"assignment_scoped"`, Proctor actors must
+   * hold an ACTIVE Proctor-to-Exam assignment to the resolved Exam. Admin
+   * short-circuits the assignment requirement (the resolver still runs). A
+   * missing assignment is folded into the 404 `RESOURCE_NOT_FOUND` bucket
+   * (anti-enumeration, ADR-015 §9).
+   */
+  proctorAccess?: "assignment_scoped";
+  /** Assignment checker (injected by the authz plugin from fastify.db). */
+  proctorAssignment?: ProctorAssignmentGate;
 }
 
 /**
@@ -73,8 +113,15 @@ export interface ScopedCapabilityInput {
 export function buildScopedCapabilityPreHandler(
   input: ScopedCapabilityInput,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  const { permission, resolverKey, resourceIdKey, resolvers, presetAllows } =
-    input;
+  const {
+    permission,
+    resolverKey,
+    resourceIdKey,
+    resolvers,
+    presetAllows,
+    proctorAccess,
+    proctorAssignment,
+  } = input;
   return async (request, reply) => {
     const ctx = request.ctx;
     if (!ctx) {
@@ -157,5 +204,66 @@ export function buildScopedCapabilityPreHandler(
 
     // Resolved scope: pass the gate. The handler runs and applies its own
     // business-state + organization predicates (defense-in-depth, ADR §3.4).
+
+    // J4-I1B Proctor-to-Exam assignment enforcement (ADR-015 §4.3): runs
+    // AFTER the capability check and AFTER the resource resolver, for
+    // non-Admin actors only. Admin short-circuits the assignment requirement
+    // but the resolver above already validated target existence, tenant, and
+    // parent chain. A missing assignment is a 404 RESOURCE_NOT_FOUND —
+    // indistinguishable from a missing resource (anti-enumeration, §9).
+    if (proctorAccess === "assignment_scoped") {
+      if (!proctorAssignment) {
+        // Configuration error: a route declared Proctor assignment scope
+        // without wiring the gate. Never fail open.
+        request.log.error(
+          { resolverKey, permission, route: request.url },
+          "authz proctor-assignment gate not wired",
+        );
+        return reply
+          .code(503)
+          .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+      }
+      const runtimeCtx = ctx as RuntimeRequestContext;
+      if (!runtimeCtx.roles.includes(Role.Admin)) {
+        const examId = resolvedExamId(resolution);
+        if (!examId) {
+          // The resolution produced no Exam identity — the enforcement cannot
+          // run. Fail closed (mis-declared route).
+          request.log.error(
+            { resolverKey, permission, route: request.url },
+            "authz proctor-assignment enforcement: no resolved Exam id",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        let assigned: boolean;
+        try {
+          assigned = await proctorAssignment.check(request, examId);
+        } catch (error) {
+          // Operational failure (DB down, timeout, repo error): never fail
+          // open, never masquerade as 403/404 — same 503 AUTHZ_UNAVAILABLE
+          // contract the resolvers use for `resolver_error` (ADR §3.9).
+          request.log.error(
+            {
+              err: error,
+              resolverKey,
+              permission,
+              examId,
+              route: request.url,
+            },
+            "authz proctor-assignment lookup failed",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        if (!assigned) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+      }
+    }
   };
 }

@@ -68,7 +68,15 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptMisconductMark),
+        // J4-I1B (ADR-015 §8): flipped from flat to scoped. The grant is
+        // REMOVED from the Proctor preset (proctorAccess = admin_only), so
+        // only Admin reaches the handler; the attempt resolver still validates
+        // target existence, tenant, and parent chain.
+        fastify.requireScopedCapability(
+          Permission.AttemptMisconductMark,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: AttemptIdParamsSchema,
@@ -132,7 +140,15 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptForceSubmit),
+        // J4-I1B (ADR-015 §8): flipped from flat to scoped. The grant is
+        // REMOVED from the Proctor preset (proctorAccess = admin_only); the
+        // attempt resolver still validates target existence, tenant, and
+        // parent chain.
+        fastify.requireScopedCapability(
+          Permission.AttemptForceSubmit,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: AttemptIdParamsSchema,
@@ -419,15 +435,23 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * GET /admin/attempts/:attemptId/timeline — returns the chronological audit
    * trail for one attempt (start, save, disrupt, restore, submit, grade, and
    * admin actions like force-submit/extend/misconduct), oldest-first. Read-only
-   * query over audit_logs filtered by target. Admin-only; 404 if the attempt
-   * does not exist in the caller's organization.
+   * query over audit_logs filtered by target. 404 if the attempt does not exist
+   * in the caller's organization; Proctor actors additionally need an active
+   * assignment to the attempt's Exam (J4-I1B, proctorAccess = assignment_scoped).
    */
   fastify.get(
     "/admin/attempts/:attemptId/timeline",
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptTimelineView),
+        // J4-I1B (ADR-015 §8): flipped from flat to scoped + Proctor
+        // assignment enforcement.
+        fastify.requireScopedCapability(
+          Permission.AttemptTimelineView,
+          "attempt",
+          "attemptId",
+          { proctorAccess: "assignment_scoped" },
+        ),
       ],
       schema: {
         params: AttemptIdParamsSchema,

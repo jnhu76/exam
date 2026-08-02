@@ -61,6 +61,11 @@ export interface RateLimitConfig {
   timeWindow: number;
 }
 
+/** E2E test-fixture routes (test-only; see the loadRuntimeConfig comment). */
+export interface E2eFixturesConfig {
+  enabled: boolean;
+}
+
 export interface SecurityConfig {
   cspEnabled: boolean;
 }
@@ -192,6 +197,7 @@ export interface AppRuntimeConfig {
   tenancy: TenancyConfig;
   auth: AuthConfig;
   rateLimit: RateLimitConfig;
+  e2eFixtures: E2eFixturesConfig;
   security: SecurityConfig;
   timezone: TimezoneConfig;
   email: EmailConfig;
@@ -708,6 +714,15 @@ export function loadRuntimeConfig(
       enabled: mode !== "e2e" && !isTruthy(env.RATE_LIMIT_DISABLED),
       max: parsePositiveInt(env.RATE_LIMIT_MAX, 100),
       timeWindow: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
+    },
+    // Test-only fixture routes (J4-I1B): enabled ONLY when the server runs in
+    // APP_MODE=e2e (CI + docker-compose.test.yml + scripts/e2e/run-wsl.sh).
+    // RATE_LIMIT_DISABLED is a generic rate-limit switch and MUST NOT gate
+    // test routes — a production deployment that legitimately disables rate
+    // limiting (intranet, reverse proxy, debugging) must not expose test
+    // mutation endpoints. Never enabled in a bare `pnpm dev` or in production.
+    e2eFixtures: {
+      enabled: mode === "e2e",
     },
     security: {
       cspEnabled: true,

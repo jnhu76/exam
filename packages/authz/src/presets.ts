@@ -152,8 +152,12 @@ const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
   Permission.ExamRoomView,
   Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
-  Permission.AttemptMisconductMark,
-  Permission.AttemptForceSubmit,
+  // AttemptMisconductMark + AttemptForceSubmit REMOVED in J4-I1B (ADR-015
+  // §13): the pre-existing org-wide grants were a current, reachable risk
+  // (M11-R0 reality audit G1/G2). The routes stay scoped
+  // (`proctorAccess = admin_only`) and the permissions remain valid Admin
+  // grants. A future dangerous-permissions policy profile must re-add them
+  // with its own activation gate — they are NOT deferred Proctor capabilities.
   // AttemptTimeExtend removed: the old /extend-time route is cut in REC-I4-I3B2.
   // Operator time grant (AttemptTimeGrant) is Admin-only; Proctor has no grant path.
   // Explicitly NOT granted: grading.*, ExamResultPublish, ScoreAllView, ExamPublish.
@@ -243,10 +247,10 @@ export const ROLE_PRESETS: Record<RoleKey, RolePreset> = {
     loginAllowed: true,
     defaultScope: Scope.Exam,
     permissions: PROCTOR_PERMISSIONS,
-    sensitivePermissions: [
-      Permission.AttemptForceSubmit,
-      Permission.AttemptMisconductMark,
-    ],
+    // AttemptForceSubmit + AttemptMisconductMark removed from the Proctor
+    // preset in J4-I1B (ADR-015 §13) — the sensitive projection derives from
+    // the preset and must not re-introduce them.
+    sensitivePermissions: [],
   },
 
   [Role.Grader]: {

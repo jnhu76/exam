@@ -84,6 +84,24 @@ export type CandidateRuntimeAuthzStrategy =
       resourceIdKey: "id" | "attemptId";
     };
 
+/**
+ * Proctor route-access policy (ADR-015 §8, frozen 5-valued).
+ *
+ * - `assignment_scoped` — resource resolver + scoped capability + active
+ *   Proctor-to-Exam assignment required.
+ * - `assignment_filtered_collection` — collection; Proctor sees only the
+ *   active-assignment-filtered set (backend query, never UI filtering).
+ * - `admin_only` — permission NOT in the Proctor preset; Proctor-unreachable.
+ * - `deferred` — future policy profile; Proctor-unreachable at runtime.
+ * - `not_applicable` — no Proctor-specific rule.
+ */
+export type ProctorAccessValue =
+  | "assignment_scoped"
+  | "assignment_filtered_collection"
+  | "admin_only"
+  | "deferred"
+  | "not_applicable";
+
 export interface RoutePermissionRegistryEntry {
   method: HttpMethod;
   /** Per-route definition path (canonical; plugin prefix applied at runtime). */
@@ -115,6 +133,12 @@ export interface RoutePermissionRegistryEntry {
   auditAction?: AuditActionKey;
   /** Whether the route touches a sensitive resource (extra audit/scrutiny). */
   sensitive: boolean;
+  /**
+   * Proctor route-access policy (ADR-015 §8). REQUIRED on every entry — never
+   * inferred at runtime from permission membership. The conformance test
+   * enumerates EVERY registry entry.
+   */
+  proctorAccess: ProctorAccessValue;
   /** ADR migration stage that will enforce this entry. */
   migrationStage: number;
 }
@@ -139,6 +163,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.System,
       resolver: "system",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -152,6 +177,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       runtimeAuthz: { kind: "candidate_context" },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -167,6 +193,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         eligibilityDenialMode: "resource_not_found",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -182,6 +209,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         eligibilityDenialMode: "resource_not_found",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -197,6 +225,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         eligibilityDenialMode: "permission_denied",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -211,6 +240,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         resourceIdKey: "id",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -227,6 +257,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         resourceIdKey: "attemptId",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -241,6 +272,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         resourceIdKey: "attemptId",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -256,6 +288,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       },
       auditAction: "attempt.submit",
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -270,6 +303,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         resourceIdKey: "attemptId",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -284,6 +318,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         resourceIdKey: "attemptId",
       },
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
     {
@@ -294,6 +329,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.OwnScore,
       resolver: "score",
       sensitive: false,
+      proctorAccess: "not_applicable",
       migrationStage: 7,
     },
 
@@ -307,6 +343,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       resource: { type: "list", listOf: "question" },
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -317,6 +354,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Course,
       resolver: "question",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -327,6 +365,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Course,
       resolver: "question",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -337,6 +376,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Course,
       resolver: "question",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -347,6 +387,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Course,
       resolver: "question",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -357,6 +398,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Course,
       resolver: "question",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -370,6 +412,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       resource: { type: "list", listOf: "candidate" },
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -380,6 +423,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -390,6 +434,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Candidate,
       resolver: "candidate",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -400,6 +445,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -413,6 +459,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       resource: { type: "list", listOf: "score" },
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
 
@@ -426,6 +473,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "attempt.misconductFlagged",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -437,6 +485,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "attempt.forceSubmit",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -448,6 +497,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "attempt.timeGrant",
       sensitive: true,
+      proctorAccess: "deferred",
       migrationStage: 7,
     },
     {
@@ -458,6 +508,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Attempt,
       resolver: "attempt",
       sensitive: true,
+      proctorAccess: "assignment_scoped",
       migrationStage: 7,
     },
     {
@@ -469,6 +520,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "attempt.exported",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -480,6 +532,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "attempt.exported",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
 
@@ -497,6 +550,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         filterSpec: "proctor-discoverable-exams",
       },
       sensitive: true,
+      proctorAccess: "assignment_filtered_collection",
       migrationStage: 7,
     },
     {
@@ -508,6 +562,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       resource: { type: "list", listOf: "attempt" },
       sensitive: true,
+      proctorAccess: "assignment_scoped",
       migrationStage: 7,
     },
     {
@@ -518,6 +573,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Attempt,
       resolver: "attempt",
       sensitive: true,
+      proctorAccess: "assignment_scoped",
       migrationStage: 7,
     },
     {
@@ -532,6 +588,9 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "proctor.incident_marked",
       sensitive: true,
+      // J4-I1B (ADR-015 §16): legacy audit-only marker; the grant is removed
+      // from the Proctor preset, so the route is effectively Admin-only.
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
 
@@ -545,6 +604,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       resource: { type: "list", listOf: "attempt" },
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -556,6 +616,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "grading.detail_viewed",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -567,6 +628,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "attempt",
       auditAction: "grading.score_entered",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
 
@@ -580,6 +642,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       resource: { type: "list", listOf: "user" },
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -591,6 +654,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       auditAction: "user.create",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -601,6 +665,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "user",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -611,6 +676,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "user",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -622,6 +688,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "user",
       auditAction: "user.delete",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -635,6 +702,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "export_scores",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
 
@@ -648,6 +716,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       resource: { type: "list", listOf: "course" },
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -658,6 +727,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Course,
       resolver: "course",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -669,6 +739,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       auditAction: "course.create",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -680,6 +751,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "course",
       auditAction: "course.update",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -691,6 +763,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "course",
       auditAction: "course.delete",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -703,6 +776,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -713,6 +787,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -723,6 +798,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -733,6 +809,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -743,6 +820,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -753,6 +831,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.System,
       resolver: "system",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -763,6 +842,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.System,
       resolver: "system",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -773,6 +853,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.System,
       resolver: "system",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -786,6 +867,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       resource: { type: "list", listOf: "exam" },
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -796,6 +878,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Exam,
       resolver: "exam",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -807,6 +890,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.create",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -817,6 +901,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Exam,
       resolver: "exam",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -828,6 +913,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.publish",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -839,6 +925,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.close",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -850,6 +937,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.unpublish",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -861,6 +949,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.extend",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -872,6 +961,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.cancel",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -883,6 +973,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.archive",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -894,6 +985,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.publish_results",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 7,
     },
     {
@@ -905,6 +997,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       auditAction: "exam.delete",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -916,6 +1009,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       resource: { type: "list", listOf: "enrollment" },
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -926,6 +1020,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Exam,
       resolver: "exam",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -936,6 +1031,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Exam,
       resolver: "enrollment",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -947,6 +1043,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "exam",
       resource: { type: "list", listOf: "candidate" },
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
 
@@ -960,6 +1057,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       resource: { type: "list", listOf: "candidate" },
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -970,6 +1068,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -980,6 +1079,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -990,6 +1090,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     {
@@ -1002,6 +1103,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 6,
     },
     // ── Role assignments (RBAC-M8) — admin capability surface ──
@@ -1013,6 +1115,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: false,
+      proctorAccess: "admin_only",
       migrationStage: 8,
     },
     {
@@ -1023,6 +1126,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "user",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 8,
     },
     {
@@ -1034,6 +1138,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "user",
       auditAction: "user.role_changed",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 8,
     },
     {
@@ -1045,6 +1150,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       auditAction: "user.role_changed",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 8,
     },
     {
@@ -1056,6 +1162,131 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       resolver: "organization",
       auditAction: "user.role_changed",
       sensitive: true,
+      proctorAccess: "admin_only",
       migrationStage: 8,
+    },
+
+    // ── Exam incidents (ADR-014 routes; registry entries added by J4-I1B) ──
+    {
+      method: "POST",
+      path: "/admin/exams/:examId/incidents",
+      legacyGate: "Admin",
+      permission: Permission.IncidentCreate,
+      scope: Scope.Exam,
+      resolver: "exam",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "GET",
+      path: "/admin/exams/:examId/incidents",
+      legacyGate: "Admin",
+      permission: Permission.IncidentView,
+      scope: Scope.Exam,
+      resolver: "exam",
+      resource: { type: "list", listOf: "incident" },
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "GET",
+      path: "/admin/incidents/:incidentId",
+      legacyGate: "Admin",
+      permission: Permission.IncidentView,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/investigate",
+      legacyGate: "Admin",
+      permission: Permission.IncidentInvestigate,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/notes",
+      legacyGate: "Admin",
+      permission: Permission.IncidentInvestigate,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/severity",
+      legacyGate: "Admin",
+      permission: Permission.IncidentInvestigate,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/resolve",
+      legacyGate: "Admin",
+      permission: Permission.IncidentResolve,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/dismiss",
+      legacyGate: "Admin",
+      permission: Permission.IncidentResolve,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/actions",
+      legacyGate: "Admin",
+      permission: Permission.IncidentInvestigate,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/attempts",
+      legacyGate: "Admin",
+      permission: Permission.IncidentInvestigate,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
+      method: "POST",
+      path: "/admin/incidents/:incidentId/interruptions",
+      legacyGate: "Admin",
+      permission: Permission.IncidentInvestigate,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
     },
   ];

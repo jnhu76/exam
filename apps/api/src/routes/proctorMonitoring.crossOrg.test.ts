@@ -282,6 +282,11 @@ describe("Proctor scoped routes — cross-org isolation", () => {
     });
 
     it("POST /admin/attempts/:attemptId/proctor-incident — cross-org 404, zero write", async () => {
+      // J4-I1B (ADR-015 §13): the legacy marker is Admin-only (grant removed
+      // from the Proctor preset). The cross-org isolation is proven with an
+      // Org A ADMIN token: the scoped resolver rejects the Org B attempt with
+      // 404 before the handler runs. A Proctor is denied at the capability
+      // gate (403) regardless of org — asserted separately.
       const auditBefore = await countAuditForAction(
         ctx.db,
         orgBAttemptId,
@@ -304,7 +309,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
           reasonCode: "attention_lost",
           note: "Cross-org attempt",
         },
-        cookies: { "auth-token": proctorAToken },
+        cookies: { "auth-token": ctx.adminToken },
       });
       expect(res.statusCode).toBe(404);
       expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
@@ -419,6 +424,20 @@ describe("Proctor scoped routes — cross-org isolation", () => {
         "proctor-a-matrix",
       );
       orgAProctorToken = proctor.token;
+      // J4-I1B (ADR-015 §8): an assigned Proctor passes the scoped monitoring
+      // reads. Assign this Proctor to the Org A exam so the capability
+      // verdict matrix exercises the 200 path (not the 404 assignment miss).
+      await ctx.db.insert(schema.examProctorAssignments).values({
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        examId: orgAExamId,
+        proctorUserId: proctor.user.id,
+        status: "active",
+        assignedBy: ctx.admin.id,
+        assignedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
       const teacher = await createFutureRoleUserForTest(
         ctx.db,
         ctx.org.id,
@@ -443,14 +462,9 @@ describe("Proctor scoped routes — cross-org isolation", () => {
           method: "GET",
           url: `/api/admin/attempts/${orgAAttemptId}/proctor-events?limit=20`,
         },
-        {
-          method: "POST",
-          url: `/api/admin/attempts/${orgAAttemptId}/proctor-incident`,
-          payload: {
-            incidentType: "manual_note_added",
-            examId: orgAExamId,
-          },
-        },
+        // J4-I1B (ADR-015 §13): the legacy proctor-incident marker is
+        // Admin-only (grant removed from the Proctor preset) — it is asserted
+        // separately below, not in the passed/denied monitoring matrix.
       ];
     });
 
@@ -495,6 +509,26 @@ describe("Proctor scoped routes — cross-org isolation", () => {
       },
     );
 
+    // J4-I1B (ADR-015 §13): the legacy proctor-incident marker is Admin-only —
+    // an ASSIGNED Proctor is denied (grant removed), Admin still passes.
+    it("Proctor is denied the legacy proctor-incident marker; Admin passes (scoped)", async () => {
+      const proctorRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${orgAAttemptId}/proctor-incident`,
+        payload: { incidentType: "manual_note_added", examId: orgAExamId },
+        cookies: { "auth-token": orgAProctorToken },
+      });
+      expect(proctorRes.statusCode).toBe(403);
+
+      const adminRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${orgAAttemptId}/proctor-incident`,
+        payload: { incidentType: "manual_note_added", examId: orgAExamId },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(adminRes.statusCode).toBe(200);
+    });
+
     it("unauthenticated → 401", async () => {
       for (const { method, url, payload } of _routes) {
         const res = await ctx.app.inject({ method, url, payload });
@@ -532,6 +566,8 @@ describe("Proctor route authz metadata introspection (Finding 2 proof)", () => {
         permission: "exam_room.view",
         resolverKey: "exam",
         resourceIdKey: "examId",
+        // J4-I1B (ADR-015 §8): Proctor assignment enforcement wired.
+        proctorAccess: "assignment_scoped" as const,
       },
     },
     {
@@ -542,6 +578,8 @@ describe("Proctor route authz metadata introspection (Finding 2 proof)", () => {
         permission: "attempt.timeline.view",
         resolverKey: "attempt",
         resourceIdKey: "attemptId",
+        // J4-I1B (ADR-015 §8): Proctor assignment enforcement wired.
+        proctorAccess: "assignment_scoped" as const,
       },
     },
     {

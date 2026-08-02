@@ -21,12 +21,15 @@ import fp from "fastify-plugin";
 import { type PermissionKey, type ResourceResolverKey } from "@exam/authz";
 import {
   buildScopedCapabilityPreHandler,
+  type ProctorAssignmentGate,
   type ResolverRegistry,
 } from "../authz/scopedCapability.js";
 import {
   createAttemptResolver,
   createExamResolver,
 } from "../authz/resolvers/attemptResolver.js";
+import { createIncidentResolver } from "../authz/resolvers/incidentResolver.js";
+import { createProctorAssignmentRepo } from "@exam/db/src/repository/proctorAssignmentRepo.js";
 import { buildScoreCapabilityPreHandler } from "../authz/scoreCapability.js";
 import { buildCandidateContextCapabilityPreHandler } from "../authz/candidateContextCapability.js";
 import { buildExamEligibilityCapabilityPreHandler } from "../authz/examEligibilityCapability.js";
@@ -55,10 +58,29 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   const resolvers: ResolverRegistry = {
     attempt: createAttemptResolver(fastify.db, fastify.log),
     exam: createExamResolver(fastify.db, fastify.log),
+    incident: createIncidentResolver(fastify.db, fastify.log),
     // NOTE: the `score` family is NOT a generic ScopeResolver — its resolution
     // carries ownership facts the generic interface cannot express, so the
     // score route uses the dedicated `requireScoreCapability` decorator below
     // (which calls resolveScoreScope directly) instead of this registry.
+  };
+
+  /**
+   * J4-I1B Proctor-to-Exam assignment gate (ADR-015 §4.3). Reads the active
+   * `exam_proctor_assignments` row for (ctx.organizationId, resolvedExamId,
+   * ctx.actorId) per request — never cached across requests, never placed
+   * into JWTs.
+   */
+  const proctorAssignmentGate: ProctorAssignmentGate = {
+    check: async (request: FastifyRequest, resolvedExamId: string) => {
+      const ctx = request.ctx;
+      if (!ctx) return false;
+      return createProctorAssignmentRepo(fastify.db).hasActiveAssignment(
+        ctx,
+        resolvedExamId,
+        ctx.actorId,
+      );
+    },
   };
 
   fastify.decorate(
@@ -67,6 +89,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
       permission: PermissionKey,
       resolverKey: ResourceResolverKey,
       resourceIdKey: string,
+      options?: { proctorAccess?: "assignment_scoped" },
     ) => {
       const handler = buildScopedCapabilityPreHandler({
         permission,
@@ -75,6 +98,12 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
         resolvers,
         presetAllows: (request: FastifyRequest, perm: PermissionKey) =>
           ctxAllows(request, perm),
+        ...(options?.proctorAccess === "assignment_scoped"
+          ? {
+              proctorAccess: "assignment_scoped" as const,
+              proctorAssignment: proctorAssignmentGate,
+            }
+          : {}),
       });
       const preHandler: AuthzPreHandler = (request, reply) =>
         handler(request, reply);
@@ -83,6 +112,9 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
         permission,
         resolverKey,
         resourceIdKey,
+        ...(options?.proctorAccess === "assignment_scoped"
+          ? { proctorAccess: "assignment_scoped" as const }
+          : {}),
       };
       return preHandler;
     },
