@@ -489,6 +489,206 @@ describe("proctor assignment persistence foundation", () => {
     expect(mostRecent?.id).toBe(newer.id);
   });
 
+  it("findMostRecentEpisodeByExamAndProctor: any-status most recent by (created_at DESC, id DESC), bounded by createdBefore", async () => {
+    const examId = randomUUID();
+    const courseId = randomUUID();
+    await db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: alpha.organizationId,
+      name: "Course 4",
+      code: `C4-${courseId}`,
+      description: "",
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    await db.insert(schema.exams).values({
+      id: examId,
+      organizationId: alpha.organizationId,
+      title: "Exam 4",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now(),
+      closeAt: new Date("2026-03-01T00:00:00.000Z"),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    const proctorId = await newProctor(alpha.organizationId);
+
+    const t1 = new Date("2026-02-01T00:00:00.000Z");
+    const t2 = new Date("2026-02-02T00:00:00.000Z");
+    const first = await repo.insertAssignment(alpha.ctx, {
+      examId,
+      proctorUserId: proctorId,
+      assignedBy: alpha.adminId,
+      assignedAt: t1,
+      createdAt: t1,
+      updatedAt: t1,
+    });
+    await repo.revokeAssignment(alpha.ctx, first.id, {
+      revokedBy: alpha.adminId,
+      revokedAt: t1,
+      updatedAt: t1,
+    });
+    const second = await repo.insertAssignment(alpha.ctx, {
+      examId,
+      proctorUserId: proctorId,
+      assignedBy: alpha.adminId,
+      assignedAt: t2,
+      createdAt: t2,
+      updatedAt: t2,
+    });
+
+    // No bound → the newest episode of any status.
+    const latest = await repo.findMostRecentEpisodeByExamAndProctor(
+      alpha.ctx,
+      examId,
+      proctorId,
+    );
+    expect(latest?.id).toBe(second.id);
+    expect(latest?.status).toBe("active");
+
+    // Bound between the two rounds → the first (revoked) episode.
+    const bounded = await repo.findMostRecentEpisodeByExamAndProctor(
+      alpha.ctx,
+      examId,
+      proctorId,
+      { createdBefore: new Date("2026-02-01T12:00:00.000Z") },
+    );
+    expect(bounded?.id).toBe(first.id);
+    expect(bounded?.status).toBe("revoked");
+
+    // Bound before everything → null.
+    const none = await repo.findMostRecentEpisodeByExamAndProctor(
+      alpha.ctx,
+      examId,
+      proctorId,
+      { createdBefore: new Date("2026-01-01T00:00:00.000Z") },
+    );
+    expect(none).toBeNull();
+
+    // Cross-organization read fails closed.
+    const crossOrg = await repo.findMostRecentEpisodeByExamAndProctor(
+      beta.ctx,
+      examId,
+      proctorId,
+    );
+    expect(crossOrg).toBeNull();
+  });
+
+  it("findMostRecentEpisodeByExamAndProctor tie-breaks on id DESC for identical created_at", async () => {
+    const examId = randomUUID();
+    const courseId = randomUUID();
+    await db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: alpha.organizationId,
+      name: "Course 5",
+      code: `C5-${courseId}`,
+      description: "",
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    await db.insert(schema.exams).values({
+      id: examId,
+      organizationId: alpha.organizationId,
+      title: "Exam 5",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now(),
+      closeAt: new Date("2026-03-01T00:00:00.000Z"),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    const proctorId = await newProctor(alpha.organizationId);
+
+    const same = new Date("2026-02-01T00:00:00.000Z");
+    const lowId = "00000000-0000-0000-0000-000000000001";
+    const highId = "00000000-0000-0000-0000-000000000002";
+    await db.insert(schema.examProctorAssignments).values({
+      id: lowId,
+      organizationId: alpha.organizationId,
+      examId,
+      proctorUserId: proctorId,
+      status: "active",
+      assignedBy: alpha.adminId,
+      assignedAt: same,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: same,
+      updatedAt: same,
+    });
+    await repo.revokeAssignment(alpha.ctx, lowId, {
+      revokedBy: alpha.adminId,
+      revokedAt: same,
+      updatedAt: same,
+    });
+    await db.insert(schema.examProctorAssignments).values({
+      id: highId,
+      organizationId: alpha.organizationId,
+      examId,
+      proctorUserId: proctorId,
+      status: "active",
+      assignedBy: alpha.adminId,
+      assignedAt: same,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: same,
+      updatedAt: same,
+    });
+
+    const found = await repo.findMostRecentEpisodeByExamAndProctor(
+      alpha.ctx,
+      examId,
+      proctorId,
+    );
+    expect(found?.id).toBe(highId);
+  });
+
   it("listExamProctors: active default + revoked filter + stable keyset pagination", async () => {
     const examId = randomUUID();
     const courseId = randomUUID();

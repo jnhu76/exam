@@ -19,10 +19,15 @@ import type { Database } from "@exam/db/src/types.js";
 import {
   assignProctorToExam,
   revokeProctorFromExam,
+  isConstraintViolation,
+  PROCTOR_ASSIGNMENT_ACTIVE_UNIQUE_CONSTRAINT,
   type ProctorAssignmentRepo,
 } from "@exam/exam-engine";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { withProctorAssignmentOperationRecovery } from "./proctorAssignmentOperationRecovery.js";
+import {
+  formLoserReceipt,
+  withProctorAssignmentOperationRecovery,
+} from "./proctorAssignmentOperationRecovery.js";
 
 function context(organizationId: string, actorId: string): RequestContext {
   return {
@@ -152,6 +157,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
     examId: string,
     proctorId: string,
     operationId: string,
+    now: Date = NOW,
   ) {
     return (tx: Database) => {
       const repo = createProctorAssignmentRepo(
@@ -162,7 +168,7 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
         ctx,
         { operationId, examId, proctorUserId: proctorId },
         {
-          now: NOW,
+          now,
           audit: async (action, metadata) => {
             await createAuditLogWriter(tx).insert(ctx, {
               actorId: ctx.actorId,
@@ -483,5 +489,198 @@ describe("proctor assignment concurrency (ADR-015 §7)", () => {
         },
       ),
     ).rejects.toThrow();
+  });
+
+  it("assign loser still forms a durable no_change receipt when the winning episode was revoked before its fresh recovery", async () => {
+    const { examId, proctorId, payload } =
+      await newExamProctor("loser-revoked");
+    const winnerOp = randomUUID();
+    const loserOp = randomUUID();
+    const revokeOp = randomUUID();
+
+    // op-A wins: the winning episode is created through the real command path.
+    const winner = await withProctorAssignmentOperationRecovery(
+      db,
+      ctx,
+      winnerOp,
+      "assign",
+      payload,
+      NOW,
+      assignRunner(examId, proctorId, winnerOp),
+    );
+    expect(winner.outcome).toBe("applied");
+
+    // op-B collides with the SAME active-unique a concurrent loser hits: a
+    // second active episode insert for (exam, proctor) → real 23505. (The
+    // true concurrent race itself is pinned by the Promise.all test above;
+    // this deterministic collision isolates the revoked-winner recovery case,
+    // which cannot be interleaved on the test infra's single connection.)
+    const loserRepo = createProctorAssignmentRepo(db);
+    const collisionError = await loserRepo
+      .insertAssignment(ctx, {
+        examId,
+        proctorUserId: proctorId,
+        assignedBy: adminId,
+        assignedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+      .then(
+        () => null,
+        (err: unknown) => err,
+      );
+    expect(
+      isConstraintViolation(
+        collisionError,
+        PROCTOR_ASSIGNMENT_ACTIVE_UNIQUE_CONSTRAINT,
+      ),
+    ).toBe(true);
+
+    // The winning episode is revoked BEFORE op-B's fresh recovery.
+    const revoked = await withProctorAssignmentOperationRecovery(
+      db,
+      ctx,
+      revokeOp,
+      "revoke",
+      payload,
+      NOW,
+      revokeRunner(examId, proctorId, revokeOp),
+    );
+    expect(revoked.outcome).toBe("applied");
+    expect(revoked.assignment.status).toBe("revoked");
+
+    // op-B's fresh recovery must still form its durable no_change receipt
+    // against the episode that caused the collision — even though it is
+    // revoked now (ADR-015 §7 amendment A1).
+    const recovery = await formLoserReceipt(
+      db,
+      ctx,
+      loserOp,
+      "assign",
+      payload,
+      NOW,
+    );
+    expect(recovery.outcome).toBe("no_change");
+    expect(recovery.assignment.id).toBe(winner.assignment.id);
+    expect(recovery.assignment.status).toBe("revoked");
+
+    const receipts = await eventsByOpIds([loserOp]);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]!.outcome).toBe("no_change");
+    expect(receipts[0]!.assignmentId).toBe(winner.assignment.id);
+    expect(receipts[0]!.commandType).toBe("assign");
+
+    // The receipt makes a later retry replayable — never a fresh command.
+    const retry = await withProctorAssignmentOperationRecovery(
+      db,
+      ctx,
+      loserOp,
+      "assign",
+      payload,
+      NOW,
+      assignRunner(examId, proctorId, loserOp),
+    );
+    expect(retry.outcome).toBe("idempotent_replayed");
+    expect(retry.assignment.id).toBe(winner.assignment.id);
+
+    // Exactly ONE assigned audit and ONE revoked audit.
+    expect(await countAuditRows("exam.proctor_assigned", examId)).toBe(1);
+    expect(await countAuditRows("exam.proctor_revoked", examId)).toBe(1);
+  });
+
+  it("loser recovery never crosses its race-window bound — a post-window reassignment is not referenced", async () => {
+    const { examId, proctorId, payload } = await newExamProctor("loser-bound");
+    const winnerOp = randomUUID();
+    const revokeOp = randomUUID();
+    const reassignOp = randomUUID();
+    const loserOp = randomUUID();
+    const loserOp2 = randomUUID();
+
+    // Winner episode created at NOW.
+    const winner = await withProctorAssignmentOperationRecovery(
+      db,
+      ctx,
+      winnerOp,
+      "assign",
+      payload,
+      NOW,
+      assignRunner(examId, proctorId, winnerOp),
+    );
+    expect(winner.outcome).toBe("applied");
+
+    // A real collision for the loser: a second active episode insert → 23505
+    // on the active-unique (raw insert — the command pre-check would fail
+    // fast instead, and the collision path is not what this test pins).
+    const loserRepo = createProctorAssignmentRepo(db);
+    const collisionError = await loserRepo
+      .insertAssignment(ctx, {
+        examId,
+        proctorUserId: proctorId,
+        assignedBy: adminId,
+        assignedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+      .then(
+        () => null,
+        (err: unknown) => err,
+      );
+    expect(
+      isConstraintViolation(
+        collisionError,
+        PROCTOR_ASSIGNMENT_ACTIVE_UNIQUE_CONSTRAINT,
+      ),
+    ).toBe(true);
+
+    // Winner revoked, then a NEW reassignment round created at NOW+1s.
+    const revoked = await withProctorAssignmentOperationRecovery(
+      db,
+      ctx,
+      revokeOp,
+      "revoke",
+      payload,
+      NOW,
+      revokeRunner(examId, proctorId, revokeOp),
+    );
+    expect(revoked.assignment.id).toBe(winner.assignment.id);
+    const later = new Date(NOW.getTime() + 1000);
+    const reassigned = await withProctorAssignmentOperationRecovery(
+      db,
+      ctx,
+      reassignOp,
+      "assign",
+      payload,
+      later,
+      assignRunner(examId, proctorId, reassignOp, later),
+    );
+    expect(reassigned.outcome).toBe("applied");
+    expect(reassigned.assignment.id).not.toBe(winner.assignment.id);
+
+    // Recovery with the bound pinned BETWEEN the two rounds: the receipt must
+    // reference the ORIGINAL collision episode, never the later round.
+    const recovery = await formLoserReceipt(
+      db,
+      ctx,
+      loserOp,
+      "assign",
+      payload,
+      NOW,
+      { createdBefore: new Date(NOW.getTime() + 500) },
+    );
+    expect(recovery.outcome).toBe("no_change");
+    expect(recovery.assignment.id).toBe(winner.assignment.id);
+
+    // Control: without a pinned bound the default window is the recovery's
+    // own snapshot, so the ACTIVE later round is the referenced episode.
+    const recoveryDefault = await formLoserReceipt(
+      db,
+      ctx,
+      loserOp2,
+      "assign",
+      payload,
+      NOW,
+    );
+    expect(recoveryDefault.outcome).toBe("no_change");
+    expect(recoveryDefault.assignment.id).toBe(reassigned.assignment.id);
   });
 });

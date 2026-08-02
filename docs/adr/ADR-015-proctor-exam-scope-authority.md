@@ -572,6 +572,27 @@ losing operation still forms its own durable receipt**. 23505 from any
 constraint other than the active-unique or the event operation-unique is
 surfaced, never swallowed (mirrors ADR-014 §9).
 
+> **Amendment A1 (2026-08-02, J4-I1 review):** step 4's "now-committed active
+> assignment" read can come back empty even though the collision was real —
+> the winning episode may have been revoked between the loser's rollback and
+> its fresh read. Failing the recovery then (404) leaves the losing
+> `operationId` without permanent evidence, so a later retry is treated as a
+> fresh command. The resolution must NOT require the episode to still be
+> active: when no active assignment matches, the recovery falls back to the
+> most-recent episode of ANY status for (organizationId, examId,
+> proctorUserId) under the frozen order `(created_at DESC, id DESC)`, and the
+> loser's `no_change` receipt references THAT episode (active or already
+> revoked). Both lookups are restricted to the recovery's race window: the
+> first statement of the fresh transaction captures the snapshot bound
+> (`SELECT now()`; under the house REPEATABLE READ isolation it equals the
+> snapshot time). The winning episode committed before the collision, hence
+> strictly before that bound; an episode created at/after the bound — a
+> reassignment round that the losing command never competed with — is NEVER
+> referenced (the bound may be pinned explicitly by the orchestrator for
+> deterministic window semantics). A later replay of the loser's operationId
+> returns the same episode via the receipt's `assignment_id`. The invariant —
+> every racing operationId leaves permanent evidence — is unchanged.
+
 ## 8. Resource resolution (§6.8)
 
 Frozen resolvers J4-I1B MUST provide:

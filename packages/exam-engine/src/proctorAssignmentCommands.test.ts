@@ -65,6 +65,7 @@ function makeRepo(overrides: Partial<ProctorAssignmentRepo> = {}): {
     }),
     findById: vi.fn(async () => null),
     findActiveByExamAndProctor: vi.fn(async () => null),
+    findMostRecentEpisodeByExamAndProctor: vi.fn(async () => null),
     findMostRecentRevoked: vi.fn(async () => null),
     resolveRevokeTarget: vi.fn(async () => null),
     revokeAssignment: vi.fn(async (_ctx, _id, input) =>

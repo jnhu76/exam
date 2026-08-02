@@ -102,22 +102,69 @@ export function createProctorAssignmentRepo(db: Database) {
     return rows[0] ?? null;
   }
 
+  /**
+   * The active episode, optionally restricted to the recovery race window
+   * (`createdBefore` — episodes created at/after the bound are never matched;
+   * ADR-015 §7 amendment).
+   */
   async function findActiveByExamAndProctor(
     ctx: TenantContext | RequestContext,
     examId: string,
     proctorUserId: string,
+    opts?: { createdBefore?: Date },
   ): Promise<ExamProctorAssignmentRow | null> {
+    const conditions = [
+      eq(examProctorAssignments.organizationId, resolveOrganizationId(ctx)),
+      eq(examProctorAssignments.examId, examId),
+      eq(examProctorAssignments.proctorUserId, proctorUserId),
+      eq(examProctorAssignments.status, "active"),
+    ];
+    if (opts?.createdBefore) {
+      conditions.push(
+        sql`${examProctorAssignments.createdAt} < ${opts.createdBefore.toISOString()}::timestamptz`,
+      );
+    }
     const rows = await db
       .select()
       .from(examProctorAssignments)
-      .where(
-        and(
-          eq(examProctorAssignments.organizationId, resolveOrganizationId(ctx)),
-          eq(examProctorAssignments.examId, examId),
-          eq(examProctorAssignments.proctorUserId, proctorUserId),
-          eq(examProctorAssignments.status, "active"),
-        ),
+      .where(and(...conditions));
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Most-recent episode of ANY status for (org, exam, proctor) by the frozen
+   * order `(created_at DESC, id DESC)`. The §7 loser-receipt recovery falls
+   * back to this when the winning episode was already revoked before its
+   * fresh read, so the loser still forms its receipt against the episode
+   * that caused the collision. `createdBefore` restricts the lookup to the
+   * recovery's race window — a reassignment round created after the bound is
+   * never referenced.
+   */
+  async function findMostRecentEpisodeByExamAndProctor(
+    ctx: TenantContext | RequestContext,
+    examId: string,
+    proctorUserId: string,
+    opts?: { createdBefore?: Date },
+  ): Promise<ExamProctorAssignmentRow | null> {
+    const conditions = [
+      eq(examProctorAssignments.organizationId, resolveOrganizationId(ctx)),
+      eq(examProctorAssignments.examId, examId),
+      eq(examProctorAssignments.proctorUserId, proctorUserId),
+    ];
+    if (opts?.createdBefore) {
+      conditions.push(
+        sql`${examProctorAssignments.createdAt} < ${opts.createdBefore.toISOString()}::timestamptz`,
       );
+    }
+    const rows = await db
+      .select()
+      .from(examProctorAssignments)
+      .where(and(...conditions))
+      .orderBy(
+        sql`${examProctorAssignments.createdAt} DESC`,
+        sql`${examProctorAssignments.id} DESC`,
+      )
+      .limit(1);
     return rows[0] ?? null;
   }
 
@@ -376,6 +423,7 @@ export function createProctorAssignmentRepo(db: Database) {
     insertAssignment,
     findById,
     findActiveByExamAndProctor,
+    findMostRecentEpisodeByExamAndProctor,
     findMostRecentRevoked,
     resolveRevokeTarget,
     revokeAssignment,
