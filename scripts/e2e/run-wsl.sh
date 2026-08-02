@@ -96,7 +96,8 @@ export HEARTBEAT_TIMEOUT_MS=15000
 export HEARTBEAT_SCAN_INTERVAL_MS=5000
 export DEADLINE_SCAN_INTERVAL_MS=5000
 # 防止 shell 残留的 dev/prod DB 变量让 resolver 误走 dev 分支。
-unset DATABASE_URL TEST_DB_URL 2>/dev/null || true
+# 不吞 unset 错误：readonly 变量会使 unset 失败，此时应停止而非带污染 env 继续。
+unset DATABASE_URL TEST_DB_URL
 
 # ── 共享 helper（串行 / 并行 shard 路径复用）──────────────────────────
 DB_HOST_PORT_VAL="${DB_HOST_PORT:-15432}"
