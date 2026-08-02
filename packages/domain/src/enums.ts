@@ -342,3 +342,38 @@ export const IncidentOutcome = {
 } as const;
 export type IncidentOutcome =
   (typeof IncidentOutcome)[keyof typeof IncidentOutcome];
+
+// ── Proctor-to-Exam assignment (ADR-015) ──────────────────────────
+
+/** Proctor-to-Exam assignment episode status (monotonic revocation). */
+export const ExamProctorAssignmentStatus = {
+  Active: "active",
+  Revoked: "revoked",
+} as const;
+export type ExamProctorAssignmentStatus =
+  (typeof ExamProctorAssignmentStatus)[keyof typeof ExamProctorAssignmentStatus];
+
+/** Command type recorded on a proctor-assignment operation receipt. */
+export const ExamProctorAssignmentCommandType = {
+  Assign: "assign",
+  Revoke: "revoke",
+} as const;
+export type ExamProctorAssignmentCommandType =
+  (typeof ExamProctorAssignmentCommandType)[keyof typeof ExamProctorAssignmentCommandType];
+
+/** Outcome recorded on a proctor-assignment operation receipt (event table). */
+export const ExamProctorAssignmentEventOutcome = {
+  Applied: "applied",
+  NoChange: "no_change",
+} as const;
+export type ExamProctorAssignmentEventOutcome =
+  (typeof ExamProctorAssignmentEventOutcome)[keyof typeof ExamProctorAssignmentEventOutcome];
+
+/** Wire outcome for proctor-assignment write commands. */
+export const ExamProctorAssignmentCommandOutcome = {
+  Applied: "applied",
+  NoChange: "no_change",
+  IdempotentReplayed: "idempotent_replayed",
+} as const;
+export type ExamProctorAssignmentCommandOutcome =
+  (typeof ExamProctorAssignmentCommandOutcome)[keyof typeof ExamProctorAssignmentCommandOutcome];

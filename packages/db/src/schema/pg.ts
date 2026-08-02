@@ -275,6 +275,10 @@ export const exams = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    // Composite-FK target for child tables (exam_incidents, and J4-I1's
+    // exam_proctor_assignments): PostgreSQL requires a unique on the
+    // referenced (organization_id, id) pair. Additive index; no column edits.
+    uniqueIndex("exams_org_id_unique").on(table.organizationId, table.id),
     check(
       "exams_latest_start_offset_minutes_check",
       sql`${table.latestStartOffsetMinutes} >= 0`,
@@ -1467,6 +1471,180 @@ export const examIncidentInterruptionLinks = pgTable(
   ],
 );
 
+// ── Proctor-to-Exam Assignment Tables (ADR-015) ───────────────────
+
+/**
+ * Proctor-to-Exam assignment episodes (ADR-015 §4.1) — current state rows.
+ * At most one ACTIVE episode per (organization, exam, proctor) (partial
+ * unique); revoked episodes remain as history. No operation_id / reason_code
+ * columns on this row — operationId lives on the events table; reasonCode
+ * lives only inside the event's canonical_payload (single source of truth).
+ */
+export const examProctorAssignments = pgTable(
+  "exam_proctor_assignments",
+  {
+    id: id(),
+    // organizationId / user FKs are declared as explicit named foreign keys
+    // below (the drizzle-generated names exceed PostgreSQL's 63-char
+    // identifier limit for this table's longer name).
+    organizationId: text("organization_id").notNull(),
+    examId: text("exam_id").notNull(),
+    proctorUserId: text("proctor_user_id").notNull(),
+    status: text("status").notNull().default("active"),
+    assignedBy: text("assigned_by").notNull(),
+    assignedAt: timestamp("assigned_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    revokedBy: text("revoked_by"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // Composite-FK target for the events table (ADR-015 §4.1).
+    uniqueIndex("exam_proctor_assignments_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    // The one-active-episode arbiter (ADR-015 §7).
+    uniqueIndex("exam_proctor_assignments_active_unique")
+      .on(table.organizationId, table.examId, table.proctorUserId)
+      .where(sql`${table.status} = 'active'`),
+    // listExamProctors (ADR-015 §4.1).
+    index("exam_proctor_assignments_org_exam_status_idx").on(
+      table.organizationId,
+      table.examId,
+      table.status,
+    ),
+    // listProctorExams (ADR-015 §4.1).
+    index("exam_proctor_assignments_org_proctor_status_idx").on(
+      table.organizationId,
+      table.proctorUserId,
+      table.status,
+    ),
+    // Revoke-target episode resolution: active if present, else most-recent
+    // revoked by (revoked_at DESC, id DESC) (ADR-015 §6).
+    index("exam_proctor_assignments_revoke_target_idx").on(
+      table.organizationId,
+      table.examId,
+      table.proctorUserId,
+      table.status,
+      sql`${table.revokedAt} DESC`,
+      sql`${table.id} DESC`,
+    ),
+    check(
+      "exam_proctor_assignments_status_check",
+      sql`${table.status} IN ('active', 'revoked')`,
+    ),
+    check(
+      "exam_proctor_assignments_revocation_shape_check",
+      sql`
+        (
+          ${table.status} = 'active'
+          AND ${table.revokedAt} IS NULL
+          AND ${table.revokedBy} IS NULL
+        )
+        OR
+        (
+          ${table.status} = 'revoked'
+          AND ${table.revokedAt} IS NOT NULL
+          AND ${table.revokedBy} IS NOT NULL
+        )
+      `,
+    ),
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organizations.id],
+      name: "exam_proctor_assignments_org_fk",
+    }),
+    foreignKey({
+      columns: [table.proctorUserId],
+      foreignColumns: [users.id],
+      name: "exam_proctor_assignments_proctor_user_fk",
+    }),
+    foreignKey({
+      columns: [table.assignedBy],
+      foreignColumns: [users.id],
+      name: "exam_proctor_assignments_assigned_by_fk",
+    }),
+    foreignKey({
+      columns: [table.revokedBy],
+      foreignColumns: [users.id],
+      name: "exam_proctor_assignments_revoked_by_fk",
+    }),
+    // Composite FK to exams(organization_id, id) — requires the
+    // exams_org_id_unique index added above (ADR-015 §4.1 / §15).
+    foreignKey({
+      columns: [table.organizationId, table.examId],
+      foreignColumns: [exams.organizationId, exams.id],
+      name: "exam_proctor_assignments_exam_fk",
+    }),
+  ],
+);
+
+/**
+ * Proctor-to-Exam assignment events — append-only command receipts
+ * (ADR-015 §4.2). `UNIQUE (organization_id, operation_id)` is the sole
+ * idempotency arbiter (NOT audit_logs). `assignment_id` is NOT NULL: every
+ * event acquires its episode id in the same transaction that creates or
+ * resolves the episode. `actor_id` is NOT NULL — assign/revoke are human
+ * Admin commands; there is no anonymous actor path.
+ */
+export const examProctorAssignmentEvents = pgTable(
+  "exam_proctor_assignment_events",
+  {
+    id: uuid("id").primaryKey(),
+    // Explicit named FK below (generated name exceeds PG identifier limit).
+    organizationId: text("organization_id").notNull(),
+    assignmentId: text("assignment_id").notNull(),
+    commandType: text("command_type").notNull(),
+    operationId: uuid("operation_id").notNull(),
+    canonicalPayload: jsonb("canonical_payload").notNull(),
+    outcome: text("outcome").notNull(),
+    actorId: text("actor_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // The idempotency arbiter (ADR-015 §4.2 / §7).
+    uniqueIndex("exam_proctor_assignment_events_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    index("exam_proctor_assignment_events_assignment_idx").on(
+      table.organizationId,
+      table.assignmentId,
+      table.createdAt,
+    ),
+    check(
+      "exam_proctor_assignment_events_command_type_check",
+      sql`${table.commandType} IN ('assign', 'revoke')`,
+    ),
+    check(
+      "exam_proctor_assignment_events_outcome_check",
+      sql`${table.outcome} IN ('applied', 'no_change')`,
+    ),
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organizations.id],
+      name: "exam_proctor_assignment_events_org_fk",
+    }),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [users.id],
+      name: "exam_proctor_assignment_events_actor_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.assignmentId],
+      foreignColumns: [
+        examProctorAssignments.organizationId,
+        examProctorAssignments.id,
+      ],
+      name: "exam_proctor_assignment_events_assignment_fk",
+    }),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -1494,4 +1672,6 @@ export const schema = {
   examIncidentActions,
   examIncidentAttempts,
   examIncidentInterruptionLinks,
+  examProctorAssignments,
+  examProctorAssignmentEvents,
 };

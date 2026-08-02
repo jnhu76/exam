@@ -169,6 +169,13 @@
       "when": 1787600000000,
       "tag": "0023_exam_incidents",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785621462155,
+      "tag": "0024_breezy_tigra",
+      "breakpoints": true
     }
   ]
 }

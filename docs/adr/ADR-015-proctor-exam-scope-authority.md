@@ -506,7 +506,7 @@ canonicalization); J4-I1A ships the canonical comparator with tests.
 
 | Race | Outcome |
 | --- | --- |
-| Two concurrent `assignProctorToExam` (same exam+proctor, different operationId) | The active-unique partial index admits exactly one INSERT winner; the loser hits 23505 on the named constraint and runs the §7 recovery algorithm, which writes the loser's own `no_change` event receipt referencing the committed active episode. Both return the same active episode. No split-brain active rows; both operationIds leave permanent evidence. |
+| Two concurrent `assignProctorToExam` (same exam+proctor, different operationId) | The active-unique partial index admits exactly one INSERT winner; the loser hits 23505 on the named constraint and runs the §7 recovery algorithm, which writes the loser's own `no_change` event receipt referencing the recovery-snapshot episode (the active episode if one is visible in the fresh recovery transaction's MVCC snapshot, else the most-recent visible episode of any status by the frozen `(created_at DESC, id DESC)` order). No split-brain active rows; both operationIds leave permanent evidence. |
 | Two concurrent `assignProctorToExam` (same operationId — retry) | The events-table `(org, opId)` unique admits exactly one event; the second is a replay (returns the original episode), NO write. |
 | Assign vs revoke (same exam+proctor) | The active-unique index means exactly one active row exists. Whichever transaction locks/inserts first wins; the other either writes a `no_change` receipt (assign loser, per §7) or resolves the most-recent revoked episode (revoke when the active row was already revoked by the winner). |
 | Two concurrent `revokeProctorFromExam` (same resolved episode) | The first UPDATE sets `status='revoked'` and writes an `applied` event; the second locks the same row, sees `status='revoked'`, writes a `no_change` event referencing that episode, NO audit. |
@@ -552,16 +552,20 @@ of that opId cannot be distinguished from a fresh command.
 3. query the event row by (organizationId, operationId):
      found → compare commandType + canonical payload
             → replay (idempotent_replayed) or IDEMPOTENCY_CONFLICT;
-4. otherwise query the now-committed active assignment
-     by (organizationId, examId, proctorUserId);
+4. otherwise resolve an episode from the fresh recovery transaction's
+     Repeatable Read snapshot — the active episode if one is visible,
+     else the most-recent visible episode of any status by
+     `(created_at DESC, id DESC)`. The referenced episode is a durable
+     recovery anchor, not necessarily the physical row that triggered the
+     original unique violation (Amendment A1);
 5. INSERT event row:
      commandType      = assign
-     assignmentId     = the committed active assignment id
+     assignmentId     = the recovery-snapshot episode resolved in step 4
      operationId      = the LOSING command's operationId
      canonicalPayload = the LOSING command's payload
      outcome          = no_change;
 6. write NO compliance audit (no state change);
-7. commit; return the no_change / idempotent-style outcome + the active episode.
+7. commit; return the no_change / idempotent-style outcome + the resolved episode.
 ```
 
 Step 5 may itself race another recoverer using the same `operationId` →
@@ -571,6 +575,31 @@ race pattern: the unique constraint is the final arbiter, but **every
 losing operation still forms its own durable receipt**. 23505 from any
 constraint other than the active-unique or the event operation-unique is
 surfaced, never swallowed (mirrors ADR-014 §9).
+
+> **Amendment A1 (2026-08-02, J4-I1A review):** Recovery resolves an episode
+> from the fresh Repeatable Read transaction's fixed MVCC snapshot. It selects
+> the active episode if one is visible; otherwise the most-recent visible
+> episode of any status under the frozen order `(created_at DESC, id DESC)`.
+> The selected episode is a durable recovery anchor and is **not** guaranteed
+> to be the physical row that triggered the original unique violation. A
+> reassignment committed before the recovery snapshot may be selected; one
+> committed after the snapshot cannot be selected.
+>
+> The recovery snapshot is established by the first statement of the fresh
+> transaction (`findEventByOperationId`). No application time bound is used.
+> (The earlier formulation — `SELECT now()` as the snapshot bound plus a
+> `created_at < bound` filter — was withdrawn: `now()` is the transaction-start
+> timestamp, not the snapshot establishment time, and the filter compared a
+> database clock against an application-supplied `created_at`, which reopened
+> the no-evidence hole under host clock skew. The MVCC snapshot itself is the
+> race window.) When no active episode is visible (e.g. the winner was revoked
+> before the recovery snapshot) the fallback to the most-recent visible episode
+> of any status guarantees the loser still leaves permanent evidence.
+>
+> The invariant — every operationId that loses an assignment race leaves one
+> durable receipt referencing a deterministic episode visible to its recovery
+> snapshot — is unchanged. A later replay of the loser's `operationId` returns
+> the same episode via the receipt's `assignment_id`.
 
 ## 8. Resource resolution (§6.8)
 

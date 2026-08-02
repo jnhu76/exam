@@ -230,3 +230,93 @@ describe("auditPolicy — Incident payloads use canonical domain values", () => 
     }
   });
 });
+
+describe("auditPolicy — Proctor-to-Exam assignment payloads (ADR-015 §14)", () => {
+  const ASSIGNMENT_ID = "assignment-1";
+  const PROCTOR_USER_ID = "proctor-1";
+  const ACTOR_ID = "actor-1";
+  const OPERATION_ID = "11111111-1111-4111-8111-111111111111";
+  const AT = "2026-02-01T00:00:00.000Z";
+
+  it("ExamProctorAssigned accepts the frozen bounded metadata", () => {
+    const out = validateAuditPayload(AuditAction.ExamProctorAssigned, {
+      organizationId: "org-1",
+      examId: EXAM_ID,
+      proctorUserId: PROCTOR_USER_ID,
+      assignmentId: ASSIGNMENT_ID,
+      actorId: ACTOR_ID,
+      operationId: OPERATION_ID,
+      assignedAt: AT,
+      reasonCode: "pre-exam planning",
+    });
+    expect(out.assignmentId).toBe(ASSIGNMENT_ID);
+    expect(out.reasonCode).toBe("pre-exam planning");
+  });
+
+  it("ExamProctorAssigned rejects extra keys (strict object) and a non-datetime assignedAt", () => {
+    expect(() =>
+      validateAuditPayload(AuditAction.ExamProctorAssigned, {
+        organizationId: "org-1",
+        examId: EXAM_ID,
+        proctorUserId: PROCTOR_USER_ID,
+        assignmentId: ASSIGNMENT_ID,
+        actorId: ACTOR_ID,
+        operationId: OPERATION_ID,
+        assignedAt: "not-a-datetime",
+      }),
+    ).toThrow();
+    expect(() =>
+      validateAuditPayload(AuditAction.ExamProctorAssigned, {
+        organizationId: "org-1",
+        examId: EXAM_ID,
+        proctorUserId: PROCTOR_USER_ID,
+        assignmentId: ASSIGNMENT_ID,
+        actorId: ACTOR_ID,
+        operationId: OPERATION_ID,
+        assignedAt: AT,
+        candidatePii: "must not appear",
+      }),
+    ).toThrow();
+  });
+
+  it("ExamProctorRevoked accepts the frozen bounded metadata", () => {
+    const out = validateAuditPayload(AuditAction.ExamProctorRevoked, {
+      organizationId: "org-1",
+      examId: EXAM_ID,
+      proctorUserId: PROCTOR_USER_ID,
+      assignmentId: ASSIGNMENT_ID,
+      actorId: ACTOR_ID,
+      operationId: OPERATION_ID,
+      revokedAt: AT,
+      reasonCode: null,
+    });
+    expect(out.revokedAt).toBe(AT);
+    expect(out.reasonCode).toBeNull();
+  });
+
+  it("ExamProctorRevoked rejects a missing revokedAt and an over-long reasonCode", () => {
+    expect(() =>
+      validateAuditPayload(AuditAction.ExamProctorRevoked, {
+        organizationId: "org-1",
+        examId: EXAM_ID,
+        proctorUserId: PROCTOR_USER_ID,
+        assignmentId: ASSIGNMENT_ID,
+        actorId: ACTOR_ID,
+        operationId: OPERATION_ID,
+        reasonCode: null,
+      }),
+    ).toThrow();
+    expect(() =>
+      validateAuditPayload(AuditAction.ExamProctorRevoked, {
+        organizationId: "org-1",
+        examId: EXAM_ID,
+        proctorUserId: PROCTOR_USER_ID,
+        assignmentId: ASSIGNMENT_ID,
+        actorId: ACTOR_ID,
+        operationId: OPERATION_ID,
+        revokedAt: AT,
+        reasonCode: "x".repeat(101),
+      }),
+    ).toThrow();
+  });
+});
