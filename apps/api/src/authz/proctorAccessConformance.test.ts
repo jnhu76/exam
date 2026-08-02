@@ -30,6 +30,7 @@ import {
   ROLE_PRESETS,
   Role,
   type PermissionKey,
+  type RoleKey,
 } from "@exam/authz";
 import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
 import {
@@ -292,6 +293,107 @@ describe("J4-I1B proctorAccess structural conformance (ADR-015 §8)", () => {
       expect(runtime!.authz?.kind, `${key} is scoped (never flat)`).toBe(
         "scoped",
       );
+    }
+  });
+
+  /**
+   * J4-I1C precise registry↔runtime authorization lock for the three
+   * Proctor-assignment routes (ADR-015 §16). The registry is the authorization
+   * enumeration source of truth; this proves the RUNTIME gate on each route is
+   * not merely "a valid scoped gate" but EXACTLY the registry's declared
+   * permission + resolver + resource param — so a regression that swaps e.g.
+   * `ExamProctorAssignmentManage` for the broader, Teacher-granted `ExamView`
+   * (which would still pass every other conformance assertion here: Admin still
+   * passes, a Proctor still gets 403, cross-org still 404s, route count is
+   * unchanged, the permission is a valid catalog value) is caught mechanically.
+   */
+  it("every Proctor-assignment route's runtime gate matches its registry entry precisely (permission + resolver + resource)", () => {
+    const matrix: Array<{
+      method: string;
+      path: string;
+      permission: PermissionKey;
+      resolverKey: string;
+      resourceIdKey: string;
+    }> = [
+      {
+        method: "POST",
+        path: "/admin/exams/:examId/proctors",
+        permission: Permission.ExamProctorAssignmentManage,
+        resolverKey: "exam",
+        resourceIdKey: "examId",
+      },
+      {
+        method: "GET",
+        path: "/admin/exams/:examId/proctors",
+        permission: Permission.ExamProctorAssignmentView,
+        resolverKey: "exam",
+        resourceIdKey: "examId",
+      },
+      {
+        method: "POST",
+        path: "/admin/exams/:examId/proctors/:proctorUserId/revoke",
+        permission: Permission.ExamProctorAssignmentManage,
+        resolverKey: "exam",
+        resourceIdKey: "examId",
+      },
+    ];
+    for (const expected of matrix) {
+      const key = `${expected.method} ${expected.path}`;
+      const entry = ROUTE_PERMISSION_REGISTRY.find(
+        (e) => e.method === expected.method && e.path === expected.path,
+      );
+      expect(entry, `registry entry ${key} exists`).toBeDefined();
+      // Registry permission must match the expected dedicated permission (this
+      // is the value the runtime lock below compares against).
+      expect(entry!.permission, `${key} registry permission`).toBe(
+        expected.permission,
+      );
+      const runtime = runtimeRouteFor(entry!);
+      expect(runtime, `${key} runtime route exists`).toBeDefined();
+      expect(runtime!.authz?.kind, `${key} scoped at runtime`).toBe("scoped");
+      if (runtime!.authz?.kind !== "scoped") continue; // narrow for TS
+      expect(runtime!.authz.permission, `${key} runtime permission`).toBe(
+        entry!.permission,
+      );
+      expect(runtime!.authz.resolverKey, `${key} resolver key`).toBe(
+        entry!.resolver,
+      );
+      expect(runtime!.authz.resourceIdKey, `${key} resource id key`).toBe(
+        expected.resourceIdKey,
+      );
+    }
+  });
+
+  it("ExamProctorAssignmentView/Manage are granted to Admin ONLY (never Teacher/Proctor/Grader/Candidate/System)", () => {
+    // The product boundary: Proctor-assignment management is Admin-exclusive.
+    // Locking every non-Admin role — not just Proctor — guards against a future
+    // preset edit that accidentally grants it to Teacher (which holds the
+    // broad ExamView grant that the runtime-lock test above defends against).
+    const ASSIGNMENT_PERMISSIONS: readonly PermissionKey[] = [
+      Permission.ExamProctorAssignmentView,
+      Permission.ExamProctorAssignmentManage,
+    ];
+    const ADMIN_KEYS: readonly RoleKey[] = [Role.Admin];
+    const NON_ADMIN_KEYS: readonly RoleKey[] = [
+      Role.Teacher,
+      Role.Proctor,
+      Role.Grader,
+      Role.Candidate,
+      Role.System,
+    ];
+    for (const perm of ASSIGNMENT_PERMISSIONS) {
+      for (const role of ADMIN_KEYS) {
+        expect(
+          ROLE_PRESETS[role].permissions,
+          `${role} must grant ${perm}`,
+        ).toContain(perm);
+      }
+      for (const role of NON_ADMIN_KEYS) {
+        expect(
+          ROLE_PRESETS[role].permissions,
+          `${role} must NOT grant ${perm}`,
+        ).not.toContain(perm);
+      }
     }
   });
 });

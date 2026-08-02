@@ -11,7 +11,7 @@
 # 固化完整链路，让任何开发者（含 AI agent）一键复现。
 #
 # 关键：dev server 必须带 E2E 专用 env，与 docker-compose.test.yml 对齐：
-#   - APP_MODE=e2e              开启 e2e fixture 路由 + 自动关闭限流（与 CI 一致）
+#   - APP_MODE=e2e              选择测试数据库路径 + 自动关闭限流（与 CI 一致）
 #   - RATE_LIMIT_DISABLED=1     E2E 连续登录/请求不能被限流（双保险，同 CI）
 #   - HEARTBEAT_TIMEOUT_MS=15000    disconnect-restore spec 依赖 15s 超时
 #   - HEARTBEAT_SCAN_INTERVAL_MS=5000 / DEADLINE_SCAN_INTERVAL_MS=5000
@@ -85,9 +85,8 @@ done
 # seed 进程。WSL 快速 E2E 走独立的 exam_e2e 库（不是 dev 的 exam，也不是 vitest 的
 # exam_test），这样 reseed 只覆盖 e2e 数据，绝不污染 dev/vitest 库（AGENTS.md
 # "Local Database Discipline"）。APP_MODE=e2e 使 resolver 强制走
-# TEST_DATABASE_URL（test/e2e/ci 分支，绝不停退 DATABASE_URL），并开启
-# e2e fixture 路由 + 自动关闭限流；DATABASE_URL 显式 unset，防止残留的 dev URL
-# 干扰（e2e 模式下 resolver 本来也不会读它）。
+# TEST_DATABASE_URL（test/e2e/ci 分支，绝不停退 DATABASE_URL），并自动关闭限流；
+# DATABASE_URL 显式 unset，防止残留的 dev URL 干扰（e2e 模式下 resolver 本来也不会读它）。
 E2E_DB_NAME="exam_e2e"
 export APP_MODE=e2e
 export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-15432}/${E2E_DB_NAME}"

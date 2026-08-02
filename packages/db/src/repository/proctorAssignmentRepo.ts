@@ -15,11 +15,23 @@ export type ExamProctorAssignmentEventRow =
 
 export type AssignmentStatusFilter = "active" | "revoked" | "all";
 
+/**
+ * Structured keyset cursor for {@link listExamProctors}: the (created_at, id)
+ * pair of the last row on the previous page. The opaque wire format
+ * (`"<createdAtISO>|<id>"`) is parsed/validated at the API boundary, never
+ * here — the repo only consumes trusted structured values, so an untrusted
+ * cursor can never reach the query as a raw string.
+ */
+export interface AssignmentCursor {
+  createdAt: Date;
+  id: string;
+}
+
 export interface ListExamProctorsParams {
   status: AssignmentStatusFilter;
   limit: number;
-  /** Opaque keyset cursor: `"<createdAtISO>|<id>"` (stable (created_at, id) order). */
-  cursor?: string | null;
+  /** Structured keyset cursor (stable (created_at, id) order). */
+  cursor?: AssignmentCursor | null;
 }
 
 export interface InsertAssignmentInput {
@@ -329,7 +341,10 @@ export function createProctorAssignmentRepo(db: Database) {
     ctx: TenantContext | RequestContext,
     examId: string,
     params: ListExamProctorsParams,
-  ): Promise<{ items: ExamProctorAssignmentRow[]; nextCursor: string | null }> {
+  ): Promise<{
+    items: ExamProctorAssignmentRow[];
+    nextCursor: AssignmentCursor | null;
+  }> {
     const conditions = [
       eq(examProctorAssignments.organizationId, resolveOrganizationId(ctx)),
       eq(examProctorAssignments.examId, examId),
@@ -338,15 +353,15 @@ export function createProctorAssignmentRepo(db: Database) {
       conditions.push(eq(examProctorAssignments.status, params.status));
     }
     if (params.cursor) {
-      const [createdAtIso, id] = params.cursor.split("|");
-      const cursorCreatedAt = new Date(createdAtIso!).toISOString();
+      const cursorCreatedAt = params.cursor.createdAt.toISOString();
+      const cursorId = params.cursor.id;
       // Keyset predicate on (created_at, id): strictly after the cursor row.
       conditions.push(
         sql`(
           ${examProctorAssignments.createdAt} > ${cursorCreatedAt}::timestamptz
           OR (
             ${examProctorAssignments.createdAt} = ${cursorCreatedAt}::timestamptz
-            AND ${examProctorAssignments.id} > ${id}
+            AND ${examProctorAssignments.id} > ${cursorId}
           )
         )`,
       );
@@ -363,7 +378,10 @@ export function createProctorAssignmentRepo(db: Database) {
     const items = rows.slice(0, params.limit);
     const nextCursor =
       rows.length > params.limit && items.length > 0
-        ? `${items[items.length - 1]!.createdAt.toISOString()}|${items[items.length - 1]!.id}`
+        ? {
+            createdAt: items[items.length - 1]!.createdAt,
+            id: items[items.length - 1]!.id,
+          }
         : null;
     return { items, nextCursor };
   }
