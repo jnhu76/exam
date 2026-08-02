@@ -2,11 +2,15 @@
  * J4-I1D end-to-end authorization tests (ADR-015 §6.3) — the frozen
  * Proctor capability set activated behind the J4-I1B resolver enforcement.
  *
- * Fixtures: Admin · Proctor P1 (assigned to Exam A) · Proctor P2 (unassigned)
- * · Exam A · Exam B · Attempts and Incidents under both Exams.
+ * Fixtures: Admin · Proctor P1 (assigned to Exam A, holds Proctor + Candidate
+ * roles) · Proctor P2 (assigned to nothing) · Exam A · Exam B · Attempts and
+ * Incidents under both Exams.
  *
- * Covers every §6.3 assertion, including the revocation / role-loss /
- * role-restore cycles and the "Admin needs no fake assignment row" invariant.
+ * Covers representative assigned-Proctor read/create/investigate paths
+ * (timeline, proctor-events, monitoring, incident create/investigate/notes,
+ * severity, evidence links) plus the full denial matrix: cross-Exam 404,
+ * dangerous-op 403, revocation / role-loss / role-restore, zero-assignment
+ * actor, and the "Admin needs no fake assignment row" invariant.
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -46,6 +50,8 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
   let p1Token: string;
   let p2Token: string;
   let p1AssignmentId: string;
+  let p1ProctorRoleAssignmentId: string;
+  let p1CandidateRoleAssignmentId: string;
   let candidateProfileId: string;
 
   async function seedExam(examTitle: string): Promise<ExamFixture> {
@@ -163,7 +169,10 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
     examA = await seedExam("Exam A");
     examB = await seedExam("Exam B");
 
-    // P1: assigned to Exam A. P2: unassigned.
+    // P1: assigned to Exam A, holds BOTH an active Proctor role AND an active
+    // Candidate role (the Candidate role is the secondary-role fixture used by
+    // the role-loss test to prove assignment-only denial at the capability
+    // layer — see "removing the active Proctor ROLE" below). P2: unassigned.
     const p1 = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
@@ -172,6 +181,31 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
     );
     p1UserId = p1.user.id;
     p1Token = p1.token;
+    const [p1ProctorRole] = await ctx.db
+      .select()
+      .from(schema.userRoleAssignments)
+      .where(
+        and(
+          eq(schema.userRoleAssignments.organizationId, ctx.org.id),
+          eq(schema.userRoleAssignments.userId, p1UserId),
+        ),
+      );
+    p1ProctorRoleAssignmentId = p1ProctorRole!.id;
+    const now0 = new Date();
+    const [p1CandidateRole] = await ctx.db
+      .insert(schema.userRoleAssignments)
+      .values({
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        userId: p1UserId,
+        role: "Candidate",
+        isPrimary: false,
+        isActive: true,
+        createdAt: now0,
+        updatedAt: now0,
+      })
+      .returning();
+    p1CandidateRoleAssignmentId = p1CandidateRole!.id;
     const p2 = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
@@ -281,6 +315,43 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
     });
   });
 
+  describe("zero-assignment actor (P2 — no exam assignment, still a Proctor)", () => {
+    it("P2 lists zero Exams via the assignment-filtered collection (200 + empty list)", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/proctor/exams",
+        cookies: { "auth-token": p2Token },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().items).toEqual([]);
+    });
+
+    it("P2 cannot read Exam A monitoring (404, no active assignment)", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/exams/${examA.examId}/proctor/attempts`,
+        cookies: { "auth-token": p2Token },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("P2 cannot create an Incident for Exam A (404, no active assignment)", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/exams/${examA.examId}/incidents`,
+        cookies: { "auth-token": p2Token },
+        payload: {
+          operationId: opId(),
+          type: "suspected_misconduct",
+          description: "P2 should be denied",
+        },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+  });
+
   describe("incident authority for assigned Exams", () => {
     it("P1 can create an Incident for Exam A", async () => {
       const res = await ctx.app.inject({
@@ -297,7 +368,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
       expect(res.json().outcome).toBe("applied");
     });
 
-    it("P1 can investigate the Exam A incident (start + note)", async () => {
+    it("P1 can investigate the Exam A incident (start + note + severity + evidence link)", async () => {
       const created = await ctx.app.inject({
         method: "POST",
         url: `/api/admin/exams/${examA.examId}/incidents`,
@@ -323,6 +394,33 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         payload: { operationId: opId(), body: "P1 note" },
       });
       expect(note.statusCode, note.body).toBe(200);
+      // severity (investigate v1→2; notes are append-only, no version bump) —
+      // P1 holds IncidentInvestigate.
+      const severity = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/incidents/${incidentId}/severity`,
+        cookies: { "auth-token": p1Token },
+        payload: {
+          operationId: opId(),
+          expectedVersion: 2,
+          severity: "major",
+        },
+      });
+      expect(severity.statusCode, severity.body).toBe(200);
+      expect(severity.json().incident.severity).toBe("major");
+      // evidence link — P1 links the Exam A attempt to the incident.
+      const linkAttempt = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/incidents/${incidentId}/attempts`,
+        cookies: { "auth-token": p1Token },
+        payload: {
+          operationId: opId(),
+          attemptId: examA.attemptId,
+          relationshipType: "affected",
+        },
+      });
+      expect(linkAttempt.statusCode, linkAttempt.body).toBe(200);
+      expect(linkAttempt.json().incident.id).toBe(incidentId);
     });
 
     it("P1 cannot resolve or dismiss an Incident → 403", async () => {
@@ -429,37 +527,44 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
       expect(res.statusCode).toBe(200);
     });
 
-    it("removing the active Proctor ROLE disables access even though the assignment remains", async () => {
-      // Deactivate P1's Proctor role assignment (the exam assignment stays
-      // active — the triple requires BOTH).
+    it("removing the active Proctor ROLE denies access even though the assignment remains (403, not 401)", async () => {
+      // Deactivate ONLY the Proctor role assignment and promote the Candidate
+      // role to primary (exactly-one-active-primary invariant), so the request
+      // still authenticates under a legal active role. The exam assignment
+      // stays active — the retained active Proctor-to-Exam assignment must NOT
+      // by itself grant Proctor capability. This is the ADR-015
+      // assignment-only bypass: authenticated actor + active assignment + no
+      // active Proctor role → 403 PERMISSION_DENIED, never 401 (which would be
+      // a weaker "no active role at all" proof).
       await ctx.db
         .update(schema.userRoleAssignments)
         .set({ isActive: false })
-        .where(
-          and(
-            eq(schema.userRoleAssignments.organizationId, ctx.org.id),
-            eq(schema.userRoleAssignments.userId, p1UserId),
-          ),
-        );
-      // With zero active assignments, authenticate denies 401.
+        .where(eq(schema.userRoleAssignments.id, p1ProctorRoleAssignmentId));
+      await ctx.db
+        .update(schema.userRoleAssignments)
+        .set({ isPrimary: true })
+        .where(eq(schema.userRoleAssignments.id, p1CandidateRoleAssignmentId));
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/exams/${examA.examId}/proctor/attempts`,
         cookies: { "auth-token": p1Token },
       });
-      expect(res.statusCode).toBe(401);
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe("PERMISSION_DENIED");
     });
 
     it("restoring the active Proctor role makes the retained active assignment authorize again", async () => {
+      // Demote the Candidate role first, then promote the Proctor role back to
+      // active primary — the user_role_assignments_active_primary_unique
+      // partial index allows exactly one active primary at a time.
       await ctx.db
         .update(schema.userRoleAssignments)
-        .set({ isActive: true })
-        .where(
-          and(
-            eq(schema.userRoleAssignments.organizationId, ctx.org.id),
-            eq(schema.userRoleAssignments.userId, p1UserId),
-          ),
-        );
+        .set({ isPrimary: false })
+        .where(eq(schema.userRoleAssignments.id, p1CandidateRoleAssignmentId));
+      await ctx.db
+        .update(schema.userRoleAssignments)
+        .set({ isActive: true, isPrimary: true })
+        .where(eq(schema.userRoleAssignments.id, p1ProctorRoleAssignmentId));
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/exams/${examA.examId}/proctor/attempts`,
@@ -470,7 +575,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
   });
 
   describe("Admin authority without fake assignment rows", () => {
-    it("Admin works on every Proctor-reachable route with zero assignment rows", async () => {
+    it("Admin works on representative Proctor-reachable routes with zero assignment rows", async () => {
       const routes = [
         ["GET", `/api/admin/exams/${examA.examId}/proctor/attempts`],
         ["GET", `/api/admin/attempts/${examA.attemptId}/timeline`],

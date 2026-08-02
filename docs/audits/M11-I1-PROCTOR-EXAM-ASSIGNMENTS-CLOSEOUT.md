@@ -1,7 +1,7 @@
 # M11-I1 — Proctor-to-Exam Assignments Closeout Audit
 
 > **Job:** `M11-PROCTOR-EXAM-ASSIGNMENTS` (J4-I1)
-> **Type:** Implementation closeout (runtime shipped via four stacked draft PRs)
+> **Type:** Implementation closeout (runtime shipped via four stacked PRs)
 > **Date:** 2026-08-02
 > **Branches:** `feat/m11-i1a-proctor-assignment-domain` → `feat/m11-i1b-proctor-scope-runtime` → `feat/m11-i1c-proctor-assignment-api` → `feat/m11-i1d-proctor-minimum-activation`
 > **Authority:** ADR-015 (Accepted 2026-08-02, PR #245, base `836023c7`)
@@ -10,20 +10,25 @@
 
 ## 1. Job and PR stack
 
-| Slice | PR | Title | Base | Head SHA |
-| --- | --- | --- | --- | --- |
-| J4-I1A | #246 (draft) | add Proctor-to-Exam assignment domain | `master` @ `836023c7` | `329b74ce` |
-| J4-I1B | #247 (draft) | enforce Proctor Exam scope | PR A branch | `cf5c8bda` |
-| J4-I1C | #248 (draft) | add Admin Proctor assignment API | PR B branch | `6affe62d` |
-| J4-I1D | #249 (draft) | activate minimum Proctor authority | PR C branch | HEAD of this branch |
+| Slice | PR | Title | Base | Final state | Final head SHA | Merge commit |
+| --- | --- | --- | --- | --- | --- | --- |
+| J4-I1A | #246 | add Proctor-to-Exam assignment domain | `master` | merged | `7c3d7686` | `b464647c` |
+| J4-I1B | #247 | enforce Proctor Exam scope | PR A branch | merged | `8fb99b83` | `27cbc10f` |
+| J4-I1C | #248 | add Admin Proctor assignment API | PR B branch | merged | `dfe089cf` | `cd3cccfd` |
+| J4-I1D (original) | #249 | activate minimum Proctor authority | PR C branch | closed, unmerged, superseded by #250 | — | — |
+| J4-I1D closing PR | #250 | activate minimum Proctor authority | `master` | current closing PR | `45344342` | populate after merge / omitted by design |
 
-Stack: `A → B`, `A → C`, `B + C → D` (mandated linear delivery A→B→C→D). No PR was merged; no PR was marked ready for review automatically.
+Stack: `A → B`, `A → C`, `B + C → D` (mandated linear delivery A→B→C→D). PRs
+#246–#248 were merged in sequence; the original J4-I1D PR (#249) was based on
+the PR C branch and was closed once its rebased replacement (#250, base
+`master`) was opened. The closing PR's merge commit is intentionally not
+pre-guessed.
 
 ## 2. Base and final SHAs
 
 - Accepted base SHA: `836023c7f9b32bc2cacc8745d1257363fc0222bd` (master, PR #245 M11-R0)
 - ADR-015 acceptance date: 2026-08-02; acceptance evidence: ADR-015 §Status + §26 checklist (all closed) present on the base commit; J4-R0 CLOSED and J4-I1 NEXT per `docs/roadmap/recovery-operations-jobs.md` §6.
-- Final head (PR D branch): see PR D (pushed as draft).
+- Final head (J4-I1D closing PR #250): `45344342`.
 
 ## 3. Implemented scope
 
@@ -39,7 +44,7 @@ Stack: `A → B`, `A → C`, `B + C → D` (mandated linear delivery A→B→C�
 
 - Incident→Exam resolver (`incident` resolver family; incident's examId server-derived).
 - Per-request Proctor-assignment enforcement (`proctorAccess: "assignment_scoped"`) after capability check + resource resolver; Admin short-circuit; missing assignment folded into 404 `RESOURCE_NOT_FOUND`.
-- 5-valued `proctorAccess` on every route-registry entry (93 entries incl. the 11 previously-missing incident routes); structural conformance test enumerating every entry.
+- 5-valued `proctorAccess` on every route-registry entry (96 entries incl. the 11 previously-missing incident routes — was 93 at J4-I1B, +3 Admin assignment routes in J4-I1C); structural conformance test enumerating every entry.
 - Flat→scoped flips: misconduct, force-submit, timeline, all 11 incident routes; legacy `proctor-incident` marker Admin-only + OpenAPI `deprecated: true` (stays scoped).
 - `AttemptForceSubmit` + `AttemptMisconductMark` removed from `PROCTOR_PERMISSIONS` and the Proctor sensitive projection (still valid Admin catalog permissions).
 - `GET /admin/proctor/exams` backend assignment-filtered (assignment_filtered_collection).
@@ -55,7 +60,7 @@ Stack: `A → B`, `A → C`, `B + C → D` (mandated linear delivery A→B→C�
 
 - Proctor preset gains `IncidentView` / `IncidentCreate` / `IncidentInvestigate` (ADR-014 §8 target grant) behind the J4-I1B enforcement.
 - `AttemptForceSubmit` / `AttemptMisconductMark` NOT restored; `AttemptTimeGrant` / `IncidentResolve` NOT granted.
-- End-to-end authorization tests covering the full §6.3 matrix (cross-Exam denial, revoke/restore, role-loss/role-restore, Admin-without-fake-rows).
+- End-to-end authorization tests covering the §6.3 matrix (cross-Exam denial, revoke/restore, role-loss/role-restore with an active non-Proctor role proving assignment-only denial, Admin-without-fake-rows, zero-assignment actor).
 
 ## 4. Schema and constraints (frozen, verified against real PostgreSQL)
 
@@ -123,7 +128,7 @@ The concurrent-assign loser forms its own durable `no_change` receipt in a fresh
 
 - `pnpm verify:static` — PASS on every PR.
 - `packages/authz`, `packages/db`, `packages/exam-engine`, `apps/api` suites — PASS (apps/api: 141 files / 1787 tests incl. new conformance, behavior, authorization, and assignment-API tests).
-- Real-PostgreSQL concurrency + migration-contract tests (PR A), structural conformance (PR B), Admin API integration (PR C), §6.3 end-to-end authorization matrix (PR D).
+- Real-PostgreSQL concurrency + migration-contract tests (PR A), structural conformance (PR B), Admin API integration (PR C), §6.3 end-to-end authorization tests (PR D / #250): representative assigned-Proctor read/create/investigate paths plus the full denial matrix (cross-Exam 404, dangerous-op 403, revocation, role-loss, zero-assignment actor).
 - `git diff --check` clean.
 
 ## 14. Explicit non-goals (still NOT implemented)
@@ -173,25 +178,36 @@ ADR-015's core invariant ("every racing operationId must form permanent
 evidence"). The shipped concurrency test only covered two concurrent assigns
 while the winner stays active.
 
-**Fix (PR #246, `94f683bf`):** `formLoserReceipt` no longer requires the
-episode to be active. It resolves the collision episode within the recovery's
-race window:
+**Fix (PR #246, `94f683bf`, finalized by Amendment A1):**
+`formLoserReceipt` no longer requires the episode to be active, and it no
+longer uses any application time bound. Recovery resolves the collision
+episode from the fresh transaction's own fixed MVCC snapshot:
 
-1. own operation event (unchanged — replay/conflict);
-2. committed active assignment, bounded by the window;
-3. fallback: most-recent episode of ANY status by the frozen
-   `(created_at DESC, id DESC)` order, bounded by the same window;
-4. the loser's `no_change` receipt references that episode — active or
-   already revoked;
-5. no compliance audit (unchanged).
+1. rollback the failed transaction;
+2. enter a fresh REPEATABLE READ transaction;
+3. **the first statement is `findEventByOperationId()`** — it establishes the
+   recovery transaction's MVCC snapshot. Own event found → compare
+   commandType + canonical payload → replay (`idempotent_replayed`) or
+   `IDEMPOTENCY_CONFLICT`;
+4. otherwise, from that SAME fixed snapshot, resolve an episode: the active
+   episode if one is visible; else the most-recent episode of ANY status by
+   the frozen `(created_at DESC, id DESC)` order;
+5. the loser's `no_change` receipt references that episode — active or
+   already revoked. The episode is a durable recovery anchor; it is NOT
+   guaranteed to be the physical row that triggered the original unique
+   violation (Amendment A1). A reassignment committed before the recovery
+   snapshot may be selected; one committed after it cannot be;
+6. no compliance audit (unchanged).
 
-The window bound is the fresh transaction's own snapshot time (`SELECT now()`
-as the first statement; under the house REPEATABLE READ isolation it equals
-the snapshot). The winning episode committed before the collision, hence
-strictly before the bound; a reassignment round created at/after the bound is
-never referenced. The bound can be pinned explicitly (`opts.createdBefore`) —
-tests pin the window semantics deterministically. ADR-015 §7 gained amendment
-A1 documenting the fallback.
+The snapshot is the race window — **no `SELECT now()`, no `createdBefore`, no
+application time bound**. The earlier formulation (`SELECT now()` as a bound
+plus a `created_at < bound` filter) was withdrawn: `now()` is the
+transaction-start timestamp, not the snapshot establishment time, and the
+filter compared a database clock against an application-supplied `created_at`,
+reopening the no-evidence hole under host clock skew (ADR-015 §7 Amendment
+A1). The test seam is `opts.afterOperationLookupAbsent`, a SQL-free hook that
+fires after the event lookup returns absent (snapshot established) and before
+the episode lookup — it never moves the snapshot establishment point.
 
 **New real-PostgreSQL tests (recovery suite + repo suite):**
 
@@ -201,14 +217,17 @@ A1 documenting the fallback.
   a later retry of the loser's operationId replays instead of creating a
   fresh assignment; exactly one `exam.proctor_assigned` and one
   `exam.proctor_revoked` audit.
-- race-window boundary: with the bound pinned between the original round and
-  a later reassignment, the receipt references the ORIGINAL episode; without
-  a pinned bound the default window is the recovery snapshot and the active
-  later round is referenced.
+- recovery-snapshot window, Test A: a reassignment committed BEFORE the
+  recovery snapshot is visible → the receipt references that active episode.
+- recovery-snapshot window, Test B: the winner revoked before the snapshot and
+  a reassignment committed AFTER the snapshot (`afterOperationLookupAbsent`
+  pauses recovery between the event lookup and the episode lookup) → the
+  active lookup is absent and the fallback resolves the revoked episode; the
+  later reassignment is invisible to the fixed snapshot.
 - repo: `findMostRecentEpisodeByExamAndProctor` ordering
-  (`created_at DESC, id DESC`), bound filter, cross-org fail-closed, id
-  tie-break.
+  (`created_at DESC, id DESC`), cross-org fail-closed, id tie-break (no bound
+  filter — the visible set is governed by the caller's transaction snapshot).
 
 **No other PR affected:** the fix is confined to PR #246's files
-(orchestrator, repo, engine contract, tests, ADR-015 §7); PRs #247–#249
-inherit it when #246 lands.
+(orchestrator, repo, engine contract, tests, ADR-015 §7); PRs #247–#248
+inherited it when #246 landed, and #249/#250 sit on top of that merged base.
