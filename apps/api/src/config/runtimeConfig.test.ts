@@ -808,6 +808,67 @@ describe("runtimeConfig", () => {
     });
   });
 
+  describe("e2e fixture routes (test-only activation)", () => {
+    it("is enabled only in APP_MODE=e2e", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+      });
+      expect(config.e2eFixtures.enabled).toBe(true);
+    });
+
+    it("is disabled in every non-e2e mode", () => {
+      const dev = loadRuntimeConfig({ APP_MODE: "development" });
+      expect(dev.e2eFixtures.enabled).toBe(false);
+
+      const test = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/test_db",
+      });
+      expect(test.e2eFixtures.enabled).toBe(false);
+
+      const ci = loadRuntimeConfig({
+        APP_MODE: "ci",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/ci_db",
+      });
+      expect(ci.e2eFixtures.enabled).toBe(false);
+
+      const prod = loadRuntimeConfig({
+        APP_MODE: "production",
+        JWT_SECRET: "s",
+        DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+        CORS_ORIGIN: "https://example.com",
+        PUBLIC_WEB_ORIGIN: "https://example.com",
+      });
+      expect(prod.e2eFixtures.enabled).toBe(false);
+    });
+
+    it("never enables fixture routes in production when rate limiting is disabled", () => {
+      // A fully valid production config: APP_MODE=production + the generic
+      // RATE_LIMIT_DISABLED switch. Test mutation routes must stay off; the
+      // rate-limit disable itself remains honored.
+      const config = loadRuntimeConfig({
+        APP_MODE: "production",
+        RATE_LIMIT_DISABLED: "1",
+        JWT_SECRET: "s",
+        DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+        CORS_ORIGIN: "https://example.com",
+        PUBLIC_WEB_ORIGIN: "https://example.com",
+      });
+      expect(config.e2eFixtures.enabled).toBe(false);
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    it("RATE_LIMIT_DISABLED=1 in development does not enable fixture routes", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_DISABLED: "1",
+      });
+      expect(config.e2eFixtures.enabled).toBe(false);
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+  });
+
   describe("resolveDatabaseUrlFromEnv (migration helper)", () => {
     it("returns TEST_DATABASE_URL in test mode", async () => {
       const { resolveDatabaseUrlFromEnv } = await import("./runtimeConfig.js");

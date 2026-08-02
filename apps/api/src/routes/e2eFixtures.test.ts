@@ -2,19 +2,20 @@
  * E2E fixture route tests (J4-I1B).
  *
  * `/api/e2e-fixtures/proctor-assignments` is test-only infrastructure: it
- * registers ONLY when `runtimeConfig.e2eFixtures.enabled` — APP_MODE=e2e
- * (CI / docker-compose.test.yml) or RATE_LIMIT_DISABLED=1 (the WSL fast
- * path, scripts/e2e/run-wsl.sh). These tests prove:
+ * registers ONLY when `runtimeConfig.e2eFixtures.enabled` — i.e. the server
+ * runs in APP_MODE=e2e (CI / docker-compose.test.yml / scripts/e2e/run-wsl.sh).
+ * These tests prove:
  *
- *   1. registration gating — the route is ABSENT under a normal config
- *      (never a production backdoor) and PRESENT under the e2e marker;
+ *   1. registration gating — the route is ABSENT under a normal config and
+ *      in production even with RATE_LIMIT_DISABLED=1 (never a production
+ *      backdoor), and PRESENT under APP_MODE=e2e;
  *   2. behavior — the route runs the real `assignProctorToExam` domain
  *      command: creates the active `exam_proctor_assignments` row + the
  *      applied event receipt, writes the atomic compliance audit, is
  *      admin-gated, and rejects a target user without an active Proctor role.
  */
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -90,14 +91,26 @@ async function insertExam(ctx: Awaited<ReturnType<typeof buildTestApp>>) {
 describe("e2e fixture route — registration gating", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>> | null = null;
 
-  afterAll(async () => {
+  // The vitest harness forces APP_MODE=test (vitest.shared.ts). Snapshot the
+  // ambient mode keys at describe entry and restore them after EVERY test, so
+  // the e2e/production-mode tests here cannot leak into later describes in
+  // this file, and each buildTestApp gets its cleanup (no orphaned Fastify
+  // instances / connections).
+  const entryAppMode = process.env.APP_MODE;
+  const entryRateLimitDisabled = process.env.RATE_LIMIT_DISABLED;
+
+  afterEach(async () => {
     await ctx?.cleanup();
-    delete process.env.RATE_LIMIT_DISABLED;
+    ctx = null;
+    if (entryAppMode === undefined) delete process.env.APP_MODE;
+    else process.env.APP_MODE = entryAppMode;
+    if (entryRateLimitDisabled === undefined)
+      delete process.env.RATE_LIMIT_DISABLED;
+    else process.env.RATE_LIMIT_DISABLED = entryRateLimitDisabled;
     resetRuntimeConfigForTest();
   });
 
   it("is ABSENT under a normal config (never a production backdoor)", async () => {
-    delete process.env.RATE_LIMIT_DISABLED;
     resetRuntimeConfigForTest();
     ctx = await buildTestApp(fullCompositionPlugin, { prefix: "" });
     const res = await ctx.app.inject({
@@ -110,7 +123,15 @@ describe("e2e fixture route — registration gating", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("is PRESENT under the e2e marker (RATE_LIMIT_DISABLED=1)", async () => {
+  it("is ABSENT with RATE_LIMIT_DISABLED=1 in a non-e2e mode (regression)", async () => {
+    // The old activation condition (`mode === "e2e" || RATE_LIMIT_DISABLED`)
+    // made a valid production config (APP_MODE=production +
+    // RATE_LIMIT_DISABLED=1) register this test mutation route. The
+    // production combo itself is pinned at config level in
+    // runtimeConfig.test.ts; here we prove the trigger switch no longer
+    // registers the route in a non-e2e mode at the HTTP layer.
+    // (buildTestApp cannot run under APP_MODE=production: the worker-DB
+    // test adapter's assertNotProduction guard deliberately refuses it.)
     process.env.RATE_LIMIT_DISABLED = "1";
     resetRuntimeConfigForTest();
     ctx = await buildTestApp(fullCompositionPlugin, { prefix: "" });
@@ -119,6 +140,20 @@ describe("e2e fixture route — registration gating", () => {
       url: "/api/e2e-fixtures/proctor-assignments",
       payload: { examId: randomUUID(), proctorUserId: randomUUID() },
     });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("is PRESENT under APP_MODE=e2e", async () => {
+    process.env.APP_MODE = "e2e";
+    process.env.NODE_ENV = "test";
+    resetRuntimeConfigForTest();
+    ctx = await buildTestApp(fullCompositionPlugin, { prefix: "" });
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/e2e-fixtures/proctor-assignments",
+      payload: { examId: randomUUID(), proctorUserId: randomUUID() },
+    });
+    // Registered -> the auth gate answers 401 (anonymous request).
     expect(res.statusCode).toBe(401);
   });
 });

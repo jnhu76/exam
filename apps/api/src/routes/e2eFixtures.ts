@@ -2,9 +2,10 @@
  * E2E test-only fixture routes (J4-I1B review fix).
  *
  * Registered ONLY on E2E-configured servers: `APP_MODE=e2e` (CI +
- * docker-compose.test.yml) or `RATE_LIMIT_DISABLED=1` (scripts/e2e/run-wsl.sh
- * runs the dev server with that E2E marker). NEVER enabled in a bare
- * `pnpm dev` or in production.
+ * docker-compose.test.yml + scripts/e2e/run-wsl.sh). NEVER enabled in a bare
+ * `pnpm dev` or in production — in particular `RATE_LIMIT_DISABLED=1` (a valid
+ * production config that merely turns off app-level rate limiting) does NOT
+ * activate these routes.
  *
  * The Proctor-to-Exam assignment HTTP API ships in M11-I1C (PR C); until then
  * the E2E specs need a test-data channel to create the active assignments the
