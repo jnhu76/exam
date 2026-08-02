@@ -489,7 +489,7 @@ describe("proctor assignment persistence foundation", () => {
     expect(mostRecent?.id).toBe(newer.id);
   });
 
-  it("findMostRecentEpisodeByExamAndProctor: any-status most recent by (created_at DESC, id DESC), bounded by createdBefore", async () => {
+  it("findMostRecentEpisodeByExamAndProctor: any-status most recent by (created_at DESC, id DESC)", async () => {
     const examId = randomUUID();
     const courseId = randomUUID();
     await db.insert(schema.courses).values({
@@ -561,7 +561,9 @@ describe("proctor assignment persistence foundation", () => {
       updatedAt: t2,
     });
 
-    // No bound → the newest episode of any status.
+    // The newest episode of any status (here: the active reassignment). The
+    // visible-set is governed by the caller's transaction snapshot, not by an
+    // application time bound (ADR-015 §7 Amendment A1).
     const latest = await repo.findMostRecentEpisodeByExamAndProctor(
       alpha.ctx,
       examId,
@@ -569,25 +571,6 @@ describe("proctor assignment persistence foundation", () => {
     );
     expect(latest?.id).toBe(second.id);
     expect(latest?.status).toBe("active");
-
-    // Bound between the two rounds → the first (revoked) episode.
-    const bounded = await repo.findMostRecentEpisodeByExamAndProctor(
-      alpha.ctx,
-      examId,
-      proctorId,
-      { createdBefore: new Date("2026-02-01T12:00:00.000Z") },
-    );
-    expect(bounded?.id).toBe(first.id);
-    expect(bounded?.status).toBe("revoked");
-
-    // Bound before everything → null.
-    const none = await repo.findMostRecentEpisodeByExamAndProctor(
-      alpha.ctx,
-      examId,
-      proctorId,
-      { createdBefore: new Date("2026-01-01T00:00:00.000Z") },
-    );
-    expect(none).toBeNull();
 
     // Cross-organization read fails closed.
     const crossOrg = await repo.findMostRecentEpisodeByExamAndProctor(
