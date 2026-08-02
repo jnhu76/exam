@@ -16,19 +16,21 @@
 | J4-I1B | #247 | enforce Proctor Exam scope | PR A branch | merged | `8fb99b83` | `27cbc10f` |
 | J4-I1C | #248 | add Admin Proctor assignment API | PR B branch | merged | `dfe089cf` | `cd3cccfd` |
 | J4-I1D (original) | #249 | activate minimum Proctor authority | PR C branch | closed, unmerged, superseded by #250 | — | — |
-| J4-I1D closing PR | #250 | activate minimum Proctor authority | `master` | current closing PR | `45344342` | populate after merge / omitted by design |
+| J4-I1D closing PR | #250 | activate minimum Proctor authority | `master` | merged | `bd985eee` | `62f84407` |
 
 Stack: `A → B`, `A → C`, `B + C → D` (mandated linear delivery A→B→C→D). PRs
 #246–#248 were merged in sequence; the original J4-I1D PR (#249) was based on
 the PR C branch and was closed once its rebased replacement (#250, base
-`master`) was opened. The closing PR's merge commit is intentionally not
-pre-guessed.
+`master`) was opened. PR #250 merged on 2026-08-02.
 
 ## 2. Base and final SHAs
 
 - Accepted base SHA: `836023c7f9b32bc2cacc8745d1257363fc0222bd` (master, PR #245 M11-R0)
 - ADR-015 acceptance date: 2026-08-02; acceptance evidence: ADR-015 §Status + §26 checklist (all closed) present on the base commit; J4-R0 CLOSED and J4-I1 NEXT per `docs/roadmap/recovery-operations-jobs.md` §6.
-- Final head (J4-I1D closing PR #250): `45344342`.
+- Final head (J4-I1D closing PR #250): `bd985eee47182c9e255a9f1a03c1b3b092710078`
+  (verified via `gh pr view 250`).
+- Merge commit (J4-I1D closing PR #250): `62f844079da61ce16ea27c3f8db9fd2ab944812f`,
+  merged 2026-08-02T13:09:38Z.
 
 ## 3. Implemented scope
 

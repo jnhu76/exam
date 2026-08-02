@@ -59,8 +59,10 @@ Proctor-to-Exam assignment persistence, commands, Admin assignment API,
 resource-scope enforcement, and the minimum Proctor incident authority are
 implemented per ADR-015 §23 (A → B → C → D); see
 [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is the next recovery job per the accepted
-roadmap.
+J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is the next recovery job; its reality-audit
+and product/API/read-model contract is **IN REVIEW**
+([`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md)),
+with J5-I1A through J5-I1D NOT STARTED and BLOCKED pending J5-R0 acceptance.
 
 ### Plain-text subjective question loop
 
@@ -170,7 +172,9 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     implemented per ADR-015 §23 — persistence, commands, Admin assignment
     API, resolver enforcement, minimum Proctor incident activation; see
     `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`);
-  - J5 — Admin Recovery Center (NOT IMPLEMENTED; NEXT);
+  - J5 — Admin Recovery Center (NOT IMPLEMENTED; R0 contract IN REVIEW —
+    `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A through
+    J5-I1D NOT STARTED);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;
