@@ -23999,6 +23999,7 @@
           {
             "schema": {
               "type": "string",
+              "maxLength": 200,
               "nullable": true
             },
             "in": "query",

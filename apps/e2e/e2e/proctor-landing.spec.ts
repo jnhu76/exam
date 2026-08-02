@@ -65,8 +65,8 @@ test.describe("Proctor landing workspace", () => {
     proctor = await createProctor(request, adminToken);
     // J4-I1B: /admin/proctor/exams is assignment-filtered — a Proctor sees
     // ONLY exams with an active Proctor-to-Exam assignment (ADR-015 §4.5).
-    // The assignment API ships in M11-I1C, so create the active assignment
-    // through the E2E fixture channel before logging in.
+    // Create the assignment through the production Admin API (M11-I1C) so E2E
+    // exercises the real write path before the Proctor logs in.
     await createProctorAssignmentFixture(
       request,
       adminToken,

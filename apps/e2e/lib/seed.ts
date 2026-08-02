@@ -108,11 +108,11 @@ async function adminPost(
 }
 
 /**
- * Creates an active Proctor-to-Exam assignment via the E2E fixture route
- * (J4-I1B). Test-only channel: the production assignment API ships in
- * M11-I1C, so the API exposes `/api/e2e-fixtures/proctor-assignments` only
- * on E2E-configured servers (see apps/api/src/routes/e2eFixtures.ts). The
- * route runs the real `assignProctorToExam` domain command.
+ * Creates an active Proctor-to-Exam assignment via the production Admin API
+ * (M11-I1C, ADR-015 §16). `POST /api/admin/exams/:examId/proctors` runs the
+ * real `assignProctorToExam` domain command (validation, idempotency receipt,
+ * audit, operation recovery) — so E2E exercises the genuine write path, not a
+ * parallel test channel. Each call gets a fresh idempotency `operationId`.
  */
 export async function createProctorAssignmentFixture(
   request: APIRequestContext,
@@ -122,15 +122,18 @@ export async function createProctorAssignmentFixture(
 ): Promise<void> {
   const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
   const res = await request.post(
-    `${baseURL}/api/e2e-fixtures/proctor-assignments`,
+    `${baseURL}/api/admin/exams/${examId}/proctors`,
     {
       headers: { Cookie: `auth-token=${adminToken}` },
-      data: { examId, proctorUserId },
+      data: {
+        operationId: crypto.randomUUID(),
+        proctorUserId,
+      },
     },
   );
   if (!res.ok()) {
     throw new Error(
-      `proctor-assignment fixture failed: ${res.status()} ${await res.text()}`,
+      `proctor-assignment failed: ${res.status()} ${await res.text()}`,
     );
   }
 }

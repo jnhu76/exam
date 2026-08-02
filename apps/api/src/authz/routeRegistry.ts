@@ -1185,7 +1185,6 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.ExamProctorAssignmentView,
       scope: Scope.Exam,
       resolver: "exam",
-      resource: { type: "list", listOf: "exam" },
       sensitive: true,
       proctorAccess: "admin_only",
       migrationStage: 8,

@@ -334,6 +334,21 @@ describe("Admin proctor assignment API (ADR-015 §16, J4-I1C)", () => {
       // Keyset pagination never repeats an item and the cursor order is stable.
       expect(body2.items[0]!.id).not.toBe(body1.items[0]!.id);
     });
+
+    it.each([
+      ["garbage", "garbage"],
+      ["missing separator", "2026-08-02T00:00:00.000Z"],
+      ["invalid datetime", "not-a-date|some-id"],
+      ["empty id", "2026-08-02T00:00:00.000Z|"],
+      ["too many parts", "a|b|c"],
+    ])(
+      "rejects malformed cursor (%s) → 400 VALIDATION_ERROR",
+      async (_label, cursor) => {
+        const res = await list(`?cursor=${encodeURIComponent(cursor)}`);
+        expect(res.statusCode).toBe(400);
+        expect(res.json().error.code).toBe("VALIDATION_ERROR");
+      },
+    );
   });
 
   describe("revoke", () => {
@@ -484,13 +499,34 @@ describe("Admin proctor assignment API (ADR-015 §16, J4-I1C)", () => {
         scoreStrategy: "highest",
         maxAttempts: 1,
       });
-      const res = await ctx.app.inject({
+      // All three assignment routes share the same Exam scoped resolver, so a
+      // cross-org exam must be hidden to each — not just GET. The title claims
+      // "every route", so prove assign + revoke too.
+      const getList = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/exams/${foreignExamId}/proctors`,
         cookies: { "auth-token": ctx.adminToken },
       });
-      expect(res.statusCode).toBe(404);
-      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
+      expect(getList.statusCode).toBe(404);
+      expect(getList.json().error.code).toBe("RESOURCE_NOT_FOUND");
+
+      const postAssign = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/exams/${foreignExamId}/proctors`,
+        cookies: { "auth-token": ctx.adminToken },
+        payload: { operationId: opId(), proctorUserId },
+      });
+      expect(postAssign.statusCode).toBe(404);
+      expect(postAssign.json().error.code).toBe("RESOURCE_NOT_FOUND");
+
+      const postRevoke = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/exams/${foreignExamId}/proctors/${proctorUserId}/revoke`,
+        cookies: { "auth-token": ctx.adminToken },
+        payload: { operationId: opId() },
+      });
+      expect(postRevoke.statusCode).toBe(404);
+      expect(postRevoke.json().error.code).toBe("RESOURCE_NOT_FOUND");
     });
   });
 });

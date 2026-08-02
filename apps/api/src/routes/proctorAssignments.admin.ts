@@ -2,13 +2,17 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ErrorResponseSchema } from "@exam/contracts";
 import { Permission } from "@exam/authz";
-import { createProctorAssignmentRepo } from "@exam/db/src/repository/proctorAssignmentRepo.js";
+import {
+  createProctorAssignmentRepo,
+  type AssignmentCursor,
+} from "@exam/db/src/repository/proctorAssignmentRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import type { TransactionDatabase } from "@exam/db/src/types.js";
 import {
   assignProctorToExam,
+  canonicalAssignmentPayload,
   normalizeReasonCode,
   revokeProctorFromExam,
   type ProctorAssignmentRepo,
@@ -38,11 +42,54 @@ const RevokeBodySchema = z.object({
   reasonCode: z.string().max(100).optional().nullable(),
 });
 
+/**
+ * Wire format of the keyset cursor: `"<createdAtISO>|<id>"`. This is the ONLY
+ * place an untrusted cursor string is trusted — `parseCursor` validates it to a
+ * structured {@link AssignmentCursor} so the repository never re-parses raw
+ * external input (an invalid date / wrong shape surfaces as the same 400
+ * VALIDATION_ERROR every other request-validation failure produces, never as a
+ * 500 from `new Date(...).toISOString()`).
+ *
+ * The querystring schema keeps `cursor` as a plain string with a `.refine`
+ * (rather than a `.transform`) so the request-validation and OpenAPI shapes are
+ * unambiguously `string`; the structured form is produced in the handler.
+ */
+const CURSOR_MAX_LENGTH = 200;
+
+function parseCursor(raw: string): AssignmentCursor {
+  const parts = raw.split("|");
+  if (parts.length !== 2 || parts[1]!.length === 0) {
+    throw new Error("cursor must be `<createdAtISO>|<id>`");
+  }
+  const createdAt = new Date(parts[0]!);
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new Error("cursor createdAt must be a valid ISO datetime");
+  }
+  return { createdAt, id: parts[1]! };
+}
+
+const CursorWireSchema = z
+  .string()
+  .max(CURSOR_MAX_LENGTH)
+  .refine((raw) => {
+    try {
+      parseCursor(raw);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "cursor must be a valid `<createdAtISO>|<id>` keyset cursor");
+
 const ListQuerySchema = z.object({
   status: z.enum(["active", "revoked", "all"]).optional().default("active"),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  cursor: z.string().optional().nullable(),
+  cursor: CursorWireSchema.optional().nullable(),
 });
+
+/** Encodes a structured cursor back to its opaque wire form for clients. */
+function encodeCursor(cursor: AssignmentCursor | null): string | null {
+  return cursor ? `${cursor.createdAt.toISOString()}|${cursor.id}` : null;
+}
 
 // ── Response Schemas ──
 
@@ -159,12 +206,14 @@ export async function registerAdminProctorAssignmentRoutes(
       const now = fastify.now();
 
       // Byte-identical to the engine's stored event payload so the recovery
-      // wrapper's fresh-transaction lookup compares correctly.
-      const canonicalPayload = {
+      // wrapper's fresh-transaction lookup compares correctly — reuse the
+      // command's own helper so any future canonical-field change can never
+      // drift between route and event row.
+      const canonicalPayload = canonicalAssignmentPayload(
         examId,
-        proctorUserId: body.proctorUserId,
-        reasonCode: normalizeReasonCode(body.reasonCode),
-      };
+        body.proctorUserId,
+        normalizeReasonCode(body.reasonCode),
+      );
 
       const result = await withProctorAssignmentOperationRecovery(
         fastify.db,
@@ -260,13 +309,13 @@ export async function registerAdminProctorAssignmentRoutes(
       ).listExamProctors(ctx, params.examId, {
         status: query.status,
         limit: query.limit,
-        cursor: query.cursor ?? null,
+        cursor: query.cursor ? parseCursor(query.cursor) : null,
       });
 
       return reply.send(
         AssignmentListResponseSchema.parse({
           items: items.map(toAssignmentResponse),
-          nextCursor,
+          nextCursor: encodeCursor(nextCursor),
         }),
       );
     },
@@ -305,11 +354,11 @@ export async function registerAdminProctorAssignmentRoutes(
       const { examId, proctorUserId } = params;
       const now = fastify.now();
 
-      const canonicalPayload = {
+      const canonicalPayload = canonicalAssignmentPayload(
         examId,
         proctorUserId,
-        reasonCode: normalizeReasonCode(body.reasonCode),
-      };
+        normalizeReasonCode(body.reasonCode),
+      );
 
       const result = await withProctorAssignmentOperationRecovery(
         fastify.db,
