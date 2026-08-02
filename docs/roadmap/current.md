@@ -49,14 +49,18 @@ REC-I6-R0 froze the exam incident authority in
 commands, API, audit, and optional time-grant linkage paths are implemented on
 `master`; see
 [`docs/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md`](../audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md).
-Remaining recovery work — all explicitly NOT IMPLEMENTED: Proctor Incident
-permissions and Proctor-to-Exam resource scope (M11 / J4), dedicated recovery
+Remaining recovery work — all explicitly NOT IMPLEMENTED: dedicated recovery
 centers (J5/J6), system-generated incidents, and wider startup reconciliation.
 The J4 design contract (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **CLOSED**
 as ADR-015 (**Accepted** 2026-08-02, PR #245) with its reality audit
-([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
-the J4-I1 runtime is NEXT, authorized to implement per ADR-015 §23
-(A → B → C → D).
+([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)).
+**J4-I1 (`M11-PROCTOR-EXAM-ASSIGNMENTS`) is CLOSED** (2026-08-02): the
+Proctor-to-Exam assignment persistence, commands, Admin assignment API,
+resource-scope enforcement, and the minimum Proctor incident authority are
+implemented per ADR-015 §23 (A → B → C → D); see
+[`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is the next recovery job per the accepted
+roadmap.
 
 ### Plain-text subjective question loop
 
@@ -162,10 +166,11 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 - operational queue admission;
 - REC-I6 incident persistence and commands (J3 — **CLOSED on master** via
   PR #242); Admin/Proctor recovery-center workflows remain open:
-  - J4 — Proctor-to-Exam resource scope (NOT IMPLEMENTED; the J4-R0 design
-    contract `M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT` is **IN REVIEW** as ADR-015
-    Proposed — no runtime implementation authorized before R0 acceptance);
-  - J5 — Admin Recovery Center (NOT IMPLEMENTED);
+  - J4 — Proctor-to-Exam resource scope (**CLOSED** 2026-08-02; J4-I1
+    implemented per ADR-015 §23 — persistence, commands, Admin assignment
+    API, resolver enforcement, minimum Proctor incident activation; see
+    `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`);
+  - J5 — Admin Recovery Center (NOT IMPLEMENTED; NEXT);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;

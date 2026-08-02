@@ -231,10 +231,13 @@ audit, external log shipping. All Phase 4; none started.
   ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
   with reality audit
   ([`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
-  it is documentation-only. J4-I1 (runtime) is **NEXT**, unblocked by
-  acceptance, to implement per ADR-015 §23 (A → B → C → D). Recovery Center
-  UI (J5/J6), Proctor-to-Exam resource scope runtime (J4/M11), and
-  system-generated incidents remain NOT IMPLEMENTED and deferred.
+  it is documentation-only. **J4-I1 (runtime) is CLOSED** (2026-08-02) —
+  Proctor-to-Exam assignment persistence, commands, Admin assignment API,
+  resolver enforcement, and the minimum Proctor incident activation are
+  implemented per ADR-015 §23 (A → B → C → D); closeout:
+  [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+  Recovery Center UI (J5/J6) and system-generated incidents remain NOT
+  IMPLEMENTED and deferred.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
