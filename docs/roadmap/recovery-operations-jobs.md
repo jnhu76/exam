@@ -8,9 +8,12 @@
 > (ADR-015 **Accepted** 2026-08-02, PR #245;
 > `M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`).
 > **J4-I1 CLOSED** — runtime implemented per ADR-015 §23 (A→B→C→D,
-> 2026-08-02); closeout:
+> 2026-08-02, PR #250, merge commit `62f84407`); closeout:
 > `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`.
-> **J5 NEXT** — `REC-OPS-ADMIN-RECOVERY-CENTER`.
+> **J5-R0 IN REVIEW** — `REC-OPS-ADMIN-RECOVERY-CENTER` reality audit +
+> product/API/read-model contract
+> (`j5-r0-admin-recovery-center-contract.md`); J5-I1A–I1D NOT STARTED,
+> BLOCKED pending J5-R0 acceptance. J6/J7 NOT STARTED.
 >
 > Updated: 2026-08-02
 >
@@ -69,7 +72,7 @@ REC-I6-R0 Incident Authority Contract
 | J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **CLOSED — PR #242 merged** — Admin incident model, event history, commands, action links, and API are live on master | J2 |
 | J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **CLOSED** — Proctor-to-Exam scope authority design contract accepted in ADR-015 (ACCEPTED 2026-08-02, PR #245) | J2; existing RBAC baseline |
 | J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **CLOSED** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Closeout: `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`. | J4-R0 accepted |
-| J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3 |
+| J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3, J4-I1 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
 | J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | Real incident scenarios, crash recovery, audit, and E2E are closed | J1–J6 |
 | Gate | `RECOVERY-AUTHORITY-GATE` | Recovery authority and operator workflows are safe enough to build shared infrastructure around | J1–J7 |
@@ -98,10 +101,13 @@ Authority result:
   Incident linkage is still reserved for the J2/J3 authority contract — only
   the Admin surface is now live.
 
-Remaining dependencies handed forward:
+Remaining dependencies handed forward (status as of the J4-I1 merge):
 
-- Proctor time grant requires J4 (M11 Proctor-to-Exam scope).
-- Non-null `incidentId` requires J2 authority and J3 persistence.
+- Proctor time grant: J4 (M11 Proctor-to-Exam scope) is now CLOSED (2026-08-02,
+  PR #250), and under ADR-015 §13 the time grant stays **Admin-only** — Proctor
+  has no grant path.
+- Non-null `incidentId`: J2 (ADR-014) and J3 (PR #242) are CLOSED; the optional
+  `incidentId` operator path is live.
 - Admin/Proctor Recovery Center UI (J5/J6) and Redis (J8) remain out of scope.
 
 The full contract, request/response examples, invariants, acceptance, and test
@@ -615,6 +621,18 @@ investigate an incident.
 
 ## 7. J5 — REC-OPS Admin Recovery Center
 
+> **The authoritative J5 contract is
+> [`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md)
+> (Status: IN REVIEW).** The contract was built from a master reality audit
+> (post-J4-I1 merge) and supersedes the planning sketch below where they
+> differ. In particular the contract: corrects J5's dependencies to
+> `J1 + J3 + J4-I1`; freezes the MVP product surface, data scope, queue read
+> model, Incident Detail projection, Admin action matrix, dangerous-action UX,
+> and refresh model; classifies every queue filter into
+> already-implemented / reusable / requires-additive-read-API / deferred; and
+> decomposes J5 into `J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D`. The sketch
+> below is retained as the original planning narrative.
+
 ## Purpose
 
 Provide a real administrator workflow for discovering, understanding, and
@@ -742,34 +760,53 @@ Suggested Proctor pages:
 
 ## Proctor capabilities
 
-Recommended baseline:
+> The table below is the **current master baseline** as implemented by J4-I1
+> (ADR-015 §13, CLOSED 2026-08-02, PR #250), not a future "recommended"
+> baseline. The earlier "Policy-dependent" rows for grant-time / force-submit
+> / resolve-dismiss were superseded by ADR-015 §13. J6 starts from this
+> baseline; a future dangerous-permissions policy profile may re-add
+> `AttemptForceSubmit` / `AttemptMisconductMark` only behind its own
+> activation gate — they are NOT deferred Proctor capabilities.
 
-| Capability | Default |
+| Capability | Current Proctor baseline |
 | --- | --- |
 | View assigned Exam live status | Allowed |
-| View assigned Exam Attempts | Allowed |
-| Create incident | Allowed |
-| Investigate/add notes | Allowed |
-| Mark suspected misconduct | Allowed |
-| Grant time | Policy-dependent |
-| Force submit | Policy-dependent |
-| Resolve/dismiss incident | Policy-dependent |
+| View assigned Exam Attempts / timeline | Allowed |
+| View incidents in assigned Exam | Allowed |
+| Create incident in assigned Exam | Allowed |
+| Investigate / add notes / evidence in assigned Exam | Allowed |
+| Create a suspected-misconduct **incident** | Allowed (incident type `suspected_misconduct`) |
+| Apply Attempt misconduct **mark** | Admin-only |
+| Grant Attempt time | Admin-only / deferred |
+| Force submit Attempt | Admin-only |
+| Resolve / dismiss incident | Admin-only terminal judgment |
+| Access unassigned Exam | Denied with anti-enumeration 404 |
 | Change Exam/system settings | Denied |
 | View unassigned Exams | Denied |
 | Delete history | Denied |
 
+Critical distinction J6 must preserve when reusing J5 components:
+
+```text
+Create a suspected_misconduct Incident  (incident type, allowed for Proctor)
+        !=
+Apply AttemptMisconductMark             (terminal Attempt fact, Admin-only)
+```
+
+A Proctor may document suspected misconduct as an incident; a Proctor may NOT
+apply the misconduct mark to the Attempt. Sharing a button component between
+Admin and Proctor does not change this.
+
 ## Policy interaction
 
-Exam policy/profile may resolve whether Proctor can:
+Exam policy/profile may later resolve whether a Proctor can:
 
-- grant time directly;
-- request Admin approval;
-- force submit;
-- resolve incidents;
+- request Admin approval for a dangerous action;
 - perform only documentation actions.
 
 The UI must display the effective policy and disabled reason, but authorization
-must be enforced server-side.
+is enforced server-side; the dangerous terminal actions above are Admin-only
+on master and are NOT silently granted by a policy profile.
 
 ## Live view
 
@@ -1113,12 +1150,14 @@ PR-2  J2 — CLOSED — ADR-014 ACCEPTED
 PR-3  J3 — CLOSED — PR #242 merged
 PR-4  J4-R0 — M11-PROCTOR-EXAM-SCOPE-CONTRACT — CLOSED (design contract;
        ADR-015 Accepted 2026-08-02, PR #245; reality audit landed; no runtime code)
-       ↳ J4-I1 — M11-PROCTOR-EXAM-ASSIGNMENTS (runtime) — NEXT, unblocked
-         J4-I1 is sliced A→B→C→D per ADR-015 §23; the hard ordering rule is
-         "do not activate Proctor permissions before resolver enforcement exists"
-PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — PLANNED
-PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED
-PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED
+       ↳ J4-I1 — M11-PROCTOR-EXAM-ASSIGNMENTS (runtime) — CLOSED (2026-08-02,
+         PR #250, merge commit 62f84407); sliced A→B→C→D per ADR-015 §23.
+PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — IN REVIEW (R0 contract);
+         authoritative contract: j5-r0-admin-recovery-center-contract.md
+         implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
+         (J5-I1A–I1D: NOT STARTED, BLOCKED pending J5-R0 acceptance)
+PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
+PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 ```
 
@@ -1127,13 +1166,18 @@ PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 J1 is closed. J2 (REC-I6-R0) is CLOSED — ADR-014 is ACCEPTED.
 J3 (REC-I6-I1) is CLOSED on master via PR #242. J4-R0 (design contract) is
 CLOSED — ADR-015 is ACCEPTED (2026-08-02, PR #245); J4-I1 (runtime) is
-NEXT, unblocked by acceptance.
+CLOSED (2026-08-02, PR #250).
 
 ## Next Job
 
-J4-I1 (`M11-PROCTOR-EXAM-ASSIGNMENTS`) runtime implementation per the
-ADR-015 §23 decomposition (A → B → C → D). ADR-015 acceptance authorizes
-the runtime; no further design review is required.
+J5-R0 (`REC-OPS-ADMIN-RECOVERY-CENTER` reality audit + product/API/read-model
+contract) is **IN REVIEW** — see
+[`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md).
+J5-I1A–I1D are NOT STARTED and BLOCKED pending J5-R0 acceptance. J5 consumes
+the already-shipped authorities of J1 (Admin time-grant path), J3 (Incident
+aggregate + commands + API), and J4-I1 (Proctor→Exam assignment persistence,
+API, resource-scope resolution, minimum Proctor incident activation); it does
+not redefine them.
 
 ---
 

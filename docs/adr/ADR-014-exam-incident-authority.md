@@ -622,9 +622,9 @@ command appends exactly one event, §5). Frozen semantics, mirroring the
 ADR-013 time-grant precedent (`IdempotencyConflictError`, `GrantOutcome`):
 
 ```text
-	same operationId + same command_type + same canonical payload
-	  → idempotent replay: the committed incident is returned
-	    (wire outcome `idempotent_replayed`)
+same operationId + same command_type + same canonical payload
+  → idempotent replay: the committed incident is returned
+    (wire outcome `idempotent_replayed`)
 
 same operationId + different command_type or canonical payload
   → 409 IDEMPOTENCY_CONFLICT
@@ -1113,14 +1113,14 @@ J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements, after acceptance:
    the Proctor preset is NOT touched;
 5. repositories (ctx-first, organization-scoped, tx-bound factory);
 6. canonical commands (§3, §5, §9, §10) — `operationId` on every write,
-	   `event_sequence` + before/after versions on every event, the link-scope
-	   quadruple on every link, with separate concurrency algorithms for
-	   append-only and version-bumping commands (§9); no universal
-	   `updateIncident()`;
+   `event_sequence` + before/after versions on every event, the link-scope
+   quadruple on every link, with separate concurrency algorithms for
+   append-only and version-bumping commands (§9); no universal
+   `updateIncident()`;
 7. routes under `requireScopedCapability` (§13);
 8. extension of the time-grant route/command for optional `incidentId`
-	   (§10 one-transaction model, full link-scope quadruple with org, exam,
-	   attempt, and candidate validation) and removal of the
+   (§10 one-transaction model, full link-scope quadruple with org, exam,
+   attempt, and candidate validation) and removal of the
    "reserved until REC-I6" guard for the validated path only;
 9. audit actions under the existing audit policy (§11);
 10. unit, integration, permission-matrix, concurrency, idempotency-replay,

@@ -59,8 +59,11 @@ Phase 2+ hardening.
   `Permission.AttemptTimeGrant`, the Attempt-scoped
   `POST /admin/attempts/:attemptId/time-grants` route, atomic compliance audit,
   PostgreSQL operation-ID race recovery, and Dashboard retry/cross-tab
-  coordination. Proctor activation remains deferred until M11 provides
-  resource scope.
+  coordination. At J1 closeout the Proctor time-grant path was deferred pending
+  M11 resource scope; that scope has since landed (J4-I1 CLOSED, 2026-08-02,
+  PR #250), and under ADR-015 §13 the time grant stays **Admin-only** — Proctor
+  has no grant path (the minimum Proctor activation covers Incident
+  view/create/investigate only).
 - ✅ Proctor intervention workflow (polling dashboard).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
@@ -224,20 +227,31 @@ audit, external log shipping. All Phase 4; none started.
   (migration `0023`), domain types/errors, repositories, nine canonical
   write commands, Admin-only permissions, API routes, audit actions, and
   the `grantAttemptTime()` optional `incidentId` operator path. The Admin
-  Incident authority path is live. Proctor Incident runtime is NOT
-  implemented — Proctor activation still requires M11 Proctor-to-Exam
-  scope (J4). The J4-R0 design contract (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`)
-  is **CLOSED** — ADR-015 is **Accepted** (2026-08-02, PR #245)
+  Incident authority path is live. The Proctor Incident **backend** authority
+  is **implemented for assigned Exams** by J4-I1 (CLOSED, 2026-08-02): an
+  actively-assigned Proctor can `incident.view` / `incident.create` /
+  `incident.investigate` on the Exam they are assigned to. The dangerous
+  terminal authority is **NOT** granted to Proctor: `incident.resolve` /
+  `incident.dismiss` (Admin-only terminal judgment), `AttemptTimeGrant`
+  (Admin-only), `AttemptForceSubmit` (Admin-only), and
+  `AttemptMisconductMark` (Admin-only; removed from the Proctor preset in
+  J4-I1B per ADR-015 §13). The J4-R0 design contract
+  (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **CLOSED** — ADR-015 is
+  **Accepted** (2026-08-02, PR #245)
   ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
   with reality audit
   ([`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
-  it is documentation-only. **J4-I1 (runtime) is CLOSED** (2026-08-02) —
-  Proctor-to-Exam assignment persistence, commands, Admin assignment API,
-  resolver enforcement, and the minimum Proctor incident activation are
-  implemented per ADR-015 §23 (A → B → C → D); closeout:
+  it is documentation-only. **J4-I1 (runtime) is CLOSED** (2026-08-02,
+  PR #250, merge commit `62f84407`) — Proctor-to-Exam assignment
+  persistence, commands, Admin assignment API, resolver enforcement, and
+  the minimum Proctor incident activation are implemented per ADR-015 §23
+  (A → B → C → D); closeout:
   [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-  Recovery Center UI (J5/J6) and system-generated incidents remain NOT
-  IMPLEMENTED and deferred.
+  The Proctor **product** Recovery Center UI (J6) is NOT IMPLEMENTED; the
+  Admin Recovery Center UI (J5) is NOT IMPLEMENTED (J5-R0 contract is IN
+  REVIEW — see
+  [`docs/roadmap/j5-r0-admin-recovery-center-contract.md`](../roadmap/j5-r0-admin-recovery-center-contract.md)).
+  System-generated incidents remain NOT IMPLEMENTED and deferred.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the

@@ -1,19 +1,24 @@
 # Exam Incident Authority
 
-> Status: IMPLEMENTED — ADR-014 ACCEPTED; J3 CLOSED (PR #242 merged)
+> Status: IMPLEMENTED — ADR-014 ACCEPTED; J3 CLOSED (PR #242 merged); J4-I1
+> CLOSED (PR #250 merged)
 >
 > Runtime implementation: J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) is
 > implemented and merged on master (PR #242, merge commit `5b653c13`,
 > 2026-08-01). Five incident tables (migration `0023`), domain types,
 > repositories, nine canonical write commands, Admin-only permissions, API
 > routes, audit actions, and the `grantAttemptTime()` optional `incidentId`
-> operator path are live. The Recovery Center UI (J5), Proctor incident
-> permissions and Proctor-to-Exam scope (J4/M11), and system-generated
-> incidents remain NOT IMPLEMENTED. The J4-R0 design contract
-> (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **CLOSED** — ADR-015 is
-> **Accepted** (2026-08-02, PR #245) with reality audit
-> `M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`; it is documentation-only and
-> the J4-I1 runtime is NEXT (unblocked by acceptance, not yet implemented).
+> operator path are live. The Proctor Incident **backend** authority is
+> **implemented for assigned Exams** by J4-I1 (CLOSED, 2026-08-02, PR #250,
+> merge commit `62f84407`): an actively-assigned Proctor can
+> `incident.view` / `incident.create` / `incident.investigate` on the Exam
+> they are assigned to (ADR-015 §13). The dangerous terminal authority
+> (`incident.resolve` / `incident.dismiss`, `AttemptTimeGrant`,
+> `AttemptForceSubmit`, `AttemptMisconductMark`) is **NOT** granted to
+> Proctor and remains Admin-only. The Admin **and** Proctor Recovery Center
+> product UIs (J5 / J6) and system-generated incidents remain NOT
+> IMPLEMENTED; the J5-R0 Admin Recovery Center contract is IN REVIEW (see
+> [`../../roadmap/j5-r0-admin-recovery-center-contract.md`](../../roadmap/j5-r0-admin-recovery-center-contract.md)).
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
 > (Accepted). This document is the accepted target contract for J3. It provides
@@ -109,7 +114,7 @@ Transaction boundaries); version-bumping transitions additionally require
 | Actor | `incident.view` | `incident.create` | `incident.investigate` | `incident.resolve` | Activation |
 | --- | :-: | :-: | :-: | :-: | --- |
 | Admin | ✅ | ✅ | ✅ | ✅ (sensitive) | granted by J3; active on implementation |
-| Proctor | ✅ | ✅ | ✅ | ❌ | target grant — applied by J4 (M11) with exam-scope enforcement; J3 leaves the Proctor preset unchanged (no org-wide Proctor incident authority) |
+| Proctor | ✅ | ✅ | ✅ | ❌ | **implemented for assigned Exams** by J4-I1 (CLOSED, 2026-08-02, PR #250) behind ADR-015 §13 exam-scope enforcement; resolve/dismiss stay Admin-only terminal judgment |
 | Teacher | ❌ | ❌ | ❌ | ❌ | — |
 | Grader | ❌ | ❌ | ❌ | ❌ | — |
 | Candidate | ❌ | ❌ | ❌ | ❌ | never; future candidate report is a separate input protocol |
@@ -177,12 +182,12 @@ erDiagram
         jsonb payload "bounded"
     }
 exam_incident_actions {
-	        uuid id PK
-	        uuid incident_id FK
-	        text action_type "time_grant|force_submit"
-	        text action_id "UNIQUE with action_type; text to match house id() convention"
-	        text attempt_id "server-derived"
-	    }
+        uuid id PK
+        uuid incident_id FK
+        text action_type "time_grant|force_submit"
+        text action_id "UNIQUE with action_type; text to match house id() convention"
+        text attempt_id "server-derived"
+    }
     exam_incident_attempts {
         uuid id PK
         uuid incident_id FK
@@ -288,6 +293,7 @@ mapping guidance lives in ADR-014 §15.
 - [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md) — normative contract (Accepted).
 - [`state-and-authority.md`](state-and-authority.md) — orthogonal state dimensions.
 - [`candidate-recovery.md`](candidate-recovery.md) — ADR-012/ADR-013 recovery sequences.
-- [`protocol-catalog.md`](protocol-catalog.md) — Incident protocols (Admin runtime implemented in J3; Proctor protocols deferred).
+- [`protocol-catalog.md`](protocol-catalog.md) — Incident protocols (Admin runtime implemented in J3; the assigned-Proctor view/create/investigate backend authority is implemented in J4-I1; the Proctor **product** UI is J6, not started).
 - [`domain-model.md`](domain-model.md) — explicitly absent / designed aggregates.
-- [`../../roadmap/recovery-operations-jobs.md`](../../roadmap/recovery-operations-jobs.md) — J2/J3 workstream.
+- [`../../roadmap/recovery-operations-jobs.md`](../../roadmap/recovery-operations-jobs.md) — J2/J3/J4 workstream; the J5 Admin Recovery Center contract is
+  [`../../roadmap/j5-r0-admin-recovery-center-contract.md`](../../roadmap/j5-r0-admin-recovery-center-contract.md).

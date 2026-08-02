@@ -78,6 +78,8 @@ describe("RBAC-M6 — Admin is the migration compatibility superset", () => {
       // system diagnostics
       Permission.SystemHealthView,
       Permission.SystemDiagnosticsView,
+      // incident recovery (J5-R0 Admin-only)
+      Permission.IncidentRecoveryView,
     ];
     const admin = adminPerms();
     const missing = adminRoutesetPerms.filter((p) => !admin.has(p));
