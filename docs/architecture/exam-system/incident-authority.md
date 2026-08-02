@@ -182,12 +182,12 @@ erDiagram
         jsonb payload "bounded"
     }
 exam_incident_actions {
-	        uuid id PK
-	        uuid incident_id FK
-	        text action_type "time_grant|force_submit"
-	        text action_id "UNIQUE with action_type; text to match house id() convention"
-	        text attempt_id "server-derived"
-	    }
+        uuid id PK
+        uuid incident_id FK
+        text action_type "time_grant|force_submit"
+        text action_id "UNIQUE with action_type; text to match house id() convention"
+        text attempt_id "server-derived"
+    }
     exam_incident_attempts {
         uuid id PK
         uuid incident_id FK

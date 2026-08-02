@@ -19,9 +19,9 @@
 | J4-I1D closing PR | #250 | activate minimum Proctor authority | `master` | merged | `bd985eee` | `62f84407` |
 
 Stack: `A → B`, `A → C`, `B + C → D` (mandated linear delivery A→B→C→D). PRs
-#246–#248 were merged in sequence; the original J4-I1D PR (#249) was based on
-the PR C branch and was closed once its rebased replacement (#250, base
-`master`) was opened. PR #250 merged on 2026-08-02.
+246–248 were merged in sequence; the original J4-I1D PR (249) was based on
+the PR C branch and was closed once its rebased replacement (250, base
+`master`) was opened. PR 250 merged on 2026-08-02.
 
 ## 2. Base and final SHAs
 
