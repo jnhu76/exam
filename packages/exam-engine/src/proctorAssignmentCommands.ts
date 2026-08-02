@@ -35,6 +35,17 @@ export interface ProctorAssignmentRepo {
     examId: string,
     proctorUserId: string,
   ): Promise<ExamProctorAssignment | null>;
+  /**
+   * Most-recent episode of ANY status under the frozen order
+   * `(created_at DESC, id DESC)` — the §7 loser-receipt fallback when no
+   * active episode is visible in the recovery snapshot (ADR-015 §7
+   * Amendment A1).
+   */
+  findMostRecentEpisodeByExamAndProctor(
+    ctx: RequestContext,
+    examId: string,
+    proctorUserId: string,
+  ): Promise<ExamProctorAssignment | null>;
   findMostRecentRevoked(
     ctx: RequestContext,
     examId: string,

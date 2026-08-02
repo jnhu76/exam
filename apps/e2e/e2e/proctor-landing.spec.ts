@@ -5,11 +5,16 @@ import {
   candidateStartAttempt,
 } from "../lib/flow";
 import { loginViaUi } from "../lib/login";
-import { seedExam, type SeededExam } from "../lib/seed";
+import {
+  createProctorAssignmentFixture,
+  seedExam,
+  type SeededExam,
+} from "../lib/seed";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 interface ProctorCredentials {
+  userId: string;
   username: string;
   password: string;
 }
@@ -30,9 +35,10 @@ async function createProctor(
   // a Teacher+Proctor user would inherit Teacher's QuestionView and the
   // forbidden-nav assertion below would correctly fail (题目管理 would
   // appear). A pure Proctor user has only Proctor's preset (ExamRoomView +
-  // Attempt*View/Mark/Extend/ForceSubmit), which excludes QuestionView,
-  // CourseView, ExamView, ScoreAllView, and every management perm — exactly
-  // what the forbidden-nav list asserts.
+  // AttemptStatusView + AttemptTimelineView; AttemptMisconductMark and
+  // AttemptForceSubmit were removed from the preset in J4-I1B, ADR-015 §13),
+  // which excludes QuestionView, CourseView, ExamView, ScoreAllView, and
+  // every management perm — exactly what the forbidden-nav list asserts.
   const createResponse = await request.post(`${BASE_URL}/api/users`, {
     headers,
     data: {
@@ -43,7 +49,8 @@ async function createProctor(
     },
   });
   expect(createResponse.status()).toBe(201);
-  return { username, password };
+  const body = (await createResponse.json()) as { id: string };
+  return { userId: body.id, username, password };
 }
 
 test.describe("Proctor landing workspace", () => {
@@ -56,6 +63,16 @@ test.describe("Proctor landing workspace", () => {
     seeded = await seedExam(request, `proctor-landing-${Date.now()}`);
     const adminToken = await adminApiToken(request);
     proctor = await createProctor(request, adminToken);
+    // J4-I1B: /admin/proctor/exams is assignment-filtered — a Proctor sees
+    // ONLY exams with an active Proctor-to-Exam assignment (ADR-015 §4.5).
+    // The assignment API ships in M11-I1C, so create the active assignment
+    // through the E2E fixture channel before logging in.
+    await createProctorAssignmentFixture(
+      request,
+      adminToken,
+      seeded.examId,
+      proctor.userId,
+    );
     const token = await candidateLoginApi(
       request,
       seeded.candidate.username,

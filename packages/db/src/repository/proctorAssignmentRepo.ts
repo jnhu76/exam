@@ -102,6 +102,12 @@ export function createProctorAssignmentRepo(db: Database) {
     return rows[0] ?? null;
   }
 
+  /**
+   * The active episode visible to the caller's transaction snapshot. The §7
+   * recovery reads this inside a fresh REPEATABLE READ transaction, so the
+   * snapshot — not an application time bound — is the race window
+   * (ADR-015 §7 Amendment A1).
+   */
   async function findActiveByExamAndProctor(
     ctx: TenantContext | RequestContext,
     examId: string,
@@ -118,6 +124,36 @@ export function createProctorAssignmentRepo(db: Database) {
           eq(examProctorAssignments.status, "active"),
         ),
       );
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Most-recent episode of ANY status for (org, exam, proctor) by the frozen
+   * order `(created_at DESC, id DESC)`. The §7 loser-receipt recovery falls
+   * back to this when no active episode is visible, so the loser still forms
+   * its receipt against the most-recent episode in its recovery snapshot
+   * (ADR-015 §7 Amendment A1).
+   */
+  async function findMostRecentEpisodeByExamAndProctor(
+    ctx: TenantContext | RequestContext,
+    examId: string,
+    proctorUserId: string,
+  ): Promise<ExamProctorAssignmentRow | null> {
+    const rows = await db
+      .select()
+      .from(examProctorAssignments)
+      .where(
+        and(
+          eq(examProctorAssignments.organizationId, resolveOrganizationId(ctx)),
+          eq(examProctorAssignments.examId, examId),
+          eq(examProctorAssignments.proctorUserId, proctorUserId),
+        ),
+      )
+      .orderBy(
+        sql`${examProctorAssignments.createdAt} DESC`,
+        sql`${examProctorAssignments.id} DESC`,
+      )
+      .limit(1);
     return rows[0] ?? null;
   }
 
@@ -376,6 +412,7 @@ export function createProctorAssignmentRepo(db: Database) {
     insertAssignment,
     findById,
     findActiveByExamAndProctor,
+    findMostRecentEpisodeByExamAndProctor,
     findMostRecentRevoked,
     resolveRevokeTarget,
     revokeAssignment,

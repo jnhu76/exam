@@ -5,14 +5,13 @@ import {
   Scope,
   type DeniedScope,
   type ResolvedScope,
+  type ResolverContext,
+  type ResourceRef,
   type ScopeResolver,
 } from "@exam/authz";
 import { resolveAuthorizationChain } from "./attemptResolver.js";
 
-function repoCtx(ctx: {
-  actorId: string;
-  organizationId: string;
-}): TenantContext {
+function repoCtx(ctx: ResolverContext): TenantContext {
   return {
     actorId: ctx.actorId,
     organizationId: ctx.organizationId,
@@ -39,8 +38,8 @@ export function createIncidentResolver(
   return {
     key: "incident",
     async resolve(
-      ctx: { actorId: string; organizationId: string },
-      ref: { type: string; id: string },
+      ctx: ResolverContext,
+      ref: ResourceRef,
     ): Promise<ResolvedScope | DeniedScope> {
       return resolveAuthorizationChain({
         logger,

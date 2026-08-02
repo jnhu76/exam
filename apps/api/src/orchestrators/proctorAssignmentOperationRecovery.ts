@@ -21,11 +21,17 @@
  * Cases handled here:
  *
  * Case 1 — active-unique 23505 (concurrent assign loser): rollback the failed
- *   transaction, then in a FRESH transaction: (a) look up the event row by
- *   (organizationId, operationId) → replay or IDEMPOTENCY_CONFLICT; (b)
- *   otherwise read the committed active assignment; (c) insert the loser's
- *   own no_change event referencing that episode; (d) commit and return
- *   `no_change` + the active episode. NO compliance audit (no state change).
+ *   transaction, then in a FRESH REPEATABLE READ transaction: (a) look up the
+ *   event row by (organizationId, operationId) → replay or
+ *   IDEMPOTENCY_CONFLICT (this first statement also establishes the recovery
+ *   snapshot); (b) otherwise resolve an episode from that fixed MVCC snapshot —
+ *   the active episode if one is visible, else the most-recent episode of ANY
+ *   status by the frozen `(created_at DESC, id DESC)` order. The referenced
+ *   episode is a durable recovery anchor, not necessarily the physical row that
+ *   caused the collision; a reassignment committed before the snapshot may be
+ *   selected, one committed after it cannot (ADR-015 §7 Amendment A1); (c)
+ *   insert the loser's own no_change event referencing that episode; (d) commit
+ *   and return `no_change` + the episode. NO compliance audit (no state change).
  *
  * Case 2 — events operation-unique 23505 (append race): re-run the SAME
  *   command once in a fresh transaction; its own pre-read resolves
@@ -119,25 +125,48 @@ async function resolveCommittedOperation(
 }
 
 /**
- * ADR-015 §7 loser-receipt recovery: in a fresh transaction, form the losing
- * assign's own durable `no_change` receipt referencing the committed active
- * episode. The event insert may itself race another recoverer with the same
+ * ADR-015 §7 loser-receipt recovery: in a fresh REPEATABLE READ transaction,
+ * form the losing assign's own durable `no_change` receipt referencing an
+ * episode visible in this transaction's fixed MVCC snapshot — the active
+ * episode if one is visible, otherwise the most-recent episode of ANY status
+ * under the frozen `(created_at DESC, id DESC)` order, so the loser ALWAYS
+ * leaves permanent evidence.
+ *
+ * The referenced episode is a durable recovery anchor; it is NOT guaranteed to
+ * be the physical row that triggered the original unique violation. A
+ * reassignment committed before the recovery snapshot may be selected; one
+ * committed after the snapshot cannot (ADR-015 §7 Amendment A1). The snapshot
+ * is established by the first statement of this transaction
+ * (`findEventByOperationId`); no application time bound is used, avoiding the
+ * dual-clock (DB `now()` vs app `created_at`) skew hole.
+ *
+ * The event insert may itself race another recoverer with the same
  * operationId → events operation-unique 23505 → rollback → fresh lookup →
  * replay/conflict (the same rule as Case 2).
+ *
+ * `opts.afterOperationLookupAbsent` is a test-only, SQL-free seam: it fires
+ * after the event lookup returns absent (i.e. after the RR snapshot is
+ * established) and before the episode lookup, letting a test pause recovery to
+ * prove the snapshot-window boundary. It executes no SQL and does not change
+ * the snapshot establishment point.
+ *
+ * @internal opts is a test-only seam; production callers omit it.
  */
-async function formLoserReceipt(
+export async function formLoserReceipt(
   db: Database,
   ctx: RequestContext,
   operationId: string,
   commandType: string,
   canonicalPayload: Record<string, unknown>,
   now: Date,
+  opts?: { afterOperationLookupAbsent?: () => Promise<void> },
 ): Promise<ExamProctorAssignmentCommandResult> {
   return executeInTransaction(db, async (tx) => {
     const repo = createProctorAssignmentRepo(
       tx,
     ) as unknown as ProctorAssignmentRepo;
-    // 1. Look up the event row by (organizationId, operationId).
+    // 1. Look up the event row by (organizationId, operationId). This first
+    //    statement establishes the recovery transaction's RR snapshot.
     const existing = await repo.findEventByOperationId(ctx, operationId);
     if (existing) {
       if (
@@ -152,20 +181,32 @@ async function formLoserReceipt(
         `Operation ${operationId} already used for ${existing.commandType}`,
       );
     }
-    // 2. Read the now-committed active assignment.
-    const active = await repo.findActiveByExamAndProctor(
-      ctx,
-      String(canonicalPayload.examId),
-      String(canonicalPayload.proctorUserId),
-    );
-    if (!active) {
-      // The winner committed but revoked before our fresh read — surface
-      // rather than synthesizing a receipt against a missing episode.
-      throw new NotFoundError("Active assignment not found");
+    // 2. Test-only snapshot-window seam (no SQL; does not move the snapshot).
+    await opts?.afterOperationLookupAbsent?.();
+    // 3. Resolve an episode from this transaction's MVCC snapshot: the active
+    //    episode if one is visible, otherwise the most-recent episode of ANY
+    //    status. The winner may have been revoked before this snapshot, and a
+    //    later reassignment visible in the snapshot may also be selected — the
+    //    anchor need not be the physical collision row (ADR-015 §7 A1).
+    const episode =
+      (await repo.findActiveByExamAndProctor(
+        ctx,
+        String(canonicalPayload.examId),
+        String(canonicalPayload.proctorUserId),
+      )) ??
+      (await repo.findMostRecentEpisodeByExamAndProctor(
+        ctx,
+        String(canonicalPayload.examId),
+        String(canonicalPayload.proctorUserId),
+      ));
+    if (!episode) {
+      // Unreachable in valid states: the 23505 proves a colliding episode
+      // existed, and episodes are append-only — never deleted.
+      throw new NotFoundError("Assignment episode not found");
     }
-    // 3. Insert the loser's own no_change receipt.
+    // 4. Insert the loser's own no_change receipt against that episode.
     await repo.appendEvent(ctx, {
-      assignmentId: active.id,
+      assignmentId: episode.id,
       commandType: commandType as "assign" | "revoke",
       operationId,
       canonicalPayload,
@@ -173,8 +214,8 @@ async function formLoserReceipt(
       actorId: ctx.actorId,
       createdAt: now,
     });
-    // 4. NO compliance audit (no state change).
-    return { outcome: "no_change", assignment: active };
+    // 5. NO compliance audit (no state change).
+    return { outcome: "no_change", assignment: episode };
   });
 }
 

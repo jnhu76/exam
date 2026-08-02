@@ -237,7 +237,27 @@ export function buildScopedCapabilityPreHandler(
             .code(503)
             .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
         }
-        const assigned = await proctorAssignment.check(request, examId);
+        let assigned: boolean;
+        try {
+          assigned = await proctorAssignment.check(request, examId);
+        } catch (error) {
+          // Operational failure (DB down, timeout, repo error): never fail
+          // open, never masquerade as 403/404 — same 503 AUTHZ_UNAVAILABLE
+          // contract the resolvers use for `resolver_error` (ADR §3.9).
+          request.log.error(
+            {
+              err: error,
+              resolverKey,
+              permission,
+              examId,
+              route: request.url,
+            },
+            "authz proctor-assignment lookup failed",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
         if (!assigned) {
           return reply
             .code(404)
