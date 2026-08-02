@@ -20,6 +20,8 @@ import proctorMonitoringRoutes from "./proctorMonitoring.js";
 import { emailRoutes } from "./email.js";
 import notificationRoutes from "./notifications.js";
 import { adminIncidentRoutes } from "./incidents.admin.js";
+import e2eFixtureRoutes from "./e2eFixtures.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 /**
  * Registers all API route modules on a Fastify instance.
@@ -57,4 +59,10 @@ export async function registerApiRoutes(
   await app.register(emailRoutes, { prefix });
   await app.register(notificationRoutes, { prefix });
   await app.register(adminIncidentRoutes, { prefix });
+
+  // Test-only fixture routes — registered ONLY on E2E-configured servers
+  // (runtimeConfig.e2eFixtures.enabled; see routes/e2eFixtures.ts).
+  if (getRuntimeConfig().e2eFixtures.enabled) {
+    await app.register(e2eFixtureRoutes, { prefix });
+  }
 }
