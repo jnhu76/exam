@@ -1,9 +1,27 @@
 # J5-R0 — Admin Recovery Center Contract
 
-> Status: **IN REVIEW**
-> Type: Documentation-only product/API/read-model contract
-> Runtime changes: **none** (no schema, API, route, permission, preset, resolver,
-> repository, migration, OpenAPI, or UI change is introduced by this document)
+> Status: **ACCEPTED / CLOSED**
+> Type: Product/API/read-model authority contract
+> Accepted: 2026-08-02
+> Amended: 2026-08-04 by J5-I1A2 / PR #253
+>
+> This contract defines authority. Runtime implementation is delivered by the
+> J5-I1 slices.
+>
+> **2026-08-04 — §6.3 authorization amendment (J5-I1A2 / PR #253).** The
+> aggregate detail read changed from `scope Exam + incident resolver` to
+> `scope Organization + organization resolver + repository-owned fail-closed
+> graph validation`. Reason: ADR-010 §3.9 freezes `broken_parent_chain` as
+> 403, while this Admin audit/read surface requires corrupted-graph
+> conditions to surface as 503 AUTHZ_UNAVAILABLE. See §6.3 for the full
+> amendment.
+>
+> **2026-08-04 — §6.1 timeAdjustmentSummaries semantics clarification (J5-I1A2
+> / PR #253).** `timeAdjustmentSummaries` contains exactly the
+> `attempt_time_adjustments` rows referenced by THIS Incident's `time_grant`
+> action identities (ADR-014 §7: `action_id` is the polymorphic referent). It
+> is NOT the complete adjustment ledger of every referenced Attempt — the full
+> per-Attempt ledger belongs to Attempt Operations Context. See §6.1.
 >
 > Authority chain: this contract consumes — and is bounded by — the already
 > accepted/runtime authorities ADR-013, ADR-014, ADR-015. It does not redefine
@@ -365,6 +383,19 @@ at least:
 - version / concurrency token (for expectedVersion on writes)
 - audit references / authoritative navigation links
 ```
+
+`timeAdjustmentSummaries` contains exactly the `attempt_time_adjustments` rows
+referenced by THIS Incident's `time_grant` action identities (ADR-014 §7:
+`action_id` is the polymorphic referent — for `time_grant` it is the
+`attempt_time_adjustments.id`). It is NOT the complete adjustment ledger of
+every referenced Attempt: unrelated grants on the same Attempt (other
+incidents, administrative adjustments with no incident) MUST NOT leak into
+this Incident's projection. The complete per-Attempt ledger belongs to
+Attempt Operations Context, not the Incident's linked-action projection. Each
+`time_grant` action identity is fail-closed validated (the referenced
+adjustment exists and its `attemptId` matches the action link's `attemptId`);
+a `force_submit` action identity is validated as `actionId == attemptId`.
+Broken referents surface as 503 AUTHZ_UNAVAILABLE, never a partial projection.
 
 ### 6.2 Frontend MUST NOT derive
 

@@ -442,30 +442,24 @@ export function createRecoveryRepo(db: Database) {
       async (tx) => {
         const incidentRepo = createIncidentRepo(tx);
 
-        const incident = await incidentRepo.findById(
-          { organizationId: orgId } as TenantContext,
-          incidentId,
-        );
+        // The incidentRepo reads accept TenantContext | RequestContext, and
+        // `ctx` already carries organizationId (proven by resolveOrganizationId
+        // above). Pass ctx directly — no synthetic partial TenantContext cast.
+        const incident = await incidentRepo.findById(ctx, incidentId);
         if (!incident) return null;
 
         // All dimension reads bound to `tx` → same REPEATABLE READ snapshot.
-        const events = await incidentRepo.listEventsByIncident(
-          { organizationId: orgId } as TenantContext,
-          incidentId,
-        );
+        const events = await incidentRepo.listEventsByIncident(ctx, incidentId);
         const actions = await incidentRepo.listActionsByIncident(
-          { organizationId: orgId } as TenantContext,
+          ctx,
           incidentId,
         );
         const attemptMemberships = await incidentRepo.listAttemptsByIncident(
-          { organizationId: orgId } as TenantContext,
+          ctx,
           incidentId,
         );
         const interruptionLinks =
-          await incidentRepo.listInterruptionLinksByIncident(
-            { organizationId: orgId } as TenantContext,
-            incidentId,
-          );
+          await incidentRepo.listInterruptionLinksByIncident(ctx, incidentId);
 
         // Exam summary — also fetch closeAt so the route layer can compute the
         // canonical effective deadline via computeEffectiveDeadline(exam,
@@ -545,8 +539,22 @@ export function createRecoveryRepo(db: Database) {
         let attemptSummaries: IncidentAggregateAttemptSummary[] = [];
         const candidateIds = new Set<string>();
         if (incident.candidateId) candidateIds.add(incident.candidateId);
-        let timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[] =
+        const timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[] =
           [];
+        // adjustmentById is populated inside the referenced-attempt read block
+        // below (only when there are time_grant action links) and consumed in
+        // the per-action identity validation that follows.
+        let adjustmentById = new Map<
+          string,
+          {
+            id: string;
+            attemptId: string;
+            addedSeconds: number;
+            reasonCode: string;
+            operationId: string;
+            createdAt: Date;
+          }
+        >();
         const attemptById = new Map<
           string,
           { examId: string; candidateId: string | null }
@@ -590,39 +598,44 @@ export function createRecoveryRepo(db: Database) {
             }
           }
 
-          // Time adjustments for ALL referenced attempts (action links with
-          // action_type='time_grant' point at these ledger rows). Fetching by
-          // the referenced set guarantees the canonical atomic time-grant
-          // path (adjustment + action link, no membership) still projects its
-          // ledger row.
-          const timeAdjRows = await tx
-            .select({
-              id: attemptTimeAdjustments.id,
-              attemptId: attemptTimeAdjustments.attemptId,
-              addedSeconds: attemptTimeAdjustments.addedSeconds,
-              reasonCode: attemptTimeAdjustments.reasonCode,
-              operationId: attemptTimeAdjustments.operationId,
-              createdAt: attemptTimeAdjustments.createdAt,
-            })
-            .from(attemptTimeAdjustments)
-            .where(
-              and(
-                eq(attemptTimeAdjustments.organizationId, orgId),
-                inArray(attemptTimeAdjustments.attemptId, referencedIdList),
-              ),
-            )
-            .orderBy(
-              asc(attemptTimeAdjustments.createdAt),
-              asc(attemptTimeAdjustments.id),
-            );
-          timeAdjustmentSummaries = timeAdjRows.map((t) => ({
-            id: t.id,
-            attemptId: t.attemptId,
-            addedSeconds: t.addedSeconds,
-            reasonCode: t.reasonCode,
-            operationId: t.operationId,
-            createdAt: t.createdAt,
-          }));
+          // Time adjustments referenced by THIS Incident's time_grant action
+          // identities ONLY (ADR-014 §7: action_id is the polymorphic referent;
+          // for time_grant it is exactly the attempt_time_adjustments.id). The
+          // projection is NOT the complete per-Attempt ledger — unrelated grants
+          // on the same Attempt (other incidents, administrative adjustments)
+          // must NOT leak in. J5-R0 §6.1 freezes the detail field as "linked
+          // time grants / actions"; the full per-Attempt ledger belongs to
+          // Attempt Operations Context.
+          //
+          // `actions` is already read above; collect the time_grant referents
+          // and fetch by id (the adjustment PK), not by attempt_id.
+          const timeGrantActionIds = [
+            ...new Set(
+              actions
+                .filter((a) => a.actionType === "time_grant")
+                .map((a) => a.actionId),
+            ),
+          ];
+          const timeAdjRows =
+            timeGrantActionIds.length === 0
+              ? []
+              : await tx
+                  .select({
+                    id: attemptTimeAdjustments.id,
+                    attemptId: attemptTimeAdjustments.attemptId,
+                    addedSeconds: attemptTimeAdjustments.addedSeconds,
+                    reasonCode: attemptTimeAdjustments.reasonCode,
+                    operationId: attemptTimeAdjustments.operationId,
+                    createdAt: attemptTimeAdjustments.createdAt,
+                  })
+                  .from(attemptTimeAdjustments)
+                  .where(
+                    and(
+                      eq(attemptTimeAdjustments.organizationId, orgId),
+                      inArray(attemptTimeAdjustments.id, timeGrantActionIds),
+                    ),
+                  );
+          adjustmentById = new Map(timeAdjRows.map((r) => [r.id, r]));
         }
 
         // ── Fail-closed relationship-graph validation (ADR-014 §7 scope
@@ -686,6 +699,17 @@ export function createRecoveryRepo(db: Database) {
         // but its action / interruption links still MUST point at the anchor
         // attempt (same-Exam; candidate-matched when the incident is
         // candidate-focused).
+        //
+        // Each action link ALSO carries a polymorphic actionId whose referent
+        // depends on action_type (ADR-014 §7): for time_grant it is the exact
+        // attempt_time_adjustments.id; for force_submit it IS the attemptId
+        // itself. action_id is plain text with no DB FK, so the application
+        // layer MUST fail-closed validate the referent on read — a missing or
+        // attempt-mismatched referent is tenant-graph corruption, never a
+        // partial projection. time_grant links additionally drive the
+        // timeAdjustmentSummaries projection: each linked adjustment is
+        // projected in action-link order (stable; independent of the
+        // adjustment's own createdAt), so actions[i] maps to its fact.
         for (const act of actions) {
           const a = attemptById.get(act.attemptId);
           if (
@@ -697,6 +721,48 @@ export function createRecoveryRepo(db: Database) {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_ACTION_ATTEMPT_SCOPE: incident ${incident.id} action ${act.id} attempt ${act.attemptId}`,
             );
+          }
+          switch (act.actionType) {
+            case "time_grant": {
+              const adjustment = adjustmentById.get(act.actionId);
+              if (!adjustment) {
+                throw new AuthzUnavailableError(
+                  `RECOVERY_AGG_TIME_GRANT_REFERENT_BROKEN: incident ${incident.id} action ${act.id} adjustment ${act.actionId}`,
+                );
+              }
+              if (adjustment.attemptId !== act.attemptId) {
+                throw new AuthzUnavailableError(
+                  `RECOVERY_AGG_TIME_GRANT_ATTEMPT_MISMATCH: incident ${incident.id} action ${act.id} actionAttempt ${act.attemptId} adjustmentAttempt ${adjustment.attemptId}`,
+                );
+              }
+              timeAdjustmentSummaries.push({
+                id: adjustment.id,
+                attemptId: adjustment.attemptId,
+                addedSeconds: adjustment.addedSeconds,
+                reasonCode: adjustment.reasonCode,
+                operationId: adjustment.operationId,
+                createdAt: adjustment.createdAt,
+              });
+              break;
+            }
+            case "force_submit": {
+              // ADR-014 §7: force_submit action_id IS the force-submitted
+              // attemptId (force submit is a one-time terminal fact). The
+              // audit-fact existence check is the canonical write command's
+              // authority at link time; this read model validates the identity
+              // invariant only.
+              if (act.actionId !== act.attemptId) {
+                throw new AuthzUnavailableError(
+                  `RECOVERY_AGG_FORCE_SUBMIT_ACTION_ID_MISMATCH: incident ${incident.id} action ${act.id} actionId ${act.actionId} attemptId ${act.attemptId}`,
+                );
+              }
+              break;
+            }
+            default: {
+              throw new AuthzUnavailableError(
+                `RECOVERY_AGG_ACTION_TYPE_UNSUPPORTED: incident ${incident.id} action ${act.id} type ${act.actionType}`,
+              );
+            }
           }
         }
         for (const link of interruptionLinks) {
@@ -743,24 +809,25 @@ export function createRecoveryRepo(db: Database) {
               ),
             )
             .orderBy(asc(users.name), asc(candidateProfiles.id));
-          for (const c of candRows) {
-            // candidate_profiles.user_id is NOT NULL, so a missing join row
-            // means the same-org User is gone or belongs to another org —
-            // tenant-graph corruption. The candidate identity projection must
-            // NOT disguise that as an empty display name (the UI would read
-            // "user never set a name" while the graph is actually broken).
+          // candidate_profiles.user_id is NOT NULL, so a missing join row
+          // means the same-org User is gone or belongs to another org —
+          // tenant-graph corruption. The candidate identity projection must
+          // NOT disguise that as an empty display name (the UI would read
+          // "user never set a name" while the graph is actually broken).
+          // Validation + projection run in ONE iteration over candRows; after
+          // narrowing displayName to non-null there is no `as string` left.
+          const resolved = new Set<string>();
+          candidateSummaries = candRows.map((c) => {
             if (c.displayName == null) {
               throw new AuthzUnavailableError(
                 `RECOVERY_AGG_CANDIDATE_USER_BROKEN: incident ${incident.id} candidate ${c.id}`,
               );
             }
-          }
-          candidateSummaries = candRows.map((c) => ({
-            id: c.id,
-            displayName: c.displayName as string,
-          }));
+            resolved.add(c.id);
+            return { id: c.id, displayName: c.displayName };
+          });
           for (const cid of candidateIds) {
-            if (!candidateSummaries.some((c) => c.id === cid)) {
+            if (!resolved.has(cid)) {
               throw new AuthzUnavailableError(
                 `RECOVERY_AGG_CANDIDATE_BROKEN: incident ${incident.id} candidate ${cid}`,
               );

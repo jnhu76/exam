@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../database.js";
 import { schema } from "../schema/pg.js";
@@ -1949,9 +1949,30 @@ describe("recovery incident aggregate detail repository", () => {
       createdAt: t,
       description: "agg-membership-broken",
     });
-    // Bypass the composite FK to simulate tenant-data corruption.
+    // Bypass the composite FK to simulate tenant-data corruption. Capture the
+    // authoritative constraint definition from pg_get_constraintdef BEFORE
+    // dropping, and restore THAT exact text during cleanup — avoids hard-coding
+    // the FK definition (column quoting / options) and silently drifting from
+    // the migrated schema.
+    const constraintName = "exam_incident_attempts_attempt_fk";
+    const capturedDefRows = await db.execute<{ definition: string }>(
+      sql`SELECT pg_get_constraintdef(c.oid) AS definition
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = c.connamespace
+          WHERE n.nspname = current_schema() AND t.relname = 'exam_incident_attempts'
+            AND c.conname = ${constraintName}`,
+    );
+    // db.execute returns the postgres.js result: a row array accessed by
+    // index (not `.rows`).
+    const fkDef = (capturedDefRows as unknown as { definition: string }[])[0]
+      ?.definition;
+    expect(
+      fkDef,
+      `precondition: constraint ${constraintName} must exist before DROP`,
+    ).toBeTruthy();
     await db.execute(
-      sql`ALTER TABLE exam_incident_attempts DROP CONSTRAINT exam_incident_attempts_attempt_fk`,
+      sql`ALTER TABLE exam_incident_attempts DROP CONSTRAINT ${sql.raw(`"${constraintName}"`)}`,
     );
     try {
       await db.insert(schema.examIncidentAttempts).values({
@@ -1975,8 +1996,10 @@ describe("recovery incident aggregate detail repository", () => {
       await db
         .delete(schema.examIncidentAttempts)
         .where(eq(schema.examIncidentAttempts.incidentId, id));
+      // Restore the exact captured definition (round-trips the migrated
+      // constraint instead of re-stating it by hand).
       await db.execute(
-        sql`ALTER TABLE exam_incident_attempts ADD CONSTRAINT exam_incident_attempts_attempt_fk FOREIGN KEY ("organization_id","attempt_id") REFERENCES "exam_attempts"("organization_id","id")`,
+        sql`ALTER TABLE exam_incident_attempts ADD CONSTRAINT ${sql.raw(`"${constraintName}"`)} ${sql.raw(fkDef!)}`,
       );
       await db
         .delete(schema.examIncidents)
@@ -2351,10 +2374,11 @@ describe("recovery incident aggregate detail repository", () => {
       expect(agg!.interruptionLinks[0]!.attemptId).toBe(fx.attemptId);
       expect(agg!.interruptionLinks[0]!.linkedBy).toBe(fx.actorId);
 
-      // Time adjustment projected with all fields — fetched by the
-      // REFERENCED attempt set (not the summary set), so the canonical
-      // atomic time-grant path (adjustment + action link, no membership)
-      // still projects its ledger row.
+      // Time adjustment projected with all fields — fetched by THIS incident's
+      // time_grant action identity (actionId = adjustment id), so the canonical
+      // atomic time-grant path (adjustment + action link, no membership) still
+      // projects its ledger row. Unrelated grants on the same attempt would be
+      // excluded (see the round-4 linked-only regression test).
       expect(agg!.timeAdjustmentSummaries.length).toBe(1);
       expect(agg!.timeAdjustmentSummaries[0]!.id).toBe(adjustmentId);
       expect(agg!.timeAdjustmentSummaries[0]!.attemptId).toBe(fx.attemptId);
@@ -2651,6 +2675,321 @@ describe("recovery incident aggregate detail repository", () => {
       await db
         .delete(schema.examIncidentAttempts)
         .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  // ── Round 4: action-identity-driven timeAdjustmentSummaries ──
+  // (ADR-014 §7: time_grant.actionId = attempt_time_adjustments.id;
+  //  force_submit.actionId = attemptId. J5-R0 §6.1: "linked time grants /
+  //  actions" — NOT a referenced Attempt's full ledger.)
+
+  it("projects only the time_grant adjustment linked to the current incident (unrelated grants on the same attempt are excluded)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-05-01T00:00:00.000Z");
+    // Two time adjustments on fx.attemptId: G1 linked to this Incident,
+    // G2 unlinked (administrative / belongs to another incident).
+    const g1 = randomUUID();
+    const g2 = randomUUID();
+    for (const gid of [g1, g2]) {
+      await db.insert(schema.attemptTimeAdjustments).values({
+        id: gid,
+        operationId: randomUUID(),
+        organizationId: fx.organizationId,
+        attemptId: fx.attemptId,
+        interruptionId: null,
+        incidentId: null,
+        policy: "operator_incident",
+        source: "operator",
+        beforeDeadline: ATTEMPT_DEADLINE_AT,
+        afterDeadline: new Date("2026-01-01T02:00:00.000Z"),
+        addedSeconds: 3600,
+        reasonCode: "network",
+        reasonText: "round4",
+        actorId: fx.actorId,
+        createdAt: t,
+      });
+    }
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-time-grant-linked-only",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "time_grant",
+      actionId: g1,
+      attemptId: fx.attemptId,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      const agg = await repo.getIncidentAggregate(fx.ctx, id);
+      expect(agg).not.toBeNull();
+      // Only G1 is projected — G2 (same attempt, not linked to this incident)
+      // must NOT leak into this incident's projection.
+      expect(agg!.timeAdjustmentSummaries).toHaveLength(1);
+      expect(agg!.timeAdjustmentSummaries[0]!.id).toBe(g1);
+      expect(agg!.timeAdjustmentSummaries[0]!.attemptId).toBe(fx.attemptId);
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.attemptTimeAdjustments)
+        .where(inArray(schema.attemptTimeAdjustments.id, [g1, g2]));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("projects zero timeAdjustmentSummaries for a force_submit-only incident even when the attempt has historical grants", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-05-02T00:00:00.000Z");
+    // Historical grants on fx.attemptId — NOT linked to this incident.
+    const g1 = randomUUID();
+    const g2 = randomUUID();
+    for (const gid of [g1, g2]) {
+      await db.insert(schema.attemptTimeAdjustments).values({
+        id: gid,
+        operationId: randomUUID(),
+        organizationId: fx.organizationId,
+        attemptId: fx.attemptId,
+        interruptionId: null,
+        incidentId: null,
+        policy: "operator_incident",
+        source: "operator",
+        beforeDeadline: ATTEMPT_DEADLINE_AT,
+        afterDeadline: new Date("2026-01-01T02:00:00.000Z"),
+        addedSeconds: 3600,
+        reasonCode: "network",
+        reasonText: "round4-fs",
+        actorId: fx.actorId,
+        createdAt: t,
+      });
+    }
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-force-submit-only",
+    });
+    // ADR-014 §7: for force_submit, actionId == attemptId.
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "force_submit",
+      actionId: fx.attemptId,
+      attemptId: fx.attemptId,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      const agg = await repo.getIncidentAggregate(fx.ctx, id);
+      expect(agg).not.toBeNull();
+      // No time_grant link → no timeAdjustmentSummaries, even though the
+      // attempt carries historical grants.
+      expect(agg!.timeAdjustmentSummaries).toEqual([]);
+      expect(agg!.actions).toHaveLength(1);
+      expect(agg!.actions[0]!.actionType).toBe("force_submit");
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.attemptTimeAdjustments)
+        .where(inArray(schema.attemptTimeAdjustments.id, [g1, g2]));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a time_grant actionId does not resolve to an adjustment (RECOVERY_AGG_TIME_GRANT_REFERENT_BROKEN)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-05-03T00:00:00.000Z");
+    // examIncidentActions.actionId is plain text with NO FK to
+    // attempt_time_adjustments, so a dangling actionId is directly insertable.
+    const missingAdjustmentId = randomUUID();
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-time-grant-referent-broken",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "time_grant",
+      actionId: missingAdjustmentId,
+      attemptId: fx.attemptId,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining(
+            "RECOVERY_AGG_TIME_GRANT_REFERENT_BROKEN",
+          ),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a time_grant adjustment belongs to a different attempt than the action link (RECOVERY_AGG_TIME_GRANT_ATTEMPT_MISMATCH)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-05-04T00:00:00.000Z");
+    // Adjustment exists on attemptId2, but the action link points at
+    // fx.attemptId — the action identity is internally inconsistent.
+    const g1 = randomUUID();
+    await db.insert(schema.attemptTimeAdjustments).values({
+      id: g1,
+      operationId: randomUUID(),
+      organizationId: fx.organizationId,
+      attemptId: attemptId2,
+      interruptionId: null,
+      incidentId: null,
+      policy: "operator_incident",
+      source: "operator",
+      beforeDeadline: ATTEMPT_DEADLINE_AT,
+      afterDeadline: new Date("2026-01-01T02:00:00.000Z"),
+      addedSeconds: 3600,
+      reasonCode: "network",
+      reasonText: "round4-mismatch",
+      actorId: fx.actorId,
+      createdAt: t,
+    });
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-time-grant-attempt-mismatch",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "time_grant",
+      actionId: g1,
+      attemptId: fx.attemptId,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining(
+            "RECOVERY_AGG_TIME_GRANT_ATTEMPT_MISMATCH",
+          ),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.attemptTimeAdjustments)
+        .where(eq(schema.attemptTimeAdjustments.id, g1));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a force_submit actionId differs from its attemptId (RECOVERY_AGG_FORCE_SUBMIT_ACTION_ID_MISMATCH)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-05-05T00:00:00.000Z");
+    // ADR-014 §7: for force_submit, actionId MUST equal attemptId. A divergence
+    // is a broken action identity — action_id is plain text with no FK to
+    // enforce it, so the read model must validate it.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-force-submit-id-mismatch",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "force_submit",
+      actionId: randomUUID(),
+      attemptId: fx.attemptId,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining(
+            "RECOVERY_AGG_FORCE_SUBMIT_ACTION_ID_MISMATCH",
+          ),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
       await db
         .delete(schema.examIncidents)
         .where(

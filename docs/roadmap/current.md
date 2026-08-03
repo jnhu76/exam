@@ -62,12 +62,11 @@ implemented per ADR-015 §23 (A → B → C → D); see
 J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is the next recovery job; its reality-audit
 and product/API/read-model contract is **CLOSED / ACCEPTED**
 ([`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md),
-PR #251 merged 2026-08-02). J5-I1A1 (Recovery Incident Queue,
-`GET /admin/recovery/incidents`) is IN PROGRESS on
-`feat/j5-i1a1-recovery-incident-queue`; J5-I1A2 (Recovery Incident Aggregate
-Detail, `GET /admin/recovery/incidents/:incidentId`) is IN PROGRESS on the
-stacked branch `feat/j5-i1a2-recovery-incident-detail`. J5-I1B–I1D are NOT
-STARTED.
+PR #251 merged 2026-08-02; amended 2026-08-04 by J5-I1A2 / PR #253). J5-I1A1
+(Recovery Incident Queue, `GET /admin/recovery/incidents`) is **CLOSED** (PR
+#252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
+`GET /admin/recovery/incidents/:incidentId`) is **IN REVIEW** (PR #253, based
+directly on `master` — not stacked). J5-I1B–I1D are NOT STARTED.
 
 ### Plain-text subjective question loop
 
@@ -177,11 +176,12 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     implemented per ADR-015 §23 — persistence, commands, Admin assignment
     API, resolver enforcement, minimum Proctor incident activation; see
     `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`);
-  - J5 — Admin Recovery Center (R0 contract CLOSED/ACCEPTED, PR #251;
-    `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A1 IN
-    PROGRESS — Recovery Incident Queue `GET /admin/recovery/incidents`;
-    J5-I1A2 IN PROGRESS — Recovery Incident Aggregate Detail
-    `GET /admin/recovery/incidents/:incidentId` (stacked branch);
+  - J5 — Admin Recovery Center (R0 contract CLOSED/ACCEPTED, PR #251,
+    amended 2026-08-04 by J5-I1A2 / PR #253;
+    `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A1 CLOSED —
+    Recovery Incident Queue `GET /admin/recovery/incidents` (PR #252 merged);
+    J5-I1A2 IN REVIEW — Recovery Incident Aggregate Detail
+    `GET /admin/recovery/incidents/:incidentId` (PR #253, based on master);
     J5-I1B–I1D NOT STARTED);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);

@@ -21,7 +21,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Permission } from "@exam/authz";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
@@ -1500,12 +1500,13 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       createdAt: now,
       updatedAt: now,
     });
+    // ADR-014 §7: for force_submit, actionId IS the force-submitted attemptId.
     await ctx2.db.insert(schema.examIncidentActions).values({
       id: randomUUID(),
       organizationId: ctx2.org.id,
       incidentId,
       actionType: "force_submit",
-      actionId: randomUUID(),
+      actionId: aggregateAttemptId,
       attemptId: aggregateAttemptId,
       actorId: ctx2.admin.id,
       linkedAt: now,
@@ -1629,6 +1630,157 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       await ctx2.db
         .delete(schema.examIncidentAttempts)
         .where(eq(schema.examIncidentAttempts.incidentId, incidentId));
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, incidentId),
+          ),
+        );
+    }
+  });
+
+  it("aggregate detail projects only the linked time_grant adjustment (unrelated grants on the same attempt are excluded)", async () => {
+    // Round 4: timeAdjustmentSummaries is action-identity-driven. Two grants
+    // exist on aggregateAttemptId; only G1 is linked via a time_grant action.
+    // G2 (same attempt, not linked) must NOT appear in the projection.
+    const now = new Date();
+    const beforeDeadline = new Date(now.getTime() + 3_600_000);
+    const afterDeadline = new Date(now.getTime() + 7_200_000);
+    const g1 = randomUUID();
+    const g2 = randomUUID();
+    for (const gid of [g1, g2]) {
+      await ctx2.db.insert(schema.attemptTimeAdjustments).values({
+        id: gid,
+        operationId: randomUUID(),
+        organizationId: ctx2.org.id,
+        attemptId: aggregateAttemptId,
+        interruptionId: null,
+        incidentId: null,
+        policy: "operator_incident",
+        source: "operator",
+        beforeDeadline,
+        afterDeadline,
+        addedSeconds: 3600,
+        reasonCode: "network",
+        reasonText: "round4-http",
+        actorId: ctx2.admin.id,
+        createdAt: now,
+      });
+    }
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-http-time-grant-linked-only",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      actionType: "time_grant",
+      actionId: g1,
+      attemptId: aggregateAttemptId,
+      actorId: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${incidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      // Only G1 projected; G2 excluded.
+      expect(body.timeAdjustmentSummaries).toHaveLength(1);
+      expect(body.timeAdjustmentSummaries[0].id).toBe(g1);
+      expect(body.timeAdjustmentSummaries[0].attemptId).toBe(
+        aggregateAttemptId,
+      );
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, incidentId));
+      await ctx2.db
+        .delete(schema.attemptTimeAdjustments)
+        .where(inArray(schema.attemptTimeAdjustments.id, [g1, g2]));
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, incidentId),
+          ),
+        );
+    }
+  });
+
+  it("aggregate detail maps a broken time_grant referent to HTTP 503 AUTHZ_UNAVAILABLE", async () => {
+    // Round 4: a time_grant action whose actionId does not resolve to an
+    // adjustment is tenant-graph corruption. The public error mapping is
+    // 503 AUTHZ_UNAVAILABLE (no internal sentinel leaked).
+    const now = new Date();
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-http-time-grant-referent-broken",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // actionId references an adjustment that does not exist (no FK enforces it).
+    await ctx2.db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      actionType: "time_grant",
+      actionId: randomUUID(),
+      attemptId: aggregateAttemptId,
+      actorId: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${incidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, incidentId));
       await ctx2.db
         .delete(schema.examIncidents)
         .where(

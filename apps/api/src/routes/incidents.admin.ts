@@ -30,7 +30,6 @@ import {
   computeEffectiveDeadline,
 } from "@exam/exam-engine";
 import type { IncidentRepo } from "@exam/exam-engine";
-import type { Exam, ExamAttempt } from "@exam/domain";
 import { withIncidentOperationRecovery } from "../orchestrators/incidentOperationRecovery.js";
 import {
   ensureTargetOrg,
@@ -1556,7 +1555,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       // only `exam.closeAt` and `attempt.deadlineAt`.
       const examForDeadline = {
         closeAt: aggregate.examSummary.closeAt,
-      } as unknown as Exam;
+      };
 
       // Final per-caller allowedActions (J5-R0 §6.2 / §6.3): the repo's
       // status candidates ∩ this caller's capabilities ∩ incident shape. The
@@ -1603,7 +1602,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             status: a.status,
             effectiveDeadlineAt: computeEffectiveDeadline(examForDeadline, {
               deadlineAt: a.deadlineAt,
-            } as unknown as ExamAttempt).toISOString(),
+            }).toISOString(),
           })),
           timeAdjustmentSummaries: aggregate.timeAdjustmentSummaries.map(
             (t) => ({ ...t, createdAt: t.createdAt.toISOString() }),
