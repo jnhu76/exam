@@ -402,11 +402,11 @@ decision is **frozen to A**:
 ```text
 GET /admin/recovery/incidents/:incidentId
 
-- Admin-only (permission incident.recovery.view, scope Exam,
-  resolver incident, resourceIdKey incidentId,
-  proctorAccess admin_only, sensitive true)
-- resolves Incident → Exam → Course → Organization (same parent-chain
-  validation as every other Incident resource route)
+- Admin-only (permission incident.recovery.view, scope Organization,
+  resolver organization, proctorAccess admin_only, sensitive true)
+- authorization shape: flat capability gate + repo-owned fail-closed graph
+  validation (see amendment below) — NOT the resource-resolver chain used
+  by the assignment-scoped Incident routes
 - reads Incident + events + notes + actions + Attempt memberships +
   interruptions + Exam/Attempt/Candidate summaries + audit references +
   allowed actions in ONE consistent snapshot (single aggregate SQL, or a
@@ -415,6 +415,41 @@ GET /admin/recovery/incidents/:incidentId
 - carries `snapshotAt` and the Incident `version`
 - the frontend MUST NOT assemble business state from multiple calls
 ```
+
+**Authorization amendment (J5-I1A2, supersedes the original Exam/incident
+resolver shape).** The original §6.3 draft froze
+`scope Exam, resolver incident, resourceIdKey incidentId`. J5-I1A2 amends
+this to `scope Organization, resolver organization` — the same shape the
+queue endpoint (§5.4) already uses. The Recovery aggregate is hereby defined
+as an **org-wide Admin read model**: a sensitive, Admin-only audit projection
+whose entire resource graph (incident, exam, attempts, candidates, actions,
+interruptions, audit references) is validated by the recovery repository
+inside ONE org-scoped, fail-closed snapshot, not by the resource resolver.
+
+This is NOT a resource-resolver bypass:
+
+- The flat capability gate (`incident.recovery.view`, Admin preset only,
+  `proctorAccess: admin_only`) remains the runtime authority for WHO may
+  read the surface — identical to the queue.
+- The repository owns the full graph validation the resolver would have
+  performed, org-scoped end to end: missing or cross-org incident → 404;
+  anchor/membership conflict, wrong-exam or cross-candidate linked
+  attempts, broken candidate User joins, or an unparseable snapshot
+  timestamp → 503 AUTHZ_UNAVAILABLE (fail closed, never a partial
+  projection).
+- Reason the resolver chain was dropped: ADR-010 §3.9 freezes the
+  resource-resolver deny mapping, where a broken parent chain
+  (`broken_parent_chain`) maps to **403 PERMISSION_DENIED**. The audit
+  surface's fail-closed contract requires corrupted-graph conditions to
+  surface as **503 AUTHZ_UNAVAILABLE** (data-integrity signal, not a
+  caller-permission denial). Keeping the `incident` resolver would have
+  forced the frozen 403 mapping onto parent-chain corruption; moving the
+  scope decision into the repo lets the aggregate distinguish
+  missing/cross-org (404) from corruption (503) without amending the
+  frozen ADR-010 deny mapping.
+- Every mutation the Recovery Center performs still goes through the
+  canonical assignment-scoped command routes (§7), which keep the
+  `incident` resource resolver. The aggregate is a READ model only.
 
 The existing `GET /admin/incidents/:incidentId` remains the assignment-scoped
 core Incident read (usable by Admin and the assigned Proctor) and stays lean —
@@ -763,7 +798,7 @@ All previously-open decisions are now frozen in this contract:
 | # | Open question | Adjudication | Frozen in |
 | --- | --- | --- | --- |
 | 1 | Organization-wide Incident queue route | Keep `GET /admin/recovery/incidents` (NOT `/admin/incidents`); `incident.recovery.view` (Admin-only capability), Organization scope, resolver `organization`, `admin_only`, `createdAt DESC, id DESC`, opaque keyset cursor | §5.4 |
-| 2 | Incident Detail: aggregate vs multi-fetch | Single aggregate endpoint `GET /admin/recovery/incidents/:incidentId` (Admin-only, `incident.recovery.view`, scope Exam, resolver `incident`, one consistent snapshot); existing `GET /admin/incidents/:incidentId` stays the assignment-scoped core read | §6.3 |
+| 2 | Incident Detail: aggregate vs multi-fetch | Single aggregate endpoint `GET /admin/recovery/incidents/:incidentId` (Admin-only, `incident.recovery.view`, one consistent snapshot); existing `GET /admin/incidents/:incidentId` stays the assignment-scoped core read. **Amended in J5-I1A2:** authorization shape is `scope Organization, resolver organization` + repo-owned fail-closed graph validation (org-wide Admin read model, same shape as queue §5.4) — NOT the original `scope Exam, resolver incident`; the ADR-010 §3.9 frozen deny mapping would surface broken parent chains as 403, while the audit surface contract requires 503 for corrupted graphs | §6.3 |
 | 3 | Dangerous-operation reason | No blanket upgrade; only force-submit `reason` becomes server-required (`trim` + min 1 + max 500) | §8.1 |
 | 4 | Bounded polling interval | Concrete values deferred to J5-I1B; R0 freezes the behavioral constraints only | §9 |
 | 5 | Recovery API permission model | New `incident.recovery.view` capability (Admin preset only, NOT Proctor); resolves the conformance-test conflict where `admin_only` + `incident.view` would leak into the Proctor preset | §5.4, §6.3 |

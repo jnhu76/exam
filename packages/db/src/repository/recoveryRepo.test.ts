@@ -1636,9 +1636,12 @@ describe("recovery incident aggregate detail repository", () => {
     expect(agg).toBeNull();
   });
 
-  // ── P1-1: allowedActions matches ADR-014 §3 exactly per status ──
+  // ── P1-1: statusActionCandidates matches ADR-014 §3 exactly per status ──
+  // The repo derives the STATUS candidates only; the route intersects them
+  // with the caller's capabilities + incident shape to produce the wire
+  // `allowedActions` (J5-R0 §6.2 / §6.3).
 
-  it("allowedActions[open] = investigate + non-terminal + append-only (exact)", async () => {
+  it("statusActionCandidates[open] = investigate + non-terminal + append-only (exact)", async () => {
     const repo = createRecoveryRepo(db);
     const t = new Date("2027-01-01T00:00:00.000Z");
     const id = await insertIncident(db, fx, {
@@ -1649,7 +1652,7 @@ describe("recovery incident aggregate detail repository", () => {
     });
     const agg = await repo.getIncidentAggregate(fx.ctx, id);
     expect(agg).not.toBeNull();
-    expect(agg!.allowedActions).toEqual([
+    expect(agg!.statusActionCandidates).toEqual([
       "investigate",
       "add_note",
       "change_severity",
@@ -1661,13 +1664,13 @@ describe("recovery incident aggregate detail repository", () => {
     ]);
   });
 
-  it("allowedActions[investigating] excludes investigate (no self-transition)", async () => {
+  it("statusActionCandidates[investigating] excludes investigate (no self-transition)", async () => {
     const repo = createRecoveryRepo(db);
     // The shared fixture incident is in 'investigating' — assert on it directly.
     const agg = await repo.getIncidentAggregate(fx.ctx, incidentId);
     expect(agg).not.toBeNull();
     // investigating MUST NOT include investigate (open→investigating only).
-    expect(agg!.allowedActions).toEqual([
+    expect(agg!.statusActionCandidates).toEqual([
       "add_note",
       "change_severity",
       "resolve",
@@ -1676,10 +1679,10 @@ describe("recovery incident aggregate detail repository", () => {
       "link_attempt",
       "link_interruption",
     ]);
-    expect(agg!.allowedActions).not.toContain("investigate");
+    expect(agg!.statusActionCandidates).not.toContain("investigate");
   });
 
-  it("allowedActions[resolved] = append-only side writes (note + 3 links)", async () => {
+  it("statusActionCandidates[resolved] = append-only side writes (note + 3 links)", async () => {
     const repo = createRecoveryRepo(db);
     const t = new Date("2027-02-01T00:00:00.000Z");
     const id = await insertIncident(db, fx, {
@@ -1690,7 +1693,7 @@ describe("recovery incident aggregate detail repository", () => {
     });
     const agg = await repo.getIncidentAggregate(fx.ctx, id);
     expect(agg).not.toBeNull();
-    expect(agg!.allowedActions).toEqual([
+    expect(agg!.statusActionCandidates).toEqual([
       "add_note",
       "link_action",
       "link_attempt",
@@ -1698,7 +1701,7 @@ describe("recovery incident aggregate detail repository", () => {
     ]);
   });
 
-  it("allowedActions[dismissed] = append-only side writes (note + 3 links)", async () => {
+  it("statusActionCandidates[dismissed] = append-only side writes (note + 3 links)", async () => {
     const repo = createRecoveryRepo(db);
     const t = new Date("2027-03-01T00:00:00.000Z");
     const id = await insertIncident(db, fx, {
@@ -1709,7 +1712,7 @@ describe("recovery incident aggregate detail repository", () => {
     });
     const agg = await repo.getIncidentAggregate(fx.ctx, id);
     expect(agg).not.toBeNull();
-    expect(agg!.allowedActions).toEqual([
+    expect(agg!.statusActionCandidates).toEqual([
       "add_note",
       "link_action",
       "link_attempt",
@@ -2157,14 +2160,16 @@ describe("recovery incident aggregate detail repository", () => {
     }
   });
 
-  // ── P1-4: cross-org User-name projection must fail closed ──
+  // ── P2-1: candidate profile resolved but its same-org User missing → 503 ──
 
-  it("does not project a cross-org candidate User name (same-org User join)", async () => {
+  it("fails closed when a candidate's User belongs to a foreign org (never an empty displayName)", async () => {
     const repo = createRecoveryRepo(db);
     // Build a candidate profile in fx.org whose userId points at a User in a
-    // FOREIGN org. The same-org User join MUST NOT project the foreign name;
-    // it falls back to "" (the profile is still resolved — the candidate row
-    // itself is in-org).
+    // FOREIGN org. The same-org User join cannot resolve it — that is
+    // tenant-graph corruption (candidate_profiles.user_id is NOT NULL, so a
+    // missing join row can never mean "user unset"). The projection MUST
+    // fail closed with 503 instead of disguising the broken graph as an
+    // empty displayName.
     const now = new Date("2026-01-01T00:00:00.000Z");
     const foreignOrgId = randomUUID();
     const foreignUserId = randomUUID();
@@ -2204,13 +2209,16 @@ describe("recovery incident aggregate detail repository", () => {
       description: "agg-cross-org-candidate-user",
     });
     try {
-      const agg = await repo.getIncidentAggregate(fx.ctx, id);
-      expect(agg).not.toBeNull();
-      // The candidate IS resolved (profile is in-org), but its User is
-      // cross-org → displayName falls back to "" (never the foreign name).
-      expect(agg!.candidateSummaries).toEqual([
-        { id: candId, displayName: "" },
-      ]);
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining(
+            "RECOVERY_AGG_CANDIDATE_USER_BROKEN",
+          ),
+        },
+      );
     } finally {
       await db
         .delete(schema.examIncidents)
@@ -2232,11 +2240,17 @@ describe("recovery incident aggregate detail repository", () => {
 
   // ── Full-field projection: action link, interruption link, time adjustment, audit ──
 
-  it("projects action links, interruption links, time adjustments, and audit references", async () => {
+  it("projects action links, interruption links, time adjustments, and audit references without any membership", async () => {
     const repo = createRecoveryRepo(db);
     const now = new Date("2026-01-01T00:00:00.000Z");
     const t = new Date("2027-12-01T00:00:00.000Z");
-    // Exam-wide incident anchored to fx.attemptId's candidate via membership.
+    // Exam-wide incident (no anchor, no candidate focus) with action and
+    // interruption links pointing at fx.attemptId — but NO membership row.
+    // ADR-014 §7 treats anchor, membership, operator action links, and
+    // interruption evidence links as INDEPENDENT durable relationships: the
+    // links MUST NOT require membership (the canonical time-grant path
+    // creates adjustment + action link atomically, with no membership), and
+    // the aggregate MUST project successfully.
     const id = await insertIncident(db, fx, {
       examId: fx.examId,
       attemptId: null,
@@ -2296,18 +2310,6 @@ describe("recovery incident aggregate detail repository", () => {
       operationId: randomUUID(),
     });
 
-    // Membership for fx.attemptId (so the action/interruption attempt is in scope).
-    await db.insert(schema.examIncidentAttempts).values({
-      id: randomUUID(),
-      organizationId: fx.organizationId,
-      incidentId: id,
-      attemptId: fx.attemptId,
-      relationshipType: "affected",
-      linkedBy: fx.actorId,
-      operationId: randomUUID(),
-      linkedAt: t,
-    });
-
     // Audit reference targeting this incident.
     const auditId = randomUUID();
     await db.insert(schema.auditLogs).values({
@@ -2327,6 +2329,14 @@ describe("recovery incident aggregate detail repository", () => {
       const agg = await repo.getIncidentAggregate(fx.ctx, id);
       expect(agg).not.toBeNull();
 
+      // Wire decision (J5-R0 §6.3): attemptSummaries = anchor ∪ membership
+      // ONLY. The link-referenced attempt is validated but NOT summarized —
+      // zero memberships means zero summaries, and the link rows still carry
+      // the attempt ids.
+      expect(agg!.attemptSummaries).toEqual([]);
+      // No candidate seed either (no candidate focus, no summary attempts).
+      expect(agg!.candidateSummaries).toEqual([]);
+
       // Action link projected with all fields.
       expect(agg!.actions.length).toBe(1);
       expect(agg!.actions[0]!.actionType).toBe("time_grant");
@@ -2341,7 +2351,10 @@ describe("recovery incident aggregate detail repository", () => {
       expect(agg!.interruptionLinks[0]!.attemptId).toBe(fx.attemptId);
       expect(agg!.interruptionLinks[0]!.linkedBy).toBe(fx.actorId);
 
-      // Time adjustment projected with all fields.
+      // Time adjustment projected with all fields — fetched by the
+      // REFERENCED attempt set (not the summary set), so the canonical
+      // atomic time-grant path (adjustment + action link, no membership)
+      // still projects its ledger row.
       expect(agg!.timeAdjustmentSummaries.length).toBe(1);
       expect(agg!.timeAdjustmentSummaries[0]!.id).toBe(adjustmentId);
       expect(agg!.timeAdjustmentSummaries[0]!.attemptId).toBe(fx.attemptId);
@@ -2368,6 +2381,273 @@ describe("recovery incident aggregate detail repository", () => {
       await db
         .delete(schema.attemptTimeAdjustments)
         .where(eq(schema.attemptTimeAdjustments.id, adjustmentId));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  // ── P1-3 (round 3): link-referenced attempts are validated, membership NOT required ──
+
+  it("fails closed when an action link's attempt belongs to a different exam", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // attemptId2 is a same-org attempt on fx.examId belonging to candidateId2.
+    // Point an action link at an attempt of a DIFFERENT exam to break the
+    // scope quadruple: build that attempt via a second exam.
+    const exam2 = randomUUID();
+    await db.insert(schema.exams).values({
+      id: exam2,
+      organizationId: fx.organizationId,
+      title: "Agg Action Exam Two",
+      description: "",
+      courseId: fx.courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: EXAM_CLOSE_AT,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const enr2 = randomUUID();
+    await db.insert(schema.examEnrollments).values({
+      id: enr2,
+      organizationId: fx.organizationId,
+      examId: exam2,
+      candidateId: fx.candidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const att2 = randomUUID();
+    await db.insert(schema.examAttempts).values({
+      id: att2,
+      organizationId: fx.organizationId,
+      examId: exam2,
+      enrollmentId: enr2,
+      candidateId: fx.candidateId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const t = new Date("2028-01-01T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-action-wrong-exam",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "force_submit",
+      actionId: randomUUID(),
+      attemptId: att2,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining("RECOVERY_AGG_ACTION_ATTEMPT_SCOPE"),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a candidate-focused incident's action link belongs to a different candidate", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-02-01T00:00:00.000Z");
+    // Candidate-focused exam-wide incident on fx.candidateId; the action link
+    // points at attemptId2, which belongs to candidateId2 — candidate matrix
+    // violation (ADR-014 §7), even though the attempt IS on the same exam.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: fx.candidateId,
+      createdAt: t,
+      description: "agg-action-candidate-mismatch",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "force_submit",
+      actionId: randomUUID(),
+      attemptId: attemptId2,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining("RECOVERY_AGG_ACTION_ATTEMPT_SCOPE"),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when an interruption link's attempt belongs to a different candidate", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-03-01T00:00:00.000Z");
+    // Same candidate matrix violation via an interruption evidence link.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: fx.candidateId,
+      createdAt: t,
+      description: "agg-interruption-candidate-mismatch",
+    });
+    const interruptionId = randomUUID();
+    await db.insert(schema.attemptInterruptions).values({
+      id: interruptionId,
+      organizationId: fx.organizationId,
+      attemptId: attemptId2,
+      createdAt: t,
+    });
+    await db.insert(schema.examIncidentInterruptionLinks).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      attemptId: attemptId2,
+      interruptionId,
+      linkedBy: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining(
+            "RECOVERY_AGG_INTERRUPTION_ATTEMPT_SCOPE",
+          ),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentInterruptionLinks)
+        .where(eq(schema.examIncidentInterruptionLinks.incidentId, id));
+      await db
+        .delete(schema.attemptInterruptions)
+        .where(eq(schema.attemptInterruptions.id, interruptionId));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  // ── P1-4 (round 3): anchor/membership mutual exclusion (ADR-014 §2) ──
+
+  it("fails closed when an anchored incident also carries membership rows", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-04-01T00:00:00.000Z");
+    // ADR-014 §2: anchor and membership are mutually exclusive. A historical
+    // row carrying BOTH is tenant-data corruption — the aggregate must fail
+    // closed instead of projecting a graph the authority forbids.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: fx.attemptId,
+      candidateId: fx.candidateId,
+      createdAt: t,
+      description: "agg-anchor-membership-conflict",
+    });
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      attemptId: attemptId2,
+      relationshipType: "affected",
+      linkedBy: fx.actorId,
+      operationId: randomUUID(),
+      linkedAt: t,
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining(
+            "RECOVERY_AGG_ANCHOR_MEMBERSHIP_CONFLICT",
+          ),
+        },
+      );
+    } finally {
       await db
         .delete(schema.examIncidentAttempts)
         .where(eq(schema.examIncidentAttempts.incidentId, id));

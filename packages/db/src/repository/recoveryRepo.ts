@@ -223,12 +223,15 @@ export interface IncidentAggregate {
   timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[];
   auditReferences: IncidentAggregateAuditReferenceSummary[];
   /**
-   * Status-derived action candidates (ADR-014 §3). The repo derives the
-   * status-based candidates; the route layer is the place that additionally
-   * filters by the caller's permissions (J5-R0 §6.2: action eligibility =
-   * capability + resource scope + status).
+   * Status-derived action candidates ONLY (ADR-014 §3). The repo computes
+   * exactly the status machine; the ROUTE layer is the place that filters
+   * them down to the caller's final allowed set (J5-R0 §6.2: action
+   * eligibility = capability + resource scope + status; J5-R0 §6.3: the wire
+   * `allowedActions` is the per-caller intersection, never the raw status
+   * candidates). The route additionally applies the incident-shape filter
+   * (an anchored Incident never exposes `link_attempt`).
    */
-  allowedActions: IncidentAllowedAction[];
+  statusActionCandidates: IncidentAllowedAction[];
   /**
    * Transaction snapshot timestamp — `transaction_timestamp()` queried INSIDE
    * the RR transaction, so it is the actual PostgreSQL snapshot time, not a
@@ -420,8 +423,9 @@ export function createRecoveryRepo(db: Database) {
    *   transaction — the actual PostgreSQL snapshot time, not a request-side
    *   clock reading. // adr-006-allow: DB snapshot identity stamp, not an
    *   exam-lifecycle time decision (see ADR-006 allowlist entry).
-   * - `allowedActions` is server-derived from the current status per ADR-014 §3
-   *   (the route layer further filters by the caller's permissions).
+   * - `statusActionCandidates` is server-derived from the current status per
+   *   ADR-014 §3 (the route layer further filters by the caller's
+   *   capabilities + incident shape to produce the wire `allowedActions`).
    * - The full relationship graph is validated against the ADR-014 §7 scope
    *   quadruple (org, exam, attempt, candidate); any unresolvable link or
    *   scope contradiction fails closed with {@link AuthzUnavailableError}
@@ -496,17 +500,45 @@ export function createRecoveryRepo(db: Database) {
           );
         }
 
-        // Linked attempt set = anchor attempt (if any) ∪ membership rows.
-        const linkedAttemptIds = new Set<string>();
-        if (incident.attemptId) linkedAttemptIds.add(incident.attemptId);
-        for (const m of attemptMemberships) {
-          linkedAttemptIds.add(m.attemptId);
+        // ADR-014 §2: anchor and membership are MUTUALLY EXCLUSIVE — an
+        // anchored Incident (attemptId set) rejects membership rows. A
+        // historical row carrying both is tenant-data corruption: fail closed
+        // instead of projecting a graph the authority forbids.
+        if (incident.attemptId !== null && attemptMemberships.length > 0) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_ANCHOR_MEMBERSHIP_CONFLICT: incident ${incident.id}`,
+          );
         }
-        const linkedIdList = [...linkedAttemptIds];
+
+        // Summary (linked) attempt set = anchor attempt (if any) ∪ membership
+        // rows. This is the wire's `attemptSummaries` — exactly the durable
+        // "linked attempts" relationships (§6.1).
+        const summaryAttemptIds = new Set<string>();
+        if (incident.attemptId) summaryAttemptIds.add(incident.attemptId);
+        for (const m of attemptMemberships) {
+          summaryAttemptIds.add(m.attemptId);
+        }
+
+        // Referenced attempt set additionally covers action-link and
+        // interruption-link attempts. ADR-014 §7 treats anchor, membership,
+        // operator action links, and interruption evidence links as
+        // INDEPENDENT durable relationships — an action/interruption link does
+        // NOT require the attempt to also be a membership (e.g. the canonical
+        // time-grant path atomically creates time adjustment + action link
+        // without a membership row). Referenced attempts are batch-read and
+        // fail-closed validated (same-Exam, matching candidate when the
+        // incident is candidate-focused); only summary attempts are projected
+        // into `attemptSummaries`.
+        const referencedAttemptIds = new Set(summaryAttemptIds);
+        for (const act of actions) referencedAttemptIds.add(act.attemptId);
+        for (const link of interruptionLinks) {
+          referencedAttemptIds.add(link.attemptId);
+        }
+        const referencedIdList = [...referencedAttemptIds];
 
         // Attempt summaries — MUST select examAttempts.examId so the same-Exam
         // scope quadruple (ADR-014 §7) is verifiable. The candidate set is
-        // seeded from BOTH the linked attempts AND the incident's own
+        // seeded from BOTH the summary attempts AND the incident's own
         // candidateId focus (candidate-focused exam-wide incident:
         // attemptId=null, candidateId=set — without this seed the aggregate
         // would project an empty candidate list and contradict itself).
@@ -519,7 +551,7 @@ export function createRecoveryRepo(db: Database) {
           string,
           { examId: string; candidateId: string | null }
         >();
-        if (linkedIdList.length > 0) {
+        if (referencedIdList.length > 0) {
           const attRows = await tx
             .select({
               id: examAttempts.id,
@@ -532,27 +564,37 @@ export function createRecoveryRepo(db: Database) {
             .where(
               and(
                 eq(examAttempts.organizationId, orgId),
-                inArray(examAttempts.id, linkedIdList),
+                inArray(examAttempts.id, referencedIdList),
               ),
             )
             .orderBy(asc(examAttempts.id));
-          attemptSummaries = attRows.map((a) => ({
-            id: a.id,
-            candidateId: a.candidateId,
-            status: a.status,
-            deadlineAt: a.deadlineAt,
-            examId: a.examId,
-          }));
+          // Wire decision (J5-R0 §6.3): attemptSummaries = summary attempts
+          // only. Action/interruption-referenced attempts are validated but
+          // not summarized — they remain reachable by id via the link rows.
+          attemptSummaries = attRows
+            .filter((a) => summaryAttemptIds.has(a.id))
+            .map((a) => ({
+              id: a.id,
+              candidateId: a.candidateId,
+              status: a.status,
+              deadlineAt: a.deadlineAt,
+              examId: a.examId,
+            }));
           for (const a of attRows) {
             attemptById.set(a.id, {
               examId: a.examId,
               candidateId: a.candidateId,
             });
-            if (a.candidateId) candidateIds.add(a.candidateId);
+            if (a.candidateId && summaryAttemptIds.has(a.id)) {
+              candidateIds.add(a.candidateId);
+            }
           }
 
-          // Time adjustments for linked attempts (action_type='time_grant'
-          // links point at the same attempt ledger rows).
+          // Time adjustments for ALL referenced attempts (action links with
+          // action_type='time_grant' point at these ledger rows). Fetching by
+          // the referenced set guarantees the canonical atomic time-grant
+          // path (adjustment + action link, no membership) still projects its
+          // ledger row.
           const timeAdjRows = await tx
             .select({
               id: attemptTimeAdjustments.id,
@@ -566,7 +608,7 @@ export function createRecoveryRepo(db: Database) {
             .where(
               and(
                 eq(attemptTimeAdjustments.organizationId, orgId),
-                inArray(attemptTimeAdjustments.attemptId, linkedIdList),
+                inArray(attemptTimeAdjustments.attemptId, referencedIdList),
               ),
             )
             .orderBy(
@@ -638,12 +680,20 @@ export function createRecoveryRepo(db: Database) {
           }
         }
         // Action links and interruption links each carry an attemptId that
-        // MUST belong to the incident's resolved attempt set (same-Exam
-        // scope). An anchored incident rejects membership, but its action /
-        // interruption links still MUST point at the anchor attempt.
+        // MUST resolve in-org and satisfy the same scope quadruple — but the
+        // attempt does NOT need to be a membership (the relationships are
+        // independent, ADR-014 §7). An anchored incident rejects membership,
+        // but its action / interruption links still MUST point at the anchor
+        // attempt (same-Exam; candidate-matched when the incident is
+        // candidate-focused).
         for (const act of actions) {
           const a = attemptById.get(act.attemptId);
-          if (!a || a.examId !== incident.examId) {
+          if (
+            !a ||
+            a.examId !== incident.examId ||
+            (incident.candidateId != null &&
+              a.candidateId !== incident.candidateId)
+          ) {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_ACTION_ATTEMPT_SCOPE: incident ${incident.id} action ${act.id} attempt ${act.attemptId}`,
             );
@@ -651,7 +701,12 @@ export function createRecoveryRepo(db: Database) {
         }
         for (const link of interruptionLinks) {
           const a = attemptById.get(link.attemptId);
-          if (!a || a.examId !== incident.examId) {
+          if (
+            !a ||
+            a.examId !== incident.examId ||
+            (incident.candidateId != null &&
+              a.candidateId !== incident.candidateId)
+          ) {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_INTERRUPTION_ATTEMPT_SCOPE: incident ${incident.id} interruptionLink ${link.id} attempt ${link.attemptId}`,
             );
@@ -688,9 +743,21 @@ export function createRecoveryRepo(db: Database) {
               ),
             )
             .orderBy(asc(users.name), asc(candidateProfiles.id));
+          for (const c of candRows) {
+            // candidate_profiles.user_id is NOT NULL, so a missing join row
+            // means the same-org User is gone or belongs to another org —
+            // tenant-graph corruption. The candidate identity projection must
+            // NOT disguise that as an empty display name (the UI would read
+            // "user never set a name" while the graph is actually broken).
+            if (c.displayName == null) {
+              throw new AuthzUnavailableError(
+                `RECOVERY_AGG_CANDIDATE_USER_BROKEN: incident ${incident.id} candidate ${c.id}`,
+              );
+            }
+          }
           candidateSummaries = candRows.map((c) => ({
             id: c.id,
-            displayName: c.displayName ?? "",
+            displayName: c.displayName as string,
           }));
           for (const cid of candidateIds) {
             if (!candidateSummaries.some((c) => c.id === cid)) {
@@ -761,9 +828,20 @@ export function createRecoveryRepo(db: Database) {
         const snapshotRows = (await tx.execute(
           sql`SELECT transaction_timestamp() AS ts`, // adr-006-allow: DB snapshot identity stamp (see ADR-006 allowlist entry)
         )) as unknown as Array<{ ts: string }>;
-        const snapshotAt = new Date(snapshotRows[0]?.ts ?? 0);
+        // Fail fast: an absent / unparseable snapshot stamp means the snapshot
+        // contract itself is broken (driver shape drift or empty result) —
+        // never silently project 1970-01-01 or Invalid Date.
+        const rawSnapshotTs = snapshotRows[0]?.ts;
+        const snapshotAt = rawSnapshotTs ? new Date(rawSnapshotTs) : null;
+        if (!snapshotAt || Number.isNaN(snapshotAt.getTime())) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_SNAPSHOT_TIMESTAMP_INVALID: incident ${incident.id}`,
+          );
+        }
 
-        const allowedActions = deriveAllowedActions(incident.status);
+        const statusActionCandidates = deriveStatusActionCandidates(
+          incident.status,
+        );
 
         return {
           incident,
@@ -815,7 +893,7 @@ export function createRecoveryRepo(db: Database) {
           attemptSummaries,
           timeAdjustmentSummaries,
           auditReferences,
-          allowedActions,
+          statusActionCandidates,
           snapshotAt,
         };
       },
@@ -842,12 +920,14 @@ export function createRecoveryRepo(db: Database) {
  *   `resolved` / `dismissed`) — operators may annotate or correlate after
  *   resolution.
  *
- * These are status-derived candidates only. The route layer additionally
- * filters by the caller's permissions (J5-R0 §6.2: action eligibility =
- * capability + resource scope + status) — a non-Admin actor may see fewer
- * actions than this list returns.
+ * These are status-derived candidates ONLY. The route layer further filters
+ * by the caller's capabilities and the incident shape (J5-R0 §6.2: action
+ * eligibility = capability + resource scope + status; §6.3: the wire
+ * `allowedActions` is the per-caller intersection) — a caller without
+ * `incident.investigate` / `incident.resolve` sees fewer actions, and an
+ * anchored Incident never exposes `link_attempt`.
  */
-function deriveAllowedActions(status: string): IncidentAllowedAction[] {
+function deriveStatusActionCandidates(status: string): IncidentAllowedAction[] {
   const APPEND_ONLY: IncidentAllowedAction[] = [
     "add_note",
     "link_action",

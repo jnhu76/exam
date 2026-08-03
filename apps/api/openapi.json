@@ -24274,8 +24274,7 @@
                           "type": "string"
                         },
                         "closeAt": {
-                          "type": "string",
-                          "nullable": true
+                          "type": "string"
                         }
                       },
                       "required": ["id", "title", "status", "closeAt"],
@@ -24510,8 +24509,7 @@
                             "type": "string"
                           },
                           "effectiveDeadlineAt": {
-                            "type": "string",
-                            "nullable": true
+                            "type": "string"
                           }
                         },
                         "required": [

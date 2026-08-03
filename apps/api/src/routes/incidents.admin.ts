@@ -3,10 +3,11 @@ import { z } from "zod";
 import { ErrorResponseSchema } from "@exam/contracts";
 import { NotFoundError } from "@exam/domain";
 import type { IncidentActionType } from "@exam/domain";
-import { Permission } from "@exam/authz";
+import { Permission, type PermissionKey } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import {
   createRecoveryRepo,
+  type IncidentAllowedAction,
   type IncidentQueueCursor,
 } from "@exam/db/src/repository/recoveryRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -375,12 +376,16 @@ const RecoveryAggregateCandidateSummarySchema = z.object({
  * the frontend MUST NOT derive it). Renaming the field from `deadlineAt`
  * makes the semantics explicit instead of carrying raw deadlineAt under a
  * name that implies effective-time semantics.
+ *
+ * Non-nullable on the wire: the repo fails closed (503 AUTHZ_UNAVAILABLE)
+ * whenever `exam.closeAt` is null, so every successful response carries a
+ * computable effective deadline.
  */
 const RecoveryAggregateAttemptSummarySchema = z.object({
   id: z.string(),
   candidateId: z.string().nullable(),
   status: z.string(),
-  effectiveDeadlineAt: z.string().nullable(),
+  effectiveDeadlineAt: z.string(),
 });
 
 /**
@@ -388,12 +393,16 @@ const RecoveryAggregateAttemptSummarySchema = z.object({
  * effective deadline via the canonical helper. It is NOT exposed on the
  * queue Exam summary (which is a list-row projection, not a deadline
  * authority).
+ *
+ * Non-nullable on the wire: the repo fails closed (503 AUTHZ_UNAVAILABLE)
+ * when closeAt is null (timed_window invariant), so a successful response
+ * always carries it.
  */
 const RecoveryAggregateExamSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   status: z.string(),
-  closeAt: z.string().nullable(),
+  closeAt: z.string(),
 });
 
 const RecoveryAggregateTimeAdjustmentSchema = z.object({
@@ -439,6 +448,59 @@ const RecoveryAggregateResponseSchema = z.object({
   allowedActions: z.array(RecoveryAllowedActionSchema),
   snapshotAt: z.string(),
 });
+
+/**
+ * Final per-caller allowed actions (J5-R0 §6.2 / §6.3).
+ *
+ * action eligibility = status candidate ∩ capability ∩ resource scope ∩
+ * incident shape. The repo computes ONLY the status candidates
+ * (`statusActionCandidates`, ADR-014 §3); this route-level derivation
+ * intersects them with:
+ *
+ *   - capability: `incident.investigate` gates investigate / add_note /
+ *     change_severity / link_action / link_attempt / link_interruption;
+ *     `incident.resolve` gates resolve / dismiss (a caller holding only
+ *     `incident.recovery.view` sees no action at all);
+ *   - incident shape: an anchored Incident (attemptId set) never exposes
+ *     `link_attempt` — ADR-014 §2 makes anchor and membership mutually
+ *     exclusive, so the membership-write action is structurally impossible.
+ *
+ * The frontend MUST NOT derive eligibility from status alone (§6.2); a
+ * disabled button is a UX convenience, never an authorization (§8.2).
+ */
+export function deriveAllowedActionsForCaller(input: {
+  statusActionCandidates: IncidentAllowedAction[];
+  capabilities: readonly PermissionKey[];
+  incidentAttemptId: string | null;
+}): IncidentAllowedAction[] {
+  const { statusActionCandidates, capabilities, incidentAttemptId } = input;
+  const has = (permission: PermissionKey) => capabilities.includes(permission);
+  const INVESTIGATE_ACTIONS: readonly IncidentAllowedAction[] = [
+    "investigate",
+    "add_note",
+    "change_severity",
+    "link_action",
+    "link_attempt",
+    "link_interruption",
+  ];
+  const RESOLVE_ACTIONS: readonly IncidentAllowedAction[] = [
+    "resolve",
+    "dismiss",
+  ];
+  return statusActionCandidates.filter((action) => {
+    if (
+      INVESTIGATE_ACTIONS.includes(action) &&
+      !has(Permission.IncidentInvestigate)
+    ) {
+      return false;
+    }
+    if (RESOLVE_ACTIONS.includes(action) && !has(Permission.IncidentResolve)) {
+      return false;
+    }
+    if (action === "link_attempt" && incidentAttemptId != null) return false;
+    return true;
+  });
+}
 
 // ── Helpers ──
 
@@ -1438,12 +1500,16 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
   // granted ONLY to Admin (catalog.ts / presets.ts), so the flat
   // `requireCapability` gate is the runtime authority — a Proctor with
   // incident.view + active assignment is STILL denied (proctorAccess:
-  // admin_only per contract §6.3). The repo owns ALL fail-closed scope
-  // validation (org boundary + full relationship graph) and surfaces broken
-  // parent/relationship chains as 503 AUTHZ_UNAVAILABLE, missing/cross-org as
-  // 404 — the same contract the sibling queue route (flat gate) uses. The
-  // read comes from ONE consistent REPEATABLE READ read-only snapshot inside
-  // the repo; the frontend never multi-fetches.
+  // admin_only per contract §6.3). Contract §6.3 (amended by this PR):
+  // the Recovery aggregate is an org-wide Admin READ MODEL — the same
+  // scope/resolver shape as the queue (§5.4) — so the repo owns ALL
+  // fail-closed scope validation (org boundary + full relationship graph)
+  // and surfaces broken parent/relationship chains as 503 AUTHZ_UNAVAILABLE,
+  // missing/cross-org as 404 — the same contract the sibling queue route
+  // (flat gate) uses. The read comes from ONE consistent REPEATABLE READ
+  // read-only snapshot inside the repo; the frontend never multi-fetches.
+  // `allowedActions` is the per-caller intersection (status candidates ∩
+  // capabilities ∩ incident shape) computed in this handler.
   fastify.get(
     "/admin/recovery/incidents/:incidentId",
     {
@@ -1492,6 +1558,15 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
         closeAt: aggregate.examSummary.closeAt,
       } as unknown as Exam;
 
+      // Final per-caller allowedActions (J5-R0 §6.2 / §6.3): the repo's
+      // status candidates ∩ this caller's capabilities ∩ incident shape. The
+      // frontend never derives eligibility from status alone.
+      const allowedActions = deriveAllowedActionsForCaller({
+        statusActionCandidates: aggregate.statusActionCandidates,
+        capabilities: ctx.capabilities,
+        incidentAttemptId: aggregate.incident.attemptId,
+      });
+
       return reply.send(
         RecoveryAggregateResponseSchema.parse({
           incident: toIncidentResponse(aggregate.incident),
@@ -1537,7 +1612,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             ...a,
             createdAt: a.createdAt.toISOString(),
           })),
-          allowedActions: aggregate.allowedActions,
+          allowedActions,
           snapshotAt: aggregate.snapshotAt.toISOString(),
         }),
       );

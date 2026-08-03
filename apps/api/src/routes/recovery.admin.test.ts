@@ -22,14 +22,19 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
 import { and, eq } from "drizzle-orm";
+import { Permission } from "@exam/authz";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import type { IncidentAllowedAction } from "@exam/db/src/repository/recoveryRepo.js";
 import {
   buildTestApp,
   createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
-import { registerAdminIncidentRoutes } from "./incidents.admin.js";
+import {
+  deriveAllowedActionsForCaller,
+  registerAdminIncidentRoutes,
+} from "./incidents.admin.js";
 
 const plugin: FastifyPluginAsync = async (fastify) => {
   await registerAdminIncidentRoutes(fastify);
@@ -984,6 +989,8 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   let cleanupOrgId2: string | null = null;
   let aggregateIncidentId: string;
   let aggregateExamId: string;
+  let aggregateAttemptId: string;
+  let aggregateCandidateProfileId: string;
   let proctor2Token: string;
   let proctor2UserId: string;
 
@@ -1001,6 +1008,8 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
     const enrollmentId = randomUUID();
     const candidateProfileId = randomUUID();
     aggregateIncidentId = randomUUID();
+    aggregateAttemptId = attemptId;
+    aggregateCandidateProfileId = candidateProfileId;
 
     await ctx2.db.insert(schema.courses).values({
       id: courseId,
@@ -1155,8 +1164,22 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
     expect(Array.isArray(body.attemptSummaries)).toBe(true);
     expect(Array.isArray(body.timeAdjustmentSummaries)).toBe(true);
     expect(Array.isArray(body.auditReferences)).toBe(true);
-    expect(Array.isArray(body.allowedActions)).toBe(true);
     expect(body.snapshotAt).toEqual(expect.any(String));
+    // allowedActions is the FINAL per-caller intersection (J5-R0 §6.2 / §6.3):
+    // status candidates(open) ∩ Admin capabilities (investigate + resolve) ∩
+    // incident shape. The seeded incident is ANCHORED, so `link_attempt` is
+    // structurally impossible (ADR-014 §2 anchor/membership mutual exclusion)
+    // and MUST be absent even though the status machine lists it.
+    expect(body.allowedActions).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_interruption",
+    ]);
+    expect(body.allowedActions).not.toContain("link_attempt");
     // Each attempt summary carries the EFFECTIVE deadline (not raw deadlineAt)
     // — the field is renamed to make the semantics explicit.
     for (const a of body.attemptSummaries) {
@@ -1449,5 +1472,294 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
           ),
         );
     }
+  });
+
+  it("exam-wide incident + action link only (no membership) returns 200", async () => {
+    // P1-3 (round 3): ADR-014 §7 — anchor, membership, operator action links,
+    // and interruption evidence links are INDEPENDENT durable relationships.
+    // The canonical time-grant path creates adjustment + action link
+    // atomically WITHOUT a membership row; the aggregate MUST still read.
+    const now = new Date();
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-action-link-only",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      actionType: "force_submit",
+      actionId: randomUUID(),
+      attemptId: aggregateAttemptId,
+      actorId: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${incidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.actions.length).toBe(1);
+    expect(body.actions[0].attemptId).toBe(aggregateAttemptId);
+    // Wire decision: attemptSummaries = anchor ∪ membership ONLY — the
+    // link-referenced attempt is validated but not summarized.
+    expect(body.attemptSummaries).toEqual([]);
+    // Exam-wide (unanchored) incident keeps `link_attempt` for an Admin.
+    expect(body.allowedActions).toContain("link_attempt");
+  });
+
+  it("exam-wide incident + interruption link only (no membership) returns 200", async () => {
+    // P1-3 (round 3): same independence proof via an interruption evidence
+    // link — no membership row exists, the read MUST still succeed.
+    const now = new Date();
+    const incidentId = randomUUID();
+    const interruptionId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-interruption-link-only",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.attemptInterruptions).values({
+      id: interruptionId,
+      organizationId: ctx2.org.id,
+      attemptId: aggregateAttemptId,
+      createdAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentInterruptionLinks).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      attemptId: aggregateAttemptId,
+      interruptionId,
+      linkedBy: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${incidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.interruptionLinks.length).toBe(1);
+    expect(body.interruptionLinks[0].attemptId).toBe(aggregateAttemptId);
+    expect(body.attemptSummaries).toEqual([]);
+  });
+
+  it("anchor + membership conflict fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
+    // P1-4 (round 3): ADR-014 §2 makes anchor and membership mutually
+    // exclusive. A historical row carrying BOTH is tenant-data corruption;
+    // the aggregate must fail closed (503), never project the forbidden graph.
+    const now = new Date();
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: aggregateAttemptId,
+      candidateId: aggregateCandidateProfileId,
+      type: "device_failure",
+      severity: "info",
+      status: "open",
+      occurredAt: null,
+      description: "agg-anchor-membership-conflict",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      attemptId: aggregateAttemptId,
+      relationshipType: "affected",
+      linkedBy: ctx2.admin.id,
+      operationId: randomUUID(),
+      linkedAt: now,
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${incidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, incidentId));
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, incidentId),
+          ),
+        );
+    }
+  });
+});
+
+// ── P1-2 (round 3): allowedActions = status candidates ∩ capabilities ∩ shape ──
+//
+// The role system is preset-only (ASSIGNABLE_ROLES: Admin/Teacher/Proctor/
+// Grader/Candidate) — no runtime role can hold IncidentRecoveryView WITHOUT
+// IncidentInvestigate/IncidentResolve. The review's "view-only caller"
+// fixture is therefore exercised against the exported pure derivation, which
+// is exactly what the route handler composes with the live caller context.
+
+describe("deriveAllowedActionsForCaller — per-caller allowedActions intersection (J5-R0 §6.2/§6.3)", () => {
+  const OPEN_CANDIDATES: IncidentAllowedAction[] = [
+    "investigate",
+    "add_note",
+    "change_severity",
+    "resolve",
+    "dismiss",
+    "link_action",
+    "link_attempt",
+    "link_interruption",
+  ];
+
+  it("view-only caller (IncidentRecoveryView without Investigate/Resolve) sees NO action", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [Permission.IncidentRecoveryView],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual([]);
+  });
+
+  it("investigate-only caller keeps investigate actions but not resolve/dismiss", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+    expect(allowed).not.toContain("resolve");
+    expect(allowed).not.toContain("dismiss");
+  });
+
+  it("resolve-only caller keeps resolve/dismiss but not investigate actions", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual(["resolve", "dismiss"]);
+  });
+
+  it("full-capability caller on an ANCHORED incident never sees link_attempt", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: randomUUID(),
+    });
+    expect(allowed).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_interruption",
+    ]);
+    expect(allowed).not.toContain("link_attempt");
+  });
+
+  it("full-capability caller on an exam-wide incident keeps link_attempt", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual(OPEN_CANDIDATES);
+  });
+
+  it("status candidates remain the ceiling — terminal status keeps append-only only", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: [
+        "add_note",
+        "link_action",
+        "link_attempt",
+        "link_interruption",
+      ],
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual([
+      "add_note",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+    expect(allowed).not.toContain("investigate");
+    expect(allowed).not.toContain("resolve");
   });
 });
