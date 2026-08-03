@@ -156,14 +156,20 @@ const RECOVERY_CURSOR_MAX_LENGTH = 200;
 
 function parseRecoveryCursor(raw: string): IncidentQueueCursor {
   const parts = raw.split("|");
-  if (parts.length !== 2 || parts[1]!.length === 0) {
+  if (parts.length !== 2) {
     throw new Error("cursor must be `<createdAtISO>|<id>`");
   }
-  const createdAt = new Date(parts[0]!);
-  if (Number.isNaN(createdAt.getTime())) {
-    throw new Error("cursor createdAt must be a valid ISO datetime");
+  // Strict wire validation: canonical ISO datetime + UUID. The cursor is
+  // produced by encodeRecoveryCursor (toISOString + id), so any other shape
+  // is a client error — never a repo concern.
+  const createdAt = z.string().datetime().safeParse(parts[0]!);
+  const id = z.string().uuid().safeParse(parts[1]!);
+  if (!createdAt.success || !id.success) {
+    throw new Error(
+      "cursor must be `<createdAtISO>|<id>` with an ISO datetime and a UUID id",
+    );
   }
-  return { createdAt, id: parts[1]! };
+  return { createdAt: new Date(createdAt.data), id: id.data };
 }
 
 const RecoveryCursorWireSchema = z
@@ -184,28 +190,73 @@ function encodeRecoveryCursor(
   return cursor ? `${cursor.createdAt.toISOString()}|${cursor.id}` : null;
 }
 
-const RecoveryListQuerySchema = z.object({
-  examId: z.string().optional(),
-  candidateId: z.string().optional(),
-  attemptId: z.string().optional(),
-  status: z.string().optional(),
-  severity: z.string().optional(),
-  incidentType: z.string().optional(),
-  createdFrom: z
-    .string()
-    .datetime()
-    .optional()
-    .transform((v) => (v ? new Date(v) : undefined)),
-  createdTo: z
-    .string()
-    .datetime()
-    .optional()
-    .transform((v) => (v ? new Date(v) : undefined)),
-  unresolvedOnly: z.coerce.boolean().optional(),
-  assignedProctorUserId: z.string().optional(),
-  cursor: RecoveryCursorWireSchema.optional().nullable(),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
+// Strict filter enums — invalid values are rejected at the API boundary as
+// 400 VALIDATION_ERROR, never pushed into a PostgreSQL comparison.
+const RecoveryStatusQuerySchema = z.enum([
+  "open",
+  "investigating",
+  "resolved",
+  "dismissed",
+]);
+const RecoverySeverityQuerySchema = z.enum([
+  "info",
+  "minor",
+  "major",
+  "critical",
+]);
+const RecoveryIncidentTypeQuerySchema = z.enum([
+  "network_interruption",
+  "device_failure",
+  "power_failure",
+  "candidate_unable_to_continue",
+  "suspected_misconduct",
+  "operator_error",
+  "system_outage",
+  "environmental_disruption",
+  "other",
+]);
+// z.coerce.boolean() would turn the non-empty string "false" into true;
+// explicit parsing keeps `?unresolvedOnly=false` actually false. The union
+// with z.boolean() makes the schema idempotent: Fastify validates the raw
+// querystring and writes the transformed output back onto request.query, so
+// the route's re-parse must accept the already-transformed value.
+const RecoveryBooleanQuerySchema = z
+  .union([z.enum(["true", "false"]), z.boolean()])
+  .transform((value) => value === true || value === "true");
+// Same idempotency for datetimes (raw ISO string → Date on the first parse).
+const RecoveryDatetimeQuerySchema = z
+  .union([z.string().datetime(), z.date()])
+  .optional()
+  .transform((v) => (v instanceof Date ? v : v ? new Date(v) : undefined));
+
+const RecoveryListQuerySchema = z
+  .object({
+    examId: z.string().uuid().optional(),
+    candidateId: z.string().uuid().optional(),
+    attemptId: z.string().uuid().optional(),
+    status: RecoveryStatusQuerySchema.optional(),
+    severity: RecoverySeverityQuerySchema.optional(),
+    incidentType: RecoveryIncidentTypeQuerySchema.optional(),
+    createdFrom: RecoveryDatetimeQuerySchema,
+    createdTo: RecoveryDatetimeQuerySchema,
+    unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
+    assignedProctorUserId: z.string().uuid().optional(),
+    cursor: RecoveryCursorWireSchema.optional().nullable(),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  })
+  .superRefine((query, ctx) => {
+    if (
+      query.createdFrom &&
+      query.createdTo &&
+      query.createdFrom.getTime() > query.createdTo.getTime()
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["createdFrom"],
+        message: "createdFrom must not be after createdTo",
+      });
+    }
+  });
 
 const RecoveryExamSummarySchema = z.object({
   id: z.string(),

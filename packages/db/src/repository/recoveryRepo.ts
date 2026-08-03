@@ -1,5 +1,6 @@
 import type { RequestContext } from "@exam/domain";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { AuthzUnavailableError } from "@exam/domain";
+import { and, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import {
   candidateProfiles,
   examAttempts,
@@ -22,7 +23,9 @@ import type { ExamIncidentRow } from "./incidentRepo.js";
  * the frontend never needs to fan out per-row refetches.
  *
  * Tenant boundary is enforced on every read via `ctx.organizationId`
- * (fail-closed on cross-org rows).
+ * (fail-closed on cross-org rows). Enrichment is batch-per-page (contract
+ * §5.1 "NO N+1 architecture"): a fixed number of SQL queries regardless of
+ * page size, assembled in memory per incident.
  */
 
 /** Structured keyset cursor: the (createdAt, id) pair of the last row of the previous page. */
@@ -91,6 +94,11 @@ export function createRecoveryRepo(db: Database) {
    * - `assignedProctorUserId` filters on the *current active* Proctor
    *   assignment (status='active'); historical incident-time Proctor is NOT
    *   used (contract §5.4 adjudication).
+   * - `attemptId` / `candidateId` match the incident's anchor fields AND the
+   *   explicit membership links (`exam_incident_attempts`) — the queue row
+   *   projects linked attempts as part of the incident's identity, so a
+   *   related-attempt search must not miss membership-only links.
+   * - Enrichment is batch-per-page: a fixed number of queries, never N+1.
    */
   async function listIncidentQueue(
     ctx: TenantContext | RequestContext,
@@ -103,10 +111,53 @@ export function createRecoveryRepo(db: Database) {
     const conditions = [eq(examIncidents.organizationId, orgId)];
 
     if (params.examId) conditions.push(eq(examIncidents.examId, params.examId));
-    if (params.candidateId)
-      conditions.push(eq(examIncidents.candidateId, params.candidateId));
-    if (params.attemptId)
-      conditions.push(eq(examIncidents.attemptId, params.attemptId));
+    if (params.candidateId) {
+      // candidateId matches the incident's anchor candidate, the candidate of
+      // its anchor attempt, or the candidate of any linked (membership)
+      // attempt. Subqueries keep the queue predicate on incident rows.
+      const attemptIdsForCandidate = db
+        .select({ id: examAttempts.id })
+        .from(examAttempts)
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.candidateId, params.candidateId),
+          ),
+        );
+      const incidentIdsViaMembership = db
+        .select({ incidentId: examIncidentAttempts.incidentId })
+        .from(examIncidentAttempts)
+        .where(
+          and(
+            eq(examIncidentAttempts.organizationId, orgId),
+            inArray(examIncidentAttempts.attemptId, attemptIdsForCandidate),
+          ),
+        );
+      const orCond = or(
+        eq(examIncidents.candidateId, params.candidateId),
+        inArray(examIncidents.attemptId, attemptIdsForCandidate),
+        inArray(examIncidents.id, incidentIdsViaMembership),
+      );
+      if (orCond) conditions.push(orCond);
+    }
+    if (params.attemptId) {
+      // attemptId matches the incident's anchor attempt OR any linked
+      // (membership) attempt.
+      const incidentIdsViaMembership = db
+        .select({ incidentId: examIncidentAttempts.incidentId })
+        .from(examIncidentAttempts)
+        .where(
+          and(
+            eq(examIncidentAttempts.organizationId, orgId),
+            eq(examIncidentAttempts.attemptId, params.attemptId),
+          ),
+        );
+      const orCond = or(
+        eq(examIncidents.attemptId, params.attemptId),
+        inArray(examIncidents.id, incidentIdsViaMembership),
+      );
+      if (orCond) conditions.push(orCond);
+    }
     if (params.status) conditions.push(eq(examIncidents.status, params.status));
     if (params.severity)
       conditions.push(eq(examIncidents.severity, params.severity));
@@ -172,9 +223,7 @@ export function createRecoveryRepo(db: Database) {
         }
       : null;
 
-    const items = await Promise.all(
-      pageRows.map((row) => enrichIncident(db, orgId, row)),
-    );
+    const items = await enrichPage(db, orgId, pageRows);
     return { items, nextCursor };
   }
 
@@ -183,129 +232,124 @@ export function createRecoveryRepo(db: Database) {
 
 export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;
 
-// ── Enrichment (single SQL per dimension, per row) ──
-// The queue page is bounded (≤ limit) so a bounded N+1 is acceptable; the
-// contract forbids per-row frontend refetch, not per-row backend enrichment.
-
-async function enrichIncident(
+/**
+ * Enriches a whole queue page with a FIXED number of SQL queries (contract
+ * §5.1 "NO N+1 architecture"): base incidents + exams + memberships +
+ * attempts + candidates + proctors, then assembles per-incident projections
+ * in memory. The query count never grows with `limit` or row count.
+ *
+ * Broken parent chains (an Incident whose Exam is missing or not in the org)
+ * fail closed with {@link AuthzUnavailableError} — the API layer surfaces it
+ * as 503 AUTHZ_UNAVAILABLE. An admin audit surface must never silently drop
+ * rows it cannot project.
+ */
+async function enrichPage(
   db: Database,
   orgId: string,
-  incident: ExamIncidentRow,
-): Promise<IncidentQueueItem> {
-  // 1. Exam summary — incident.examId is NOT NULL; exams row is the boundary.
+  incidents: ExamIncidentRow[],
+): Promise<IncidentQueueItem[]> {
+  if (incidents.length === 0) return [];
+
+  const incidentIds = incidents.map((i) => i.id);
+  const examIds = [...new Set(incidents.map((i) => i.examId))];
+
+  // 1. Exams (the tenant boundary) — one batch for the whole page.
   const examRows = await db
-    .select({
-      id: exams.id,
-      title: exams.title,
-      status: exams.status,
-    })
+    .select({ id: exams.id, title: exams.title, status: exams.status })
     .from(exams)
-    .where(and(eq(exams.organizationId, orgId), eq(exams.id, incident.examId)))
-    .limit(1);
-  const examRow = examRows[0];
-  if (!examRow) {
-    // Broken parent chain — fail-closed. API layer surfaces 503 AUTHZ_UNAVAILABLE.
-    throw new Error(
-      `RECOVERY_QUEUE_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
-    );
-  }
-  const examSummary: IncidentQueueExamSummary = {
-    id: examRow.id,
-    title: examRow.title,
-    status: examRow.status,
-  };
-
-  // 2. Primary attempt (anchor attempt) — nullable.
-  let primaryAttempt: IncidentQueueAttemptSummary | null = null;
-  if (incident.attemptId) {
-    const attemptRows = await db
-      .select({
-        id: examAttempts.id,
-        candidateId: examAttempts.candidateId,
-        status: examAttempts.status,
-        deadlineAt: examAttempts.deadlineAt,
-      })
-      .from(examAttempts)
-      .where(
-        and(
-          eq(examAttempts.organizationId, orgId),
-          eq(examAttempts.id, incident.attemptId),
-        ),
-      )
-      .limit(1);
-    const a = attemptRows[0];
-    if (a) {
-      primaryAttempt = {
-        id: a.id,
-        candidateId: a.candidateId,
-        status: a.status,
-        deadlineAt: a.deadlineAt,
-      };
+    .where(and(eq(exams.organizationId, orgId), inArray(exams.id, examIds)));
+  const examById = new Map(examRows.map((e) => [e.id, e]));
+  for (const incident of incidents) {
+    if (!examById.has(incident.examId)) {
+      throw new AuthzUnavailableError(
+        `RECOVERY_QUEUE_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
+      );
     }
   }
 
-  // 3. Primary candidate (incident.candidateId) — nullable.
-  let primaryCandidate: IncidentQueueCandidateSummary | null = null;
-  if (incident.candidateId) {
-    const candRows = await db
-      .select({
-        id: candidateProfiles.id,
-        displayName: users.name,
-      })
-      .from(candidateProfiles)
-      .leftJoin(users, eq(candidateProfiles.userId, users.id))
-      .where(
-        and(
-          eq(candidateProfiles.organizationId, orgId),
-          eq(candidateProfiles.id, incident.candidateId),
-        ),
-      )
-      .limit(1);
-    const c = candRows[0];
-    if (c) {
-      primaryCandidate = { id: c.id, displayName: c.displayName ?? "" };
-    }
-  }
-
-  // 4. Linked attempts = anchor attempt (if set) ∪ explicit membership rows.
-  //    Linked candidate count = distinct candidateId across the linked attempts.
+  // 2. Memberships (explicit attempt links) — one batch for the whole page.
   const memberRows = await db
-    .select({ attemptId: examIncidentAttempts.attemptId })
+    .select({
+      incidentId: examIncidentAttempts.incidentId,
+      attemptId: examIncidentAttempts.attemptId,
+    })
     .from(examIncidentAttempts)
     .where(
       and(
         eq(examIncidentAttempts.organizationId, orgId),
-        eq(examIncidentAttempts.incidentId, incident.id),
+        inArray(examIncidentAttempts.incidentId, incidentIds),
       ),
     );
-  const linkedAttemptIds = new Set<string>();
-  if (incident.attemptId) linkedAttemptIds.add(incident.attemptId);
-  for (const m of memberRows) linkedAttemptIds.add(m.attemptId);
-  const linkedAttemptCount = linkedAttemptIds.size;
 
-  // Resolve distinct candidateIds for the linked attempts (in-org).
-  let linkedCandidateCount = 0;
-  if (linkedAttemptCount > 0) {
-    const linkedRows = await db
-      .select({ candidateId: examAttempts.candidateId })
-      .from(examAttempts)
-      .where(
-        and(
-          eq(examAttempts.organizationId, orgId),
-          inArray(examAttempts.id, [...linkedAttemptIds]),
-        ),
-      );
-    const candidateIds = new Set<string>();
-    for (const r of linkedRows) {
-      if (r.candidateId) candidateIds.add(r.candidateId);
-    }
-    linkedCandidateCount = candidateIds.size;
+  // 3. Linked attempt ids = anchor attempt (if set) ∪ membership rows; then a
+  //    single batch fetch resolves their candidate/status/deadline.
+  const linkedIdsByIncident = new Map<string, Set<string>>();
+  for (const incident of incidents) {
+    linkedIdsByIncident.set(incident.id, new Set<string>());
   }
+  for (const incident of incidents) {
+    if (incident.attemptId)
+      linkedIdsByIncident.get(incident.id)!.add(incident.attemptId);
+  }
+  for (const m of memberRows) {
+    linkedIdsByIncident.get(m.incidentId)?.add(m.attemptId);
+  }
+  const allLinkedAttemptIds = new Set<string>();
+  for (const ids of linkedIdsByIncident.values()) {
+    for (const id of ids) allLinkedAttemptIds.add(id);
+  }
+  const attemptRows =
+    allLinkedAttemptIds.size > 0
+      ? await db
+          .select({
+            id: examAttempts.id,
+            candidateId: examAttempts.candidateId,
+            status: examAttempts.status,
+            deadlineAt: examAttempts.deadlineAt,
+          })
+          .from(examAttempts)
+          .where(
+            and(
+              eq(examAttempts.organizationId, orgId),
+              inArray(examAttempts.id, [...allLinkedAttemptIds]),
+            ),
+          )
+      : [];
+  const attemptById = new Map(attemptRows.map((a) => [a.id, a]));
 
-  // 5. Active Proctors for the incident's exam — current active assignment only
+  // 4. Candidates — primary candidates + linked-attempt candidates, one batch.
+  const candidateIds = new Set<string>();
+  for (const incident of incidents) {
+    if (incident.candidateId) candidateIds.add(incident.candidateId);
+  }
+  for (const a of attemptRows) {
+    if (a.candidateId) candidateIds.add(a.candidateId);
+  }
+  const candRows =
+    candidateIds.size > 0
+      ? await db
+          .select({
+            id: candidateProfiles.id,
+            displayName: users.name,
+          })
+          .from(candidateProfiles)
+          .leftJoin(users, eq(candidateProfiles.userId, users.id))
+          .where(
+            and(
+              eq(candidateProfiles.organizationId, orgId),
+              inArray(candidateProfiles.id, [...candidateIds]),
+            ),
+          )
+      : [];
+  const candidateById = new Map(
+    candRows.map((c) => [c.id, { displayName: c.displayName ?? "" }]),
+  );
+
+  // 5. Active Proctors for the page's exams — current active assignment only
   //    (status='active'); historical incident-time Proctor is NOT included.
   const proctorRows = await db
     .select({
+      examId: examProctorAssignments.examId,
       userId: examProctorAssignments.proctorUserId,
       displayName: users.name,
     })
@@ -314,21 +358,53 @@ async function enrichIncident(
     .where(
       and(
         eq(examProctorAssignments.organizationId, orgId),
-        eq(examProctorAssignments.examId, incident.examId),
+        inArray(examProctorAssignments.examId, examIds),
         eq(examProctorAssignments.status, "active"),
       ),
     );
-  const activeProctors: IncidentQueueProctorSummary[] = proctorRows.map(
-    (p) => ({ userId: p.userId, displayName: p.displayName ?? "" }),
-  );
+  const proctorsByExam = new Map<string, IncidentQueueProctorSummary[]>();
+  for (const p of proctorRows) {
+    const list = proctorsByExam.get(p.examId) ?? [];
+    list.push({ userId: p.userId, displayName: p.displayName ?? "" });
+    proctorsByExam.set(p.examId, list);
+  }
 
-  return {
-    incident,
-    examSummary,
-    primaryAttempt,
-    primaryCandidate,
-    linkedAttemptCount,
-    linkedCandidateCount,
-    activeProctors,
-  };
+  // 6. Assemble per incident (pure in-memory).
+  return incidents.map((incident) => {
+    const exam = examById.get(incident.examId)!;
+    const linkedIds = linkedIdsByIncident.get(incident.id)!;
+    const linkedCandidateIds = new Set<string>();
+    for (const aid of linkedIds) {
+      const a = attemptById.get(aid);
+      if (a?.candidateId) linkedCandidateIds.add(a.candidateId);
+    }
+    const anchorAttempt = incident.attemptId
+      ? attemptById.get(incident.attemptId)
+      : undefined;
+    const primaryAttempt = anchorAttempt
+      ? {
+          id: anchorAttempt.id,
+          candidateId: anchorAttempt.candidateId,
+          status: anchorAttempt.status,
+          deadlineAt: anchorAttempt.deadlineAt,
+        }
+      : null;
+    const primaryCandidate =
+      incident.candidateId && candidateById.has(incident.candidateId)
+        ? {
+            id: incident.candidateId,
+            displayName: candidateById.get(incident.candidateId)!.displayName,
+          }
+        : null;
+
+    return {
+      incident,
+      examSummary: { id: exam.id, title: exam.title, status: exam.status },
+      primaryAttempt,
+      primaryCandidate,
+      linkedAttemptCount: linkedIds.size,
+      linkedCandidateCount: linkedCandidateIds.size,
+      activeProctors: proctorsByExam.get(incident.examId) ?? [],
+    };
+  });
 }

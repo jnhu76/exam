@@ -546,6 +546,103 @@ describe("recovery incident queue repository", () => {
     ).toBe(true);
   });
 
+  it("attemptId filter also matches incidents linked via exam_incident_attempts membership", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2026-08-15T00:00:00.000Z");
+    // Exam-wide incident (no anchor attempt) linked to alpha.attemptId via a
+    // membership row — a search by attempt must still find it.
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "filter-membership-attempt",
+    });
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: alpha.organizationId,
+      incidentId: id,
+      attemptId: alpha.attemptId,
+      relationshipType: "affected",
+      linkedBy: alpha.actorId,
+      operationId: randomUUID(),
+      linkedAt: t,
+    });
+    const { items } = await repo.listIncidentQueue(alpha.ctx, {
+      limit: 50,
+      attemptId: alpha.attemptId,
+    });
+    expect(
+      items.some((i) => i.incident.id === id),
+      "membership-linked incident must match attemptId filter",
+    ).toBe(true);
+  });
+
+  it("candidateId filter also matches candidates of linked (membership) attempts", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2026-08-20T00:00:00.000Z");
+    // Exam-wide incident (anchor candidateId = null) whose only link to
+    // candidate alpha is the membership attempt alpha.attemptId.
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "filter-membership-candidate",
+    });
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: alpha.organizationId,
+      incidentId: id,
+      attemptId: alpha.attemptId,
+      relationshipType: "affected",
+      linkedBy: alpha.actorId,
+      operationId: randomUUID(),
+      linkedAt: t,
+    });
+    const { items } = await repo.listIncidentQueue(alpha.ctx, {
+      limit: 50,
+      candidateId: alpha.candidateId,
+    });
+    expect(
+      items.some((i) => i.incident.id === id),
+      "incident linked to an attempt of this candidate must match candidateId filter",
+    ).toBe(true);
+  });
+
+  it("fails closed with AuthzUnavailableError when an incident's exam parent is broken", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-05-01T00:00:00.000Z");
+    // An incident in alpha whose examId references an exam that exists but
+    // belongs to another org — the org-scoped parent lookup cannot resolve it.
+    // (The FK on exam_incidents.exam_id is satisfied, so this is a realistic
+    // tenant-integrity corruption, not a DB-constraint violation.)
+    const id = await insertIncident(db, alpha, {
+      examId: beta.examId,
+      createdAt: t,
+      description: "broken-parent",
+    });
+    try {
+      await expect(
+        repo.listIncidentQueue(alpha.ctx, { limit: 50 }),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+      });
+    } finally {
+      // Remove the corrupted row so it cannot poison later alpha queries.
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, alpha.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
   it("assignedProctorUserId filters by current active assignment (not historical)", async () => {
     const repo = createRecoveryRepo(db);
     const t = new Date("2026-09-01T00:00:00.000Z");

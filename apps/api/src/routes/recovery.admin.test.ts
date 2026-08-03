@@ -2,12 +2,16 @@
  * J5-I1A1 — Admin Recovery Center incident queue (contract §5.4).
  *
  * Conformance-focused HTTP tests for `GET /admin/recovery/incidents`:
- *  - Admin-only authorization (`IncidentRecoveryView` granted ONLY to Admin).
- *  - Proctor with `incident.view` + an active Exam assignment is STILL denied
- *    (proctorAccess: admin_only — the Recovery queue is not the runtime
- *    incident surface).
- *  - Admin needs no fake Proctor assignment row.
- *  - Cross-organization data is never returned (tenant isolation).
+ *  - Admin-only authorization (`IncidentRecoveryView` granted ONLY to Admin);
+ *    Teacher / Grader / Proctor-with-active-assignment / Candidate / anonymous
+ *    are all denied.
+ *  - Cross-organization data is never returned: a REAL foreign
+ *    org→course→exam→incident chain is seeded and proven absent.
+ *  - Strict query validation: UUID filters, enum filters, strict boolean
+ *    parsing (`unresolvedOnly=false` stays false), createdFrom<=createdTo,
+ *    cursor shape — invalid input is 400 at the API boundary.
+ *  - Broken parent chain (incident whose exam is not resolvable in-org) fails
+ *    closed as 503 AUTHZ_UNAVAILABLE.
  *  - Each server-side filter narrows the page.
  *  - Cursor pagination: no-dup/no-gap, malformed cursor → 400, limit bounds.
  *  - The frozen queue-item projection (incident/examSummary/primaryAttempt/
@@ -17,6 +21,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
+import { and, eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import {
@@ -45,6 +50,8 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
   let seed: SeedResult;
   let proctorToken: string;
   let proctorUserId: string;
+  let teacherToken: string;
+  let graderToken: string;
 
   async function seedExamAndIncident(
     orgId: string,
@@ -158,6 +165,90 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     return { examId, attemptId, incidentId, candidateProfileId };
   }
 
+  /** Seeds a COMPLETE foreign chain: Org → Course → Exam → Incident. */
+  async function seedForeignOrgIncident(): Promise<{
+    incidentId: string;
+    examId: string;
+  }> {
+    const now = new Date();
+    const otherOrgId = randomUUID();
+    const otherCourseId = randomUUID();
+    const otherExamId = randomUUID();
+    const otherIncidentId = randomUUID();
+
+    await ctx.db.insert(schema.organizations).values({
+      id: otherOrgId,
+      name: "Other Org",
+      displayName: "Other Org",
+      slug: `other-${otherOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.courses).values({
+      id: otherCourseId,
+      organizationId: otherOrgId,
+      name: "Other Course",
+      code: `OC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.exams).values({
+      id: otherExamId,
+      organizationId: otherOrgId,
+      title: "Foreign Org Exam",
+      description: "",
+      courseId: otherCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.examIncidents).values({
+      id: otherIncidentId,
+      organizationId: otherOrgId,
+      examId: otherExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "critical",
+      status: "open",
+      occurredAt: null,
+      description: "foreign org incident",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { incidentId: otherIncidentId, examId: otherExamId };
+  }
+
   beforeAll(async () => {
     ctx = await buildTestApp(plugin);
     cleanupOrgId = ctx.org.id;
@@ -195,6 +286,25 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    // Teacher / Grader hold none of the Recovery capabilities — their presets
+    // do not include `incident.recovery.view`, so the flat gate denies them.
+    teacherToken = (
+      await createAssignedUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Teacher",
+        `rcqteacher-${uniquePrefix()}`,
+      )
+    ).token;
+    graderToken = (
+      await createAssignedUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Grader",
+        `rcqgrader-${uniquePrefix()}`,
+      )
+    ).token;
   });
 
   afterAll(async () => {
@@ -273,6 +383,24 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     expect(res.statusCode).toBe(403);
   });
 
+  it("Teacher is denied", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/recovery/incidents",
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Grader is denied", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/recovery/incidents",
+      cookies: { "auth-token": graderToken },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it("Anonymous (no cookie) is denied", async () => {
     const res = await ctx.app.inject({
       method: "GET",
@@ -282,37 +410,12 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
   });
 
   it("cross-organization incidents never appear (tenant isolation)", async () => {
-    // The Admin ctx is scoped to ctx.org.id; cross-org seed is not visible.
-    // Build a second org + incident and confirm it does not appear.
-    const now = new Date();
-    const otherOrgId = randomUUID();
-    await ctx.db.insert(schema.organizations).values({
-      id: otherOrgId,
-      name: "Other Org",
-      displayName: "Other Org",
-      slug: `other-${otherOrgId}`,
-      createdAt: now,
-      updatedAt: now,
-    });
-    // Seed an incident in otherOrgId using a self-contained direct insert (no
-    // cross-org course/exam chain needed for the queue filter — incident row
-    // alone proves the tenant predicate).
-    const otherExamId = randomUUID();
-    await ctx.db.insert(schema.courses).values({
-      id: randomUUID(),
-      organizationId: otherOrgId,
-      name: "Other Course",
-      code: `OC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    // Skip exam chain (would require many rows); the queue enrich will fail on
-    // a broken parent, so we use a complete but minimal cross-org chain:
-    // (omitted — instead we just assert the Admin's page never contains an
-    //  incident whose organizationId !== ctx.org.id, which the projection
-    //  check below covers.)
-    void otherExamId;
+    // Build a REAL foreign chain (Org B → Course B → Exam B → Incident B)
+    // and prove the Admin (Org A) page never contains it — the enrichment
+    // path would fail if the foreign row ever leaked into the org-scoped
+    // page query.
+    const { incidentId: foreignIncidentId, examId: foreignExamId } =
+      await seedForeignOrgIncident();
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/admin/recovery/incidents",
@@ -320,14 +423,108 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     });
     expect(res.statusCode).toBe(200);
     const items = res.json().items as Array<{
-      incident: { id: string };
+      incident: { id: string; examId: string };
     }>;
-    // Every item the Admin sees belongs to the Admin's org (the projection
-    // does not echo organizationId, but the tenant predicate is the only thing
-    // that could expose a cross-org row — we assert seed.incidentId is present
-    // and we never see otherOrgId's incident because it has no exam chain to
-    // enrich here).
+    // The Admin's own incident is present…
     expect(items.some((i) => i.incident.id === seed.incidentId)).toBe(true);
+    // …and the foreign incident/exam never is.
+    expect(items.some((i) => i.incident.id === foreignIncidentId)).toBe(false);
+    expect(items.every((i) => i.incident.examId !== foreignExamId)).toBe(true);
+  });
+
+  it("unresolvedOnly=false keeps resolved incidents (strict boolean parsing)", async () => {
+    const now = new Date();
+    const resolvedId = randomUUID();
+    await ctx.db.insert(schema.examIncidents).values({
+      id: resolvedId,
+      organizationId: ctx.org.id,
+      examId: seed.examId,
+      attemptId: null,
+      candidateId: null,
+      type: "operator_error",
+      severity: "minor",
+      status: "resolved",
+      occurredAt: null,
+      description: "resolved-incident",
+      resolutionSummary: "resolved",
+      resolvedAt: now,
+      resolvedBy: ctx.admin.id,
+      reportedBy: ctx.admin.id,
+      version: 2,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // "false" must NOT enable the unresolved filter (z.coerce.boolean bug).
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/recovery/incidents?unresolvedOnly=false",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      (res.json().items as Array<{ incident: { id: string } }>).some(
+        (i) => i.incident.id === resolvedId,
+      ),
+      "resolved incident must appear when unresolvedOnly=false",
+    ).toBe(true);
+    // And true still excludes it.
+    const resTrue = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/recovery/incidents?unresolvedOnly=true",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(resTrue.statusCode).toBe(200);
+    expect(
+      (resTrue.json().items as Array<{ incident: { id: string } }>).some(
+        (i) => i.incident.id === resolvedId,
+      ),
+    ).toBe(false);
+  });
+
+  it("invalid UUID filters are rejected with 400 (never reach PostgreSQL)", async () => {
+    const badQueries = [
+      "examId=not-a-uuid",
+      "candidateId=not-a-uuid",
+      "attemptId=not-a-uuid",
+      "assignedProctorUserId=not-a-uuid",
+    ];
+    for (const q of badQueries) {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents?${q}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(res.statusCode, `query ${q} must be 400`).toBe(400);
+      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("invalid enum filters are rejected with 400", async () => {
+    const badQueries = [
+      "status=bogus",
+      "severity=catastrophic",
+      "incidentType=bogus",
+      "unresolvedOnly=1",
+    ];
+    for (const q of badQueries) {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents?${q}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(res.statusCode, `query ${q} must be 400`).toBe(400);
+      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("createdFrom after createdTo is rejected with 400", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/recovery/incidents?createdFrom=2026-08-01T00:00:00.000Z&createdTo=2026-07-01T00:00:00.000Z",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
 
   it("filters narrow the page — status filter", async () => {
@@ -428,6 +625,24 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     expect(res.statusCode).toBe(400);
   });
 
+  it("cursor with a non-UUID id is rejected with 400", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/recovery/incidents?cursor=2026-08-01T00:00:00.000Z%7Cnot-a-uuid",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("cursor with a non-canonical datetime is rejected with 400", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents?cursor=2026-08-01%7C${seed.incidentId}`,
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("cursor pagination — no-dup/no-gap across pages", async () => {
     // Seed several more incidents so pagination exercises multiple pages.
     const now = new Date();
@@ -482,5 +697,106 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     expect(seen.length).toBe(3);
     expect(new Set(seen).size).toBe(3);
     for (const id of ids) expect(seen).toContain(id);
+  });
+
+  it("broken parent chain fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
+    // An incident in the Admin's org whose examId references an exam that
+    // exists but belongs to ANOTHER org — the org-scoped parent lookup cannot
+    // resolve the chain. The queue must fail closed (503 AUTHZ_UNAVAILABLE),
+    // never silently drop the row from the admin audit surface.
+    const now = new Date();
+    const brokenOrgId = randomUUID();
+    const brokenCourseId = randomUUID();
+    const brokenExamId = randomUUID();
+    const brokenIncidentId = randomUUID();
+    await ctx.db.insert(schema.organizations).values({
+      id: brokenOrgId,
+      name: "Broken Org",
+      displayName: "Broken Org",
+      slug: `broken-${brokenOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.courses).values({
+      id: brokenCourseId,
+      organizationId: brokenOrgId,
+      name: "Broken Course",
+      code: `BC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.exams).values({
+      id: brokenExamId,
+      organizationId: brokenOrgId,
+      title: "Broken Foreign Exam",
+      description: "",
+      courseId: brokenCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.examIncidents).values({
+      id: brokenIncidentId,
+      organizationId: ctx.org.id,
+      examId: brokenExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "other",
+      severity: "info",
+      status: "open",
+      occurredAt: null,
+      description: "broken-parent",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    try {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/recovery/incidents",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      // Remove the corrupted row so it cannot poison later queue reads.
+      await ctx.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx.org.id),
+            eq(schema.examIncidents.id, brokenIncidentId),
+          ),
+        );
+    }
   });
 });

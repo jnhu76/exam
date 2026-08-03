@@ -23675,7 +23675,8 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             },
             "in": "query",
             "name": "examId",
@@ -23683,7 +23684,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             },
             "in": "query",
             "name": "candidateId",
@@ -23691,7 +23693,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             },
             "in": "query",
             "name": "attemptId",
@@ -23699,7 +23702,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": ["open", "investigating", "resolved", "dismissed"]
             },
             "in": "query",
             "name": "status",
@@ -23707,7 +23711,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": ["info", "minor", "major", "critical"]
             },
             "in": "query",
             "name": "severity",
@@ -23715,7 +23720,18 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "network_interruption",
+                "device_failure",
+                "power_failure",
+                "candidate_unable_to_continue",
+                "suspected_misconduct",
+                "operator_error",
+                "system_outage",
+                "environmental_disruption",
+                "other"
+              ]
             },
             "in": "query",
             "name": "incidentType",
@@ -23723,8 +23739,16 @@
           },
           {
             "schema": {
-              "type": "string",
-              "format": "date-time"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
             },
             "in": "query",
             "name": "createdFrom",
@@ -23732,8 +23756,16 @@
           },
           {
             "schema": {
-              "type": "string",
-              "format": "date-time"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
             },
             "in": "query",
             "name": "createdTo",
@@ -23741,7 +23773,15 @@
           },
           {
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "in": "query",
             "name": "unresolvedOnly",
@@ -23749,7 +23789,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             },
             "in": "query",
             "name": "assignedProctorUserId",

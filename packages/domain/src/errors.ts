@@ -355,3 +355,15 @@ export class IncidentActionAlreadyLinkedError extends AppError {
     super(message, "INCIDENT_ACTION_ALREADY_LINKED", 409, details);
   }
 }
+
+/**
+ * Authorization infrastructure could not resolve the resource's parent chain
+ * (HTTP 503). Fail-closed: the caller must never fall back to an empty or
+ * lenient result when the tenant/parent chain cannot be proven — e.g. an
+ * Incident whose Exam row is missing or belongs to another organization.
+ */
+export class AuthzUnavailableError extends AppError {
+  constructor(message = "Authorization service unavailable") {
+    super(message, "AUTHZ_UNAVAILABLE", 503);
+  }
+}
