@@ -60,9 +60,11 @@ resource-scope enforcement, and the minimum Proctor incident authority are
 implemented per ADR-015 §23 (A → B → C → D); see
 [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
 J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is the next recovery job; its reality-audit
-and product/API/read-model contract is **IN REVIEW**
-([`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md)),
-with J5-I1A through J5-I1D NOT STARTED and BLOCKED pending J5-R0 acceptance.
+and product/API/read-model contract is **CLOSED / ACCEPTED**
+([`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md),
+PR #251 merged 2026-08-02). J5-I1A1 (Recovery Incident Queue,
+`GET /admin/recovery/incidents`) is IN PROGRESS on
+`feat/j5-i1a1-recovery-incident-queue`; J5-I1A2 and J5-I1B–I1D are NOT STARTED.
 
 ### Plain-text subjective question loop
 
@@ -172,9 +174,10 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     implemented per ADR-015 §23 — persistence, commands, Admin assignment
     API, resolver enforcement, minimum Proctor incident activation; see
     `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`);
-  - J5 — Admin Recovery Center (NOT IMPLEMENTED; R0 contract IN REVIEW —
-    `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A through
-    J5-I1D NOT STARTED);
+  - J5 — Admin Recovery Center (R0 contract CLOSED/ACCEPTED, PR #251;
+    `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A1 IN
+    PROGRESS — Recovery Incident Queue `GET /admin/recovery/incidents`;
+    J5-I1A2 and J5-I1B–I1D NOT STARTED);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;

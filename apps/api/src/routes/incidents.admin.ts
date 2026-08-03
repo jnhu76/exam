@@ -5,6 +5,10 @@ import { NotFoundError } from "@exam/domain";
 import type { IncidentActionType } from "@exam/domain";
 import { Permission } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
+import {
+  createRecoveryRepo,
+  type IncidentQueueCursor,
+} from "@exam/db/src/repository/recoveryRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
@@ -137,6 +141,173 @@ const IncidentWriteResponseSchema = z.object({
 
 const IncidentListResponseSchema = z.object({
   incidents: z.array(IncidentResponseSchema),
+});
+
+// ── Recovery Incident Queue (J5-I1A1, contract §5.4) ──
+
+/**
+ * Wire format of the keyset cursor: `"<createdAtISO>|<id>"`. This is the ONLY
+ * place an untrusted cursor string is trusted — `parseRecoveryCursor`
+ * validates it to a structured {@link IncidentQueueCursor} so the repo never
+ * re-parses raw external input (an invalid date / wrong shape surfaces as the
+ * same 400 VALIDATION_ERROR every other request-validation failure produces).
+ *
+ * The createdAt half is the DB-exact timestamp text (up to microsecond
+ * precision, produced by the repo's SQL projection): JS `Date` only carries
+ * milliseconds, so a Date round-trip would truncate sub-millisecond values
+ * and skip rows on the next page (pagination gap). The text is cast straight
+ * back to `timestamptz` in SQL.
+ */
+const RECOVERY_CURSOR_MAX_LENGTH = 200;
+
+function parseRecoveryCursor(raw: string): IncidentQueueCursor {
+  const parts = raw.split("|");
+  if (parts.length !== 2) {
+    throw new Error("cursor must be `<createdAtISO>|<id>`");
+  }
+  // Strict wire validation: canonical ISO datetime (1–6 fractional digits)
+  // + UUID. The cursor is produced by encodeRecoveryCursor (DB-exact
+  // timestamp text + id), so any other shape is a client error — never a
+  // repo concern.
+  const createdAt = z.string().datetime().safeParse(parts[0]!);
+  const id = z.string().uuid().safeParse(parts[1]!);
+  if (!createdAt.success || !id.success) {
+    throw new Error(
+      "cursor must be `<createdAtISO>|<id>` with an ISO datetime and a UUID id",
+    );
+  }
+  return { createdAtExact: createdAt.data, id: id.data };
+}
+
+const RecoveryCursorWireSchema = z
+  .string()
+  .max(RECOVERY_CURSOR_MAX_LENGTH)
+  .refine((raw) => {
+    try {
+      parseRecoveryCursor(raw);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "cursor must be a valid `<createdAtISO>|<id>` keyset cursor");
+
+function encodeRecoveryCursor(
+  cursor: IncidentQueueCursor | null,
+): string | null {
+  return cursor ? `${cursor.createdAtExact}|${cursor.id}` : null;
+}
+
+// Strict filter enums — invalid values are rejected at the API boundary as
+// 400 VALIDATION_ERROR, never pushed into a PostgreSQL comparison.
+const RecoveryStatusQuerySchema = z.enum([
+  "open",
+  "investigating",
+  "resolved",
+  "dismissed",
+]);
+const RecoverySeverityQuerySchema = z.enum([
+  "info",
+  "minor",
+  "major",
+  "critical",
+]);
+const RecoveryIncidentTypeQuerySchema = z.enum([
+  "network_interruption",
+  "device_failure",
+  "power_failure",
+  "candidate_unable_to_continue",
+  "suspected_misconduct",
+  "operator_error",
+  "system_outage",
+  "environmental_disruption",
+  "other",
+]);
+// z.coerce.boolean() would turn the non-empty string "false" into true;
+// explicit parsing keeps `?unresolvedOnly=false` actually false. The union
+// with z.boolean() makes the schema idempotent: Fastify validates the raw
+// querystring and writes the transformed output back onto request.query, so
+// the route's re-parse must accept the already-transformed value.
+const RecoveryBooleanQuerySchema = z
+  .union([z.enum(["true", "false"]), z.boolean()])
+  .transform((value) => value === true || value === "true");
+// Same idempotency for datetimes (raw ISO string → Date on the first parse).
+const RecoveryDatetimeQuerySchema = z
+  .union([z.string().datetime(), z.date()])
+  .optional()
+  .transform((v) => (v instanceof Date ? v : v ? new Date(v) : undefined));
+
+// Resource IDs are authoritative TEXT columns (exams.id, candidate_profiles.id,
+// users.id are `text`) — the queue must accept the same legal IDs the rest of
+// the API accepts, not just UUIDs. Only attemptId is UUID-authoritative
+// (proctor monitoring + incident creation schemas). proctorUserId bounds
+// mirror proctorAssignments.admin.ts (min(1).max(128)).
+const RecoveryIdQuerySchema = z.string().min(1).max(128);
+
+const RecoveryListQuerySchema = z
+  .object({
+    examId: RecoveryIdQuerySchema.optional(),
+    candidateId: RecoveryIdQuerySchema.optional(),
+    attemptId: z.string().uuid().optional(),
+    status: RecoveryStatusQuerySchema.optional(),
+    severity: RecoverySeverityQuerySchema.optional(),
+    incidentType: RecoveryIncidentTypeQuerySchema.optional(),
+    createdFrom: RecoveryDatetimeQuerySchema,
+    createdTo: RecoveryDatetimeQuerySchema,
+    unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
+    assignedProctorUserId: RecoveryIdQuerySchema.optional(),
+    cursor: RecoveryCursorWireSchema.optional().nullable(),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  })
+  .superRefine((query, ctx) => {
+    if (
+      query.createdFrom &&
+      query.createdTo &&
+      query.createdFrom.getTime() > query.createdTo.getTime()
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["createdFrom"],
+        message: "createdFrom must not be after createdTo",
+      });
+    }
+  });
+
+const RecoveryExamSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+});
+
+const RecoveryAttemptSummarySchema = z.object({
+  id: z.string(),
+  candidateId: z.string().nullable(),
+  status: z.string(),
+  deadlineAt: z.string().nullable(),
+});
+
+const RecoveryCandidateSummarySchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+});
+
+const RecoveryProctorSummarySchema = z.object({
+  userId: z.string(),
+  displayName: z.string(),
+});
+
+const RecoveryQueueItemSchema = z.object({
+  incident: IncidentResponseSchema,
+  examSummary: RecoveryExamSummarySchema,
+  primaryAttempt: RecoveryAttemptSummarySchema.nullable(),
+  primaryCandidate: RecoveryCandidateSummarySchema.nullable(),
+  linkedAttemptCount: z.number().int().nonnegative(),
+  linkedCandidateCount: z.number().int().nonnegative(),
+  activeProctors: z.array(RecoveryProctorSummarySchema),
+});
+
+const RecoveryListResponseSchema = z.object({
+  items: z.array(RecoveryQueueItemSchema),
+  nextCursor: z.string().nullable(),
 });
 
 // ── Helpers ──
@@ -1049,6 +1220,83 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
         IncidentWriteResponseSchema.parse({
           outcome: result.outcome,
           incident: toIncidentResponse(result.incident),
+        }),
+      );
+    },
+  );
+
+  // ── Recovery Incident Queue (J5-I1A1, contract §5.4) ──
+  //
+  // Organization-wide Admin-only Recovery Center queue. `IncidentRecoveryView`
+  // is granted ONLY to Admin (catalog.ts / presets.ts); the flat
+  // `requireCapability` gate is the runtime authority. Registry metadata
+  // records `scope: Organization, resolver: organization, proctorAccess:
+  // admin_only` per contract §5.4 — a Proctor with `incident.view` + an active
+  // Exam assignment is STILL denied (the Recovery queue is not the runtime
+  // incident surface, contract §15 adjudication).
+  fastify.get(
+    "/admin/recovery/incidents",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.IncidentRecoveryView),
+      ],
+      schema: {
+        querystring: RecoveryListQuerySchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin"],
+        response: {
+          200: RecoveryListResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          // Broken parent chain (incident whose exam is not resolvable in-org)
+          // fails closed as 503 AUTHZ_UNAVAILABLE — declared so the OpenAPI
+          // contract documents the deliberately-designed response.
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const query = RecoveryListQuerySchema.parse(request.query ?? {});
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createRecoveryRepo(fastify.db);
+
+      const { items, nextCursor } = await repo.listIncidentQueue(ctx, {
+        limit: query.limit,
+        cursor: query.cursor ? parseRecoveryCursor(query.cursor) : null,
+        examId: query.examId ?? null,
+        candidateId: query.candidateId ?? null,
+        attemptId: query.attemptId ?? null,
+        status: query.status ?? null,
+        severity: query.severity ?? null,
+        incidentType: query.incidentType ?? null,
+        createdFrom: query.createdFrom ?? null,
+        createdTo: query.createdTo ?? null,
+        unresolvedOnly: query.unresolvedOnly ?? null,
+        assignedProctorUserId: query.assignedProctorUserId ?? null,
+      });
+
+      return reply.send(
+        RecoveryListResponseSchema.parse({
+          items: items.map((item) => ({
+            incident: toIncidentResponse(item.incident),
+            examSummary: item.examSummary,
+            primaryAttempt: item.primaryAttempt
+              ? {
+                  id: item.primaryAttempt.id,
+                  candidateId: item.primaryAttempt.candidateId,
+                  status: item.primaryAttempt.status,
+                  deadlineAt:
+                    item.primaryAttempt.deadlineAt?.toISOString() ?? null,
+                }
+              : null,
+            primaryCandidate: item.primaryCandidate,
+            linkedAttemptCount: item.linkedAttemptCount,
+            linkedCandidateCount: item.linkedCandidateCount,
+            activeProctors: item.activeProctors,
+          })),
+          nextCursor: encodeRecoveryCursor(nextCursor),
         }),
       );
     },

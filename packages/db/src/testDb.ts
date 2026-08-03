@@ -95,11 +95,15 @@ export async function getTestDb(): Promise<{
  * the shared {@link getTestDb} instance (no isolation).
  *
  * @param namespace - Logical test namespace (e.g. `"api"`, `"db"`, `"tenant"`).
- * @returns Database connection in isolated schema + cleanup function.
+ * @returns Database connection in isolated schema + cleanup function, plus the
+ *   connection URL / schema name so tests can open a SECOND connection to the
+ *   same isolated schema (e.g. deterministic snapshot/concurrency tests).
  */
 export async function getIsolatedTestDb(namespace: string): Promise<{
   db: Database;
   cleanup: () => Promise<void>;
+  databaseUrl?: string;
+  schemaName?: string;
 }> {
   if (!isTestDbIsolationEnabled()) {
     return getTestDb();
@@ -127,6 +131,8 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
 
   return {
     db: conn.db,
+    databaseUrl: iso.databaseUrl,
+    schemaName: iso.schemaName,
     cleanup: async () => {
       try {
         await conn.sql.end();

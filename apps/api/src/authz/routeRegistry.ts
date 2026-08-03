@@ -1324,4 +1324,25 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "assignment_scoped",
       migrationStage: 7,
     },
+
+    // ── Admin Recovery Center (J5-I1A, contract §5.4 / §6.3) ──
+    // Admin-only organization-wide recovery queue + aggregate incident detail.
+    // `IncidentRecoveryView` is granted ONLY to Admin (catalog.ts / presets.ts);
+    // a Proctor with `incident.view` + active assignment is STILL denied
+    // (proctorAccess: admin_only — the Recovery queue is not the runtime
+    // incident surface, contract §15 adjudication). The flat `requireCapability`
+    // gate is the runtime authority for the org-wide list; the Incident→Exam
+    // resolver gates the detail (A2).
+    {
+      method: "GET",
+      path: "/admin/recovery/incidents",
+      legacyGate: "Admin",
+      permission: Permission.IncidentRecoveryView,
+      scope: Scope.Organization,
+      resolver: "organization",
+      resource: { type: "list", listOf: "incident" },
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
   ];

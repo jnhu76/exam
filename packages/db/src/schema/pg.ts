@@ -1248,6 +1248,14 @@ export const examIncidents = pgTable(
       table.examId,
       table.status,
     ),
+    // Org-wide Recovery Queue ordering `(created_at DESC, id DESC)` — the
+    // default page and the keyset-cursor page both scan this index
+    // (PostgreSQL B-tree supports backward scans).
+    index("exam_incidents_org_created_at_id_idx").on(
+      table.organizationId,
+      table.createdAt,
+      table.id,
+    ),
     index("exam_incidents_active_status_idx")
       .on(table.organizationId, table.status)
       .where(sql`${table.status} IN ('open', 'investigating')`),
