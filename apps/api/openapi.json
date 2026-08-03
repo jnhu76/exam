@@ -23676,7 +23676,8 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid"
+              "minLength": 1,
+              "maxLength": 128
             },
             "in": "query",
             "name": "examId",
@@ -23685,7 +23686,8 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid"
+              "minLength": 1,
+              "maxLength": 128
             },
             "in": "query",
             "name": "candidateId",
@@ -23790,7 +23792,8 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid"
+              "minLength": 1,
+              "maxLength": 128
             },
             "in": "query",
             "name": "assignedProctorUserId",
@@ -24054,15 +24057,12 @@
             }
           },
           "401": {
-            "description": "Unauthorized — missing or invalid authentication cookie",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "requestId": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "object",
                       "properties": {
@@ -24071,15 +24071,56 @@
                         },
                         "message": {
                           "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
                         }
-                      }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }
           },
           "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Default Response",
             "content": {
               "application/json": {

@@ -481,12 +481,14 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     ).toBe(false);
   });
 
-  it("invalid UUID filters are rejected with 400 (never reach PostgreSQL)", async () => {
+  it("invalid text-ID filters are rejected with 400 (empty / overlong)", async () => {
+    const longId = "x".repeat(129);
     const badQueries = [
-      "examId=not-a-uuid",
-      "candidateId=not-a-uuid",
-      "attemptId=not-a-uuid",
-      "assignedProctorUserId=not-a-uuid",
+      "examId=", // empty
+      `examId=${longId}`, // overlong
+      "candidateId=",
+      "assignedProctorUserId=",
+      "attemptId=not-a-uuid", // attemptId remains UUID-authoritative
     ];
     for (const q of badQueries) {
       const res = await ctx.app.inject({
@@ -497,6 +499,178 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
       expect(res.statusCode, `query ${q} must be 400`).toBe(400);
       expect(res.json().error.code).toBe("VALIDATION_ERROR");
     }
+  });
+
+  it("non-UUID text IDs are accepted for filters (text-ID authoritative model)", async () => {
+    // exams.id / candidate_profiles.id / users.id are `text` — DB-legal
+    // non-UUID ids that the rest of the API accepts must not be rejected here.
+    const now = new Date();
+    const courseId = randomUUID();
+    const examId = "exam-nonuuid-1";
+    const candUserId = "user-cand-nonuuid-1";
+    const candId = "cand-nonuuid-1";
+    const proctorUserId = "user-proctor-nonuuid-1";
+
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Non-UUID Course",
+      code: `NU-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.exams).values({
+      id: examId,
+      organizationId: ctx.org.id,
+      title: "Non-UUID Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.users).values([
+      {
+        id: candUserId,
+        organizationId: ctx.org.id,
+        username: `nonuuid-cand-${uniquePrefix()}`,
+        passwordHash: "hash",
+        name: "NonUUID Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: proctorUserId,
+        organizationId: ctx.org.id,
+        username: `nonuuid-proc-${uniquePrefix()}`,
+        passwordHash: "hash",
+        name: "NonUUID Proctor",
+        role: "Proctor",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: candId,
+      organizationId: ctx.org.id,
+      userId: candUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.examProctorAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx.org.id,
+      examId: seed.examId,
+      proctorUserId,
+      status: "active",
+      assignedBy: ctx.admin.id,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.examIncidents).values([
+      {
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        examId,
+        attemptId: null,
+        candidateId: null,
+        type: "other",
+        severity: "info",
+        status: "open",
+        occurredAt: null,
+        description: "nonuuid-exam-incident",
+        resolutionSummary: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        reportedBy: ctx.admin.id,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        examId: seed.examId,
+        attemptId: null,
+        candidateId: candId,
+        type: "other",
+        severity: "info",
+        status: "open",
+        occurredAt: null,
+        description: "nonuuid-cand-incident",
+        resolutionSummary: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        reportedBy: ctx.admin.id,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const byExam = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents?examId=${examId}`,
+      cookies: { "auth-token": adminToken },
+    });
+    expect(byExam.statusCode).toBe(200);
+    expect(
+      (byExam.json().items as Array<{ incident: { examId: string } }>).some(
+        (i) => i.incident.examId === examId,
+      ),
+    ).toBe(true);
+
+    const byCand = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents?candidateId=${candId}`,
+      cookies: { "auth-token": adminToken },
+    });
+    expect(byCand.statusCode).toBe(200);
+    expect(
+      (
+        byCand.json().items as Array<{ incident: { candidateId: string } }>
+      ).some((i) => i.incident.candidateId === candId),
+    ).toBe(true);
+
+    const byProctor = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents?assignedProctorUserId=${proctorUserId}`,
+      cookies: { "auth-token": adminToken },
+    });
+    expect(byProctor.statusCode).toBe(200);
+    expect(byProctor.json().items.length).toBeGreaterThan(0);
   });
 
   it("invalid enum filters are rejected with 400", async () => {

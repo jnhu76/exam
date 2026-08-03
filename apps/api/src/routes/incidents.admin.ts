@@ -151,6 +151,12 @@ const IncidentListResponseSchema = z.object({
  * validates it to a structured {@link IncidentQueueCursor} so the repo never
  * re-parses raw external input (an invalid date / wrong shape surfaces as the
  * same 400 VALIDATION_ERROR every other request-validation failure produces).
+ *
+ * The createdAt half is the DB-exact timestamp text (up to microsecond
+ * precision, produced by the repo's SQL projection): JS `Date` only carries
+ * milliseconds, so a Date round-trip would truncate sub-millisecond values
+ * and skip rows on the next page (pagination gap). The text is cast straight
+ * back to `timestamptz` in SQL.
  */
 const RECOVERY_CURSOR_MAX_LENGTH = 200;
 
@@ -159,9 +165,10 @@ function parseRecoveryCursor(raw: string): IncidentQueueCursor {
   if (parts.length !== 2) {
     throw new Error("cursor must be `<createdAtISO>|<id>`");
   }
-  // Strict wire validation: canonical ISO datetime + UUID. The cursor is
-  // produced by encodeRecoveryCursor (toISOString + id), so any other shape
-  // is a client error — never a repo concern.
+  // Strict wire validation: canonical ISO datetime (1–6 fractional digits)
+  // + UUID. The cursor is produced by encodeRecoveryCursor (DB-exact
+  // timestamp text + id), so any other shape is a client error — never a
+  // repo concern.
   const createdAt = z.string().datetime().safeParse(parts[0]!);
   const id = z.string().uuid().safeParse(parts[1]!);
   if (!createdAt.success || !id.success) {
@@ -169,7 +176,7 @@ function parseRecoveryCursor(raw: string): IncidentQueueCursor {
       "cursor must be `<createdAtISO>|<id>` with an ISO datetime and a UUID id",
     );
   }
-  return { createdAt: new Date(createdAt.data), id: id.data };
+  return { createdAtExact: createdAt.data, id: id.data };
 }
 
 const RecoveryCursorWireSchema = z
@@ -187,7 +194,7 @@ const RecoveryCursorWireSchema = z
 function encodeRecoveryCursor(
   cursor: IncidentQueueCursor | null,
 ): string | null {
-  return cursor ? `${cursor.createdAt.toISOString()}|${cursor.id}` : null;
+  return cursor ? `${cursor.createdAtExact}|${cursor.id}` : null;
 }
 
 // Strict filter enums — invalid values are rejected at the API boundary as
@@ -229,10 +236,17 @@ const RecoveryDatetimeQuerySchema = z
   .optional()
   .transform((v) => (v instanceof Date ? v : v ? new Date(v) : undefined));
 
+// Resource IDs are authoritative TEXT columns (exams.id, candidate_profiles.id,
+// users.id are `text`) — the queue must accept the same legal IDs the rest of
+// the API accepts, not just UUIDs. Only attemptId is UUID-authoritative
+// (proctor monitoring + incident creation schemas). proctorUserId bounds
+// mirror proctorAssignments.admin.ts (min(1).max(128)).
+const RecoveryIdQuerySchema = z.string().min(1).max(128);
+
 const RecoveryListQuerySchema = z
   .object({
-    examId: z.string().uuid().optional(),
-    candidateId: z.string().uuid().optional(),
+    examId: RecoveryIdQuerySchema.optional(),
+    candidateId: RecoveryIdQuerySchema.optional(),
     attemptId: z.string().uuid().optional(),
     status: RecoveryStatusQuerySchema.optional(),
     severity: RecoverySeverityQuerySchema.optional(),
@@ -240,7 +254,7 @@ const RecoveryListQuerySchema = z
     createdFrom: RecoveryDatetimeQuerySchema,
     createdTo: RecoveryDatetimeQuerySchema,
     unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
-    assignedProctorUserId: z.string().uuid().optional(),
+    assignedProctorUserId: RecoveryIdQuerySchema.optional(),
     cursor: RecoveryCursorWireSchema.optional().nullable(),
     limit: z.coerce.number().int().min(1).max(100).optional().default(20),
   })
@@ -1234,7 +1248,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
         response: {
           200: RecoveryListResponseSchema,
           400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
           403: ErrorResponseSchema,
+          // Broken parent chain (incident whose exam is not resolvable in-org)
+          // fails closed as 503 AUTHZ_UNAVAILABLE — declared so the OpenAPI
+          // contract documents the deliberately-designed response.
+          503: ErrorResponseSchema,
         },
       },
     },

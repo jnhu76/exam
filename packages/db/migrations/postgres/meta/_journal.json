@@ -176,6 +176,13 @@
       "when": 1785621462155,
       "tag": "0024_breezy_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788000000000,
+      "tag": "0025_recovery_queue_index",
+      "breakpoints": true
     }
   ]
 }

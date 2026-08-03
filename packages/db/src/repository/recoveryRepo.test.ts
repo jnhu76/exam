@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createDatabase } from "../database.js";
 import { schema } from "../schema/pg.js";
 import { getIsolatedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
@@ -233,6 +234,8 @@ async function insertIncident(
 describe("recovery incident queue repository", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
+  let testDbUrl: string | undefined;
+  let testSchemaName: string | undefined;
   let alpha: Fixture;
   let beta: Fixture;
 
@@ -240,6 +243,8 @@ describe("recovery incident queue repository", () => {
     const result = await getIsolatedTestDb("recovery-queue");
     db = result.db;
     cleanup = result.cleanup;
+    testDbUrl = result.databaseUrl;
+    testSchemaName = result.schemaName;
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
   });
@@ -357,7 +362,7 @@ describe("recovery incident queue repository", () => {
     }
     // Mark these so we can filter the page down to just them by description.
     const seen: string[] = [];
-    let cursor: { createdAt: Date; id: string } | null = null;
+    let cursor: { createdAtExact: string; id: string } | null = null;
     for (let page = 0; page < 5; page++) {
       const res = await repo.listIncidentQueue(alpha.ctx, {
         limit: 2,
@@ -1040,5 +1045,381 @@ describe("recovery incident queue repository", () => {
     const page = items.filter((i) => i.incident.description === "limit-bounds");
     expect(page.length).toBe(2);
     expect(nextCursor).not.toBeNull();
+  });
+
+  it("keyset cursor preserves microsecond precision — no gap within one millisecond", async () => {
+    const repo = createRecoveryRepo(db);
+    // Raw SQL inserts at same-millisecond, different-microsecond timestamps.
+    // JS Date cannot express these values, which is exactly why the cursor
+    // must carry the DB-exact timestamp text instead of a Date round-trip
+    // (a truncated cursor would skip the .123400/.123456 rows).
+    const stamps = [
+      "2027-04-01T00:00:00.123400Z",
+      "2027-04-01T00:00:00.123456Z",
+      "2027-04-01T00:00:00.123700Z",
+    ];
+    for (const s of stamps) {
+      await db.execute(sql`
+        INSERT INTO exam_incidents (id, organization_id, exam_id, attempt_id, candidate_id, type, severity, status, occurred_at, description, resolution_summary, resolved_at, resolved_by, reported_by, version, created_at, updated_at)
+        VALUES (${randomUUID()}, ${alpha.organizationId}, ${alpha.examId}, NULL, NULL, 'network_interruption', 'info', 'open', NULL, 'us-pagination', NULL, NULL, NULL, ${alpha.actorId}, 1, ${s}::timestamptz, ${s}::timestamptz)
+      `);
+    }
+    const seen: string[] = [];
+    let cursor: { createdAtExact: string; id: string } | null = null;
+    let firstCursorExact: string | null = null;
+    for (let page = 0; page < 10; page++) {
+      const res = await repo.listIncidentQueue(alpha.ctx, {
+        limit: 1,
+        cursor,
+      });
+      for (const it of res.items) {
+        if (it.incident.description === "us-pagination") {
+          seen.push(it.incident.id);
+        }
+      }
+      if (page === 0) firstCursorExact = res.nextCursor?.createdAtExact ?? null;
+      cursor = res.nextCursor;
+      if (!cursor) break;
+    }
+    // All 3 sub-millisecond rows must be visited, exactly once each.
+    expect(seen.length, "all 3 sub-millisecond rows must be visited").toBe(3);
+    expect(new Set(seen).size).toBe(3);
+    // The emitted cursor is microsecond-exact (6 fractional digits), never a
+    // truncated JS Date (which would emit ...123Z for all three rows).
+    expect(firstCursorExact).toBe("2027-04-01T00:00:00.123700Z");
+  });
+
+  it("filter and activeProctors projection share one snapshot (read-only REPEATABLE READ)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-03-01T00:00:00.000Z");
+    await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      createdAt: t,
+      description: "snapshot-proctor",
+    });
+
+    // One read-only REPEATABLE READ transaction: between two queue reads the
+    // assignment is revoked on a SECOND connection. Both reads must still see
+    // the pre-revocation snapshot — the page can never contradict its own
+    // assignedProctorUserId filter.
+    const result = await db.transaction(
+      async (tx) => {
+        const first = await createRecoveryRepo(tx).listIncidentQueue(
+          alpha.ctx,
+          { limit: 50, assignedProctorUserId: alpha.proctorUserId },
+        );
+        const conn2 = await createDatabase(testDbUrl, testSchemaName);
+        try {
+          await conn2.db
+            .update(schema.examProctorAssignments)
+            .set({
+              status: "revoked",
+              revokedBy: alpha.actorId,
+              revokedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(
+                  schema.examProctorAssignments.organizationId,
+                  alpha.organizationId,
+                ),
+                eq(
+                  schema.examProctorAssignments.proctorUserId,
+                  alpha.proctorUserId,
+                ),
+              ),
+            );
+        } finally {
+          await conn2.sql.end();
+        }
+        const second = await createRecoveryRepo(tx).listIncidentQueue(
+          alpha.ctx,
+          { limit: 50, assignedProctorUserId: alpha.proctorUserId },
+        );
+        return { first, second };
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
+
+    const f = result.first.items.find(
+      (i) => i.incident.description === "snapshot-proctor",
+    );
+    const s = result.second.items.find(
+      (i) => i.incident.description === "snapshot-proctor",
+    );
+    expect(f).toBeDefined();
+    expect(s).toBeDefined();
+    expect(
+      f!.activeProctors.some((p) => p.userId === alpha.proctorUserId),
+      "first read sees the active proctor",
+    ).toBe(true);
+    expect(
+      s!.activeProctors.some((p) => p.userId === alpha.proctorUserId),
+      "second read (same snapshot) still sees the active proctor",
+    ).toBe(true);
+
+    // A fresh call on a new snapshot no longer matches the revoked proctor.
+    const fresh = await repo.listIncidentQueue(alpha.ctx, {
+      limit: 50,
+      assignedProctorUserId: alpha.proctorUserId,
+    });
+    expect(
+      fresh.items.some((i) => i.incident.description === "snapshot-proctor"),
+    ).toBe(false);
+
+    // Restore the assignment so later tests are unaffected.
+    await db
+      .update(schema.examProctorAssignments)
+      .set({
+        status: "active",
+        revokedBy: null,
+        revokedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(
+            schema.examProctorAssignments.organizationId,
+            alpha.organizationId,
+          ),
+          eq(schema.examProctorAssignments.proctorUserId, alpha.proctorUserId),
+        ),
+      );
+  });
+
+  it("fails closed when an anchored incident's attempt belongs to a different exam", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // Second exam + enrollment + attempt in alpha org.
+    const exam2 = randomUUID();
+    await db.insert(schema.exams).values({
+      id: exam2,
+      organizationId: alpha.organizationId,
+      title: "Alpha Exam Two",
+      description: "",
+      courseId: alpha.courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: EXAM_CLOSE_AT,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const enr2 = randomUUID();
+    await db.insert(schema.examEnrollments).values({
+      id: enr2,
+      organizationId: alpha.organizationId,
+      examId: exam2,
+      candidateId: alpha.candidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const att2 = randomUUID();
+    await db.insert(schema.examAttempts).values({
+      id: att2,
+      organizationId: alpha.organizationId,
+      examId: exam2,
+      enrollmentId: enr2,
+      candidateId: alpha.candidateId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Incident anchored to alpha.examId but pointing at an attempt of exam2 —
+    // the composite FK (org, attempt_id) is satisfied, so this corruption is
+    // reachable at the DB level and must fail closed on read.
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: att2,
+      candidateId: alpha.candidateId,
+      createdAt: new Date("2027-07-01T00:00:00.000Z"),
+      description: "anchor-exam-mismatch",
+    });
+    try {
+      await expect(
+        repo.listIncidentQueue(alpha.ctx, { limit: 50 }),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+      });
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, alpha.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when an anchored incident's candidate contradicts its attempt", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // Second candidate profile in alpha org (single-column FK satisfied).
+    const candXUser = randomUUID();
+    const candX = randomUUID();
+    await db.insert(schema.users).values({
+      id: candXUser,
+      organizationId: alpha.organizationId,
+      username: `candx-${candXUser}`,
+      passwordHash: "hash",
+      name: "Candidate X",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: candX,
+      organizationId: alpha.organizationId,
+      userId: candXUser,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Anchor attempt alpha.attemptId belongs to candidate alpha, but the
+    // incident row claims candidate candX — corruption per the frozen matrix
+    // (supplied candidate MUST equal attempt.candidateId).
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: alpha.attemptId,
+      candidateId: candX,
+      createdAt: new Date("2027-08-01T00:00:00.000Z"),
+      description: "anchor-candidate-mismatch",
+    });
+    try {
+      await expect(
+        repo.listIncidentQueue(alpha.ctx, { limit: 50 }),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+      });
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, alpha.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a non-null candidateId cannot be resolved in-org", async () => {
+    const repo = createRecoveryRepo(db);
+    // beta.candidateId exists (single-column FK satisfied) but belongs to
+    // another org — the org-scoped candidate lookup cannot resolve it.
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: null,
+      candidateId: beta.candidateId,
+      createdAt: new Date("2027-09-01T00:00:00.000Z"),
+      description: "candidate-broken",
+    });
+    try {
+      await expect(
+        repo.listIncidentQueue(alpha.ctx, { limit: 50 }),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+      });
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, alpha.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a membership attempt cannot be resolved (FK bypass)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-10-01T00:00:00.000Z");
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "membership-broken",
+    });
+    // The composite (org, attempt_id) FK normally makes an unresolvable
+    // membership impossible; bypass it to simulate tenant-data corruption and
+    // prove the read path still fails closed.
+    await db.execute(
+      sql`ALTER TABLE exam_incident_attempts DROP CONSTRAINT exam_incident_attempts_attempt_fk`,
+    );
+    try {
+      await db.insert(schema.examIncidentAttempts).values({
+        id: randomUUID(),
+        organizationId: alpha.organizationId,
+        incidentId: id,
+        attemptId: randomUUID(),
+        relationshipType: "affected",
+        linkedBy: alpha.actorId,
+        operationId: randomUUID(),
+        linkedAt: t,
+      });
+      await expect(
+        repo.listIncidentQueue(alpha.ctx, { limit: 50 }),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+      });
+    } finally {
+      await db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db.execute(
+        sql`ALTER TABLE exam_incident_attempts ADD CONSTRAINT exam_incident_attempts_attempt_fk FOREIGN KEY ("organization_id","attempt_id") REFERENCES "exam_attempts"("organization_id","id")`,
+      );
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, alpha.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
   });
 });
