@@ -310,6 +310,112 @@ const RecoveryListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+// ── Recovery Incident Aggregate Detail (J5-I1A2, contract §6.3) ──
+
+const RecoveryAggregateEventSchema = z.object({
+  id: z.string().uuid(),
+  eventSequence: z.number().int(),
+  eventType: z.string(),
+  commandType: z.string(),
+  operationId: z.string().uuid(),
+  actorId: z.string().nullable(),
+  beforeVersion: z.number().int(),
+  afterVersion: z.number().int(),
+  payload: z.unknown(),
+  createdAt: z.string(),
+});
+
+const RecoveryAggregateNoteSchema = z.object({
+  operationId: z.string().uuid(),
+  actorId: z.string().nullable(),
+  body: z.string(),
+  createdAt: z.string(),
+});
+
+const RecoveryAggregateActionSchema = z.object({
+  id: z.string().uuid(),
+  actionType: z.string(),
+  actionId: z.string(),
+  attemptId: z.string(),
+  actorId: z.string().nullable(),
+  operationId: z.string().uuid(),
+  linkedAt: z.string(),
+});
+
+const RecoveryAggregateAttemptMembershipSchema = z.object({
+  id: z.string().uuid(),
+  attemptId: z.string(),
+  relationshipType: z.string(),
+  linkedAt: z.string(),
+  linkedBy: z.string(),
+  operationId: z.string().uuid(),
+});
+
+const RecoveryAggregateInterruptionLinkSchema = z.object({
+  id: z.string().uuid(),
+  attemptId: z.string(),
+  interruptionId: z.string().uuid(),
+  linkedAt: z.string(),
+  linkedBy: z.string(),
+  operationId: z.string().uuid(),
+});
+
+const RecoveryAggregateCandidateSummarySchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+});
+
+const RecoveryAggregateAttemptSummarySchema = z.object({
+  id: z.string(),
+  candidateId: z.string().nullable(),
+  status: z.string(),
+  deadlineAt: z.string().nullable(),
+});
+
+const RecoveryAggregateTimeAdjustmentSchema = z.object({
+  id: z.string(),
+  attemptId: z.string(),
+  addedSeconds: z.number().int(),
+  reasonCode: z.string().nullable(),
+  operationId: z.string(),
+  createdAt: z.string(),
+});
+
+const RecoveryAggregateAuditReferenceSchema = z.object({
+  id: z.string(),
+  action: z.string(),
+  actorId: z.string().nullable(),
+  actorName: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+const RecoveryAllowedActionSchema = z.enum([
+  "investigate",
+  "add_note",
+  "change_severity",
+  "resolve",
+  "dismiss",
+  "link_action",
+  "link_attempt",
+  "link_interruption",
+]);
+
+const RecoveryAggregateResponseSchema = z.object({
+  incident: IncidentResponseSchema,
+  examSummary: RecoveryExamSummarySchema,
+  events: z.array(RecoveryAggregateEventSchema),
+  notes: z.array(RecoveryAggregateNoteSchema),
+  actions: z.array(RecoveryAggregateActionSchema),
+  attemptMemberships: z.array(RecoveryAggregateAttemptMembershipSchema),
+  interruptionLinks: z.array(RecoveryAggregateInterruptionLinkSchema),
+  candidateSummaries: z.array(RecoveryAggregateCandidateSummarySchema),
+  attemptSummaries: z.array(RecoveryAggregateAttemptSummarySchema),
+  timeAdjustmentSummaries: z.array(RecoveryAggregateTimeAdjustmentSchema),
+  auditReferences: z.array(RecoveryAggregateAuditReferenceSchema),
+  allowedActions: z.array(RecoveryAllowedActionSchema),
+  snapshotAt: z.string(),
+});
+
 // ── Helpers ──
 
 function toIncidentResponse(incident: {
@@ -1297,6 +1403,96 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             activeProctors: item.activeProctors,
           })),
           nextCursor: encodeRecoveryCursor(nextCursor),
+        }),
+      );
+    },
+  );
+
+  // ── Recovery Incident Aggregate Detail (J5-I1A2, contract §6.3) ──
+  //
+  // Admin-only authoritative aggregate projection. Authorization uses the
+  // Incident→Exam→Course→Organization resolver (scope Exam, resourceIdKey
+  // incidentId) so the parent chain is validated and cross-org / missing
+  // incidents fail-closed. proctorAccess is omitted (defaults to admin_only)
+  // per contract §6.3 — a Proctor with incident.view + active assignment is
+  // STILL denied. The read comes from ONE consistent REPEATABLE READ read-only
+  // snapshot inside the repo; the frontend never multi-fetches.
+  fastify.get(
+    "/admin/recovery/incidents/:incidentId",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireScopedCapability(
+          Permission.IncidentRecoveryView,
+          "incident",
+          "incidentId",
+        ),
+      ],
+      schema: {
+        params: IncidentIdParamsSchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin"],
+        response: {
+          200: RecoveryAggregateResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = IncidentIdParamsSchema.parse(request.params);
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createRecoveryRepo(fastify.db);
+
+      const aggregate = await repo.getIncidentAggregate(
+        ctx,
+        params.incidentId,
+        fastify.now(),
+      );
+      // The scoped resolver already validated existence + parent chain, so a
+      // null here is a narrow post-resolver race (incident deleted between
+      // resolver and repo read). Surface as 404 RESOURCE_NOT_FOUND — the same
+      // shape as the resolver miss.
+      if (!aggregate) throw new NotFoundError("Incident not found");
+
+      return reply.send(
+        RecoveryAggregateResponseSchema.parse({
+          incident: toIncidentResponse(aggregate.incident),
+          examSummary: aggregate.examSummary,
+          events: aggregate.events.map((e) => ({
+            ...e,
+            createdAt: e.createdAt.toISOString(),
+          })),
+          notes: aggregate.notes.map((n) => ({
+            ...n,
+            createdAt: n.createdAt.toISOString(),
+          })),
+          actions: aggregate.actions.map((a) => ({
+            ...a,
+            linkedAt: a.linkedAt.toISOString(),
+          })),
+          attemptMemberships: aggregate.attemptMemberships.map((m) => ({
+            ...m,
+            linkedAt: m.linkedAt.toISOString(),
+          })),
+          interruptionLinks: aggregate.interruptionLinks.map((l) => ({
+            ...l,
+            linkedAt: l.linkedAt.toISOString(),
+          })),
+          candidateSummaries: aggregate.candidateSummaries,
+          attemptSummaries: aggregate.attemptSummaries.map((a) => ({
+            ...a,
+            deadlineAt: a.deadlineAt?.toISOString() ?? null,
+          })),
+          timeAdjustmentSummaries: aggregate.timeAdjustmentSummaries.map(
+            (t) => ({ ...t, createdAt: t.createdAt.toISOString() }),
+          ),
+          auditReferences: aggregate.auditReferences.map((a) => ({
+            ...a,
+            createdAt: a.createdAt.toISOString(),
+          })),
+          allowedActions: aggregate.allowedActions,
+          snapshotAt: aggregate.snapshotAt.toISOString(),
         }),
       );
     },

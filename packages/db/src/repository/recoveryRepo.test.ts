@@ -1423,3 +1423,239 @@ describe("recovery incident queue repository", () => {
     }
   });
 });
+
+// ── J5-I1A2 — Recovery Incident Aggregate Detail (contract §6.3) ──
+
+describe("recovery incident aggregate detail repository", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  let fx: Fixture;
+  let incidentId: string;
+  let attemptId2: string;
+  let candidateId2: string;
+  let candidateUserId2: string;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("recovery-aggregate");
+    db = result.db;
+    cleanup = result.cleanup;
+    fx = await createFixture(db, "agg");
+
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // Build a second candidate + attempt on the same exam so we can exercise
+    // multi-Attempt membership and candidate summaries.
+    candidateId2 = randomUUID();
+    candidateUserId2 = randomUUID();
+    attemptId2 = randomUUID();
+    await db.insert(schema.users).values({
+      id: candidateUserId2,
+      organizationId: fx.organizationId,
+      username: `cand2-${candidateUserId2}`,
+      passwordHash: "hash",
+      name: "Agg Candidate Two",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: candidateId2,
+      organizationId: fx.organizationId,
+      userId: candidateUserId2,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    const enrollmentId2 = randomUUID();
+    await db.insert(schema.examEnrollments).values({
+      id: enrollmentId2,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      candidateId: candidateId2,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.examAttempts).values({
+      id: attemptId2,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      enrollmentId: enrollmentId2,
+      candidateId: candidateId2,
+      attemptNo: 2,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Create an exam-wide incident (no anchor attempt) and link both attempts
+    // as members, plus one action link and one interruption link.
+    incidentId = randomUUID();
+    const incidentAt = new Date("2026-01-01T12:00:00.000Z");
+    await db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "critical",
+      status: "investigating",
+      occurredAt: null,
+      description: "aggregate detail test incident",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: fx.actorId,
+      version: 2,
+      createdAt: incidentAt,
+      updatedAt: incidentAt,
+    });
+    // Event 1: incident_created
+    await db.insert(schema.examIncidentEvents).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId,
+      eventType: "incident_created",
+      commandType: "createExamIncident",
+      operationId: randomUUID(),
+      actorId: fx.actorId,
+      beforeVersion: 0,
+      afterVersion: 1,
+      payload: {},
+      createdAt: incidentAt,
+    });
+    // Event 2: note_added (a note)
+    const noteAt = new Date("2026-01-01T12:30:00.000Z");
+    await db.insert(schema.examIncidentEvents).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId,
+      eventType: "note_added",
+      commandType: "addIncidentNote",
+      operationId: randomUUID(),
+      actorId: fx.actorId,
+      beforeVersion: 1,
+      afterVersion: 1,
+      payload: { body: "first note" },
+      createdAt: noteAt,
+    });
+    // Attempt memberships for both attempts
+    for (const attId of [fx.attemptId, attemptId2]) {
+      await db.insert(schema.examIncidentAttempts).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId,
+        attemptId: attId,
+        relationshipType: "affected",
+        linkedBy: fx.actorId,
+        operationId: randomUUID(),
+        linkedAt: incidentAt,
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  it("projects the full aggregate from one consistent snapshot", async () => {
+    const repo = createRecoveryRepo(db);
+    const agg = await repo.getIncidentAggregate(
+      fx.ctx,
+      incidentId,
+      new Date("2026-02-01T00:00:00.000Z"),
+    );
+
+    expect(agg).not.toBeNull();
+    expect(agg!.incident.id).toBe(incidentId);
+    expect(agg!.incident.version).toBe(2);
+    expect(agg!.incident.status).toBe("investigating");
+
+    // Exam summary
+    expect(agg!.examSummary).toEqual({
+      id: fx.examId,
+      title: "Recovery Exam agg",
+      status: "open",
+    });
+
+    // Events ordered by event_sequence ASC
+    expect(agg!.events.length).toBeGreaterThanOrEqual(2);
+    expect(agg!.events[0]!.eventType).toBe("incident_created");
+    expect(agg!.events[1]!.eventType).toBe("note_added");
+    expect(agg!.events[0]!.eventSequence < agg!.events[1]!.eventSequence).toBe(
+      true,
+    );
+
+    // Notes derived from note_added events
+    expect(agg!.notes.length).toBe(1);
+    expect(agg!.notes[0]!.body).toBe("first note");
+
+    // Attempt memberships (both attempts)
+    expect(agg!.attemptMemberships.length).toBe(2);
+    const memberAttemptIds = agg!.attemptMemberships
+      .map((m) => m.attemptId)
+      .sort();
+    expect(memberAttemptIds).toEqual([fx.attemptId, attemptId2].sort());
+
+    // Candidate summaries — both candidates appear
+    const candIds = agg!.candidateSummaries.map((c) => c.id).sort();
+    expect(candIds).toEqual([fx.candidateId, candidateId2].sort());
+
+    // Attempt summaries — both attempts appear with their core fields
+    const attIds = agg!.attemptSummaries.map((a) => a.id).sort();
+    expect(attIds).toEqual([fx.attemptId, attemptId2].sort());
+
+    // Snapshot carried
+    expect(agg!.snapshotAt).toBeInstanceOf(Date);
+    expect(agg!.incident.version).toBe(2);
+  });
+
+  it("returns null for a missing incident (fail-closed, no 500)", async () => {
+    const repo = createRecoveryRepo(db);
+    const agg = await repo.getIncidentAggregate(
+      fx.ctx,
+      "00000000-0000-0000-0000-000000000000",
+      new Date("2026-02-01T00:00:00.000Z"),
+    );
+    expect(agg).toBeNull();
+  });
+
+  it("enforces tenant isolation — cross-org incident returns null", async () => {
+    const repo = createRecoveryRepo(db);
+    // fx.ctx is org alpha; build a second org ctx.
+    const otherOrgCtx = context(randomUUID(), fx.actorId);
+    const agg = await repo.getIncidentAggregate(
+      otherOrgCtx,
+      incidentId,
+      new Date("2026-02-01T00:00:00.000Z"),
+    );
+    expect(agg).toBeNull();
+  });
+
+  it("allowedActions is server-derived from current status", async () => {
+    const repo = createRecoveryRepo(db);
+    const agg = await repo.getIncidentAggregate(
+      fx.ctx,
+      incidentId,
+      new Date("2026-02-01T00:00:00.000Z"),
+    );
+    // status is 'investigating' → non-terminal: investigate/notes/severity/
+    // resolve/dismiss + link actions/attempts/interruptions allowed.
+    expect(agg).not.toBeNull();
+    expect(agg!.allowedActions).toContain("investigate");
+    expect(agg!.allowedActions).toContain("add_note");
+    expect(agg!.allowedActions).toContain("change_severity");
+    expect(agg!.allowedActions).toContain("resolve");
+    expect(agg!.allowedActions).toContain("dismiss");
+    expect(agg!.allowedActions).toContain("link_action");
+    expect(agg!.allowedActions).toContain("link_attempt");
+    expect(agg!.allowedActions).toContain("link_interruption");
+  });
+});

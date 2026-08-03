@@ -64,7 +64,10 @@ and product/API/read-model contract is **CLOSED / ACCEPTED**
 ([`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md),
 PR #251 merged 2026-08-02). J5-I1A1 (Recovery Incident Queue,
 `GET /admin/recovery/incidents`) is IN PROGRESS on
-`feat/j5-i1a1-recovery-incident-queue`; J5-I1A2 and J5-I1B–I1D are NOT STARTED.
+`feat/j5-i1a1-recovery-incident-queue`; J5-I1A2 (Recovery Incident Aggregate
+Detail, `GET /admin/recovery/incidents/:incidentId`) is IN PROGRESS on the
+stacked branch `feat/j5-i1a2-recovery-incident-detail`. J5-I1B–I1D are NOT
+STARTED.
 
 ### Plain-text subjective question loop
 
@@ -177,7 +180,9 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
   - J5 — Admin Recovery Center (R0 contract CLOSED/ACCEPTED, PR #251;
     `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A1 IN
     PROGRESS — Recovery Incident Queue `GET /admin/recovery/incidents`;
-    J5-I1A2 and J5-I1B–I1D NOT STARTED);
+    J5-I1A2 IN PROGRESS — Recovery Incident Aggregate Detail
+    `GET /admin/recovery/incidents/:incidentId` (stacked branch);
+    J5-I1B–I1D NOT STARTED);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;

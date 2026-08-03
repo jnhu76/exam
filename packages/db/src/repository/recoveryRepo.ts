@@ -2,6 +2,8 @@ import type { RequestContext } from "@exam/domain";
 import { AuthzUnavailableError } from "@exam/domain";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import {
+  attemptTimeAdjustments,
+  auditLogs,
   candidateProfiles,
   examAttempts,
   examIncidentAttempts,
@@ -12,7 +14,7 @@ import {
 } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
-import type { ExamIncidentRow } from "./incidentRepo.js";
+import { createIncidentRepo, type ExamIncidentRow } from "./incidentRepo.js";
 
 /**
  * Recovery Incident Queue (J5-I1A, contract §5.4).
@@ -92,6 +94,111 @@ export interface IncidentQueueItem {
   linkedAttemptCount: number;
   linkedCandidateCount: number;
   activeProctors: IncidentQueueProctorSummary[];
+}
+
+// ── Aggregate detail types (J5-I1A2, contract §6.3) ──
+
+export interface IncidentAggregateEventSummary {
+  id: string;
+  eventSequence: number;
+  eventType: string;
+  commandType: string;
+  operationId: string;
+  actorId: string | null;
+  beforeVersion: number;
+  afterVersion: number;
+  payload: unknown;
+  createdAt: Date;
+}
+
+export interface IncidentAggregateNoteSummary {
+  operationId: string;
+  actorId: string | null;
+  body: string;
+  createdAt: Date;
+}
+
+export interface IncidentAggregateActionSummary {
+  id: string;
+  actionType: string;
+  actionId: string;
+  attemptId: string;
+  actorId: string | null;
+  operationId: string;
+  linkedAt: Date;
+}
+
+export interface IncidentAggregateAttemptMembershipSummary {
+  id: string;
+  attemptId: string;
+  relationshipType: string;
+  linkedAt: Date;
+  linkedBy: string;
+  operationId: string;
+}
+
+export interface IncidentAggregateInterruptionLinkSummary {
+  id: string;
+  attemptId: string;
+  interruptionId: string;
+  linkedAt: Date;
+  linkedBy: string;
+  operationId: string;
+}
+
+export interface IncidentAggregateCandidateSummary {
+  id: string;
+  displayName: string;
+}
+
+export interface IncidentAggregateAttemptSummary {
+  id: string;
+  candidateId: string | null;
+  status: string;
+  deadlineAt: Date | null;
+}
+
+export interface IncidentAggregateTimeAdjustmentSummary {
+  id: string;
+  attemptId: string;
+  addedSeconds: number;
+  reasonCode: string | null;
+  operationId: string;
+  createdAt: Date;
+}
+
+export interface IncidentAggregateAuditReferenceSummary {
+  id: string;
+  action: string;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: Date;
+}
+
+export type IncidentAllowedAction =
+  | "investigate"
+  | "add_note"
+  | "change_severity"
+  | "resolve"
+  | "dismiss"
+  | "link_action"
+  | "link_attempt"
+  | "link_interruption";
+
+export interface IncidentAggregate {
+  incident: ExamIncidentRow;
+  examSummary: IncidentQueueExamSummary;
+  events: IncidentAggregateEventSummary[];
+  notes: IncidentAggregateNoteSummary[];
+  actions: IncidentAggregateActionSummary[];
+  attemptMemberships: IncidentAggregateAttemptMembershipSummary[];
+  interruptionLinks: IncidentAggregateInterruptionLinkSummary[];
+  candidateSummaries: IncidentAggregateCandidateSummary[];
+  attemptSummaries: IncidentAggregateAttemptSummary[];
+  timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[];
+  auditReferences: IncidentAggregateAuditReferenceSummary[];
+  allowedActions: IncidentAllowedAction[];
+  snapshotAt: Date;
 }
 
 export function createRecoveryRepo(db: Database) {
@@ -258,7 +365,291 @@ export function createRecoveryRepo(db: Database) {
     );
   }
 
-  return { listIncidentQueue };
+  /**
+   * getIncidentAggregate — authoritative aggregate projection for the Admin
+   * Recovery Center detail view (J5-I1A2 §6.3).
+   *
+   * Reads Incident + events + notes + actions + Attempt memberships +
+   * interruption links + Exam/Attempt/Candidate summaries + time adjustments +
+   * audit references + allowed actions from ONE consistent snapshot: a
+   * read-only REPEATABLE READ transaction. All repos are bound to the same
+   * transaction handle so the Incident version, event/action/membership lists,
+   * and summaries cannot come from different snapshots.
+   *
+   * - Returns null if the incident does not exist in the caller's organization
+   *   (fail-closed on missing / cross-org; the resolver at the API layer maps
+   *   that to 404 RESOURCE_NOT_FOUND).
+   * - `snapshotAt` is the transaction snapshot timestamp.
+   * - `allowedActions` is server-derived from the current status (terminal
+   *   statuses resolve/dismissed remove the non-terminal actions).
+   */
+  async function getIncidentAggregate(
+    ctx: TenantContext | RequestContext,
+    incidentId: string,
+    now: Date,
+  ): Promise<IncidentAggregate | null> {
+    const orgId = resolveOrganizationId(ctx);
+
+    return db.transaction(
+      async (tx) => {
+        const incidentRepo = createIncidentRepo(tx);
+
+        const incident = await incidentRepo.findById(
+          { organizationId: orgId } as TenantContext,
+          incidentId,
+        );
+        if (!incident) return null;
+
+        // All dimension reads bound to `tx` → same REPEATABLE READ snapshot.
+        const events = await incidentRepo.listEventsByIncident(
+          { organizationId: orgId } as TenantContext,
+          incidentId,
+        );
+        const actions = await incidentRepo.listActionsByIncident(
+          { organizationId: orgId } as TenantContext,
+          incidentId,
+        );
+        const attemptMemberships = await incidentRepo.listAttemptsByIncident(
+          { organizationId: orgId } as TenantContext,
+          incidentId,
+        );
+        const interruptionLinks =
+          await incidentRepo.listInterruptionLinksByIncident(
+            { organizationId: orgId } as TenantContext,
+            incidentId,
+          );
+
+        // Exam summary
+        const examRows = await tx
+          .select({
+            id: exams.id,
+            title: exams.title,
+            status: exams.status,
+          })
+          .from(exams)
+          .where(
+            and(eq(exams.organizationId, orgId), eq(exams.id, incident.examId)),
+          )
+          .limit(1);
+        const examRow = examRows[0];
+        if (!examRow) {
+          throw new Error(
+            `RECOVERY_AGG_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
+          );
+        }
+
+        // Linked attempt set = anchor attempt (if any) ∪ membership rows.
+        const linkedAttemptIds = new Set<string>();
+        if (incident.attemptId) linkedAttemptIds.add(incident.attemptId);
+        for (const m of attemptMemberships) {
+          linkedAttemptIds.add(m.attemptId);
+        }
+        const linkedIdList = [...linkedAttemptIds];
+
+        // Attempt summaries + candidate summaries + time adjustments
+        let attemptSummaries: IncidentAggregateAttemptSummary[] = [];
+        const candidateIds = new Set<string>();
+        let timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[] =
+          [];
+        if (linkedIdList.length > 0) {
+          const attRows = await tx
+            .select({
+              id: examAttempts.id,
+              candidateId: examAttempts.candidateId,
+              status: examAttempts.status,
+              deadlineAt: examAttempts.deadlineAt,
+            })
+            .from(examAttempts)
+            .where(
+              and(
+                eq(examAttempts.organizationId, orgId),
+                inArray(examAttempts.id, linkedIdList),
+              ),
+            );
+          attemptSummaries = attRows.map((a) => ({
+            id: a.id,
+            candidateId: a.candidateId,
+            status: a.status,
+            deadlineAt: a.deadlineAt,
+          }));
+          for (const a of attRows) {
+            if (a.candidateId) candidateIds.add(a.candidateId);
+          }
+
+          // Time adjustments for linked attempts (action_type='time_grant'
+          // links point at the same attempt ledger rows).
+          const timeAdjRows = await tx
+            .select({
+              id: attemptTimeAdjustments.id,
+              attemptId: attemptTimeAdjustments.attemptId,
+              addedSeconds: attemptTimeAdjustments.addedSeconds,
+              reasonCode: attemptTimeAdjustments.reasonCode,
+              operationId: attemptTimeAdjustments.operationId,
+              createdAt: attemptTimeAdjustments.createdAt,
+            })
+            .from(attemptTimeAdjustments)
+            .where(
+              and(
+                eq(attemptTimeAdjustments.organizationId, orgId),
+                inArray(attemptTimeAdjustments.attemptId, linkedIdList),
+              ),
+            );
+          timeAdjustmentSummaries = timeAdjRows.map((t) => ({
+            id: t.id,
+            attemptId: t.attemptId,
+            addedSeconds: t.addedSeconds,
+            reasonCode: t.reasonCode,
+            operationId: t.operationId,
+            createdAt: t.createdAt,
+          }));
+        }
+
+        // Candidate summaries (distinct candidateIds across linked attempts)
+        let candidateSummaries: IncidentAggregateCandidateSummary[] = [];
+        if (candidateIds.size > 0) {
+          const candRows = await tx
+            .select({
+              id: candidateProfiles.id,
+              displayName: users.name,
+            })
+            .from(candidateProfiles)
+            .leftJoin(users, eq(candidateProfiles.userId, users.id))
+            .where(
+              and(
+                eq(candidateProfiles.organizationId, orgId),
+                inArray(candidateProfiles.id, [...candidateIds]),
+              ),
+            );
+          candidateSummaries = candRows.map((c) => ({
+            id: c.id,
+            displayName: c.displayName ?? "",
+          }));
+        }
+
+        // Audit references for this incident target
+        const auditRows = await tx
+          .select({
+            id: auditLogs.id,
+            action: auditLogs.action,
+            actorId: auditLogs.actorId,
+            actorName: users.name,
+            createdAt: auditLogs.createdAt,
+          })
+          .from(auditLogs)
+          .leftJoin(users, eq(users.id, auditLogs.actorId))
+          .where(
+            and(
+              eq(auditLogs.organizationId, orgId),
+              eq(auditLogs.targetType, "incident"),
+              eq(auditLogs.targetId, incidentId),
+            ),
+          )
+          .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id));
+        const auditReferences: IncidentAggregateAuditReferenceSummary[] =
+          auditRows.map((a) => ({
+            id: a.id,
+            action: a.action,
+            actorId: a.actorId,
+            actorName: a.actorName,
+            createdAt: a.createdAt,
+          }));
+
+        // Notes derived from note_added events (event payload body).
+        const notes: IncidentAggregateNoteSummary[] = events
+          .filter((e) => e.eventType === "note_added")
+          .map((e) => ({
+            operationId: e.operationId,
+            actorId: e.actorId,
+            body:
+              (e.payload as { body?: string } | null)?.body?.toString() ?? "",
+            createdAt: e.createdAt,
+          }));
+
+        const allowedActions = deriveAllowedActions(incident.status);
+
+        return {
+          incident,
+          examSummary: {
+            id: examRow.id,
+            title: examRow.title,
+            status: examRow.status,
+          },
+          events: events.map((e) => ({
+            id: e.id,
+            eventSequence: e.eventSequence,
+            eventType: e.eventType,
+            commandType: e.commandType,
+            operationId: e.operationId,
+            actorId: e.actorId,
+            beforeVersion: e.beforeVersion,
+            afterVersion: e.afterVersion,
+            payload: e.payload,
+            createdAt: e.createdAt,
+          })),
+          notes,
+          actions: actions.map((a) => ({
+            id: a.id,
+            actionType: a.actionType,
+            actionId: a.actionId,
+            attemptId: a.attemptId,
+            actorId: a.actorId,
+            operationId: a.operationId,
+            linkedAt: a.linkedAt,
+          })),
+          attemptMemberships: attemptMemberships.map((m) => ({
+            id: m.id,
+            attemptId: m.attemptId,
+            relationshipType: m.relationshipType,
+            linkedAt: m.linkedAt,
+            linkedBy: m.linkedBy,
+            operationId: m.operationId,
+          })),
+          interruptionLinks: interruptionLinks.map((l) => ({
+            id: l.id,
+            attemptId: l.attemptId,
+            interruptionId: l.interruptionId,
+            linkedAt: l.linkedAt,
+            linkedBy: l.linkedBy,
+            operationId: l.operationId,
+          })),
+          candidateSummaries,
+          attemptSummaries,
+          timeAdjustmentSummaries,
+          auditReferences,
+          allowedActions,
+          snapshotAt: now,
+        };
+      },
+      {
+        isolationLevel: "repeatable read",
+        accessMode: "read only",
+      },
+    );
+  }
+
+  return { listIncidentQueue, getIncidentAggregate };
+}
+
+/**
+ * Server-derived action allow-list from the incident's current status.
+ * - open/investigating (non-terminal): all operator actions.
+ * - resolved/dismissed (terminal): no state-changing actions — the incident
+ *   is closed; only read remains.
+ */
+function deriveAllowedActions(status: string): IncidentAllowedAction[] {
+  if (status === "resolved" || status === "dismissed") {
+    return [];
+  }
+  return [
+    "investigate",
+    "add_note",
+    "change_severity",
+    "resolve",
+    "dismiss",
+    "link_action",
+    "link_attempt",
+    "link_interruption",
+  ];
 }
 
 export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;

@@ -1345,4 +1345,15 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "admin_only",
       migrationStage: 8,
     },
+    {
+      method: "GET",
+      path: "/admin/recovery/incidents/:incidentId",
+      legacyGate: "Admin",
+      permission: Permission.IncidentRecoveryView,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
   ];

@@ -974,3 +974,232 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     }
   });
 });
+
+// ── J5-I1A2 — Recovery Incident Aggregate Detail (contract §6.3) ──
+
+describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incidents/:incidentId", () => {
+  let ctx2: Awaited<ReturnType<typeof buildTestApp>>;
+  let adminToken2: string;
+  let candidateToken2: string;
+  let cleanupOrgId2: string | null = null;
+  let aggregateIncidentId: string;
+  let aggregateExamId: string;
+  let proctor2Token: string;
+  let proctor2UserId: string;
+
+  beforeAll(async () => {
+    ctx2 = await buildTestApp(plugin);
+    cleanupOrgId2 = ctx2.org.id;
+    adminToken2 = ctx2.adminToken;
+    candidateToken2 = ctx2.candidateToken;
+
+    // Build an exam + attempt + candidate + proctor + incident for the aggregate.
+    const now = new Date();
+    const courseId = randomUUID();
+    aggregateExamId = randomUUID();
+    const attemptId = randomUUID();
+    const enrollmentId = randomUUID();
+    const candidateProfileId = randomUUID();
+    aggregateIncidentId = randomUUID();
+
+    await ctx2.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx2.org.id,
+      name: "Aggregate Detail Course",
+      code: `ADC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.exams).values({
+      id: aggregateExamId,
+      organizationId: ctx2.org.id,
+      title: "Aggregate Detail Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.candidateProfiles).values({
+      id: candidateProfileId,
+      organizationId: ctx2.org.id,
+      userId: ctx2.candidate.id,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      candidateId: candidateProfileId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examAttempts).values({
+      id: attemptId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      enrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: new Date(now.getTime() + 3_600_000),
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: aggregateIncidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId,
+      candidateId: candidateProfileId,
+      type: "device_failure",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "aggregate detail route incident",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Proctor with active assignment on this exam — must STILL be denied.
+    const proctor = await createAssignedUserForTest(
+      ctx2.db,
+      ctx2.org.id,
+      "Proctor",
+      `aggproctor-${uniquePrefix()}`,
+      { isPrimary: true, isActive: true },
+    );
+    proctor2UserId = proctor.user.id;
+    proctor2Token = proctor.token;
+    await ctx2.db.insert(schema.examProctorAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      proctorUserId: proctor2UserId,
+      status: "active",
+      assignedBy: ctx2.admin.id,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  afterAll(async () => {
+    if (cleanupOrgId2) {
+      await cleanupOrganizationTestData(ctx2.db, cleanupOrgId2);
+    }
+    await ctx2.cleanup();
+  });
+
+  it("Admin reads the aggregate — returns frozen projection", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.incident.id).toBe(aggregateIncidentId);
+    expect(body.incident.version).toBe(1);
+    expect(body.examSummary).toEqual({
+      id: aggregateExamId,
+      title: "Aggregate Detail Exam",
+      status: "open",
+    });
+    expect(Array.isArray(body.events)).toBe(true);
+    expect(Array.isArray(body.notes)).toBe(true);
+    expect(Array.isArray(body.actions)).toBe(true);
+    expect(Array.isArray(body.attemptMemberships)).toBe(true);
+    expect(Array.isArray(body.interruptionLinks)).toBe(true);
+    expect(Array.isArray(body.candidateSummaries)).toBe(true);
+    expect(Array.isArray(body.attemptSummaries)).toBe(true);
+    expect(Array.isArray(body.timeAdjustmentSummaries)).toBe(true);
+    expect(Array.isArray(body.auditReferences)).toBe(true);
+    expect(Array.isArray(body.allowedActions)).toBe(true);
+    expect(body.snapshotAt).toEqual(expect.any(String));
+  });
+
+  it("Admin needs no fake Proctor assignment — bare Admin works", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("Proctor with incident.view + active assignment is STILL denied", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": proctor2Token },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Candidate is denied", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": candidateToken2 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Anonymous (no cookie) is denied with 401", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("missing incident returns 404 (resolver fail-closed, anti-enumeration)", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${randomUUID()}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});

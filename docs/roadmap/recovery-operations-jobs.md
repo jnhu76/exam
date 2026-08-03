@@ -15,7 +15,9 @@
 > (`j5-r0-admin-recovery-center-contract.md`, PR #251 merged 2026-08-02,
 > merge commit `b2545e6e`). J5-I1A1 (Recovery Incident Queue,
 > `GET /admin/recovery/incidents`) IN PROGRESS on
-> `feat/j5-i1a1-recovery-incident-queue`. J5-I1A2 / J5-I1B–I1D NOT STARTED.
+> `feat/j5-i1a1-recovery-incident-queue`. J5-I1A2 (Recovery Incident Aggregate
+> Detail, `GET /admin/recovery/incidents/:incidentId`) IN PROGRESS on
+> `feat/j5-i1a2-recovery-incident-detail` (stacked). J5-I1B–I1D NOT STARTED.
 > J6/J7 NOT STARTED.
 >
 > Updated: 2026-08-03
