@@ -1567,22 +1567,19 @@ describe("recovery incident aggregate detail repository", () => {
 
   it("projects the full aggregate from one consistent snapshot", async () => {
     const repo = createRecoveryRepo(db);
-    const agg = await repo.getIncidentAggregate(
-      fx.ctx,
-      incidentId,
-      new Date("2026-02-01T00:00:00.000Z"),
-    );
+    const agg = await repo.getIncidentAggregate(fx.ctx, incidentId);
 
     expect(agg).not.toBeNull();
     expect(agg!.incident.id).toBe(incidentId);
     expect(agg!.incident.version).toBe(2);
     expect(agg!.incident.status).toBe("investigating");
 
-    // Exam summary
+    // Exam summary — carries the canonical closeAt (effective-deadline input)
     expect(agg!.examSummary).toEqual({
       id: fx.examId,
       title: "Recovery Exam agg",
       status: "open",
+      closeAt: EXAM_CLOSE_AT,
     });
 
     // Events ordered by event_sequence ASC
@@ -1608,11 +1605,16 @@ describe("recovery incident aggregate detail repository", () => {
     const candIds = agg!.candidateSummaries.map((c) => c.id).sort();
     expect(candIds).toEqual([fx.candidateId, candidateId2].sort());
 
-    // Attempt summaries — both attempts appear with their core fields
+    // Attempt summaries — both attempts appear with their core fields +
+    // the raw deadlineAt (the route maps it to the effective deadline).
     const attIds = agg!.attemptSummaries.map((a) => a.id).sort();
     expect(attIds).toEqual([fx.attemptId, attemptId2].sort());
+    for (const a of agg!.attemptSummaries) {
+      expect(a.deadlineAt).toEqual(ATTEMPT_DEADLINE_AT);
+      expect(a.examId).toBe(fx.examId);
+    }
 
-    // Snapshot carried
+    // Snapshot carried — it is a real DB transaction_timestamp() Date
     expect(agg!.snapshotAt).toBeInstanceOf(Date);
     expect(agg!.incident.version).toBe(2);
   });
@@ -1622,7 +1624,6 @@ describe("recovery incident aggregate detail repository", () => {
     const agg = await repo.getIncidentAggregate(
       fx.ctx,
       "00000000-0000-0000-0000-000000000000",
-      new Date("2026-02-01T00:00:00.000Z"),
     );
     expect(agg).toBeNull();
   });
@@ -1631,31 +1632,753 @@ describe("recovery incident aggregate detail repository", () => {
     const repo = createRecoveryRepo(db);
     // fx.ctx is org alpha; build a second org ctx.
     const otherOrgCtx = context(randomUUID(), fx.actorId);
-    const agg = await repo.getIncidentAggregate(
-      otherOrgCtx,
-      incidentId,
-      new Date("2026-02-01T00:00:00.000Z"),
-    );
+    const agg = await repo.getIncidentAggregate(otherOrgCtx, incidentId);
     expect(agg).toBeNull();
   });
 
-  it("allowedActions is server-derived from current status", async () => {
+  // ── P1-1: allowedActions matches ADR-014 §3 exactly per status ──
+
+  it("allowedActions[open] = investigate + non-terminal + append-only (exact)", async () => {
     const repo = createRecoveryRepo(db);
-    const agg = await repo.getIncidentAggregate(
-      fx.ctx,
-      incidentId,
-      new Date("2026-02-01T00:00:00.000Z"),
-    );
-    // status is 'investigating' → non-terminal: investigate/notes/severity/
-    // resolve/dismiss + link actions/attempts/interruptions allowed.
+    const t = new Date("2027-01-01T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      status: "open",
+      createdAt: t,
+      description: "status-open",
+    });
+    const agg = await repo.getIncidentAggregate(fx.ctx, id);
     expect(agg).not.toBeNull();
-    expect(agg!.allowedActions).toContain("investigate");
-    expect(agg!.allowedActions).toContain("add_note");
-    expect(agg!.allowedActions).toContain("change_severity");
-    expect(agg!.allowedActions).toContain("resolve");
-    expect(agg!.allowedActions).toContain("dismiss");
-    expect(agg!.allowedActions).toContain("link_action");
-    expect(agg!.allowedActions).toContain("link_attempt");
-    expect(agg!.allowedActions).toContain("link_interruption");
+    expect(agg!.allowedActions).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+  });
+
+  it("allowedActions[investigating] excludes investigate (no self-transition)", async () => {
+    const repo = createRecoveryRepo(db);
+    // The shared fixture incident is in 'investigating' — assert on it directly.
+    const agg = await repo.getIncidentAggregate(fx.ctx, incidentId);
+    expect(agg).not.toBeNull();
+    // investigating MUST NOT include investigate (open→investigating only).
+    expect(agg!.allowedActions).toEqual([
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+    expect(agg!.allowedActions).not.toContain("investigate");
+  });
+
+  it("allowedActions[resolved] = append-only side writes (note + 3 links)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-02-01T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      status: "resolved",
+      createdAt: t,
+      description: "status-resolved",
+    });
+    const agg = await repo.getIncidentAggregate(fx.ctx, id);
+    expect(agg).not.toBeNull();
+    expect(agg!.allowedActions).toEqual([
+      "add_note",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+  });
+
+  it("allowedActions[dismissed] = append-only side writes (note + 3 links)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-03-01T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      status: "dismissed",
+      createdAt: t,
+      description: "status-dismissed",
+    });
+    const agg = await repo.getIncidentAggregate(fx.ctx, id);
+    expect(agg).not.toBeNull();
+    expect(agg!.allowedActions).toEqual([
+      "add_note",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+  });
+
+  // ── P1-3: candidate-focused exam-wide incident (attemptId=null, candidateId=set) ──
+
+  it("candidate-focused exam-wide incident projects its focus candidate even with zero memberships", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-04-01T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: fx.candidateId,
+      createdAt: t,
+      description: "candidate-focused",
+    });
+    const agg = await repo.getIncidentAggregate(fx.ctx, id);
+    expect(agg).not.toBeNull();
+    // The focus candidate MUST appear — without the incident.candidateId seed
+    // the aggregate would return an empty candidate list and contradict itself.
+    expect(agg!.candidateSummaries.map((c) => c.id)).toEqual([fx.candidateId]);
+    expect(agg!.candidateSummaries[0]!.displayName).toBe("Candidate agg");
+  });
+
+  // ── P2-1: parent corruption fails closed with AUTHZ_UNAVAILABLE ──
+
+  it("fails closed with AUTHZ_UNAVAILABLE when the exam parent cannot be resolved in-org", async () => {
+    const repo = createRecoveryRepo(db);
+    // Build a foreign-org exam, then a fx-org incident that points at it. The
+    // composite FK (organization_id, exam_id) is satisfied by the cross-org
+    // exam row existing, but the org-scoped exam lookup cannot resolve it.
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const foreignOrgId = randomUUID();
+    const foreignCourseId = randomUUID();
+    const foreignExamId = randomUUID();
+    await db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Foreign Parent Org",
+      displayName: "Foreign Parent Org",
+      slug: `fpo-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.courses).values({
+      id: foreignCourseId,
+      organizationId: foreignOrgId,
+      name: "Foreign Course",
+      code: `FC-${foreignCourseId}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.exams).values({
+      id: foreignExamId,
+      organizationId: foreignOrgId,
+      title: "Foreign Exam",
+      description: "",
+      courseId: foreignCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: EXAM_CLOSE_AT,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const id = await insertIncident(db, fx, {
+      examId: foreignExamId,
+      createdAt: new Date("2027-05-01T00:00:00.000Z"),
+      description: "broken-parent-agg",
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  // ── P1-4: full relationship-graph scope validation (fail-closed 503) ──
+
+  it("fails closed when a membership attempt belongs to a different exam", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // A second exam + attempt in fx org (so the membership FK is satisfied).
+    const exam2 = randomUUID();
+    await db.insert(schema.exams).values({
+      id: exam2,
+      organizationId: fx.organizationId,
+      title: "Agg Exam Two",
+      description: "",
+      courseId: fx.courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: EXAM_CLOSE_AT,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const enr2 = randomUUID();
+    await db.insert(schema.examEnrollments).values({
+      id: enr2,
+      organizationId: fx.organizationId,
+      examId: exam2,
+      candidateId: fx.candidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const att2 = randomUUID();
+    await db.insert(schema.examAttempts).values({
+      id: att2,
+      organizationId: fx.organizationId,
+      examId: exam2,
+      enrollmentId: enr2,
+      candidateId: fx.candidateId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Exam-wide incident on fx.examId but with a membership pointing at att2
+    // (which belongs to exam2) — the composite FK is satisfied, so this
+    // corruption is reachable; the read MUST fail closed.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: new Date("2027-06-01T00:00:00.000Z"),
+      description: "agg-membership-exam-mismatch",
+    });
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      attemptId: att2,
+      relationshipType: "affected",
+      linkedBy: fx.actorId,
+      operationId: randomUUID(),
+      linkedAt: now,
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a linked membership attempt cannot be resolved (FK bypass)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-07-01T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      createdAt: t,
+      description: "agg-membership-broken",
+    });
+    // Bypass the composite FK to simulate tenant-data corruption.
+    await db.execute(
+      sql`ALTER TABLE exam_incident_attempts DROP CONSTRAINT exam_incident_attempts_attempt_fk`,
+    );
+    try {
+      await db.insert(schema.examIncidentAttempts).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId: id,
+        attemptId: randomUUID(),
+        relationshipType: "affected",
+        linkedBy: fx.actorId,
+        operationId: randomUUID(),
+        linkedAt: t,
+      });
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db.execute(
+        sql`ALTER TABLE exam_incident_attempts ADD CONSTRAINT exam_incident_attempts_attempt_fk FOREIGN KEY ("organization_id","attempt_id") REFERENCES "exam_attempts"("organization_id","id")`,
+      );
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when an anchored incident's candidate contradicts its attempt", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // A second candidate profile in fx org (single-column FK satisfied).
+    const candXUser = randomUUID();
+    const candX = randomUUID();
+    await db.insert(schema.users).values({
+      id: candXUser,
+      organizationId: fx.organizationId,
+      username: `aggcandx-${candXUser}`,
+      passwordHash: "hash",
+      name: "Agg Candidate X",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: candX,
+      organizationId: fx.organizationId,
+      userId: candXUser,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Anchor attempt fx.attemptId belongs to candidate fx.candidateId, but the
+    // incident claims candidate candX — corruption per ADR-014 §7 matrix.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: fx.attemptId,
+      candidateId: candX,
+      createdAt: new Date("2027-08-01T00:00:00.000Z"),
+      description: "agg-anchor-candidate-mismatch",
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when a candidate-focused incident's membership belongs to a different candidate", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // candidateId2 (from the shared fixture) is a different candidate than
+    // fx.candidateId. A candidate-focused incident on fx.candidateId with a
+    // membership pointing at attemptId2 (candidateId2's attempt) is corruption
+    // per ADR-014 §7 candidate matrix.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: fx.candidateId,
+      createdAt: new Date("2027-09-01T00:00:00.000Z"),
+      description: "agg-membership-candidate-mismatch",
+    });
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      attemptId: attemptId2,
+      relationshipType: "affected",
+      linkedBy: fx.actorId,
+      operationId: randomUUID(),
+      linkedAt: now,
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  it("fails closed when the incident's candidate focus cannot be resolved in-org", async () => {
+    const repo = createRecoveryRepo(db);
+    // A candidate profile in a FOREIGN org satisfies the single-column FK,
+    // but the org-scoped candidate lookup cannot resolve it in fx.org — the
+    // read MUST fail closed (same pattern as the queue suite's in-org test).
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const foreignOrgId = randomUUID();
+    const foreignUserId = randomUUID();
+    const foreignCandidateId = randomUUID();
+    await db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Foreign Candidate Org",
+      displayName: "Foreign Candidate Org",
+      slug: `fco-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: `foreigncand-${foreignUserId}`,
+      passwordHash: "hash",
+      name: "Foreign Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: foreignCandidateId,
+      organizationId: foreignOrgId,
+      userId: foreignUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: foreignCandidateId,
+      createdAt: new Date("2027-10-01T00:00:00.000Z"),
+      description: "agg-candidate-broken",
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+      await db
+        .delete(schema.candidateProfiles)
+        .where(eq(schema.candidateProfiles.id, foreignCandidateId));
+      await db.delete(schema.users).where(eq(schema.users.id, foreignUserId));
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+
+  // ── P1-4: cross-org User-name projection must fail closed ──
+
+  it("does not project a cross-org candidate User name (same-org User join)", async () => {
+    const repo = createRecoveryRepo(db);
+    // Build a candidate profile in fx.org whose userId points at a User in a
+    // FOREIGN org. The same-org User join MUST NOT project the foreign name;
+    // it falls back to "" (the profile is still resolved — the candidate row
+    // itself is in-org).
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const foreignOrgId = randomUUID();
+    const foreignUserId = randomUUID();
+    const candId = randomUUID();
+    await db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Foreign User Org",
+      displayName: "Foreign User Org",
+      slug: `fuo-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: `foreignuser-${foreignUserId}`,
+      passwordHash: "hash",
+      name: "Foreign User Name",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: candId,
+      organizationId: fx.organizationId,
+      userId: foreignUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: candId,
+      createdAt: new Date("2027-11-01T00:00:00.000Z"),
+      description: "agg-cross-org-candidate-user",
+    });
+    try {
+      const agg = await repo.getIncidentAggregate(fx.ctx, id);
+      expect(agg).not.toBeNull();
+      // The candidate IS resolved (profile is in-org), but its User is
+      // cross-org → displayName falls back to "" (never the foreign name).
+      expect(agg!.candidateSummaries).toEqual([
+        { id: candId, displayName: "" },
+      ]);
+    } finally {
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+      await db
+        .delete(schema.candidateProfiles)
+        .where(eq(schema.candidateProfiles.id, candId));
+      await db.delete(schema.users).where(eq(schema.users.id, foreignUserId));
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+
+  // ── Full-field projection: action link, interruption link, time adjustment, audit ──
+
+  it("projects action links, interruption links, time adjustments, and audit references", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const t = new Date("2027-12-01T00:00:00.000Z");
+    // Exam-wide incident anchored to fx.attemptId's candidate via membership.
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: null,
+      candidateId: null,
+      status: "investigating",
+      createdAt: t,
+      description: "agg-full-projection",
+    });
+
+    // Action link (time_grant) pointing at fx.attemptId.
+    const adjustmentId = randomUUID();
+    await db.insert(schema.attemptTimeAdjustments).values({
+      id: adjustmentId,
+      operationId: randomUUID(),
+      organizationId: fx.organizationId,
+      attemptId: fx.attemptId,
+      interruptionId: null,
+      incidentId: null,
+      policy: "operator_incident",
+      source: "operator",
+      beforeDeadline: ATTEMPT_DEADLINE_AT,
+      afterDeadline: new Date("2026-01-01T02:00:00.000Z"),
+      addedSeconds: 3600,
+      reasonCode: "network",
+      reasonText: "compensation",
+      actorId: fx.actorId,
+      createdAt: t,
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "time_grant",
+      actionId: adjustmentId,
+      attemptId: fx.attemptId,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+
+    // Interruption episode + link pointing at fx.attemptId.
+    const interruptionId = randomUUID();
+    await db.insert(schema.attemptInterruptions).values({
+      id: interruptionId,
+      organizationId: fx.organizationId,
+      attemptId: fx.attemptId,
+      createdAt: t,
+    });
+    await db.insert(schema.examIncidentInterruptionLinks).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      attemptId: fx.attemptId,
+      interruptionId,
+      linkedBy: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+
+    // Membership for fx.attemptId (so the action/interruption attempt is in scope).
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      attemptId: fx.attemptId,
+      relationshipType: "affected",
+      linkedBy: fx.actorId,
+      operationId: randomUUID(),
+      linkedAt: t,
+    });
+
+    // Audit reference targeting this incident.
+    const auditId = randomUUID();
+    await db.insert(schema.auditLogs).values({
+      id: auditId,
+      organizationId: fx.organizationId,
+      actorId: fx.actorId,
+      action: "incident.investigated",
+      targetType: "incident",
+      targetId: id,
+      metadata: { incidentId: id },
+      ipAddress: null,
+      userAgent: null,
+      createdAt: t,
+    });
+
+    try {
+      const agg = await repo.getIncidentAggregate(fx.ctx, id);
+      expect(agg).not.toBeNull();
+
+      // Action link projected with all fields.
+      expect(agg!.actions.length).toBe(1);
+      expect(agg!.actions[0]!.actionType).toBe("time_grant");
+      expect(agg!.actions[0]!.actionId).toBe(adjustmentId);
+      expect(agg!.actions[0]!.attemptId).toBe(fx.attemptId);
+      expect(agg!.actions[0]!.actorId).toBe(fx.actorId);
+      expect(agg!.actions[0]!.linkedAt).toEqual(t);
+
+      // Interruption link projected with all fields.
+      expect(agg!.interruptionLinks.length).toBe(1);
+      expect(agg!.interruptionLinks[0]!.interruptionId).toBe(interruptionId);
+      expect(agg!.interruptionLinks[0]!.attemptId).toBe(fx.attemptId);
+      expect(agg!.interruptionLinks[0]!.linkedBy).toBe(fx.actorId);
+
+      // Time adjustment projected with all fields.
+      expect(agg!.timeAdjustmentSummaries.length).toBe(1);
+      expect(agg!.timeAdjustmentSummaries[0]!.id).toBe(adjustmentId);
+      expect(agg!.timeAdjustmentSummaries[0]!.attemptId).toBe(fx.attemptId);
+      expect(agg!.timeAdjustmentSummaries[0]!.addedSeconds).toBe(3600);
+      expect(agg!.timeAdjustmentSummaries[0]!.reasonCode).toBe("network");
+
+      // Audit reference projected with actor name (same-org User).
+      expect(agg!.auditReferences.length).toBe(1);
+      expect(agg!.auditReferences[0]!.id).toBe(auditId);
+      expect(agg!.auditReferences[0]!.action).toBe("incident.investigated");
+      expect(agg!.auditReferences[0]!.actorId).toBe(fx.actorId);
+      expect(agg!.auditReferences[0]!.actorName).toBe("Actor");
+    } finally {
+      await db.delete(schema.auditLogs).where(eq(schema.auditLogs.id, auditId));
+      await db
+        .delete(schema.examIncidentInterruptionLinks)
+        .where(eq(schema.examIncidentInterruptionLinks.incidentId, id));
+      await db
+        .delete(schema.attemptInterruptions)
+        .where(eq(schema.attemptInterruptions.id, interruptionId));
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.attemptTimeAdjustments)
+        .where(eq(schema.attemptTimeAdjustments.id, adjustmentId));
+      await db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
   });
 });

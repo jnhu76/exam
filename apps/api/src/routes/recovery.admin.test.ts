@@ -1141,11 +1141,11 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
     const body = res.json();
     expect(body.incident.id).toBe(aggregateIncidentId);
     expect(body.incident.version).toBe(1);
-    expect(body.examSummary).toEqual({
-      id: aggregateExamId,
-      title: "Aggregate Detail Exam",
-      status: "open",
-    });
+    // examSummary now carries closeAt (effective-deadline canonical input).
+    expect(body.examSummary.id).toBe(aggregateExamId);
+    expect(body.examSummary.title).toBe("Aggregate Detail Exam");
+    expect(body.examSummary.status).toBe("open");
+    expect(body.examSummary.closeAt).toEqual(expect.any(String));
     expect(Array.isArray(body.events)).toBe(true);
     expect(Array.isArray(body.notes)).toBe(true);
     expect(Array.isArray(body.actions)).toBe(true);
@@ -1157,6 +1157,12 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
     expect(Array.isArray(body.auditReferences)).toBe(true);
     expect(Array.isArray(body.allowedActions)).toBe(true);
     expect(body.snapshotAt).toEqual(expect.any(String));
+    // Each attempt summary carries the EFFECTIVE deadline (not raw deadlineAt)
+    // — the field is renamed to make the semantics explicit.
+    for (const a of body.attemptSummaries) {
+      expect(a.effectiveDeadlineAt).toEqual(expect.any(String));
+      expect(a).not.toHaveProperty("deadlineAt");
+    }
   });
 
   it("Admin needs no fake Proctor assignment — bare Admin works", async () => {
@@ -1201,5 +1207,247 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       cookies: { "auth-token": adminToken2 },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it("attemptSummaries carry the EFFECTIVE deadline = min(exam.closeAt, attempt.deadlineAt)", async () => {
+    // Build an exam whose closeAt is EARLIER than the attempt deadlineAt — the
+    // effective deadline MUST be the exam closeAt, not the raw attempt
+    // deadlineAt. This is the canonical authority (contract §6.2 / §6.3): the
+    // frontend MUST NOT derive it.
+    const now = new Date();
+    const courseId = randomUUID();
+    const examId = randomUUID();
+    const attemptId = randomUUID();
+    const enrollmentId = randomUUID();
+    const candidateUserId = randomUUID();
+    const candidateProfileId = randomUUID();
+    const incidentId = randomUUID();
+    const examCloseAt = new Date(now.getTime() + 1_800_000); // +30min
+    const attemptDeadlineAt = new Date(now.getTime() + 7_200_000); // +2h
+
+    // A dedicated candidate user — the shared ctx2.candidate fixture already
+    // has a candidate profile in this org (unique per user).
+    await ctx2.db.insert(schema.users).values({
+      id: candidateUserId,
+      organizationId: ctx2.org.id,
+      username: `edcand-${uniquePrefix()}`,
+      passwordHash: "hash",
+      name: "Effective Deadline Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx2.org.id,
+      name: "Effective Deadline Course",
+      code: `EDC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.exams).values({
+      id: examId,
+      organizationId: ctx2.org.id,
+      title: "Effective Deadline Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: examCloseAt,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.candidateProfiles).values({
+      id: candidateProfileId,
+      organizationId: ctx2.org.id,
+      userId: candidateUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: ctx2.org.id,
+      examId,
+      candidateId: candidateProfileId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examAttempts).values({
+      id: attemptId,
+      organizationId: ctx2.org.id,
+      examId,
+      enrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: attemptDeadlineAt,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId,
+      attemptId,
+      candidateId: candidateProfileId,
+      type: "network_interruption",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "effective deadline boundary incident",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${incidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const attemptSummary = body.attemptSummaries.find(
+      (a: { id: string }) => a.id === attemptId,
+    );
+    expect(attemptSummary).toBeDefined();
+    // exam.closeAt (+30min) is earlier than attempt.deadlineAt (+2h) →
+    // effectiveDeadlineAt MUST equal examCloseAt, not attemptDeadlineAt.
+    expect(attemptSummary.effectiveDeadlineAt).toBe(examCloseAt.toISOString());
+  });
+
+  it("broken parent chain fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
+    // An incident in the Admin's org whose examId references an exam that
+    // exists but belongs to ANOTHER org — the resolver already validated the
+    // incident exists in-org, but the aggregate's org-scoped exam lookup cannot
+    // resolve the parent. Fail closed (503), never a bare 500.
+    const now = new Date();
+    const foreignOrgId = randomUUID();
+    const foreignCourseId = randomUUID();
+    const foreignExamId = randomUUID();
+    const brokenIncidentId = randomUUID();
+    await ctx2.db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Agg Broken Org",
+      displayName: "Agg Broken Org",
+      slug: `abbo-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.courses).values({
+      id: foreignCourseId,
+      organizationId: foreignOrgId,
+      name: "Agg Broken Course",
+      code: `ABC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.exams).values({
+      id: foreignExamId,
+      organizationId: foreignOrgId,
+      title: "Agg Broken Foreign Exam",
+      description: "",
+      courseId: foreignCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: brokenIncidentId,
+      organizationId: ctx2.org.id,
+      examId: foreignExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "other",
+      severity: "info",
+      status: "open",
+      occurredAt: null,
+      description: "agg-broken-parent",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${brokenIncidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, brokenIncidentId),
+          ),
+        );
+    }
   });
 });

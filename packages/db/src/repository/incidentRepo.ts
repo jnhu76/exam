@@ -374,7 +374,8 @@ export function createIncidentRepo(db: Database) {
           eq(examIncidentActions.organizationId, resolveOrganizationId(ctx)),
           eq(examIncidentActions.incidentId, incidentId),
         ),
-      );
+      )
+      .orderBy(asc(examIncidentActions.linkedAt), asc(examIncidentActions.id));
   }
 
   // ── Attempt Membership ──
@@ -427,6 +428,10 @@ export function createIncidentRepo(db: Database) {
           eq(examIncidentAttempts.organizationId, resolveOrganizationId(ctx)),
           eq(examIncidentAttempts.incidentId, incidentId),
         ),
+      )
+      .orderBy(
+        asc(examIncidentAttempts.linkedAt),
+        asc(examIncidentAttempts.id),
       );
   }
 
@@ -486,6 +491,10 @@ export function createIncidentRepo(db: Database) {
           ),
           eq(examIncidentInterruptionLinks.incidentId, incidentId),
         ),
+      )
+      .orderBy(
+        asc(examIncidentInterruptionLinks.linkedAt),
+        asc(examIncidentInterruptionLinks.id),
       );
   }
 

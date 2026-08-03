@@ -69,6 +69,21 @@ export interface IncidentQueueExamSummary {
   status: string;
 }
 
+/**
+ * Exam summary carrying the canonical closeAt so the route layer can compute
+ * each Attempt's effective deadline via the canonical
+ * `computeEffectiveDeadline(exam, attempt)` authority (contract §6.2 / §6.3).
+ * The repo MUST NOT re-derive the min(closeAt, deadlineAt) formula itself —
+ * it only carries the inputs the canonical helper needs.
+ */
+export interface IncidentAggregateExamSummary {
+  id: string;
+  title: string;
+  status: string;
+  /** Exam closeAt — the upper bound of every effective deadline. */
+  closeAt: Date;
+}
+
 export interface IncidentQueueAttemptSummary {
   id: string;
   candidateId: string | null;
@@ -155,7 +170,17 @@ export interface IncidentAggregateAttemptSummary {
   id: string;
   candidateId: string | null;
   status: string;
+  /**
+   * Raw per-attempt deadline (examAttempts.deadlineAt). The route layer maps
+   * this to the canonical effective deadline; the repo never re-derives it.
+   */
   deadlineAt: Date | null;
+  /**
+   * attempt.examId — required for the same-Exam scope validation (ADR-014 §7
+   * scope quadruple: every linked/anchor attempt MUST belong to the Incident's
+   * exam). Not exposed on the wire; consumed by the repo's fail-closed check.
+   */
+  examId: string;
 }
 
 export interface IncidentAggregateTimeAdjustmentSummary {
@@ -187,7 +212,7 @@ export type IncidentAllowedAction =
 
 export interface IncidentAggregate {
   incident: ExamIncidentRow;
-  examSummary: IncidentQueueExamSummary;
+  examSummary: IncidentAggregateExamSummary;
   events: IncidentAggregateEventSummary[];
   notes: IncidentAggregateNoteSummary[];
   actions: IncidentAggregateActionSummary[];
@@ -197,7 +222,19 @@ export interface IncidentAggregate {
   attemptSummaries: IncidentAggregateAttemptSummary[];
   timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[];
   auditReferences: IncidentAggregateAuditReferenceSummary[];
+  /**
+   * Status-derived action candidates (ADR-014 §3). The repo derives the
+   * status-based candidates; the route layer is the place that additionally
+   * filters by the caller's permissions (J5-R0 §6.2: action eligibility =
+   * capability + resource scope + status).
+   */
   allowedActions: IncidentAllowedAction[];
+  /**
+   * Transaction snapshot timestamp — `transaction_timestamp()` queried INSIDE
+   * the RR transaction, so it is the actual PostgreSQL snapshot time, not a
+   * request-side clock reading. // adr-006-allow: DB snapshot identity stamp,
+   * not an exam-lifecycle time decision (see ADR-006 allowlist entry).
+   */
   snapshotAt: Date;
 }
 
@@ -379,14 +416,21 @@ export function createRecoveryRepo(db: Database) {
    * - Returns null if the incident does not exist in the caller's organization
    *   (fail-closed on missing / cross-org; the resolver at the API layer maps
    *   that to 404 RESOURCE_NOT_FOUND).
-   * - `snapshotAt` is the transaction snapshot timestamp.
-   * - `allowedActions` is server-derived from the current status (terminal
-   *   statuses resolve/dismissed remove the non-terminal actions).
+   * - `snapshotAt` is `transaction_timestamp()` queried INSIDE the RR
+   *   transaction — the actual PostgreSQL snapshot time, not a request-side
+   *   clock reading. // adr-006-allow: DB snapshot identity stamp, not an
+   *   exam-lifecycle time decision (see ADR-006 allowlist entry).
+   * - `allowedActions` is server-derived from the current status per ADR-014 §3
+   *   (the route layer further filters by the caller's permissions).
+   * - The full relationship graph is validated against the ADR-014 §7 scope
+   *   quadruple (org, exam, attempt, candidate); any unresolvable link or
+   *   scope contradiction fails closed with {@link AuthzUnavailableError}
+   *   (503 AUTHZ_UNAVAILABLE) — the admin audit surface never silently drops
+   *   a summary nor disguises corruption as absence.
    */
   async function getIncidentAggregate(
     ctx: TenantContext | RequestContext,
     incidentId: string,
-    now: Date,
   ): Promise<IncidentAggregate | null> {
     const orgId = resolveOrganizationId(ctx);
 
@@ -419,12 +463,16 @@ export function createRecoveryRepo(db: Database) {
             incidentId,
           );
 
-        // Exam summary
+        // Exam summary — also fetch closeAt so the route layer can compute the
+        // canonical effective deadline via computeEffectiveDeadline(exam,
+        // attempt). The repo never re-derives the min(closeAt, deadlineAt)
+        // formula; it only carries the canonical helper's inputs.
         const examRows = await tx
           .select({
             id: exams.id,
             title: exams.title,
             status: exams.status,
+            closeAt: exams.closeAt,
           })
           .from(exams)
           .where(
@@ -433,8 +481,18 @@ export function createRecoveryRepo(db: Database) {
           .limit(1);
         const examRow = examRows[0];
         if (!examRow) {
-          throw new Error(
+          // Broken parent chain — fail closed with the same shape the queue
+          // uses (503 AUTHZ_UNAVAILABLE), never a bare 500.
+          throw new AuthzUnavailableError(
             `RECOVERY_AGG_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
+          );
+        }
+        if (examRow.closeAt == null) {
+          // timed_window invariant: every exam carries a non-null closeAt. A
+          // null here is tenant-data corruption the canonical deadline helper
+          // cannot reason about — fail closed rather than mis-project.
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_EXAM_CLOSEAT_NULL: incident ${incident.id} exam ${incident.examId}`,
           );
         }
 
@@ -446,11 +504,21 @@ export function createRecoveryRepo(db: Database) {
         }
         const linkedIdList = [...linkedAttemptIds];
 
-        // Attempt summaries + candidate summaries + time adjustments
+        // Attempt summaries — MUST select examAttempts.examId so the same-Exam
+        // scope quadruple (ADR-014 §7) is verifiable. The candidate set is
+        // seeded from BOTH the linked attempts AND the incident's own
+        // candidateId focus (candidate-focused exam-wide incident:
+        // attemptId=null, candidateId=set — without this seed the aggregate
+        // would project an empty candidate list and contradict itself).
         let attemptSummaries: IncidentAggregateAttemptSummary[] = [];
         const candidateIds = new Set<string>();
+        if (incident.candidateId) candidateIds.add(incident.candidateId);
         let timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[] =
           [];
+        const attemptById = new Map<
+          string,
+          { examId: string; candidateId: string | null }
+        >();
         if (linkedIdList.length > 0) {
           const attRows = await tx
             .select({
@@ -458,6 +526,7 @@ export function createRecoveryRepo(db: Database) {
               candidateId: examAttempts.candidateId,
               status: examAttempts.status,
               deadlineAt: examAttempts.deadlineAt,
+              examId: examAttempts.examId,
             })
             .from(examAttempts)
             .where(
@@ -465,14 +534,20 @@ export function createRecoveryRepo(db: Database) {
                 eq(examAttempts.organizationId, orgId),
                 inArray(examAttempts.id, linkedIdList),
               ),
-            );
+            )
+            .orderBy(asc(examAttempts.id));
           attemptSummaries = attRows.map((a) => ({
             id: a.id,
             candidateId: a.candidateId,
             status: a.status,
             deadlineAt: a.deadlineAt,
+            examId: a.examId,
           }));
           for (const a of attRows) {
+            attemptById.set(a.id, {
+              examId: a.examId,
+              candidateId: a.candidateId,
+            });
             if (a.candidateId) candidateIds.add(a.candidateId);
           }
 
@@ -493,6 +568,10 @@ export function createRecoveryRepo(db: Database) {
                 eq(attemptTimeAdjustments.organizationId, orgId),
                 inArray(attemptTimeAdjustments.attemptId, linkedIdList),
               ),
+            )
+            .orderBy(
+              asc(attemptTimeAdjustments.createdAt),
+              asc(attemptTimeAdjustments.id),
             );
           timeAdjustmentSummaries = timeAdjRows.map((t) => ({
             id: t.id,
@@ -504,29 +583,127 @@ export function createRecoveryRepo(db: Database) {
           }));
         }
 
-        // Candidate summaries (distinct candidateIds across linked attempts)
+        // ── Fail-closed relationship-graph validation (ADR-014 §7 scope
+        //    quadruple). The composite FKs only prove organization + attempt
+        //    consistency; they do NOT prove `incident.examId ==
+        //    attempt.examId`, nor that a candidate-focused incident's
+        //    membership belongs to the same candidate. The application layer
+        //    must verify these and fail closed on any contradiction — never
+        //    silently omit a summary, never disguise corruption as absence.
+        // Anchor attempt (if any) MUST resolve and belong to the incident's
+        // exam; its candidate MUST match the incident focus when set.
+        if (incident.attemptId) {
+          const a = attemptById.get(incident.attemptId);
+          if (!a) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ANCHOR_BROKEN: incident ${incident.id} attempt ${incident.attemptId}`,
+            );
+          }
+          if (a.examId !== incident.examId) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ANCHOR_EXAM_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} exam ${a.examId}`,
+            );
+          }
+          if (
+            incident.candidateId != null &&
+            a.candidateId !== incident.candidateId
+          ) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ANCHOR_CANDIDATE_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} candidate ${a.candidateId}`,
+            );
+          }
+        }
+        // Every membership MUST resolve to an attempt of the incident's exam;
+        // for a candidate-focused incident, every membership attempt MUST
+        // belong to that candidate (ADR-014 §7 candidate matrix).
+        for (const m of attemptMemberships) {
+          const a = attemptById.get(m.attemptId);
+          if (!a) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_MEMBERSHIP_BROKEN: incident ${incident.id} membership ${m.id} attempt ${m.attemptId}`,
+            );
+          }
+          if (a.examId !== incident.examId) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_MEMBERSHIP_EXAM_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} exam ${a.examId}`,
+            );
+          }
+          if (
+            incident.candidateId != null &&
+            a.candidateId !== incident.candidateId
+          ) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_MEMBERSHIP_CANDIDATE_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} candidate ${a.candidateId}`,
+            );
+          }
+        }
+        // Action links and interruption links each carry an attemptId that
+        // MUST belong to the incident's resolved attempt set (same-Exam
+        // scope). An anchored incident rejects membership, but its action /
+        // interruption links still MUST point at the anchor attempt.
+        for (const act of actions) {
+          const a = attemptById.get(act.attemptId);
+          if (!a || a.examId !== incident.examId) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ACTION_ATTEMPT_SCOPE: incident ${incident.id} action ${act.id} attempt ${act.attemptId}`,
+            );
+          }
+        }
+        for (const link of interruptionLinks) {
+          const a = attemptById.get(link.attemptId);
+          if (!a || a.examId !== incident.examId) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_INTERRUPTION_ATTEMPT_SCOPE: incident ${incident.id} interruptionLink ${link.id} attempt ${link.attemptId}`,
+            );
+          }
+        }
+
+        // Candidate summaries — fail closed if a non-null candidate focus
+        // cannot be resolved in-org (a candidate-focused incident whose
+        // candidate row is missing or belongs to another org is corruption,
+        // not an exam-wide incident with an empty focus).
         let candidateSummaries: IncidentAggregateCandidateSummary[] = [];
         if (candidateIds.size > 0) {
+          // Same-org predicate on the User join: a historical or directly-
+          // written CandidateProfile may point at a User of ANOTHER org. The
+          // leftJoin must restrict the joined User to the caller's org, or
+          // the aggregate would project a foreign-org display name.
           const candRows = await tx
             .select({
               id: candidateProfiles.id,
               displayName: users.name,
             })
             .from(candidateProfiles)
-            .leftJoin(users, eq(candidateProfiles.userId, users.id))
+            .leftJoin(
+              users,
+              and(
+                eq(candidateProfiles.userId, users.id),
+                eq(users.organizationId, orgId),
+              ),
+            )
             .where(
               and(
                 eq(candidateProfiles.organizationId, orgId),
                 inArray(candidateProfiles.id, [...candidateIds]),
               ),
-            );
+            )
+            .orderBy(asc(users.name), asc(candidateProfiles.id));
           candidateSummaries = candRows.map((c) => ({
             id: c.id,
             displayName: c.displayName ?? "",
           }));
+          for (const cid of candidateIds) {
+            if (!candidateSummaries.some((c) => c.id === cid)) {
+              throw new AuthzUnavailableError(
+                `RECOVERY_AGG_CANDIDATE_BROKEN: incident ${incident.id} candidate ${cid}`,
+              );
+            }
+          }
         }
 
-        // Audit references for this incident target
+        // Audit references for this incident target. The actor User join is
+        // restricted to the caller's org for the same tenant-projection
+        // reason as the candidate join.
         const auditRows = await tx
           .select({
             id: auditLogs.id,
@@ -536,7 +713,13 @@ export function createRecoveryRepo(db: Database) {
             createdAt: auditLogs.createdAt,
           })
           .from(auditLogs)
-          .leftJoin(users, eq(users.id, auditLogs.actorId))
+          .leftJoin(
+            users,
+            and(
+              eq(users.id, auditLogs.actorId),
+              eq(users.organizationId, orgId),
+            ),
+          )
           .where(
             and(
               eq(auditLogs.organizationId, orgId),
@@ -550,11 +733,16 @@ export function createRecoveryRepo(db: Database) {
             id: a.id,
             action: a.action,
             actorId: a.actorId,
+            // null actorName is a legitimate audit-contract outcome for an
+            // actor whose User row is gone or out-of-org — it is NOT damage
+            // being disguised: the actorId is still projected verbatim, and
+            // the audit row's own organizationId was the org predicate.
             actorName: a.actorName,
             createdAt: a.createdAt,
           }));
 
-        // Notes derived from note_added events (event payload body).
+        // Notes derived from note_added events (event payload body), in
+        // stable event_sequence order (events come pre-ordered).
         const notes: IncidentAggregateNoteSummary[] = events
           .filter((e) => e.eventType === "note_added")
           .map((e) => ({
@@ -565,6 +753,16 @@ export function createRecoveryRepo(db: Database) {
             createdAt: e.createdAt,
           }));
 
+        // Transaction snapshot timestamp — queried INSIDE the RR transaction
+        // so it is the actual PostgreSQL snapshot time, not a request-side
+        // clock reading. The route passes no `now`; this is the only source.
+        // Raw `execute` results bypass Drizzle's column serializers, so the
+        // driver hands back timestamptz as text; parse it into a Date.
+        const snapshotRows = (await tx.execute(
+          sql`SELECT transaction_timestamp() AS ts`, // adr-006-allow: DB snapshot identity stamp (see ADR-006 allowlist entry)
+        )) as unknown as Array<{ ts: string }>;
+        const snapshotAt = new Date(snapshotRows[0]?.ts ?? 0);
+
         const allowedActions = deriveAllowedActions(incident.status);
 
         return {
@@ -573,6 +771,7 @@ export function createRecoveryRepo(db: Database) {
             id: examRow.id,
             title: examRow.title,
             status: examRow.status,
+            closeAt: examRow.closeAt,
           },
           events: events.map((e) => ({
             id: e.id,
@@ -617,7 +816,7 @@ export function createRecoveryRepo(db: Database) {
           timeAdjustmentSummaries,
           auditReferences,
           allowedActions,
-          snapshotAt: now,
+          snapshotAt,
         };
       },
       {
@@ -631,25 +830,55 @@ export function createRecoveryRepo(db: Database) {
 }
 
 /**
- * Server-derived action allow-list from the incident's current status.
- * - open/investigating (non-terminal): all operator actions.
- * - resolved/dismissed (terminal): no state-changing actions — the incident
- *   is closed; only read remains.
+ * Status-derived action candidates per ADR-014 §3.
+ *
+ * ADR-014 freezes these rules:
+ * - `investigate` is allowed ONLY from `open` (it is the `open → investigating`
+ *   transition; `investigating` is NOT a self-transition).
+ * - `change_severity` is allowed only in non-terminal status.
+ * - `resolve` / `dismiss` are allowed from `open | investigating`.
+ * - `add_note`, `link_action`, `link_attempt`, `link_interruption` are
+ *   append-only side writes allowed in ANY status (including the terminal
+ *   `resolved` / `dismissed`) — operators may annotate or correlate after
+ *   resolution.
+ *
+ * These are status-derived candidates only. The route layer additionally
+ * filters by the caller's permissions (J5-R0 §6.2: action eligibility =
+ * capability + resource scope + status) — a non-Admin actor may see fewer
+ * actions than this list returns.
  */
 function deriveAllowedActions(status: string): IncidentAllowedAction[] {
-  if (status === "resolved" || status === "dismissed") {
-    return [];
-  }
-  return [
-    "investigate",
+  const APPEND_ONLY: IncidentAllowedAction[] = [
     "add_note",
-    "change_severity",
-    "resolve",
-    "dismiss",
     "link_action",
     "link_attempt",
     "link_interruption",
   ];
+  if (status === "open") {
+    return [
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ];
+  }
+  if (status === "investigating") {
+    return [
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ];
+  }
+  // resolved / dismissed (terminal): only append-only side writes remain.
+  return APPEND_ONLY;
 }
 
 export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;

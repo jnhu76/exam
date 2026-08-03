@@ -24272,9 +24272,13 @@
                         },
                         "status": {
                           "type": "string"
+                        },
+                        "closeAt": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
-                      "required": ["id", "title", "status"],
+                      "required": ["id", "title", "status", "closeAt"],
                       "additionalProperties": false
                     },
                     "events": {
@@ -24505,7 +24509,7 @@
                           "status": {
                             "type": "string"
                           },
-                          "deadlineAt": {
+                          "effectiveDeadlineAt": {
                             "type": "string",
                             "nullable": true
                           }
@@ -24514,7 +24518,7 @@
                           "id",
                           "candidateId",
                           "status",
-                          "deadlineAt"
+                          "effectiveDeadlineAt"
                         ],
                         "additionalProperties": false
                       }
@@ -24628,16 +24632,13 @@
               }
             }
           },
-          "401": {
-            "description": "Unauthorized — missing or invalid authentication cookie",
+          "400": {
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "requestId": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "object",
                       "properties": {
@@ -24646,10 +24647,51 @@
                         },
                         "message": {
                           "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
                         }
-                      }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }
@@ -24687,6 +24729,38 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Default Response",
             "content": {
               "application/json": {

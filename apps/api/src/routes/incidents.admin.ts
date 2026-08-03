@@ -26,8 +26,10 @@ import {
   linkIncidentAction,
   linkIncidentAttempt,
   linkIncidentInterruption,
+  computeEffectiveDeadline,
 } from "@exam/exam-engine";
 import type { IncidentRepo } from "@exam/exam-engine";
+import type { Exam, ExamAttempt } from "@exam/domain";
 import { withIncidentOperationRecovery } from "../orchestrators/incidentOperationRecovery.js";
 import {
   ensureTargetOrg,
@@ -365,11 +367,33 @@ const RecoveryAggregateCandidateSummarySchema = z.object({
   displayName: z.string(),
 });
 
+/**
+ * Aggregate Attempt summary carries the EFFECTIVE deadline, not the raw
+ * `examAttempts.deadlineAt`. The effective deadline is the canonical
+ * `min(exam.closeAt, attempt.deadlineAt)` (null deadlineAt → exam.closeAt),
+ * computed server-side via `computeEffectiveDeadline` (contract §6.2 / §6.3:
+ * the frontend MUST NOT derive it). Renaming the field from `deadlineAt`
+ * makes the semantics explicit instead of carrying raw deadlineAt under a
+ * name that implies effective-time semantics.
+ */
 const RecoveryAggregateAttemptSummarySchema = z.object({
   id: z.string(),
   candidateId: z.string().nullable(),
   status: z.string(),
-  deadlineAt: z.string().nullable(),
+  effectiveDeadlineAt: z.string().nullable(),
+});
+
+/**
+ * Aggregate Exam summary carries `closeAt` so the route can compute the
+ * effective deadline via the canonical helper. It is NOT exposed on the
+ * queue Exam summary (which is a list-row projection, not a deadline
+ * authority).
+ */
+const RecoveryAggregateExamSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+  closeAt: z.string().nullable(),
 });
 
 const RecoveryAggregateTimeAdjustmentSchema = z.object({
@@ -402,7 +426,7 @@ const RecoveryAllowedActionSchema = z.enum([
 
 const RecoveryAggregateResponseSchema = z.object({
   incident: IncidentResponseSchema,
-  examSummary: RecoveryExamSummarySchema,
+  examSummary: RecoveryAggregateExamSummarySchema,
   events: z.array(RecoveryAggregateEventSchema),
   notes: z.array(RecoveryAggregateNoteSchema),
   actions: z.array(RecoveryAggregateActionSchema),
@@ -1410,23 +1434,22 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
 
   // ── Recovery Incident Aggregate Detail (J5-I1A2, contract §6.3) ──
   //
-  // Admin-only authoritative aggregate projection. Authorization uses the
-  // Incident→Exam→Course→Organization resolver (scope Exam, resourceIdKey
-  // incidentId) so the parent chain is validated and cross-org / missing
-  // incidents fail-closed. proctorAccess is omitted (defaults to admin_only)
-  // per contract §6.3 — a Proctor with incident.view + active assignment is
-  // STILL denied. The read comes from ONE consistent REPEATABLE READ read-only
-  // snapshot inside the repo; the frontend never multi-fetches.
+  // Admin-only authoritative aggregate projection. `IncidentRecoveryView` is
+  // granted ONLY to Admin (catalog.ts / presets.ts), so the flat
+  // `requireCapability` gate is the runtime authority — a Proctor with
+  // incident.view + active assignment is STILL denied (proctorAccess:
+  // admin_only per contract §6.3). The repo owns ALL fail-closed scope
+  // validation (org boundary + full relationship graph) and surfaces broken
+  // parent/relationship chains as 503 AUTHZ_UNAVAILABLE, missing/cross-org as
+  // 404 — the same contract the sibling queue route (flat gate) uses. The
+  // read comes from ONE consistent REPEATABLE READ read-only snapshot inside
+  // the repo; the frontend never multi-fetches.
   fastify.get(
     "/admin/recovery/incidents/:incidentId",
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireScopedCapability(
-          Permission.IncidentRecoveryView,
-          "incident",
-          "incidentId",
-        ),
+        fastify.requireCapability(Permission.IncidentRecoveryView),
       ],
       schema: {
         params: IncidentIdParamsSchema,
@@ -1434,8 +1457,15 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
         "x-role": ["Admin"],
         response: {
           200: RecoveryAggregateResponseSchema,
+          // Declared so the OpenAPI contract documents the deliberately-
+          // designed responses: 400 (validation), 401 (auth), 403 (capability),
+          // 404 (resolver fail-closed / anti-enumeration), 503 (broken
+          // parent/relationship chain — fail-closed AUTHZ_UNAVAILABLE).
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          503: ErrorResponseSchema,
         },
       },
     },
@@ -1444,21 +1474,33 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const repo = createRecoveryRepo(fastify.db);
 
-      const aggregate = await repo.getIncidentAggregate(
-        ctx,
-        params.incidentId,
-        fastify.now(),
-      );
-      // The scoped resolver already validated existence + parent chain, so a
-      // null here is a narrow post-resolver race (incident deleted between
-      // resolver and repo read). Surface as 404 RESOURCE_NOT_FOUND — the same
-      // shape as the resolver miss.
+      const aggregate = await repo.getIncidentAggregate(ctx, params.incidentId);
+      // Missing or cross-org incident → repo returns null (org-scoped lookup
+      // fails closed) → 404 RESOURCE_NOT_FOUND, the same anti-enumeration
+      // shape the queue list uses. Broken parent/relationship chains throw
+      // AuthzUnavailableError (503) from the repo.
       if (!aggregate) throw new NotFoundError("Incident not found");
+
+      // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
+      // with null attempt deadlineAt → exam.closeAt. Computed here (not in
+      // the repo, which is forbidden from importing @exam/exam-engine) via the
+      // single canonical authority. The repo guarantees examSummary.closeAt is
+      // non-null (it fails closed with AUTHZ_UNAVAILABLE otherwise), so the
+      // minimal projections below are safe: computeEffectiveDeadline reads
+      // only `exam.closeAt` and `attempt.deadlineAt`.
+      const examForDeadline = {
+        closeAt: aggregate.examSummary.closeAt,
+      } as unknown as Exam;
 
       return reply.send(
         RecoveryAggregateResponseSchema.parse({
           incident: toIncidentResponse(aggregate.incident),
-          examSummary: aggregate.examSummary,
+          examSummary: {
+            id: aggregate.examSummary.id,
+            title: aggregate.examSummary.title,
+            status: aggregate.examSummary.status,
+            closeAt: aggregate.examSummary.closeAt.toISOString(),
+          },
           events: aggregate.events.map((e) => ({
             ...e,
             createdAt: e.createdAt.toISOString(),
@@ -1481,8 +1523,12 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
           })),
           candidateSummaries: aggregate.candidateSummaries,
           attemptSummaries: aggregate.attemptSummaries.map((a) => ({
-            ...a,
-            deadlineAt: a.deadlineAt?.toISOString() ?? null,
+            id: a.id,
+            candidateId: a.candidateId,
+            status: a.status,
+            effectiveDeadlineAt: computeEffectiveDeadline(examForDeadline, {
+              deadlineAt: a.deadlineAt,
+            } as unknown as ExamAttempt).toISOString(),
           })),
           timeAdjustmentSummaries: aggregate.timeAdjustmentSummaries.map(
             (t) => ({ ...t, createdAt: t.createdAt.toISOString() }),
