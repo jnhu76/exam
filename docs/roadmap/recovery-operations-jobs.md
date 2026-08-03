@@ -10,12 +10,15 @@
 > **J4-I1 CLOSED** — runtime implemented per ADR-015 §23 (A→B→C→D,
 > 2026-08-02, PR #250, merge commit `62f84407`); closeout:
 > `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`.
-> **J5-R0 IN REVIEW** — `REC-OPS-ADMIN-RECOVERY-CENTER` reality audit +
+> **J5-R0 CLOSED / ACCEPTED** — `REC-OPS-ADMIN-RECOVERY-CENTER` reality audit +
 > product/API/read-model contract
-> (`j5-r0-admin-recovery-center-contract.md`); J5-I1A–I1D NOT STARTED,
-> BLOCKED pending J5-R0 acceptance. J6/J7 NOT STARTED.
+> (`j5-r0-admin-recovery-center-contract.md`, PR #251 merged 2026-08-02,
+> merge commit `b2545e6e`). J5-I1A1 (Recovery Incident Queue,
+> `GET /admin/recovery/incidents`) IN PROGRESS on
+> `feat/j5-i1a1-recovery-incident-queue`. J5-I1A2 / J5-I1B–I1D NOT STARTED.
+> J6/J7 NOT STARTED.
 >
-> Updated: 2026-08-02
+> Updated: 2026-08-03
 >
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
