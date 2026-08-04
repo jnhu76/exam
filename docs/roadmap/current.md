@@ -68,7 +68,9 @@ PR #251 merged 2026-08-02; amended 2026-08-04 by J5-I1A2 / PR #253). J5-I1A1
 `GET /admin/recovery/incidents/:incidentId`) is **CLOSED** (PR #253 merged).
 J5-I1A3 (Attempt Operations Context,
 `GET /admin/recovery/attempts/:attemptId`) is **CLOSED** (PR #254 merged).
-**J5-I1A is CLOSED.** J5-I1B (Recovery Center frontend) is **NEXT**.
+**J5-I1A is CLOSED.** **J5-I1B (Recovery Center UI) is CLOSED** — queue,
+incident detail, attempt operations, and exam recovery detail pages plus the
+Exam Recovery Context aggregate (`GET /admin/recovery/exams/:examId`, §6.5).
 J5-I1C–I1D are NOT STARTED.
 
 ### Plain-text subjective question loop
@@ -187,7 +189,9 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     `GET /admin/recovery/incidents/:incidentId` (PR #253 merged);
     J5-I1A3 CLOSED — Attempt Operations Context
     `GET /admin/recovery/attempts/:attemptId` (PR #254 merged);
-    **J5-I1A CLOSED**; J5-I1B NEXT — Recovery Center frontend;
+    **J5-I1A CLOSED**; **J5-I1B CLOSED** — Recovery Center UI (queue,
+    incident detail, attempt operations, exam recovery detail + Exam
+    Recovery Context aggregate `GET /admin/recovery/exams/:examId` §6.5);
     J5-I1C–I1D NOT STARTED);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);

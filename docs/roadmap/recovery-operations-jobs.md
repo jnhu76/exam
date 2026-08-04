@@ -19,9 +19,10 @@
 > `GET /admin/recovery/incidents/:incidentId`) is **CLOSED** (PR #253 merged).
 > J5-I1A3 (Attempt Operations Context, `GET /admin/recovery/attempts/:attemptId`)
 > is **CLOSED** (PR #254 merged). **J5-I1A is CLOSED.**
-> J5-I1B is **NEXT** (Recovery Center frontend: queue page, incident detail,
-> attempt operations, exam recovery detail). J5-I1B–I1D NOT STARTED.
-> J6/J7 NOT STARTED.
+> **J5-I1B is CLOSED** (Recovery Center frontend + Exam Recovery Context:
+> queue page, incident detail, attempt operations, exam recovery detail —
+> I1B1–I1B4, one branch, PR #254).
+> J5-I1C–I1D NOT STARTED. J6/J7 NOT STARTED.
 >
 > Updated: 2026-08-04
 >
@@ -1166,7 +1167,7 @@ PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
        implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
          (J5-I1A1 CLOSED, PR #252; J5-I1A2 CLOSED, PR #253;
           J5-I1A3 CLOSED, PR #254; J5-I1A CLOSED;
-          J5-I1B NEXT — Recovery Center frontend; J5-I1C–I1D NOT STARTED)
+          J5-I1B CLOSED — Recovery Center UI, PR #254; J5-I1C–I1D NOT STARTED)
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
@@ -1186,8 +1187,10 @@ contract) is **CLOSED / ACCEPTED** — see
 [`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md).
 J5-I1A1 (Queue), J5-I1A2 (Incident Aggregate Detail), and J5-I1A3 (Attempt
 Operations Context) are **CLOSED** (PR #252, PR #253, PR #254) — **J5-I1A is
-CLOSED**. J5-I1B (Recovery Center frontend) is **NEXT**. J5-I1C–I1D are NOT
-STARTED.
+CLOSED**. **J5-I1B (Recovery Center UI) is CLOSED** (queue, incident detail,
+attempt operations, and exam recovery detail pages, PR #254) — including the
+Exam Recovery Context aggregate (`GET /admin/recovery/exams/:examId`,
+contract §6.5). J5-I1C–I1D are NOT STARTED.
 J5 consumes the already-shipped authorities of J1 (Admin time-grant path),
 J3 (Incident aggregate + commands + API), and J4-I1 (Proctor→Exam assignment
 persistence, API, resource-scope resolution, minimum Proctor incident

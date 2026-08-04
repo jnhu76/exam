@@ -28,40 +28,42 @@
   - XS · 2 files · docs only
 
 ### Checkpoint: After Task 4 closeout
-- `pnpm test` + `pnpm verify` pass
-- Three recovery read-model endpoints complete
-- J5-I1A CLOSED, J5-I1B NEXT
+- [x] `pnpm test` + `pnpm verify` pass
+- [x] Three recovery read-model endpoints complete
+- [x] J5-I1A CLOSED, J5-I1B NEXT
 
 ## Phase 3: A2 Field Audit
 
-- [ ] **Task 7:** Strict A2 wire field mapping
+- [x] **Task 7:** Strict A2 wire field mapping (+ Task 7a additive A2 projection)
   - Audit every UI field in Task 8 against A2 wire contract
-  - Gap → additive A2 PR before Task 8
+  - Gap → additive A2 PR before Task 8 (`attemptSummaries[].score`,
+    `timeAdjustmentSummaries[]` policy/source/before/after/actor)
   - S-M · 1-5 files
 
 ## Phase 4: J5-I1B — Read-only UI
 
-- [ ] **Task 5/6:** J5-I1B1 — Recovery Queue infrastructure + Queue page
+- [x] **Task 5/6:** J5-I1B1 — Recovery Queue infrastructure + Queue page
   - Routes, sidebar, capabilities, i18n + functional queue page (single PR)
   - Filters → URL, cursor → component state
   - Polling: 30s visible, pause hidden, immediate on focus, single-flight, reset to page 1
   - L · 8+ files
 
-- [ ] **Task 8:** J5-I1B2 — Recovery Incident Detail page
+- [x] **Task 8:** J5-I1B2 — Recovery Incident Detail page
   - Only fields confirmed in A2 wire (Task 7 mapping)
   - No action buttons in read-only phase
   - L · 5-8 files
 
-- [ ] **Task 9:** J5-I1B3 — Attempt Operations Context page
+- [x] **Task 9:** J5-I1B3 — Attempt Operations Context page
   - Consumes new A3 endpoint
   - Full adjustment ledger, interruption episodes, timeline
   - L · 5-8 files
 
-- [ ] **Task 10:** J5-I1B4 — Exam Recovery Detail page
-  - Evaluate: compose existing APIs vs. new aggregate
+- [x] **Task 10:** J5-I1B4 — Exam Recovery Detail page
+  - Decision: NEW aggregate `GET /admin/recovery/exams/:examId` (§6.5) —
+    composition rejected (counts + attempt distribution have no server source)
   - M-L · 3-8 files
 
 ### Checkpoint: After Task 10
-- All tests pass, `pnpm verify` passes
-- Four Recovery UI pages navigable with cross-links
-- J5-I1B ready for review
+- [x] All tests pass, `pnpm verify` passes
+- [x] Four Recovery UI pages navigable with cross-links
+- [x] J5-I1B ready for review (J5-I1B CLOSED on the branch; J5-I1C NEXT)

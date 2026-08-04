@@ -86,29 +86,31 @@ never be conflated (contract §6.4 boundary).
 
 ## 3. What is NOT yet delivered
 
-### 3.1 Exam Recovery Detail (J5-I1B scope)
+### 3.1 Exam Recovery Detail (J5-I1B4 — DELIVERED)
 
 The J5-R0 contract's §3.1 lists `/admin/exams/:examId/recovery` as an MVP
-entry point. This is in the J5-I1B (UI) scope, not I1A. Whether it requires a
-new aggregate endpoint or can compose from existing APIs (Exam read + Queue
-examId filter + Proctor assignment list) is a J5-I1B design decision (I1B4).
-
----
+entry point. Decision (contract §6.5): a NEW aggregate endpoint
+`GET /admin/recovery/exams/:examId` — composition was rejected because the
+incident counts by status/severity and the attempt status distribution have
+no server source elsewhere, and composing the rest would multi-fetch with
+per-statement snapshot skew. Delivered with the J5-I1B UI (PR #254):
+repo `getExamRecoveryContext` + route + `RecoveryExamDetailPage`.
 
 ## 4. Hand-off to J5-I1B
 
-Next agent task:
+J5-I1B (Recovery Center UI) is **CLOSED** (PR #254):
 
-```text
-J5-I1B — Recovery Center frontend
-feat(recovery): Recovery Center UI (queue, incident detail, attempt operations, exam detail)
-```
-
-This must:
-- J5-I1B1: Recovery Queue page + navigation infrastructure (ONE PR — no empty shell)
-- J5-I1B2: Incident Detail page (only A2-confirmed fields; no action buttons in read-only phase)
-- J5-I1B3: Attempt Operations page (consumes the A3 endpoint)
-- J5-I1B4: Exam Recovery Detail (compose vs. new aggregate decision)
+- J5-I1B1: Recovery Queue page + full navigation infrastructure (routes,
+  sidebar group, capabilities, pageMeta, statusMeta, i18n) — ONE PR, no
+  empty shell; filters in URL, keyset cursor in component state; polling
+  semantics (30s visible, drop hidden, focus refresh, single-flight,
+  page-1 reset).
+- J5-I1B2: Incident Detail page — only A2 wire-confirmed fields (Task 7
+  mapping + Task 7a additive projection); no action area in the
+  read-only phase.
+- J5-I1B3: Attempt Operations page — consumes the A3 endpoint; full
+  per-Attempt ledger, interruption episodes, timeline, related incidents.
+- J5-I1B4: Exam Recovery Detail page + Exam Recovery Context aggregate.
 
 ---
 
