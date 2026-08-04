@@ -3602,9 +3602,10 @@ describe("recovery attempt operations context repository", () => {
         createdAt: t3,
       });
 
-      // Audit timeline: two entries, oldest first.
+      // Audit timeline: three entries, oldest first.
       const auditA = randomUUID();
       const auditB = randomUUID();
+      const auditC = randomUUID();
       await db.insert(schema.auditLogs).values([
         {
           id: auditA,
@@ -3629,6 +3630,18 @@ describe("recovery attempt operations context repository", () => {
           ipAddress: null,
           userAgent: null,
           createdAt: t2,
+        },
+        {
+          id: auditC,
+          organizationId: fx.organizationId,
+          actorId: fx.actorId,
+          action: "attempt.forceSubmit",
+          targetType: "attempt",
+          targetId: attemptId,
+          metadata: {},
+          ipAddress: null,
+          userAgent: null,
+          createdAt: t3,
         },
       ]);
 
@@ -3686,11 +3699,14 @@ describe("recovery attempt operations context repository", () => {
       ]);
 
       // Timeline oldest-first with actor names.
-      expect(ctx!.timeline.length).toBe(2);
+      expect(ctx!.timeline.length).toBe(3);
       expect(ctx!.timeline[0]!.auditLog.id).toBe(auditA);
       expect(ctx!.timeline[0]!.auditLog.action).toBe("attempt.started");
       expect(ctx!.timeline[1]!.auditLog.id).toBe(auditB);
+      expect(ctx!.timeline[1]!.auditLog.action).toBe("attempt.submitted");
       expect(ctx!.timeline[1]!.actorName).toBe("Actor");
+      expect(ctx!.timeline[2]!.auditLog.id).toBe(auditC);
+      expect(ctx!.timeline[2]!.auditLog.action).toBe("attempt.forceSubmit");
 
       // Related incidents: most recently linked first, deduplicated (incidentZ
       // linked both ways keeps the latest link time); incidentW is validated

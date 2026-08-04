@@ -6,7 +6,7 @@ import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ApiError, api } from "@/lib/api";
-import type { RecoveryIncidentAggregateResponse } from "@/lib/recovery";
+import type { RecoveryAggregateResponse as RecoveryIncidentAggregateResponse } from "@exam/contracts";
 import { RecoveryIncidentDetailPage } from "./RecoveryIncidentDetailPage";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -235,13 +235,16 @@ describe("RecoveryIncidentDetailPage", () => {
     expect(links.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("renders NO action buttons in the read-only phase (allowedActions is never rendered)", async () => {
+  it("renders NO command action buttons in the read-only phase (allowedActions is never rendered)", async () => {
     renderPage();
     await screen.findByText("detail page test incident");
-    // The only interactive element is the back link (an anchor) — the action
-    // area is simply not rendered; allowedActions must not produce buttons.
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // The action COMMAND area is not rendered (read-only phase). Toolbar
+    // affordances (refresh / back) are not commands. allowedActions must not
+    // produce command buttons.
     expect(screen.queryByText(/allowedActions/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /investigate|resolve|dismiss/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the snapshot timestamp and a stale warning for old snapshots", async () => {
@@ -286,11 +289,10 @@ describe("RecoveryIncidentDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the error state on fetch failure", async () => {
+  it("shows the classified network error state on fetch failure", async () => {
     getMock.mockRejectedValueOnce(new ApiError(0, "Network request failed"));
     renderPage();
-    expect(
-      await screen.findByText(/Network request failed/),
-    ).toBeInTheDocument();
+    // status 0 → network kind → networkError message (classifier authority).
+    expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 });

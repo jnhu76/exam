@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { ApiError, api } from "@/lib/api";
-import type { RecoveryExamContextResponse } from "@/lib/recovery";
+import { api } from "@/lib/api";
+import type { ExamRecoveryContext as RecoveryExamContextResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
+import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
 import { routes } from "@/lib/routes";
+import { useRecoveryProjection } from "@/hooks/useRecoveryProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -14,63 +15,54 @@ import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ListFilter, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CircleAlert, ListFilter, RefreshCw } from "lucide-react";
 
 const INCIDENT_STATUSES = ["open", "investigating", "resolved", "dismissed"];
 const INCIDENT_SEVERITIES = ["info", "minor", "major", "critical"];
+const STALE_AFTER_MS = 2 * 60_000;
+const NAMESPACE = "admin.recoveryExam";
 
 /**
  * Exam Recovery Detail (J5-I1B4, contract §6.5) — the org-wide Exam recovery
  * aggregate: exam summary, incident counts, recent incidents, active proctors
  * and the attempt status distribution, all from ONE server snapshot. Read-only
  * Admin surface; renders only wire fields (no self-derivation).
+ *
+ * Refresh model (J5-R0 §9): no polling (the queue is the live surface), but a
+ * manual Refresh button and a server-snapshot-based stale indicator are
+ * provided. Errors flow through the shared classifier (no copy leaks from
+ * sibling pages).
  */
 export function RecoveryExamDetailPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
   const { examId } = useParams<{ examId: string }>();
 
-  const [data, setData] = useState<RecoveryExamContextResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+    useRecoveryProjection<RecoveryExamContextResponse>({
+      load: ({ signal }) =>
+        api.get<RecoveryExamContextResponse>(
+          `/api/admin/recovery/exams/${examId}`,
+          { signal },
+        ),
+      getSnapshotAt: (d) => d.snapshotAt,
+      staleAfterMs: STALE_AFTER_MS,
+      deps: [examId],
+    });
 
-  const load = useCallback(async () => {
-    if (!examId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await api.get<RecoveryExamContextResponse>(
-        `/api/admin/recovery/exams/${examId}`,
-      );
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? (err as ApiError) : null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [examId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (isLoading) return <LoadingState />;
+  if (isInitialLoading) return <LoadingState />;
   if (error) {
     return (
       <ErrorState
-        message={
-          error.status === 404
-            ? t("admin.recoveryExam.notFound")
-            : error.message || t("admin.recoveryAttempt.loadFailed")
-        }
-        onRetry={() => void load()}
+        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        onRetry={refresh}
       />
     );
   }
   if (!data) {
     return (
       <EmptyState
-        icon={<AppIcon icon={ShieldAlert} size="state" />}
+        icon={<AppIcon icon={ListFilter} size="state" />}
         title={t("admin.recoveryExam.notFound")}
         description={t("admin.recoveryExam.notFoundDescription")}
       />
@@ -87,6 +79,17 @@ export function RecoveryExamDetailPage() {
         description={data.examSummary.title}
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refresh}
+              disabled={isRefreshing}
+            >
+              <AppIcon icon={RefreshCw} size="inline" className="mr-1" />
+              {isRefreshing
+                ? t("admin.recoveryExam.refreshing")
+                : t("admin.recoveryExam.refresh")}
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link to={queueForExam}>
                 <AppIcon icon={ListFilter} size="inline" className="mr-1" />
@@ -103,24 +106,57 @@ export function RecoveryExamDetailPage() {
         }
       />
 
+      {/* Snapshot indicator — server RR snapshot time + staleness flag. */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {isStale && (
+          <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
+        )}
+        {t("admin.recoveryExam.snapshotAt", {
+          time: formatTime(data.snapshotAt),
+        })}
+        {isStale && (
+          <span className="text-warning">
+            {t("admin.recoveryExam.snapshotStale")}
+          </span>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Exam summary */}
         <PageSection title={t("admin.recoveryExam.sections.exam")}>
           <dl className="flex flex-col gap-2">
-            <dd className="text-sm font-medium">{data.examSummary.title}</dd>
-            <dd>
-              <StatusBadge status={data.examSummary.status} />
-            </dd>
-            <dd className="text-xs text-muted-foreground">
-              {t("admin.recoveryExam.timingMode")}:{" "}
-              {t(
-                `admin.recoveryExam.timingModeValue.${data.examSummary.timingMode}` as never,
-              )}
-            </dd>
-            <dd className="text-xs text-muted-foreground">
-              {t("admin.recoveryExam.examCloseAt")}:{" "}
-              {formatTime(data.examSummary.closeAt)}
-            </dd>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryExam.sections.exam")}
+              </dt>
+              <dd className="text-sm font-medium">{data.examSummary.title}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryQueue.columns.severity")}
+              </dt>
+              <dd>
+                <StatusBadge status={data.examSummary.status} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryExam.timingMode")}
+              </dt>
+              <dd className="text-sm">
+                {t(
+                  `admin.recoveryExam.timingModeValue.${data.examSummary.timingMode}` as never,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryExam.examCloseAt")}
+              </dt>
+              <dd className="text-sm">
+                {formatTime(data.examSummary.closeAt)}
+              </dd>
+            </div>
           </dl>
         </PageSection>
 

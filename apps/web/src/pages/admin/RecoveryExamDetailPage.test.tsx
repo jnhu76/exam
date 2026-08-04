@@ -6,7 +6,7 @@ import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ApiError, api } from "@/lib/api";
-import type { RecoveryExamContextResponse } from "@/lib/recovery";
+import type { ExamRecoveryContext as RecoveryExamContextResponse } from "@exam/contracts";
 import { RecoveryExamDetailPage } from "./RecoveryExamDetailPage";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -158,11 +158,11 @@ describe("RecoveryExamDetailPage", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows the error state on fetch failure", async () => {
+  it("shows the classified network error state on fetch failure", async () => {
     getMock.mockRejectedValueOnce(new ApiError(0, "Network request failed"));
     renderPage();
-    expect(
-      await screen.findByText(/Network request failed/),
-    ).toBeInTheDocument();
+    // status 0 → network kind → networkError message (classifier authority);
+    // never the leaked recoveryAttempt.loadFailed copy.
+    expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 });

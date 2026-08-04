@@ -20624,13 +20624,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -20892,13 +20910,31 @@
                             "nullable": true
                           },
                           "type": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "network_interruption",
+                              "device_failure",
+                              "power_failure",
+                              "candidate_unable_to_continue",
+                              "suspected_misconduct",
+                              "operator_error",
+                              "system_outage",
+                              "environmental_disruption",
+                              "other"
+                            ]
                           },
                           "severity": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["info", "minor", "major", "critical"]
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "investigating",
+                              "resolved",
+                              "dismissed"
+                            ]
                           },
                           "occurredAt": {
                             "type": "string",
@@ -21095,13 +21131,26 @@
                       "nullable": true
                     },
                     "type": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "network_interruption",
+                        "device_failure",
+                        "power_failure",
+                        "candidate_unable_to_continue",
+                        "suspected_misconduct",
+                        "operator_error",
+                        "system_outage",
+                        "environmental_disruption",
+                        "other"
+                      ]
                     },
                     "severity": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": ["info", "minor", "major", "critical"]
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": ["open", "investigating", "resolved", "dismissed"]
                     },
                     "occurredAt": {
                       "type": "string",
@@ -21333,13 +21382,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -21629,13 +21696,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -21939,13 +22024,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -22249,13 +22352,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -22555,13 +22676,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -22853,13 +22992,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -23151,13 +23308,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -23446,13 +23621,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -23859,13 +24052,31 @@
                                 "nullable": true
                               },
                               "type": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "network_interruption",
+                                  "device_failure",
+                                  "power_failure",
+                                  "candidate_unable_to_continue",
+                                  "suspected_misconduct",
+                                  "operator_error",
+                                  "system_outage",
+                                  "environmental_disruption",
+                                  "other"
+                                ]
                               },
                               "severity": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": ["info", "minor", "major", "critical"]
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "investigating",
+                                  "resolved",
+                                  "dismissed"
+                                ]
                               },
                               "occurredAt": {
                                 "type": "string",
@@ -24016,9 +24227,12 @@
                     "nextCursor": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "snapshotAt": {
+                      "type": "string"
                     }
                   },
-                  "required": ["items", "nextCursor"],
+                  "required": ["items", "nextCursor", "snapshotAt"],
                   "additionalProperties": false
                 }
               }
@@ -24201,13 +24415,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -24370,7 +24602,8 @@
                             "format": "uuid"
                           },
                           "actionType": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["time_grant", "force_submit"]
                           },
                           "actionId": {
                             "type": "string"
@@ -24415,7 +24648,8 @@
                             "type": "string"
                           },
                           "relationshipType": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["affected", "referenced"]
                           },
                           "linkedAt": {
                             "type": "string"
@@ -24506,7 +24740,17 @@
                             "nullable": true
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "not_started",
+                              "queued",
+                              "in_progress",
+                              "disrupted",
+                              "submitted",
+                              "grading",
+                              "graded",
+                              "voided"
+                            ]
                           },
                           "effectiveDeadlineAt": {
                             "type": "string"
@@ -24538,10 +24782,21 @@
                             "type": "string"
                           },
                           "policy": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "strict",
+                              "bounded_grace",
+                              "operator_incident"
+                            ]
                           },
                           "source": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "bounded_grace",
+                              "operator",
+                              "system_incident",
+                              "administrative_correction"
+                            ]
                           },
                           "beforeDeadline": {
                             "type": "string"
@@ -24872,7 +25127,17 @@
                           "type": "integer"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_started",
+                            "queued",
+                            "in_progress",
+                            "disrupted",
+                            "submitted",
+                            "grading",
+                            "graded",
+                            "voided"
+                          ]
                         },
                         "startedAt": {
                           "type": "string",
@@ -24883,8 +25148,7 @@
                           "nullable": true
                         },
                         "effectiveDeadlineAt": {
-                          "type": "string",
-                          "nullable": true
+                          "type": "string"
                         },
                         "submittedAt": {
                           "type": "string",
@@ -24998,7 +25262,12 @@
                                   "nullable": true
                                 },
                                 "policy": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "enum": [
+                                    "strict",
+                                    "bounded_grace",
+                                    "operator_incident"
+                                  ]
                                 },
                                 "eligibleSeconds": {
                                   "type": "number",
@@ -25060,10 +25329,21 @@
                             "nullable": true
                           },
                           "policy": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "strict",
+                              "bounded_grace",
+                              "operator_incident"
+                            ]
                           },
                           "source": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "bounded_grace",
+                              "operator",
+                              "system_incident",
+                              "administrative_correction"
+                            ]
                           },
                           "beforeDeadline": {
                             "type": "string"
@@ -25177,10 +25457,17 @@
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "investigating",
+                              "resolved",
+                              "dismissed"
+                            ]
                           },
                           "severity": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["info", "minor", "major", "critical"]
                           },
                           "title": {
                             "type": "string"
@@ -25509,13 +25796,31 @@
                             "type": "string"
                           },
                           "type": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "network_interruption",
+                              "device_failure",
+                              "power_failure",
+                              "candidate_unable_to_continue",
+                              "suspected_misconduct",
+                              "operator_error",
+                              "system_outage",
+                              "environmental_disruption",
+                              "other"
+                            ]
                           },
                           "severity": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["info", "minor", "major", "critical"]
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "investigating",
+                              "resolved",
+                              "dismissed"
+                            ]
                           },
                           "createdAt": {
                             "type": "string"

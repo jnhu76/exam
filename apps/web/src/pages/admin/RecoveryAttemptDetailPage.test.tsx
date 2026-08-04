@@ -6,7 +6,7 @@ import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ApiError, api } from "@/lib/api";
-import type { RecoveryAttemptOperationsResponse } from "@/lib/recovery";
+import type { AttemptOperationsContext as RecoveryAttemptOperationsResponse } from "@exam/contracts";
 import { RecoveryAttemptDetailPage } from "./RecoveryAttemptDetailPage";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -176,12 +176,13 @@ describe("RecoveryAttemptDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the exam cross-link and closeAt", async () => {
+  it("renders the Recovery Exam cross-link and closeAt", async () => {
     renderPage();
     expect(await screen.findByText("网络恢复考试")).toBeInTheDocument();
+    // Cross-navigation to the Recovery Exam detail (not the plain exam detail).
     expect(screen.getByRole("link", { name: "网络恢复考试" })).toHaveAttribute(
       "href",
-      "/admin/exams/exam-1",
+      "/admin/recovery/exams/exam-1",
     );
   });
 
@@ -231,12 +232,18 @@ describe("RecoveryAttemptDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders NO action buttons in the read-only phase", async () => {
+  it("renders NO command action buttons in the read-only phase", async () => {
     renderPage();
     await screen.findByText("第 1 次答题");
-    // Only the back link (anchor) exists — allowedActions never renders.
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // The action COMMAND area is not rendered (read-only phase). Toolbar
+    // affordances (refresh / back) are not commands. allowedActions must not
+    // produce command buttons (time_grant / force_submit / misconduct_mark).
     expect(screen.queryByText(/allowedActions/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /time_grant|force_submit|misconduct/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows loading state then data", async () => {
@@ -255,11 +262,10 @@ describe("RecoveryAttemptDetailPage", () => {
     expect(await screen.findByText("第 1 次答题")).toBeInTheDocument();
   });
 
-  it("shows the error state on fetch failure", async () => {
+  it("shows the classified network error state on fetch failure", async () => {
     getMock.mockRejectedValueOnce(new ApiError(0, "Network request failed"));
     renderPage();
-    expect(
-      await screen.findByText(/Network request failed/),
-    ).toBeInTheDocument();
+    // status 0 → network kind → networkError message (classifier authority).
+    expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 });

@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
-import {
-  incidentStatusKey,
-  type RecoveryQueueItem,
-  type RecoveryQueueResponse,
-} from "@/lib/recovery";
+import type { RecoveryQueueResponse } from "@exam/contracts";
+import { incidentStatusKey } from "@/lib/recovery";
+import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
 import { routes } from "@/lib/routes";
+import { useRecoveryQueueProjection } from "@/hooks/useRecoveryQueueProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -38,6 +37,12 @@ import { LifeBuoy, RefreshCw, X } from "lucide-react";
 
 /** Visible-tab polling interval (J5-I1B1 polling semantics). */
 const POLL_INTERVAL_MS = 30_000;
+/** Free-text filter debounce: commits to the URL after typing settles. */
+const FILTER_DEBOUNCE_MS = 400;
+/** A server snapshot older than this is flagged stale (Queue refresh contract). */
+const STALE_AFTER_MS = 60_000;
+/** Bounded failure backoff for the automatic poll cadence. */
+const BACKOFF = { initialMs: POLL_INTERVAL_MS, maxMs: 5 * 60_000 };
 
 /** ISO datetime for the start (00:00:00.000) of the given date, local time. */
 function startOfDayISO(date: Date): string {
@@ -55,6 +60,7 @@ function endOfDayISO(date: Date): string {
 
 const INCIDENT_STATUSES = ["open", "investigating", "resolved", "dismissed"];
 const INCIDENT_SEVERITIES = ["info", "minor", "major", "critical"];
+const NAMESPACE = "admin.recoveryQueue";
 
 interface QueueFilters {
   status: string;
@@ -70,31 +76,23 @@ interface QueueFilters {
  *
  * Read-only Admin surface: `GET /api/admin/recovery/incidents` with
  * server-side filters. Filters live in the URL query state (shareable,
- * refresh-safe); the keyset cursor lives in component state (a cursor in the
- * URL would leak a server pagination secret and break on stale pages).
+ * refresh-safe); the keyset cursor lives in the projection coordinator (a
+ * cursor in the URL would leak a server pagination secret and break on stale
+ * pages).
  *
- * Polling semantics (per plan):
- *   - 30s interval while the tab is visible; ticks are skipped while a
- *     request is in flight (single-flight — no overlapping requests);
- *   - interval pauses automatically when the tab is hidden (setInterval keeps
- *     firing but the visibility gate drops ticks);
- *   - re-visibility / window focus triggers an immediate refresh;
- *   - every page-1 fetch (poll, focus, filter change) REPLACES the
- *     accumulated items and resets the cursor chain — a poll never merges
- *     into an old cursor chain. A request sequence counter discards stale
- *     responses so an older in-flight fetch can never overwrite a newer one.
+ * Refresh model (J5-R0 §9, via {@link useRecoveryQueueProjection}):
+ *   - visible-only polling at 30s, dropped while a request is in flight;
+ *   - focus / re-visibility triggers an immediate page-1 refresh;
+ *   - manual Refresh aborts + supersedes any in-flight request;
+ *   - bounded failure backoff on the automatic poll cadence;
+ *   - `snapshotAt` (server RR snapshot) drives the stale indicator;
+ *   - free-text filters (examId/candidateId) are debounced and committed with
+ *     `replace:true` so typing does not create per-keystroke history entries.
  */
 export function RecoveryQueuePage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [items, setItems] = useState<RecoveryQueueItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const filters: QueueFilters = useMemo(
     () => ({
@@ -110,114 +108,86 @@ export function RecoveryQueuePage() {
 
   const hasActiveFilter = Object.values(filters).some(Boolean);
 
-  const buildQuery = useCallback(
-    (cursor: string | null): string => {
-      const params = new URLSearchParams();
-      if (filters.status) params.set("status", filters.status);
-      if (filters.severity) params.set("severity", filters.severity);
-      if (filters.examId) params.set("examId", filters.examId);
-      if (filters.candidateId) params.set("candidateId", filters.candidateId);
-      if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
-      if (filters.createdTo) params.set("createdTo", filters.createdTo);
-      if (cursor) params.set("cursor", cursor);
-      return params.toString();
-    },
-    [filters],
-  );
+  const buildQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set("status", filters.status);
+    if (filters.severity) params.set("severity", filters.severity);
+    if (filters.examId) params.set("examId", filters.examId);
+    if (filters.candidateId) params.set("candidateId", filters.candidateId);
+    if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
+    if (filters.createdTo) params.set("createdTo", filters.createdTo);
+    return params;
+  }, [filters]);
 
-  // Single-flight: `activeSeq` owns the in-flight slot; only the latest
-  // request may commit (stale responses are discarded by sequence).
-  const requestSeqRef = useRef(0);
-  const activeSeqRef = useRef<number | null>(null);
+  const queryKey = buildQuery.toString();
 
-  /** Fetches page 1, replacing accumulated items and resetting the cursor chain. */
-  const fetchPage1 = useCallback(
-    async (mode: "user" | "poll") => {
-      const seq = ++requestSeqRef.current;
-      if (mode === "poll" && activeSeqRef.current !== null) {
-        // Single-flight: drop the poll tick while another request runs.
-        return;
-      }
-      activeSeqRef.current = seq;
-      if (mode === "user") setInitialLoading(true);
-      setError(null);
-      try {
-        const result = await api.get<RecoveryQueueResponse>(
-          `/api/admin/recovery/incidents?${buildQuery(null)}`,
-        );
-        if (seq !== requestSeqRef.current) return; // stale response
-        setItems(result.items);
-        setNextCursor(result.nextCursor);
-      } catch {
-        if (seq === requestSeqRef.current) {
-          setError(t("admin.recoveryQueue.loadFailed"));
-        }
-      } finally {
-        if (activeSeqRef.current === seq) activeSeqRef.current = null;
-        if (seq === requestSeqRef.current) setInitialLoading(false);
-      }
-    },
-    [buildQuery, t],
-  );
+  const {
+    items,
+    nextCursor,
+    error,
+    isInitialLoading,
+    isRefreshing,
+    isLoadingMore,
+    snapshotAt,
+    lastUpdatedAt,
+    refresh,
+    loadMore,
+  } = useRecoveryQueueProjection({
+    loadPage1: ({ signal }) =>
+      api.get<RecoveryQueueResponse>(
+        `/api/admin/recovery/incidents?${queryKey}`,
+        { signal },
+      ),
+    loadMorePage: (cursor, { signal }) =>
+      api.get<RecoveryQueueResponse>(
+        `/api/admin/recovery/incidents?${queryKey}&cursor=${encodeURIComponent(cursor)}`,
+        { signal },
+      ),
+    pollIntervalMs: POLL_INTERVAL_MS,
+    backoff: BACKOFF,
+    deps: [queryKey],
+  });
 
-  /** Appends the next cursor page to the accumulated list. */
-  const loadMore = useCallback(async () => {
-    if (!nextCursor || activeSeqRef.current !== null) return;
-    const seq = ++requestSeqRef.current;
-    activeSeqRef.current = seq;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const result = await api.get<RecoveryQueueResponse>(
-        `/api/admin/recovery/incidents?${buildQuery(nextCursor)}`,
-      );
-      if (seq !== requestSeqRef.current) return; // superseded by a refresh
-      setItems((prev) => [...prev, ...result.items]);
-      setNextCursor(result.nextCursor);
-    } catch {
-      if (seq === requestSeqRef.current) {
-        setError(t("admin.recoveryQueue.loadFailed"));
-      }
-    } finally {
-      if (activeSeqRef.current === seq) activeSeqRef.current = null;
-      setLoadingMore(false);
-    }
-  }, [nextCursor, buildQuery, t]);
+  // Free-text filter draft + debounce. Local state keeps the input responsive;
+  // the debounced commit writes the URL with `replace:true` so typing does not
+  // push per-keystroke history entries (Back wouldn't step through each char).
+  const [examIdDraft, setExamIdDraft] = useState(filters.examId);
+  const [candidateIdDraft, setCandidateIdDraft] = useState(filters.candidateId);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initial load + polling. The effect is keyed on `fetchPage1`, so any
-  // filter change tears down the old interval and re-runs: page-1 fetch +
-  // a fresh interval. Poll ticks only fire while the tab is visible; focus
-  // and re-visibility trigger an immediate (poll-mode) refresh.
+  // Sync drafts when the URL changes externally (back/forward, link share).
   useEffect(() => {
-    void fetchPage1("user");
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") void fetchPage1("poll");
-    }, POLL_INTERVAL_MS);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") void fetchPage1("poll");
-    };
-    const onFocus = () => void fetchPage1("poll");
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [fetchPage1]);
+    setExamIdDraft(filters.examId);
+    setCandidateIdDraft(filters.candidateId);
+  }, [filters.examId, filters.candidateId]);
 
-  /** Applies a filter patch to the URL (and only the URL — cursor state resets). */
-  function applyFilter(patch: Partial<QueueFilters>) {
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  /** Commits a filter patch to the URL with replace semantics. */
+  function commitFilter(patch: Partial<QueueFilters>) {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(patch)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
-    setSearchParams(next);
+    setSearchParams(next, { replace: true });
+  }
+
+  /** Debounced commit for free-text inputs (cancels any pending timer). */
+  function scheduleDebouncedCommit(patch: Partial<QueueFilters>) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      commitFilter(patch);
+      debounceRef.current = null;
+    }, FILTER_DEBOUNCE_MS);
   }
 
   function clearFilters() {
-    setSearchParams(new URLSearchParams());
+    setSearchParams(new URLSearchParams(), { replace: true });
   }
 
   const fromDate = filters.createdFrom
@@ -225,10 +195,13 @@ export function RecoveryQueuePage() {
     : undefined;
   const toDate = filters.createdTo ? new Date(filters.createdTo) : undefined;
 
-  if (initialLoading && items.length === 0) return <LoadingState />;
+  if (isInitialLoading) return <LoadingState />;
   if (error && items.length === 0) {
     return (
-      <ErrorState message={error} onRetry={() => void fetchPage1("user")} />
+      <ErrorState
+        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        onRetry={refresh}
+      />
     );
   }
 
@@ -241,7 +214,7 @@ export function RecoveryQueuePage() {
       <DataToolbar>
         <Select
           value={filters.status || "all"}
-          onValueChange={(v) => applyFilter({ status: v === "all" ? "" : v })}
+          onValueChange={(v) => commitFilter({ status: v === "all" ? "" : v })}
         >
           <SelectTrigger
             className="w-[150px]"
@@ -262,7 +235,9 @@ export function RecoveryQueuePage() {
         </Select>
         <Select
           value={filters.severity || "all"}
-          onValueChange={(v) => applyFilter({ severity: v === "all" ? "" : v })}
+          onValueChange={(v) =>
+            commitFilter({ severity: v === "all" ? "" : v })
+          }
         >
           <SelectTrigger
             className="w-[150px]"
@@ -284,23 +259,59 @@ export function RecoveryQueuePage() {
         <input
           type="text"
           className="h-9 w-[180px] rounded-md border border-input bg-transparent px-3 text-sm"
+          aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
           placeholder={t("admin.recoveryQueue.filters.examPlaceholder")}
-          value={filters.examId}
-          onChange={(e) => applyFilter({ examId: e.target.value })}
+          value={examIdDraft}
+          onChange={(e) => {
+            setExamIdDraft(e.target.value);
+            scheduleDebouncedCommit({ examId: e.target.value });
+          }}
+          onBlur={() => {
+            if (debounceRef.current) {
+              clearTimeout(debounceRef.current);
+              debounceRef.current = null;
+              commitFilter({ examId: examIdDraft });
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && debounceRef.current) {
+              clearTimeout(debounceRef.current);
+              debounceRef.current = null;
+              commitFilter({ examId: examIdDraft });
+            }
+          }}
         />
         <input
           type="text"
           className="h-9 w-[180px] rounded-md border border-input bg-transparent px-3 text-sm"
+          aria-label={t("admin.recoveryQueue.filters.candidatePlaceholder")}
           placeholder={t("admin.recoveryQueue.filters.candidatePlaceholder")}
-          value={filters.candidateId}
-          onChange={(e) => applyFilter({ candidateId: e.target.value })}
+          value={candidateIdDraft}
+          onChange={(e) => {
+            setCandidateIdDraft(e.target.value);
+            scheduleDebouncedCommit({ candidateId: e.target.value });
+          }}
+          onBlur={() => {
+            if (debounceRef.current) {
+              clearTimeout(debounceRef.current);
+              debounceRef.current = null;
+              commitFilter({ candidateId: candidateIdDraft });
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && debounceRef.current) {
+              clearTimeout(debounceRef.current);
+              debounceRef.current = null;
+              commitFilter({ candidateId: candidateIdDraft });
+            }
+          }}
         />
         <DatePicker
           aria-label={t("admin.recoveryQueue.filters.startDate")}
           placeholder={t("admin.recoveryQueue.filters.startDate")}
           value={fromDate}
           onChange={(d) =>
-            applyFilter({
+            commitFilter({
               createdFrom: d ? startOfDayISO(d) : "",
               createdTo: d && toDate && toDate < d ? "" : filters.createdTo,
             })
@@ -311,7 +322,7 @@ export function RecoveryQueuePage() {
           placeholder={t("admin.recoveryQueue.filters.endDate")}
           value={toDate}
           onChange={(d) =>
-            applyFilter({
+            commitFilter({
               createdTo: d ? endOfDayISO(d) : "",
               createdFrom:
                 d && fromDate && fromDate > d ? "" : filters.createdFrom,
@@ -342,9 +353,38 @@ export function RecoveryQueuePage() {
           <DataTableShell
             title={t("admin.recoveryQueue.title")}
             toolbar={
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <AppIcon icon={RefreshCw} size="inline" />
-                {t("admin.recoveryQueue.polling")}
+              <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refresh}
+                  disabled={isRefreshing}
+                  className="h-7 gap-1 px-2 text-xs"
+                  aria-label={t("admin.recoveryQueue.refresh")}
+                >
+                  <AppIcon
+                    icon={RefreshCw}
+                    size="inline"
+                    className={isRefreshing ? "animate-spin" : undefined}
+                  />
+                  {isRefreshing
+                    ? t("admin.recoveryQueue.refreshing")
+                    : t("admin.recoveryQueue.refresh")}
+                </Button>
+                {snapshotAt && (
+                  <span>
+                    {t("admin.recoveryQueue.snapshotAt", {
+                      time: formatTime(snapshotAt),
+                    })}
+                  </span>
+                )}
+                {lastUpdatedAt && (
+                  <span>
+                    {t("admin.recoveryQueue.lastUpdatedAt", {
+                      time: formatTime(lastUpdatedAt),
+                    })}
+                  </span>
+                )}
               </span>
             }
           >
@@ -381,19 +421,16 @@ export function RecoveryQueuePage() {
                 </TableHeader>
                 <TableBody>
                   {items.map((item) => (
-                    <TableRow
-                      key={item.incident.id}
-                      className="cursor-pointer"
-                      onClick={() =>
-                        navigate(
-                          routes.admin.recoveryIncident(item.incident.id),
-                        )
-                      }
-                    >
+                    <TableRow key={item.incident.id}>
                       <TableCell>
-                        <StatusBadge
-                          status={incidentStatusKey(item.incident.status)}
-                        />
+                        <Link
+                          to={routes.admin.recoveryIncident(item.incident.id)}
+                          className="text-sm font-medium underline-offset-4 hover:underline"
+                        >
+                          <StatusBadge
+                            status={incidentStatusKey(item.incident.status)}
+                          />
+                        </Link>
                       </TableCell>
                       <TableCell>
                         {t(
@@ -440,12 +477,9 @@ export function RecoveryQueuePage() {
             >
               {items.map((item) => (
                 <li key={item.incident.id}>
-                  <button
-                    type="button"
+                  <Link
+                    to={routes.admin.recoveryIncident(item.incident.id)}
                     className="flex w-full flex-col gap-2 rounded-md border p-3 text-left"
-                    onClick={() =>
-                      navigate(routes.admin.recoveryIncident(item.incident.id))
-                    }
                   >
                     <span className="flex items-center justify-between gap-2">
                       <StatusBadge
@@ -471,7 +505,7 @@ export function RecoveryQueuePage() {
                         count: item.linkedAttemptCount,
                       })}
                     </span>
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -479,8 +513,10 @@ export function RecoveryQueuePage() {
 
           {error && (
             <ErrorState
-              message={error}
-              onRetry={() => void fetchPage1("user")}
+              message={t(
+                recoveryErrorMessageKey(error.kind, NAMESPACE) as never,
+              )}
+              onRetry={refresh}
             />
           )}
 
@@ -488,10 +524,10 @@ export function RecoveryQueuePage() {
             <div className="flex justify-center">
               <Button
                 variant="outline"
-                onClick={() => void loadMore()}
-                disabled={loadingMore}
+                onClick={loadMore}
+                disabled={isLoadingMore}
               >
-                {loadingMore
+                {isLoadingMore
                   ? t("admin.recoveryQueue.loadingMore")
                   : t("admin.recoveryQueue.loadMore")}
               </Button>

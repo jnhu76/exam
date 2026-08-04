@@ -89,16 +89,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (error instanceof ApiError) {
       throw error;
     }
+    // An aborted request (AbortSignal) is intentional — the caller is
+    // superseding it. It is NOT a network failure: no toast, no ApiError, so
+    // the caller's sequence check is the sole arbiter (no error state, no
+    // failure-count bump, no backoff).
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
     toast.error(i18n.t("errors.network"));
     throw new ApiError(0, "Network request failed");
   }
 }
 
+/**
+ * Optional request options. `signal` is forwarded to `fetch` so callers (e.g.
+ * the Recovery projection hook) can abort a superseded in-flight request; an
+ * aborted request throws an `AbortError` (DOMException), which the client
+ * re-throws unchanged — never as a toast or a network ApiError.
+ */
+export interface ApiRequestOptions {
+  signal?: AbortSignal;
+}
+
 /** HTTP client with get, post, patch, and delete helpers that use cookie-based auth. */
 export const api = {
   baseURL: baseUrl,
-  get<T>(path: string): Promise<T> {
-    return request<T>(path);
+  get<T>(path: string, opts?: ApiRequestOptions): Promise<T> {
+    return request<T>(path, opts?.signal ? { signal: opts.signal } : undefined);
   },
   post<T, TBody = unknown>(path: string, body?: TBody): Promise<T> {
     return request<T>(path, {

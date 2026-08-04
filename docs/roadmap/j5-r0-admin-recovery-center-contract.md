@@ -635,7 +635,9 @@ GET /admin/recovery/attempts/:attemptId
       severity,            // IncidentSeverity enum
       title,               // incident description (truncated if needed)
     },
-  ],  // from both attempt memberships and action links, deduplicated by incident id
+  ],  // four-edge union (ADR-014 §7): direct anchor ∪ membership ∪ action link ∪
+      // interruption evidence link; every edge validated independently; any
+      // broken edge → 503 AUTHZ_UNAVAILABLE; deduplicated by incident id.
 
   allowedActions: [        // real eligibility from caller capability ∩ Attempt state ∩ resource scope
     // May include: "time_grant", "force_submit", "misconduct_mark"

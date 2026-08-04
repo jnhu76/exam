@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { ApiError, api } from "@/lib/api";
-import type { RecoveryAttemptOperationsResponse } from "@/lib/recovery";
+import { api } from "@/lib/api";
+import type { AttemptOperationsContext as RecoveryAttemptOperationsResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
+import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
 import { routes } from "@/lib/routes";
+import { useRecoveryProjection } from "@/hooks/useRecoveryProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -15,7 +16,10 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CircleAlert, Flag, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CircleAlert, Flag, RefreshCw } from "lucide-react";
+
+const STALE_AFTER_MS = 2 * 60_000;
+const NAMESPACE = "admin.recoveryAttempt";
 
 /**
  * Attempt Operations Context (J5-I1B3, contract §6.4) — read-only Admin
@@ -34,49 +38,31 @@ export function RecoveryAttemptDetailPage() {
   const { formatTime } = useProductDateTime();
   const { attemptId } = useParams<{ attemptId: string }>();
 
-  const [data, setData] = useState<RecoveryAttemptOperationsResponse | null>(
-    null,
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+    useRecoveryProjection<RecoveryAttemptOperationsResponse>({
+      load: ({ signal }) =>
+        api.get<RecoveryAttemptOperationsResponse>(
+          `/api/admin/recovery/attempts/${attemptId}`,
+          { signal },
+        ),
+      getSnapshotAt: (d) => d.snapshotAt,
+      staleAfterMs: STALE_AFTER_MS,
+      deps: [attemptId],
+    });
 
-  const load = useCallback(async () => {
-    if (!attemptId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await api.get<RecoveryAttemptOperationsResponse>(
-        `/api/admin/recovery/attempts/${attemptId}`,
-      );
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? (err as ApiError) : null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [attemptId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (isLoading) return <LoadingState />;
+  if (isInitialLoading) return <LoadingState />;
   if (error) {
     return (
       <ErrorState
-        message={
-          error.status === 404
-            ? t("admin.recoveryAttempt.notFound")
-            : error.message || t("admin.recoveryAttempt.loadFailed")
-        }
-        onRetry={() => void load()}
+        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        onRetry={refresh}
       />
     );
   }
   if (!data) {
     return (
       <EmptyState
-        icon={<AppIcon icon={ShieldAlert} size="state" />}
+        icon={<AppIcon icon={Flag} size="state" />}
         title={t("admin.recoveryAttempt.notFound")}
         description={t("admin.recoveryAttempt.notFoundDescription")}
       />
@@ -98,20 +84,41 @@ export function RecoveryAttemptDetailPage() {
         })}
         status={<StatusBadge status={attempt.status} />}
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link to={routes.admin.recovery}>
-              <AppIcon icon={ArrowLeft} size="inline" className="mr-1" />
-              {t("admin.recoveryAttempt.back")}
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refresh}
+              disabled={isRefreshing}
+            >
+              <AppIcon icon={RefreshCw} size="inline" className="mr-1" />
+              {isRefreshing
+                ? t("admin.recoveryAttempt.refreshing")
+                : t("admin.recoveryAttempt.refresh")}
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={routes.admin.recovery}>
+                <AppIcon icon={ArrowLeft} size="inline" className="mr-1" />
+                {t("admin.recoveryAttempt.back")}
+              </Link>
+            </Button>
+          </div>
         }
       />
 
-      {/* Snapshot indicator — the read model is ONE consistent snapshot. */}
+      {/* Snapshot indicator — server RR snapshot time + staleness flag. */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {t("admin.recoveryIncident.snapshotAt", {
+        {isStale && (
+          <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
+        )}
+        {t("admin.recoveryAttempt.snapshotAt", {
           time: formatTime(data.snapshotAt),
         })}
+        {isStale && (
+          <span className="text-warning">
+            {t("admin.recoveryAttempt.snapshotStale")}
+          </span>
+        )}
       </div>
 
       {/* Misconduct flag — prominent, boolean on the wire (jsonb → boolean). */}
@@ -193,21 +200,35 @@ export function RecoveryAttemptDetailPage() {
         <div className="flex flex-col gap-4">
           <PageSection title={t("admin.recoveryAttempt.sections.exam")}>
             <dl className="flex flex-col gap-2">
-              <dd className="text-sm font-medium">
-                <Link
-                  to={routes.admin.examDetail(data.examSummary.id)}
-                  className="underline-offset-4 hover:underline"
-                >
-                  {data.examSummary.title}
-                </Link>
-              </dd>
-              <dd>
-                <StatusBadge status={data.examSummary.status} />
-              </dd>
-              <dd className="text-xs text-muted-foreground">
-                {t("admin.recoveryAttempt.examCloseAt")}:{" "}
-                {formatTime(data.examSummary.closeAt)}
-              </dd>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  {t("admin.recoveryAttempt.sections.exam")}
+                </dt>
+                <dd className="text-sm font-medium">
+                  <Link
+                    to={routes.admin.recoveryExam(data.examSummary.id)}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {data.examSummary.title}
+                  </Link>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  {t("admin.recoveryQueue.columns.severity")}
+                </dt>
+                <dd>
+                  <StatusBadge status={data.examSummary.status} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  {t("admin.recoveryAttempt.examCloseAt")}
+                </dt>
+                <dd className="text-sm">
+                  {formatTime(data.examSummary.closeAt)}
+                </dd>
+              </div>
             </dl>
           </PageSection>
           <PageSection title={t("admin.recoveryAttempt.sections.candidate")}>

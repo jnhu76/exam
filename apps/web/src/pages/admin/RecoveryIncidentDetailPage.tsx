@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { ApiError, api } from "@/lib/api";
-import type { RecoveryIncidentAggregateResponse } from "@/lib/recovery";
+import { api } from "@/lib/api";
+import type { RecoveryAggregateResponse as RecoveryIncidentAggregateResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
+import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
 import { routes } from "@/lib/routes";
+import { useRecoveryProjection } from "@/hooks/useRecoveryProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -14,14 +15,16 @@ import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CircleAlert, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 
 /**
  * A point-in-time aggregate read (contract §6.3): the page renders exactly the
- * server snapshot — a snapshot older than this threshold is flagged as stale
- * (the read is NOT re-polled; the queue is the live surface).
+ * server snapshot — a snapshot older than this threshold is flagged as stale.
+ * The stale flag is driven by the shared projection hook's wall-clock tick, so
+ * it self-updates as time advances (no manual polling).
  */
 const SNAPSHOT_STALE_MS = 2 * 60_000;
+const NAMESPACE = "admin.recoveryIncident";
 
 /**
  * Renders a structured top-level key/value summary of an event payload.
@@ -63,44 +66,24 @@ export function RecoveryIncidentDetailPage() {
   const { formatTime } = useProductDateTime();
   const { incidentId } = useParams<{ incidentId: string }>();
 
-  const [data, setData] = useState<RecoveryIncidentAggregateResponse | null>(
-    null,
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+    useRecoveryProjection<RecoveryIncidentAggregateResponse>({
+      load: ({ signal }) =>
+        api.get<RecoveryIncidentAggregateResponse>(
+          `/api/admin/recovery/incidents/${incidentId}`,
+          { signal },
+        ),
+      getSnapshotAt: (d) => d.snapshotAt,
+      staleAfterMs: SNAPSHOT_STALE_MS,
+      deps: [incidentId],
+    });
 
-  const load = useCallback(async () => {
-    if (!incidentId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await api.get<RecoveryIncidentAggregateResponse>(
-        `/api/admin/recovery/incidents/${incidentId}`,
-      );
-      setData(result);
-    } catch (err) {
-      // The API client throws ApiError; keep any Error so a transport failure
-      // surfaces the error state instead of a misleading empty state.
-      setError(err instanceof Error ? (err as ApiError) : null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [incidentId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (isLoading) return <LoadingState />;
+  if (isInitialLoading) return <LoadingState />;
   if (error) {
     return (
       <ErrorState
-        message={
-          error.status === 404
-            ? t("admin.recoveryIncident.notFound")
-            : error.message || t("admin.recoveryIncident.loadFailed")
-        }
-        onRetry={() => void load()}
+        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        onRetry={refresh}
       />
     );
   }
@@ -114,8 +97,7 @@ export function RecoveryIncidentDetailPage() {
     );
   }
 
-  const snapshotStale =
-    Date.now() - new Date(data.snapshotAt).getTime() > SNAPSHOT_STALE_MS;
+  const snapshotStale = isStale;
   const attemptStatusById = new Map(
     data.attemptSummaries.map((a) => [a.id, a.status]),
   );
@@ -126,16 +108,30 @@ export function RecoveryIncidentDetailPage() {
         title={t("admin.recoveryIncident.title")}
         description={data.incident.description}
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link to={routes.admin.recovery}>
-              <AppIcon icon={ArrowLeft} size="inline" className="mr-1" />
-              {t("admin.recoveryIncident.back")}
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refresh}
+              disabled={isRefreshing}
+            >
+              <AppIcon icon={RefreshCw} size="inline" className="mr-1" />
+              {isRefreshing
+                ? t("admin.recoveryIncident.refreshing")
+                : t("admin.recoveryIncident.refresh")}
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={routes.admin.recovery}>
+                <AppIcon icon={ArrowLeft} size="inline" className="mr-1" />
+                {t("admin.recoveryIncident.back")}
+              </Link>
+            </Button>
+          </div>
         }
       />
 
-      {/* Snapshot indicator — the aggregate is one consistent read. */}
+      {/* Snapshot indicator — the aggregate is one consistent read; the stale
+          flag self-updates via the projection hook's wall-clock tick. */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {snapshotStale && (
           <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
@@ -222,17 +218,38 @@ export function RecoveryIncidentDetailPage() {
           </dl>
         </PageSection>
 
-        {/* Exam summary */}
+        {/* Exam summary — links to the Recovery Exam detail (cross-navigation). */}
         <PageSection title={t("admin.recoveryIncident.sections.exam")}>
           <dl className="flex flex-col gap-2">
-            <dd className="text-sm font-medium">{data.examSummary.title}</dd>
-            <dd>
-              <StatusBadge status={data.examSummary.status} />
-            </dd>
-            <dd className="text-xs text-muted-foreground">
-              {t("admin.recoveryIncident.examCloseAt")}:{" "}
-              {formatTime(data.examSummary.closeAt)}
-            </dd>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryIncident.sections.exam")}
+              </dt>
+              <dd className="text-sm font-medium">
+                <Link
+                  to={routes.admin.recoveryExam(data.examSummary.id)}
+                  className="underline-offset-4 hover:underline"
+                >
+                  {data.examSummary.title}
+                </Link>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryQueue.columns.severity")}
+              </dt>
+              <dd>
+                <StatusBadge status={data.examSummary.status} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {t("admin.recoveryIncident.examCloseAt")}
+              </dt>
+              <dd className="text-sm">
+                {formatTime(data.examSummary.closeAt)}
+              </dd>
+            </div>
           </dl>
         </PageSection>
 
@@ -365,7 +382,7 @@ export function RecoveryIncidentDetailPage() {
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {t("admin.recoveryIncident.actor")}: {a.actorId ?? "—"} ·{" "}
-                    {t("admin.recoveryIncident.header.type")}: {a.operationId} ·{" "}
+                    {t("admin.recoveryIncident.operationId")}: {a.operationId} ·{" "}
                     {formatTime(a.linkedAt)}
                   </span>
                 </li>
@@ -422,7 +439,7 @@ export function RecoveryIncidentDetailPage() {
                     {l.interruptionId}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {t("admin.recoveryIncident.header.type")}:{" "}
+                    {t("admin.recoveryIncident.sections.attempts")}:{" "}
                     <Link
                       to={routes.admin.recoveryAttempt(l.attemptId)}
                       className="underline-offset-4 hover:underline"

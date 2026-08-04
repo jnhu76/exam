@@ -247,10 +247,12 @@ audit, external log shipping. All Phase 4; none started.
   the minimum Proctor incident activation are implemented per ADR-015 §23
   (A → B → C → D); closeout:
   [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-  The Proctor **product** Recovery Center UI (J6) is NOT IMPLEMENTED; the
-  Admin Recovery Center UI (J5) is NOT IMPLEMENTED (J5-R0 contract is IN
-  REVIEW — see
-  [`docs/roadmap/j5-r0-admin-recovery-center-contract.md`](../roadmap/j5-r0-admin-recovery-center-contract.md)).
+  The Proctor **product** Recovery Center UI (J6) is NOT IMPLEMENTED. The
+  Admin Recovery Center UI (J5-I1B) is CLOSED: J5-R0 contract is ACCEPTED
+  (see
+  [`docs/roadmap/j5-r0-admin-recovery-center-contract.md`](../roadmap/j5-r0-admin-recovery-center-contract.md)),
+  J5-I1A (read models) is CLOSED, and J5-I1B (admin recovery center UI)
+  is CLOSED.
   System-generated incidents remain NOT IMPLEMENTED and deferred.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`

@@ -6,15 +6,20 @@ import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { api } from "@/lib/api";
-import type { RecoveryQueueResponse } from "@/lib/recovery";
+import type { RecoveryQueueResponse } from "@exam/contracts";
 import { RecoveryQueuePage } from "./RecoveryQueuePage";
 
-vi.mock("@/lib/api", () => ({
-  api: {
-    get: vi.fn(),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      get: vi.fn(),
+    },
+    setNavigate: () => {},
+  };
+});
 
 vi.mock("@/components/shared/DatePicker", () => ({
   DatePicker: ({
@@ -92,6 +97,7 @@ function makeItem(
 const mockQueueData: RecoveryQueueResponse = {
   items: [makeItem()],
   nextCursor: null,
+  snapshotAt: "2025-01-15T10:00:00Z",
 };
 
 function renderPage(initialEntries = ["/admin/recovery"]) {
@@ -216,13 +222,14 @@ describe("RecoveryQueuePage", () => {
     expect(lastCall).not.toContain("status=");
   });
 
-  it("row click navigates to the incident detail route", async () => {
+  it("the incident status link navigates to the incident detail route", async () => {
     const user = userEvent.setup();
     renderPage();
     const table = await screen.findByTestId("recovery-queue-table");
-    const row = within(table).getByText("网络恢复考试").closest("tr");
-    expect(row).toBeTruthy();
-    await user.click(row!);
+    // The incident status badge is the navigation link (keyboard-accessible,
+    // open-in-new-tab capable). Clicking it navigates to the detail route.
+    const incidentLink = within(table).getByText("待处理");
+    await user.click(incidentLink);
     expect(screen.getByTestId("incident-detail-stub")).toBeInTheDocument();
   });
 
