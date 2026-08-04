@@ -180,6 +180,13 @@ export function canSeeProctor(
   return can(user, Permission.ExamRoomView);
 }
 
+/** Recovery Center nav — Admin only (`incident.recovery.view` preset). */
+export function canSeeRecovery(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.IncidentRecoveryView);
+}
+
 // ── Exam-page action visibility (task 10.4) ──
 
 export function canPublishExam(

@@ -10,6 +10,7 @@ describe("page metadata", () => {
   it("returns static admin route titles", () => {
     expect(getPageTitle("/admin/dashboard")).toBe("仪表盘");
     expect(getPageTitle("/admin/settings")).toBe("平台设置");
+    expect(getPageTitle("/admin/recovery")).toBe("恢复中心");
   });
 
   it("returns candidate-facing route titles", () => {
@@ -24,6 +25,12 @@ describe("page metadata", () => {
     expect(getPageTitle("/admin/exams/exam-1/scores")).toBe("成绩列表");
     expect(getPageTitle("/admin/questions/question-1/edit")).toBe("编辑题目");
     expect(getPageTitle("/admin/attempts/attempt-1")).toBe("答题详情");
+    expect(getPageTitle("/admin/recovery/incidents/incident-1")).toBe(
+      "事件详情",
+    );
+    expect(getPageTitle("/admin/recovery/attempts/attempt-1")).toBe(
+      "答题操作详情",
+    );
   });
 
   it("returns a stable fallback page title", () => {

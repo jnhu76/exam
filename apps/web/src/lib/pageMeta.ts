@@ -35,11 +35,20 @@ const staticRouteTitleKeys = new Map<string, string>([
   [routes.admin.system, "pageMeta.static.system"],
   [routes.admin.auditLogs, "pageMeta.static.auditLogs"],
   [routes.admin.importLogs, "pageMeta.static.importLogs"],
+  [routes.admin.recovery, "pageMeta.static.recovery"],
   [routes.exam.list, "pageMeta.static.examList"],
 ]);
 
 /** Regex-based title key rules for dynamic routes containing IDs. */
 const dynamicRouteTitleKeys: RouteTitleRule[] = [
+  {
+    pattern: /^\/admin\/recovery\/incidents\/[^/]+$/,
+    titleKey: "pageMeta.dynamic.recoveryIncident",
+  },
+  {
+    pattern: /^\/admin\/recovery\/attempts\/[^/]+$/,
+    titleKey: "pageMeta.dynamic.recoveryAttempt",
+  },
   {
     pattern: /^\/admin\/questions\/[^/]+\/edit$/,
     titleKey: "pageMeta.dynamic.questionEdit",

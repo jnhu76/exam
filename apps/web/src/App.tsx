@@ -46,6 +46,7 @@ import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
 import { GradingDetailPage } from "@/pages/admin/GradingDetailPage";
 import { AuditLogPage } from "@/pages/admin/AuditLogPage";
 import { ImportLogsPage } from "@/pages/admin/ImportLogsPage";
+import { RecoveryQueuePage } from "@/pages/admin/RecoveryQueuePage";
 import { adminLandingPath } from "@/lib/capabilities";
 
 export function AdminIndexRoute() {
@@ -98,6 +99,7 @@ export function AppRoutes() {
         <Route path="audit-logs" element={<AuditLogPage />} />
         <Route path="import-logs" element={<ImportLogsPage />} />
         <Route path="attempts/:id" element={<AttemptDetailPage />} />
+        <Route path="recovery" element={<RecoveryQueuePage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
       <Route path="/exam" element={<ExamLayout />}>
