@@ -276,6 +276,7 @@ describe("ADMIN_ROUTE_CAPABILITIES — coverage integrity", () => {
       "import-logs",
       "attempts/:id",
       "recovery",
+      "recovery/incidents/:id",
     ];
     const registered = new Set(ADMIN_ROUTE_CAPABILITIES.map((e) => e.pattern));
     for (const r of appRoutes) {

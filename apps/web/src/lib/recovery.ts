@@ -47,6 +47,110 @@ export interface RecoveryQueueResponse {
   nextCursor: string | null;
 }
 
+// ── Recovery Incident Aggregate (contract §6.3, J5-I1A2) ──
+
+export interface RecoveryIncidentAggregateEvent {
+  id: string;
+  eventSequence: number;
+  eventType: string;
+  commandType: string;
+  operationId: string;
+  actorId: string | null;
+  beforeVersion: number;
+  afterVersion: number;
+  payload: unknown;
+  createdAt: string;
+}
+
+export interface RecoveryIncidentAggregateNote {
+  operationId: string;
+  actorId: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface RecoveryIncidentAggregateAction {
+  id: string;
+  actionType: string;
+  actionId: string;
+  attemptId: string;
+  actorId: string | null;
+  operationId: string;
+  linkedAt: string;
+}
+
+export interface RecoveryIncidentAggregateMembership {
+  id: string;
+  attemptId: string;
+  relationshipType: string;
+  linkedAt: string;
+  linkedBy: string;
+  operationId: string;
+}
+
+export interface RecoveryIncidentAggregateInterruptionLink {
+  id: string;
+  attemptId: string;
+  interruptionId: string;
+  linkedAt: string;
+  linkedBy: string;
+  operationId: string;
+}
+
+export interface RecoveryIncidentAggregateCandidateSummary {
+  id: string;
+  displayName: string;
+}
+
+export interface RecoveryIncidentAggregateAttemptSummary {
+  id: string;
+  candidateId: string | null;
+  status: string;
+  effectiveDeadlineAt: string;
+  /** Null until the attempt is graded (additive, J5-I1B2 field mapping). */
+  score: number | null;
+}
+
+export interface RecoveryIncidentAggregateTimeAdjustment {
+  id: string;
+  attemptId: string;
+  policy: string;
+  source: string;
+  beforeDeadline: string;
+  afterDeadline: string;
+  addedSeconds: number;
+  eligibleSeconds: number | null;
+  reasonCode: string | null;
+  reasonText: string | null;
+  actorId: string | null;
+  operationId: string;
+  createdAt: string;
+}
+
+export interface RecoveryIncidentAggregateAuditReference {
+  id: string;
+  action: string;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface RecoveryIncidentAggregateResponse {
+  incident: RecoveryQueueIncident;
+  examSummary: { id: string; title: string; status: string; closeAt: string };
+  events: RecoveryIncidentAggregateEvent[];
+  notes: RecoveryIncidentAggregateNote[];
+  actions: RecoveryIncidentAggregateAction[];
+  attemptMemberships: RecoveryIncidentAggregateMembership[];
+  interruptionLinks: RecoveryIncidentAggregateInterruptionLink[];
+  candidateSummaries: RecoveryIncidentAggregateCandidateSummary[];
+  attemptSummaries: RecoveryIncidentAggregateAttemptSummary[];
+  timeAdjustmentSummaries: RecoveryIncidentAggregateTimeAdjustment[];
+  auditReferences: RecoveryIncidentAggregateAuditReference[];
+  allowedActions: string[];
+  snapshotAt: string;
+}
+
 /**
  * Maps the incident wire status (`open | investigating | resolved |
  * dismissed`) to its `statusMeta` key. Prefixed domain keys (`incidentOpen`,
