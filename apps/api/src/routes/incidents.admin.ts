@@ -3,10 +3,11 @@ import { z } from "zod";
 import { ErrorResponseSchema } from "@exam/contracts";
 import { NotFoundError } from "@exam/domain";
 import type { IncidentActionType } from "@exam/domain";
-import { Permission } from "@exam/authz";
+import { Permission, type PermissionKey } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import {
   createRecoveryRepo,
+  type IncidentAllowedAction,
   type IncidentQueueCursor,
 } from "@exam/db/src/repository/recoveryRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -26,6 +27,7 @@ import {
   linkIncidentAction,
   linkIncidentAttempt,
   linkIncidentInterruption,
+  computeEffectiveDeadline,
 } from "@exam/exam-engine";
 import type { IncidentRepo } from "@exam/exam-engine";
 import { withIncidentOperationRecovery } from "../orchestrators/incidentOperationRecovery.js";
@@ -309,6 +311,195 @@ const RecoveryListResponseSchema = z.object({
   items: z.array(RecoveryQueueItemSchema),
   nextCursor: z.string().nullable(),
 });
+
+// ── Recovery Incident Aggregate Detail (J5-I1A2, contract §6.3) ──
+
+const RecoveryAggregateEventSchema = z.object({
+  id: z.string().uuid(),
+  eventSequence: z.number().int(),
+  eventType: z.string(),
+  commandType: z.string(),
+  operationId: z.string().uuid(),
+  actorId: z.string().nullable(),
+  beforeVersion: z.number().int(),
+  afterVersion: z.number().int(),
+  payload: z.unknown(),
+  createdAt: z.string(),
+});
+
+const RecoveryAggregateNoteSchema = z.object({
+  operationId: z.string().uuid(),
+  actorId: z.string().nullable(),
+  body: z.string(),
+  createdAt: z.string(),
+});
+
+const RecoveryAggregateActionSchema = z.object({
+  id: z.string().uuid(),
+  actionType: z.string(),
+  actionId: z.string(),
+  attemptId: z.string(),
+  actorId: z.string().nullable(),
+  operationId: z.string().uuid(),
+  linkedAt: z.string(),
+});
+
+const RecoveryAggregateAttemptMembershipSchema = z.object({
+  id: z.string().uuid(),
+  attemptId: z.string(),
+  relationshipType: z.string(),
+  linkedAt: z.string(),
+  linkedBy: z.string(),
+  operationId: z.string().uuid(),
+});
+
+const RecoveryAggregateInterruptionLinkSchema = z.object({
+  id: z.string().uuid(),
+  attemptId: z.string(),
+  interruptionId: z.string().uuid(),
+  linkedAt: z.string(),
+  linkedBy: z.string(),
+  operationId: z.string().uuid(),
+});
+
+const RecoveryAggregateCandidateSummarySchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+});
+
+/**
+ * Aggregate Attempt summary carries the EFFECTIVE deadline, not the raw
+ * `examAttempts.deadlineAt`. The effective deadline is the canonical
+ * `min(exam.closeAt, attempt.deadlineAt)` (null deadlineAt → exam.closeAt),
+ * computed server-side via `computeEffectiveDeadline` (contract §6.2 / §6.3:
+ * the frontend MUST NOT derive it). Renaming the field from `deadlineAt`
+ * makes the semantics explicit instead of carrying raw deadlineAt under a
+ * name that implies effective-time semantics.
+ *
+ * Non-nullable on the wire: the repo fails closed (503 AUTHZ_UNAVAILABLE)
+ * whenever `exam.closeAt` is null, so every successful response carries a
+ * computable effective deadline.
+ */
+const RecoveryAggregateAttemptSummarySchema = z.object({
+  id: z.string(),
+  candidateId: z.string().nullable(),
+  status: z.string(),
+  effectiveDeadlineAt: z.string(),
+});
+
+/**
+ * Aggregate Exam summary carries `closeAt` so the route can compute the
+ * effective deadline via the canonical helper. It is NOT exposed on the
+ * queue Exam summary (which is a list-row projection, not a deadline
+ * authority).
+ *
+ * Non-nullable on the wire: the repo fails closed (503 AUTHZ_UNAVAILABLE)
+ * when closeAt is null (timed_window invariant), so a successful response
+ * always carries it.
+ */
+const RecoveryAggregateExamSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+  closeAt: z.string(),
+});
+
+const RecoveryAggregateTimeAdjustmentSchema = z.object({
+  id: z.string(),
+  attemptId: z.string(),
+  addedSeconds: z.number().int(),
+  reasonCode: z.string().nullable(),
+  operationId: z.string(),
+  createdAt: z.string(),
+});
+
+const RecoveryAggregateAuditReferenceSchema = z.object({
+  id: z.string(),
+  action: z.string(),
+  actorId: z.string().nullable(),
+  actorName: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+const RecoveryAllowedActionSchema = z.enum([
+  "investigate",
+  "add_note",
+  "change_severity",
+  "resolve",
+  "dismiss",
+  "link_action",
+  "link_attempt",
+  "link_interruption",
+]);
+
+const RecoveryAggregateResponseSchema = z.object({
+  incident: IncidentResponseSchema,
+  examSummary: RecoveryAggregateExamSummarySchema,
+  events: z.array(RecoveryAggregateEventSchema),
+  notes: z.array(RecoveryAggregateNoteSchema),
+  actions: z.array(RecoveryAggregateActionSchema),
+  attemptMemberships: z.array(RecoveryAggregateAttemptMembershipSchema),
+  interruptionLinks: z.array(RecoveryAggregateInterruptionLinkSchema),
+  candidateSummaries: z.array(RecoveryAggregateCandidateSummarySchema),
+  attemptSummaries: z.array(RecoveryAggregateAttemptSummarySchema),
+  timeAdjustmentSummaries: z.array(RecoveryAggregateTimeAdjustmentSchema),
+  auditReferences: z.array(RecoveryAggregateAuditReferenceSchema),
+  allowedActions: z.array(RecoveryAllowedActionSchema),
+  snapshotAt: z.string(),
+});
+
+/**
+ * Final per-caller allowed actions (J5-R0 §6.2 / §6.3).
+ *
+ * action eligibility = status candidate ∩ capability ∩ resource scope ∩
+ * incident shape. The repo computes ONLY the status candidates
+ * (`statusActionCandidates`, ADR-014 §3); this route-level derivation
+ * intersects them with:
+ *
+ *   - capability: `incident.investigate` gates investigate / add_note /
+ *     change_severity / link_action / link_attempt / link_interruption;
+ *     `incident.resolve` gates resolve / dismiss (a caller holding only
+ *     `incident.recovery.view` sees no action at all);
+ *   - incident shape: an anchored Incident (attemptId set) never exposes
+ *     `link_attempt` — ADR-014 §2 makes anchor and membership mutually
+ *     exclusive, so the membership-write action is structurally impossible.
+ *
+ * The frontend MUST NOT derive eligibility from status alone (§6.2); a
+ * disabled button is a UX convenience, never an authorization (§8.2).
+ */
+export function deriveAllowedActionsForCaller(input: {
+  statusActionCandidates: IncidentAllowedAction[];
+  capabilities: readonly PermissionKey[];
+  incidentAttemptId: string | null;
+}): IncidentAllowedAction[] {
+  const { statusActionCandidates, capabilities, incidentAttemptId } = input;
+  const has = (permission: PermissionKey) => capabilities.includes(permission);
+  const INVESTIGATE_ACTIONS: readonly IncidentAllowedAction[] = [
+    "investigate",
+    "add_note",
+    "change_severity",
+    "link_action",
+    "link_attempt",
+    "link_interruption",
+  ];
+  const RESOLVE_ACTIONS: readonly IncidentAllowedAction[] = [
+    "resolve",
+    "dismiss",
+  ];
+  return statusActionCandidates.filter((action) => {
+    if (
+      INVESTIGATE_ACTIONS.includes(action) &&
+      !has(Permission.IncidentInvestigate)
+    ) {
+      return false;
+    }
+    if (RESOLVE_ACTIONS.includes(action) && !has(Permission.IncidentResolve)) {
+      return false;
+    }
+    if (action === "link_attempt" && incidentAttemptId != null) return false;
+    return true;
+  });
+}
 
 // ── Helpers ──
 
@@ -1297,6 +1488,131 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             activeProctors: item.activeProctors,
           })),
           nextCursor: encodeRecoveryCursor(nextCursor),
+        }),
+      );
+    },
+  );
+
+  // ── Recovery Incident Aggregate Detail (J5-I1A2, contract §6.3) ──
+  //
+  // Admin-only authoritative aggregate projection. `IncidentRecoveryView` is
+  // granted ONLY to Admin (catalog.ts / presets.ts), so the flat
+  // `requireCapability` gate is the runtime authority — a Proctor with
+  // incident.view + active assignment is STILL denied (proctorAccess:
+  // admin_only per contract §6.3). Contract §6.3 (amended by this PR):
+  // the Recovery aggregate is an org-wide Admin READ MODEL — the same
+  // scope/resolver shape as the queue (§5.4) — so the repo owns ALL
+  // fail-closed scope validation (org boundary + full relationship graph)
+  // and surfaces broken parent/relationship chains as 503 AUTHZ_UNAVAILABLE,
+  // missing/cross-org as 404 — the same contract the sibling queue route
+  // (flat gate) uses. The read comes from ONE consistent REPEATABLE READ
+  // read-only snapshot inside the repo; the frontend never multi-fetches.
+  // `allowedActions` is the per-caller intersection (status candidates ∩
+  // capabilities ∩ incident shape) computed in this handler.
+  fastify.get(
+    "/admin/recovery/incidents/:incidentId",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.IncidentRecoveryView),
+      ],
+      schema: {
+        params: IncidentIdParamsSchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin"],
+        response: {
+          200: RecoveryAggregateResponseSchema,
+          // Declared so the OpenAPI contract documents the deliberately-
+          // designed responses: 400 (validation), 401 (auth), 403 (capability),
+          // 404 (resolver fail-closed / anti-enumeration), 503 (broken
+          // parent/relationship chain — fail-closed AUTHZ_UNAVAILABLE).
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = IncidentIdParamsSchema.parse(request.params);
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createRecoveryRepo(fastify.db);
+
+      const aggregate = await repo.getIncidentAggregate(ctx, params.incidentId);
+      // Missing or cross-org incident → repo returns null (org-scoped lookup
+      // fails closed) → 404 RESOURCE_NOT_FOUND, the same anti-enumeration
+      // shape the queue list uses. Broken parent/relationship chains throw
+      // AuthzUnavailableError (503) from the repo.
+      if (!aggregate) throw new NotFoundError("Incident not found");
+
+      // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
+      // with null attempt deadlineAt → exam.closeAt. Computed here (not in
+      // the repo, which is forbidden from importing @exam/exam-engine) via the
+      // single canonical authority. The repo guarantees examSummary.closeAt is
+      // non-null (it fails closed with AUTHZ_UNAVAILABLE otherwise), so the
+      // minimal projections below are safe: computeEffectiveDeadline reads
+      // only `exam.closeAt` and `attempt.deadlineAt`.
+      const examForDeadline = {
+        closeAt: aggregate.examSummary.closeAt,
+      };
+
+      // Final per-caller allowedActions (J5-R0 §6.2 / §6.3): the repo's
+      // status candidates ∩ this caller's capabilities ∩ incident shape. The
+      // frontend never derives eligibility from status alone.
+      const allowedActions = deriveAllowedActionsForCaller({
+        statusActionCandidates: aggregate.statusActionCandidates,
+        capabilities: ctx.capabilities,
+        incidentAttemptId: aggregate.incident.attemptId,
+      });
+
+      return reply.send(
+        RecoveryAggregateResponseSchema.parse({
+          incident: toIncidentResponse(aggregate.incident),
+          examSummary: {
+            id: aggregate.examSummary.id,
+            title: aggregate.examSummary.title,
+            status: aggregate.examSummary.status,
+            closeAt: aggregate.examSummary.closeAt.toISOString(),
+          },
+          events: aggregate.events.map((e) => ({
+            ...e,
+            createdAt: e.createdAt.toISOString(),
+          })),
+          notes: aggregate.notes.map((n) => ({
+            ...n,
+            createdAt: n.createdAt.toISOString(),
+          })),
+          actions: aggregate.actions.map((a) => ({
+            ...a,
+            linkedAt: a.linkedAt.toISOString(),
+          })),
+          attemptMemberships: aggregate.attemptMemberships.map((m) => ({
+            ...m,
+            linkedAt: m.linkedAt.toISOString(),
+          })),
+          interruptionLinks: aggregate.interruptionLinks.map((l) => ({
+            ...l,
+            linkedAt: l.linkedAt.toISOString(),
+          })),
+          candidateSummaries: aggregate.candidateSummaries,
+          attemptSummaries: aggregate.attemptSummaries.map((a) => ({
+            id: a.id,
+            candidateId: a.candidateId,
+            status: a.status,
+            effectiveDeadlineAt: computeEffectiveDeadline(examForDeadline, {
+              deadlineAt: a.deadlineAt,
+            }).toISOString(),
+          })),
+          timeAdjustmentSummaries: aggregate.timeAdjustmentSummaries.map(
+            (t) => ({ ...t, createdAt: t.createdAt.toISOString() }),
+          ),
+          auditReferences: aggregate.auditReferences.map((a) => ({
+            ...a,
+            createdAt: a.createdAt.toISOString(),
+          })),
+          allowedActions,
+          snapshotAt: aggregate.snapshotAt.toISOString(),
         }),
       );
     },

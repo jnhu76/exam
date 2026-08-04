@@ -2,6 +2,8 @@ import type { RequestContext } from "@exam/domain";
 import { AuthzUnavailableError } from "@exam/domain";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import {
+  attemptTimeAdjustments,
+  auditLogs,
   candidateProfiles,
   examAttempts,
   examIncidentAttempts,
@@ -12,7 +14,7 @@ import {
 } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
-import type { ExamIncidentRow } from "./incidentRepo.js";
+import { createIncidentRepo, type ExamIncidentRow } from "./incidentRepo.js";
 
 /**
  * Recovery Incident Queue (J5-I1A, contract §5.4).
@@ -67,6 +69,21 @@ export interface IncidentQueueExamSummary {
   status: string;
 }
 
+/**
+ * Exam summary carrying the canonical closeAt so the route layer can compute
+ * each Attempt's effective deadline via the canonical
+ * `computeEffectiveDeadline(exam, attempt)` authority (contract §6.2 / §6.3).
+ * The repo MUST NOT re-derive the min(closeAt, deadlineAt) formula itself —
+ * it only carries the inputs the canonical helper needs.
+ */
+export interface IncidentAggregateExamSummary {
+  id: string;
+  title: string;
+  status: string;
+  /** Exam closeAt — the upper bound of every effective deadline. */
+  closeAt: Date;
+}
+
 export interface IncidentQueueAttemptSummary {
   id: string;
   candidateId: string | null;
@@ -92,6 +109,136 @@ export interface IncidentQueueItem {
   linkedAttemptCount: number;
   linkedCandidateCount: number;
   activeProctors: IncidentQueueProctorSummary[];
+}
+
+// ── Aggregate detail types (J5-I1A2, contract §6.3) ──
+
+export interface IncidentAggregateEventSummary {
+  id: string;
+  eventSequence: number;
+  eventType: string;
+  commandType: string;
+  operationId: string;
+  actorId: string | null;
+  beforeVersion: number;
+  afterVersion: number;
+  payload: unknown;
+  createdAt: Date;
+}
+
+export interface IncidentAggregateNoteSummary {
+  operationId: string;
+  actorId: string | null;
+  body: string;
+  createdAt: Date;
+}
+
+export interface IncidentAggregateActionSummary {
+  id: string;
+  actionType: string;
+  actionId: string;
+  attemptId: string;
+  actorId: string | null;
+  operationId: string;
+  linkedAt: Date;
+}
+
+export interface IncidentAggregateAttemptMembershipSummary {
+  id: string;
+  attemptId: string;
+  relationshipType: string;
+  linkedAt: Date;
+  linkedBy: string;
+  operationId: string;
+}
+
+export interface IncidentAggregateInterruptionLinkSummary {
+  id: string;
+  attemptId: string;
+  interruptionId: string;
+  linkedAt: Date;
+  linkedBy: string;
+  operationId: string;
+}
+
+export interface IncidentAggregateCandidateSummary {
+  id: string;
+  displayName: string;
+}
+
+export interface IncidentAggregateAttemptSummary {
+  id: string;
+  candidateId: string | null;
+  status: string;
+  /**
+   * Raw per-attempt deadline (examAttempts.deadlineAt). The route layer maps
+   * this to the canonical effective deadline; the repo never re-derives it.
+   */
+  deadlineAt: Date | null;
+  /**
+   * attempt.examId — required for the same-Exam scope validation (ADR-014 §7
+   * scope quadruple: every linked/anchor attempt MUST belong to the Incident's
+   * exam). Not exposed on the wire; consumed by the repo's fail-closed check.
+   */
+  examId: string;
+}
+
+export interface IncidentAggregateTimeAdjustmentSummary {
+  id: string;
+  attemptId: string;
+  addedSeconds: number;
+  reasonCode: string | null;
+  operationId: string;
+  createdAt: Date;
+}
+
+export interface IncidentAggregateAuditReferenceSummary {
+  id: string;
+  action: string;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: Date;
+}
+
+export type IncidentAllowedAction =
+  | "investigate"
+  | "add_note"
+  | "change_severity"
+  | "resolve"
+  | "dismiss"
+  | "link_action"
+  | "link_attempt"
+  | "link_interruption";
+
+export interface IncidentAggregate {
+  incident: ExamIncidentRow;
+  examSummary: IncidentAggregateExamSummary;
+  events: IncidentAggregateEventSummary[];
+  notes: IncidentAggregateNoteSummary[];
+  actions: IncidentAggregateActionSummary[];
+  attemptMemberships: IncidentAggregateAttemptMembershipSummary[];
+  interruptionLinks: IncidentAggregateInterruptionLinkSummary[];
+  candidateSummaries: IncidentAggregateCandidateSummary[];
+  attemptSummaries: IncidentAggregateAttemptSummary[];
+  timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[];
+  auditReferences: IncidentAggregateAuditReferenceSummary[];
+  /**
+   * Status-derived action candidates ONLY (ADR-014 §3). The repo computes
+   * exactly the status machine; the ROUTE layer is the place that filters
+   * them down to the caller's final allowed set (J5-R0 §6.2: action
+   * eligibility = capability + resource scope + status; J5-R0 §6.3: the wire
+   * `allowedActions` is the per-caller intersection, never the raw status
+   * candidates). The route additionally applies the incident-shape filter
+   * (an anchored Incident never exposes `link_attempt`).
+   */
+  statusActionCandidates: IncidentAllowedAction[];
+  /**
+   * Transaction snapshot timestamp — `transaction_timestamp()` queried INSIDE
+   * the RR transaction, so it is the actual PostgreSQL snapshot time, not a
+   * request-side clock reading. // adr-006-allow: DB snapshot identity stamp,
+   * not an exam-lifecycle time decision (see ADR-006 allowlist entry).
+   */
+  snapshotAt: Date;
 }
 
 export function createRecoveryRepo(db: Database) {
@@ -258,7 +405,627 @@ export function createRecoveryRepo(db: Database) {
     );
   }
 
-  return { listIncidentQueue };
+  /**
+   * getIncidentAggregate — authoritative aggregate projection for the Admin
+   * Recovery Center detail view (J5-I1A2 §6.3).
+   *
+   * Reads Incident + events + notes + actions + Attempt memberships +
+   * interruption links + Exam/Attempt/Candidate summaries + time adjustments +
+   * audit references + allowed actions from ONE consistent snapshot: a
+   * read-only REPEATABLE READ transaction. All repos are bound to the same
+   * transaction handle so the Incident version, event/action/membership lists,
+   * and summaries cannot come from different snapshots.
+   *
+   * - Returns null if the incident does not exist in the caller's organization
+   *   (fail-closed on missing / cross-org; the resolver at the API layer maps
+   *   that to 404 RESOURCE_NOT_FOUND).
+   * - `snapshotAt` is `transaction_timestamp()` queried INSIDE the RR
+   *   transaction — the actual PostgreSQL snapshot time, not a request-side
+   *   clock reading. // adr-006-allow: DB snapshot identity stamp, not an
+   *   exam-lifecycle time decision (see ADR-006 allowlist entry).
+   * - `statusActionCandidates` is server-derived from the current status per
+   *   ADR-014 §3 (the route layer further filters by the caller's
+   *   capabilities + incident shape to produce the wire `allowedActions`).
+   * - The full relationship graph is validated against the ADR-014 §7 scope
+   *   quadruple (org, exam, attempt, candidate); any unresolvable link or
+   *   scope contradiction fails closed with {@link AuthzUnavailableError}
+   *   (503 AUTHZ_UNAVAILABLE) — the admin audit surface never silently drops
+   *   a summary nor disguises corruption as absence.
+   */
+  async function getIncidentAggregate(
+    ctx: TenantContext | RequestContext,
+    incidentId: string,
+  ): Promise<IncidentAggregate | null> {
+    const orgId = resolveOrganizationId(ctx);
+
+    return db.transaction(
+      async (tx) => {
+        const incidentRepo = createIncidentRepo(tx);
+
+        // The incidentRepo reads accept TenantContext | RequestContext, and
+        // `ctx` already carries organizationId (proven by resolveOrganizationId
+        // above). Pass ctx directly — no synthetic partial TenantContext cast.
+        const incident = await incidentRepo.findById(ctx, incidentId);
+        if (!incident) return null;
+
+        // All dimension reads bound to `tx` → same REPEATABLE READ snapshot.
+        const events = await incidentRepo.listEventsByIncident(ctx, incidentId);
+        const actions = await incidentRepo.listActionsByIncident(
+          ctx,
+          incidentId,
+        );
+        const attemptMemberships = await incidentRepo.listAttemptsByIncident(
+          ctx,
+          incidentId,
+        );
+        const interruptionLinks =
+          await incidentRepo.listInterruptionLinksByIncident(ctx, incidentId);
+
+        // Exam summary — also fetch closeAt so the route layer can compute the
+        // canonical effective deadline via computeEffectiveDeadline(exam,
+        // attempt). The repo never re-derives the min(closeAt, deadlineAt)
+        // formula; it only carries the canonical helper's inputs.
+        const examRows = await tx
+          .select({
+            id: exams.id,
+            title: exams.title,
+            status: exams.status,
+            closeAt: exams.closeAt,
+          })
+          .from(exams)
+          .where(
+            and(eq(exams.organizationId, orgId), eq(exams.id, incident.examId)),
+          )
+          .limit(1);
+        const examRow = examRows[0];
+        if (!examRow) {
+          // Broken parent chain — fail closed with the same shape the queue
+          // uses (503 AUTHZ_UNAVAILABLE), never a bare 500.
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
+          );
+        }
+        if (examRow.closeAt == null) {
+          // timed_window invariant: every exam carries a non-null closeAt. A
+          // null here is tenant-data corruption the canonical deadline helper
+          // cannot reason about — fail closed rather than mis-project.
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_EXAM_CLOSEAT_NULL: incident ${incident.id} exam ${incident.examId}`,
+          );
+        }
+
+        // ADR-014 §2: anchor and membership are MUTUALLY EXCLUSIVE — an
+        // anchored Incident (attemptId set) rejects membership rows. A
+        // historical row carrying both is tenant-data corruption: fail closed
+        // instead of projecting a graph the authority forbids.
+        if (incident.attemptId !== null && attemptMemberships.length > 0) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_ANCHOR_MEMBERSHIP_CONFLICT: incident ${incident.id}`,
+          );
+        }
+
+        // Summary (linked) attempt set = anchor attempt (if any) ∪ membership
+        // rows. This is the wire's `attemptSummaries` — exactly the durable
+        // "linked attempts" relationships (§6.1).
+        const summaryAttemptIds = new Set<string>();
+        if (incident.attemptId) summaryAttemptIds.add(incident.attemptId);
+        for (const m of attemptMemberships) {
+          summaryAttemptIds.add(m.attemptId);
+        }
+
+        // Referenced attempt set additionally covers action-link and
+        // interruption-link attempts. ADR-014 §7 treats anchor, membership,
+        // operator action links, and interruption evidence links as
+        // INDEPENDENT durable relationships — an action/interruption link does
+        // NOT require the attempt to also be a membership (e.g. the canonical
+        // time-grant path atomically creates time adjustment + action link
+        // without a membership row). Referenced attempts are batch-read and
+        // fail-closed validated (same-Exam, matching candidate when the
+        // incident is candidate-focused); only summary attempts are projected
+        // into `attemptSummaries`.
+        const referencedAttemptIds = new Set(summaryAttemptIds);
+        for (const act of actions) referencedAttemptIds.add(act.attemptId);
+        for (const link of interruptionLinks) {
+          referencedAttemptIds.add(link.attemptId);
+        }
+        const referencedIdList = [...referencedAttemptIds];
+
+        // Attempt summaries — MUST select examAttempts.examId so the same-Exam
+        // scope quadruple (ADR-014 §7) is verifiable. The candidate set is
+        // seeded from BOTH the summary attempts AND the incident's own
+        // candidateId focus (candidate-focused exam-wide incident:
+        // attemptId=null, candidateId=set — without this seed the aggregate
+        // would project an empty candidate list and contradict itself).
+        let attemptSummaries: IncidentAggregateAttemptSummary[] = [];
+        const candidateIds = new Set<string>();
+        if (incident.candidateId) candidateIds.add(incident.candidateId);
+        const timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[] =
+          [];
+        // adjustmentById is populated inside the referenced-attempt read block
+        // below (only when there are time_grant action links) and consumed in
+        // the per-action identity validation that follows.
+        let adjustmentById = new Map<
+          string,
+          {
+            id: string;
+            attemptId: string;
+            addedSeconds: number;
+            reasonCode: string;
+            operationId: string;
+            createdAt: Date;
+          }
+        >();
+        const attemptById = new Map<
+          string,
+          { examId: string; candidateId: string | null }
+        >();
+        if (referencedIdList.length > 0) {
+          const attRows = await tx
+            .select({
+              id: examAttempts.id,
+              candidateId: examAttempts.candidateId,
+              status: examAttempts.status,
+              deadlineAt: examAttempts.deadlineAt,
+              examId: examAttempts.examId,
+            })
+            .from(examAttempts)
+            .where(
+              and(
+                eq(examAttempts.organizationId, orgId),
+                inArray(examAttempts.id, referencedIdList),
+              ),
+            )
+            .orderBy(asc(examAttempts.id));
+          // Wire decision (J5-R0 §6.3): attemptSummaries = summary attempts
+          // only. Action/interruption-referenced attempts are validated but
+          // not summarized — they remain reachable by id via the link rows.
+          attemptSummaries = attRows
+            .filter((a) => summaryAttemptIds.has(a.id))
+            .map((a) => ({
+              id: a.id,
+              candidateId: a.candidateId,
+              status: a.status,
+              deadlineAt: a.deadlineAt,
+              examId: a.examId,
+            }));
+          for (const a of attRows) {
+            attemptById.set(a.id, {
+              examId: a.examId,
+              candidateId: a.candidateId,
+            });
+            if (a.candidateId && summaryAttemptIds.has(a.id)) {
+              candidateIds.add(a.candidateId);
+            }
+          }
+
+          // Time adjustments referenced by THIS Incident's time_grant action
+          // identities ONLY (ADR-014 §7: action_id is the polymorphic referent;
+          // for time_grant it is exactly the attempt_time_adjustments.id). The
+          // projection is NOT the complete per-Attempt ledger — unrelated grants
+          // on the same Attempt (other incidents, administrative adjustments)
+          // must NOT leak in. J5-R0 §6.1 freezes the detail field as "linked
+          // time grants / actions"; the full per-Attempt ledger belongs to
+          // Attempt Operations Context.
+          //
+          // `actions` is already read above; collect the time_grant referents
+          // and fetch by id (the adjustment PK), not by attempt_id.
+          const timeGrantActionIds = [
+            ...new Set(
+              actions
+                .filter((a) => a.actionType === "time_grant")
+                .map((a) => a.actionId),
+            ),
+          ];
+          const timeAdjRows =
+            timeGrantActionIds.length === 0
+              ? []
+              : await tx
+                  .select({
+                    id: attemptTimeAdjustments.id,
+                    attemptId: attemptTimeAdjustments.attemptId,
+                    addedSeconds: attemptTimeAdjustments.addedSeconds,
+                    reasonCode: attemptTimeAdjustments.reasonCode,
+                    operationId: attemptTimeAdjustments.operationId,
+                    createdAt: attemptTimeAdjustments.createdAt,
+                  })
+                  .from(attemptTimeAdjustments)
+                  .where(
+                    and(
+                      eq(attemptTimeAdjustments.organizationId, orgId),
+                      inArray(attemptTimeAdjustments.id, timeGrantActionIds),
+                    ),
+                  );
+          adjustmentById = new Map(timeAdjRows.map((r) => [r.id, r]));
+        }
+
+        // ── Fail-closed relationship-graph validation (ADR-014 §7 scope
+        //    quadruple). The composite FKs only prove organization + attempt
+        //    consistency; they do NOT prove `incident.examId ==
+        //    attempt.examId`, nor that a candidate-focused incident's
+        //    membership belongs to the same candidate. The application layer
+        //    must verify these and fail closed on any contradiction — never
+        //    silently omit a summary, never disguise corruption as absence.
+        // Anchor attempt (if any) MUST resolve and belong to the incident's
+        // exam; its candidate MUST match the incident focus when set.
+        if (incident.attemptId) {
+          const a = attemptById.get(incident.attemptId);
+          if (!a) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ANCHOR_BROKEN: incident ${incident.id} attempt ${incident.attemptId}`,
+            );
+          }
+          if (a.examId !== incident.examId) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ANCHOR_EXAM_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} exam ${a.examId}`,
+            );
+          }
+          if (
+            incident.candidateId != null &&
+            a.candidateId !== incident.candidateId
+          ) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ANCHOR_CANDIDATE_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} candidate ${a.candidateId}`,
+            );
+          }
+        }
+        // Every membership MUST resolve to an attempt of the incident's exam;
+        // for a candidate-focused incident, every membership attempt MUST
+        // belong to that candidate (ADR-014 §7 candidate matrix).
+        for (const m of attemptMemberships) {
+          const a = attemptById.get(m.attemptId);
+          if (!a) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_MEMBERSHIP_BROKEN: incident ${incident.id} membership ${m.id} attempt ${m.attemptId}`,
+            );
+          }
+          if (a.examId !== incident.examId) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_MEMBERSHIP_EXAM_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} exam ${a.examId}`,
+            );
+          }
+          if (
+            incident.candidateId != null &&
+            a.candidateId !== incident.candidateId
+          ) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_MEMBERSHIP_CANDIDATE_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} candidate ${a.candidateId}`,
+            );
+          }
+        }
+        // Action links and interruption links each carry an attemptId that
+        // MUST resolve in-org and satisfy the same scope quadruple — but the
+        // attempt does NOT need to be a membership (the relationships are
+        // independent, ADR-014 §7). An anchored incident rejects membership,
+        // but its action / interruption links still MUST point at the anchor
+        // attempt (same-Exam; candidate-matched when the incident is
+        // candidate-focused).
+        //
+        // Each action link ALSO carries a polymorphic actionId whose referent
+        // depends on action_type (ADR-014 §7): for time_grant it is the exact
+        // attempt_time_adjustments.id; for force_submit it IS the attemptId
+        // itself. action_id is plain text with no DB FK, so the application
+        // layer MUST fail-closed validate the referent on read — a missing or
+        // attempt-mismatched referent is tenant-graph corruption, never a
+        // partial projection. time_grant links additionally drive the
+        // timeAdjustmentSummaries projection: each linked adjustment is
+        // projected in action-link order (stable; independent of the
+        // adjustment's own createdAt), so actions[i] maps to its fact.
+        for (const act of actions) {
+          const a = attemptById.get(act.attemptId);
+          if (
+            !a ||
+            a.examId !== incident.examId ||
+            (incident.candidateId != null &&
+              a.candidateId !== incident.candidateId)
+          ) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_ACTION_ATTEMPT_SCOPE: incident ${incident.id} action ${act.id} attempt ${act.attemptId}`,
+            );
+          }
+          switch (act.actionType) {
+            case "time_grant": {
+              const adjustment = adjustmentById.get(act.actionId);
+              if (!adjustment) {
+                throw new AuthzUnavailableError(
+                  `RECOVERY_AGG_TIME_GRANT_REFERENT_BROKEN: incident ${incident.id} action ${act.id} adjustment ${act.actionId}`,
+                );
+              }
+              if (adjustment.attemptId !== act.attemptId) {
+                throw new AuthzUnavailableError(
+                  `RECOVERY_AGG_TIME_GRANT_ATTEMPT_MISMATCH: incident ${incident.id} action ${act.id} actionAttempt ${act.attemptId} adjustmentAttempt ${adjustment.attemptId}`,
+                );
+              }
+              timeAdjustmentSummaries.push({
+                id: adjustment.id,
+                attemptId: adjustment.attemptId,
+                addedSeconds: adjustment.addedSeconds,
+                reasonCode: adjustment.reasonCode,
+                operationId: adjustment.operationId,
+                createdAt: adjustment.createdAt,
+              });
+              break;
+            }
+            case "force_submit": {
+              // ADR-014 §7: force_submit action_id IS the force-submitted
+              // attemptId (force submit is a one-time terminal fact). The
+              // audit-fact existence check is the canonical write command's
+              // authority at link time; this read model validates the identity
+              // invariant only.
+              if (act.actionId !== act.attemptId) {
+                throw new AuthzUnavailableError(
+                  `RECOVERY_AGG_FORCE_SUBMIT_ACTION_ID_MISMATCH: incident ${incident.id} action ${act.id} actionId ${act.actionId} attemptId ${act.attemptId}`,
+                );
+              }
+              break;
+            }
+            default: {
+              throw new AuthzUnavailableError(
+                `RECOVERY_AGG_ACTION_TYPE_UNSUPPORTED: incident ${incident.id} action ${act.id} type ${act.actionType}`,
+              );
+            }
+          }
+        }
+        for (const link of interruptionLinks) {
+          const a = attemptById.get(link.attemptId);
+          if (
+            !a ||
+            a.examId !== incident.examId ||
+            (incident.candidateId != null &&
+              a.candidateId !== incident.candidateId)
+          ) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_AGG_INTERRUPTION_ATTEMPT_SCOPE: incident ${incident.id} interruptionLink ${link.id} attempt ${link.attemptId}`,
+            );
+          }
+        }
+
+        // Candidate summaries — fail closed if a non-null candidate focus
+        // cannot be resolved in-org (a candidate-focused incident whose
+        // candidate row is missing or belongs to another org is corruption,
+        // not an exam-wide incident with an empty focus).
+        let candidateSummaries: IncidentAggregateCandidateSummary[] = [];
+        if (candidateIds.size > 0) {
+          // Same-org predicate on the User join: a historical or directly-
+          // written CandidateProfile may point at a User of ANOTHER org. The
+          // leftJoin must restrict the joined User to the caller's org, or
+          // the aggregate would project a foreign-org display name.
+          const candRows = await tx
+            .select({
+              id: candidateProfiles.id,
+              displayName: users.name,
+            })
+            .from(candidateProfiles)
+            .leftJoin(
+              users,
+              and(
+                eq(candidateProfiles.userId, users.id),
+                eq(users.organizationId, orgId),
+              ),
+            )
+            .where(
+              and(
+                eq(candidateProfiles.organizationId, orgId),
+                inArray(candidateProfiles.id, [...candidateIds]),
+              ),
+            )
+            .orderBy(asc(users.name), asc(candidateProfiles.id));
+          // candidate_profiles.user_id is NOT NULL, so a missing join row
+          // means the same-org User is gone or belongs to another org —
+          // tenant-graph corruption. The candidate identity projection must
+          // NOT disguise that as an empty display name (the UI would read
+          // "user never set a name" while the graph is actually broken).
+          // Validation + projection run in ONE iteration over candRows; after
+          // narrowing displayName to non-null there is no `as string` left.
+          const resolved = new Set<string>();
+          candidateSummaries = candRows.map((c) => {
+            if (c.displayName == null) {
+              throw new AuthzUnavailableError(
+                `RECOVERY_AGG_CANDIDATE_USER_BROKEN: incident ${incident.id} candidate ${c.id}`,
+              );
+            }
+            resolved.add(c.id);
+            return { id: c.id, displayName: c.displayName };
+          });
+          for (const cid of candidateIds) {
+            if (!resolved.has(cid)) {
+              throw new AuthzUnavailableError(
+                `RECOVERY_AGG_CANDIDATE_BROKEN: incident ${incident.id} candidate ${cid}`,
+              );
+            }
+          }
+        }
+
+        // Audit references for this incident target. The actor User join is
+        // restricted to the caller's org for the same tenant-projection
+        // reason as the candidate join.
+        const auditRows = await tx
+          .select({
+            id: auditLogs.id,
+            action: auditLogs.action,
+            actorId: auditLogs.actorId,
+            actorName: users.name,
+            createdAt: auditLogs.createdAt,
+          })
+          .from(auditLogs)
+          .leftJoin(
+            users,
+            and(
+              eq(users.id, auditLogs.actorId),
+              eq(users.organizationId, orgId),
+            ),
+          )
+          .where(
+            and(
+              eq(auditLogs.organizationId, orgId),
+              eq(auditLogs.targetType, "incident"),
+              eq(auditLogs.targetId, incidentId),
+            ),
+          )
+          .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id));
+        const auditReferences: IncidentAggregateAuditReferenceSummary[] =
+          auditRows.map((a) => ({
+            id: a.id,
+            action: a.action,
+            actorId: a.actorId,
+            // null actorName is a legitimate audit-contract outcome for an
+            // actor whose User row is gone or out-of-org — it is NOT damage
+            // being disguised: the actorId is still projected verbatim, and
+            // the audit row's own organizationId was the org predicate.
+            actorName: a.actorName,
+            createdAt: a.createdAt,
+          }));
+
+        // Notes derived from note_added events (event payload body), in
+        // stable event_sequence order (events come pre-ordered).
+        const notes: IncidentAggregateNoteSummary[] = events
+          .filter((e) => e.eventType === "note_added")
+          .map((e) => ({
+            operationId: e.operationId,
+            actorId: e.actorId,
+            body:
+              (e.payload as { body?: string } | null)?.body?.toString() ?? "",
+            createdAt: e.createdAt,
+          }));
+
+        // Transaction snapshot timestamp — queried INSIDE the RR transaction
+        // so it is the actual PostgreSQL snapshot time, not a request-side
+        // clock reading. The route passes no `now`; this is the only source.
+        // Raw `execute` results bypass Drizzle's column serializers, so the
+        // driver hands back timestamptz as text; parse it into a Date.
+        const snapshotRows = (await tx.execute(
+          sql`SELECT transaction_timestamp() AS ts`, // adr-006-allow: DB snapshot identity stamp (see ADR-006 allowlist entry)
+        )) as unknown as Array<{ ts: string }>;
+        // Fail fast: an absent / unparseable snapshot stamp means the snapshot
+        // contract itself is broken (driver shape drift or empty result) —
+        // never silently project 1970-01-01 or Invalid Date.
+        const rawSnapshotTs = snapshotRows[0]?.ts;
+        const snapshotAt = rawSnapshotTs ? new Date(rawSnapshotTs) : null;
+        if (!snapshotAt || Number.isNaN(snapshotAt.getTime())) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_AGG_SNAPSHOT_TIMESTAMP_INVALID: incident ${incident.id}`,
+          );
+        }
+
+        const statusActionCandidates = deriveStatusActionCandidates(
+          incident.status,
+        );
+
+        return {
+          incident,
+          examSummary: {
+            id: examRow.id,
+            title: examRow.title,
+            status: examRow.status,
+            closeAt: examRow.closeAt,
+          },
+          events: events.map((e) => ({
+            id: e.id,
+            eventSequence: e.eventSequence,
+            eventType: e.eventType,
+            commandType: e.commandType,
+            operationId: e.operationId,
+            actorId: e.actorId,
+            beforeVersion: e.beforeVersion,
+            afterVersion: e.afterVersion,
+            payload: e.payload,
+            createdAt: e.createdAt,
+          })),
+          notes,
+          actions: actions.map((a) => ({
+            id: a.id,
+            actionType: a.actionType,
+            actionId: a.actionId,
+            attemptId: a.attemptId,
+            actorId: a.actorId,
+            operationId: a.operationId,
+            linkedAt: a.linkedAt,
+          })),
+          attemptMemberships: attemptMemberships.map((m) => ({
+            id: m.id,
+            attemptId: m.attemptId,
+            relationshipType: m.relationshipType,
+            linkedAt: m.linkedAt,
+            linkedBy: m.linkedBy,
+            operationId: m.operationId,
+          })),
+          interruptionLinks: interruptionLinks.map((l) => ({
+            id: l.id,
+            attemptId: l.attemptId,
+            interruptionId: l.interruptionId,
+            linkedAt: l.linkedAt,
+            linkedBy: l.linkedBy,
+            operationId: l.operationId,
+          })),
+          candidateSummaries,
+          attemptSummaries,
+          timeAdjustmentSummaries,
+          auditReferences,
+          statusActionCandidates,
+          snapshotAt,
+        };
+      },
+      {
+        isolationLevel: "repeatable read",
+        accessMode: "read only",
+      },
+    );
+  }
+
+  return { listIncidentQueue, getIncidentAggregate };
+}
+
+/**
+ * Status-derived action candidates per ADR-014 §3.
+ *
+ * ADR-014 freezes these rules:
+ * - `investigate` is allowed ONLY from `open` (it is the `open → investigating`
+ *   transition; `investigating` is NOT a self-transition).
+ * - `change_severity` is allowed only in non-terminal status.
+ * - `resolve` / `dismiss` are allowed from `open | investigating`.
+ * - `add_note`, `link_action`, `link_attempt`, `link_interruption` are
+ *   append-only side writes allowed in ANY status (including the terminal
+ *   `resolved` / `dismissed`) — operators may annotate or correlate after
+ *   resolution.
+ *
+ * These are status-derived candidates ONLY. The route layer further filters
+ * by the caller's capabilities and the incident shape (J5-R0 §6.2: action
+ * eligibility = capability + resource scope + status; §6.3: the wire
+ * `allowedActions` is the per-caller intersection) — a caller without
+ * `incident.investigate` / `incident.resolve` sees fewer actions, and an
+ * anchored Incident never exposes `link_attempt`.
+ */
+function deriveStatusActionCandidates(status: string): IncidentAllowedAction[] {
+  const APPEND_ONLY: IncidentAllowedAction[] = [
+    "add_note",
+    "link_action",
+    "link_attempt",
+    "link_interruption",
+  ];
+  if (status === "open") {
+    return [
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ];
+  }
+  if (status === "investigating") {
+    return [
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ];
+  }
+  // resolved / dismissed (terminal): only append-only side writes remain.
+  return APPEND_ONLY;
 }
 
 export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;

@@ -24155,6 +24155,644 @@
         }
       }
     },
+    "/api/admin/recovery/incidents/{incidentId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "incidentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "examId": {
+                          "type": "string"
+                        },
+                        "attemptId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "candidateId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "occurredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "resolutionSummary": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "resolvedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "resolvedBy": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reportedBy": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "integer"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "examId",
+                        "attemptId",
+                        "candidateId",
+                        "type",
+                        "severity",
+                        "status",
+                        "occurredAt",
+                        "description",
+                        "resolutionSummary",
+                        "resolvedAt",
+                        "resolvedBy",
+                        "reportedBy",
+                        "version",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "examSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "closeAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "status", "closeAt"],
+                      "additionalProperties": false
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "eventSequence": {
+                            "type": "integer"
+                          },
+                          "eventType": {
+                            "type": "string"
+                          },
+                          "commandType": {
+                            "type": "string"
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "beforeVersion": {
+                            "type": "integer"
+                          },
+                          "afterVersion": {
+                            "type": "integer"
+                          },
+                          "payload": {},
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "eventSequence",
+                          "eventType",
+                          "commandType",
+                          "operationId",
+                          "actorId",
+                          "beforeVersion",
+                          "afterVersion",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "operationId",
+                          "actorId",
+                          "body",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "actionType": {
+                            "type": "string"
+                          },
+                          "actionId": {
+                            "type": "string"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "linkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "actionType",
+                          "actionId",
+                          "attemptId",
+                          "actorId",
+                          "operationId",
+                          "linkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attemptMemberships": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "relationshipType": {
+                            "type": "string"
+                          },
+                          "linkedAt": {
+                            "type": "string"
+                          },
+                          "linkedBy": {
+                            "type": "string"
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "attemptId",
+                          "relationshipType",
+                          "linkedAt",
+                          "linkedBy",
+                          "operationId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "interruptionLinks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "interruptionId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "linkedAt": {
+                            "type": "string"
+                          },
+                          "linkedBy": {
+                            "type": "string"
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "attemptId",
+                          "interruptionId",
+                          "linkedAt",
+                          "linkedBy",
+                          "operationId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "candidateSummaries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "displayName"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attemptSummaries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "candidateId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "effectiveDeadlineAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "candidateId",
+                          "status",
+                          "effectiveDeadlineAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "timeAdjustmentSummaries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "addedSeconds": {
+                            "type": "integer"
+                          },
+                          "reasonCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "operationId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "attemptId",
+                          "addedSeconds",
+                          "reasonCode",
+                          "operationId",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "auditReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actorName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "action",
+                          "actorId",
+                          "actorName",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedActions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "investigate",
+                          "add_note",
+                          "change_severity",
+                          "resolve",
+                          "dismiss",
+                          "link_action",
+                          "link_attempt",
+                          "link_interruption"
+                        ]
+                      }
+                    },
+                    "snapshotAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "incident",
+                    "examSummary",
+                    "events",
+                    "notes",
+                    "actions",
+                    "attemptMemberships",
+                    "interruptionLinks",
+                    "candidateSummaries",
+                    "attemptSummaries",
+                    "timeAdjustmentSummaries",
+                    "auditReferences",
+                    "allowedActions",
+                    "snapshotAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/exams/{examId}/proctors": {
       "post": {
         "requestBody": {

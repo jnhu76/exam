@@ -21,15 +21,20 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { Permission } from "@exam/authz";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import type { IncidentAllowedAction } from "@exam/db/src/repository/recoveryRepo.js";
 import {
   buildTestApp,
   createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
-import { registerAdminIncidentRoutes } from "./incidents.admin.js";
+import {
+  deriveAllowedActionsForCaller,
+  registerAdminIncidentRoutes,
+} from "./incidents.admin.js";
 
 const plugin: FastifyPluginAsync = async (fastify) => {
   await registerAdminIncidentRoutes(fastify);
@@ -972,5 +977,941 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
           ),
         );
     }
+  });
+});
+
+// ── J5-I1A2 — Recovery Incident Aggregate Detail (contract §6.3) ──
+
+describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incidents/:incidentId", () => {
+  let ctx2: Awaited<ReturnType<typeof buildTestApp>>;
+  let adminToken2: string;
+  let candidateToken2: string;
+  let cleanupOrgId2: string | null = null;
+  let aggregateIncidentId: string;
+  let aggregateExamId: string;
+  let aggregateAttemptId: string;
+  let aggregateCandidateProfileId: string;
+  let proctor2Token: string;
+  let proctor2UserId: string;
+
+  beforeAll(async () => {
+    ctx2 = await buildTestApp(plugin);
+    cleanupOrgId2 = ctx2.org.id;
+    adminToken2 = ctx2.adminToken;
+    candidateToken2 = ctx2.candidateToken;
+
+    // Build an exam + attempt + candidate + proctor + incident for the aggregate.
+    const now = new Date();
+    const courseId = randomUUID();
+    aggregateExamId = randomUUID();
+    const attemptId = randomUUID();
+    const enrollmentId = randomUUID();
+    const candidateProfileId = randomUUID();
+    aggregateIncidentId = randomUUID();
+    aggregateAttemptId = attemptId;
+    aggregateCandidateProfileId = candidateProfileId;
+
+    await ctx2.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx2.org.id,
+      name: "Aggregate Detail Course",
+      code: `ADC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.exams).values({
+      id: aggregateExamId,
+      organizationId: ctx2.org.id,
+      title: "Aggregate Detail Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.candidateProfiles).values({
+      id: candidateProfileId,
+      organizationId: ctx2.org.id,
+      userId: ctx2.candidate.id,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      candidateId: candidateProfileId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examAttempts).values({
+      id: attemptId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      enrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: new Date(now.getTime() + 3_600_000),
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: aggregateIncidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId,
+      candidateId: candidateProfileId,
+      type: "device_failure",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "aggregate detail route incident",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Proctor with active assignment on this exam — must STILL be denied.
+    const proctor = await createAssignedUserForTest(
+      ctx2.db,
+      ctx2.org.id,
+      "Proctor",
+      `aggproctor-${uniquePrefix()}`,
+      { isPrimary: true, isActive: true },
+    );
+    proctor2UserId = proctor.user.id;
+    proctor2Token = proctor.token;
+    await ctx2.db.insert(schema.examProctorAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      proctorUserId: proctor2UserId,
+      status: "active",
+      assignedBy: ctx2.admin.id,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  afterAll(async () => {
+    if (cleanupOrgId2) {
+      await cleanupOrganizationTestData(ctx2.db, cleanupOrgId2);
+    }
+    await ctx2.cleanup();
+  });
+
+  it("Admin reads the aggregate — returns frozen projection", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.incident.id).toBe(aggregateIncidentId);
+    expect(body.incident.version).toBe(1);
+    // examSummary now carries closeAt (effective-deadline canonical input).
+    expect(body.examSummary.id).toBe(aggregateExamId);
+    expect(body.examSummary.title).toBe("Aggregate Detail Exam");
+    expect(body.examSummary.status).toBe("open");
+    expect(body.examSummary.closeAt).toEqual(expect.any(String));
+    expect(Array.isArray(body.events)).toBe(true);
+    expect(Array.isArray(body.notes)).toBe(true);
+    expect(Array.isArray(body.actions)).toBe(true);
+    expect(Array.isArray(body.attemptMemberships)).toBe(true);
+    expect(Array.isArray(body.interruptionLinks)).toBe(true);
+    expect(Array.isArray(body.candidateSummaries)).toBe(true);
+    expect(Array.isArray(body.attemptSummaries)).toBe(true);
+    expect(Array.isArray(body.timeAdjustmentSummaries)).toBe(true);
+    expect(Array.isArray(body.auditReferences)).toBe(true);
+    expect(body.snapshotAt).toEqual(expect.any(String));
+    // allowedActions is the FINAL per-caller intersection (J5-R0 §6.2 / §6.3):
+    // status candidates(open) ∩ Admin capabilities (investigate + resolve) ∩
+    // incident shape. The seeded incident is ANCHORED, so `link_attempt` is
+    // structurally impossible (ADR-014 §2 anchor/membership mutual exclusion)
+    // and MUST be absent even though the status machine lists it.
+    expect(body.allowedActions).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_interruption",
+    ]);
+    expect(body.allowedActions).not.toContain("link_attempt");
+    // Each attempt summary carries the EFFECTIVE deadline (not raw deadlineAt)
+    // — the field is renamed to make the semantics explicit.
+    for (const a of body.attemptSummaries) {
+      expect(a.effectiveDeadlineAt).toEqual(expect.any(String));
+      expect(a).not.toHaveProperty("deadlineAt");
+    }
+  });
+
+  it("Admin needs no fake Proctor assignment — bare Admin works", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("Proctor with incident.view + active assignment is STILL denied", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": proctor2Token },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Candidate is denied", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+      cookies: { "auth-token": candidateToken2 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Anonymous (no cookie) is denied with 401", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("missing incident returns 404 (resolver fail-closed, anti-enumeration)", async () => {
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${randomUUID()}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("attemptSummaries carry the EFFECTIVE deadline = min(exam.closeAt, attempt.deadlineAt)", async () => {
+    // Build an exam whose closeAt is EARLIER than the attempt deadlineAt — the
+    // effective deadline MUST be the exam closeAt, not the raw attempt
+    // deadlineAt. This is the canonical authority (contract §6.2 / §6.3): the
+    // frontend MUST NOT derive it.
+    const now = new Date();
+    const courseId = randomUUID();
+    const examId = randomUUID();
+    const attemptId = randomUUID();
+    const enrollmentId = randomUUID();
+    const candidateUserId = randomUUID();
+    const candidateProfileId = randomUUID();
+    const incidentId = randomUUID();
+    const examCloseAt = new Date(now.getTime() + 1_800_000); // +30min
+    const attemptDeadlineAt = new Date(now.getTime() + 7_200_000); // +2h
+
+    // A dedicated candidate user — the shared ctx2.candidate fixture already
+    // has a candidate profile in this org (unique per user).
+    await ctx2.db.insert(schema.users).values({
+      id: candidateUserId,
+      organizationId: ctx2.org.id,
+      username: `edcand-${uniquePrefix()}`,
+      passwordHash: "hash",
+      name: "Effective Deadline Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx2.org.id,
+      name: "Effective Deadline Course",
+      code: `EDC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.exams).values({
+      id: examId,
+      organizationId: ctx2.org.id,
+      title: "Effective Deadline Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: examCloseAt,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.candidateProfiles).values({
+      id: candidateProfileId,
+      organizationId: ctx2.org.id,
+      userId: candidateUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: ctx2.org.id,
+      examId,
+      candidateId: candidateProfileId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examAttempts).values({
+      id: attemptId,
+      organizationId: ctx2.org.id,
+      examId,
+      enrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: attemptDeadlineAt,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId,
+      attemptId,
+      candidateId: candidateProfileId,
+      type: "network_interruption",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "effective deadline boundary incident",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${incidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const attemptSummary = body.attemptSummaries.find(
+      (a: { id: string }) => a.id === attemptId,
+    );
+    expect(attemptSummary).toBeDefined();
+    // exam.closeAt (+30min) is earlier than attempt.deadlineAt (+2h) →
+    // effectiveDeadlineAt MUST equal examCloseAt, not attemptDeadlineAt.
+    expect(attemptSummary.effectiveDeadlineAt).toBe(examCloseAt.toISOString());
+  });
+
+  it("broken parent chain fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
+    // An incident in the Admin's org whose examId references an exam that
+    // exists but belongs to ANOTHER org — the resolver already validated the
+    // incident exists in-org, but the aggregate's org-scoped exam lookup cannot
+    // resolve the parent. Fail closed (503), never a bare 500.
+    const now = new Date();
+    const foreignOrgId = randomUUID();
+    const foreignCourseId = randomUUID();
+    const foreignExamId = randomUUID();
+    const brokenIncidentId = randomUUID();
+    await ctx2.db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Agg Broken Org",
+      displayName: "Agg Broken Org",
+      slug: `abbo-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.courses).values({
+      id: foreignCourseId,
+      organizationId: foreignOrgId,
+      name: "Agg Broken Course",
+      code: `ABC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.exams).values({
+      id: foreignExamId,
+      organizationId: foreignOrgId,
+      title: "Agg Broken Foreign Exam",
+      description: "",
+      courseId: foreignCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: brokenIncidentId,
+      organizationId: ctx2.org.id,
+      examId: foreignExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "other",
+      severity: "info",
+      status: "open",
+      occurredAt: null,
+      description: "agg-broken-parent",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${brokenIncidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, brokenIncidentId),
+          ),
+        );
+    }
+  });
+
+  it("exam-wide incident + action link only (no membership) returns 200", async () => {
+    // P1-3 (round 3): ADR-014 §7 — anchor, membership, operator action links,
+    // and interruption evidence links are INDEPENDENT durable relationships.
+    // The canonical time-grant path creates adjustment + action link
+    // atomically WITHOUT a membership row; the aggregate MUST still read.
+    const now = new Date();
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-action-link-only",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // ADR-014 §7: for force_submit, actionId IS the force-submitted attemptId.
+    await ctx2.db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      actionType: "force_submit",
+      actionId: aggregateAttemptId,
+      attemptId: aggregateAttemptId,
+      actorId: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${incidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.actions.length).toBe(1);
+    expect(body.actions[0].attemptId).toBe(aggregateAttemptId);
+    // Wire decision: attemptSummaries = anchor ∪ membership ONLY — the
+    // link-referenced attempt is validated but not summarized.
+    expect(body.attemptSummaries).toEqual([]);
+    // Exam-wide (unanchored) incident keeps `link_attempt` for an Admin.
+    expect(body.allowedActions).toContain("link_attempt");
+  });
+
+  it("exam-wide incident + interruption link only (no membership) returns 200", async () => {
+    // P1-3 (round 3): same independence proof via an interruption evidence
+    // link — no membership row exists, the read MUST still succeed.
+    const now = new Date();
+    const incidentId = randomUUID();
+    const interruptionId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-interruption-link-only",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.attemptInterruptions).values({
+      id: interruptionId,
+      organizationId: ctx2.org.id,
+      attemptId: aggregateAttemptId,
+      createdAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentInterruptionLinks).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      attemptId: aggregateAttemptId,
+      interruptionId,
+      linkedBy: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+
+    const res = await ctx2.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/incidents/${incidentId}`,
+      cookies: { "auth-token": adminToken2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.interruptionLinks.length).toBe(1);
+    expect(body.interruptionLinks[0].attemptId).toBe(aggregateAttemptId);
+    expect(body.attemptSummaries).toEqual([]);
+  });
+
+  it("anchor + membership conflict fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
+    // P1-4 (round 3): ADR-014 §2 makes anchor and membership mutually
+    // exclusive. A historical row carrying BOTH is tenant-data corruption;
+    // the aggregate must fail closed (503), never project the forbidden graph.
+    const now = new Date();
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: aggregateAttemptId,
+      candidateId: aggregateCandidateProfileId,
+      type: "device_failure",
+      severity: "info",
+      status: "open",
+      occurredAt: null,
+      description: "agg-anchor-membership-conflict",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      attemptId: aggregateAttemptId,
+      relationshipType: "affected",
+      linkedBy: ctx2.admin.id,
+      operationId: randomUUID(),
+      linkedAt: now,
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${incidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, incidentId));
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, incidentId),
+          ),
+        );
+    }
+  });
+
+  it("aggregate detail projects only the linked time_grant adjustment (unrelated grants on the same attempt are excluded)", async () => {
+    // Round 4: timeAdjustmentSummaries is action-identity-driven. Two grants
+    // exist on aggregateAttemptId; only G1 is linked via a time_grant action.
+    // G2 (same attempt, not linked) must NOT appear in the projection.
+    const now = new Date();
+    const beforeDeadline = new Date(now.getTime() + 3_600_000);
+    const afterDeadline = new Date(now.getTime() + 7_200_000);
+    const g1 = randomUUID();
+    const g2 = randomUUID();
+    for (const gid of [g1, g2]) {
+      await ctx2.db.insert(schema.attemptTimeAdjustments).values({
+        id: gid,
+        operationId: randomUUID(),
+        organizationId: ctx2.org.id,
+        attemptId: aggregateAttemptId,
+        interruptionId: null,
+        incidentId: null,
+        policy: "operator_incident",
+        source: "operator",
+        beforeDeadline,
+        afterDeadline,
+        addedSeconds: 3600,
+        reasonCode: "network",
+        reasonText: "round4-http",
+        actorId: ctx2.admin.id,
+        createdAt: now,
+      });
+    }
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-http-time-grant-linked-only",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx2.db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      actionType: "time_grant",
+      actionId: g1,
+      attemptId: aggregateAttemptId,
+      actorId: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${incidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      // Only G1 projected; G2 excluded.
+      expect(body.timeAdjustmentSummaries).toHaveLength(1);
+      expect(body.timeAdjustmentSummaries[0].id).toBe(g1);
+      expect(body.timeAdjustmentSummaries[0].attemptId).toBe(
+        aggregateAttemptId,
+      );
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, incidentId));
+      await ctx2.db
+        .delete(schema.attemptTimeAdjustments)
+        .where(inArray(schema.attemptTimeAdjustments.id, [g1, g2]));
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, incidentId),
+          ),
+        );
+    }
+  });
+
+  it("aggregate detail maps a broken time_grant referent to HTTP 503 AUTHZ_UNAVAILABLE", async () => {
+    // Round 4: a time_grant action whose actionId does not resolve to an
+    // adjustment is tenant-graph corruption. The public error mapping is
+    // 503 AUTHZ_UNAVAILABLE (no internal sentinel leaked).
+    const now = new Date();
+    const incidentId = randomUUID();
+    await ctx2.db.insert(schema.examIncidents).values({
+      id: incidentId,
+      organizationId: ctx2.org.id,
+      examId: aggregateExamId,
+      attemptId: null,
+      candidateId: null,
+      type: "system_outage",
+      severity: "major",
+      status: "open",
+      occurredAt: null,
+      description: "agg-http-time-grant-referent-broken",
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: ctx2.admin.id,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // actionId references an adjustment that does not exist (no FK enforces it).
+    await ctx2.db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: ctx2.org.id,
+      incidentId,
+      actionType: "time_grant",
+      actionId: randomUUID(),
+      attemptId: aggregateAttemptId,
+      actorId: ctx2.admin.id,
+      linkedAt: now,
+      operationId: randomUUID(),
+    });
+    try {
+      const res = await ctx2.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents/${incidentId}`,
+        cookies: { "auth-token": adminToken2 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx2.db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, incidentId));
+      await ctx2.db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, ctx2.org.id),
+            eq(schema.examIncidents.id, incidentId),
+          ),
+        );
+    }
+  });
+});
+
+// ── P1-2 (round 3): allowedActions = status candidates ∩ capabilities ∩ shape ──
+//
+// The role system is preset-only (ASSIGNABLE_ROLES: Admin/Teacher/Proctor/
+// Grader/Candidate) — no runtime role can hold IncidentRecoveryView WITHOUT
+// IncidentInvestigate/IncidentResolve. The review's "view-only caller"
+// fixture is therefore exercised against the exported pure derivation, which
+// is exactly what the route handler composes with the live caller context.
+
+describe("deriveAllowedActionsForCaller — per-caller allowedActions intersection (J5-R0 §6.2/§6.3)", () => {
+  const OPEN_CANDIDATES: IncidentAllowedAction[] = [
+    "investigate",
+    "add_note",
+    "change_severity",
+    "resolve",
+    "dismiss",
+    "link_action",
+    "link_attempt",
+    "link_interruption",
+  ];
+
+  it("view-only caller (IncidentRecoveryView without Investigate/Resolve) sees NO action", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [Permission.IncidentRecoveryView],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual([]);
+  });
+
+  it("investigate-only caller keeps investigate actions but not resolve/dismiss", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+    expect(allowed).not.toContain("resolve");
+    expect(allowed).not.toContain("dismiss");
+  });
+
+  it("resolve-only caller keeps resolve/dismiss but not investigate actions", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual(["resolve", "dismiss"]);
+  });
+
+  it("full-capability caller on an ANCHORED incident never sees link_attempt", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: randomUUID(),
+    });
+    expect(allowed).toEqual([
+      "investigate",
+      "add_note",
+      "change_severity",
+      "resolve",
+      "dismiss",
+      "link_action",
+      "link_interruption",
+    ]);
+    expect(allowed).not.toContain("link_attempt");
+  });
+
+  it("full-capability caller on an exam-wide incident keeps link_attempt", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: OPEN_CANDIDATES,
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual(OPEN_CANDIDATES);
+  });
+
+  it("status candidates remain the ceiling — terminal status keeps append-only only", async () => {
+    const allowed = deriveAllowedActionsForCaller({
+      statusActionCandidates: [
+        "add_note",
+        "link_action",
+        "link_attempt",
+        "link_interruption",
+      ],
+      capabilities: [
+        Permission.IncidentRecoveryView,
+        Permission.IncidentInvestigate,
+        Permission.IncidentResolve,
+      ],
+      incidentAttemptId: null,
+    });
+    expect(allowed).toEqual([
+      "add_note",
+      "link_action",
+      "link_attempt",
+      "link_interruption",
+    ]);
+    expect(allowed).not.toContain("investigate");
+    expect(allowed).not.toContain("resolve");
   });
 });

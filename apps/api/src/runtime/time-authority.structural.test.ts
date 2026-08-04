@@ -141,6 +141,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
     reason:
       "Uses baseRepo now() for notifications createdAt/readAt storage stamps only (non-business); notification creation time is a storage stamp, not an exam-lifecycle time authority decision.",
   },
+  {
+    path: "packages/db/src/repository/recoveryRepo.ts",
+    reason:
+      "getIncidentAggregate stamps snapshotAt via transaction_timestamp() INSIDE the read-only REPEATABLE READ transaction (J5-I1A2 §6.3). This is the DB's own snapshot-identity stamp for the one-consistent-read contract — NOT an exam-lifecycle time decision: no lifecycle/deadline/submit/score gate branches on it. The stamp is read-only and display/audit only, mirroring the non-business storage-stamp allowlist entries (baseRepo/attemptRepo). Inline adr-006-allow markers pin the exact lines.",
+  },
 ];
 
 /** Directories scanned for raw-time regressions in business paths. */

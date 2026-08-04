@@ -157,8 +157,8 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  * expired?" is answered for mutation purposes.
  */
 export function computeEffectiveDeadline(
-  exam: Exam,
-  attempt: ExamAttempt,
+  exam: Pick<Exam, "closeAt">,
+  attempt: { deadlineAt?: Date | null | undefined },
 ): Date {
   const examClose = exam.closeAt;
   if (examClose == null) {

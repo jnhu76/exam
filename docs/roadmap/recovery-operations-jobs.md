@@ -13,9 +13,11 @@
 > **J5-R0 CLOSED / ACCEPTED** — `REC-OPS-ADMIN-RECOVERY-CENTER` reality audit +
 > product/API/read-model contract
 > (`j5-r0-admin-recovery-center-contract.md`, PR #251 merged 2026-08-02,
-> merge commit `b2545e6e`). J5-I1A1 (Recovery Incident Queue,
-> `GET /admin/recovery/incidents`) IN PROGRESS on
-> `feat/j5-i1a1-recovery-incident-queue`. J5-I1A2 / J5-I1B–I1D NOT STARTED.
+> merge commit `b2545e6e`; amended 2026-08-04 by J5-I1A2 / PR #253).
+> J5-I1A1 (Recovery Incident Queue, `GET /admin/recovery/incidents`) is
+> **CLOSED** (PR #252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
+> `GET /admin/recovery/incidents/:incidentId`) is **IN REVIEW** (PR #253,
+> based directly on `master` — not stacked). J5-I1B–I1D NOT STARTED.
 > J6/J7 NOT STARTED.
 >
 > Updated: 2026-08-03
@@ -626,7 +628,7 @@ investigate an incident.
 
 > **The authoritative J5 contract is
 > [`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md)
-> (Status: IN REVIEW).** The contract was built from a master reality audit
+> (Status: CLOSED / ACCEPTED).** The contract was built from a master reality audit
 > (post-J4-I1 merge) and supersedes the planning sketch below where they
 > differ. In particular the contract: corrects J5's dependencies to
 > `J1 + J3 + J4-I1`; freezes the MVP product surface, data scope, queue read
@@ -1155,10 +1157,12 @@ PR-4  J4-R0 — M11-PROCTOR-EXAM-SCOPE-CONTRACT — CLOSED (design contract;
        ADR-015 Accepted 2026-08-02, PR #245; reality audit landed; no runtime code)
        ↳ J4-I1 — M11-PROCTOR-EXAM-ASSIGNMENTS (runtime) — CLOSED (2026-08-02,
          PR #250, merge commit 62f84407); sliced A→B→C→D per ADR-015 §23.
-PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — IN REVIEW (R0 contract);
-         authoritative contract: j5-r0-admin-recovery-center-contract.md
-         implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
-         (J5-I1A–I1D: NOT STARTED, BLOCKED pending J5-R0 acceptance)
+PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
+       amended by PR #253); authoritative contract:
+       j5-r0-admin-recovery-center-contract.md
+       implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
+         (J5-I1A1 CLOSED, PR #252; J5-I1A2 IN REVIEW, PR #253 based on master;
+          J5-I1B–I1D NOT STARTED)
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED

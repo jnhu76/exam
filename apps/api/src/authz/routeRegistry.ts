@@ -1330,9 +1330,10 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     // `IncidentRecoveryView` is granted ONLY to Admin (catalog.ts / presets.ts);
     // a Proctor with `incident.view` + active assignment is STILL denied
     // (proctorAccess: admin_only — the Recovery queue is not the runtime
-    // incident surface, contract §15 adjudication). The flat `requireCapability`
-    // gate is the runtime authority for the org-wide list; the Incident→Exam
-    // resolver gates the detail (A2).
+    // incident surface, contract §15 adjudication). BOTH surfaces use the flat
+    // `requireCapability` gate as the runtime authority; the repo owns all
+    // fail-closed scope validation (org boundary + relationship graph) and
+    // surfaces broken parent chains as 503 AUTHZ_UNAVAILABLE (queue + detail).
     {
       method: "GET",
       path: "/admin/recovery/incidents",
@@ -1341,6 +1342,17 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       resource: { type: "list", listOf: "incident" },
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+    {
+      method: "GET",
+      path: "/admin/recovery/incidents/:incidentId",
+      legacyGate: "Admin",
+      permission: Permission.IncidentRecoveryView,
+      scope: Scope.Organization,
+      resolver: "organization",
       sensitive: true,
       proctorAccess: "admin_only",
       migrationStage: 8,
