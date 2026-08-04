@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CircleAlert, ListFilter, RefreshCw } from "lucide-react";
 
@@ -51,7 +52,7 @@ export function RecoveryExamDetailPage() {
     });
 
   if (isInitialLoading) return <LoadingState />;
-  if (error) {
+  if (error && !data) {
     return (
       <ErrorState
         message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
@@ -105,6 +106,14 @@ export function RecoveryExamDetailPage() {
           </div>
         }
       />
+
+      {/* Background-refresh failure: old data stays on screen + inline warning
+          (a full-screen ErrorState is shown only when there is no data). */}
+      {error && (
+        <InlineErrorBanner>
+          {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        </InlineErrorBanner>
+      )}
 
       {/* Snapshot indicator — server RR snapshot time + staleness flag. */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">

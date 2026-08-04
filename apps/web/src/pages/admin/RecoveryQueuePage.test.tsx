@@ -59,7 +59,7 @@ function LocationProbe() {
 
 function makeItem(
   overrides: Partial<RecoveryQueueResponse["items"][number]> = {},
-) {
+): RecoveryQueueResponse["items"][number] {
   return {
     incident: {
       id: "incident-1",
@@ -91,7 +91,7 @@ function makeItem(
     linkedCandidateCount: 1,
     activeProctors: [{ userId: "proctor-1", displayName: "监考李四" }],
     ...overrides,
-  };
+  } as RecoveryQueueResponse["items"][number];
 }
 
 const mockQueueData: RecoveryQueueResponse = {
@@ -352,5 +352,58 @@ describe("RecoveryQueuePage", () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(getMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rapidly typing examId then candidateId commits BOTH filters to the URL (shared debounce, P2)", async () => {
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {});
+
+    // Type examId, then candidateId within the debounce window: the SECOND
+    // keystroke must NOT cancel the first filter — one timer commits both.
+    fireEvent.change(screen.getByPlaceholderText("考试 ID"), {
+      target: { value: "exam-9" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("考生 ID"), {
+      target: { value: "cand-9" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "examId=exam-9",
+    );
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "candidateId=cand-9",
+    );
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain("examId=exam-9");
+    expect(lastCall).toContain("candidateId=cand-9");
+  });
+
+  it("changing status while a free-text debounce is pending keeps BOTH in the URL (P2)", async () => {
+    vi.useFakeTimers();
+    // Start with status=investigating already in the URL, simulating a prior
+    // Select commit. Then type examId (debounce pending). The debounce commit
+    // uses a functional setSearchParams updater — it must preserve the
+    // existing status param, never overwrite it with a stale closure.
+    renderPage(["/admin/recovery?status=investigating"]);
+    await act(async () => {});
+
+    fireEvent.change(screen.getByPlaceholderText("考试 ID"), {
+      target: { value: "exam-9" },
+    });
+
+    // After the debounce commits, BOTH status and examId are in the URL.
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "status=investigating",
+    );
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "examId=exam-9",
+    );
   });
 });

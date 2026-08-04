@@ -51,7 +51,7 @@ export function RecoveryAttemptDetailPage() {
     });
 
   if (isInitialLoading) return <LoadingState />;
-  if (error) {
+  if (error && !data) {
     return (
       <ErrorState
         message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
@@ -105,6 +105,14 @@ export function RecoveryAttemptDetailPage() {
           </div>
         }
       />
+
+      {/* Background-refresh failure: old data stays on screen + inline warning
+          (a full-screen ErrorState is shown only when there is no data). */}
+      {error && (
+        <InlineErrorBanner>
+          {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        </InlineErrorBanner>
+      )}
 
       {/* Snapshot indicator — server RR snapshot time + staleness flag. */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">

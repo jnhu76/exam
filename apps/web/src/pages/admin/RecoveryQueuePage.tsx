@@ -14,6 +14,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { DataToolbar } from "@/components/shared/DataToolbar";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -33,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LifeBuoy, RefreshCw, X } from "lucide-react";
+import { LifeBuoy, RefreshCw, X, CircleAlert } from "lucide-react";
 
 /** Visible-tab polling interval (J5-I1B1 polling semantics). */
 const POLL_INTERVAL_MS = 30_000;
@@ -130,6 +131,7 @@ export function RecoveryQueuePage() {
     isLoadingMore,
     snapshotAt,
     lastUpdatedAt,
+    isStale,
     refresh,
     loadMore,
   } = useRecoveryQueueProjection({
@@ -144,21 +146,34 @@ export function RecoveryQueuePage() {
         { signal },
       ),
     pollIntervalMs: POLL_INTERVAL_MS,
+    staleAfterMs: STALE_AFTER_MS,
     backoff: BACKOFF,
     deps: [queryKey],
   });
 
-  // Free-text filter draft + debounce. Local state keeps the input responsive;
-  // the debounced commit writes the URL with `replace:true` so typing does not
-  // push per-keystroke history entries (Back wouldn't step through each char).
+  // Free-text filter draft + debounce. The two drafts share ONE timer: the
+  // debounced commit always submits BOTH fields from a ref, so typing examId
+  // and then candidateId within the window can not drop the first filter.
+  // The commit uses a functional searchParams updater so concurrent changes
+  // (e.g. a status Select while a debounce is pending) are never overwritten
+  // by a stale closure.
   const [examIdDraft, setExamIdDraft] = useState(filters.examId);
   const [candidateIdDraft, setCandidateIdDraft] = useState(filters.candidateId);
+  const draftRef = useRef({
+    examId: filters.examId,
+    candidateId: filters.candidateId,
+  });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync drafts when the URL changes externally (back/forward, link share).
+  // While a debounce is pending the draft is the user's in-progress input —
+  // it wins until the commit lands.
   useEffect(() => {
+    if (debounceRef.current) return;
     setExamIdDraft(filters.examId);
     setCandidateIdDraft(filters.candidateId);
+    draftRef.current.examId = filters.examId;
+    draftRef.current.candidateId = filters.candidateId;
   }, [filters.examId, filters.candidateId]);
 
   useEffect(() => {
@@ -167,26 +182,56 @@ export function RecoveryQueuePage() {
     };
   }, []);
 
-  /** Commits a filter patch to the URL with replace semantics. */
+  /** Commits a filter patch to the URL with replace semantics, always
+      starting from the LATEST URL params (never a stale closure). */
   function commitFilter(patch: Partial<QueueFilters>) {
-    const next = new URLSearchParams(searchParams);
-    for (const [key, value] of Object.entries(patch)) {
-      if (value) next.set(key, value);
-      else next.delete(key);
-    }
-    setSearchParams(next, { replace: true });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(patch)) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
+        return next;
+      },
+      { replace: true },
+    );
   }
 
-  /** Debounced commit for free-text inputs (cancels any pending timer). */
-  function scheduleDebouncedCommit(patch: Partial<QueueFilters>) {
+  /** One debounce timer for both free-text fields; the commit reads the
+      draft ref so neither filter can be lost to a cancelled timer. */
+  function scheduleDebouncedCommit() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      commitFilter(patch);
       debounceRef.current = null;
+      commitFilter({
+        examId: draftRef.current.examId,
+        candidateId: draftRef.current.candidateId,
+      });
     }, FILTER_DEBOUNCE_MS);
   }
 
+  /** Flushes a pending debounced commit immediately (blur / Enter). */
+  function flushDebouncedCommit() {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+      commitFilter({
+        examId: draftRef.current.examId,
+        candidateId: draftRef.current.candidateId,
+      });
+    }
+  }
+
   function clearFilters() {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setExamIdDraft("");
+    setCandidateIdDraft("");
+    draftRef.current.examId = "";
+    draftRef.current.candidateId = "";
     setSearchParams(new URLSearchParams(), { replace: true });
   }
 
@@ -264,21 +309,12 @@ export function RecoveryQueuePage() {
           value={examIdDraft}
           onChange={(e) => {
             setExamIdDraft(e.target.value);
-            scheduleDebouncedCommit({ examId: e.target.value });
+            draftRef.current.examId = e.target.value;
+            scheduleDebouncedCommit();
           }}
-          onBlur={() => {
-            if (debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-              commitFilter({ examId: examIdDraft });
-            }
-          }}
+          onBlur={flushDebouncedCommit}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-              commitFilter({ examId: examIdDraft });
-            }
+            if (e.key === "Enter") flushDebouncedCommit();
           }}
         />
         <input
@@ -289,21 +325,12 @@ export function RecoveryQueuePage() {
           value={candidateIdDraft}
           onChange={(e) => {
             setCandidateIdDraft(e.target.value);
-            scheduleDebouncedCommit({ candidateId: e.target.value });
+            draftRef.current.candidateId = e.target.value;
+            scheduleDebouncedCommit();
           }}
-          onBlur={() => {
-            if (debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-              commitFilter({ candidateId: candidateIdDraft });
-            }
-          }}
+          onBlur={flushDebouncedCommit}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && debounceRef.current) {
-              clearTimeout(debounceRef.current);
-              debounceRef.current = null;
-              commitFilter({ candidateId: candidateIdDraft });
-            }
+            if (e.key === "Enter") flushDebouncedCommit();
           }}
         />
         <DatePicker
@@ -372,10 +399,16 @@ export function RecoveryQueuePage() {
                     : t("admin.recoveryQueue.refresh")}
                 </Button>
                 {snapshotAt && (
-                  <span>
+                  <span className={isStale ? "text-warning" : undefined}>
+                    {isStale && <AppIcon icon={CircleAlert} size="inline" />}
                     {t("admin.recoveryQueue.snapshotAt", {
                       time: formatTime(snapshotAt),
                     })}
+                  </span>
+                )}
+                {isStale && (
+                  <span className="text-warning">
+                    {t("admin.recoveryQueue.snapshotStale")}
                   </span>
                 )}
                 {lastUpdatedAt && (
@@ -511,13 +544,12 @@ export function RecoveryQueuePage() {
             </ul>
           </DataTableShell>
 
+          {/* Background-refresh failure: rows stay on screen + inline warning
+              (a full-screen ErrorState is shown only when there are no rows). */}
           {error && (
-            <ErrorState
-              message={t(
-                recoveryErrorMessageKey(error.kind, NAMESPACE) as never,
-              )}
-              onRetry={refresh}
-            />
+            <InlineErrorBanner>
+              {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+            </InlineErrorBanner>
           )}
 
           {nextCursor && (

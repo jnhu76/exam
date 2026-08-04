@@ -268,4 +268,23 @@ describe("RecoveryAttemptDetailPage", () => {
     // status 0 → network kind → networkError message (classifier authority).
     expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
+
+  it("keeps the loaded page on screen with an inline warning when a background refresh fails (P1-2)", async () => {
+    renderPage();
+    await screen.findByText("第 1 次答题");
+
+    // Manual refresh fails while data is on screen (503 → unavailable).
+    getMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    await userEvent.setup().click(screen.getByRole("button", { name: "刷新" }));
+
+    // Old data stays visible, the failure is an INLINE banner (not a
+    // full-screen ErrorState — no retry button, no data swap).
+    expect(
+      await screen.findByText("恢复数据暂不可用，请稍后重试。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("第 1 次答题")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
+  });
 });

@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 
@@ -79,7 +80,7 @@ export function RecoveryIncidentDetailPage() {
     });
 
   if (isInitialLoading) return <LoadingState />;
-  if (error) {
+  if (error && !data) {
     return (
       <ErrorState
         message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
@@ -129,6 +130,14 @@ export function RecoveryIncidentDetailPage() {
           </div>
         }
       />
+
+      {/* Background-refresh failure: old data stays on screen + inline warning
+          (a full-screen ErrorState is shown only when there is no data). */}
+      {error && (
+        <InlineErrorBanner>
+          {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        </InlineErrorBanner>
+      )}
 
       {/* Snapshot indicator — the aggregate is one consistent read; the stale
           flag self-updates via the projection hook's wall-clock tick. */}

@@ -67,7 +67,7 @@ PR #251 merged 2026-08-02; amended 2026-08-04 by J5-I1A2 / PR #253). J5-I1A1
 #252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
 `GET /admin/recovery/incidents/:incidentId`) is **CLOSED** (PR #253 merged).
 J5-I1A3 (Attempt Operations Context,
-`GET /admin/recovery/attempts/:attemptId`) is **CLOSED** (PR #254 merged).
+`GET /admin/recovery/attempts/:attemptId`) is **CLOSED** (delivered by PR #254).
 **J5-I1A is CLOSED.** **J5-I1B (Recovery Center UI) is CLOSED** — queue,
 incident detail, attempt operations, and exam recovery detail pages plus the
 Exam Recovery Context aggregate (`GET /admin/recovery/exams/:examId`, §6.5).
@@ -188,7 +188,7 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     J5-I1A2 CLOSED — Recovery Incident Aggregate Detail
     `GET /admin/recovery/incidents/:incidentId` (PR #253 merged);
     J5-I1A3 CLOSED — Attempt Operations Context
-    `GET /admin/recovery/attempts/:attemptId` (PR #254 merged);
+    `GET /admin/recovery/attempts/:attemptId` (delivered by PR #254);
     **J5-I1A CLOSED**; **J5-I1B CLOSED** — Recovery Center UI (queue,
     incident detail, attempt operations, exam recovery detail + Exam
     Recovery Context aggregate `GET /admin/recovery/exams/:examId` §6.5);

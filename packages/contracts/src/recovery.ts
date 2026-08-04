@@ -14,27 +14,41 @@ import {
 //
 // `@exam/contracts` depends on `@exam/domain`, so the canonical enum value
 // tuples are referenced (via `Object.values(...)`), never hand-copied. The
+// tuple is cast to the KEYOF literal union (not `string`), so `z.infer`
+// produces the exact literal union and `z.enum` stays closed at runtime. The
 // closed `z.enum(...)` shapes then flow into every recovery wire schema below,
 // so a CHECK-constraint value added upstream cannot drift into the contract.
 
+type AttemptStatusValue = (typeof AttemptStatus)[keyof typeof AttemptStatus];
+type IncidentStatusValue = (typeof IncidentStatus)[keyof typeof IncidentStatus];
+type IncidentSeverityValue =
+  (typeof IncidentSeverity)[keyof typeof IncidentSeverity];
+type IncidentTypeValue = (typeof IncidentType)[keyof typeof IncidentType];
+
 /** Closed Attempt lifecycle status (from {@link AttemptStatus}). */
 export const RecoveryAttemptStatusSchema = z.enum(
-  Object.values(AttemptStatus) as [string, ...string[]],
+  Object.values(AttemptStatus) as [AttemptStatusValue, ...AttemptStatusValue[]],
 );
 
 /** Closed Incident status (from {@link IncidentStatus}). */
 export const RecoveryIncidentStatusSchema = z.enum(
-  Object.values(IncidentStatus) as [string, ...string[]],
+  Object.values(IncidentStatus) as [
+    IncidentStatusValue,
+    ...IncidentStatusValue[],
+  ],
 );
 
 /** Closed Incident severity (from {@link IncidentSeverity}). */
 export const RecoveryIncidentSeveritySchema = z.enum(
-  Object.values(IncidentSeverity) as [string, ...string[]],
+  Object.values(IncidentSeverity) as [
+    IncidentSeverityValue,
+    ...IncidentSeverityValue[],
+  ],
 );
 
 /** Closed Incident type (from {@link IncidentType}). */
 export const RecoveryIncidentTypeSchema = z.enum(
-  Object.values(IncidentType) as [string, ...string[]],
+  Object.values(IncidentType) as [IncidentTypeValue, ...IncidentTypeValue[]],
 );
 
 // ── Shared Incident wire (used by incident CRUD AND recovery surfaces) ──

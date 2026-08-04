@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useRecoveryQueueProjection,
   type QueuePageResult,
@@ -18,11 +18,14 @@ function page(items: Item[], nextCursor: string | null): QueuePageResult<Item> {
  * assert the shared single-flight slot (page-1 vs loadMore).
  */
 function makeLoaders() {
-  const page1Calls: { resolve: (v: QueuePageResult<Item>) => void }[] = [];
+  const page1Calls: {
+    resolve: (v: QueuePageResult<Item>) => void;
+    reject: (e: unknown) => void;
+  }[] = [];
   const moreCalls: { resolve: (v: QueuePageResult<Item>) => void }[] = [];
   const loadPage1 = vi.fn(() => {
-    return new Promise<QueuePageResult<Item>>((resolve) => {
-      page1Calls.push({ resolve });
+    return new Promise<QueuePageResult<Item>>((resolve, reject) => {
+      page1Calls.push({ resolve, reject });
     });
   });
   const loadMorePage = vi.fn(() => {
@@ -148,5 +151,178 @@ describe("useRecoveryQueueProjection", () => {
     await waitFor(() =>
       expect(result.current.snapshotAt).toBe("2025-06-01T12:00:00Z"),
     );
+  });
+});
+
+describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stale flag is based on the SERVER snapshotAt and self-updates (P1-3)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    // System clock starts at T0; the server snapshot is also T0, so the queue
+    // is fresh at resolve time. Wall-clock then advances past the threshold.
+    vi.setSystemTime(new Date("2025-01-01T00:00:00Z"));
+
+    const { result } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: undefined,
+        staleAfterMs: 60_000,
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    page1Calls[0]!.resolve(page([{ id: "a" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.isStale).toBe(false);
+
+    // Advance wall-clock well past the staleness threshold; the 10s stale
+    // tick recomputes `now` so isStale flips — driven by the SERVER snapshot
+    // age (snapshotAt), not the client receive time.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(90_000);
+    });
+    expect(result.current.isStale).toBe(true);
+  });
+
+  it("filter change (deps) resets the projection: the previous filter's rows are never shown (P1-1)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    const { result, rerender } = renderHook(
+      ({ q }: { q: string }) =>
+        useRecoveryQueueProjection<Item>({
+          loadPage1,
+          loadMorePage,
+          pollIntervalMs: undefined,
+          deps: [q],
+        }),
+      { initialProps: { q: "exam=A" } },
+    );
+
+    // Filter A loads one row.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    page1Calls[0]!.resolve(page([{ id: "a" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.items.map((i) => i.id)).toEqual(["a"]);
+
+    // Filter changes: rows/cursor/snapshot reset synchronously; the new load
+    // is initial (full-screen loading), not a background refresh.
+    rerender({ q: "exam=B" });
+    expect(result.current.items).toEqual([]);
+    expect(result.current.snapshotAt).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(result.current.isInitialLoading).toBe(true);
+    expect(result.current.isRefreshing).toBe(false);
+    expect(page1Calls.length).toBe(2);
+
+    // Only B's response commits.
+    page1Calls[1]!.resolve(page([{ id: "b" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.items.map((i) => i.id)).toEqual(["b"]);
+    expect(result.current.isInitialLoading).toBe(false);
+  });
+
+  it("a manual refresh returning the SAME item count still re-arms polling (P1-4)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    const { result } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: 30_000,
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    page1Calls[0]!.resolve(page([{ id: "a" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.items.length).toBe(1);
+
+    // Manual refresh clears the timer, runs immediately, returns the SAME
+    // item count (items identity unchanged).
+    act(() => {
+      result.current.refresh();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(page1Calls.length).toBe(2);
+    page1Calls[1]!.resolve(page([{ id: "a" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.items.length).toBe(1);
+
+    // The manual completion re-armed the cadence: the poll fires one interval
+    // later even though the item count never changed.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(loadPage1).toHaveBeenCalledTimes(3);
+  });
+
+  it("a FAILED manual refresh keeps items and still re-arms polling with backoff (P1-4)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    const { result } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: 5_000,
+        backoff: { initialMs: 5_000, maxMs: 20_000 },
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    page1Calls[0]!.resolve(page([{ id: "a" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    act(() => {
+      result.current.refresh();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(page1Calls.length).toBe(2);
+    page1Calls[1]!.reject(new Error("boom"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Old items preserved + error recorded (background failure).
+    expect(result.current.items.map((i) => i.id)).toEqual(["a"]);
+    expect(result.current.error).not.toBeNull();
+
+    // The failed manual completion re-armed the cadence at the BACKED-OFF
+    // delay (1 failure → 10s): nothing at 5s, poll fires at 10s.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(loadPage1).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(loadPage1).toHaveBeenCalledTimes(3);
   });
 });
