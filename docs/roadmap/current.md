@@ -65,8 +65,11 @@ and product/API/read-model contract is **CLOSED / ACCEPTED**
 PR #251 merged 2026-08-02; amended 2026-08-04 by J5-I1A2 / PR #253). J5-I1A1
 (Recovery Incident Queue, `GET /admin/recovery/incidents`) is **CLOSED** (PR
 #252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
-`GET /admin/recovery/incidents/:incidentId`) is **IN REVIEW** (PR #253, based
-directly on `master` — not stacked). J5-I1B–I1D are NOT STARTED.
+`GET /admin/recovery/incidents/:incidentId`) is **CLOSED** (PR #253 merged).
+J5-I1A3 (Attempt Operations Context,
+`GET /admin/recovery/attempts/:attemptId`) is **CLOSED** (PR #254 merged).
+**J5-I1A is CLOSED.** J5-I1B (Recovery Center frontend) is **NEXT**.
+J5-I1C–I1D are NOT STARTED.
 
 ### Plain-text subjective question loop
 
@@ -180,9 +183,12 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     amended 2026-08-04 by J5-I1A2 / PR #253;
     `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A1 CLOSED —
     Recovery Incident Queue `GET /admin/recovery/incidents` (PR #252 merged);
-    J5-I1A2 IN REVIEW — Recovery Incident Aggregate Detail
-    `GET /admin/recovery/incidents/:incidentId` (PR #253, based on master);
-    J5-I1B–I1D NOT STARTED);
+    J5-I1A2 CLOSED — Recovery Incident Aggregate Detail
+    `GET /admin/recovery/incidents/:incidentId` (PR #253 merged);
+    J5-I1A3 CLOSED — Attempt Operations Context
+    `GET /admin/recovery/attempts/:attemptId` (PR #254 merged);
+    **J5-I1A CLOSED**; J5-I1B NEXT — Recovery Center frontend;
+    J5-I1C–I1D NOT STARTED);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;

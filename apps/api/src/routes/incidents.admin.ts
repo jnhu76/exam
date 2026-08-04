@@ -1,12 +1,17 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { ErrorResponseSchema } from "@exam/contracts";
+import {
+  AttemptIdParamsSchema,
+  AttemptOperationsContextSchema,
+  ErrorResponseSchema,
+} from "@exam/contracts";
 import { NotFoundError } from "@exam/domain";
 import type { IncidentActionType } from "@exam/domain";
 import { Permission, type PermissionKey } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import {
   createRecoveryRepo,
+  type AttemptAllowedAction,
   type IncidentAllowedAction,
   type IncidentQueueCursor,
 } from "@exam/db/src/repository/recoveryRepo.js";
@@ -497,6 +502,47 @@ export function deriveAllowedActionsForCaller(input: {
       return false;
     }
     if (action === "link_attempt" && incidentAttemptId != null) return false;
+    return true;
+  });
+}
+
+/**
+ * Final per-caller attempt-operation allowed actions (J5-R0 §6.4).
+ *
+ * action eligibility = status candidate ∩ capability ∩ resource scope. The
+ * repo computes ONLY the status candidates (`statusActionCandidates`,
+ * derived from the canonical attempt-command preconditions); this route-level
+ * derivation intersects them with the caller's capability:
+ *
+ *   - `attempt.time.grant` gates time_grant;
+ *   - `attempt.force_submit` gates force_submit;
+ *   - `attempt.misconduct.mark` gates misconduct_mark.
+ *
+ * A caller holding only `incident.recovery.view` sees an empty
+ * `allowedActions` for every attempt — read-only, not disabled.
+ *
+ * The frontend MUST NOT derive eligibility from status alone (§6.4); a
+ * disabled button is a UX convenience, never an authorization (§8.2).
+ */
+export function deriveAttemptAllowedActionsForCaller(input: {
+  statusActionCandidates: AttemptAllowedAction[];
+  capabilities: readonly PermissionKey[];
+}): AttemptAllowedAction[] {
+  const { statusActionCandidates, capabilities } = input;
+  const has = (permission: PermissionKey) => capabilities.includes(permission);
+  return statusActionCandidates.filter((action) => {
+    if (action === "time_grant" && !has(Permission.AttemptTimeGrant)) {
+      return false;
+    }
+    if (action === "force_submit" && !has(Permission.AttemptForceSubmit)) {
+      return false;
+    }
+    if (
+      action === "misconduct_mark" &&
+      !has(Permission.AttemptMisconductMark)
+    ) {
+      return false;
+    }
     return true;
   });
 }
@@ -1613,6 +1659,163 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
           })),
           allowedActions,
           snapshotAt: aggregate.snapshotAt.toISOString(),
+        }),
+      );
+    },
+  );
+
+  // ── Recovery Attempt Operations Context (J5-I1A3, contract §6.4) ──
+  //
+  // Admin-only authoritative per-Attempt read model. Same auth shape as the
+  // queue and the Incident aggregate: flat `requireCapability` gate on
+  // `IncidentRecoveryView` (granted ONLY to Admin), the repo owns all
+  // fail-closed scope validation (org boundary + full relationship graph),
+  // missing/cross-org → 404, broken parent/relationship chains → 503
+  // AUTHZ_UNAVAILABLE. One consistent REPEATABLE READ read-only snapshot
+  // inside the repo; the frontend never multi-fetches. `allowedActions` is
+  // the per-caller intersection (status candidates ∩ capabilities) computed
+  // in this handler.
+  fastify.get(
+    "/admin/recovery/attempts/:attemptId",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.IncidentRecoveryView),
+      ],
+      schema: {
+        params: AttemptIdParamsSchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin"],
+        response: {
+          200: AttemptOperationsContextSchema,
+          // Declared so the OpenAPI contract documents the deliberately-
+          // designed responses: 400 (validation), 401 (auth), 403 (capability),
+          // 404 (missing/cross-org — anti-enumeration), 503 (broken
+          // parent/relationship chain — fail-closed AUTHZ_UNAVAILABLE).
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = AttemptIdParamsSchema.parse(request.params);
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createRecoveryRepo(fastify.db);
+
+      const context = await repo.getAttemptOperationsContext(
+        ctx,
+        params.attemptId,
+      );
+      // Missing or cross-org attempt → repo returns null (org-scoped lookup
+      // fails closed) → 404 RESOURCE_NOT_FOUND. Broken parent/relationship
+      // chains throw AuthzUnavailableError (503) from the repo.
+      if (!context) throw new NotFoundError("Attempt not found");
+
+      // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
+      // with null attempt deadlineAt → exam.closeAt. Computed here (not in
+      // the repo, which is forbidden from importing @exam/exam-engine) via the
+      // single canonical authority. The repo guarantees examSummary.closeAt is
+      // non-null (it fails closed with AUTHZ_UNAVAILABLE otherwise), so the
+      // effective deadline is always computable.
+      const effectiveDeadlineAt = computeEffectiveDeadline(
+        { closeAt: context.examSummary.closeAt },
+        { deadlineAt: context.attempt.deadlineAt },
+      );
+
+      // Final per-caller allowedActions (J5-R0 §6.4): the repo's status
+      // candidates ∩ this caller's capabilities. The frontend never derives
+      // eligibility from status alone.
+      const allowedActions = deriveAttemptAllowedActionsForCaller({
+        statusActionCandidates: context.statusActionCandidates,
+        capabilities: ctx.capabilities,
+      });
+
+      return reply.send(
+        AttemptOperationsContextSchema.parse({
+          attempt: {
+            id: context.attempt.id,
+            examId: context.attempt.examId,
+            candidateId: context.attempt.candidateId,
+            attemptNo: context.attempt.attemptNo,
+            status: context.attempt.status,
+            startedAt: context.attempt.startedAt?.toISOString() ?? null,
+            deadlineAt: context.attempt.deadlineAt?.toISOString() ?? null,
+            effectiveDeadlineAt: effectiveDeadlineAt.toISOString(),
+            submittedAt: context.attempt.submittedAt?.toISOString() ?? null,
+            gradedAt: context.attempt.gradedAt?.toISOString() ?? null,
+            lastActivityAt:
+              context.attempt.lastActivityAt?.toISOString() ?? null,
+            misconduct: context.attempt.misconduct,
+          },
+          examSummary: {
+            id: context.examSummary.id,
+            title: context.examSummary.title,
+            status: context.examSummary.status,
+            closeAt: context.examSummary.closeAt.toISOString(),
+          },
+          candidateSummary: context.candidateSummary,
+          interruptionEpisodes: context.interruptionEpisodes.map((episode) => ({
+            interruption: {
+              id: episode.interruption.id,
+              attemptId: episode.interruption.attemptId,
+              createdAt: episode.interruption.createdAt.toISOString(),
+            },
+            events: episode.events.map((e) => ({
+              id: e.id,
+              eventType: e.eventType,
+              occurredAt: e.occurredAt.toISOString(),
+              observedLastActivityAt:
+                e.observedLastActivityAt?.toISOString() ?? null,
+              detectionSource: e.detectionSource,
+              timeoutSeconds: e.timeoutSeconds,
+              policy: e.policy,
+              eligibleSeconds: e.eligibleSeconds,
+              timeAdjustmentId: e.timeAdjustmentId,
+              actorId: e.actorId,
+              reasonCode: e.reasonCode,
+            })),
+          })),
+          timeAdjustments: context.timeAdjustments.map((a) => ({
+            id: a.id,
+            operationId: a.operationId,
+            attemptId: a.attemptId,
+            interruptionId: a.interruptionId,
+            incidentId: a.incidentId,
+            policy: a.policy,
+            source: a.source,
+            beforeDeadline: a.beforeDeadline.toISOString(),
+            afterDeadline: a.afterDeadline.toISOString(),
+            addedSeconds: a.addedSeconds,
+            eligibleSeconds: a.eligibleSeconds,
+            reasonCode: a.reasonCode,
+            reasonText: a.reasonText,
+            actorId: a.actorId,
+            createdAt: a.createdAt.toISOString(),
+          })),
+          timeline: context.timeline.map((row) => ({
+            id: row.auditLog.id,
+            organizationId: row.auditLog.organizationId,
+            actorId: row.auditLog.actorId,
+            actorName: row.actorName,
+            action: row.auditLog.action,
+            targetType: row.auditLog.targetType,
+            targetId: row.auditLog.targetId,
+            metadata: row.auditLog.metadata,
+            ipAddress: row.auditLog.ipAddress,
+            userAgent: row.auditLog.userAgent,
+            createdAt: row.auditLog.createdAt.toISOString(),
+          })),
+          relatedIncidents: context.relatedIncidents.map((r) => ({
+            id: r.id,
+            status: r.status,
+            severity: r.severity,
+            title: r.title,
+          })),
+          allowedActions,
+          snapshotAt: context.snapshotAt.toISOString(),
         }),
       );
     },

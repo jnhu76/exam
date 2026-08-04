@@ -16,11 +16,14 @@
 > merge commit `b2545e6e`; amended 2026-08-04 by J5-I1A2 / PR #253).
 > J5-I1A1 (Recovery Incident Queue, `GET /admin/recovery/incidents`) is
 > **CLOSED** (PR #252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
-> `GET /admin/recovery/incidents/:incidentId`) is **IN REVIEW** (PR #253,
-> based directly on `master` — not stacked). J5-I1B–I1D NOT STARTED.
+> `GET /admin/recovery/incidents/:incidentId`) is **CLOSED** (PR #253 merged).
+> J5-I1A3 (Attempt Operations Context, `GET /admin/recovery/attempts/:attemptId`)
+> is **CLOSED** (PR #254 merged). **J5-I1A is CLOSED.**
+> J5-I1B is **NEXT** (Recovery Center frontend: queue page, incident detail,
+> attempt operations, exam recovery detail). J5-I1B–I1D NOT STARTED.
 > J6/J7 NOT STARTED.
 >
-> Updated: 2026-08-03
+> Updated: 2026-08-04
 >
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
@@ -1161,8 +1164,9 @@ PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
        amended by PR #253); authoritative contract:
        j5-r0-admin-recovery-center-contract.md
        implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
-         (J5-I1A1 CLOSED, PR #252; J5-I1A2 IN REVIEW, PR #253 based on master;
-          J5-I1B–I1D NOT STARTED)
+         (J5-I1A1 CLOSED, PR #252; J5-I1A2 CLOSED, PR #253;
+          J5-I1A3 CLOSED, PR #254; J5-I1A CLOSED;
+          J5-I1B NEXT — Recovery Center frontend; J5-I1C–I1D NOT STARTED)
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
@@ -1178,13 +1182,16 @@ CLOSED (2026-08-02, PR #250).
 ## Next Job
 
 J5-R0 (`REC-OPS-ADMIN-RECOVERY-CENTER` reality audit + product/API/read-model
-contract) is **IN REVIEW** — see
+contract) is **CLOSED / ACCEPTED** — see
 [`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md).
-J5-I1A–I1D are NOT STARTED and BLOCKED pending J5-R0 acceptance. J5 consumes
-the already-shipped authorities of J1 (Admin time-grant path), J3 (Incident
-aggregate + commands + API), and J4-I1 (Proctor→Exam assignment persistence,
-API, resource-scope resolution, minimum Proctor incident activation); it does
-not redefine them.
+J5-I1A1 (Queue), J5-I1A2 (Incident Aggregate Detail), and J5-I1A3 (Attempt
+Operations Context) are **CLOSED** (PR #252, PR #253, PR #254) — **J5-I1A is
+CLOSED**. J5-I1B (Recovery Center frontend) is **NEXT**. J5-I1C–I1D are NOT
+STARTED.
+J5 consumes the already-shipped authorities of J1 (Admin time-grant path),
+J3 (Incident aggregate + commands + API), and J4-I1 (Proctor→Exam assignment
+persistence, API, resource-scope resolution, minimum Proctor incident
+activation); it does not redefine them.
 
 ---
 

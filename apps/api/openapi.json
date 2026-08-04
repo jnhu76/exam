@@ -24793,6 +24793,561 @@
         }
       }
     },
+    "/api/admin/recovery/attempts/{attemptId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "attemptId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attempt": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "examId": {
+                          "type": "string"
+                        },
+                        "candidateId": {
+                          "type": "string"
+                        },
+                        "attemptNo": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "deadlineAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "effectiveDeadlineAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "submittedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "gradedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastActivityAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "misconduct": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "examId",
+                        "candidateId",
+                        "attemptNo",
+                        "status",
+                        "startedAt",
+                        "deadlineAt",
+                        "effectiveDeadlineAt",
+                        "submittedAt",
+                        "gradedAt",
+                        "lastActivityAt",
+                        "misconduct"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "examSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "closeAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "status", "closeAt"],
+                      "additionalProperties": false
+                    },
+                    "candidateSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "displayName"],
+                      "additionalProperties": false
+                    },
+                    "interruptionEpisodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "interruption": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "attemptId": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "attemptId", "createdAt"],
+                            "additionalProperties": false
+                          },
+                          "events": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "eventType": {
+                                  "type": "string"
+                                },
+                                "occurredAt": {
+                                  "type": "string"
+                                },
+                                "observedLastActivityAt": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "detectionSource": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "timeoutSeconds": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "policy": {
+                                  "type": "string"
+                                },
+                                "eligibleSeconds": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "timeAdjustmentId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "actorId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "reasonCode": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "eventType",
+                                "occurredAt",
+                                "observedLastActivityAt",
+                                "detectionSource",
+                                "timeoutSeconds",
+                                "policy",
+                                "eligibleSeconds",
+                                "timeAdjustmentId",
+                                "actorId",
+                                "reasonCode"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["interruption", "events"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "timeAdjustments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "operationId": {
+                            "type": "string"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "interruptionId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "incidentId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "policy": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "beforeDeadline": {
+                            "type": "string"
+                          },
+                          "afterDeadline": {
+                            "type": "string"
+                          },
+                          "addedSeconds": {
+                            "type": "number"
+                          },
+                          "eligibleSeconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "reasonCode": {
+                            "type": "string"
+                          },
+                          "reasonText": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "operationId",
+                          "attemptId",
+                          "interruptionId",
+                          "incidentId",
+                          "policy",
+                          "source",
+                          "beforeDeadline",
+                          "afterDeadline",
+                          "addedSeconds",
+                          "eligibleSeconds",
+                          "reasonCode",
+                          "reasonText",
+                          "actorId",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "timeline": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "actorId": {
+                            "type": "string"
+                          },
+                          "actorName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "targetType": {
+                            "type": "string"
+                          },
+                          "targetId": {
+                            "type": "string"
+                          },
+                          "metadata": {},
+                          "ipAddress": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "userAgent": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "actorId",
+                          "actorName",
+                          "action",
+                          "targetType",
+                          "targetId",
+                          "ipAddress",
+                          "userAgent",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "relatedIncidents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "severity": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "status", "severity", "title"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedActions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "time_grant",
+                          "force_submit",
+                          "misconduct_mark"
+                        ]
+                      }
+                    },
+                    "snapshotAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "attempt",
+                    "examSummary",
+                    "candidateSummary",
+                    "interruptionEpisodes",
+                    "timeAdjustments",
+                    "timeline",
+                    "relatedIncidents",
+                    "allowedActions",
+                    "snapshotAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/exams/{examId}/proctors": {
       "post": {
         "requestBody": {

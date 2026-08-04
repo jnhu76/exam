@@ -3,7 +3,7 @@
 > Status: **ACCEPTED / CLOSED**
 > Type: Product/API/read-model authority contract
 > Accepted: 2026-08-02
-> Amended: 2026-08-04 by J5-I1A2 / PR #253
+> Amended: 2026-08-04 by J5-I1A2 / PR #253 and J5-I1A3 amendment (§6.4)
 >
 > This contract defines authority. Runtime implementation is delivered by the
 > J5-I1 slices.
@@ -22,6 +22,14 @@
 > action identities (ADR-014 §7: `action_id` is the polymorphic referent). It
 > is NOT the complete adjustment ledger of every referenced Attempt — the full
 > per-Attempt ledger belongs to Attempt Operations Context. See §6.1.
+>
+> **2026-08-04 — §6.4 Attempt Operations Context frozen contract (J5-I1A3
+> amendment).** Adds `GET /admin/recovery/attempts/:attemptId` as a frozen
+> endpoint in J5-I1A. Freezes wire fields, ordering, error mapping,
+> allowedActions semantics, and the semantic boundary between full per-Attempt
+> ledger (§6.4 `timeAdjustments`) and incident-scoped summaries (§6.3
+> `timeAdjustmentSummaries`). Updates §12 decomposition to add I1A3 as a
+> sub-slice of I1A. See §6.4 and §12.
 >
 > Authority chain: this contract consumes — and is bounded by — the already
 > accepted/runtime authorities ADR-013, ADR-014, ADR-015. It does not redefine
@@ -486,6 +494,185 @@ The existing `GET /admin/incidents/:incidentId` remains the assignment-scoped
 core Incident read (usable by Admin and the assigned Proctor) and stays lean —
 it does not absorb the Admin-only audit projection.
 
+### 6.4 Attempt Operations Context (frozen, J5-I1A3 amendment)
+
+The Incident Detail aggregate (§6.3) explicitly delegates the full per-Attempt
+adjustment ledger to a separate endpoint. The existing
+`GET /admin/attempts/:attemptId/timeline` is audit-log-only and cannot be
+extended to include interruption episodes and adjustment ledger without breaking
+its contract. A dedicated Attempt Operations Context endpoint is therefore
+required.
+
+```text
+GET /admin/recovery/attempts/:attemptId
+
+- Admin-only (permission incident.recovery.view, scope Organization,
+  resolver organization, proctorAccess admin_only, sensitive true)
+- authorization shape: flat capability gate + repo-owned fail-closed
+  graph validation (same pattern as §6.3 — NOT the resource-resolver chain)
+- reads Attempt + Exam + Candidate + interruption episodes + time-adjustment
+  ledger + audit timeline + related incidents in ONE consistent snapshot
+  (single REPEATABLE READ read-only transaction)
+- carries `snapshotAt` from PostgreSQL transaction_timestamp()
+- the frontend MUST NOT assemble business state from multiple calls
+```
+
+**Frozen wire contract:**
+
+```ts
+{
+  attempt: {
+    id,                    // Attempt primary key
+    examId,                // foreign key
+    candidateId,           // foreign key
+    attemptNo,             // attempt sequence number within enrollment
+    status,                // AttemptStatus enum
+    startedAt,             // ISO timestamp
+    deadlineAt,            // raw Attempt deadline (from time-adjustment ledger)
+    effectiveDeadlineAt,   // min(exam.closeAt, deadlineAt) — server-computed
+    submittedAt,           // ISO timestamp | null
+    gradedAt,              // ISO timestamp | null
+    lastActivityAt,        // heartbeat field — ISO timestamp
+    misconduct,            // boolean — projected true when the jsonb
+                           // MisconductFlag is set (null flag → false)
+  },
+
+  examSummary: {
+    id,
+    title,
+    status,                // ExamStatus enum
+    closeAt,               // ISO timestamp — needed for effectiveDeadlineAt
+  },
+
+  candidateSummary: {
+    id,
+    displayName,           // resolved from same-org CandidateProfile → User;
+                           // a broken resolution fails closed as 503
+                           // AUTHZ_UNAVAILABLE (see error mapping) — never
+                           // an empty-name fallback
+  },
+
+  interruptionEpisodes: [
+    {
+      interruption: {      // AttemptInterruption row
+        id,
+        attemptId,
+        createdAt,
+      },
+      events: [            // AttemptInterruptionEvent[] sorted by
+                           // occurredAt asc (the events table has no
+                           // event_sequence column; id is the tiebreaker)
+        {
+          id,
+          eventType,       // detected | restored | terminalized
+          occurredAt,
+          observedLastActivityAt,
+          detectionSource, // heartbeat_timeout | migration_backfill
+          timeoutSeconds,
+          policy,          // InterruptionTimePolicy enum
+          eligibleSeconds,
+          timeAdjustmentId,
+          actorId,
+          reasonCode,
+        },
+      ],
+    },
+  ],  // sorted by interruption.createdAt asc
+
+  timeAdjustments: [       // FULL per-Attempt ledger (NOT incident-scoped)
+    {
+      id,
+      operationId,
+      attemptId,
+      interruptionId,      // nullable
+      incidentId,          // nullable
+      policy,              // InterruptionTimePolicy enum
+      source,              // bounded_grace | operator | system_incident | administrative_correction
+      beforeDeadline,      // ISO timestamp
+      afterDeadline,       // ISO timestamp
+      addedSeconds,        // number
+      eligibleSeconds,     // number | null
+      reasonCode,
+      reasonText,
+      actorId,
+      createdAt,           // ISO timestamp
+    },
+  ],  // sorted by createdAt asc
+
+  timeline: [              // audit log entries — same shape as GET /admin/attempts/:attemptId/timeline
+    {
+      id,
+      organizationId,
+      actorId,
+      actorName,
+      action,
+      targetType,
+      targetId,
+      metadata,
+      ipAddress,
+      userAgent,
+      createdAt,
+    },
+  ],  // sorted by createdAt asc
+
+  relatedIncidents: [      // minimal navigation stubs, deduplicated
+    {
+      id,
+      status,              // IncidentStatus enum
+      severity,            // IncidentSeverity enum
+      title,               // incident description (truncated if needed)
+    },
+  ],  // from both attempt memberships and action links, deduplicated by incident id
+
+  allowedActions: [        // real eligibility from caller capability ∩ Attempt state ∩ resource scope
+    // May include: "time_grant", "force_submit", "misconduct_mark"
+    // Computed server-side; initially may be empty if no commands are
+    // eligible for the given attempt state — this is NOT "empty because
+    // UI is read-only", it is "server computed and found no eligible actions"
+  ],
+
+  snapshotAt,              // PostgreSQL transaction_timestamp() — ISO timestamp
+}
+```
+
+**Ordering rules (frozen):**
+
+- `interruptionEpisodes`: sorted by `interruption.createdAt` asc (oldest first)
+- Events within each episode: sorted by `occurredAt` asc (chronological,
+  `id` as tiebreaker — the events table has no `event_sequence` column)
+- `timeAdjustments`: sorted by `createdAt` asc (chronological)
+- `timeline`: sorted by `createdAt` asc (chronological, oldest first)
+- `relatedIncidents`: sorted by most recently linked first, deduplicated by `id`
+
+**Error mapping (frozen):**
+
+- Attempt does not exist or belongs to a different organization → 404
+  `RESOURCE_NOT_FOUND`
+- Broken parent relationship (Exam, Enrollment, Candidate missing or
+  cross-org) → 503 `AUTHZ_UNAVAILABLE`
+- Broken CandidateProfile → User resolution (same-org profile missing or
+  User deleted) → 503 `AUTHZ_UNAVAILABLE` (fail-closed, not partial
+  projection)
+- Caller lacks `incident.recovery.view` → 403 `PERMISSION_DENIED`
+
+**Semantic boundary — timeAdjustments vs timeAdjustmentSummaries:**
+
+```text
+timeAdjustments (§6.4 — Attempt Operations Context)
+  = FULL per-Attempt ledger
+  = every attempt_time_adjustments row for this attemptId
+  = includes grants from all sources (bounded_grace, operator, system_incident, administrative_correction)
+  = includes grants linked to any incident or no incident
+
+timeAdjustmentSummaries (§6.3 — Incident Detail aggregate)
+  = ONLY attempt_time_adjustments rows referenced by THIS Incident's time_grant action identities
+  = a subset of the full ledger, scoped to one incident's action links
+  = does NOT include unrelated grants on the same Attempt
+```
+
+These two semantics MUST NOT be confused. The UI must render them in distinct
+contexts and must not merge or deduplicate across the two projections.
+
 ---
 
 ## 7. Admin action matrix (frozen)
@@ -689,12 +876,19 @@ reviewed before any operator-action UI ships.
 
 ```text
 J5-R0   Admin Recovery Center reality audit + product/API/read-model contract
-        (THIS document — documentation-only, IN REVIEW)
+        (THIS document — CLOSED / ACCEPTED, PR #251; amended by PR #253)
 
 J5-I1A  Recovery queue + required authoritative read APIs / projections
         (the additive organization-wide Incident queue endpoint from §5.4,
-         plus implement the frozen aggregate endpoint for Incident Detail
-         per §6.3)
+         plus the frozen aggregate endpoint for Incident Detail per §6.3,
+         plus the frozen Attempt Operations Context endpoint per §6.4)
+        Status: IN PROGRESS (I1A1 CLOSED PR #252; I1A2 CLOSED PR #253;
+                I1A3 NEXT)
+
+J5-I1A1 Recovery Incident Queue — CLOSED (PR #252)
+J5-I1A2 Recovery Incident Aggregate Detail — CLOSED (PR #253)
+J5-I1A3 Attempt Operations Context — NEXT
+        (GET /admin/recovery/attempts/:attemptId, per §6.4)
 
 J5-I1B  Read-only Admin Recovery Center UI
         - queue (with filters)
@@ -729,7 +923,7 @@ Dependencies:
 
 ```text
 J5-R0 accepted
-  → J5-I1A
+  → J5-I1A (I1A1 → I1A2 → I1A3)
   → J5-I1B
   → J5-I1C0
   → J5-I1C1
