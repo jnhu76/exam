@@ -317,6 +317,68 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(loader).toHaveBeenCalledTimes(3);
   });
 
+  it("unmount clears the poll timer: no requests fire after leaving the page (P1-1)", async () => {
+    const { loader, calls } = makeControllableLoader();
+    const { unmount } = renderHook(() =>
+      useRecoveryProjection<TestPayload>({
+        load: loader,
+        getSnapshotAt: (d) => d.snapshotAt,
+        pollIntervalMs: 30_000,
+      }),
+    );
+
+    // Initial request resolves → timer armed at 30s.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    // Unmount → timer must be cleared.
+    unmount();
+
+    // Advance well past the poll interval — no new request must fire.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("unmount while a request is in flight aborts it and does not reschedule (P1-1)", async () => {
+    const { loader, calls } = makeControllableLoader();
+    const { unmount } = renderHook(() =>
+      useRecoveryProjection<TestPayload>({
+        load: loader,
+        getSnapshotAt: (d) => d.snapshotAt,
+        pollIntervalMs: 30_000,
+      }),
+    );
+
+    // Initial request is pending (not resolved).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(calls.length).toBe(1);
+    expect(calls[0]!.signal.aborted).toBe(false);
+
+    // Unmount → abort fires.
+    unmount();
+    expect(calls[0]!.signal.aborted).toBe(true);
+
+    // Resolve the aborted request — it must not schedule a new poll.
+    calls[0]!.reject(new DOMException("Aborted", "AbortError"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
   it("a FAILED manual refresh keeps data and still re-arms polling with backoff (P1-4)", async () => {
     const { loader, calls } = makeControllableLoader();
     const { result } = renderHook(() =>

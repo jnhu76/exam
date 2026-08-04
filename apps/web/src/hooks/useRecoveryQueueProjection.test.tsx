@@ -22,15 +22,18 @@ function makeLoaders() {
     resolve: (v: QueuePageResult<Item>) => void;
     reject: (e: unknown) => void;
   }[] = [];
-  const moreCalls: { resolve: (v: QueuePageResult<Item>) => void }[] = [];
+  const moreCalls: {
+    resolve: (v: QueuePageResult<Item>) => void;
+    reject: (e: unknown) => void;
+  }[] = [];
   const loadPage1 = vi.fn(() => {
     return new Promise<QueuePageResult<Item>>((resolve, reject) => {
       page1Calls.push({ resolve, reject });
     });
   });
   const loadMorePage = vi.fn(() => {
-    return new Promise<QueuePageResult<Item>>((resolve) => {
-      moreCalls.push({ resolve });
+    return new Promise<QueuePageResult<Item>>((resolve, reject) => {
+      moreCalls.push({ resolve, reject });
     });
   });
   return { loadPage1, loadMorePage, page1Calls, moreCalls };
@@ -129,6 +132,80 @@ describe("useRecoveryQueueProjection", () => {
       expect(result.current.items.map((i) => i.id)).toEqual(["a", "b", "c"]),
     );
     expect(result.current.nextCursor).toBeNull();
+  });
+
+  it("loadMore is dropped when a page-1 refresh is in flight (P1-2)", async () => {
+    const { loadPage1, loadMorePage, page1Calls, moreCalls } = makeLoaders();
+    const { result } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: undefined,
+      }),
+    );
+
+    // Resolve initial page-1 with a cursor.
+    await waitFor(() => expect(page1Calls.length).toBe(1));
+    page1Calls[0]!.resolve(page([{ id: "a" }], "cursor-1"));
+    await flushMicros();
+    await waitFor(() => expect(result.current.items.length).toBe(1));
+
+    // Start a page-1 refresh (it is now in flight).
+    act(() => {
+      result.current.refresh();
+    });
+    await waitFor(() => expect(page1Calls.length).toBe(2));
+
+    // Attempt loadMore while refresh is in flight — it MUST be dropped.
+    act(() => {
+      result.current.loadMore();
+    });
+    // No loadMore request should have been created.
+    expect(moreCalls.length).toBe(0);
+
+    // Resolve the refresh.
+    page1Calls[1]!.resolve(page([{ id: "refreshed" }], null));
+    await flushMicros();
+    await waitFor(() =>
+      expect(result.current.items.map((i) => i.id)).toEqual(["refreshed"]),
+    );
+  });
+
+  it("loadMore success clears a previous error (P1-2)", async () => {
+    const { loadPage1, loadMorePage, page1Calls, moreCalls } = makeLoaders();
+    const { result } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: undefined,
+      }),
+    );
+
+    // Resolve initial page-1 with a cursor.
+    await waitFor(() => expect(page1Calls.length).toBe(1));
+    page1Calls[0]!.resolve(page([{ id: "a" }], "cursor-1"));
+    await flushMicros();
+    await waitFor(() => expect(result.current.items.length).toBe(1));
+
+    // First loadMore fails → error is set.
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(moreCalls.length).toBe(1));
+    moreCalls[0]!.reject(new Error("network"));
+    await flushMicros();
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+
+    // Retry loadMore succeeds → error must be cleared. The cursor is still
+    // available because the failed loadMore did not consume it.
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(moreCalls.length).toBe(2));
+    moreCalls[1]!.resolve(page([{ id: "b" }], null));
+    await flushMicros();
+    await waitFor(() => expect(result.current.error).toBeNull());
+    expect(result.current.items.map((i) => i.id)).toEqual(["a", "b"]);
   });
 
   it("carries the server snapshotAt from the latest page-1 result", async () => {
@@ -324,5 +401,74 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(loadPage1).toHaveBeenCalledTimes(3);
+  });
+
+  it("empty queue + background poll failure keeps EmptyState + inline warning (P1-3)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    const { result } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: 30_000,
+      }),
+    );
+
+    // Initial page-1 succeeds with an empty result.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    page1Calls[0]!.resolve(page([], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.items).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(result.current.snapshotAt).not.toBeNull();
+
+    // Background poll fails.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    page1Calls[1]!.reject(new Error("network"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Items stay empty (valid projection), error is recorded, snapshotAt
+    // remains non-null — the page can distinguish this from a first-load
+    // failure and show EmptyState + inline warning instead of ErrorState.
+    expect(result.current.items).toEqual([]);
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.snapshotAt).not.toBeNull();
+  });
+
+  it("unmount clears the poll timer: no requests fire after leaving the page (P1-1)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    const { unmount } = renderHook(() =>
+      useRecoveryQueueProjection<Item>({
+        loadPage1,
+        loadMorePage,
+        pollIntervalMs: 30_000,
+      }),
+    );
+
+    // Initial request resolves → timer armed at 30s.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    page1Calls[0]!.resolve(page([{ id: "a" }], null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(loadPage1).toHaveBeenCalledTimes(1);
+
+    // Unmount → timer must be cleared.
+    unmount();
+
+    // Advance well past the poll interval — no new request must fire.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(loadPage1).toHaveBeenCalledTimes(1);
   });
 });

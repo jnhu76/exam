@@ -124,6 +124,7 @@ export function useRecoveryProjection<T>(
   const failureRef = useRef(0);
   const hasDataRef = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disposedRef = useRef(false);
 
   // Keep `load`/`getSnapshotAt` refs so the in-flight closure always calls the
   // latest without re-triggering the deps effect per render.
@@ -144,6 +145,7 @@ export function useRecoveryProjection<T>(
   const runRef = useRef<(trigger: Trigger) => Promise<void>>(async () => {});
   const scheduleNextPoll = useCallback(() => {
     clearPollTimer();
+    if (disposedRef.current) return;
     if (pollIntervalMs === undefined) return;
     if (document.visibilityState !== "visible") return;
     const fails = failureRef.current;
@@ -163,6 +165,7 @@ export function useRecoveryProjection<T>(
   /** Core loader. `trigger` controls single-flight/backoff semantics. */
   const run = useCallback(
     async (trigger: Trigger) => {
+      if (disposedRef.current) return;
       // Scheduled poll: drop the tick while a request is running (the in-flight
       // request re-arms the timer on completion). Focus/visibility: drop if a
       // request is active; else fire immediately. Manual / initial / deps:
@@ -213,7 +216,7 @@ export function useRecoveryProjection<T>(
         if (controllerRef.current === controller) {
           controllerRef.current = null;
         }
-        if (seq === seqRef.current) {
+        if (seq === seqRef.current && !disposedRef.current) {
           setIsRefreshing(false);
           // Schedule the NEXT poll from THIS completion's failure count — the
           // cadence is restored even after a manual refresh or a failed
@@ -238,7 +241,10 @@ export function useRecoveryProjection<T>(
   // the old resource can never render (or be read as a background refresh)
   // while the new resource loads.
   const depsKey = JSON.stringify(deps);
+  const activeKeyRef = useRef(depsKey);
+  const keyChanged = activeKeyRef.current !== depsKey;
   useEffect(() => {
+    disposedRef.current = false;
     controllerRef.current?.abort();
     seqRef.current += 1;
     hasDataRef.current = false;
@@ -248,9 +254,14 @@ export function useRecoveryProjection<T>(
     setError(null);
     setLastUpdatedAt(null);
     setIsRefreshing(false);
+    activeKeyRef.current = depsKey;
     void run("initial");
     return () => {
-      if (controllerRef.current) controllerRef.current.abort();
+      disposedRef.current = true;
+      seqRef.current += 1;
+      controllerRef.current?.abort();
+      controllerRef.current = null;
+      clearPollTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [depsKey]);
@@ -282,13 +293,6 @@ export function useRecoveryProjection<T>(
     return () => clearInterval(id);
   }, [staleAfterMs]);
 
-  // Abort any in-flight request on unmount.
-  useEffect(() => {
-    return () => {
-      if (controllerRef.current) controllerRef.current.abort();
-    };
-  }, []);
-
   const snapshotAt = useMemo(() => {
     if (!data) return null;
     try {
@@ -302,6 +306,19 @@ export function useRecoveryProjection<T>(
     staleAfterMs !== undefined &&
     snapshotAt !== null &&
     nowTick - new Date(snapshotAt).getTime() > staleAfterMs;
+
+  if (keyChanged) {
+    return {
+      data: null,
+      error: null,
+      isInitialLoading: true,
+      isRefreshing: false,
+      isStale: false,
+      snapshotAt: null,
+      lastUpdatedAt: null,
+      refresh,
+    };
+  }
 
   return {
     data,

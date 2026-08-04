@@ -382,6 +382,29 @@ describe("RecoveryQueuePage", () => {
     expect(lastCall).toContain("candidateId=cand-9");
   });
 
+  it("empty queue + background poll failure keeps EmptyState + inline warning (P1-3)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    getMock.mockResolvedValueOnce({
+      items: [],
+      nextCursor: null,
+      snapshotAt: "2025-01-15T10:00:00Z",
+    });
+    renderPage();
+    await act(async () => {});
+    expect(screen.getByText("暂无中断事件")).toBeInTheDocument();
+
+    // Background poll fails — must keep EmptyState, not switch to ErrorState.
+    getMock.mockRejectedValueOnce(new Error("network"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    // EmptyState still visible (not replaced by full-screen ErrorState).
+    expect(screen.getByText("暂无中断事件")).toBeInTheDocument();
+    // Inline warning appears.
+    expect(screen.getByText("加载恢复队列失败")).toBeInTheDocument();
+  });
+
   it("changing status while a free-text debounce is pending keeps BOTH in the URL (P2)", async () => {
     vi.useFakeTimers();
     // Start with status=investigating already in the URL, simulating a prior

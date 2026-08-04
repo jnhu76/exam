@@ -241,7 +241,7 @@ export function RecoveryQueuePage() {
   const toDate = filters.createdTo ? new Date(filters.createdTo) : undefined;
 
   if (isInitialLoading) return <LoadingState />;
-  if (error && items.length === 0) {
+  if (error && snapshotAt === null) {
     return (
       <ErrorState
         message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
@@ -376,196 +376,190 @@ export function RecoveryQueuePage() {
           description={t("admin.recoveryQueue.emptyDescription")}
         />
       ) : (
-        <>
-          <DataTableShell
-            title={t("admin.recoveryQueue.title")}
-            toolbar={
-              <span className="flex items-center gap-3 text-xs text-muted-foreground">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={refresh}
-                  disabled={isRefreshing}
-                  className="h-7 gap-1 px-2 text-xs"
-                  aria-label={t("admin.recoveryQueue.refresh")}
-                >
-                  <AppIcon
-                    icon={RefreshCw}
-                    size="inline"
-                    className={isRefreshing ? "animate-spin" : undefined}
-                  />
-                  {isRefreshing
-                    ? t("admin.recoveryQueue.refreshing")
-                    : t("admin.recoveryQueue.refresh")}
-                </Button>
-                {snapshotAt && (
-                  <span className={isStale ? "text-warning" : undefined}>
-                    {isStale && <AppIcon icon={CircleAlert} size="inline" />}
-                    {t("admin.recoveryQueue.snapshotAt", {
-                      time: formatTime(snapshotAt),
-                    })}
-                  </span>
-                )}
-                {isStale && (
-                  <span className="text-warning">
-                    {t("admin.recoveryQueue.snapshotStale")}
-                  </span>
-                )}
-                {lastUpdatedAt && (
-                  <span>
-                    {t("admin.recoveryQueue.lastUpdatedAt", {
-                      time: formatTime(lastUpdatedAt),
-                    })}
-                  </span>
-                )}
-              </span>
-            }
-          >
-            {/* Desktop table */}
-            <div className="hidden md:block" data-testid="recovery-queue-table">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.incident")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.severity")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.exam")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.candidate")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.attempt")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.linked")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.proctors")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.recoveryQueue.columns.createdAt")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.incident.id}>
-                      <TableCell>
-                        <Link
-                          to={routes.admin.recoveryIncident(item.incident.id)}
-                          className="text-sm font-medium underline-offset-4 hover:underline"
-                        >
-                          <StatusBadge
-                            status={incidentStatusKey(item.incident.status)}
-                          />
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {t(
-                          `admin.recoveryQueue.severity.${item.incident.severity}` as never,
-                        )}
-                      </TableCell>
-                      <TableCell>{item.examSummary.title}</TableCell>
-                      <TableCell>
-                        {item.primaryCandidate?.displayName ??
-                          t("admin.recoveryQueue.noCandidate")}
-                      </TableCell>
-                      <TableCell>
-                        {item.primaryAttempt ? (
-                          <StatusBadge status={item.primaryAttempt.status} />
-                        ) : (
-                          t("admin.recoveryQueue.noAttempt")
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {t("admin.recoveryQueue.linkedCount", {
-                          count: item.linkedAttemptCount,
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        {item.activeProctors.length > 0
-                          ? item.activeProctors
-                              .map((p) => p.displayName)
-                              .join("、")
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {formatTime(item.incident.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Mobile card list */}
-            <ul
-              className="flex flex-col gap-3 md:hidden"
-              data-testid="recovery-queue-cards"
-            >
-              {items.map((item) => (
-                <li key={item.incident.id}>
-                  <Link
-                    to={routes.admin.recoveryIncident(item.incident.id)}
-                    className="flex w-full flex-col gap-2 rounded-md border p-3 text-left"
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <StatusBadge
-                        status={incidentStatusKey(item.incident.status)}
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {formatTime(item.incident.createdAt)}
-                      </span>
-                    </span>
-                    <span className="text-sm font-medium">
-                      {item.examSummary.title}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
+        <DataTableShell
+          title={t("admin.recoveryQueue.title")}
+          toolbar={
+            <span className="flex items-center gap-3 text-xs text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refresh}
+                disabled={isRefreshing}
+                className="h-7 gap-1 px-2 text-xs"
+                aria-label={t("admin.recoveryQueue.refresh")}
+              >
+                <AppIcon
+                  icon={RefreshCw}
+                  size="inline"
+                  className={isRefreshing ? "animate-spin" : undefined}
+                />
+                {isRefreshing
+                  ? t("admin.recoveryQueue.refreshing")
+                  : t("admin.recoveryQueue.refresh")}
+              </Button>
+              {snapshotAt && (
+                <span className={isStale ? "text-warning" : undefined}>
+                  {isStale && <AppIcon icon={CircleAlert} size="inline" />}
+                  {t("admin.recoveryQueue.snapshotAt", {
+                    time: formatTime(snapshotAt),
+                  })}
+                </span>
+              )}
+              {isStale && (
+                <span className="text-warning">
+                  {t("admin.recoveryQueue.snapshotStale")}
+                </span>
+              )}
+              {lastUpdatedAt && (
+                <span>
+                  {t("admin.recoveryQueue.lastUpdatedAt", {
+                    time: formatTime(lastUpdatedAt),
+                  })}
+                </span>
+              )}
+            </span>
+          }
+        >
+          {/* Desktop table */}
+          <div className="hidden md:block" data-testid="recovery-queue-table">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.incident")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.severity")}
+                  </TableHead>
+                  <TableHead>{t("admin.recoveryQueue.columns.exam")}</TableHead>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.candidate")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.attempt")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.linked")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.proctors")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.recoveryQueue.columns.createdAt")}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.incident.id}>
+                    <TableCell>
+                      <Link
+                        to={routes.admin.recoveryIncident(item.incident.id)}
+                        className="text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        <StatusBadge
+                          status={incidentStatusKey(item.incident.status)}
+                        />
+                      </Link>
+                    </TableCell>
+                    <TableCell>
                       {t(
-                        ("admin.recoveryQueue.severity." +
-                          item.incident.severity) as never,
+                        `admin.recoveryQueue.severity.${item.incident.severity}` as never,
                       )}
-                      {" · "}
+                    </TableCell>
+                    <TableCell>{item.examSummary.title}</TableCell>
+                    <TableCell>
                       {item.primaryCandidate?.displayName ??
                         t("admin.recoveryQueue.noCandidate")}
-                      {" · "}
+                    </TableCell>
+                    <TableCell>
+                      {item.primaryAttempt ? (
+                        <StatusBadge status={item.primaryAttempt.status} />
+                      ) : (
+                        t("admin.recoveryQueue.noAttempt")
+                      )}
+                    </TableCell>
+                    <TableCell>
                       {t("admin.recoveryQueue.linkedCount", {
                         count: item.linkedAttemptCount,
                       })}
+                    </TableCell>
+                    <TableCell>
+                      {item.activeProctors.length > 0
+                        ? item.activeProctors
+                            .map((p) => p.displayName)
+                            .join("、")
+                        : "—"}
+                    </TableCell>
+                    <TableCell>{formatTime(item.incident.createdAt)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile card list */}
+          <ul
+            className="flex flex-col gap-3 md:hidden"
+            data-testid="recovery-queue-cards"
+          >
+            {items.map((item) => (
+              <li key={item.incident.id}>
+                <Link
+                  to={routes.admin.recoveryIncident(item.incident.id)}
+                  className="flex w-full flex-col gap-2 rounded-md border p-3 text-left"
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <StatusBadge
+                      status={incidentStatusKey(item.incident.status)}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {formatTime(item.incident.createdAt)}
                     </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </DataTableShell>
+                  </span>
+                  <span className="text-sm font-medium">
+                    {item.examSummary.title}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t(
+                      ("admin.recoveryQueue.severity." +
+                        item.incident.severity) as never,
+                    )}
+                    {" · "}
+                    {item.primaryCandidate?.displayName ??
+                      t("admin.recoveryQueue.noCandidate")}
+                    {" · "}
+                    {t("admin.recoveryQueue.linkedCount", {
+                      count: item.linkedAttemptCount,
+                    })}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </DataTableShell>
+      )}
 
-          {/* Background-refresh failure: rows stay on screen + inline warning
-              (a full-screen ErrorState is shown only when there are no rows). */}
-          {error && (
-            <InlineErrorBanner>
-              {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
-            </InlineErrorBanner>
-          )}
+      {/* Background-refresh failure: inline warning outside the items branch
+          so an empty queue + poll failure keeps EmptyState + warning (P1-3). */}
+      {error && snapshotAt !== null && (
+        <InlineErrorBanner>
+          {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+        </InlineErrorBanner>
+      )}
 
-          {nextCursor && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={loadMore}
-                disabled={isLoadingMore}
-              >
-                {isLoadingMore
-                  ? t("admin.recoveryQueue.loadingMore")
-                  : t("admin.recoveryQueue.loadMore")}
-              </Button>
-            </div>
-          )}
-        </>
+      {nextCursor && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={loadMore}
+            disabled={isLoadingMore || isRefreshing}
+          >
+            {isLoadingMore
+              ? t("admin.recoveryQueue.loadingMore")
+              : t("admin.recoveryQueue.loadMore")}
+          </Button>
+        </div>
       )}
     </div>
   );

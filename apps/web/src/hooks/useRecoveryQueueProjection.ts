@@ -115,6 +115,7 @@ export function useRecoveryQueueProjection<TItem>(
   const failureRef = useRef(0);
   const hasItemsRef = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disposedRef = useRef(false);
   const nextCursorRef = useRef<string | null>(null);
   nextCursorRef.current = nextCursor;
 
@@ -135,6 +136,7 @@ export function useRecoveryQueueProjection<TItem>(
   );
   const scheduleNextPoll = useCallback(() => {
     clearPollTimer();
+    if (disposedRef.current) return;
     if (pollIntervalMs === undefined) return;
     if (document.visibilityState !== "visible") return;
     const fails = failureRef.current;
@@ -151,6 +153,7 @@ export function useRecoveryQueueProjection<TItem>(
 
   const runPage1 = useCallback(
     async (trigger: Page1Trigger) => {
+      if (disposedRef.current) return;
       // loadMore shares the slot: abort it on manual/initial; drop poll/
       // visible/focus if a request is active.
       if (controllerRef.current !== null) {
@@ -194,7 +197,7 @@ export function useRecoveryQueueProjection<TItem>(
         failureRef.current += 1;
       } finally {
         if (controllerRef.current === controller) controllerRef.current = null;
-        if (seq === seqRef.current) {
+        if (seq === seqRef.current && !disposedRef.current) {
           setIsRefreshing(false);
           setHasResolved(true);
           // Re-arm the cadence from THIS completion (see P1-4): a manual
@@ -209,12 +212,12 @@ export function useRecoveryQueueProjection<TItem>(
   runPage1Ref.current = runPage1;
 
   const runLoadMore = useCallback(async () => {
+    if (disposedRef.current) return;
     const cursor = nextCursorRef.current;
     if (!cursor) return;
-    // Mutually exclusive with page-1: abort any in-flight request first.
-    if (controllerRef.current !== null) {
-      controllerRef.current.abort();
-    }
+    // Drop loadMore if a page-1 refresh is already in flight — refresh has
+    // priority to avoid the isRefreshing state getting stuck (P1-2).
+    if (controllerRef.current !== null) return;
     const controller = new AbortController();
     controllerRef.current = controller;
     const seq = ++seqRef.current;
@@ -226,6 +229,7 @@ export function useRecoveryQueueProjection<TItem>(
       if (seq !== seqRef.current || controller.signal.aborted) return;
       setItems((prev) => [...prev, ...result.items]);
       setNextCursor(result.nextCursor);
+      setError(null);
       hasItemsRef.current = true;
       failureRef.current = 0;
     } catch (err) {
@@ -241,7 +245,7 @@ export function useRecoveryQueueProjection<TItem>(
       failureRef.current += 1;
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
-      if (seq === seqRef.current) {
+      if (seq === seqRef.current && !disposedRef.current) {
         setIsLoadingMore(false);
         // A poll tick may have been dropped while this append ran — restore
         // the cadence from this completion.
@@ -260,10 +264,13 @@ export function useRecoveryQueueProjection<TItem>(
   }, [runLoadMore]);
 
   const depsKey = JSON.stringify(deps);
+  const activeKeyRef = useRef(depsKey);
+  const keyChanged = activeKeyRef.current !== depsKey;
   useEffect(() => {
     // Filter change: reset the WHOLE projection synchronously so the previous
     // filter's rows/cursor/snapshot can never be shown while the new query
     // loads, and the new first load is treated as initial (full-screen).
+    disposedRef.current = false;
     controllerRef.current?.abort();
     seqRef.current += 1;
     hasItemsRef.current = false;
@@ -277,9 +284,14 @@ export function useRecoveryQueueProjection<TItem>(
     setIsRefreshing(false);
     setIsLoadingMore(false);
     setHasResolved(false);
+    activeKeyRef.current = depsKey;
     void runPage1("initial");
     return () => {
-      if (controllerRef.current) controllerRef.current.abort();
+      disposedRef.current = true;
+      seqRef.current += 1;
+      controllerRef.current?.abort();
+      controllerRef.current = null;
+      clearPollTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [depsKey]);
@@ -308,12 +320,6 @@ export function useRecoveryQueueProjection<TItem>(
     return () => clearInterval(id);
   }, [staleAfterMs]);
 
-  useEffect(() => {
-    return () => {
-      if (controllerRef.current) controllerRef.current.abort();
-    };
-  }, []);
-
   const isInitialLoading = useMemo(
     () => !hasResolved && error === null,
     [hasResolved, error],
@@ -323,6 +329,22 @@ export function useRecoveryQueueProjection<TItem>(
     staleAfterMs !== undefined &&
     snapshotAt !== null &&
     nowTick - new Date(snapshotAt).getTime() > staleAfterMs;
+
+  if (keyChanged) {
+    return {
+      items: [],
+      nextCursor: null,
+      error: null,
+      isInitialLoading: true,
+      isRefreshing: false,
+      isLoadingMore: false,
+      snapshotAt: null,
+      lastUpdatedAt: null,
+      isStale: false,
+      refresh,
+      loadMore,
+    };
+  }
 
   return {
     items,
