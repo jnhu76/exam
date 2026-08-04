@@ -1185,10 +1185,12 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
     ]);
     expect(body.allowedActions).not.toContain("link_attempt");
     // Each attempt summary carries the EFFECTIVE deadline (not raw deadlineAt)
-    // — the field is renamed to make the semantics explicit.
+    // — the field is renamed to make the semantics explicit — and the score
+    // (Task 7a additive field; null because the seeded attempts are ungraded).
     for (const a of body.attemptSummaries) {
       expect(a.effectiveDeadlineAt).toEqual(expect.any(String));
       expect(a).not.toHaveProperty("deadlineAt");
+      expect(a.score).toBeNull();
     }
   });
 
@@ -1338,6 +1340,8 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       answers: [],
       startedAt: now,
       deadlineAt: attemptDeadlineAt,
+      // Graded score — projected by the aggregate (Task 7a additive field).
+      score: 91,
       lastActivityAt: now,
       createdAt: now,
       updatedAt: now,
@@ -1373,6 +1377,8 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       (a: { id: string }) => a.id === attemptId,
     );
     expect(attemptSummary).toBeDefined();
+    // Task 7a additive field: the graded attempt's score is projected.
+    expect(attemptSummary.score).toBe(91);
     // exam.closeAt (+30min) is earlier than attempt.deadlineAt (+2h) →
     // effectiveDeadlineAt MUST equal examCloseAt, not attemptDeadlineAt.
     expect(attemptSummary.effectiveDeadlineAt).toBe(examCloseAt.toISOString());

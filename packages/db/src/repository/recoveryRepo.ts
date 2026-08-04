@@ -1,4 +1,8 @@
-import type { RequestContext } from "@exam/domain";
+import type {
+  AttemptTimeAdjustment,
+  InterruptionTimePolicy,
+  RequestContext,
+} from "@exam/domain";
 import { AuthzUnavailableError } from "@exam/domain";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import {
@@ -191,6 +195,11 @@ export interface IncidentAggregateAttemptSummary {
    */
   deadlineAt: Date | null;
   /**
+   * Final attempt score (examAttempts.score, `total_score`) — null until the
+   * attempt is graded. Mirrors the existing attempt-detail wire semantics.
+   */
+  score: number | null;
+  /**
    * attempt.examId — required for the same-Exam scope validation (ADR-014 §7
    * scope quadruple: every linked/anchor attempt MUST belong to the Incident's
    * exam). Not exposed on the wire; consumed by the repo's fail-closed check.
@@ -201,8 +210,15 @@ export interface IncidentAggregateAttemptSummary {
 export interface IncidentAggregateTimeAdjustmentSummary {
   id: string;
   attemptId: string;
+  policy: InterruptionTimePolicy;
+  source: AttemptTimeAdjustment["source"];
+  beforeDeadline: Date;
+  afterDeadline: Date;
   addedSeconds: number;
+  eligibleSeconds: number | null;
   reasonCode: string | null;
+  reasonText: string | null;
+  actorId: string | null;
   operationId: string;
   createdAt: Date;
 }
@@ -653,8 +669,15 @@ export function createRecoveryRepo(db: Database) {
           {
             id: string;
             attemptId: string;
+            policy: InterruptionTimePolicy;
+            source: AttemptTimeAdjustment["source"];
+            beforeDeadline: Date;
+            afterDeadline: Date;
             addedSeconds: number;
+            eligibleSeconds: number | null;
             reasonCode: string;
+            reasonText: string | null;
+            actorId: string | null;
             operationId: string;
             createdAt: Date;
           }
@@ -670,6 +693,7 @@ export function createRecoveryRepo(db: Database) {
               candidateId: examAttempts.candidateId,
               status: examAttempts.status,
               deadlineAt: examAttempts.deadlineAt,
+              score: examAttempts.score,
               examId: examAttempts.examId,
             })
             .from(examAttempts)
@@ -690,6 +714,7 @@ export function createRecoveryRepo(db: Database) {
               candidateId: a.candidateId,
               status: a.status,
               deadlineAt: a.deadlineAt,
+              score: a.score,
               examId: a.examId,
             }));
           for (const a of attRows) {
@@ -727,8 +752,15 @@ export function createRecoveryRepo(db: Database) {
                   .select({
                     id: attemptTimeAdjustments.id,
                     attemptId: attemptTimeAdjustments.attemptId,
+                    policy: attemptTimeAdjustments.policy,
+                    source: attemptTimeAdjustments.source,
+                    beforeDeadline: attemptTimeAdjustments.beforeDeadline,
+                    afterDeadline: attemptTimeAdjustments.afterDeadline,
                     addedSeconds: attemptTimeAdjustments.addedSeconds,
+                    eligibleSeconds: attemptTimeAdjustments.eligibleSeconds,
                     reasonCode: attemptTimeAdjustments.reasonCode,
+                    reasonText: attemptTimeAdjustments.reasonText,
+                    actorId: attemptTimeAdjustments.actorId,
                     operationId: attemptTimeAdjustments.operationId,
                     createdAt: attemptTimeAdjustments.createdAt,
                   })
@@ -842,8 +874,15 @@ export function createRecoveryRepo(db: Database) {
               timeAdjustmentSummaries.push({
                 id: adjustment.id,
                 attemptId: adjustment.attemptId,
+                policy: adjustment.policy,
+                source: adjustment.source,
+                beforeDeadline: adjustment.beforeDeadline,
+                afterDeadline: adjustment.afterDeadline,
                 addedSeconds: adjustment.addedSeconds,
+                eligibleSeconds: adjustment.eligibleSeconds,
                 reasonCode: adjustment.reasonCode,
+                reasonText: adjustment.reasonText,
+                actorId: adjustment.actorId,
                 operationId: adjustment.operationId,
                 createdAt: adjustment.createdAt,
               });

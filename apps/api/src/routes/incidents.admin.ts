@@ -390,6 +390,8 @@ const RecoveryAggregateAttemptSummarySchema = z.object({
   candidateId: z.string().nullable(),
   status: z.string(),
   effectiveDeadlineAt: z.string(),
+  // Final attempt score — null until graded (mirrors the attempt-detail wire).
+  score: z.number().nullable(),
 });
 
 /**
@@ -412,8 +414,15 @@ const RecoveryAggregateExamSummarySchema = z.object({
 const RecoveryAggregateTimeAdjustmentSchema = z.object({
   id: z.string(),
   attemptId: z.string(),
+  policy: z.string(),
+  source: z.string(),
+  beforeDeadline: z.string(),
+  afterDeadline: z.string(),
   addedSeconds: z.number().int(),
+  eligibleSeconds: z.number().nullable(),
   reasonCode: z.string().nullable(),
+  reasonText: z.string().nullable(),
+  actorId: z.string().nullable(),
   operationId: z.string(),
   createdAt: z.string(),
 });
@@ -1649,9 +1658,24 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             effectiveDeadlineAt: computeEffectiveDeadline(examForDeadline, {
               deadlineAt: a.deadlineAt,
             }).toISOString(),
+            score: a.score,
           })),
           timeAdjustmentSummaries: aggregate.timeAdjustmentSummaries.map(
-            (t) => ({ ...t, createdAt: t.createdAt.toISOString() }),
+            (t) => ({
+              id: t.id,
+              attemptId: t.attemptId,
+              policy: t.policy,
+              source: t.source,
+              beforeDeadline: t.beforeDeadline.toISOString(),
+              afterDeadline: t.afterDeadline.toISOString(),
+              addedSeconds: t.addedSeconds,
+              eligibleSeconds: t.eligibleSeconds,
+              reasonCode: t.reasonCode,
+              reasonText: t.reasonText,
+              actorId: t.actorId,
+              operationId: t.operationId,
+              createdAt: t.createdAt.toISOString(),
+            }),
           ),
           auditReferences: aggregate.auditReferences.map((a) => ({
             ...a,

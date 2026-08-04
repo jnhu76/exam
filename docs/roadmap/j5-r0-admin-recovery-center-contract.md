@@ -31,6 +31,14 @@
 > `timeAdjustmentSummaries`). Updates §12 decomposition to add I1A3 as a
 > sub-slice of I1A. See §6.4 and §12.
 >
+> **2026-08-04 — §6.3 additive projection (J5-I1B2 field mapping / Task 7a).**
+> `attemptSummaries[].score` (nullable — null until graded, mirrors the
+> attempt-detail wire) and `timeAdjustmentSummaries[]` gains
+> `policy / source / beforeDeadline / afterDeadline / actorId`
+> (the summary stays incident-scoped — the §6.1 boundary is unchanged).
+> The Incident Detail UI requires these fields; the endpoint is the single
+> authority (UI does not self-derive, does not multi-fetch). See §6.3.
+>
 > Authority chain: this contract consumes — and is bounded by — the already
 > accepted/runtime authorities ADR-013, ADR-014, ADR-015. It does not redefine
 > any Incident, Attempt, assignment, or interruption state machine. Where it
@@ -386,7 +394,8 @@ at least:
 - linked interruption episodes (evidence)
 - linked time grants / actions (action_type + action_id)
 - exam summary (identity + scope)
-- attempt summary (current status + effective deadline)
+- attempt summary (current status + effective deadline + score — score is
+  nullable, null until graded; additive 2026-08-04, J5-I1B2 field mapping)
 - current allowed actions (server-derived; see §7)
 - version / concurrency token (for expectedVersion on writes)
 - audit references / authoritative navigation links
@@ -404,6 +413,10 @@ Attempt Operations Context, not the Incident's linked-action projection. Each
 adjustment exists and its `attemptId` matches the action link's `attemptId`);
 a `force_submit` action identity is validated as `actionId == attemptId`.
 Broken referents surface as 503 AUTHZ_UNAVAILABLE, never a partial projection.
+Each projected summary row carries the full adjustment facts
+(`policy`, `source`, `beforeDeadline`, `afterDeadline`, `actorId`,
+`eligibleSeconds`, `reasonText`) — additive 2026-08-04 (J5-I1B2 field
+mapping): the Incident Detail UI renders them from this single endpoint.
 
 ### 6.2 Frontend MUST NOT derive
 

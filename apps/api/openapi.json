@@ -24510,13 +24510,18 @@
                           },
                           "effectiveDeadlineAt": {
                             "type": "string"
+                          },
+                          "score": {
+                            "type": "number",
+                            "nullable": true
                           }
                         },
                         "required": [
                           "id",
                           "candidateId",
                           "status",
-                          "effectiveDeadlineAt"
+                          "effectiveDeadlineAt",
+                          "score"
                         ],
                         "additionalProperties": false
                       }
@@ -24532,10 +24537,34 @@
                           "attemptId": {
                             "type": "string"
                           },
+                          "policy": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "beforeDeadline": {
+                            "type": "string"
+                          },
+                          "afterDeadline": {
+                            "type": "string"
+                          },
                           "addedSeconds": {
                             "type": "integer"
                           },
+                          "eligibleSeconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
                           "reasonCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "reasonText": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actorId": {
                             "type": "string",
                             "nullable": true
                           },
@@ -24549,8 +24578,15 @@
                         "required": [
                           "id",
                           "attemptId",
+                          "policy",
+                          "source",
+                          "beforeDeadline",
+                          "afterDeadline",
                           "addedSeconds",
+                          "eligibleSeconds",
                           "reasonCode",
+                          "reasonText",
+                          "actorId",
                           "operationId",
                           "createdAt"
                         ],

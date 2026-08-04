@@ -1493,6 +1493,8 @@ describe("recovery incident aggregate detail repository", () => {
       answers: [],
       startedAt: now,
       deadlineAt: ATTEMPT_DEADLINE_AT,
+      // Graded score — projected by the aggregate (Task 7a additive field).
+      score: 88.5,
       lastActivityAt: now,
       createdAt: now,
       updatedAt: now,
@@ -1617,6 +1619,16 @@ describe("recovery incident aggregate detail repository", () => {
       expect(a.deadlineAt).toEqual(ATTEMPT_DEADLINE_AT);
       expect(a.examId).toBe(fx.examId);
     }
+    // Score projection (Task 7a additive field): graded attempt carries its
+    // score; the ungraded fixture attempt stays null.
+    const gradedSummary = agg!.attemptSummaries.find(
+      (a) => a.id === attemptId2,
+    );
+    expect(gradedSummary!.score).toBe(88.5);
+    const ungradedSummary = agg!.attemptSummaries.find(
+      (a) => a.id === fx.attemptId,
+    );
+    expect(ungradedSummary!.score).toBeNull();
 
     // Snapshot carried — it is a real DB transaction_timestamp() Date
     expect(agg!.snapshotAt).toBeInstanceOf(Date);
@@ -2388,6 +2400,17 @@ describe("recovery incident aggregate detail repository", () => {
       expect(agg!.timeAdjustmentSummaries[0]!.attemptId).toBe(fx.attemptId);
       expect(agg!.timeAdjustmentSummaries[0]!.addedSeconds).toBe(3600);
       expect(agg!.timeAdjustmentSummaries[0]!.reasonCode).toBe("network");
+      // Task 7a additive fields (J5-I1B2 field mapping): policy/source/
+      // before/after deadline/actor are carried for the Incident Detail UI.
+      expect(agg!.timeAdjustmentSummaries[0]!.policy).toBe("operator_incident");
+      expect(agg!.timeAdjustmentSummaries[0]!.source).toBe("operator");
+      expect(agg!.timeAdjustmentSummaries[0]!.beforeDeadline).toBeInstanceOf(
+        Date,
+      );
+      expect(agg!.timeAdjustmentSummaries[0]!.afterDeadline).toBeInstanceOf(
+        Date,
+      );
+      expect(agg!.timeAdjustmentSummaries[0]!.actorId).toBe(fx.actorId);
 
       // Audit reference projected with actor name (same-org User).
       expect(agg!.auditReferences.length).toBe(1);
