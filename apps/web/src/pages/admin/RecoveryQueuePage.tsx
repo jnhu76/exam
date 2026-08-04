@@ -465,10 +465,19 @@ export function RecoveryQueuePage() {
                         `admin.recoveryQueue.severity.${item.incident.severity}` as never,
                       )}
                     </TableCell>
-                    <TableCell>{item.examSummary.title}</TableCell>
                     <TableCell>
-                      {item.primaryCandidate?.displayName ??
-                        t("admin.recoveryQueue.noCandidate")}
+                      <span
+                        className="block max-w-[200px] truncate text-sm"
+                        title={item.examSummary.title}
+                      >
+                        {item.examSummary.title}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="block max-w-[180px] truncate text-sm">
+                        {item.primaryCandidate?.displayName ??
+                          t("admin.recoveryQueue.noCandidate")}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {item.primaryAttempt ? (
@@ -515,7 +524,7 @@ export function RecoveryQueuePage() {
                       {formatTime(item.incident.createdAt)}
                     </span>
                   </span>
-                  <span className="text-sm font-medium">
+                  <span className="block truncate text-sm font-medium">
                     {item.examSummary.title}
                   </span>
                   <span className="text-xs text-muted-foreground">
