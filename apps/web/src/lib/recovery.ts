@@ -151,6 +151,81 @@ export interface RecoveryIncidentAggregateResponse {
   snapshotAt: string;
 }
 
+// ── Attempt Operations Context (contract §6.4, J5-I1A3) ──
+
+export interface RecoveryAttemptOperationsResponse {
+  attempt: {
+    id: string;
+    examId: string;
+    candidateId: string;
+    attemptNo: number;
+    status: string;
+    startedAt: string | null;
+    deadlineAt: string | null;
+    effectiveDeadlineAt: string | null;
+    submittedAt: string | null;
+    gradedAt: string | null;
+    lastActivityAt: string | null;
+    misconduct: boolean;
+  };
+  examSummary: { id: string; title: string; status: string; closeAt: string };
+  candidateSummary: { id: string; displayName: string };
+  interruptionEpisodes: {
+    interruption: { id: string; attemptId: string; createdAt: string };
+    events: {
+      id: string;
+      eventType: string;
+      occurredAt: string;
+      observedLastActivityAt: string | null;
+      detectionSource: string | null;
+      timeoutSeconds: number | null;
+      policy: string;
+      eligibleSeconds: number | null;
+      timeAdjustmentId: string | null;
+      actorId: string | null;
+      reasonCode: string;
+    }[];
+  }[];
+  timeAdjustments: {
+    id: string;
+    operationId: string;
+    attemptId: string;
+    interruptionId: string | null;
+    incidentId: string | null;
+    policy: string;
+    source: string;
+    beforeDeadline: string;
+    afterDeadline: string;
+    addedSeconds: number;
+    eligibleSeconds: number | null;
+    reasonCode: string;
+    reasonText: string | null;
+    actorId: string | null;
+    createdAt: string;
+  }[];
+  timeline: {
+    id: string;
+    organizationId: string;
+    actorId: string;
+    actorName: string | null;
+    action: string;
+    targetType: string;
+    targetId: string;
+    metadata: unknown;
+    ipAddress: string | null;
+    userAgent: string | null;
+    createdAt: string;
+  }[];
+  relatedIncidents: {
+    id: string;
+    status: string;
+    severity: string;
+    title: string;
+  }[];
+  allowedActions: string[];
+  snapshotAt: string;
+}
+
 /**
  * Maps the incident wire status (`open | investigating | resolved |
  * dismissed`) to its `statusMeta` key. Prefixed domain keys (`incidentOpen`,
