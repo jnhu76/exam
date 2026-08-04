@@ -382,7 +382,7 @@ describe("RecoveryQueuePage", () => {
     expect(lastCall).toContain("candidateId=cand-9");
   });
 
-  it("empty queue + background poll failure keeps EmptyState + inline warning (P1-3)", async () => {
+  it("empty queue + background poll failure keeps EmptyState + inline warning + refresh button (P1-3)", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     getMock.mockResolvedValueOnce({
       items: [],
@@ -391,7 +391,11 @@ describe("RecoveryQueuePage", () => {
     });
     renderPage();
     await act(async () => {});
+
+    // Empty queue: EmptyState visible, Refresh button visible, snapshot visible.
     expect(screen.getByText("暂无中断事件")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
+    expect(screen.getByText(/数据快照/)).toBeInTheDocument();
 
     // Background poll fails — must keep EmptyState, not switch to ErrorState.
     getMock.mockRejectedValueOnce(new Error("network"));
@@ -403,6 +407,10 @@ describe("RecoveryQueuePage", () => {
     expect(screen.getByText("暂无中断事件")).toBeInTheDocument();
     // Inline warning appears.
     expect(screen.getByText("加载恢复队列失败")).toBeInTheDocument();
+    // Refresh button still clickable.
+    expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
+    // Snapshot still visible.
+    expect(screen.getByText(/数据快照/)).toBeInTheDocument();
   });
 
   it("changing status while a free-text debounce is pending keeps BOTH in the URL (P2)", async () => {

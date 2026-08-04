@@ -255,6 +255,24 @@ export function RecoveryQueuePage() {
       <PageHeader
         title={t("admin.recoveryQueue.title")}
         description={t("admin.recoveryQueue.description")}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={isRefreshing}
+            aria-label={t("admin.recoveryQueue.refresh")}
+          >
+            <AppIcon
+              icon={RefreshCw}
+              size="inline"
+              className={isRefreshing ? "animate-spin" : undefined}
+            />
+            {isRefreshing
+              ? t("admin.recoveryQueue.refreshing")
+              : t("admin.recoveryQueue.refresh")}
+          </Button>
+        }
       />
       <DataToolbar>
         <Select
@@ -369,6 +387,29 @@ export function RecoveryQueuePage() {
         )}
       </DataToolbar>
 
+      {snapshotAt && (
+        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className={isStale ? "text-warning" : undefined}>
+            {isStale && <AppIcon icon={CircleAlert} size="inline" />}
+            {t("admin.recoveryQueue.snapshotAt", {
+              time: formatTime(snapshotAt),
+            })}
+          </span>
+          {isStale && (
+            <span className="text-warning">
+              {t("admin.recoveryQueue.snapshotStale")}
+            </span>
+          )}
+          {lastUpdatedAt && (
+            <span>
+              {t("admin.recoveryQueue.lastUpdatedAt", {
+                time: formatTime(lastUpdatedAt),
+              })}
+            </span>
+          )}
+        </span>
+      )}
+
       {items.length === 0 ? (
         <EmptyState
           icon={<AppIcon icon={LifeBuoy} size="state" />}
@@ -376,50 +417,7 @@ export function RecoveryQueuePage() {
           description={t("admin.recoveryQueue.emptyDescription")}
         />
       ) : (
-        <DataTableShell
-          title={t("admin.recoveryQueue.title")}
-          toolbar={
-            <span className="flex items-center gap-3 text-xs text-muted-foreground">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={refresh}
-                disabled={isRefreshing}
-                className="h-7 gap-1 px-2 text-xs"
-                aria-label={t("admin.recoveryQueue.refresh")}
-              >
-                <AppIcon
-                  icon={RefreshCw}
-                  size="inline"
-                  className={isRefreshing ? "animate-spin" : undefined}
-                />
-                {isRefreshing
-                  ? t("admin.recoveryQueue.refreshing")
-                  : t("admin.recoveryQueue.refresh")}
-              </Button>
-              {snapshotAt && (
-                <span className={isStale ? "text-warning" : undefined}>
-                  {isStale && <AppIcon icon={CircleAlert} size="inline" />}
-                  {t("admin.recoveryQueue.snapshotAt", {
-                    time: formatTime(snapshotAt),
-                  })}
-                </span>
-              )}
-              {isStale && (
-                <span className="text-warning">
-                  {t("admin.recoveryQueue.snapshotStale")}
-                </span>
-              )}
-              {lastUpdatedAt && (
-                <span>
-                  {t("admin.recoveryQueue.lastUpdatedAt", {
-                    time: formatTime(lastUpdatedAt),
-                  })}
-                </span>
-              )}
-            </span>
-          }
-        >
+        <DataTableShell>
           {/* Desktop table */}
           <div className="hidden md:block" data-testid="recovery-queue-table">
             <Table>
