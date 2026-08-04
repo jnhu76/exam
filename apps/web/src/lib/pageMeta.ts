@@ -50,6 +50,10 @@ const dynamicRouteTitleKeys: RouteTitleRule[] = [
     titleKey: "pageMeta.dynamic.recoveryAttempt",
   },
   {
+    pattern: /^\/admin\/recovery\/exams\/[^/]+$/,
+    titleKey: "pageMeta.dynamic.recoveryExam",
+  },
+  {
     pattern: /^\/admin\/questions\/[^/]+\/edit$/,
     titleKey: "pageMeta.dynamic.questionEdit",
   },

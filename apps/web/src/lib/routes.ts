@@ -30,6 +30,7 @@ export const routes = {
     recovery: "/admin/recovery",
     recoveryIncident: (id: string) => `/admin/recovery/incidents/${id}`,
     recoveryAttempt: (id: string) => `/admin/recovery/attempts/${id}`,
+    recoveryExam: (id: string) => `/admin/recovery/exams/${id}`,
     system: "/admin/system",
     diagnostics: "/admin/system",
   },

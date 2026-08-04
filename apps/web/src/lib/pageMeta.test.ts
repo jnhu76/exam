@@ -31,6 +31,7 @@ describe("page metadata", () => {
     expect(getPageTitle("/admin/recovery/attempts/attempt-1")).toBe(
       "答题操作详情",
     );
+    expect(getPageTitle("/admin/recovery/exams/exam-1")).toBe("考试恢复详情");
   });
 
   it("returns a stable fallback page title", () => {

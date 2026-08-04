@@ -226,6 +226,43 @@ export interface RecoveryAttemptOperationsResponse {
   snapshotAt: string;
 }
 
+// ── Exam Recovery Context (contract §6.5, J5-I1B4) ──
+
+export interface RecoveryExamContextResponse {
+  examSummary: {
+    id: string;
+    title: string;
+    status: string;
+    timingMode: string;
+    closeAt: string;
+  };
+  incidentStats: {
+    total: number;
+    byStatus: {
+      open: number;
+      investigating: number;
+      resolved: number;
+      dismissed: number;
+    };
+    bySeverity: {
+      info: number;
+      minor: number;
+      major: number;
+      critical: number;
+    };
+  };
+  recentIncidents: {
+    id: string;
+    type: string;
+    severity: string;
+    status: string;
+    createdAt: string;
+  }[];
+  activeProctors: { userId: string; displayName: string }[];
+  attemptStatusDistribution: Record<string, number>;
+  snapshotAt: string;
+}
+
 /**
  * Maps the incident wire status (`open | investigating | resolved |
  * dismissed`) to its `statusMeta` key. Prefixed domain keys (`incidentOpen`,

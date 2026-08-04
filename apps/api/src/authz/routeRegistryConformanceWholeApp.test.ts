@@ -347,7 +347,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 112 primary routes (98 protected + 14 non-protected)", () => {
+  it("the full composition reconciles to 113 primary routes (99 protected + 14 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -361,17 +361,19 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // routes → 109 primary = 95 protected + 14 non-protected. J5-I1A adds 3
     // Admin Recovery Center read routes (queue + aggregate detail + attempt
     // operations context) → 112 primary = 98 protected + 14 non-protected.
-    // This is a regression anchor, not a hard-coded PASS: if a route is
-    // added/removed the counts move and the failure message names the delta so
-    // the regression is triaged, not silently swallowed.
+    // J5-I1B4 adds the Exam Recovery Context read route → 113 primary = 99
+    // protected + 14 non-protected. This is a regression anchor, not a
+    // hard-coded PASS: if a route is added/removed the counts move and the
+    // failure message names the delta so the regression is triaged, not
+    // silently swallowed.
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(98);
+    ).toBe(99);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       14,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(112);
+    expect(capturedRoutes.length, "total primary routes").toBe(113);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

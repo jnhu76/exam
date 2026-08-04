@@ -1987,6 +1987,32 @@ const zhCN = {
       },
       loadFailed: "加载答题操作详情失败",
     },
+
+    /** Recovery Center — exam recovery detail page (J5-I1B4, contract §6.5). */
+    recoveryExam: {
+      title: "考试恢复详情",
+      back: "返回恢复中心",
+      viewInQueue: "在队列中查看",
+      notFound: "未找到该考试",
+      notFoundDescription: "考试不存在或已被删除。",
+      sections: {
+        exam: "考试",
+        incidents: "事件统计",
+        recentIncidents: "最近事件",
+        proctors: "监考人员",
+        attempts: "答题状态分布",
+      },
+      timingMode: "计时方式",
+      timingModeValue: {
+        timed_window: "定时窗口",
+      },
+      examCloseAt: "关闭时间",
+      incidentTotal: "事件总数",
+      noRecentIncidents: "暂无事件",
+      noProctors: "暂无监考人员",
+      noAttempts: "暂无答题",
+      attemptCount: "{{count}} 次",
+    },
   },
 
   /** LoginPage + auth-context copy. */
@@ -2113,6 +2139,7 @@ const zhCN = {
       attemptDetail: "答题详情",
       recoveryIncident: "事件详情",
       recoveryAttempt: "答题操作详情",
+      recoveryExam: "考试恢复详情",
       examPrepare: "考试准备",
       examTake: "正在答题",
       examResult: "考试结果",

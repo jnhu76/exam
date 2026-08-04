@@ -301,6 +301,45 @@ export interface AttemptOperationsRelatedIncident {
   linkedAt: Date;
 }
 
+export interface ExamRecoveryContext {
+  examSummary: {
+    id: string;
+    title: string;
+    status: string;
+    timingMode: string;
+    /** Non-null — the repo fails closed (503) when the timed_window invariant is broken. */
+    closeAt: Date;
+  };
+  incidentStats: {
+    total: number;
+    byStatus: {
+      open: number;
+      investigating: number;
+      resolved: number;
+      dismissed: number;
+    };
+    bySeverity: {
+      info: number;
+      minor: number;
+      major: number;
+      critical: number;
+    };
+  };
+  /** Newest 20 incidents of the exam (createdAt desc, id desc tiebreak). */
+  recentIncidents: {
+    id: string;
+    type: string;
+    severity: string;
+    status: string;
+    createdAt: Date;
+  }[];
+  /** Current ACTIVE proctor assignments with same-org display names. */
+  activeProctors: { userId: string; displayName: string }[];
+  /** Counts per attempt status for ALL attempts of the exam. */
+  attemptStatusDistribution: Record<string, number>;
+  snapshotAt: Date;
+}
+
 export type AttemptAllowedAction =
   | "time_grant"
   | "force_submit"
@@ -1489,10 +1528,195 @@ export function createRecoveryRepo(db: Database) {
     );
   }
 
+  /**
+   * getExamRecoveryContext — the org-wide Exam recovery aggregate (contract
+   * §6.5, J5-I1B4): exam summary, incident counts (by status/severity), the
+   * newest incidents, active proctors, and the attempt status distribution,
+   * read in ONE REPEATABLE READ read-only snapshot.
+   *
+   * Composition from existing endpoints was evaluated and rejected (§6.5):
+   * the incident counts and the attempt status distribution have NO server
+   * source elsewhere, and composing the rest would multi-fetch with
+   * per-statement snapshot skew. Missing/cross-org exam → null (route maps
+   * 404); broken timed_window invariant (null closeAt) or proctor→User
+   * resolution → 503 AUTHZ_UNAVAILABLE (fail-closed, never partial).
+   */
+  async function getExamRecoveryContext(
+    ctx: TenantContext | RequestContext,
+    examId: string,
+  ): Promise<ExamRecoveryContext | null> {
+    const orgId = resolveOrganizationId(ctx);
+    return db.transaction(
+      async (tx) => {
+        // 1. Exam — org-scoped; missing/cross-org fails closed to null (404).
+        const examRows = await tx
+          .select({
+            id: exams.id,
+            title: exams.title,
+            status: exams.status,
+            timingMode: exams.timingMode,
+            closeAt: exams.closeAt,
+          })
+          .from(exams)
+          .where(and(eq(exams.organizationId, orgId), eq(exams.id, examId)))
+          .limit(1);
+        const exam = examRows[0];
+        if (!exam) return null;
+        if (exam.closeAt == null) {
+          // timed_window invariant — a null closeAt is tenant-data corruption
+          // the deadline surface cannot reason about.
+          throw new AuthzUnavailableError(
+            `RECOVERY_EXAM_CLOSEAT_NULL: exam ${examId}`,
+          );
+        }
+
+        // 2. Incident counts — grouped in memory over the org+exam-scoped
+        //    rows (status/severity are constrained by CHECK constraints, so
+        //    the fixed buckets cover every legal value).
+        const byStatus = {
+          open: 0,
+          investigating: 0,
+          resolved: 0,
+          dismissed: 0,
+        };
+        const bySeverity = {
+          info: 0,
+          minor: 0,
+          major: 0,
+          critical: 0,
+        };
+        let total = 0;
+        const incidentRows = await tx
+          .select({
+            status: examIncidents.status,
+            severity: examIncidents.severity,
+          })
+          .from(examIncidents)
+          .where(
+            and(
+              eq(examIncidents.organizationId, orgId),
+              eq(examIncidents.examId, examId),
+            ),
+          );
+        for (const row of incidentRows) {
+          total += 1;
+          if (row.status in byStatus) {
+            byStatus[row.status as keyof typeof byStatus] += 1;
+          }
+          if (row.severity in bySeverity) {
+            bySeverity[row.severity as keyof typeof bySeverity] += 1;
+          }
+        }
+
+        // 3. Recent incidents — newest 20 (createdAt desc, id desc tiebreak).
+        const recentIncidents = await tx
+          .select({
+            id: examIncidents.id,
+            type: examIncidents.type,
+            severity: examIncidents.severity,
+            status: examIncidents.status,
+            createdAt: examIncidents.createdAt,
+          })
+          .from(examIncidents)
+          .where(
+            and(
+              eq(examIncidents.organizationId, orgId),
+              eq(examIncidents.examId, examId),
+            ),
+          )
+          .orderBy(desc(examIncidents.createdAt), desc(examIncidents.id))
+          .limit(20);
+
+        // 4. Active proctors — current active assignments only (status='active')
+        //    with SAME-ORG display names; a missing or cross-org User row is
+        //    tenant-graph corruption (fail closed, never an empty-name stub).
+        const proctorRows = await tx
+          .select({
+            userId: examProctorAssignments.proctorUserId,
+            displayName: users.name,
+          })
+          .from(examProctorAssignments)
+          .leftJoin(
+            users,
+            and(
+              eq(examProctorAssignments.proctorUserId, users.id),
+              eq(users.organizationId, orgId),
+            ),
+          )
+          .where(
+            and(
+              eq(examProctorAssignments.organizationId, orgId),
+              eq(examProctorAssignments.examId, examId),
+              eq(examProctorAssignments.status, "active"),
+            ),
+          )
+          .orderBy(asc(users.name), asc(examProctorAssignments.proctorUserId));
+        const activeProctors: { userId: string; displayName: string }[] = [];
+        for (const p of proctorRows) {
+          if (p.displayName == null) {
+            throw new AuthzUnavailableError(
+              `RECOVERY_EXAM_PROCTOR_USER_BROKEN: exam ${examId} proctor ${p.userId}`,
+            );
+          }
+          activeProctors.push({ userId: p.userId, displayName: p.displayName });
+        }
+
+        // 5. Attempt status distribution — ALL attempts of the exam.
+        const attemptRows = await tx
+          .select({ status: examAttempts.status })
+          .from(examAttempts)
+          .where(
+            and(
+              eq(examAttempts.organizationId, orgId),
+              eq(examAttempts.examId, examId),
+            ),
+          );
+        const attemptStatusDistribution: Record<string, number> = {};
+        for (const row of attemptRows) {
+          attemptStatusDistribution[row.status] =
+            (attemptStatusDistribution[row.status] ?? 0) + 1;
+        }
+
+        // 6. Transaction snapshot timestamp — queried INSIDE the RR
+        //    transaction (same pattern as the Incident aggregate).
+        const snapshotRows = (await tx.execute(
+          sql`SELECT transaction_timestamp() AS ts`, // adr-006-allow: DB snapshot identity stamp (see ADR-006 allowlist entry)
+        )) as unknown as Array<{ ts: string }>;
+        const rawSnapshotTs = snapshotRows[0]?.ts;
+        const snapshotAt = rawSnapshotTs ? new Date(rawSnapshotTs) : null;
+        if (!snapshotAt || Number.isNaN(snapshotAt.getTime())) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_EXAM_SNAPSHOT_TIMESTAMP_INVALID: exam ${examId}`,
+          );
+        }
+
+        return {
+          examSummary: {
+            id: exam.id,
+            title: exam.title,
+            status: exam.status,
+            timingMode: exam.timingMode,
+            closeAt: exam.closeAt,
+          },
+          incidentStats: { total, byStatus, bySeverity },
+          recentIncidents,
+          activeProctors,
+          attemptStatusDistribution,
+          snapshotAt,
+        };
+      },
+      {
+        isolationLevel: "repeatable read",
+        accessMode: "read only",
+      },
+    );
+  }
+
   return {
     listIncidentQueue,
     getIncidentAggregate,
     getAttemptOperationsContext,
+    getExamRecoveryContext,
   };
 }
 

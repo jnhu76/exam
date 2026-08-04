@@ -117,3 +117,49 @@ export const AttemptOperationsContextSchema = z.object({
 export type AttemptOperationsContext = z.infer<
   typeof AttemptOperationsContextSchema
 >;
+
+// ── Exam Recovery Context (J5-I1B4, contract §6.5) ──
+
+export const ExamRecoveryIncidentStatSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  severity: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+
+export const ExamRecoveryContextSchema = z.object({
+  examSummary: z.object({
+    id: z.string(),
+    title: z.string(),
+    status: z.string(),
+    timingMode: z.string(),
+    closeAt: z.string(),
+  }),
+  incidentStats: z.object({
+    total: z.number().int().nonnegative(),
+    byStatus: z.object({
+      open: z.number().int().nonnegative(),
+      investigating: z.number().int().nonnegative(),
+      resolved: z.number().int().nonnegative(),
+      dismissed: z.number().int().nonnegative(),
+    }),
+    bySeverity: z.object({
+      info: z.number().int().nonnegative(),
+      minor: z.number().int().nonnegative(),
+      major: z.number().int().nonnegative(),
+      critical: z.number().int().nonnegative(),
+    }),
+  }),
+  recentIncidents: z.array(ExamRecoveryIncidentStatSchema),
+  activeProctors: z.array(
+    z.object({ userId: z.string(), displayName: z.string() }),
+  ),
+  attemptStatusDistribution: z.record(
+    z.string(),
+    z.number().int().nonnegative(),
+  ),
+  snapshotAt: z.string(),
+});
+
+export type ExamRecoveryContext = z.infer<typeof ExamRecoveryContextSchema>;

@@ -2698,3 +2698,315 @@ describe("deriveAttemptAllowedActionsForCaller — per-caller allowedActions int
     expect(allowed).toEqual(["force_submit", "misconduct_mark"]);
   });
 });
+
+// ── J5-I1B4 — Recovery Exam Context (contract §6.5) ──
+
+describe("J5-I1B4 Admin Recovery exam context — GET /admin/recovery/exams/:examId", () => {
+  let ctx4: Awaited<ReturnType<typeof buildTestApp>>;
+  let adminToken4: string;
+  let candidateToken4: string;
+  let cleanupOrgId4: string | null = null;
+  let proctor4Token: string;
+  let proctor4UserId: string;
+  let examId4: string;
+
+  beforeAll(async () => {
+    ctx4 = await buildTestApp(plugin);
+    cleanupOrgId4 = ctx4.org.id;
+    adminToken4 = ctx4.adminToken;
+    candidateToken4 = ctx4.candidateToken;
+
+    // Exam + incidents + attempts + proctor for the exam recovery aggregate.
+    const now = new Date();
+    const courseId = randomUUID();
+    examId4 = randomUUID();
+    const enrollmentId = randomUUID();
+    const candidateProfileId = randomUUID();
+
+    await ctx4.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx4.org.id,
+      name: "Exam Ctx Course",
+      code: `ECC-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx4.db.insert(schema.exams).values({
+      id: examId4,
+      organizationId: ctx4.org.id,
+      title: "Exam Ctx Exam",
+      description: "",
+      courseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86_400_000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx4.db.insert(schema.candidateProfiles).values({
+      id: candidateProfileId,
+      organizationId: ctx4.org.id,
+      userId: ctx4.candidate.id,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx4.db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: ctx4.org.id,
+      examId: examId4,
+      candidateId: candidateProfileId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx4.db.insert(schema.examAttempts).values({
+      id: randomUUID(),
+      organizationId: ctx4.org.id,
+      examId: examId4,
+      enrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: new Date(now.getTime() + 3_600_000),
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Two incidents (open/major + resolved/info).
+    await ctx4.db.insert(schema.examIncidents).values([
+      {
+        id: randomUUID(),
+        organizationId: ctx4.org.id,
+        examId: examId4,
+        attemptId: null,
+        candidateId: null,
+        type: "network_interruption",
+        severity: "major",
+        status: "open",
+        occurredAt: null,
+        description: "exam-ctx-open",
+        resolutionSummary: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        reportedBy: ctx4.admin.id,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: randomUUID(),
+        organizationId: ctx4.org.id,
+        examId: examId4,
+        attemptId: null,
+        candidateId: null,
+        type: "operator_error",
+        severity: "info",
+        status: "resolved",
+        occurredAt: null,
+        description: "exam-ctx-resolved",
+        resolutionSummary: "resolved",
+        resolvedAt: now,
+        resolvedBy: ctx4.admin.id,
+        reportedBy: ctx4.admin.id,
+        version: 2,
+        createdAt: new Date(now.getTime() + 60_000),
+        updatedAt: now,
+      },
+    ]);
+    // Active proctor with assignment on this exam.
+    const proctor = await createAssignedUserForTest(
+      ctx4.db,
+      ctx4.org.id,
+      "Proctor",
+      `examctxproctor-${uniquePrefix()}`,
+      { isPrimary: true, isActive: true },
+    );
+    proctor4UserId = proctor.user.id;
+    proctor4Token = proctor.token;
+    await ctx4.db.insert(schema.examProctorAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx4.org.id,
+      examId: examId4,
+      proctorUserId: proctor4UserId,
+      status: "active",
+      assignedBy: ctx4.admin.id,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  afterAll(async () => {
+    if (cleanupOrgId4) {
+      await cleanupOrganizationTestData(ctx4.db, cleanupOrgId4);
+    }
+    await ctx4.cleanup();
+  });
+
+  it("Admin reads the exam recovery context — frozen projection", async () => {
+    const res = await ctx4.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/exams/${examId4}`,
+      cookies: { "auth-token": adminToken4 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.examSummary).toEqual({
+      id: examId4,
+      title: "Exam Ctx Exam",
+      status: "open",
+      timingMode: "timed_window",
+      closeAt: expect.any(String),
+    });
+    expect(body.incidentStats).toEqual({
+      total: 2,
+      byStatus: { open: 1, investigating: 0, resolved: 1, dismissed: 0 },
+      bySeverity: { info: 1, minor: 0, major: 1, critical: 0 },
+    });
+    // Newest first — the resolved incident (+60s) leads.
+    expect(body.recentIncidents.map((r: { type: string }) => r.type)).toEqual([
+      "operator_error",
+      "network_interruption",
+    ]);
+    expect(body.activeProctors).toEqual([
+      { userId: proctor4UserId, displayName: expect.any(String) },
+    ]);
+    expect(body.attemptStatusDistribution).toEqual({ in_progress: 1 });
+    expect(body.snapshotAt).toEqual(expect.any(String));
+  });
+
+  it("Proctor with incident.view + active assignment is STILL denied", async () => {
+    const res = await ctx4.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/exams/${examId4}`,
+      cookies: { "auth-token": proctor4Token },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Candidate is denied", async () => {
+    const res = await ctx4.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/exams/${examId4}`,
+      cookies: { "auth-token": candidateToken4 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("Anonymous (no cookie) is denied with 401", async () => {
+    const res = await ctx4.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/exams/${examId4}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("missing exam returns 404 (anti-enumeration)", async () => {
+    const res = await ctx4.app.inject({
+      method: "GET",
+      url: `/api/admin/recovery/exams/${randomUUID()}`,
+      cookies: { "auth-token": adminToken4 },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("broken proctor→User resolution fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
+    // An active assignment whose proctor user lives in ANOTHER org — the FK is
+    // satisfied, but the same-org User join cannot resolve it (corruption).
+    const now = new Date();
+    const foreignOrgId = randomUUID();
+    const foreignUserId = randomUUID();
+    await ctx4.db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Exam Ctx Foreign Org",
+      displayName: "Exam Ctx Foreign Org",
+      slug: `ecfo-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx4.db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: `examctx-foreign-${uniquePrefix()}`,
+      passwordHash: "hash",
+      name: "Foreign Proctor",
+      role: "Proctor",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx4.db.insert(schema.examProctorAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx4.org.id,
+      examId: examId4,
+      proctorUserId: foreignUserId,
+      status: "active",
+      assignedBy: ctx4.admin.id,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    try {
+      const res = await ctx4.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/exams/${examId4}`,
+        cookies: { "auth-token": adminToken4 },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+    } finally {
+      await ctx4.db
+        .delete(schema.examProctorAssignments)
+        .where(
+          and(
+            eq(schema.examProctorAssignments.organizationId, ctx4.org.id),
+            eq(schema.examProctorAssignments.examId, examId4),
+            eq(schema.examProctorAssignments.proctorUserId, foreignUserId),
+          ),
+        );
+      await ctx4.db
+        .delete(schema.users)
+        .where(
+          and(
+            eq(schema.users.organizationId, foreignOrgId),
+            eq(schema.users.id, foreignUserId),
+          ),
+        );
+      await ctx4.db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+});

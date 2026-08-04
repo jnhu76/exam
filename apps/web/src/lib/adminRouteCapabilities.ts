@@ -220,6 +220,11 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     capability: Permission.IncidentRecoveryView,
     label: "recovery-attempt-operations",
   },
+  {
+    pattern: "recovery/exams/:id",
+    capability: Permission.IncidentRecoveryView,
+    label: "recovery-exam-detail",
+  },
 ] as const;
 
 /**

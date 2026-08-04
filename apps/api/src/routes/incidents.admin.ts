@@ -4,6 +4,7 @@ import {
   AttemptIdParamsSchema,
   AttemptOperationsContextSchema,
   ErrorResponseSchema,
+  ExamRecoveryContextSchema,
 } from "@exam/contracts";
 import { NotFoundError } from "@exam/domain";
 import type { IncidentActionType } from "@exam/domain";
@@ -1839,6 +1840,71 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             title: r.title,
           })),
           allowedActions,
+          snapshotAt: context.snapshotAt.toISOString(),
+        }),
+      );
+    },
+  );
+
+  // ── Recovery Exam Context (J5-I1B4, contract §6.5) ──
+  //
+  // Admin-only org-wide Exam recovery aggregate: exam summary, incident
+  // counts by status/severity, newest incidents, active proctors, attempt
+  // status distribution — one REPEATABLE READ read-only snapshot. Same auth
+  // shape as the other Recovery Center reads (flat IncidentRecoveryView
+  // gate; the repo owns fail-closed scope validation; missing/cross-org →
+  // 404, broken invariants → 503 AUTHZ_UNAVAILABLE).
+  fastify.get(
+    "/admin/recovery/exams/:examId",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.IncidentRecoveryView),
+      ],
+      schema: {
+        params: ExamIdParamsSchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin"],
+        response: {
+          200: ExamRecoveryContextSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = ExamIdParamsSchema.parse(request.params);
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createRecoveryRepo(fastify.db);
+
+      const context = await repo.getExamRecoveryContext(ctx, params.examId);
+      // Missing or cross-org exam → repo returns null → 404 RESOURCE_NOT_FOUND.
+      // Broken invariants (null closeAt, proctor→User resolution) throw
+      // AuthzUnavailableError (503) from the repo.
+      if (!context) throw new NotFoundError("Exam not found");
+
+      return reply.send(
+        ExamRecoveryContextSchema.parse({
+          examSummary: {
+            id: context.examSummary.id,
+            title: context.examSummary.title,
+            status: context.examSummary.status,
+            timingMode: context.examSummary.timingMode,
+            closeAt: context.examSummary.closeAt.toISOString(),
+          },
+          incidentStats: context.incidentStats,
+          recentIncidents: context.recentIncidents.map((r) => ({
+            id: r.id,
+            type: r.type,
+            severity: r.severity,
+            status: r.status,
+            createdAt: r.createdAt.toISOString(),
+          })),
+          activeProctors: context.activeProctors,
+          attemptStatusDistribution: context.attemptStatusDistribution,
           snapshotAt: context.snapshotAt.toISOString(),
         }),
       );

@@ -686,6 +686,52 @@ timeAdjustmentSummaries (§6.3 — Incident Detail aggregate)
 These two semantics MUST NOT be confused. The UI must render them in distinct
 contexts and must not merge or deduplicate across the two projections.
 
+### 6.5 Exam Recovery Context (frozen, J5-I1B4 amendment)
+
+**Decision: NEW aggregate endpoint** — `GET /admin/recovery/exams/:examId`.
+Composition from existing APIs was evaluated and rejected:
+
+```text
+Required surface                  | Available from existing APIs?
+exam summary (timing mode, close) | yes — GET /admin/exams/:examId
+incident counts by status/severity| NO — the queue is paginated and
+                                   | count-less; client-side aggregation of
+                                   | pages is self-derivation (§6.2)
+recent incidents (exam-scoped)    | partial — queue examId filter (paged)
+active proctors for the exam      | yes — proctor-assignment admin API
+attempt status distribution       | NO — no per-exam attempt aggregation
+                                   | exists anywhere
+```
+
+`attempt status distribution` and `incident counts` have no server source;
+composing the rest would still multi-fetch for one section with per-statement
+snapshot skew — the same reasons §6.3 rejected Option B. The decision is
+frozen to a single aggregate endpoint (same shape as §5.4 / §6.3 / §6.4):
+
+```text
+GET /admin/recovery/exams/:examId
+
+- Admin-only (incident.recovery.view, scope Organization, resolver
+  organization, proctorAccess admin_only, sensitive true)
+- one REPEATABLE READ read-only snapshot; carries snapshotAt
+- examSummary: { id, title, status, timingMode, closeAt }  (closeAt
+  non-null — timed_window invariant; null fails closed 503)
+- incidentStats: total + counts by status (open/investigating/resolved/
+  dismissed) + counts by severity (info/minor/major/critical)
+- recentIncidents: newest 20 (createdAt desc, id desc tiebreak):
+  { id, type, severity, status, createdAt }
+- activeProctors: current ACTIVE proctor assignments with same-org
+  display names ({ userId, displayName }[])
+- attemptStatusDistribution: counts per attempt status for ALL attempts
+  of the exam (examAttempts group by status)
+- error mapping: missing/cross-org exam → 404 RESOURCE_NOT_FOUND;
+  broken proctor-User resolution → 503 AUTHZ_UNAVAILABLE (fail-closed);
+  caller lacks incident.recovery.view → 403
+```
+
+The Exam Recovery Detail page renders ONLY these wire fields (same rule as
+§6.3/§6.4: no self-derivation, no multi-fetch for one section).
+
 ---
 
 ## 7. Admin action matrix (frozen)

@@ -4361,3 +4361,299 @@ describe("recovery attempt operations context repository", () => {
     }
   });
 });
+
+describe("recovery exam recovery context repository", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  let fx: Fixture;
+  let emptyFx: Fixture;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("recovery-exam");
+    db = result.db;
+    cleanup = result.cleanup;
+    fx = await createFixture(db, "examctx");
+    emptyFx = await createFixture(db, "examctxempty");
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  it("projects exam summary, incident stats, recent incidents, active proctors and attempt distribution", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    // Three incidents: two open (major, info) + one resolved (major).
+    await insertIncident(db, fx, {
+      examId: fx.examId,
+      type: "network_interruption",
+      severity: "major",
+      status: "open",
+      createdAt: new Date(now.getTime() + 1_000),
+    });
+    await insertIncident(db, fx, {
+      examId: fx.examId,
+      type: "device_failure",
+      severity: "info",
+      status: "open",
+      createdAt: new Date(now.getTime() + 3_000),
+    });
+    await insertIncident(db, fx, {
+      examId: fx.examId,
+      type: "operator_error",
+      severity: "major",
+      status: "resolved",
+      createdAt: new Date(now.getTime() + 2_000),
+    });
+    // Active proctor assignment for the fixture proctor — already created by
+    // createFixture (the shared fixture inserts an active assignment).
+    // A second attempt (submitted) for distribution variety — fresh candidate.
+    const candidateUserId = randomUUID();
+    const candidateId = randomUUID();
+    const enrollmentId = randomUUID();
+    const attemptId2 = randomUUID();
+    await db.insert(schema.users).values({
+      id: candidateUserId,
+      organizationId: fx.organizationId,
+      username: `examctx-cand-${randomUUID()}`,
+      passwordHash: "hash",
+      name: "Exam Ctx Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: candidateId,
+      organizationId: fx.organizationId,
+      userId: candidateUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      candidateId,
+      status: "completed",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.examAttempts).values({
+      id: attemptId2,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      enrollmentId,
+      candidateId,
+      attemptNo: 1,
+      status: "submitted",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const ctx = await repo.getExamRecoveryContext(fx.ctx, fx.examId);
+    expect(ctx).not.toBeNull();
+    expect(ctx!.examSummary).toEqual({
+      id: fx.examId,
+      title: "Recovery Exam examctx",
+      status: "open",
+      timingMode: "timed_window",
+      closeAt: EXAM_CLOSE_AT,
+    });
+    expect(ctx!.incidentStats).toEqual({
+      total: 3,
+      byStatus: { open: 2, investigating: 0, resolved: 1, dismissed: 0 },
+      bySeverity: { info: 1, minor: 0, major: 2, critical: 0 },
+    });
+    // Newest first (createdAt desc) — the device_failure (+3s) leads.
+    expect(ctx!.recentIncidents.map((r) => r.type)).toEqual([
+      "device_failure",
+      "operator_error",
+      "network_interruption",
+    ]);
+    expect(ctx!.recentIncidents[0]!.status).toBe("open");
+    expect(ctx!.activeProctors).toEqual([
+      { userId: fx.proctorUserId, displayName: "Proctor examctx" },
+    ]);
+    expect(ctx!.attemptStatusDistribution).toEqual({
+      in_progress: 1,
+      submitted: 1,
+    });
+    expect(ctx!.snapshotAt).toBeInstanceOf(Date);
+  });
+
+  it("projects zero counts for an exam with no incidents/attempts/proctors", async () => {
+    const repo = createRecoveryRepo(db);
+    const ctx = await repo.getExamRecoveryContext(emptyFx.ctx, emptyFx.examId);
+    expect(ctx).not.toBeNull();
+    expect(ctx!.incidentStats).toEqual({
+      total: 0,
+      byStatus: { open: 0, investigating: 0, resolved: 0, dismissed: 0 },
+      bySeverity: { info: 0, minor: 0, major: 0, critical: 0 },
+    });
+    expect(ctx!.recentIncidents).toEqual([]);
+    // The fixture itself creates one active proctor assignment.
+    expect(ctx!.activeProctors).toEqual([
+      { userId: emptyFx.proctorUserId, displayName: "Proctor examctxempty" },
+    ]);
+    // The fixture itself creates one attempt (in_progress).
+    expect(ctx!.attemptStatusDistribution).toEqual({ in_progress: 1 });
+  });
+
+  it("returns null for a missing exam (fail-closed, no 500)", async () => {
+    const repo = createRecoveryRepo(db);
+    const ctx = await repo.getExamRecoveryContext(fx.ctx, randomUUID());
+    expect(ctx).toBeNull();
+  });
+
+  it("returns null for a cross-org exam (tenant isolation)", async () => {
+    const repo = createRecoveryRepo(db);
+    // fx's exam queried through emptyFx's org context → null, never data.
+    const ctx = await repo.getExamRecoveryContext(emptyFx.ctx, fx.examId);
+    expect(ctx).toBeNull();
+  });
+
+  it("fails closed when the exam closeAt is null (timed_window invariant)", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const courseId = randomUUID();
+    const examId = randomUUID();
+    await db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: fx.organizationId,
+      name: "Broken Course",
+      code: `BC-${randomUUID()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    // exams.close_at is NOT NULL — temporarily drop the column constraint
+    // (this runs on the per-run isolated worker DB) and insert the corrupt
+    // row via raw SQL (the typed insert legally cannot express it).
+    await db.execute(
+      sql`ALTER TABLE exams ALTER COLUMN close_at DROP NOT NULL`,
+    );
+    await db.execute(
+      sql`INSERT INTO exams (
+        id, organization_id, title, description, course_id, status,
+        timing_mode, duration_minutes, open_at, close_at, passing_score,
+        total_score, question_selection_mode, question_ids,
+        question_snapshot, control_flags, retake_policy, score_strategy,
+        max_attempts, created_at, updated_at
+      ) VALUES (
+        ${examId}, ${fx.organizationId}, 'Broken CloseAt Exam', '',
+        ${courseId}, 'open', 'timed_window', 60, ${now.toISOString()}, NULL, 60, 100,
+        'manual', '[]', '[]', '{}', 'unlimited', 'highest', 1,
+        ${now.toISOString()}, ${now.toISOString()}
+      )`,
+    );
+    try {
+      await expect(
+        repo.getExamRecoveryContext(fx.ctx, examId),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining("RECOVERY_EXAM_CLOSEAT_NULL"),
+      });
+    } finally {
+      await db
+        .delete(schema.exams)
+        .where(
+          and(
+            eq(schema.exams.organizationId, fx.organizationId),
+            eq(schema.exams.id, examId),
+          ),
+        );
+      await db
+        .delete(schema.courses)
+        .where(
+          and(
+            eq(schema.courses.organizationId, fx.organizationId),
+            eq(schema.courses.id, courseId),
+          ),
+        );
+      await db.execute(
+        sql`ALTER TABLE exams ALTER COLUMN close_at SET NOT NULL`,
+      );
+    }
+  });
+
+  it("fails closed when an active proctor assignment cannot resolve its user in-org", async () => {
+    const repo = createRecoveryRepo(db);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const foreignOrgId = randomUUID();
+    const foreignUserId = randomUUID();
+    await db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Foreign Proctor Org",
+      displayName: "Foreign Proctor Org",
+      slug: `fpo-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // The FK on proctor_user_id is satisfied (the user row exists), but the
+    // same-org User join cannot resolve it — tenant-graph corruption.
+    await db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: `foreign-proctor-${randomUUID()}`,
+      passwordHash: "hash",
+      name: "Foreign Proctor",
+      role: "Proctor",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.examProctorAssignments).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      proctorUserId: foreignUserId,
+      status: "active",
+      assignedBy: fx.actorId,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    try {
+      await expect(
+        repo.getExamRecoveryContext(fx.ctx, fx.examId),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining("RECOVERY_EXAM_PROCTOR_USER_BROKEN"),
+      });
+    } finally {
+      await db
+        .delete(schema.examProctorAssignments)
+        .where(
+          and(
+            eq(schema.examProctorAssignments.organizationId, fx.organizationId),
+            eq(schema.examProctorAssignments.examId, fx.examId),
+          ),
+        );
+      await db
+        .delete(schema.users)
+        .where(
+          and(
+            eq(schema.users.organizationId, foreignOrgId),
+            eq(schema.users.id, foreignUserId),
+          ),
+        );
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+});
