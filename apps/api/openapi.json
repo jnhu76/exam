@@ -20624,13 +20624,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -20892,13 +20910,31 @@
                             "nullable": true
                           },
                           "type": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "network_interruption",
+                              "device_failure",
+                              "power_failure",
+                              "candidate_unable_to_continue",
+                              "suspected_misconduct",
+                              "operator_error",
+                              "system_outage",
+                              "environmental_disruption",
+                              "other"
+                            ]
                           },
                           "severity": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["info", "minor", "major", "critical"]
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "investigating",
+                              "resolved",
+                              "dismissed"
+                            ]
                           },
                           "occurredAt": {
                             "type": "string",
@@ -21095,13 +21131,26 @@
                       "nullable": true
                     },
                     "type": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "network_interruption",
+                        "device_failure",
+                        "power_failure",
+                        "candidate_unable_to_continue",
+                        "suspected_misconduct",
+                        "operator_error",
+                        "system_outage",
+                        "environmental_disruption",
+                        "other"
+                      ]
                     },
                     "severity": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": ["info", "minor", "major", "critical"]
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": ["open", "investigating", "resolved", "dismissed"]
                     },
                     "occurredAt": {
                       "type": "string",
@@ -21333,13 +21382,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -21629,13 +21696,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -21939,13 +22024,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -22249,13 +22352,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -22555,13 +22676,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -22853,13 +22992,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -23151,13 +23308,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -23446,13 +23621,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -23859,13 +24052,31 @@
                                 "nullable": true
                               },
                               "type": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "network_interruption",
+                                  "device_failure",
+                                  "power_failure",
+                                  "candidate_unable_to_continue",
+                                  "suspected_misconduct",
+                                  "operator_error",
+                                  "system_outage",
+                                  "environmental_disruption",
+                                  "other"
+                                ]
                               },
                               "severity": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": ["info", "minor", "major", "critical"]
                               },
                               "status": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "investigating",
+                                  "resolved",
+                                  "dismissed"
+                                ]
                               },
                               "occurredAt": {
                                 "type": "string",
@@ -24016,9 +24227,12 @@
                     "nextCursor": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "snapshotAt": {
+                      "type": "string"
                     }
                   },
-                  "required": ["items", "nextCursor"],
+                  "required": ["items", "nextCursor", "snapshotAt"],
                   "additionalProperties": false
                 }
               }
@@ -24201,13 +24415,31 @@
                           "nullable": true
                         },
                         "type": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
                         },
                         "severity": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
                         },
                         "occurredAt": {
                           "type": "string",
@@ -24370,7 +24602,8 @@
                             "format": "uuid"
                           },
                           "actionType": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["time_grant", "force_submit"]
                           },
                           "actionId": {
                             "type": "string"
@@ -24415,7 +24648,8 @@
                             "type": "string"
                           },
                           "relationshipType": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["affected", "referenced"]
                           },
                           "linkedAt": {
                             "type": "string"
@@ -24506,17 +24740,32 @@
                             "nullable": true
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "not_started",
+                              "queued",
+                              "in_progress",
+                              "disrupted",
+                              "submitted",
+                              "grading",
+                              "graded",
+                              "voided"
+                            ]
                           },
                           "effectiveDeadlineAt": {
                             "type": "string"
+                          },
+                          "score": {
+                            "type": "number",
+                            "nullable": true
                           }
                         },
                         "required": [
                           "id",
                           "candidateId",
                           "status",
-                          "effectiveDeadlineAt"
+                          "effectiveDeadlineAt",
+                          "score"
                         ],
                         "additionalProperties": false
                       }
@@ -24532,10 +24781,45 @@
                           "attemptId": {
                             "type": "string"
                           },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "strict",
+                              "bounded_grace",
+                              "operator_incident"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "bounded_grace",
+                              "operator",
+                              "system_incident",
+                              "administrative_correction"
+                            ]
+                          },
+                          "beforeDeadline": {
+                            "type": "string"
+                          },
+                          "afterDeadline": {
+                            "type": "string"
+                          },
                           "addedSeconds": {
                             "type": "integer"
                           },
+                          "eligibleSeconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
                           "reasonCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "reasonText": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actorId": {
                             "type": "string",
                             "nullable": true
                           },
@@ -24549,8 +24833,15 @@
                         "required": [
                           "id",
                           "attemptId",
+                          "policy",
+                          "source",
+                          "beforeDeadline",
+                          "afterDeadline",
                           "addedSeconds",
+                          "eligibleSeconds",
                           "reasonCode",
+                          "reasonText",
+                          "actorId",
                           "operationId",
                           "createdAt"
                         ],
@@ -24623,6 +24914,961 @@
                     "timeAdjustmentSummaries",
                     "auditReferences",
                     "allowedActions",
+                    "snapshotAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/recovery/attempts/{attemptId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "attemptId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attempt": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "examId": {
+                          "type": "string"
+                        },
+                        "candidateId": {
+                          "type": "string"
+                        },
+                        "attemptNo": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "not_started",
+                            "queued",
+                            "in_progress",
+                            "disrupted",
+                            "submitted",
+                            "grading",
+                            "graded",
+                            "voided"
+                          ]
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "deadlineAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "effectiveDeadlineAt": {
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "gradedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastActivityAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "misconduct": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "examId",
+                        "candidateId",
+                        "attemptNo",
+                        "status",
+                        "startedAt",
+                        "deadlineAt",
+                        "effectiveDeadlineAt",
+                        "submittedAt",
+                        "gradedAt",
+                        "lastActivityAt",
+                        "misconduct"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "examSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "closeAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "status", "closeAt"],
+                      "additionalProperties": false
+                    },
+                    "candidateSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "displayName"],
+                      "additionalProperties": false
+                    },
+                    "interruptionEpisodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "interruption": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "attemptId": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "attemptId", "createdAt"],
+                            "additionalProperties": false
+                          },
+                          "events": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "eventType": {
+                                  "type": "string"
+                                },
+                                "occurredAt": {
+                                  "type": "string"
+                                },
+                                "observedLastActivityAt": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "detectionSource": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "timeoutSeconds": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "policy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "strict",
+                                    "bounded_grace",
+                                    "operator_incident"
+                                  ]
+                                },
+                                "eligibleSeconds": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "timeAdjustmentId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "actorId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "reasonCode": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "eventType",
+                                "occurredAt",
+                                "observedLastActivityAt",
+                                "detectionSource",
+                                "timeoutSeconds",
+                                "policy",
+                                "eligibleSeconds",
+                                "timeAdjustmentId",
+                                "actorId",
+                                "reasonCode"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["interruption", "events"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "timeAdjustments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "operationId": {
+                            "type": "string"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "interruptionId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "incidentId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "strict",
+                              "bounded_grace",
+                              "operator_incident"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "bounded_grace",
+                              "operator",
+                              "system_incident",
+                              "administrative_correction"
+                            ]
+                          },
+                          "beforeDeadline": {
+                            "type": "string"
+                          },
+                          "afterDeadline": {
+                            "type": "string"
+                          },
+                          "addedSeconds": {
+                            "type": "number"
+                          },
+                          "eligibleSeconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "reasonCode": {
+                            "type": "string"
+                          },
+                          "reasonText": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "operationId",
+                          "attemptId",
+                          "interruptionId",
+                          "incidentId",
+                          "policy",
+                          "source",
+                          "beforeDeadline",
+                          "afterDeadline",
+                          "addedSeconds",
+                          "eligibleSeconds",
+                          "reasonCode",
+                          "reasonText",
+                          "actorId",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "timeline": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "actorId": {
+                            "type": "string"
+                          },
+                          "actorName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "targetType": {
+                            "type": "string"
+                          },
+                          "targetId": {
+                            "type": "string"
+                          },
+                          "metadata": {},
+                          "ipAddress": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "userAgent": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "actorId",
+                          "actorName",
+                          "action",
+                          "targetType",
+                          "targetId",
+                          "ipAddress",
+                          "userAgent",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "relatedIncidents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "investigating",
+                              "resolved",
+                              "dismissed"
+                            ]
+                          },
+                          "severity": {
+                            "type": "string",
+                            "enum": ["info", "minor", "major", "critical"]
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "status", "severity", "title"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedActions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "time_grant",
+                          "force_submit",
+                          "misconduct_mark"
+                        ]
+                      }
+                    },
+                    "snapshotAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "attempt",
+                    "examSummary",
+                    "candidateSummary",
+                    "interruptionEpisodes",
+                    "timeAdjustments",
+                    "timeline",
+                    "relatedIncidents",
+                    "allowedActions",
+                    "snapshotAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/recovery/exams/{examId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "examId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "examSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "timingMode": {
+                          "type": "string"
+                        },
+                        "closeAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "status",
+                        "timingMode",
+                        "closeAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "incidentStats": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "byStatus": {
+                          "type": "object",
+                          "properties": {
+                            "open": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "investigating": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "resolved": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "dismissed": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "bySeverity": {
+                          "type": "object",
+                          "properties": {
+                            "info": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "minor": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "major": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "critical": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["info", "minor", "major", "critical"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["total", "byStatus", "bySeverity"],
+                      "additionalProperties": false
+                    },
+                    "recentIncidents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "network_interruption",
+                              "device_failure",
+                              "power_failure",
+                              "candidate_unable_to_continue",
+                              "suspected_misconduct",
+                              "operator_error",
+                              "system_outage",
+                              "environmental_disruption",
+                              "other"
+                            ]
+                          },
+                          "severity": {
+                            "type": "string",
+                            "enum": ["info", "minor", "major", "critical"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "investigating",
+                              "resolved",
+                              "dismissed"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type",
+                          "severity",
+                          "status",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "activeProctors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["userId", "displayName"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attemptStatusDistribution": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "snapshotAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "examSummary",
+                    "incidentStats",
+                    "recentIncidents",
+                    "activeProctors",
+                    "attemptStatusDistribution",
                     "snapshotAt"
                   ],
                   "additionalProperties": false

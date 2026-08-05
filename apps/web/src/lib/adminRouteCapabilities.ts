@@ -203,6 +203,28 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     capability: Permission.AttemptTimelineView,
     label: "attempt-detail",
   },
+
+  // Recovery Center (J5-I1B) — Admin-only read surfaces (contract §5.4/§6.3).
+  {
+    pattern: "recovery",
+    capability: Permission.IncidentRecoveryView,
+    label: "recovery-queue",
+  },
+  {
+    pattern: "recovery/incidents/:id",
+    capability: Permission.IncidentRecoveryView,
+    label: "recovery-incident-detail",
+  },
+  {
+    pattern: "recovery/attempts/:id",
+    capability: Permission.IncidentRecoveryView,
+    label: "recovery-attempt-operations",
+  },
+  {
+    pattern: "recovery/exams/:id",
+    capability: Permission.IncidentRecoveryView,
+    label: "recovery-exam-detail",
+  },
 ] as const;
 
 /**

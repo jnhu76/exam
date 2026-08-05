@@ -117,6 +117,30 @@ export const statusMeta = {
     icon: Ban,
     iconPolicy: "show",
   },
+  // Incident statuses (J5-I1B Recovery Center — queue + aggregate wire:
+  // open | investigating | resolved | dismissed). Domain keys are prefixed
+  // because `open` collides with the exam lifecycle status.
+  incidentOpen: {
+    labelKey: "status.incident.open",
+    tone: "warning",
+    icon: CircleAlert,
+    iconPolicy: "show",
+  },
+  incidentInvestigating: {
+    labelKey: "status.incident.investigating",
+    tone: "primary",
+    icon: LoaderCircle,
+  },
+  incidentResolved: {
+    labelKey: "status.incident.resolved",
+    tone: "success",
+    icon: CheckCircle2,
+  },
+  incidentDismissed: {
+    labelKey: "status.incident.dismissed",
+    tone: "muted",
+    icon: XCircle,
+  },
   saving: {
     labelKey: "status.save.saving",
     tone: "warning",

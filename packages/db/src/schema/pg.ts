@@ -474,6 +474,14 @@ export const examAttempts = pgTable(
         (${table.status} != 'disrupted' AND ${table.currentInterruptionId} IS NULL AND ${table.interruptedAt} IS NULL)
       `,
     ),
+    // Org+exam status distribution for the Recovery Exam aggregate
+    // (contract §6.5 `GROUP BY status`). Covers the org+exam predicate and
+    // the grouped status column.
+    index("exam_attempts_org_exam_status_idx").on(
+      table.organizationId,
+      table.examId,
+      table.status,
+    ),
   ],
 );
 

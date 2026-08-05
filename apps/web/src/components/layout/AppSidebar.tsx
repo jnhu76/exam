@@ -8,6 +8,7 @@ import {
   canSeeManagement,
   canSeeProctor,
   canSeeQuestions,
+  canSeeRecovery,
   canSeeResults,
 } from "@/lib/capabilities";
 import {
@@ -19,6 +20,7 @@ import {
   Gauge,
   GraduationCap,
   LayoutDashboard,
+  LifeBuoy,
   ListChecks,
   LogOut,
   Monitor,
@@ -137,6 +139,18 @@ const groups: NavGroup[] = [
         to: routes.admin.proctorWorkspace,
         icon: Monitor,
         visible: canSeeProctor,
+      },
+    ],
+  },
+  {
+    labelKey: "nav.groups.recovery",
+    items: [
+      {
+        labelKey: "nav.items.recoveryQueue",
+        to: routes.admin.recovery,
+        icon: LifeBuoy,
+        end: true,
+        visible: canSeeRecovery,
       },
     ],
   },

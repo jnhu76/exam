@@ -26,6 +26,15 @@ describe("routes", () => {
     expect(routes.admin.examScores("42")).toBe("/admin/exams/42/scores");
     expect(routes.admin.attemptDetail).toBeInstanceOf(Function);
     expect(routes.admin.attemptDetail("99")).toBe("/admin/attempts/99");
+    expect(routes.admin.recovery).toBe("/admin/recovery");
+    expect(routes.admin.recoveryIncident).toBeInstanceOf(Function);
+    expect(routes.admin.recoveryIncident("i-1")).toBe(
+      "/admin/recovery/incidents/i-1",
+    );
+    expect(routes.admin.recoveryAttempt).toBeInstanceOf(Function);
+    expect(routes.admin.recoveryAttempt("a-1")).toBe(
+      "/admin/recovery/attempts/a-1",
+    );
     expect(routes.admin.system).toBe("/admin/system");
   });
 
