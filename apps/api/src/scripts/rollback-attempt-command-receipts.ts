@@ -30,7 +30,9 @@ import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 /**
  * Extracts the database name from a connection URL. Query params are
  * excluded, a trailing slash is handled, and the final non-empty pathname
- * segment is used (percent-decoded). Throws on a malformed URL.
+ * segment is used (percent-decoded). Throws on a malformed URL and on
+ * malformed percent-encoding — a name the guard cannot evaluate reliably
+ * must fail closed, never fall back to a raw guess.
  */
 export function parseDatabaseName(databaseUrl: string): string {
   const parsed = new URL(databaseUrl);
@@ -38,9 +40,11 @@ export function parseDatabaseName(databaseUrl: string): string {
   try {
     return decodeURIComponent(lastSegment);
   } catch {
-    // Malformed percent-encoding: fall back to the raw segment so the name
-    // guard can still evaluate it.
-    return lastSegment;
+    // Malformed percent-encoding: fail closed. A raw-segment fallback could
+    // let an unparseable name slip past the database-name safety guard.
+    throw new Error(
+      `Malformed percent-encoding in DATABASE_URL path segment "${lastSegment}"`,
+    );
   }
 }
 
