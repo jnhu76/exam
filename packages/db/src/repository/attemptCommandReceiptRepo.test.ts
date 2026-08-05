@@ -14,11 +14,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type {
-  AttemptCommandRequestPayload,
-  AttemptCommandResultPayload,
-  RequestContext,
-} from "@exam/domain";
+import type { RequestContext } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
 import { getIsolatedTestDb } from "../testDb.js";
@@ -26,6 +22,7 @@ import type { Database } from "../types.js";
 import {
   createAttemptCommandReceiptRepo,
   type AttemptCommandReceiptRow,
+  type InsertAttemptCommandReceiptInput,
 } from "./attemptCommandReceiptRepo.js";
 
 function context(organizationId: string, actorId: string): RequestContext {
@@ -256,21 +253,23 @@ describe("attempt command receipt persistence foundation", () => {
             appliedAt: BASE_TIME.toISOString(),
           };
     // The `over` overrides are deliberately loose (Record<string, unknown>)
-    // so the runtime guard tests can bypass the compile-time binding; cast to
-    // the canonical unions at the boundary.
+    // so the runtime guard tests can bypass the compile-time binding. The
+    // per-branch input union is satisfied via an `as unknown as` cast at the
+    // test↔repo boundary — the runtime guard is what the bypass tests
+    // exercise, the union is what the @ts-expect-error tests below pin.
     return repo.insertReceipt(fix.ctx, {
       attemptId: over.attemptId ?? fix.attemptId,
       operationId: over.operationId ?? randomUUID(),
       commandType,
       requestPayload: (over.requestPayload ?? {
         reason: "forced",
-      }) as unknown as AttemptCommandRequestPayload,
+      }) as unknown as InsertAttemptCommandReceiptInput["requestPayload"],
       resultPayload: (over.resultPayload ??
-        defaultResultPayload) as unknown as AttemptCommandResultPayload,
+        defaultResultPayload) as unknown as InsertAttemptCommandReceiptInput["resultPayload"],
       outcome: over.outcome ?? "applied",
       actorId: fix.actorId,
       createdAt: over.createdAt ?? BASE_TIME,
-    });
+    } as unknown as InsertAttemptCommandReceiptInput);
   }
 
   // ── §11.9 findByOperationId is the cross-command arbiter ──────────
@@ -419,9 +418,14 @@ describe("attempt command receipt persistence foundation", () => {
   });
 
   // ── runtime payload↔commandType guard ────────────────────────────
+  //
+  // The discriminated-union input binds payload↔command at compile time; the
+  // tests below bypass the types via `as unknown as InsertAttemptCommandReceiptInput`
+  // to prove the runtime guard still holds (defense against `as unknown as`,
+  // JS callers, and rows read back from the database).
 
   it("insertReceipt rejects a request payload that does not match the commandType", async () => {
-    // The input types bind payload to command at compile time; this test
+    // The input union binds payload to command at compile time; this test
     // bypasses the types to prove the runtime guard still holds.
     await expect(
       repo.insertReceipt(alpha.ctx, {
@@ -431,7 +435,7 @@ describe("attempt command receipt persistence foundation", () => {
         requestPayload: {
           severity: "warning",
           notes: "x",
-        } as unknown as { reason: string },
+        },
         resultPayload: {
           commandType: "force_submit",
           beforeStatus: "in_progress",
@@ -439,11 +443,11 @@ describe("attempt command receipt persistence foundation", () => {
           submittedAt: BASE_TIME.toISOString(),
           gradedAt: BASE_TIME.toISOString(),
           appliedAt: BASE_TIME.toISOString(),
-        } as unknown as AttemptCommandResultPayload,
+        },
         outcome: "applied",
         actorId: alpha.actorId,
         createdAt: BASE_TIME,
-      }),
+      } as unknown as InsertAttemptCommandReceiptInput),
     ).rejects.toThrow(/requestPayload shape belongs to misconduct_mark/);
   });
 
@@ -458,11 +462,90 @@ describe("attempt command receipt persistence foundation", () => {
           commandType: "misconduct_mark",
           misconduct: null,
           appliedAt: BASE_TIME.toISOString(),
-        } as unknown as AttemptCommandResultPayload,
+        },
         outcome: "applied",
         actorId: alpha.actorId,
         createdAt: BASE_TIME,
-      }),
+      } as unknown as InsertAttemptCommandReceiptInput),
     ).rejects.toThrow(/resultPayload\.commandType misconduct_mark/);
+  });
+
+  // ── compile-time payload↔commandType binding (P2-1) ──────────────
+  // The @ts-expect-error directives fail typecheck (TS2578 unused) if the
+  // discriminated-union input ever regresses to a loose payload union. The
+  // calls are guarded by `if (false)` so they are type-checked but NEVER
+  // executed (a mismatched input must not silently reach the runtime guard).
+
+  it("rejects a misconduct request payload for a force_submit receipt (compile-time)", () => {
+    const misconductRequest = { severity: "warning" as const, notes: "x" };
+    const forceSubmitResult = {
+      commandType: "force_submit" as const,
+      beforeStatus: "in_progress" as const,
+      afterStatus: "graded" as const,
+      submittedAt: BASE_TIME.toISOString(),
+      gradedAt: BASE_TIME.toISOString(),
+      appliedAt: BASE_TIME.toISOString(),
+    };
+    if (false) {
+      // @ts-expect-error — force_submit requires a ForceSubmitRequestPayload
+      // (reason) and a ForceSubmitResultPayload; a misconduct request is a
+      // compile-time error, not a runtime guard.
+      repo.insertReceipt(alpha.ctx, {
+        attemptId: alpha.attemptId,
+        operationId: randomUUID(),
+        commandType: "force_submit",
+        requestPayload: misconductRequest,
+        resultPayload: forceSubmitResult,
+        outcome: "applied",
+        actorId: alpha.actorId,
+        createdAt: BASE_TIME,
+      });
+    }
+  });
+
+  it("rejects a misconduct result payload for a force_submit receipt (compile-time)", () => {
+    const forceSubmitRequest = { reason: "forced" };
+    const misconductResult = {
+      commandType: "misconduct_mark" as const,
+      misconduct: null,
+      appliedAt: BASE_TIME.toISOString(),
+    };
+    if (false) {
+      // @ts-expect-error — force_submit requires a ForceSubmitResultPayload;
+      // a misconduct result is a compile-time error.
+      repo.insertReceipt(alpha.ctx, {
+        attemptId: alpha.attemptId,
+        operationId: randomUUID(),
+        commandType: "force_submit",
+        requestPayload: forceSubmitRequest,
+        resultPayload: misconductResult,
+        outcome: "applied",
+        actorId: alpha.actorId,
+        createdAt: BASE_TIME,
+      });
+    }
+  });
+
+  it("rejects a force_submit request payload for a misconduct receipt (compile-time)", () => {
+    const forceSubmitRequest = { reason: "forced" };
+    const misconductResult = {
+      commandType: "misconduct_mark" as const,
+      misconduct: null,
+      appliedAt: BASE_TIME.toISOString(),
+    };
+    if (false) {
+      // @ts-expect-error — misconduct_mark requires a MisconductMarkRequestPayload;
+      // a force_submit request is a compile-time error.
+      repo.insertReceipt(alpha.ctx, {
+        attemptId: alpha.attemptId,
+        operationId: randomUUID(),
+        commandType: "misconduct_mark",
+        requestPayload: forceSubmitRequest,
+        resultPayload: misconductResult,
+        outcome: "applied",
+        actorId: alpha.actorId,
+        createdAt: BASE_TIME,
+      });
+    }
   });
 });

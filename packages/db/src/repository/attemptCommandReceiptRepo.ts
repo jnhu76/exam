@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type {
-  AttemptCommandRequestPayload,
-  AttemptCommandResultPayload,
   AttemptCommandType,
+  ForceSubmitRequestPayload,
+  ForceSubmitResultPayload,
+  MisconductMarkRequestPayload,
+  MisconductMarkResultPayload,
   RequestContext,
 } from "@exam/domain";
 import { and, asc, eq } from "drizzle-orm";
@@ -16,13 +18,22 @@ export type AttemptCommandReceiptRow =
 /** Persistent receipt outcome (audit §3.3 — `idempotent_replay` is never stored). */
 export type AttemptCommandReceiptOutcome = "applied" | "no_change";
 
-/** Input for {@link createAttemptCommandReceiptRepo.insertReceipt}. */
-export interface InsertAttemptCommandReceiptInput {
+/**
+ * Discriminated-union input for
+ * {@link createAttemptCommandReceiptRepo.insertReceipt}. The `commandType`
+ * discriminates the branch, and each branch binds BOTH the `requestPayload`
+ * and the `resultPayload` to that command at compile time (review J5-I1C0 PR
+ * #261 P2-1) — a `force_submit` row carrying a `misconduct_mark` payload is a
+ * TypeScript error, not a runtime `as` cast. The domain canonicalizer already
+ * binds the request side; this input extends the same binding to the stored
+ * result.
+ *
+ * Shared fields (`attemptId`, `operationId`, ...) are factored into a base so
+ * the union stays readable; the discriminator narrows the payload pair.
+ */
+interface InsertAttemptCommandReceiptBase {
   attemptId: string;
   operationId: string;
-  commandType: AttemptCommandType;
-  requestPayload: AttemptCommandRequestPayload;
-  resultPayload: AttemptCommandResultPayload;
   outcome: AttemptCommandReceiptOutcome;
   actorId: string;
   /**
@@ -34,11 +45,35 @@ export interface InsertAttemptCommandReceiptInput {
   createdAt: Date;
 }
 
+/** force_submit receipt insert: both payloads bound to force_submit. */
+export interface InsertForceSubmitReceiptInput extends InsertAttemptCommandReceiptBase {
+  commandType: "force_submit";
+  requestPayload: ForceSubmitRequestPayload;
+  resultPayload: ForceSubmitResultPayload;
+}
+
+/** misconduct_mark receipt insert: both payloads bound to misconduct_mark. */
+export interface InsertMisconductMarkReceiptInput extends InsertAttemptCommandReceiptBase {
+  commandType: "misconduct_mark";
+  requestPayload: MisconductMarkRequestPayload;
+  resultPayload: MisconductMarkResultPayload;
+}
+
+/**
+ * Input for {@link createAttemptCommandReceiptRepo.insertReceipt}. A
+ * discriminated union on `commandType` so a mismatched payload pair cannot be
+ * expressed at the call site.
+ */
+export type InsertAttemptCommandReceiptInput =
+  | InsertForceSubmitReceiptInput
+  | InsertMisconductMarkReceiptInput;
+
 /**
  * Guard against a caller inserting a payload that does not belong to the
- * declared commandType. The input types already bind the payloads to the
- * command at compile time; this runtime check keeps the durable row
- * self-consistent even if a caller bypasses the types.
+ * declared commandType. The {@link InsertAttemptCommandReceiptInput} union
+ * binds the payloads to the command at compile time; this runtime check
+ * keeps the durable row self-consistent even if a caller bypasses the types
+ * (`as unknown as`, a JS caller, or a row read back from the database).
  */
 function assertPayloadMatchesCommandType(
   input: InsertAttemptCommandReceiptInput,
