@@ -228,6 +228,39 @@ test("fails on a NEW backward when (0022-style regression)", () => {
   }
 });
 
+test("fails when an entry exceeds an allowlisted predecessor but not the historical maximum", () => {
+  const entries = Array.from({ length: 22 }, (_, idx) => ({
+    idx,
+    version: "7",
+    when: idx === 21 ? 1787200000000 : 1000 + idx,
+    tag: `${String(idx).padStart(4, "0")}_entry`,
+    breakpoints: true,
+  }));
+  entries.push({
+    idx: 22,
+    version: "7",
+    when: 1785253697471,
+    tag: "0022_engine_policy_seam",
+    breakpoints: true,
+  });
+  entries.push({
+    idx: 23,
+    version: "7",
+    when: 1786000000000,
+    tag: "0023_after_allowlisted_regression",
+    breakpoints: true,
+  });
+  const dir = buildJournalDir(entries);
+  try {
+    expectFail(
+      dir,
+      "when=1786000000000 is not greater than prior maximum=1787200000000",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // --- Mutation: duplicate tag ------------------------------------------------
 test("fails on duplicate tag", () => {
   const entries = [

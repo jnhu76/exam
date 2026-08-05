@@ -131,13 +131,21 @@ BEGIN
     -- invalid index of the same name cannot serve a composite FK and is
     -- rejected.
     SELECT i.indisunique
+      AND NOT i.indnullsnotdistinct
+      AND i.indimmediate
       AND i.indisvalid
+      AND i.indisready
+      AND i.indislive
       AND i.indpred IS NULL
+      AND i.indexprs IS NULL
       AND i.indnatts = 2
       AND i.indnkeyatts = 2
-      AND pg_get_indexdef(i.indexrelid) ~* 'USING btree'
+      AND i.indoption::text = '0 0'
+      AND am.amname = 'btree'
     INTO idx_unique_ok
     FROM pg_index i
+    JOIN pg_class c ON c.oid = i.indexrelid
+    JOIN pg_am am ON am.oid = c.relam
     WHERE i.indexrelid = idx_oid;
 
     -- pg_index.indkey is an int2vector indexed from 0. Collect the referenced
@@ -180,8 +188,6 @@ BEGIN
     -- Validate exact column shape. count(*) = 11 makes this set-equality: a
     -- table missing (or adding) a column fails even if every remaining column
     -- is in the allow-list. bool_and then checks type + nullability of each.
-    -- (PK is NOT separately verified here — it is implied by the column set and
-    -- enforced by the pkey index created in B2 when the table is new.)
     SELECT count(*) = 11
       AND bool_and(
         (a.attname, a.atttypid::regtype::text, a.attnotnull) IN (
@@ -238,14 +244,163 @@ END $$;
 
 --> statement-breakpoint
 
--- B2. exam_proctor_assignments indexes + FKs. Each object is added only if its
--- name is absent (idempotent). NOTE: an existing same-named object is accepted
--- WITHOUT re-verifying its definition — there is no duplicate-name CREATE here,
--- so a wrong-shaped existing index/FK would NOT be caught by this block. This
--- is acceptable because the table-level column-shape gate in B1 already guards
--- the high-risk partial-apply state (missing/extra columns); the authoritative
--- index/FK definitions only ever come from this CREATE/ADD path (when the table
--- is new) or from the original 0024 migration (when the table is fully present).
+-- B1a. Exact defaults, PK, and CHECKs for exam_proctor_assignments.
+DO $$
+DECLARE
+  actual_default text;
+  pk_ok boolean;
+  invalid_check text;
+BEGIN
+  SELECT pg_get_expr(d.adbin, d.adrelid, false)
+  INTO actual_default
+  FROM pg_attrdef d
+  JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+  WHERE d.adrelid='exam_proctor_assignments'::regclass AND a.attname='status';
+  IF actual_default IS NULL THEN
+    ALTER TABLE "exam_proctor_assignments" ALTER COLUMN "status" SET DEFAULT 'active';
+  ELSIF actual_default != '''active''::text' THEN
+    RAISE EXCEPTION '0027-B1a: exam_proctor_assignments.status default is incompatible (expected ''active'')';
+  END IF;
+
+  SELECT pg_get_expr(d.adbin, d.adrelid, false)
+  INTO actual_default
+  FROM pg_attrdef d
+  JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+  WHERE d.adrelid='exam_proctor_assignments'::regclass AND a.attname='created_at';
+  IF actual_default IS NULL THEN
+    ALTER TABLE "exam_proctor_assignments" ALTER COLUMN "created_at" SET DEFAULT now();
+  ELSIF actual_default != 'now()' THEN
+    RAISE EXCEPTION '0027-B1a: exam_proctor_assignments.created_at default is incompatible (expected now())';
+  END IF;
+
+  SELECT pg_get_expr(d.adbin, d.adrelid, false)
+  INTO actual_default
+  FROM pg_attrdef d
+  JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+  WHERE d.adrelid='exam_proctor_assignments'::regclass AND a.attname='updated_at';
+  IF actual_default IS NULL THEN
+    ALTER TABLE "exam_proctor_assignments" ALTER COLUMN "updated_at" SET DEFAULT now();
+  ELSIF actual_default != 'now()' THEN
+    RAISE EXCEPTION '0027-B1a: exam_proctor_assignments.updated_at default is incompatible (expected now())';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_attrdef d
+    JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+    WHERE d.adrelid='exam_proctor_assignments'::regclass
+      AND a.attname NOT IN ('status', 'created_at', 'updated_at')
+  ) THEN
+    RAISE EXCEPTION '0027-B1a: exam_proctor_assignments has an unexpected column default';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='exam_proctor_assignments'::regclass
+      AND conname='exam_proctor_assignments_pkey'
+  ) THEN
+    IF EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid='exam_proctor_assignments'::regclass AND contype='p'
+    ) THEN
+      RAISE EXCEPTION '0027-B1a: exam_proctor_assignments has a non-authoritative primary key';
+    END IF;
+    ALTER TABLE "exam_proctor_assignments"
+      ADD CONSTRAINT "exam_proctor_assignments_pkey" PRIMARY KEY ("id");
+  END IF;
+
+  SELECT c.contype='p'
+    AND c.conenforced
+    AND c.convalidated
+    AND NOT c.condeferrable
+    AND NOT c.condeferred
+    AND ARRAY(
+      SELECT a.attname::text
+      FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+      JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.attnum
+      ORDER BY k.ord
+    ) = ARRAY['id']::text[]
+    AND i.indisprimary AND i.indisunique
+    AND NOT i.indnullsnotdistinct AND i.indimmediate
+    AND i.indisvalid
+    AND i.indisready AND i.indislive
+    AND i.indnatts=1 AND i.indnkeyatts=1
+    AND i.indpred IS NULL AND i.indexprs IS NULL
+    AND i.indoption::text='0'
+    AND am.amname='btree'
+  INTO pk_ok
+  FROM pg_constraint c
+  LEFT JOIN pg_index i ON i.indexrelid=c.conindid
+  LEFT JOIN pg_class ic ON ic.oid=i.indexrelid
+  LEFT JOIN pg_am am ON am.oid=ic.relam
+  WHERE c.conrelid='exam_proctor_assignments'::regclass
+    AND c.conname='exam_proctor_assignments_pkey';
+  IF NOT COALESCE(pk_ok, false) THEN
+    RAISE EXCEPTION '0027-B1a: exam_proctor_assignments_pkey is incompatible';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='exam_proctor_assignments'::regclass
+      AND conname='exam_proctor_assignments_status_check'
+  ) THEN
+    ALTER TABLE "exam_proctor_assignments"
+      ADD CONSTRAINT "exam_proctor_assignments_status_check"
+      CHECK ("status" IN ('active', 'revoked'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='exam_proctor_assignments'::regclass
+      AND conname='exam_proctor_assignments_revocation_shape_check'
+  ) THEN
+    ALTER TABLE "exam_proctor_assignments"
+      ADD CONSTRAINT "exam_proctor_assignments_revocation_shape_check" CHECK (
+        ("status"='active' AND "revoked_at" IS NULL AND "revoked_by" IS NULL)
+        OR
+        ("status"='revoked' AND "revoked_at" IS NOT NULL AND "revoked_by" IS NOT NULL)
+      );
+  END IF;
+
+  ALTER TABLE "exam_proctor_assignments"
+    ADD CONSTRAINT "_0027_expected_assignments_status_check"
+      CHECK ("status" IN ('active', 'revoked')) NOT VALID,
+    ADD CONSTRAINT "_0027_expected_assignments_revocation_check" CHECK (
+      ("status"='active' AND "revoked_at" IS NULL AND "revoked_by" IS NULL)
+      OR
+      ("status"='revoked' AND "revoked_at" IS NOT NULL AND "revoked_by" IS NOT NULL)
+    ) NOT VALID;
+
+  SELECT names.actual_name
+  INTO invalid_check
+  FROM (VALUES
+    ('exam_proctor_assignments_status_check', '_0027_expected_assignments_status_check'),
+    ('exam_proctor_assignments_revocation_shape_check', '_0027_expected_assignments_revocation_check')
+  ) AS names(actual_name, expected_name)
+  JOIN pg_constraint actual
+    ON actual.conrelid='exam_proctor_assignments'::regclass
+   AND actual.conname=names.actual_name
+  JOIN pg_constraint expected
+    ON expected.conrelid='exam_proctor_assignments'::regclass
+   AND expected.conname=names.expected_name
+  WHERE actual.contype!='c'
+    OR NOT actual.conenforced
+    OR actual.conbin!=expected.conbin
+    OR actual.connoinherit
+  LIMIT 1;
+  IF invalid_check IS NOT NULL THEN
+    RAISE EXCEPTION '0027-B1a: % is incompatible', invalid_check;
+  END IF;
+
+  ALTER TABLE "exam_proctor_assignments"
+    DROP CONSTRAINT "_0027_expected_assignments_status_check",
+    DROP CONSTRAINT "_0027_expected_assignments_revocation_check";
+  ALTER TABLE "exam_proctor_assignments" VALIDATE CONSTRAINT "exam_proctor_assignments_status_check";
+  ALTER TABLE "exam_proctor_assignments" VALIDATE CONSTRAINT "exam_proctor_assignments_revocation_shape_check";
+END $$;
+
+--> statement-breakpoint
+
+-- B2. Add missing assignment indexes/FKs. Exact definitions are verified in B5.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND tablename='exam_proctor_assignments' AND indexname='exam_proctor_assignments_org_id_unique') THEN
@@ -337,7 +492,135 @@ END $$;
 
 --> statement-breakpoint
 
--- B4. exam_proctor_assignment_events indexes + FKs (idempotent). Requires
+-- B3a. Exact defaults, PK, and CHECKs for exam_proctor_assignment_events.
+DO $$
+DECLARE
+  actual_default text;
+  pk_ok boolean;
+  invalid_check text;
+BEGIN
+  SELECT pg_get_expr(d.adbin, d.adrelid, false)
+  INTO actual_default
+  FROM pg_attrdef d
+  JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+  WHERE d.adrelid='exam_proctor_assignment_events'::regclass AND a.attname='created_at';
+  IF actual_default IS NULL THEN
+    ALTER TABLE "exam_proctor_assignment_events" ALTER COLUMN "created_at" SET DEFAULT now();
+  ELSIF actual_default != 'now()' THEN
+    RAISE EXCEPTION '0027-B3a: exam_proctor_assignment_events.created_at default is incompatible (expected now())';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_attrdef d
+    JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+    WHERE d.adrelid='exam_proctor_assignment_events'::regclass
+      AND a.attname != 'created_at'
+  ) THEN
+    RAISE EXCEPTION '0027-B3a: exam_proctor_assignment_events has an unexpected column default';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='exam_proctor_assignment_events'::regclass
+      AND conname='exam_proctor_assignment_events_pkey'
+  ) THEN
+    IF EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid='exam_proctor_assignment_events'::regclass AND contype='p'
+    ) THEN
+      RAISE EXCEPTION '0027-B3a: exam_proctor_assignment_events has a non-authoritative primary key';
+    END IF;
+    ALTER TABLE "exam_proctor_assignment_events"
+      ADD CONSTRAINT "exam_proctor_assignment_events_pkey" PRIMARY KEY ("id");
+  END IF;
+
+  SELECT c.contype='p'
+    AND c.conenforced
+    AND c.convalidated
+    AND NOT c.condeferrable
+    AND NOT c.condeferred
+    AND ARRAY(
+      SELECT a.attname::text
+      FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+      JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.attnum
+      ORDER BY k.ord
+    ) = ARRAY['id']::text[]
+    AND i.indisprimary AND i.indisunique
+    AND NOT i.indnullsnotdistinct AND i.indimmediate
+    AND i.indisvalid
+    AND i.indisready AND i.indislive
+    AND i.indnatts=1 AND i.indnkeyatts=1
+    AND i.indpred IS NULL AND i.indexprs IS NULL
+    AND i.indoption::text='0'
+    AND am.amname='btree'
+  INTO pk_ok
+  FROM pg_constraint c
+  LEFT JOIN pg_index i ON i.indexrelid=c.conindid
+  LEFT JOIN pg_class ic ON ic.oid=i.indexrelid
+  LEFT JOIN pg_am am ON am.oid=ic.relam
+  WHERE c.conrelid='exam_proctor_assignment_events'::regclass
+    AND c.conname='exam_proctor_assignment_events_pkey';
+  IF NOT COALESCE(pk_ok, false) THEN
+    RAISE EXCEPTION '0027-B3a: exam_proctor_assignment_events_pkey is incompatible';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='exam_proctor_assignment_events'::regclass
+      AND conname='exam_proctor_assignment_events_command_type_check'
+  ) THEN
+    ALTER TABLE "exam_proctor_assignment_events"
+      ADD CONSTRAINT "exam_proctor_assignment_events_command_type_check"
+      CHECK ("command_type" IN ('assign', 'revoke'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='exam_proctor_assignment_events'::regclass
+      AND conname='exam_proctor_assignment_events_outcome_check'
+  ) THEN
+    ALTER TABLE "exam_proctor_assignment_events"
+      ADD CONSTRAINT "exam_proctor_assignment_events_outcome_check"
+      CHECK ("outcome" IN ('applied', 'no_change'));
+  END IF;
+
+  ALTER TABLE "exam_proctor_assignment_events"
+    ADD CONSTRAINT "_0027_expected_events_command_type_check"
+      CHECK ("command_type" IN ('assign', 'revoke')) NOT VALID,
+    ADD CONSTRAINT "_0027_expected_events_outcome_check"
+      CHECK ("outcome" IN ('applied', 'no_change')) NOT VALID;
+
+  SELECT names.actual_name
+  INTO invalid_check
+  FROM (VALUES
+    ('exam_proctor_assignment_events_command_type_check', '_0027_expected_events_command_type_check'),
+    ('exam_proctor_assignment_events_outcome_check', '_0027_expected_events_outcome_check')
+  ) AS names(actual_name, expected_name)
+  JOIN pg_constraint actual
+    ON actual.conrelid='exam_proctor_assignment_events'::regclass
+   AND actual.conname=names.actual_name
+  JOIN pg_constraint expected
+    ON expected.conrelid='exam_proctor_assignment_events'::regclass
+   AND expected.conname=names.expected_name
+  WHERE actual.contype!='c'
+    OR NOT actual.conenforced
+    OR actual.conbin!=expected.conbin
+    OR actual.connoinherit
+  LIMIT 1;
+  IF invalid_check IS NOT NULL THEN
+    RAISE EXCEPTION '0027-B3a: % is incompatible', invalid_check;
+  END IF;
+
+  ALTER TABLE "exam_proctor_assignment_events"
+    DROP CONSTRAINT "_0027_expected_events_command_type_check",
+    DROP CONSTRAINT "_0027_expected_events_outcome_check";
+  ALTER TABLE "exam_proctor_assignment_events" VALIDATE CONSTRAINT "exam_proctor_assignment_events_command_type_check";
+  ALTER TABLE "exam_proctor_assignment_events" VALIDATE CONSTRAINT "exam_proctor_assignment_events_outcome_check";
+END $$;
+
+--> statement-breakpoint
+
+-- B4. Add missing event indexes/FKs. Requires
 -- exam_proctor_assignments + its org_id_unique index (created in B1/B2, or
 -- already present-and-validated here).
 DO $$
@@ -357,6 +640,149 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='exam_proctor_assignment_events'::regclass AND conname='exam_proctor_assignment_events_assignment_fk') THEN
     ALTER TABLE "exam_proctor_assignment_events" ADD CONSTRAINT "exam_proctor_assignment_events_assignment_fk" FOREIGN KEY ("organization_id","assignment_id") REFERENCES "exam_proctor_assignments"("organization_id","id") ON DELETE no action ON UPDATE no action;
   END IF;
+END $$;
+
+--> statement-breakpoint
+
+-- B5. Validate the exact catalog shape of all seven secondary indexes and all
+-- eight foreign keys. Compatible NOT VALID FKs are validated in place.
+DO $$
+DECLARE
+  spec record;
+  actual record;
+BEGIN
+  FOR spec IN
+    SELECT * FROM (VALUES
+      ('exam_proctor_assignments', 'exam_proctor_assignments_org_id_unique', true, ARRAY['organization_id','id']::text[], '0 0', NULL::text),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_active_unique', true, ARRAY['organization_id','exam_id','proctor_user_id']::text[], '0 0 0', '(status = ''active''::text)'),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_org_exam_status_idx', false, ARRAY['organization_id','exam_id','status']::text[], '0 0 0', NULL::text),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_org_proctor_status_idx', false, ARRAY['organization_id','proctor_user_id','status']::text[], '0 0 0', NULL::text),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_revoke_target_idx', false, ARRAY['organization_id','exam_id','proctor_user_id','status','revoked_at','id']::text[], '0 0 0 0 3 3', NULL::text),
+      ('exam_proctor_assignment_events', 'exam_proctor_assignment_events_org_operation_unique', true, ARRAY['organization_id','operation_id']::text[], '0 0', NULL::text),
+      ('exam_proctor_assignment_events', 'exam_proctor_assignment_events_assignment_idx', false, ARRAY['organization_id','assignment_id','created_at']::text[], '0 0 0', NULL::text)
+    ) AS expected(table_name, index_name, is_unique, key_defs, index_options, predicate)
+  LOOP
+    SELECT
+      ic.oid AS index_oid,
+      i.indisunique,
+      i.indisprimary,
+      i.indisexclusion,
+      i.indnullsnotdistinct,
+      i.indimmediate,
+      i.indisvalid,
+      i.indisready,
+      i.indislive,
+      i.indnatts,
+      i.indnkeyatts,
+      i.indoption::text AS index_options,
+      i.indexprs,
+      pg_get_expr(i.indpred, i.indrelid, false) AS predicate,
+      am.amname,
+      ARRAY(
+        SELECT pg_get_indexdef(i.indexrelid, key_position, false)
+        FROM generate_series(1, i.indnkeyatts) AS positions(key_position)
+      ) AS key_defs
+    INTO actual
+    FROM pg_index i
+    JOIN pg_class ic ON ic.oid=i.indexrelid
+    JOIN pg_namespace n ON n.oid=ic.relnamespace
+    JOIN pg_am am ON am.oid=ic.relam
+    WHERE i.indrelid=to_regclass(spec.table_name)
+      AND n.nspname=current_schema()
+      AND ic.relname=spec.index_name;
+
+    IF actual.index_oid IS NULL
+      OR actual.indisunique IS DISTINCT FROM spec.is_unique
+      OR actual.indisprimary
+      OR actual.indisexclusion
+      OR actual.indnullsnotdistinct
+      OR NOT actual.indimmediate
+      OR NOT actual.indisvalid
+      OR NOT actual.indisready
+      OR NOT actual.indislive
+      OR actual.indnatts != cardinality(spec.key_defs)
+      OR actual.indnkeyatts != cardinality(spec.key_defs)
+      OR actual.index_options IS DISTINCT FROM spec.index_options
+      OR actual.indexprs IS NOT NULL
+      OR actual.predicate IS DISTINCT FROM spec.predicate
+      OR actual.amname IS DISTINCT FROM 'btree'
+      OR actual.key_defs IS DISTINCT FROM spec.key_defs
+    THEN
+      RAISE EXCEPTION '0027-B5: % is incompatible with the authoritative 0024 index definition', spec.index_name
+        USING DETAIL = format(
+          'actual unique=%s primary=%s exclusion=%s valid=%s ready=%s live=%s natts=%s nkeyatts=%s options=%s predicate=%s am=%s keys=%s; expected unique=%s options=%s predicate=%s keys=%s',
+          actual.indisunique, actual.indisprimary, actual.indisexclusion,
+          actual.indisvalid, actual.indisready, actual.indislive,
+          actual.indnatts, actual.indnkeyatts, actual.index_options,
+          actual.predicate, actual.amname, actual.key_defs,
+          spec.is_unique, spec.index_options, spec.predicate, spec.key_defs
+        );
+    END IF;
+  END LOOP;
+
+  FOR spec IN
+    SELECT * FROM (VALUES
+      ('exam_proctor_assignments', 'exam_proctor_assignments_org_fk', ARRAY['organization_id']::text[], 'organizations', ARRAY['id']::text[]),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_proctor_user_fk', ARRAY['proctor_user_id']::text[], 'users', ARRAY['id']::text[]),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_assigned_by_fk', ARRAY['assigned_by']::text[], 'users', ARRAY['id']::text[]),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_revoked_by_fk', ARRAY['revoked_by']::text[], 'users', ARRAY['id']::text[]),
+      ('exam_proctor_assignments', 'exam_proctor_assignments_exam_fk', ARRAY['organization_id','exam_id']::text[], 'exams', ARRAY['organization_id','id']::text[]),
+      ('exam_proctor_assignment_events', 'exam_proctor_assignment_events_org_fk', ARRAY['organization_id']::text[], 'organizations', ARRAY['id']::text[]),
+      ('exam_proctor_assignment_events', 'exam_proctor_assignment_events_actor_fk', ARRAY['actor_id']::text[], 'users', ARRAY['id']::text[]),
+      ('exam_proctor_assignment_events', 'exam_proctor_assignment_events_assignment_fk', ARRAY['organization_id','assignment_id']::text[], 'exam_proctor_assignments', ARRAY['organization_id','id']::text[])
+    ) AS expected(table_name, constraint_name, source_columns, target_table, target_columns)
+  LOOP
+    SELECT
+      c.oid AS constraint_oid,
+      c.contype,
+      c.conenforced,
+      c.convalidated,
+      c.condeferrable,
+      c.condeferred,
+      c.confrelid,
+      c.confupdtype,
+      c.confdeltype,
+      c.confmatchtype,
+      ARRAY(
+        SELECT a.attname::text
+        FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+        JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.attnum
+        ORDER BY k.ord
+      ) AS source_columns,
+      ARRAY(
+        SELECT a.attname::text
+        FROM unnest(c.confkey) WITH ORDINALITY AS k(attnum, ord)
+        JOIN pg_attribute a ON a.attrelid=c.confrelid AND a.attnum=k.attnum
+        ORDER BY k.ord
+      ) AS target_columns
+    INTO actual
+    FROM pg_constraint c
+    WHERE c.conrelid=to_regclass(spec.table_name)
+      AND c.conname=spec.constraint_name;
+
+    IF actual.constraint_oid IS NULL
+      OR actual.contype IS DISTINCT FROM 'f'
+      OR NOT actual.conenforced
+      OR actual.condeferrable
+      OR actual.condeferred
+      OR actual.confrelid IS DISTINCT FROM to_regclass(spec.target_table)
+      OR actual.confupdtype IS DISTINCT FROM 'a'
+      OR actual.confdeltype IS DISTINCT FROM 'a'
+      OR actual.confmatchtype IS DISTINCT FROM 's'
+      OR actual.source_columns IS DISTINCT FROM spec.source_columns
+      OR actual.target_columns IS DISTINCT FROM spec.target_columns
+    THEN
+      RAISE EXCEPTION '0027-B5: % is incompatible with the authoritative 0024 foreign-key definition', spec.constraint_name;
+    END IF;
+
+    IF NOT actual.convalidated THEN
+      EXECUTE format(
+        'ALTER TABLE %I VALIDATE CONSTRAINT %I',
+        spec.table_name,
+        spec.constraint_name
+      );
+    END IF;
+  END LOOP;
 END $$;
 
 --> statement-breakpoint
@@ -489,22 +915,107 @@ END $$;
 
 --> statement-breakpoint
 
--- C2. Create missing disrupted episodes (0022 P2). A disrupted attempt with a
--- NULL pointer is an I1 transitional row 0022 would have repaired. All inserts
--- are effect-level NOT EXISTS so a healthy DB is a no-op and re-runs never
--- duplicate.
+-- C2. Reuse exactly one legal open episode for a disrupted attempt with a NULL
+-- pointer. Create a new episode only when none exists; multiple or malformed
+-- open episodes are incompatible and fail closed.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM "exam_attempts" a
+    JOIN "attempt_interruptions" p ON p."attempt_id"=a."id"
+    WHERE a."status"='disrupted'
+      AND a."current_interruption_id" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "attempt_interruption_events" outcome
+        WHERE outcome."interruption_id"=p."id"
+          AND outcome."event_type" IN ('restored', 'terminalized')
+      )
+    GROUP BY a."id", p."id", a."organization_id", p."organization_id"
+    HAVING p."organization_id" != a."organization_id"
+      OR count(*) FILTER (
+        WHERE EXISTS (
+          SELECT 1 FROM "attempt_interruption_events" detected
+          WHERE detected."interruption_id"=p."id"
+            AND detected."event_type"='detected'
+            AND detected."attempt_id"=a."id"
+            AND detected."organization_id"=a."organization_id"
+        )
+      ) != 1
+      OR (
+        SELECT count(*)
+        FROM "attempt_interruption_events" detected
+        WHERE detected."interruption_id"=p."id"
+          AND detected."event_type"='detected'
+      ) != 1
+  ) THEN
+    RAISE EXCEPTION '0027-C2: malformed open interruption episode exists for a disrupted attempt with a NULL pointer';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM "exam_attempts" a
+    JOIN "attempt_interruptions" p
+      ON p."attempt_id"=a."id" AND p."organization_id"=a."organization_id"
+    JOIN "attempt_interruption_events" detected
+      ON detected."interruption_id"=p."id"
+     AND detected."event_type"='detected'
+     AND detected."attempt_id"=a."id"
+     AND detected."organization_id"=a."organization_id"
+    WHERE a."status"='disrupted'
+      AND a."current_interruption_id" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "attempt_interruption_events" outcome
+        WHERE outcome."interruption_id"=p."id"
+          AND outcome."event_type" IN ('restored', 'terminalized')
+      )
+    GROUP BY a."id"
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION '0027-C2: multiple legal open interruption episodes exist for a disrupted attempt with a NULL pointer';
+  END IF;
+END $$;
+
+--> statement-breakpoint
+
 CREATE TEMPORARY TABLE "_2027_missing_disrupted" (
   "attempt_id" text PRIMARY KEY,
   "interruption_id" uuid NOT NULL,
-  "detected_at" timestamp with time zone NOT NULL
+  "detected_at" timestamp with time zone NOT NULL,
+  "reused" boolean NOT NULL
 ) ON COMMIT DROP;
 
 --> statement-breakpoint
 
-INSERT INTO "_2027_missing_disrupted" ("attempt_id", "interruption_id", "detected_at")
-SELECT a."id", gen_random_uuid(), transaction_timestamp()
+INSERT INTO "_2027_missing_disrupted" ("attempt_id", "interruption_id", "detected_at", "reused")
+SELECT a."id", p."id", detected."occurred_at", true
 FROM "exam_attempts" a
-WHERE a."status" = 'disrupted' AND a."current_interruption_id" IS NULL;
+JOIN "attempt_interruptions" p
+  ON p."attempt_id"=a."id" AND p."organization_id"=a."organization_id"
+JOIN "attempt_interruption_events" detected
+  ON detected."interruption_id"=p."id"
+ AND detected."event_type"='detected'
+ AND detected."attempt_id"=a."id"
+ AND detected."organization_id"=a."organization_id"
+WHERE a."status"='disrupted'
+  AND a."current_interruption_id" IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM "attempt_interruption_events" outcome
+    WHERE outcome."interruption_id"=p."id"
+      AND outcome."event_type" IN ('restored', 'terminalized')
+  );
+
+--> statement-breakpoint
+
+INSERT INTO "_2027_missing_disrupted" ("attempt_id", "interruption_id", "detected_at", "reused")
+SELECT a."id", gen_random_uuid(), transaction_timestamp(), false
+FROM "exam_attempts" a
+WHERE a."status"='disrupted'
+  AND a."current_interruption_id" IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM "_2027_missing_disrupted" mapped
+    WHERE mapped."attempt_id"=a."id"
+  );
 
 --> statement-breakpoint
 
@@ -512,7 +1023,8 @@ INSERT INTO "attempt_interruptions" ("id", "organization_id", "attempt_id", "cre
 SELECT m."interruption_id", a."organization_id", a."id", m."detected_at"
 FROM "_2027_missing_disrupted" m
 JOIN "exam_attempts" a ON a."id" = m."attempt_id"
-WHERE NOT EXISTS (
+WHERE NOT m."reused"
+AND NOT EXISTS (
   SELECT 1 FROM "attempt_interruptions" p
   WHERE p."attempt_id" = a."id" AND p."id" = m."interruption_id"
 );
@@ -533,7 +1045,8 @@ SELECT
   NULL, NULL, NULL, 'migration_backfill_unknown_detected_at', m."detected_at"
 FROM "_2027_missing_disrupted" m
 JOIN "exam_attempts" a ON a."id" = m."attempt_id"
-WHERE NOT EXISTS (
+WHERE NOT m."reused"
+AND NOT EXISTS (
   SELECT 1 FROM "attempt_interruption_events" e
   WHERE e."interruption_id" = m."interruption_id" AND e."event_type" = 'detected'
 );
@@ -602,50 +1115,49 @@ WHERE "status" != 'disrupted' AND "current_interruption_id" IS NOT NULL;
 
 --> statement-breakpoint
 
--- C5. Install the status/pointer CHECK with the exact 0022 definition; verify
--- the definition if present. This is the durable 0022 effect: it forbids the
--- bad shapes C0-C4 just repaired from re-forming.
---
--- The definition is verified semantically (presence of the authoritative
--- predicates) rather than by exact string, because PostgreSQL rewrites the
--- stored expression (drops table-qualification, casts literals, rewrites '!='
--- to '<>'). A present CHECK missing any required predicate is treated as
--- incompatible and fails closed.
+-- C5. Install the status/pointer CHECK with the exact 0022 definition. Compare
+-- PostgreSQL's canonical expression tree against a temporary authoritative
+-- CHECK on the same table, then validate a compatible NOT VALID constraint.
 DO $$
 DECLARE
-  con_def text;
-  norm text;
   shape_ok boolean;
 BEGIN
-  SELECT pg_get_constraintdef(c.oid)
-  INTO con_def
-  FROM pg_constraint c
-  WHERE c.conrelid = 'exam_attempts'::regclass
-    AND c.conname = 'exam_attempts_status_pointer_check';
-
-  IF con_def IS NULL THEN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    WHERE c.conrelid='exam_attempts'::regclass
+      AND c.conname='exam_attempts_status_pointer_check'
+  ) THEN
     ALTER TABLE "exam_attempts" ADD CONSTRAINT "exam_attempts_status_pointer_check" CHECK (
         ("exam_attempts"."status" = 'disrupted' AND "exam_attempts"."current_interruption_id" IS NOT NULL AND "exam_attempts"."interrupted_at" IS NOT NULL)
         OR
         ("exam_attempts"."status" != 'disrupted' AND "exam_attempts"."current_interruption_id" IS NULL AND "exam_attempts"."interrupted_at" IS NULL)
       );
-  ELSE
-    -- Whitespace-normalise then require every authoritative predicate. The
-    -- '!=' vs '<>' comparison is rewritten by PG, so accept either token.
-    norm := regexp_replace(con_def, '\s+', ' ', 'g');
-    shape_ok :=
-      (norm ~* 'status = ''disrupted''')
-      AND (norm ~* 'status <> ''disrupted''' OR norm ~* 'status != ''disrupted''')
-      AND position('current_interruption_id IS NOT NULL' in norm) > 0
-      AND position('current_interruption_id IS NULL' in norm) > 0
-      AND position('interrupted_at IS NOT NULL' in norm) > 0
-      AND position('interrupted_at IS NULL' in norm) > 0
-      AND norm ~* ' OR ';
-    IF NOT COALESCE(shape_ok, false) THEN
-      RAISE EXCEPTION '0027-C5: exam_attempts_status_pointer_check exists but its definition is missing an authoritative predicate (expected both disrupted/non-disrupted branches with the current_interruption_id/interrupted_at NOT NULL / NULL pairs) — refusing to drop/recreate; repair manually'
-        USING HINT = 'Existing: ' || con_def;
-    END IF;
   END IF;
+
+  ALTER TABLE "exam_attempts"
+    ADD CONSTRAINT "_0027_expected_status_pointer_check" CHECK (
+      ("status"='disrupted' AND "current_interruption_id" IS NOT NULL AND "interrupted_at" IS NOT NULL)
+      OR
+      ("status"!='disrupted' AND "current_interruption_id" IS NULL AND "interrupted_at" IS NULL)
+    ) NOT VALID;
+
+  SELECT actual.contype='c'
+    AND actual.conenforced
+    AND actual.conbin=expected.conbin
+    AND NOT actual.connoinherit
+  INTO shape_ok
+  FROM pg_constraint actual
+  JOIN pg_constraint expected
+    ON expected.conrelid=actual.conrelid
+   AND expected.conname='_0027_expected_status_pointer_check'
+  WHERE actual.conrelid='exam_attempts'::regclass
+    AND actual.conname='exam_attempts_status_pointer_check';
+  IF NOT COALESCE(shape_ok, false) THEN
+    RAISE EXCEPTION '0027-C5: exam_attempts_status_pointer_check is incompatible with the authoritative 0022 expression';
+  END IF;
+
+  ALTER TABLE "exam_attempts" DROP CONSTRAINT "_0027_expected_status_pointer_check";
+  ALTER TABLE "exam_attempts" VALIDATE CONSTRAINT "exam_attempts_status_pointer_check";
 END $$;
 
 --> statement-breakpoint
@@ -660,6 +1172,9 @@ DO $$
 DECLARE
   grading_status_ok boolean;
   proctor_tables_ok boolean;
+  proctor_defaults_ok boolean;
+  proctor_constraints_ok boolean;
+  proctor_indexes_ok boolean;
   status_pointer_check_ok boolean;
   no_orphan_disrupted boolean;
   no_stale_pointer boolean;
@@ -679,10 +1194,83 @@ BEGIN
     WHERE n.nspname=current_schema() AND c.relname='exam_proctor_assignment_events' AND c.relkind='r'
   ) INTO proctor_tables_ok;
 
+  SELECT count(*)=4 AND bool_and(
+    (table_name, column_name, default_expr) IN (
+      ('exam_proctor_assignments', 'status', '''active''::text'),
+      ('exam_proctor_assignments', 'created_at', 'now()'),
+      ('exam_proctor_assignments', 'updated_at', 'now()'),
+      ('exam_proctor_assignment_events', 'created_at', 'now()')
+    )
+  )
+  INTO proctor_defaults_ok
+  FROM (
+    SELECT d.adrelid::regclass::text AS table_name,
+      a.attname AS column_name,
+      pg_get_expr(d.adbin, d.adrelid, false) AS default_expr
+    FROM pg_attrdef d
+    JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum
+    WHERE d.adrelid IN (
+      'exam_proctor_assignments'::regclass,
+      'exam_proctor_assignment_events'::regclass
+    )
+  ) defaults;
+
+  SELECT count(*)=14
+    AND count(*) FILTER (WHERE contype='p')=2
+    AND count(*) FILTER (WHERE contype='c')=4
+    AND count(*) FILTER (WHERE contype='f')=8
+    AND bool_and(conenforced AND convalidated)
+  INTO proctor_constraints_ok
+  FROM pg_constraint
+  WHERE conrelid IN (
+    'exam_proctor_assignments'::regclass,
+    'exam_proctor_assignment_events'::regclass
+  )
+  AND conname IN (
+    'exam_proctor_assignments_pkey',
+    'exam_proctor_assignments_status_check',
+    'exam_proctor_assignments_revocation_shape_check',
+    'exam_proctor_assignments_org_fk',
+    'exam_proctor_assignments_proctor_user_fk',
+    'exam_proctor_assignments_assigned_by_fk',
+    'exam_proctor_assignments_revoked_by_fk',
+    'exam_proctor_assignments_exam_fk',
+    'exam_proctor_assignment_events_pkey',
+    'exam_proctor_assignment_events_command_type_check',
+    'exam_proctor_assignment_events_outcome_check',
+    'exam_proctor_assignment_events_org_fk',
+    'exam_proctor_assignment_events_actor_fk',
+    'exam_proctor_assignment_events_assignment_fk'
+  );
+
+  SELECT count(*)=9
+    AND bool_and(i.indisvalid AND i.indisready AND i.indislive)
+    AND count(*) FILTER (WHERE i.indisprimary)=2
+    AND count(*) FILTER (WHERE i.indisunique)=5
+  INTO proctor_indexes_ok
+  FROM pg_index i
+  JOIN pg_class c ON c.oid=i.indexrelid
+  WHERE i.indrelid IN (
+    'exam_proctor_assignments'::regclass,
+    'exam_proctor_assignment_events'::regclass
+  )
+  AND c.relname IN (
+    'exam_proctor_assignments_pkey',
+    'exam_proctor_assignments_org_id_unique',
+    'exam_proctor_assignments_active_unique',
+    'exam_proctor_assignments_org_exam_status_idx',
+    'exam_proctor_assignments_org_proctor_status_idx',
+    'exam_proctor_assignments_revoke_target_idx',
+    'exam_proctor_assignment_events_pkey',
+    'exam_proctor_assignment_events_org_operation_unique',
+    'exam_proctor_assignment_events_assignment_idx'
+  );
+
   SELECT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conrelid='exam_attempts'::regclass
-      AND conname='exam_attempts_status_pointer_check' AND contype='c'
+      AND conname='exam_attempts_status_pointer_check'
+      AND contype='c' AND conenforced AND convalidated
   ) INTO status_pointer_check_ok;
 
   SELECT NOT EXISTS (
@@ -701,6 +1289,15 @@ BEGIN
   END IF;
   IF NOT proctor_tables_ok THEN
     RAISE EXCEPTION '0027-POST: proctor tables postcondition failed';
+  END IF;
+  IF NOT proctor_defaults_ok THEN
+    RAISE EXCEPTION '0027-POST: proctor defaults postcondition failed';
+  END IF;
+  IF NOT proctor_constraints_ok THEN
+    RAISE EXCEPTION '0027-POST: proctor constraints postcondition failed';
+  END IF;
+  IF NOT proctor_indexes_ok THEN
+    RAISE EXCEPTION '0027-POST: proctor indexes postcondition failed';
   END IF;
   IF NOT status_pointer_check_ok THEN
     RAISE EXCEPTION '0027-POST: status_pointer_check postcondition failed';

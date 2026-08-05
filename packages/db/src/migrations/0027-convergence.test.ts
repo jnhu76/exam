@@ -15,6 +15,9 @@
 //   F. Partial supported — one proctor table present, the other + its FKs absent → completes
 //   G. Partial incompatible — proctor table with wrong column type → 0027 fails closed
 //   H. Repeat safety    — re-running 0027's SQL on a converged schema → no duplicates/drift
+//   I. Exact shape      — PK/default/CHECK/index/FK drift → repair or fail closed
+//   J. Open episode     — reuse one legal episode; reject multiple legal episodes
+//   K. Pointer CHECK    — canonical semantics and validation state are authoritative
 //
 // Each scenario uses its own isolated schema so parallel workers don't collide.
 
@@ -23,6 +26,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setupIsolatedTestDb, type IsolatedTestDb } from "../testIsolation.js";
+import { withTestInfraLifecycleLock } from "../testInfraLock.js";
 import { createDatabase } from "../database.js";
 import { migratePostgres } from "../postgres.js";
 import type { Database } from "../types.js";
@@ -76,7 +80,9 @@ interface Env {
 async function makeEnv(namespace: string): Promise<Env> {
   const iso = await setupIsolatedTestDb({ namespace });
   const conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-  await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
+  await withTestInfraLifecycleLock(iso.databaseUrl, () =>
+    migratePostgres(conn.db, { migrationsSchema: iso.schemaName }),
+  );
   return { iso, conn };
 }
 
@@ -104,6 +110,54 @@ async function scalar<T>(
   // fall back to the first column value when `v` is absent.
   if ("v" in row) return row.v as T | undefined;
   return Object.values(row)[0] as T | undefined;
+}
+
+async function seedDisruptedAttempt(env: Env, suffix: string): Promise<void> {
+  await env.conn.sql.unsafe(`
+    ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_status_pointer_check;
+    INSERT INTO organizations (id, name, display_name, slug, created_at, updated_at)
+    VALUES ('org-${suffix}', 'Org', 'Org', 'org-${suffix}', now(), now());
+    INSERT INTO users (id, organization_id, username, password_hash, name, role, is_active, created_at, updated_at)
+    VALUES ('candidate-user-${suffix}', 'org-${suffix}', 'candidate-${suffix}', 'h', 'Candidate', 'Candidate', true, now(), now());
+    INSERT INTO candidate_profiles (id, organization_id, user_id, fields, created_at, updated_at)
+    VALUES ('candidate-${suffix}', 'org-${suffix}', 'candidate-user-${suffix}', '{}', now(), now());
+    INSERT INTO courses (id, organization_id, name, code, description, created_at, updated_at)
+    VALUES ('course-${suffix}', 'org-${suffix}', 'Course', 'course-${suffix}', '', now(), now());
+    INSERT INTO exams (id, organization_id, title, description, course_id, status, timing_mode,
+      duration_minutes, open_at, close_at, passing_score, total_score,
+      question_selection_mode, question_ids, question_snapshot, control_flags,
+      retake_policy, score_strategy, max_attempts, created_at, updated_at)
+    VALUES ('exam-${suffix}', 'org-${suffix}', 'Exam', '', 'course-${suffix}', 'open', 'timed_window',
+      60, now(), now(), 60, 100, 'manual', '[]', '[]', '{}'::jsonb,
+      'none', 'latest', 1, now(), now());
+    INSERT INTO exam_enrollments (id, organization_id, exam_id, candidate_id, status, attempt_count, created_at, updated_at)
+    VALUES ('enrollment-${suffix}', 'org-${suffix}', 'exam-${suffix}', 'candidate-${suffix}', 'open', 0, now(), now());
+    INSERT INTO exam_attempts (id, organization_id, exam_id, enrollment_id, candidate_id, attempt_no,
+      status, question_snapshot, answers, created_at, updated_at)
+    VALUES ('attempt-${suffix}', 'org-${suffix}', 'exam-${suffix}', 'enrollment-${suffix}', 'candidate-${suffix}', 1,
+      'disrupted', '[]', '[]', now(), now());
+  `);
+}
+
+async function insertOpenEpisode(
+  env: Env,
+  suffix: string,
+  interruptionId: string,
+  detectedAt: string,
+): Promise<void> {
+  await env.conn.sql.unsafe(`
+    INSERT INTO attempt_interruptions (id, organization_id, attempt_id, created_at)
+    VALUES ('${interruptionId}', 'org-${suffix}', 'attempt-${suffix}', '${detectedAt}');
+    INSERT INTO attempt_interruption_events (
+      id, organization_id, attempt_id, interruption_id, event_type, occurred_at,
+      observed_last_activity_at, detection_source, timeout_seconds, policy,
+      eligible_seconds, time_adjustment_id, actor_id, reason_code, created_at
+    ) VALUES (
+      'event-${interruptionId}', 'org-${suffix}', 'attempt-${suffix}', '${interruptionId}', 'detected', '${detectedAt}',
+      NULL, 'migration_backfill', NULL, 'strict', NULL, NULL, NULL,
+      'migration_backfill_unknown_detected_at', '${detectedAt}'
+    );
+  `);
 }
 
 // ============================================================
@@ -591,5 +645,380 @@ describe("0027 convergence — H. repeat safety", () => {
     expect(constraintsAfter).toBe(constraintsBefore);
     expect(checksAfter).toBe(checksBefore);
     expect(checksAfter).toBe(1);
+  });
+});
+
+describe("0027 convergence — I. exact 0024 authoritative effects", () => {
+  let env: Env;
+  beforeAll(async () => {
+    env = await makeEnv("mig0027exact0024");
+  }, 60_000);
+  afterAll(async () => {
+    if (env) await teardown(env);
+  }, 60_000);
+
+  it("adds a missing assignments primary key", async () => {
+    await env.conn.sql.unsafe(
+      `ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_pkey`,
+    );
+    await run0027(env.conn);
+    expect(
+      await scalar<string>(
+        env.conn,
+        `SELECT contype FROM pg_constraint
+         WHERE conrelid='exam_proctor_assignments'::regclass
+           AND conname='exam_proctor_assignments_pkey'`,
+      ),
+    ).toBe("p");
+  });
+
+  it("adds a missing assignment-events primary key", async () => {
+    await env.conn.sql.unsafe(
+      `ALTER TABLE exam_proctor_assignment_events DROP CONSTRAINT exam_proctor_assignment_events_pkey`,
+    );
+    await run0027(env.conn);
+    expect(
+      await scalar<string>(
+        env.conn,
+        `SELECT contype FROM pg_constraint
+         WHERE conrelid='exam_proctor_assignment_events'::regclass
+           AND conname='exam_proctor_assignment_events_pkey'`,
+      ),
+    ).toBe("p");
+  });
+
+  it("fails closed on a wrong status default", async () => {
+    try {
+      await env.conn.sql.unsafe(
+        `ALTER TABLE exam_proctor_assignments ALTER COLUMN status SET DEFAULT 'revoked'`,
+      );
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments\.status default is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(
+        `ALTER TABLE exam_proctor_assignments ALTER COLUMN status SET DEFAULT 'active'`,
+      );
+    }
+  });
+
+  it("adds a missing status CHECK", async () => {
+    await env.conn.sql.unsafe(
+      `ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_status_check`,
+    );
+    await run0027(env.conn);
+    expect(
+      await scalar<string>(
+        env.conn,
+        `SELECT contype FROM pg_constraint
+         WHERE conrelid='exam_proctor_assignments'::regclass
+           AND conname='exam_proctor_assignments_status_check'`,
+      ),
+    ).toBe("c");
+  });
+
+  it("fails closed on a wrong same-named status CHECK", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_status_check;
+        ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_status_check
+          CHECK (status IN ('active', 'revoked', 'invalid'));
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments_status_check is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_status_check;
+        ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_status_check
+          CHECK (status IN ('active', 'revoked'));
+      `);
+    }
+  });
+
+  it("validates an exact business CHECK created NOT VALID", async () => {
+    await env.conn.sql.unsafe(`
+      ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_status_check;
+      ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_status_check
+        CHECK (status IN ('active', 'revoked')) NOT VALID;
+    `);
+    await run0027(env.conn);
+    expect(
+      await scalar<boolean>(
+        env.conn,
+        `SELECT convalidated FROM pg_constraint
+         WHERE conrelid='exam_proctor_assignments'::regclass
+           AND conname='exam_proctor_assignments_status_check'`,
+      ),
+    ).toBe(true);
+  });
+
+  it("fails closed when active_unique is not unique", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        DROP INDEX exam_proctor_assignments_active_unique;
+        CREATE INDEX exam_proctor_assignments_active_unique
+          ON exam_proctor_assignments (organization_id, exam_id, proctor_user_id)
+          WHERE status = 'active';
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments_active_unique is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(`
+        DROP INDEX exam_proctor_assignments_active_unique;
+        CREATE UNIQUE INDEX exam_proctor_assignments_active_unique
+          ON exam_proctor_assignments (organization_id, exam_id, proctor_user_id)
+          WHERE status = 'active';
+      `);
+    }
+  });
+
+  it("fails closed when active_unique has the wrong predicate", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        DROP INDEX exam_proctor_assignments_active_unique;
+        CREATE UNIQUE INDEX exam_proctor_assignments_active_unique
+          ON exam_proctor_assignments (organization_id, exam_id, proctor_user_id)
+          WHERE status = 'revoked';
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments_active_unique is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(`
+        DROP INDEX exam_proctor_assignments_active_unique;
+        CREATE UNIQUE INDEX exam_proctor_assignments_active_unique
+          ON exam_proctor_assignments (organization_id, exam_id, proctor_user_id)
+          WHERE status = 'active';
+      `);
+    }
+  });
+
+  it("fails closed when a secondary index has the wrong sort direction", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        DROP INDEX exam_proctor_assignments_revoke_target_idx;
+        CREATE INDEX exam_proctor_assignments_revoke_target_idx
+          ON exam_proctor_assignments
+          (organization_id, exam_id, proctor_user_id, status, revoked_at ASC, id DESC);
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments_revoke_target_idx is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(`
+        DROP INDEX exam_proctor_assignments_revoke_target_idx;
+        CREATE INDEX exam_proctor_assignments_revoke_target_idx
+          ON exam_proctor_assignments
+          (organization_id, exam_id, proctor_user_id, status, revoked_at DESC, id DESC);
+      `);
+    }
+  });
+
+  it("fails closed when a same-named FK points to the wrong table", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_proctor_user_fk;
+        ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_proctor_user_fk
+          FOREIGN KEY (proctor_user_id) REFERENCES organizations(id);
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments_proctor_user_fk is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_proctor_user_fk;
+        ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_proctor_user_fk
+          FOREIGN KEY (proctor_user_id) REFERENCES users(id);
+      `);
+    }
+  });
+
+  it("fails closed when a same-named FK points to the wrong target column", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_org_fk;
+        ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_org_fk
+          FOREIGN KEY (organization_id) REFERENCES organizations(slug);
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_proctor_assignments_org_fk is incompatible/,
+      );
+    } finally {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_org_fk;
+        ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_org_fk
+          FOREIGN KEY (organization_id) REFERENCES organizations(id);
+      `);
+    }
+  });
+
+  it("validates an exact same-named FK created NOT VALID", async () => {
+    await env.conn.sql.unsafe(`
+      ALTER TABLE exam_proctor_assignments DROP CONSTRAINT exam_proctor_assignments_proctor_user_fk;
+      ALTER TABLE exam_proctor_assignments ADD CONSTRAINT exam_proctor_assignments_proctor_user_fk
+        FOREIGN KEY (proctor_user_id) REFERENCES users(id) NOT VALID;
+    `);
+    await run0027(env.conn);
+    expect(
+      await scalar<boolean>(
+        env.conn,
+        `SELECT convalidated FROM pg_constraint
+         WHERE conrelid='exam_proctor_assignments'::regclass
+           AND conname='exam_proctor_assignments_proctor_user_fk'`,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("0027 convergence — J. open interruption episode reuse", () => {
+  let env: Env;
+  beforeAll(async () => {
+    env = await makeEnv("mig0027episodes");
+  }, 60_000);
+  afterAll(async () => {
+    if (env) await teardown(env);
+  }, 60_000);
+
+  it("reuses one legal open episode without inserting rows", async () => {
+    const interruptionId = "00000000-0000-4000-8000-000000000101";
+    await seedDisruptedAttempt(env, "reuse");
+    await insertOpenEpisode(
+      env,
+      "reuse",
+      interruptionId,
+      "2026-08-05T10:00:00Z",
+    );
+    await run0027(env.conn);
+    expect(
+      await scalar<string>(
+        env.conn,
+        `SELECT current_interruption_id::text AS v FROM exam_attempts WHERE id='attempt-reuse'`,
+      ),
+    ).toBe(interruptionId);
+    expect(
+      await scalar<number>(
+        env.conn,
+        `SELECT count(*)::int AS v FROM attempt_interruptions WHERE attempt_id='attempt-reuse'`,
+      ),
+    ).toBe(1);
+    expect(
+      await scalar<number>(
+        env.conn,
+        `SELECT count(*)::int AS v FROM attempt_interruption_events WHERE attempt_id='attempt-reuse'`,
+      ),
+    ).toBe(1);
+  });
+
+  it("fails closed when a disrupted attempt has multiple legal open episodes", async () => {
+    await seedDisruptedAttempt(env, "multiple");
+    await insertOpenEpisode(
+      env,
+      "multiple",
+      "00000000-0000-4000-8000-000000000201",
+      "2026-08-05T10:00:00Z",
+    );
+    await insertOpenEpisode(
+      env,
+      "multiple",
+      "00000000-0000-4000-8000-000000000202",
+      "2026-08-05T10:01:00Z",
+    );
+    await expect(run0027(env.conn)).rejects.toThrow(
+      /multiple legal open interruption episodes/,
+    );
+  });
+});
+
+describe("0027 convergence — K. exact status-pointer CHECK", () => {
+  let env: Env;
+  beforeAll(async () => {
+    env = await makeEnv("mig0027exactcheck");
+  }, 60_000);
+  afterAll(async () => {
+    if (env) await teardown(env);
+  }, 60_000);
+
+  async function restoreStatusPointerCheck(): Promise<void> {
+    await env.conn.sql.unsafe(`
+      ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_status_pointer_check;
+      ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_status_pointer_check CHECK (
+        (status = 'disrupted' AND current_interruption_id IS NOT NULL AND interrupted_at IS NOT NULL)
+        OR (status != 'disrupted' AND current_interruption_id IS NULL AND interrupted_at IS NULL)
+      );
+    `);
+  }
+
+  it("fails closed on a same-named authoritative expression widened by OR true", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_attempts DROP CONSTRAINT exam_attempts_status_pointer_check;
+        ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_status_pointer_check CHECK (
+          ((status = 'disrupted' AND current_interruption_id IS NOT NULL AND interrupted_at IS NOT NULL)
+          OR (status != 'disrupted' AND current_interruption_id IS NULL AND interrupted_at IS NULL))
+          OR true
+        );
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_attempts_status_pointer_check is incompatible/,
+      );
+    } finally {
+      await restoreStatusPointerCheck();
+    }
+  });
+
+  it("fails closed on the right predicates with the wrong grouping", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_attempts DROP CONSTRAINT exam_attempts_status_pointer_check;
+        ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_status_pointer_check CHECK (
+          (status = 'disrupted' AND current_interruption_id IS NOT NULL)
+          OR (interrupted_at IS NOT NULL AND status != 'disrupted'
+              AND current_interruption_id IS NULL AND interrupted_at IS NULL)
+        );
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_attempts_status_pointer_check is incompatible/,
+      );
+    } finally {
+      await restoreStatusPointerCheck();
+    }
+  });
+
+  it("fails closed on an exact status-pointer CHECK that is NOT ENFORCED", async () => {
+    try {
+      await env.conn.sql.unsafe(`
+        ALTER TABLE exam_attempts DROP CONSTRAINT exam_attempts_status_pointer_check;
+        ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_status_pointer_check CHECK (
+          (status = 'disrupted' AND current_interruption_id IS NOT NULL AND interrupted_at IS NOT NULL)
+          OR (status != 'disrupted' AND current_interruption_id IS NULL AND interrupted_at IS NULL)
+        ) NOT ENFORCED;
+      `);
+      await expect(run0027(env.conn)).rejects.toThrow(
+        /exam_attempts_status_pointer_check is incompatible/,
+      );
+    } finally {
+      await restoreStatusPointerCheck();
+    }
+  });
+
+  it("validates an exact status-pointer CHECK created NOT VALID", async () => {
+    await env.conn.sql.unsafe(`
+      ALTER TABLE exam_attempts DROP CONSTRAINT exam_attempts_status_pointer_check;
+      ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_status_pointer_check CHECK (
+        (status = 'disrupted' AND current_interruption_id IS NOT NULL AND interrupted_at IS NOT NULL)
+        OR (status != 'disrupted' AND current_interruption_id IS NULL AND interrupted_at IS NULL)
+      ) NOT VALID;
+    `);
+    await run0027(env.conn);
+    expect(
+      await scalar<boolean>(
+        env.conn,
+        `SELECT convalidated FROM pg_constraint
+         WHERE conrelid='exam_attempts'::regclass
+           AND conname='exam_attempts_status_pointer_check'`,
+      ),
+    ).toBe(true);
   });
 });

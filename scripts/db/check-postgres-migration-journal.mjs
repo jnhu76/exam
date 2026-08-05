@@ -113,8 +113,9 @@ async function main() {
   const seenIdx = new Map(); // idx -> tag
   const seenTag = new Map(); // tag -> idx
   const seenWhen = new Map(); // when -> tag
-  const observedBackward = []; // { idx, tag, when, prevWhen }
+  const observedBackward = []; // { idx, tag, when, prevWhen, maxPriorWhen }
   let prevWhen;
+  let maxPriorWhen = -Infinity;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -165,13 +166,16 @@ async function main() {
       } else {
         seenWhen.set(e.when, e.tag);
       }
-      if (prevWhen !== undefined && e.when <= prevWhen) {
+      if (e.when <= maxPriorWhen) {
         observedBackward.push({
           idx: e.idx,
           tag: e.tag,
           when: e.when,
           prevWhen,
+          maxPriorWhen,
         });
+      } else {
+        maxPriorWhen = e.when;
       }
       prevWhen = e.when;
     }
@@ -196,7 +200,7 @@ async function main() {
   for (const b of observedBackward) {
     if (allowlistDisabled || !allowedSet.has(histKey(b))) {
       violations.push(
-        `entry ${b.idx} tag=${b.tag}: NEW backward when=${b.when} (previous=${b.prevWhen}) — not in the historical allowlist; use a forward when strictly greater than all prior entries (Drizzle's max-created_at comparison permanently skips this entry on DBs that recorded a later migration)`,
+        `entry ${b.idx} tag=${b.tag}: NEW backward when=${b.when} is not greater than prior maximum=${b.maxPriorWhen} (previous=${b.prevWhen}) — not in the historical allowlist; use a forward when strictly greater than all prior entries (Drizzle's max-created_at comparison permanently skips this entry on DBs that recorded a later migration)`,
       );
     }
   }
