@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@exam/contracts": "workspace:*",
+    "@exam/domain": "workspace:*",
     "@playwright/test": "1.61.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.8.3"

@@ -9,6 +9,8 @@
  * polling/backoff, or business logic — it is purely read-only UI inspection.
  */
 import { test, expect } from "@playwright/test";
+import { IncidentResponseSchema } from "@exam/contracts";
+import { IncidentSeverity, IncidentType } from "@exam/domain";
 import { seedExam } from "../lib/seed";
 import { candidateApiToken, candidateStartAttempt } from "../lib/flow";
 
@@ -61,8 +63,8 @@ async function createIncident(
   token: string,
   examId: string,
   opts: {
-    type?: string;
-    severity?: string;
+    type?: IncidentType;
+    severity?: IncidentSeverity;
     description?: string;
     attemptId?: string;
     candidateId?: string;
@@ -74,8 +76,8 @@ async function createIncident(
     `/api/admin/exams/${examId}/incidents`,
     {
       operationId: crypto.randomUUID(),
-      type: opts.type ?? "network_interruption",
-      severity: opts.severity ?? "critical",
+      type: opts.type ?? IncidentType.NetworkInterruption,
+      severity: opts.severity ?? IncidentSeverity.Critical,
       description:
         opts.description ??
         "E2E visual inspection incident — network disruption during exam",
@@ -119,8 +121,8 @@ test.describe("Recovery Center visual inspection", () => {
     const adminToken = await adminLogin(request);
 
     const inc1 = await createIncident(request, adminToken, examId, {
-      type: "network_interruption",
-      severity: "critical",
+      type: IncidentType.NetworkInterruption,
+      severity: IncidentSeverity.Critical,
       description:
         "Candidate experienced a prolonged network disruption during the examination period. " +
         "The candidate's connection to the examination server was lost for approximately 45 seconds, " +
@@ -131,8 +133,8 @@ test.describe("Recovery Center visual inspection", () => {
     incidentId = inc1.incident.id;
 
     const inc2 = await createIncident(request, adminToken, examId, {
-      type: "device_failure",
-      severity: "minor",
+      type: IncidentType.DeviceFailure,
+      severity: IncidentSeverity.Minor,
       description: "Minor device issue — candidate switched browsers",
       attemptId,
       candidateId,
@@ -146,15 +148,21 @@ test.describe("Recovery Center visual inspection", () => {
         adminToken,
         `/api/admin/incidents/${incidentId2}`,
       );
-      const inc2Json = await inc2Detail.json();
-      const inc2Version = inc2Json.version ?? inc2Json.incident?.version ?? 1;
+      if (!inc2Detail.ok()) {
+        throw new Error(`incident detail fetch failed: ${inc2Detail.status()}`);
+      }
+      // Validate the wire response against the canonical incident contract
+      // before reading `version` (never trust an unvalidated response body).
+      const inc2Incident = IncidentResponseSchema.parse(
+        (await inc2Detail.json()).incident,
+      );
       await adminPost(
         request,
         adminToken,
         `/api/admin/incidents/${incidentId2}/investigate`,
         {
           operationId: crypto.randomUUID(),
-          expectedVersion: inc2Version,
+          expectedVersion: inc2Incident.version,
         },
       );
     } catch {
@@ -192,13 +200,16 @@ test.describe("Recovery Center visual inspection", () => {
 
         // Navigate to recovery queue
         await page.goto("/admin/recovery");
-        // Wait for either the table (desktop) or cards (mobile) to appear, or error/alert
-        await page.waitForSelector(
-          '[data-testid="recovery-queue-table"]:visible, [data-testid="recovery-queue-cards"]:visible, [role="alert"]',
-          {
-            timeout: 15_000,
-          },
-        );
+        // Require the seeded incident row — an error/empty queue must NOT pass
+        // as a successful queue screenshot (error/empty live in their own
+        // dedicated tests).
+        await expect(
+          page
+            .locator(
+              `a[href="/admin/recovery/incidents/${incidentId}"]:visible`,
+            )
+            .first(),
+        ).toBeVisible({ timeout: 15_000 });
         // Wait for data to settle
         await page.waitForTimeout(1000);
 
@@ -375,82 +386,51 @@ test.describe("Recovery Center visual inspection", () => {
       await page.getByRole("button", { name: /^登录$/ }).click();
       await page.waitForURL(/\/admin\/dashboard/, { timeout: 15_000 });
 
-      // 1. Navigate to Recovery Queue
+      // 1. Queue → Incident detail. Every step below is a hard assertion:
+      //    the link must exist and be visible, then the URL must match
+      //    EXACTLY (no `/admin/recovery` prefix-matching that would let an
+      //    earlier page pass). The queue is (createdAt DESC, id DESC), so the
+      //    newer incident (incidentId2) is the first row; targeting it by
+      //    href keeps the step independent of row order.
       await page.goto("/admin/recovery");
-      await page.waitForSelector(
-        '[data-testid="recovery-queue-table"]:visible, [data-testid="recovery-queue-cards"]:visible',
-        {
-          timeout: 15_000,
-        },
-      );
-      await expect(page).toHaveURL(/\/admin\/recovery/);
-      // Queue page loaded
-
-      // 2. Click first incident link to go to Incident detail
       const incidentLink = page
-        .getByTestId("recovery-queue-table")
-        .locator("a")
+        .locator(`a[href="/admin/recovery/incidents/${incidentId2}"]:visible`)
         .first();
-      if (await incidentLink.isVisible()) {
-        await incidentLink.click();
-        await page.waitForURL(/\/admin\/recovery\/incidents\//, {
-          timeout: 15_000,
-        });
-        // Navigated to Incident detail
-      } else {
-        // Mobile cards
-        const cardLink = page
-          .getByTestId("recovery-queue-cards")
-          .locator("a")
-          .first();
-        await cardLink.click();
-        await page.waitForURL(/\/admin\/recovery\/incidents\//, {
-          timeout: 15_000,
-        });
-        // Navigated to Incident detail (mobile)
-      }
+      await expect(incidentLink).toBeVisible({ timeout: 15_000 });
+      await incidentLink.click();
+      await expect(page).toHaveURL(`/admin/recovery/incidents/${incidentId2}`);
 
-      // 3. From Incident detail, click an attempt link
+      // 2. Incident detail → Attempt detail (anchor attempt link)
       const attemptLink = page
-        .locator('a[href*="/admin/recovery/attempts/"]')
+        .locator(`a[href="/admin/recovery/attempts/${attemptId}"]:visible`)
         .first();
-      if (await attemptLink.isVisible()) {
-        await attemptLink.click();
-        await page.waitForURL(/\/admin\/recovery\/attempts\//, {
-          timeout: 15_000,
-        });
-        // Navigated to Attempt detail
-      }
+      await expect(attemptLink).toBeVisible({ timeout: 15_000 });
+      await attemptLink.click();
+      await expect(page).toHaveURL(`/admin/recovery/attempts/${attemptId}`);
 
-      // 4. From Attempt detail, click exam link (goes to Exam detail)
+      // 3. Attempt detail → Exam detail
       const examLink = page
-        .locator('a[href*="/admin/recovery/exams/"]')
+        .locator(`a[href="/admin/recovery/exams/${examId}"]:visible`)
         .first();
-      if (await examLink.isVisible()) {
-        await examLink.click();
-        await page.waitForURL(/\/admin\/recovery\/exams\//, {
-          timeout: 15_000,
-        });
-        // Navigated to Exam detail
-      }
+      await expect(examLink).toBeVisible({ timeout: 15_000 });
+      await examLink.click();
+      await expect(page).toHaveURL(`/admin/recovery/exams/${examId}`);
 
-      // 5. From Exam detail, click "View in Queue" → filtered Queue
+      // 4. Exam detail → filtered Queue ("在队列中查看" carries ?examId=)
       const queueLink = page
-        .getByRole("link", { name: /队列|Queue|返回/i })
+        .locator(`a[href="/admin/recovery?examId=${examId}"]:visible`)
         .first();
-      if (await queueLink.isVisible()) {
-        await queueLink.click();
-        await page.waitForURL(/\/admin\/recovery/, { timeout: 15_000 });
-        const url = new URL(page.url());
-        const hasExamFilter = url.searchParams.has("examId");
-        // Returned to Queue with or without examId filter
-      }
+      await expect(queueLink).toBeVisible({ timeout: 15_000 });
+      await queueLink.click();
+      await expect(page).toHaveURL(`/admin/recovery?examId=${examId}`);
 
-      // Final assertions
-      await expect(page).toHaveURL(/\/admin\/recovery/);
-      // No React error overlay
-      const errorOverlay = page.locator("[data-reactroot] [role=alert]");
-      await expect(errorOverlay).toHaveCount(0);
+      // Final: exactly the queue page, filtered to the seeded exam
+      const finalUrl = new URL(page.url());
+      expect(finalUrl.pathname).toBe("/admin/recovery");
+      expect(finalUrl.searchParams.get("examId")).toBe(examId);
+
+      // No error surface on the final page
+      await expect(page.locator('[role="alert"]')).toHaveCount(0);
     });
   });
 
