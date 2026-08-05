@@ -210,8 +210,6 @@ test.describe("Recovery Center visual inspection", () => {
             )
             .first(),
         ).toBeVisible({ timeout: 15_000 });
-        // Wait for data to settle
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-queue-${name}-light.png`,
@@ -231,13 +229,15 @@ test.describe("Recovery Center visual inspection", () => {
         await page.waitForURL(/\/admin\/dashboard/, { timeout: 15_000 });
 
         await page.goto("/admin/recovery");
-        await page.waitForSelector(
-          '[data-testid="recovery-queue-table"]:visible, [data-testid="recovery-queue-cards"]:visible, [role="alert"]',
-          {
-            timeout: 15_000,
-          },
-        );
-        await page.waitForTimeout(1000);
+        // Require the seeded incident row — an error/empty queue must NOT pass
+        // as a successful queue screenshot (same contract as the light variant).
+        await expect(
+          page
+            .locator(
+              `a[href="/admin/recovery/incidents/${incidentId}"]:visible`,
+            )
+            .first(),
+        ).toBeVisible({ timeout: 15_000 });
 
         await page.screenshot({
           path: `test-results/recovery-queue-${name}-dark.png`,
@@ -261,7 +261,6 @@ test.describe("Recovery Center visual inspection", () => {
         await page.goto(`/admin/recovery/incidents/${incidentId}`);
         // Wait for page sections to render
         await page.waitForSelector("dl", { timeout: 15_000 });
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-incident-${name}-light.png`,
@@ -280,7 +279,6 @@ test.describe("Recovery Center visual inspection", () => {
 
         await page.goto(`/admin/recovery/incidents/${incidentId}`);
         await page.waitForSelector("dl", { timeout: 15_000 });
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-incident-${name}-dark.png`,
@@ -303,7 +301,6 @@ test.describe("Recovery Center visual inspection", () => {
 
         await page.goto(`/admin/recovery/attempts/${attemptId}`);
         await page.waitForSelector("dl", { timeout: 15_000 });
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-attempt-${name}-light.png`,
@@ -322,7 +319,6 @@ test.describe("Recovery Center visual inspection", () => {
 
         await page.goto(`/admin/recovery/attempts/${attemptId}`);
         await page.waitForSelector("dl", { timeout: 15_000 });
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-attempt-${name}-dark.png`,
@@ -345,7 +341,6 @@ test.describe("Recovery Center visual inspection", () => {
 
         await page.goto(`/admin/recovery/exams/${examId}`);
         await page.waitForSelector("dl", { timeout: 15_000 });
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-exam-${name}-light.png`,
@@ -364,7 +359,6 @@ test.describe("Recovery Center visual inspection", () => {
 
         await page.goto(`/admin/recovery/exams/${examId}`);
         await page.waitForSelector("dl", { timeout: 15_000 });
-        await page.waitForTimeout(1000);
 
         await page.screenshot({
           path: `test-results/recovery-exam-${name}-dark.png`,
@@ -447,7 +441,10 @@ test.describe("Recovery Center visual inspection", () => {
     await page.goto(
       "/admin/recovery?examId=00000000-0000-0000-0000-000000000000",
     );
-    await page.waitForTimeout(2000);
+    // Wait for the empty state to render (queue surface finished loading)
+    await expect(page.getByText("暂无中断事件")).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.screenshot({
       path: "test-results/recovery-queue-empty-desktop-light.png",
@@ -456,7 +453,9 @@ test.describe("Recovery Center visual inspection", () => {
 
     await page.emulateMedia({ colorScheme: "dark" });
     await page.reload();
-    await page.waitForTimeout(2000);
+    await expect(page.getByText("暂无中断事件")).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.screenshot({
       path: "test-results/recovery-queue-empty-desktop-dark.png",
