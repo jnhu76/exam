@@ -416,4 +416,57 @@ describe("AttemptCommandReceiptResponseSchema (wire)", () => {
       }),
     ).toThrow();
   });
+
+  // ── outer/inner commandType consistency (P1-2) ────────────────────
+  // The discriminator-by-disposition branches accept commandType and
+  // resultPayload independently; the superRefine wrapper rejects a response
+  // whose outer commandType and inner resultPayload.commandType disagree.
+
+  it("rejects outer force_submit with an inner misconduct result payload", () => {
+    expect(() =>
+      AttemptCommandReceiptResponseSchema.parse({
+        ...base,
+        commandType: "force_submit" as const,
+        disposition: "applied",
+        outcome: "applied",
+        resultPayload: misconductResultPayload,
+      }),
+    ).toThrow(/resultPayload\.commandType misconduct_mark does not match/);
+  });
+
+  it("rejects outer misconduct_mark with an inner force_submit result payload", () => {
+    expect(() =>
+      AttemptCommandReceiptResponseSchema.parse({
+        ...base,
+        commandType: "misconduct_mark" as const,
+        resultPayload: forceSubmitResultPayload,
+        disposition: "applied",
+        outcome: "applied",
+      }),
+    ).toThrow(/resultPayload\.commandType force_submit does not match/);
+  });
+
+  it("rejects a command mismatch on the idempotent_replay branch too", () => {
+    expect(() =>
+      AttemptCommandReceiptResponseSchema.parse({
+        ...base,
+        commandType: "force_submit" as const,
+        disposition: "idempotent_replay",
+        outcome: "applied",
+        resultPayload: misconductResultPayload,
+      }),
+    ).toThrow(/resultPayload\.commandType misconduct_mark does not match/);
+  });
+
+  it("rejects a command mismatch on the no_change branch too", () => {
+    expect(() =>
+      AttemptCommandReceiptResponseSchema.parse({
+        ...base,
+        commandType: "misconduct_mark" as const,
+        resultPayload: forceSubmitResultPayload,
+        disposition: "no_change",
+        outcome: "no_change",
+      }),
+    ).toThrow(/resultPayload\.commandType force_submit does not match/);
+  });
 });

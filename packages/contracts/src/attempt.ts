@@ -692,8 +692,15 @@ export type AttemptCommandReceiptRecord = z.infer<
  *                           ORIGINAL stored outcome (applied | no_change)
  *
  * A replay does not write a new row — it returns the original receipt's fact.
+ *
+ * The outer `commandType` and the inner `resultPayload.commandType` must
+ * agree (review J5-I1C0 PR #261 P1-2): a replay response claiming two
+ * different command identities is corrupted and must be rejected. This
+ * mirrors the {@link AttemptCommandReceiptRecordSchema} consistency rule — a
+ * discriminator-by-disposition wrapper cannot express cross-field binding by
+ * itself, so a `superRefine` is layered on top of the union.
  */
-export const AttemptCommandReceiptResponseSchema = z.discriminatedUnion(
+const AttemptCommandReceiptResponseBranchSchema = z.discriminatedUnion(
   "disposition",
   [
     z
@@ -729,6 +736,22 @@ export const AttemptCommandReceiptResponseSchema = z.discriminatedUnion(
       .strict(),
   ],
 );
+
+/**
+ * The frozen wire response. Use {@link AttemptCommandReceiptResponseSchema}
+ * (not the raw branch union) — the wrapper enforces the outer/inner
+ * commandType consistency that the discriminator-by-disposition union cannot.
+ */
+export const AttemptCommandReceiptResponseSchema =
+  AttemptCommandReceiptResponseBranchSchema.superRefine((response, ctx) => {
+    if (response.resultPayload.commandType !== response.commandType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `resultPayload.commandType ${response.resultPayload.commandType} does not match commandType ${response.commandType}`,
+        path: ["resultPayload", "commandType"],
+      });
+    }
+  });
 /** DTO for a dangerous Attempt command wire response. */
 export type AttemptCommandReceiptResponse = z.infer<
   typeof AttemptCommandReceiptResponseSchema
