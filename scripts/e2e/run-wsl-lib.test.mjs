@@ -33,6 +33,7 @@ const RUN_WSL_SH = join(__dirname, "run-wsl.sh");
 const DOCKER_SCENARIOS = new Set(["drop-failure-loud", "drop-success"]);
 const COMPOSE_SCENARIOS = new Set([
   "keep-server-preserves-all",
+  "keep-on-failure-preserves-compose",
   "compose-ps-failure",
   "compose-ps-missing",
   "compose-down-failure",
@@ -77,19 +78,28 @@ if [[ "$1" == "exec" ]] && [[ "$*" == *"psql"* ]]; then
   fi
   exit 0
 fi
-# compose scenarios: \`docker compose -f <f> ps -q db\`
-if [[ "$*" == *"compose"* ]] && [[ "$*" == *"ps"* ]]; then
-  case "\${FAKE_COMPOSE_PS:-cid}" in
-    fail) echo "fake: compose ps failed" >&2; exit 1 ;;
-    empty) exit 0 ;;
-    *) echo "fake-db-cid" ;;
-  esac
-  exit 0
-fi
-# compose scenarios: \`docker compose -f <f> down -v\`
-if [[ "$*" == *"compose"* ]] && [[ "$*" == *"down"* ]]; then
-  if [[ "\${FAKE_COMPOSE_DOWN:-ok}" == "fail" ]]; then
-    echo "fake: compose down failed" >&2; exit 1
+# compose scenarios: dispatch on EXACT argument tokens (a \`-f\` file path must
+# never match a "ps"/"down" substring check on "$*").
+if [[ "$1" == "compose" ]]; then
+  _tok=""
+  for _a in "\${@:2}"; do
+    case "$_a" in
+      ps) _tok="ps"; break ;;
+      down) _tok="down"; break ;;
+    esac
+  done
+  if [[ "$_tok" == "ps" ]]; then
+    case "\${FAKE_COMPOSE_PS:-cid}" in
+      fail) echo "fake: compose ps failed" >&2; exit 1 ;;
+      empty) exit 0 ;;
+      *) echo "fake-db-cid" ;;
+    esac
+    exit 0
+  fi
+  if [[ "$_tok" == "down" ]]; then
+    if [[ "\${FAKE_COMPOSE_DOWN:-ok}" == "fail" ]]; then
+      echo "fake: compose down failed" >&2; exit 1
+    fi
   fi
 fi
 exit 0
@@ -264,6 +274,20 @@ test("parallel-failure-cleans-all: migrate failure drops every registered worker
 test("parallel-failure-retains-all: keep flag retains every registered worker DB", () => {
   const res = runScenario("parallel-failure-retains-all");
   assertPass("parallel-failure-retains-all", res);
+});
+
+// ── Round-2 P1: keep-on-failure must preserve a script-started compose ────
+test("keep-on-failure-preserves-compose: keep flag skips compose down -v", () => {
+  const res = runScenario("keep-on-failure-preserves-compose", {
+    composePs: "cid",
+  });
+  assertPass("keep-on-failure-preserves-compose", res);
+});
+
+// ── Round-2 P2: run_cleanup stops a group whose leader already died ──────
+test("cleanup-stops-orphaned-group: run_cleanup KILLs the orphaned PGID", () => {
+  const res = runScenario("cleanup-stops-orphaned-group");
+  assertPass("cleanup-stops-orphaned-group", res);
 });
 
 // ── P2-1: whole-group shutdown ───────────────────────────────────────────

@@ -230,11 +230,15 @@ run_cleanup() {
   CLEANUP_FAILURE="${CLEANUP_FAILURE:-0}"
 
   # ---- 1. Stop servers FIRST, so they release DB connections. ----
+  # The stop guard looks at the WHOLE process group, not just the leader:
+  # the setsid leader may have exited (and been reaped) while a child still
+  # holds the port/connection — a leader-only `kill -0` would skip the stop
+  # and leak the child (round-2 review P2).
   if [[ "${E2E_WORKERS:-1}" -gt 1 ]]; then
     local sp idx=0
     for sp in "${SHARD_PIDS[@]:-}"; do
       [[ -z "$sp" ]] && { idx=$((idx+1)); continue; }
-      if kill -0 "$sp" 2>/dev/null; then
+      if kill -0 "$sp" 2>/dev/null || process_group_alive "$sp"; then
         log "停 shard $((idx+1)) API server (pid $sp, 进程组)..."
         if ! stop_process_group "$sp"; then
           err "shard $((idx+1)) server (pid $sp) 未能干净退出"
@@ -245,14 +249,16 @@ run_cleanup() {
     done
   fi
 
-  if [[ -n "${API_PID:-}" ]] && kill -0 "${API_PID}" 2>/dev/null; then
-    if [[ "${KEEP_SERVER:-0}" == "1" ]]; then
-      warn "KEEP_SERVER=1，保留 dev server (pid ${API_PID}). 手动停: kill ${API_PID}"
-    else
-      log "停 dev server (pid ${API_PID}, 进程组)..."
-      if ! stop_process_group "$API_PID"; then
-        err "dev server (pid ${API_PID}) 未能干净退出"
-        CLEANUP_FAILURE=1
+  if [[ -n "${API_PID:-}" ]]; then
+    if kill -0 "${API_PID}" 2>/dev/null || process_group_alive "${API_PID}"; then
+      if [[ "${KEEP_SERVER:-0}" == "1" ]]; then
+        warn "KEEP_SERVER=1，保留 dev server (pid ${API_PID}). 手动停: kill ${API_PID}"
+      else
+        log "停 dev server (pid ${API_PID}, 进程组)..."
+        if ! stop_process_group "$API_PID"; then
+          err "dev server (pid ${API_PID}) 未能干净退出"
+          CLEANUP_FAILURE=1
+        fi
       fi
     fi
   fi
@@ -266,17 +272,33 @@ run_cleanup() {
   # any failing operation (migrate/seed/health), so every exit path is
   # covered.
   local -a dbs_to_drop=()
-  local keep_dbs=0
+  local keep_dbs=0 preserve_worker_dbs=0
+  # Freeze the retention intent up-front (round-2 review P1): failure +
+  # E2E_KEEP_WORKER_DB_ON_FAILURE=1 must preserve the WHOLE DB environment —
+  # worker DBs AND the compose that hosts them (a script-started compose would
+  # otherwise be `down -v`'d, deleting the retained DBs with the container).
+  if [[ "$code" -ne 0 && "${E2E_KEEP_WORKER_DB_ON_FAILURE:-0}" == "1" ]]; then
+    preserve_worker_dbs=1
+  fi
   if [[ "${E2E_WORKERS:-1}" -gt 1 ]]; then
-    dbs_to_drop=("${SHARD_WORKER_DBS[@]:-}")
-    if [[ "$code" -ne 0 && "${E2E_KEEP_WORKER_DB_ON_FAILURE:-0}" == "1" ]]; then
+    # Filter empty entries: `"${arr[@]:-}"` on an unset/empty array yields one
+    # empty placeholder (bash >= 4.4), which would make the length check below
+    # treat "zero DBs" as "1 pending DB" and false-positive a cleanup failure.
+    local db
+    for db in "${SHARD_WORKER_DBS[@]:-}"; do
+      [[ -z "$db" ]] && continue
+      dbs_to_drop+=("$db")
+    done
+    if [[ "$preserve_worker_dbs" == "1" ]]; then
       keep_dbs=1
       warn "测试失败 + E2E_KEEP_WORKER_DB_ON_FAILURE=1：保留 worker 库便于诊断。"
-      local db
       for db in "${dbs_to_drop[@]:-}"; do
         [[ -z "$db" ]] && continue
         warn "  保留 ${db}（手动删: docker exec <db-ct> psql -U exam -d postgres -c 'DROP DATABASE \"${db}\" WITH (FORCE)')"
       done
+      if [[ "${DEV_COMPOSE_WAS_UP:-0}" == "0" && -n "${DEV_COMPOSE:-}" ]]; then
+        warn "  本次由脚本启动的 dev compose 保持运行（保留 worker 库的数据）；手动清理: docker compose -f ${DEV_COMPOSE} down -v"
+      fi
     fi
   elif [[ "$code" -ne 0 && -v WORKER_DBS_SERIAL && "${#WORKER_DBS_SERIAL[@]}" -gt 0 ]]; then
     warn "serial 库 ${WORKER_DBS_SERIAL[*]} 失败保留（持久化策略；--no-reseed 依赖此库跨运行存在，下次运行 migrate 幂等自愈）"
@@ -331,11 +353,15 @@ run_cleanup() {
   fi
 
   # ---- 5. Dev compose teardown (only if this script started it, and never
-  #         under KEEP_SERVER — a kept server needs its DB + compose). ----
-  # Subshell scopes the `cd`; no `local` inside it. `compose ps` / `down`
-  # failures are loud: they set CLEANUP_FAILURE via the subshell rc.
-  if [[ "${KEEP_SERVER:-0}" != "1" && -n "${ROOT_DIR:-}" && -n "${DEV_COMPOSE:-}" && \
-        -f "$DEV_COMPOSE" && "${DEV_COMPOSE_WAS_UP:-0}" == "0" ]]; then
+  #         under KEEP_SERVER or worker-DB retention — a kept server / kept
+  #         DB needs its compose). ----
+  # DEV_COMPOSE_WAS_UP defaults to "1" (prevent teardown): an UNKNOWN startup
+  # state must never `down -v` dev volumes; teardown requires an explicit
+  # "0". Subshell scopes the `cd`; no `local` inside it. `compose ps` /
+  # `down` failures are loud: they set CLEANUP_FAILURE via the subshell rc.
+  if [[ "${KEEP_SERVER:-0}" != "1" && "$preserve_worker_dbs" != "1" && \
+        -n "${ROOT_DIR:-}" && -n "${DEV_COMPOSE:-}" && -f "$DEV_COMPOSE" && \
+        "${DEV_COMPOSE_WAS_UP:-1}" == "0" ]]; then
     (
       cd "$ROOT_DIR" || exit 0
       if ! _sc_still="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>&1)"; then

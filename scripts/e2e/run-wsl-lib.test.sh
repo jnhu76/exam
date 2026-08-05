@@ -35,6 +35,10 @@
 #   compose-down-failure         — compose down error → cleanup failure (P1-4)
 #   parallel-failure-cleans-all  — migrate failure drops every registered DB
 #   parallel-failure-retains-all — keep-flag retains every registered DB
+#   keep-on-failure-preserves-compose — keep-flag preserves script-started
+#                                       compose (round-2 P1)
+#   cleanup-stops-orphaned-group — run_cleanup stops group after leader died
+#                                  (round-2 P2)
 #   process-group-child-survives — TERM-ignoring child is KILLed (P2-1)
 #   signal-exit-codes            — TERM → 143, INT → 130, cleanup exactly once
 
@@ -48,6 +52,11 @@ source "$LIB"
 log()  { :; }   # quiet in tests
 warn() { :; }
 err()  { :; }
+
+# The mjs runner exports FAKE_DOCKER_LOG for docker-dependent scenarios; keep
+# a standalone-safe default so direct `bash run-wsl-lib.test.sh <scenario>`
+# invocations do not fail under `set -u` (round-3 review).
+FAKE_DOCKER_LOG="${FAKE_DOCKER_LOG:-/tmp/e2e-fake-docker.log}"
 
 scenario="${1:-}"
 [[ -n "$scenario" ]] || { echo "FAIL: no scenario given" >&2; exit 2; }
@@ -542,6 +551,87 @@ case "$scenario" in
     echo "PASS"; rm -f "$drop_log"; exit 0
     ;;
 
+  # ── 23b. KEEP-on-failure preserves a script-started compose (P1 r2) ─────
+  # Failure + E2E_KEEP_WORKER_DB_ON_FAILURE=1 must preserve the WHOLE DB
+  # environment: worker DBs AND the compose hosting them. When
+  # DEV_COMPOSE_WAS_UP=0 (this run started compose), the old code skipped
+  # DROP DATABASE but still ran `docker compose down -v`, deleting the
+  # retained DBs with the container.
+  keep-on-failure-preserves-compose)
+    : > "$FAKE_DOCKER_LOG"
+    drop_log="$(mktemp)"
+    drop_worker_db_loud() { echo "drop:$1" >> "$drop_log"; return 0; }
+    SHARD_PIDS=()
+    SHARD_WORKER_DBS=("exam_e2e_w0" "exam_e2e_w1")
+    E2E_WORKERS=2; FROZEN_EXIT=1; CLEANUP_FAILURE=0; KEEP_SERVER=0
+    E2E_KEEP_WORKER_DB_ON_FAILURE=1
+    DEV_COMPOSE="$(mktemp)"; DEV_COMPOSE_WAS_UP=0
+    ROOT_DIR="$(mktemp -d)"; DROP_DB_CID=""
+    rc=0; run_cleanup || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "FAIL: cleanup failed (rc=$rc)" >&2; exit 1
+    fi
+    if [[ -s "$drop_log" ]]; then
+      echo "FAIL: worker DB dropped despite keep-on-failure" >&2
+      cat "$drop_log" >&2; exit 1
+    fi
+    if grep -q "down" "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: compose torn down although worker DBs are retained" >&2
+      cat "$FAKE_DOCKER_LOG" >&2; exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
+  # ── 23c. run_cleanup stops an orphaned process group (P2 r2) ────────────
+  # The setsid leader exits (reaped) while a TERM-ignoring child survives in
+  # the PGID. run_cleanup's stop guard must look at the WHOLE group — a
+  # leader-only `kill -0` guard would skip the stop and leak the child.
+  cleanup-stops-orphaned-group)
+    marker="$(mktemp)"
+    setsid bash -c '
+      ( trap "" TERM; echo "READY" > "'"$marker"'"; exec sleep 30 ) &
+      trap "exit 0" TERM
+      wait
+    ' &
+    leader=$!
+    for _ in $(seq 1 50); do [[ -s "$marker" ]] && break; sleep 0.1; done
+    if [[ ! -s "$marker" ]]; then
+      echo "FAIL: child never signaled readiness" >&2
+      kill -KILL -- "-$leader" 2>/dev/null || true
+      wait "$leader" 2>/dev/null || true
+      rm -f "$marker"; exit 1
+    fi
+    # Kill ONLY the leader (its TERM trap exits 0) and reap it.
+    kill -TERM "$leader" 2>/dev/null || true
+    wait "$leader" 2>/dev/null || true
+    if kill -0 "$leader" 2>/dev/null; then
+      echo "FAIL: leader still alive after TERM" >&2
+      rm -f "$marker"; exit 1
+    fi
+    if ! process_group_alive "$leader"; then
+      echo "FAIL: child did not survive the leader exit (setup broken)" >&2
+      rm -f "$marker"; exit 1
+    fi
+    drop_log="$(mktemp)"
+    drop_worker_db_loud() { echo "drop:$1" >> "$drop_log"; return 0; }
+    SHARD_PIDS=("$leader")
+    SHARD_WORKER_DBS=("exam_e2e_w0")
+    E2E_WORKERS=2; FROZEN_EXIT=0; CLEANUP_FAILURE=0; KEEP_SERVER=0
+    E2E_KEEP_WORKER_DB_ON_FAILURE=0; DEV_COMPOSE=""; ROOT_DIR=""
+    DROP_DB_CID="fakecid"
+    run_cleanup
+    if process_group_alive "$leader"; then
+      echo "FAIL: orphaned child leaked after run_cleanup" >&2
+      kill -KILL -- "-$leader" 2>/dev/null || true
+      rm -f "$marker" "$drop_log"; exit 1
+    fi
+    if ! grep -q '^drop:exam_e2e_w0$' "$drop_log"; then
+      echo "FAIL: worker DB not dropped after orphan cleanup" >&2
+      rm -f "$marker" "$drop_log"; exit 1
+    fi
+    echo "PASS"; rm -f "$marker" "$drop_log"; exit 0
+    ;;
+
   # ── 24. TERM-ignoring child must not outlive the leader (P2-1) ─────────
   # The leader exits on TERM while a child ignores TERM and keeps running.
   # stop_process_group must wait for the WHOLE process group and escalate to
@@ -613,7 +703,10 @@ case "$scenario" in
       ' &
       local child=$!
       set +m
-      for _ in $(seq 1 50); do [[ -f "$marker.pid" ]] && break; sleep 0.1; done
+      # Poll until the pid file is NON-EMPTY: `echo "READY $$" > file` creates
+      # the file before writing, so an existence-only check can race with an
+      # empty file and feed awk an empty pid (round-3 review).
+      for _ in $(seq 1 50); do [[ -s "$marker.pid" ]] && break; sleep 0.1; done
       inner_pid="$(awk '{print $2}' "$marker.pid" 2>/dev/null)"
       if [[ -z "$inner_pid" ]]; then
         echo "FAIL: ${sig} cell never signaled readiness" >&2
@@ -630,7 +723,10 @@ case "$scenario" in
         wait "$child" 2>/dev/null || true
         rc=137
       fi
-      count="$(grep -c '^drop:exam_e2e_w0$' "$marker" 2>/dev/null || echo 0)"
+      # `grep -c` prints "0" and exits 1 when there are no matches; `|| echo 0`
+      # would append a second "0" line and break the numeric check below —
+      # `|| true` keeps the single "0" output (round-3 review).
+      count="$(grep -c '^drop:exam_e2e_w0$' "$marker" 2>/dev/null || true)"
       rm -f "$marker" "$marker.pid"
       if [[ "$rc" -ne "$want" ]]; then
         echo "FAIL: ${sig} → want exit $want, got $rc" >&2; return 1
