@@ -100,8 +100,10 @@ async function scalar<T>(
   >;
   const row = rows[0];
   if (!row) return undefined;
-  // Prefer the explicit `v` alias; fall back to the first column value.
-  return (row.v as T | undefined) ?? (Object.values(row)[0] as T | undefined);
+  // Prefer the explicit `v` alias (present even when its value is null); only
+  // fall back to the first column value when `v` is absent.
+  if ("v" in row) return row.v as T | undefined;
+  return Object.values(row)[0] as T | undefined;
 }
 
 // ============================================================
@@ -149,30 +151,60 @@ describe("0027 convergence — B. healthy schema", () => {
   let env: Env;
   beforeAll(async () => {
     env = await makeEnv("mig0027healthy");
-    // Seed a minimal organization + an attempt so "no business data" is not
-    // the only state exercised. (Backfill must not touch a legit grading_status.)
+    // Seed a minimal organization + user, then a full fixture chain so we can
+    // create an exam_attempts row with an EXPLICIT non-default grading_status.
+    // This exercises the convergence's "do not overwrite a legit value" path.
     await env.conn.sql.unsafe(`
       INSERT INTO organizations (id, name, display_name, slug, created_at, updated_at)
       VALUES ('org-b', 'OrgB', 'OrgB', 'org-b', now(), now());
       INSERT INTO users (id, organization_id, username, password_hash, name, role, is_active, created_at, updated_at)
-      VALUES ('u-b', 'org-b', 'ub', 'h', 'UB', 'Admin', true, now(), now());
+      VALUES ('u-b', 'org-b', 'ub', 'h', 'UB', 'Admin', true, now(), now()),
+             ('c-b', 'org-b', 'cb', 'h', 'CB', 'Candidate', true, now(), now());
+      INSERT INTO candidate_profiles (id, organization_id, user_id, fields, created_at, updated_at)
+      VALUES ('cp-b', 'org-b', 'c-b', '{}', now(), now());
+      INSERT INTO courses (id, organization_id, name, code, description, created_at, updated_at)
+      VALUES ('co-b', 'org-b', 'C', 'cb', '', now(), now());
+      INSERT INTO exams (id, organization_id, title, description, course_id, status, timing_mode,
+        duration_minutes, open_at, close_at, passing_score, total_score,
+        question_selection_mode, question_ids, question_snapshot, control_flags,
+        retake_policy, score_strategy, max_attempts, created_at, updated_at)
+      VALUES ('ex-b', 'org-b', 'E', '', 'co-b', 'open', 'timed_window',
+        60, now(), now(), 60, 100, 'manual', '[]', '[]', '{}'::jsonb,
+        'none', 'latest', 1, now(), now());
+      INSERT INTO exam_enrollments (id, organization_id, exam_id, candidate_id, status, attempt_count, created_at, updated_at)
+      VALUES ('en-b', 'org-b', 'ex-b', 'cp-b', 'open', 0, now(), now());
+      INSERT INTO exam_attempts (id, organization_id, exam_id, enrollment_id, candidate_id, attempt_no,
+        status, grading_status, question_snapshot, answers, created_at, updated_at)
+      VALUES ('at-b', 'org-b', 'ex-b', 'en-b', 'cp-b', 1, 'graded', 'manual_graded', '[]', '[]', now(), now());
     `);
   });
   afterAll(async () => {
     await teardown(env);
   });
 
-  it("is a verify no-op on a fully-converged schema (counts unchanged)", async () => {
+  it("is a verify no-op: counts unchanged AND a legit non-default grading_status is preserved", async () => {
     const beforeProctor = await scalar<number>(
       env.conn,
       `SELECT count(*)::int FROM exam_proctor_assignments`,
+    );
+    const beforeGs = await scalar<string>(
+      env.conn,
+      `SELECT grading_status AS v FROM exam_attempts WHERE id='at-b'`,
     );
     await run0027(env.conn);
     const afterProctor = await scalar<number>(
       env.conn,
       `SELECT count(*)::int FROM exam_proctor_assignments`,
     );
+    const afterGs = await scalar<string>(
+      env.conn,
+      `SELECT grading_status AS v FROM exam_attempts WHERE id='at-b'`,
+    );
     expect(afterProctor).toBe(beforeProctor);
+    // The convergence backfills only NULL grading_status values; a legit
+    // 'manual_graded' must be untouched, not reset to the 'auto_graded' default.
+    expect(beforeGs).toBe("manual_graded");
+    expect(afterGs).toBe("manual_graded");
   });
 });
 
@@ -240,11 +272,12 @@ describe("0027 convergence — C. missing 0024 proctor tables", () => {
     );
     expect(invalidFks).toBe(0);
 
-    // Representative indexes present.
+    // Representative indexes present (schema-scoped like Scenario H).
     const idxCount = await scalar<number>(
       env.conn,
       `SELECT count(*)::int FROM pg_indexes
-       WHERE tablename IN ('exam_proctor_assignments','exam_proctor_assignment_events')`,
+       WHERE schemaname = current_schema()
+         AND tablename IN ('exam_proctor_assignments','exam_proctor_assignment_events')`,
     );
     // assignments: pkey + 5 indexes; events: pkey + 2 indexes = 9 total
     expect(idxCount).toBe(9);
@@ -458,6 +491,38 @@ describe("0027 convergence — G. partial incompatible (wrong column type)", () 
         `SELECT to_regclass('exam_proctor_assignment_events')`,
       ),
     ).toBeNull();
+  });
+
+  it("fails closed when a required column is missing (not a raw missing-column DB error)", async () => {
+    // A table that omits exam_id but keeps every other expected column. Before
+    // the count=11 set-equality fix this slipped past the B1 subset check (every
+    // remaining column was still in the allow-list) and only failed later in B2
+    // with a raw "column does not exist" error during index CREATE. With the
+    // fix it must be rejected up front with the named 0027-B1 shape error.
+    const env2 = await makeEnv("mig0027incompat2");
+    try {
+      await env2.conn.sql.unsafe(`
+        DROP TABLE IF EXISTS exam_proctor_assignment_events CASCADE;
+        DROP TABLE IF EXISTS exam_proctor_assignments CASCADE;
+        CREATE TABLE exam_proctor_assignments (
+          "id" text PRIMARY KEY NOT NULL,
+          "organization_id" text NOT NULL,
+          "proctor_user_id" text NOT NULL,
+          "status" text DEFAULT 'active' NOT NULL,
+          "assigned_by" text NOT NULL,
+          "assigned_at" timestamp with time zone NOT NULL,
+          "revoked_by" text,
+          "revoked_at" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+          "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+        );
+      `);
+      await expect(run0027(env2.conn)).rejects.toThrow(
+        /0027-B1: exam_proctor_assignments exists with an incompatible column shape/,
+      );
+    } finally {
+      await teardown(env2);
+    }
   });
 });
 

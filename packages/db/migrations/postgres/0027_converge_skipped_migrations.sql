@@ -126,9 +126,13 @@ BEGIN
   IF idx_oid IS NULL THEN
     CREATE UNIQUE INDEX "exams_org_id_unique" ON "exams" USING btree ("organization_id","id");
   ELSE
-    -- Must be unique, btree, exactly two key columns matching the authoritative
-    -- pair (organization_id, id), with no expression columns.
+    -- Must be unique, btree, valid, non-partial, exactly two key columns
+    -- matching the authoritative pair (organization_id, id). A partial or
+    -- invalid index of the same name cannot serve a composite FK and is
+    -- rejected.
     SELECT i.indisunique
+      AND i.indisvalid
+      AND i.indpred IS NULL
       AND i.indnatts = 2
       AND i.indnkeyatts = 2
       AND pg_get_indexdef(i.indexrelid) ~* 'USING btree'
@@ -173,22 +177,27 @@ BEGIN
   ) INTO present;
 
   IF present THEN
-    -- Validate exact column shape (type + nullability). PK is checked too.
-    SELECT bool_and(
-      (a.attname, a.atttypid::regtype::text, a.attnotnull) IN (
-        ('id', 'text', true),
-        ('organization_id', 'text', true),
-        ('exam_id', 'text', true),
-        ('proctor_user_id', 'text', true),
-        ('status', 'text', true),
-        ('assigned_by', 'text', true),
-        ('assigned_at', 'timestamp with time zone', true),
-        ('revoked_by', 'text', false),
-        ('revoked_at', 'timestamp with time zone', false),
-        ('created_at', 'timestamp with time zone', true),
-        ('updated_at', 'timestamp with time zone', true)
-      )
-    ) INTO col_ok
+    -- Validate exact column shape. count(*) = 11 makes this set-equality: a
+    -- table missing (or adding) a column fails even if every remaining column
+    -- is in the allow-list. bool_and then checks type + nullability of each.
+    -- (PK is NOT separately verified here — it is implied by the column set and
+    -- enforced by the pkey index created in B2 when the table is new.)
+    SELECT count(*) = 11
+      AND bool_and(
+        (a.attname, a.atttypid::regtype::text, a.attnotnull) IN (
+          ('id', 'text', true),
+          ('organization_id', 'text', true),
+          ('exam_id', 'text', true),
+          ('proctor_user_id', 'text', true),
+          ('status', 'text', true),
+          ('assigned_by', 'text', true),
+          ('assigned_at', 'timestamp with time zone', true),
+          ('revoked_by', 'text', false),
+          ('revoked_at', 'timestamp with time zone', false),
+          ('created_at', 'timestamp with time zone', true),
+          ('updated_at', 'timestamp with time zone', true)
+        )
+      ) INTO col_ok
     FROM pg_attribute a
     WHERE a.attrelid = 'exam_proctor_assignments'::regclass
       AND a.attnum > 0 AND NOT a.attisdropped;
@@ -229,11 +238,14 @@ END $$;
 
 --> statement-breakpoint
 
--- B2. exam_proctor_assignments indexes + FKs. Each object is added only if
--- absent (idempotent). Definitions are NOT re-verified when present — a prior
--- exact-shape validate-then-create path is the authority; a partial apply that
--- left a wrong-shaped index is caught by the unique/index existence check
--- because CREATE would fail with a duplicate-name error and abort the tx.
+-- B2. exam_proctor_assignments indexes + FKs. Each object is added only if its
+-- name is absent (idempotent). NOTE: an existing same-named object is accepted
+-- WITHOUT re-verifying its definition — there is no duplicate-name CREATE here,
+-- so a wrong-shaped existing index/FK would NOT be caught by this block. This
+-- is acceptable because the table-level column-shape gate in B1 already guards
+-- the high-risk partial-apply state (missing/extra columns); the authoritative
+-- index/FK definitions only ever come from this CREATE/ADD path (when the table
+-- is new) or from the original 0024 migration (when the table is fully present).
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND tablename='exam_proctor_assignments' AND indexname='exam_proctor_assignments_org_id_unique') THEN
@@ -283,19 +295,22 @@ BEGIN
   ) INTO present;
 
   IF present THEN
-    SELECT bool_and(
-      (a.attname, a.atttypid::regtype::text, a.attnotnull) IN (
-        ('id', 'uuid', true),
-        ('organization_id', 'text', true),
-        ('assignment_id', 'text', true),
-        ('command_type', 'text', true),
-        ('operation_id', 'uuid', true),
-        ('canonical_payload', 'jsonb', true),
-        ('outcome', 'text', true),
-        ('actor_id', 'text', true),
-        ('created_at', 'timestamp with time zone', true)
-      )
-    ) INTO col_ok
+    -- Validate exact column shape. count(*) = 9 makes this set-equality (see
+    -- B1 for the rationale).
+    SELECT count(*) = 9
+      AND bool_and(
+        (a.attname, a.atttypid::regtype::text, a.attnotnull) IN (
+          ('id', 'uuid', true),
+          ('organization_id', 'text', true),
+          ('assignment_id', 'text', true),
+          ('command_type', 'text', true),
+          ('operation_id', 'uuid', true),
+          ('canonical_payload', 'jsonb', true),
+          ('outcome', 'text', true),
+          ('actor_id', 'text', true),
+          ('created_at', 'timestamp with time zone', true)
+        )
+      ) INTO col_ok
     FROM pg_attribute a
     WHERE a.attrelid = 'exam_proctor_assignment_events'::regclass
       AND a.attnum > 0 AND NOT a.attisdropped;

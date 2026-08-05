@@ -31,15 +31,28 @@ const BASE_ENTRIES = [
 /**
  * Build a throwaway migration dir containing meta/_journal.json with the given
  * entries, plus a .sql file per (selected) tag and optional orphan files.
+ * `journal` overrides the top-level {version,dialect} (defaults to the
+ * authoritative values); `rawJournal` writes an exact string instead of
+ * serializing entries (for the unparsable-journal mutation).
  */
 function buildJournalDir(entries, opts = {}) {
   const dir = mkdtempSync(join(tmpdir(), "mig-journal-"));
   const metaDir = join(dir, "meta");
   mkdirSync(metaDir, { recursive: true });
-  writeFileSync(
-    join(metaDir, "_journal.json"),
-    JSON.stringify({ version: "7", dialect: "postgresql", entries }, null, 2),
-  );
+  if (opts.rawJournal !== undefined) {
+    writeFileSync(join(metaDir, "_journal.json"), opts.rawJournal);
+  } else {
+    const journal = {
+      version: "7",
+      dialect: "postgresql",
+      entries,
+      ...opts.journal,
+    };
+    writeFileSync(
+      join(metaDir, "_journal.json"),
+      JSON.stringify(journal, null, 2),
+    );
+  }
   const writeTags = opts.writeTags ?? entries.map((e) => e.tag);
   for (const t of writeTags) {
     writeFileSync(join(dir, `${t}.sql`), "-- empty\n");
@@ -88,12 +101,116 @@ function expectPass(dir, opts) {
 }
 
 // --- Golden: the real journal passes ----------------------------------------
+// Provide an explicit clean environment so leaked MIGRATIONS_DIR_OVERRIDE /
+// MIGRATIONS_JOURNAL_ALLOWLIST_EMPTY from the surrounding shell cannot make the
+// golden test run against a throwaway dir or with the allowlist disabled.
 test("real journal passes (golden)", () => {
+  const {
+    MIGRATIONS_DIR_OVERRIDE,
+    MIGRATIONS_JOURNAL_ALLOWLIST_EMPTY,
+    ...cleanEnv
+  } = process.env;
+  void MIGRATIONS_DIR_OVERRIDE;
+  void MIGRATIONS_JOURNAL_ALLOWLIST_EMPTY;
   const res = child_process.spawnSync(process.execPath, [CHECKER], {
+    env: cleanEnv,
     encoding: "utf8",
   });
   assert.equal(res.status, 0, `real journal check failed:\n${res.stderr}`);
   assert.match(res.stdout, /passed/);
+});
+
+// --- Structural mutation: wrong journal version -----------------------------
+test("fails on a wrong journal version", () => {
+  const dir = buildJournalDir(BASE_ENTRIES, {
+    journal: { version: "6" },
+  });
+  try {
+    expectFail(dir, 'journal version is "6", expected "7"', {
+      allowlistEmpty: true,
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Structural mutation: wrong dialect -------------------------------------
+test("fails on a wrong dialect", () => {
+  const dir = buildJournalDir(BASE_ENTRIES, {
+    journal: { dialect: "sqlite" },
+  });
+  try {
+    expectFail(dir, 'journal dialect is "sqlite", expected "postgresql"', {
+      allowlistEmpty: true,
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Structural mutation: non-array entries ---------------------------------
+test("fails when entries is not an array", () => {
+  const dir = buildJournalDir([], { journal: { entries: "nope" } });
+  try {
+    expectFail(dir, "journal.entries is not an array");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Structural mutation: empty entries -------------------------------------
+test("fails when entries is empty", () => {
+  const dir = buildJournalDir([], { journal: { entries: [] } });
+  try {
+    expectFail(dir, "journal.entries is empty", { allowlistEmpty: true });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Structural mutation: non-integer when ----------------------------------
+test("fails when a when value is not an integer", () => {
+  const entries = [
+    { idx: 0, version: "7", when: 1000, tag: "0000_aaa", breakpoints: true },
+    { idx: 1, version: "7", when: "soon", tag: "0001_bbb", breakpoints: true },
+  ];
+  const dir = buildJournalDir(entries);
+  try {
+    expectFail(dir, "when is not an integer", { allowlistEmpty: true });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Structural mutation: unparsable _journal.json --------------------------
+test("fails when _journal.json is unparsable", () => {
+  const dir = buildJournalDir(BASE_ENTRIES, { rawJournal: "{ not valid json" });
+  try {
+    const { code, stderr } = runChecker(dir, { allowlistEmpty: true });
+    assert.notEqual(code, 0, "checker should fail on unparsable journal");
+    assert.ok(
+      /cannot read\/parse/.test(stderr),
+      `stderr should mention parse failure; got:\n${stderr}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Structural mutation: tag prefix does not match idx ---------------------
+test("fails when a tag's 4-digit prefix does not match its idx", () => {
+  const entries = [
+    { idx: 0, version: "7", when: 1000, tag: "0000_aaa", breakpoints: true },
+    { idx: 1, version: "7", when: 2000, tag: "0007_bbb", breakpoints: true },
+  ];
+  const dir = buildJournalDir(entries);
+  try {
+    expectFail(dir, "tag's 4-digit prefix does not match idx", {
+      allowlistEmpty: true,
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // --- Mutation: new backward `when` (not in allowlist) — the 0022 regression

@@ -28,7 +28,7 @@
 //   - every tag has a matching <tag>.sql file
 //   - no orphan numbered migration .sql file
 
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -221,9 +221,25 @@ async function main() {
   }
 
   for (const e of entries) {
+    // Each tag's 4-digit numeric prefix must match its idx (e.g. idx 22 -> "0022_...").
+    // A mismatch would re-order the on-disk numbering relative to the journal and
+    // confuse the migrator's folder-name expectations.
+    if (typeof e.idx === "number" && Number.isInteger(e.idx)) {
+      const prefix = String(e.idx).padStart(4, "0");
+      if (
+        typeof e.tag !== "string" ||
+        !e.tag.startsWith(prefix) ||
+        e.tag.slice(4, 5) !== "_"
+      ) {
+        violations.push(
+          `entry idx=${e.idx} tag=${e.tag}: tag's 4-digit prefix does not match idx (expected "${prefix}_...")`,
+        );
+      }
+    }
     const sqlFile = `${e.tag}.sql`;
     try {
-      await readFile(join(MIGRATIONS_DIR, sqlFile), "utf8");
+      // File existence is all that matters; contents are read by the migrator.
+      await access(join(MIGRATIONS_DIR, sqlFile));
     } catch {
       violations.push(
         `entry idx=${e.idx} tag=${e.tag}: referenced .sql file "${sqlFile}" not found in ${MIGRATIONS_DIR}`,
