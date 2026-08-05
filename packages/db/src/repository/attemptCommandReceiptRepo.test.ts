@@ -14,7 +14,11 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { RequestContext } from "@exam/domain";
+import type {
+  AttemptCommandRequestPayload,
+  AttemptCommandResultPayload,
+  RequestContext,
+} from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
 import { getIsolatedTestDb } from "../testDb.js";
@@ -235,15 +239,34 @@ describe("attempt command receipt persistence foundation", () => {
       createdAt: Date;
     }> = {},
   ): Promise<AttemptCommandReceiptRow> {
+    const commandType = over.commandType ?? "force_submit";
+    const defaultResultPayload =
+      commandType === "force_submit"
+        ? {
+            commandType: "force_submit" as const,
+            beforeStatus: "in_progress" as const,
+            afterStatus: "graded" as const,
+            submittedAt: BASE_TIME.toISOString(),
+            gradedAt: BASE_TIME.toISOString(),
+            appliedAt: BASE_TIME.toISOString(),
+          }
+        : {
+            commandType: "misconduct_mark" as const,
+            misconduct: null,
+            appliedAt: BASE_TIME.toISOString(),
+          };
+    // The `over` overrides are deliberately loose (Record<string, unknown>)
+    // so the runtime guard tests can bypass the compile-time binding; cast to
+    // the canonical unions at the boundary.
     return repo.insertReceipt(fix.ctx, {
       attemptId: over.attemptId ?? fix.attemptId,
       operationId: over.operationId ?? randomUUID(),
-      commandType: over.commandType ?? "force_submit",
-      requestPayload: over.requestPayload ?? { reason: null },
-      resultPayload: over.resultPayload ?? {
-        commandType: over.commandType ?? "force_submit",
-        appliedAt: BASE_TIME.toISOString(),
-      },
+      commandType,
+      requestPayload: (over.requestPayload ?? {
+        reason: "forced",
+      }) as unknown as AttemptCommandRequestPayload,
+      resultPayload: (over.resultPayload ??
+        defaultResultPayload) as unknown as AttemptCommandResultPayload,
       outcome: over.outcome ?? "applied",
       actorId: fix.actorId,
       createdAt: over.createdAt ?? BASE_TIME,
@@ -294,7 +317,7 @@ describe("attempt command receipt persistence foundation", () => {
     await insert(alpha, {
       operationId: opId,
       commandType: "force_submit",
-      requestPayload: { reason: null },
+      requestPayload: { reason: "forced" },
     });
     let caught: unknown;
     try {
@@ -334,7 +357,7 @@ describe("attempt command receipt persistence foundation", () => {
     await insert(alpha, {
       operationId: opFs,
       commandType: "force_submit",
-      requestPayload: { reason: null },
+      requestPayload: { reason: "forced" },
     });
     await insert(alpha, {
       operationId: opMs,
@@ -393,5 +416,53 @@ describe("attempt command receipt persistence foundation", () => {
     expect(
       sameTimeRows.every((r) => r.createdAt.getTime() === sameTime.getTime()),
     ).toBe(true);
+  });
+
+  // ── runtime payload↔commandType guard ────────────────────────────
+
+  it("insertReceipt rejects a request payload that does not match the commandType", async () => {
+    // The input types bind payload to command at compile time; this test
+    // bypasses the types to prove the runtime guard still holds.
+    await expect(
+      repo.insertReceipt(alpha.ctx, {
+        attemptId: alpha.attemptId,
+        operationId: randomUUID(),
+        commandType: "force_submit",
+        requestPayload: {
+          severity: "warning",
+          notes: "x",
+        } as unknown as { reason: string },
+        resultPayload: {
+          commandType: "force_submit",
+          beforeStatus: "in_progress",
+          afterStatus: "graded",
+          submittedAt: BASE_TIME.toISOString(),
+          gradedAt: BASE_TIME.toISOString(),
+          appliedAt: BASE_TIME.toISOString(),
+        } as unknown as AttemptCommandResultPayload,
+        outcome: "applied",
+        actorId: alpha.actorId,
+        createdAt: BASE_TIME,
+      }),
+    ).rejects.toThrow(/requestPayload shape belongs to misconduct_mark/);
+  });
+
+  it("insertReceipt rejects a result payload whose commandType differs", async () => {
+    await expect(
+      repo.insertReceipt(alpha.ctx, {
+        attemptId: alpha.attemptId,
+        operationId: randomUUID(),
+        commandType: "force_submit",
+        requestPayload: { reason: "forced" },
+        resultPayload: {
+          commandType: "misconduct_mark",
+          misconduct: null,
+          appliedAt: BASE_TIME.toISOString(),
+        } as unknown as AttemptCommandResultPayload,
+        outcome: "applied",
+        actorId: alpha.actorId,
+        createdAt: BASE_TIME,
+      }),
+    ).rejects.toThrow(/resultPayload\.commandType misconduct_mark/);
   });
 });

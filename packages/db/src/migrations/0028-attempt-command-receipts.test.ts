@@ -240,12 +240,98 @@ describe(
       void constraintNames; // unused local placeholder retained for symmetry
     });
 
-    it("creates the unique arbiter and the per-attempt history index", async () => {
+    it("creates the unique arbiter and the per-attempt history indexes", async () => {
       const names = await indexesOn("attempt_command_receipts");
       expect(names).toContain("attempt_command_receipts_org_operation_unique");
       expect(names).toContain(
+        "attempt_command_receipts_org_attempt_created_idx",
+      );
+      expect(names).toContain(
         "attempt_command_receipts_org_attempt_command_created_idx",
       );
+      // Composite-FK target index on users (actor identity graph).
+      const userNames = await indexesOn("users");
+      expect(userNames).toContain("users_org_id_unique");
+    });
+
+    it("the history indexes carry the exact column orders", async () => {
+      // PRIMARY history index: (org, attempt, created_at, id) — equality
+      // prefix + (created_at, id) ordering, no sort node for listByAttempt.
+      const primary = await sql.unsafe<{ key: string }[]>(`
+        SELECT pg_get_indexdef(indexrelid) AS key
+        FROM pg_index
+        WHERE indrelid = 'attempt_command_receipts'::regclass
+          AND indexrelid = 'attempt_command_receipts_org_attempt_created_idx'::regclass
+      `);
+      expect(primary[0]?.key).toContain(
+        "(organization_id, attempt_id, created_at, id)",
+      );
+      // Command-filtered history index: (org, attempt, command_type, created_at, id).
+      const filtered = await sql.unsafe<{ key: string }[]>(`
+        SELECT pg_get_indexdef(indexrelid) AS key
+        FROM pg_index
+        WHERE indrelid = 'attempt_command_receipts'::regclass
+          AND indexrelid = 'attempt_command_receipts_org_attempt_command_created_idx'::regclass
+      `);
+      expect(filtered[0]?.key).toContain(
+        "(organization_id, attempt_id, command_type, created_at, id)",
+      );
+    });
+
+    it("the frozen CHECK constraints carry the exact definitions", async () => {
+      const rows = await sql.unsafe<{ conname: string; def: string }[]>(`
+      SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'attempt_command_receipts'::regclass
+        AND contype = 'c'
+      ORDER BY conname
+    `);
+      const byName = new Map(rows.map((r) => [r.conname, r.def]));
+      expect(byName.get("attempt_command_receipts_command_type_check")).toBe(
+        `CHECK ((command_type = ANY (ARRAY['force_submit'::text, 'misconduct_mark'::text])))`,
+      );
+      expect(byName.get("attempt_command_receipts_outcome_check")).toBe(
+        `CHECK ((outcome = ANY (ARRAY['applied'::text, 'no_change'::text])))`,
+      );
+      expect(byName.get("attempt_command_receipts_request_payload_check")).toBe(
+        `CHECK ((jsonb_typeof(request_payload) = 'object'::text))`,
+      );
+      expect(byName.get("attempt_command_receipts_result_payload_check")).toBe(
+        `CHECK ((jsonb_typeof(result_payload) = 'object'::text))`,
+      );
+    });
+
+    it("the FKs are composite where required and never CASCADE", async () => {
+      const rows = await sql.unsafe<{ conname: string; def: string }[]>(`
+      SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'attempt_command_receipts'::regclass
+        AND contype = 'f'
+      ORDER BY conname
+    `);
+      const byName = new Map(rows.map((r) => [r.conname, r.def]));
+      // Composite org+attempt FK (audit §6.2) — no CASCADE on any FK.
+      expect(byName.get("attempt_command_receipts_org_attempt_fk")).toBe(
+        `FOREIGN KEY (organization_id, attempt_id) REFERENCES exam_attempts(organization_id, id)`,
+      );
+      expect(byName.get("attempt_command_receipts_org_fk")).toBe(
+        `FOREIGN KEY (organization_id) REFERENCES organizations(id)`,
+      );
+      // Composite org+actor FK — the actor must be a member of the SAME org.
+      expect(byName.get("attempt_command_receipts_actor_fk")).toBe(
+        `FOREIGN KEY (organization_id, actor_id) REFERENCES users(organization_id, id)`,
+      );
+      for (const def of byName.values()) {
+        expect(def).not.toContain("CASCADE");
+      }
+    });
+
+    it("the unique arbiter is a real unique index on (organization_id, operation_id)", async () => {
+      const rows = await sql.unsafe<{ indisunique: boolean; def: string }[]>(`
+      SELECT i.indisunique, pg_get_indexdef(i.indexrelid) AS def
+      FROM pg_index i
+      WHERE i.indexrelid = 'attempt_command_receipts_org_operation_unique'::regclass
+    `);
+      expect(rows[0]?.indisunique).toBe(true);
+      expect(rows[0]?.def).toContain("(organization_id, operation_id)");
     });
 
     it("created_at defaults to now() on insert", async () => {
@@ -460,7 +546,7 @@ describe(
       );
     });
 
-    it("the plain users(id) actor FK rejects an unknown actor", async () => {
+    it("the composite org+actor FK rejects an unknown actor", async () => {
       await expect(
         sql.unsafe(`
         INSERT INTO "attempt_command_receipts"
@@ -469,6 +555,25 @@ describe(
         VALUES (
           ${s(randomUUID())}, ${s(alpha.orgId)}, ${s(alpha.attemptId)}, ${s(randomUUID())},
           'force_submit', '{}'::jsonb, '{}'::jsonb, 'applied', 'no-such-user'
+        )
+      `),
+      ).rejects.toThrow(
+        /attempt_command_receipts_actor_fk|violates foreign key/,
+      );
+    });
+
+    it("the composite org+actor FK rejects an actor from ANOTHER organization", async () => {
+      // organization_id = alpha, actor_id = beta's admin → the actor is a
+      // real user but NOT a member of alpha. The identity graph must be
+      // DB-enforced (overnight hardening).
+      await expect(
+        sql.unsafe(`
+        INSERT INTO "attempt_command_receipts"
+          ("id", "organization_id", "attempt_id", "operation_id", "command_type",
+           "request_payload", "result_payload", "outcome", "actor_id")
+        VALUES (
+          ${s(randomUUID())}, ${s(alpha.orgId)}, ${s(alpha.attemptId)}, ${s(randomUUID())},
+          'force_submit', '{}'::jsonb, '{}'::jsonb, 'applied', ${s(beta.adminId)}
         )
       `),
       ).rejects.toThrow(

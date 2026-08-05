@@ -134,6 +134,12 @@ export const users = pgTable(
       table.organizationId,
       table.username,
     ),
+    // Composite-FK target for org-owned actor references (e.g.
+    // attempt_command_receipts(organization_id, actor_id)): proves the actor
+    // is a MEMBER of the same organization, not merely an existing user.
+    // users.organization_id is NOT NULL, so a cross-org actor cannot satisfy
+    // the composite FK.
+    uniqueIndex("users_org_id_unique").on(table.organizationId, table.id),
   ],
 );
 
@@ -1702,8 +1708,19 @@ export const attemptCommandReceipts = pgTable(
       table.organizationId,
       table.operationId,
     ),
-    // Per-attempt history + optional command_type filter + (created_at, id)
-    // tie-breaker so listByAttempt ordering is index-supported.
+    // PRIMARY per-attempt history index (audit §6.2 name + id tie-breaker):
+    // serves the unfiltered listByAttempt ordering (created_at ASC, id ASC)
+    // directly. The command-filtered listByAttempt gets its own index below —
+    // a single index cannot cover both orderings (command_type sits between
+    // attempt_id and created_at in the B-tree key).
+    index("attempt_command_receipts_org_attempt_created_idx").on(
+      table.organizationId,
+      table.attemptId,
+      table.createdAt,
+      table.id,
+    ),
+    // Command-filtered history: (organization_id, attempt_id, command_type)
+    // equality prefix + the same (created_at, id) ordering tail.
     index("attempt_command_receipts_org_attempt_command_created_idx").on(
       table.organizationId,
       table.attemptId,
@@ -1737,9 +1754,13 @@ export const attemptCommandReceipts = pgTable(
       foreignColumns: [organizations.id],
       name: "attempt_command_receipts_org_fk",
     }),
+    // Composite org+actor FK → users(organization_id, id) (target index:
+    // users_org_id_unique). The identity graph is DB-enforced: an actor from
+    // a DIFFERENT organization cannot be recorded on a receipt (overnight
+    // hardening — the previous plain users(id) FK only proved existence).
     foreignKey({
-      columns: [table.actorId],
-      foreignColumns: [users.id],
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [users.organizationId, users.id],
       name: "attempt_command_receipts_actor_fk",
     }),
   ],

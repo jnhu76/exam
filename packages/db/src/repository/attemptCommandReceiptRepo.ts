@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { AttemptCommandType } from "@exam/domain";
-import type { RequestContext } from "@exam/domain";
+import type {
+  AttemptCommandRequestPayload,
+  AttemptCommandResultPayload,
+  AttemptCommandType,
+  RequestContext,
+} from "@exam/domain";
 import { and, asc, eq } from "drizzle-orm";
 import { attemptCommandReceipts } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
@@ -17,11 +21,40 @@ export interface InsertAttemptCommandReceiptInput {
   attemptId: string;
   operationId: string;
   commandType: AttemptCommandType;
-  requestPayload: Record<string, unknown>;
-  resultPayload: Record<string, unknown>;
+  requestPayload: AttemptCommandRequestPayload;
+  resultPayload: AttemptCommandResultPayload;
   outcome: AttemptCommandReceiptOutcome;
   actorId: string;
+  /**
+   * Server time authority for the receipt row (the orchestrator passes the
+   * transaction's `now`; the DB `DEFAULT now()` is the fallback). Mirrors the
+   * `attemptTimeAdjustmentRepo` / `incidentRepo` convention — the caller is
+   * the server, never the client.
+   */
   createdAt: Date;
+}
+
+/**
+ * Guard against a caller inserting a payload that does not belong to the
+ * declared commandType. The input types already bind the payloads to the
+ * command at compile time; this runtime check keeps the durable row
+ * self-consistent even if a caller bypasses the types.
+ */
+function assertPayloadMatchesCommandType(
+  input: InsertAttemptCommandReceiptInput,
+): void {
+  const requestType =
+    "reason" in input.requestPayload ? "force_submit" : "misconduct_mark";
+  if (requestType !== input.commandType) {
+    throw new Error(
+      `requestPayload shape belongs to ${requestType}, not ${input.commandType}`,
+    );
+  }
+  if (input.resultPayload.commandType !== input.commandType) {
+    throw new Error(
+      `resultPayload.commandType ${input.resultPayload.commandType} does not match ${input.commandType}`,
+    );
+  }
 }
 
 /**
@@ -52,6 +85,7 @@ export function createAttemptCommandReceiptRepo(db: Database) {
     ctx: TenantContext | RequestContext,
     input: InsertAttemptCommandReceiptInput,
   ): Promise<AttemptCommandReceiptRow> {
+    assertPayloadMatchesCommandType(input);
     const rows = await db
       .insert(attemptCommandReceipts)
       .values({
@@ -98,10 +132,16 @@ export function createAttemptCommandReceiptRepo(db: Database) {
   /**
    * Per-attempt receipt history, org- and attempt-scoped, with an optional
    * command-type filter (audit §9.3). Deterministic ordering by
-   * `(created_at ASC, id ASC)` — the composite index
-   * `attempt_command_receipts_org_attempt_command_created_idx` covers both the
-   * filter and the tie-breaker so stable ordering is index-supported even when
-   * many receipts share the same timestamp.
+   * `(created_at ASC, id ASC)`.
+   *
+   * Index support: without a command filter the query is served by
+   * `attempt_command_receipts_org_attempt_created_idx`
+   * (organization_id, attempt_id, created_at, id) — equality prefix +
+   * ordering columns, no sort node. With a command filter it is served by
+   * `attempt_command_receipts_org_attempt_command_created_idx`
+   * (organization_id, attempt_id, command_type, created_at, id). A single
+   * index cannot cover both orderings (command_type sits between attempt_id
+   * and created_at in the B-tree key), hence two.
    */
   async function listByAttempt(
     ctx: TenantContext | RequestContext,

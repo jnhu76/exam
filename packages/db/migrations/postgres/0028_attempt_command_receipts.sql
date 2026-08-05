@@ -55,9 +55,23 @@ CREATE UNIQUE INDEX "attempt_command_receipts_org_operation_unique"
   ON "attempt_command_receipts" ("organization_id", "operation_id");
 --> statement-breakpoint
 
--- Per-attempt history with optional command_type filter and a deterministic
--- (created_at, id) tie-breaker so listByAttempt ordering is index-supported
--- even when many receipts share the same timestamp.
+-- Per-attempt history, PRIMARY index (audit §6.2 name): serves the unfiltered
+-- listByAttempt ordering (created_at ASC, id ASC tie-breaker) directly —
+-- (organization_id, attempt_id, created_at, id) matches the query's equality
+-- prefix + sort columns, so no sort node is needed. The audit §6.2 shape
+-- (organization_id, attempt_id, created_at) is extended with the id
+-- tie-breaker so the deterministic ordering is index-supported.
+CREATE INDEX "attempt_command_receipts_org_attempt_created_idx"
+  ON "attempt_command_receipts" ("organization_id", "attempt_id", "created_at", "id");
+--> statement-breakpoint
+
+-- Per-attempt history with an optional command_type filter (listByAttempt
+-- with commandType): (organization_id, attempt_id, command_type) equality
+-- prefix + the same (created_at, id) ordering tail. A single index cannot
+-- cover BOTH the unfiltered ordering and the command-filtered ordering — the
+-- command_type column sits between attempt_id and created_at — so the
+-- command-filtered path gets its own index instead of an inaccurate
+-- "one index covers everything" claim.
 CREATE INDEX "attempt_command_receipts_org_attempt_command_created_idx"
   ON "attempt_command_receipts" ("organization_id", "attempt_id", "command_type", "created_at", "id");
 --> statement-breakpoint
@@ -73,9 +87,18 @@ ALTER TABLE "attempt_command_receipts" ADD CONSTRAINT "attempt_command_receipts_
   FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 
--- Actor FK: plain users(id), no cascade (mirrors exam_proctor_assignment_events_actor_fk).
--- The cross-org model stays correct because actor_id is resolved within the
--- request ctx of the same organization; this FK only proves the user exists,
--- not org membership (which the ctx + users table enforces upstream).
+-- Composite-FK target for org-owned actor identity: a unique (organization_id, id)
+-- on users lets the receipt's actor FK prove the actor is a MEMBER of the same
+-- organization (identity graph enforced in the database, not only by request
+-- ctx upstream). users.organization_id is NOT NULL, so an actor outside the
+-- receipt's organization cannot satisfy the composite FK.
+CREATE UNIQUE INDEX "users_org_id_unique"
+  ON "users" ("organization_id", "id");
+--> statement-breakpoint
+
+-- Actor FK: composite (organization_id, actor_id) → users(organization_id, id),
+-- no cascade. This rejects a receipt whose organization_id and actor_id point
+-- into different organizations (overnight hardening — the previous plain
+-- users(id) FK only proved the user exists, not org membership).
 ALTER TABLE "attempt_command_receipts" ADD CONSTRAINT "attempt_command_receipts_actor_fk"
-  FOREIGN KEY ("actor_id") REFERENCES "users"("id") ON DELETE no action ON UPDATE no action;
+  FOREIGN KEY ("organization_id", "actor_id") REFERENCES "users"("organization_id", "id") ON DELETE no action ON UPDATE no action;
