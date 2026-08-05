@@ -34,6 +34,7 @@
     "db:seed:demo:verify": "pnpm --filter @exam/api db:seed:demo:verify",
     "db:seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
     "db:rollback:incidents": "pnpm --filter @exam/api db:rollback:incidents",
+    "db:rollback:attempt-command-receipts": "pnpm --filter @exam/api db:rollback:attempt-command-receipts",
     "seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
