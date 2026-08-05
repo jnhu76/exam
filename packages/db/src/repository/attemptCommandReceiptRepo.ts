@@ -27,9 +27,9 @@ export interface InsertAttemptCommandReceiptInput {
   actorId: string;
   /**
    * Server time authority for the receipt row (the orchestrator passes the
-   * transaction's `now`; the DB `DEFAULT now()` is the fallback). Mirrors the
-   * `attemptTimeAdjustmentRepo` / `incidentRepo` convention — the caller is
-   * the server, never the client.
+   * transaction's `now`; the DB column default — a database-side timestamp —
+   * is the fallback). Mirrors the `attemptTimeAdjustmentRepo` /
+   * `incidentRepo` convention — the caller is the server, never the client.
    */
   createdAt: Date;
 }
