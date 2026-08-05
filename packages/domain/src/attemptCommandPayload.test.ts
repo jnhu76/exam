@@ -20,6 +20,7 @@ import {
   canonicalizeMisconductPayload,
   classifyAttemptCommandReplay,
   sortKeys,
+  type AttemptCommandInputByType,
 } from "./attemptCommandPayload.js";
 
 describe("canonical force_submit payload", () => {
@@ -98,19 +99,25 @@ describe("canonicalizeAttemptCommandRequest dispatch", () => {
   // (a mismatched call must not silently canonicalize at runtime).
 
   it("rejects a misconduct payload for force_submit (compile-time)", () => {
+    // The explicit type argument pins C, so the mismatched argument is a
+    // TS2345 on the call line (the expect-error directive is directly above);
+    // the call never executes.
+    const msIn: AttemptCommandInputByType["misconduct_mark"] = {
+      severity: "warning",
+      notes: "x",
+    };
     if (false) {
-      // @ts-expect-error — force_submit input is { reason: string }; a misconduct { severity, notes } shape must not compile.
-      canonicalizeAttemptCommandRequest("force_submit", {
-        severity: "warning",
-        notes: "x",
-      });
+      // @ts-expect-error — force_submit input is { reason: string }.
+      canonicalizeAttemptCommandRequest<"force_submit">("force_submit", msIn);
     }
   });
 
   it("rejects a force-submit payload for misconduct_mark (compile-time)", () => {
+    const fsIn: AttemptCommandInputByType["force_submit"] = { reason: "x" };
     if (false) {
-      // @ts-expect-error — misconduct_mark input is { severity, notes }; a force-submit { reason } shape must not compile.
-      canonicalizeAttemptCommandRequest("misconduct_mark", { reason: "x" });
+      // prettier-ignore
+      // @ts-expect-error — misconduct_mark input is { severity, notes }.
+      canonicalizeAttemptCommandRequest<"misconduct_mark">("misconduct_mark", fsIn);
     }
   });
 });
