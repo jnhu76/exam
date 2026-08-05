@@ -21,16 +21,25 @@
 #   bash scripts/e2e/run-wsl.sh                       # 跑全部 spec
 #   bash scripts/e2e/run-wsl.sh candidate-happy-path  # 关键字匹配 spec 文件
 #   bash scripts/e2e/run-wsl.sh --grep "happy path"   # Playwright 标题正则
-#   bash scripts/e2e/run-wsl.sh --no-reseed           # 复用现有 seed（不重 seed）
-#   bash scripts/e2e/run-wsl.sh --keep-server         # 跑完保留 dev server
+#   bash scripts/e2e/run-wsl.sh --no-reseed           # 复用现有 seed（不重 seed，仅串行）
+#   bash scripts/e2e/run-wsl.sh --keep-server         # 跑完保留 dev server（仅串行）
 #
 # 环境变量：
 #   APP_PORT          api/dev server 端口，默认 3000
 #   KEEP_SERVER=1     等价于 --keep-server
+#   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
+#
+# 数据库生命周期（issue #256-A review）：
+#   - 并行 worker 库 exam_e2e_w<N> 为 ephemeral：每次运行结束（stop server 后）
+#     一律 DROP（失败保留仅限 E2E_KEEP_WORKER_DB_ON_FAILURE=1）。
+#   - 串行 exam_e2e 库持久保留（历史默认；--no-reseed 依赖它跨运行存在），
+#     脚本从不主动 DROP 它。DB identity 在可能失败的操作（migrate/seed/
+#     health）之前登记，确保任何退出路径 cleanup 都知道要清理/保留什么。
 #
 # 退出码：Playwright 退出码（任一 shard 失败则取最差非零）；若 cleanup 失败
 #   且测试本身通过，则用 sentinel 70 覆盖（见 run-wsl-lib.sh 的
-#   compute_final_exit）。cleanup 永不掩盖 Playwright 失败。
+#   compute_final_exit）。cleanup 永不掩盖 Playwright 失败。INT/TERM 中断为
+#   130/143（signal_handler），参数组合非法为 2。
 
 set -Eeuo pipefail
 
@@ -112,8 +121,9 @@ SHARD_WORKER_DBS=()
 WORKER_DBS_SERIAL=()
 
 # Source the testable cleanup/cleanup-helper library. The lib defines:
-#   is_safe_worker_db_name, wait_for_process_exit, stop_process_group,
-#   drop_worker_db_loud, run_cleanup, compute_final_exit
+#   is_safe_worker_db_name, wait_for_process_exit, process_group_alive,
+#   stop_process_group, drop_worker_db_loud, run_cleanup,
+#   compute_final_exit, exit_handler, signal_handler, validate_run_flags
 # It owns ALL teardown ordering and the loud-DROP contract (issue #256-A):
 # the historical script dropped worker DBs before stopping the shard API
 # servers, and `>/dev/null 2>&1 || true` swallowed the resulting
@@ -122,6 +132,10 @@ WORKER_DBS_SERIAL=()
 # drops DBs inline — run_cleanup does it after the servers are stopped.
 # shellcheck source=./run-wsl-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/run-wsl-lib.sh"
+
+# ── 参数组合校验（fail fast，任何副作用之前）────────────────────────────
+# --keep-server / --no-reseed 的保留/复用语义只在单 server 串行路径有定义。
+validate_run_flags "$RESEED" "$E2E_WORKERS" "$KEEP_SERVER" || exit 2
 
 # ensure_db_exists <db_name>：幂等创建库（连 exam 库执行 CREATE DATABASE）。
 ensure_db_exists() {
@@ -215,27 +229,8 @@ CLEANUP_RUNNING=0
 # code (Playwright code wins; cleanup failure can only escalate 0 → 70).
 # INT/TERM freeze 130/143 and run the SAME cleanup via the EXIT trap
 # (`exit` from a signal handler triggers EXIT), so signals never bypass DB
-# teardown and the trap chain is single.
-exit_handler() {
-  local code=$?
-  # `$?` here is the code the shell was about to exit with. Freeze it so
-  # cleanup diagnostics + compute_final_exit see the real Playwright/signal
-  # code, not whatever a cleanup sub-step happened to return.
-  FROZEN_EXIT="$code"
-  run_cleanup || CLEANUP_FAILURE=1
-  compute_final_exit
-  local final=$?
-  if [[ "$final" -ne "$code" && "$final" -eq 70 ]]; then
-    err "cleanup 失败（见上方 stderr）。以 sentinel 70 退出。"
-  fi
-  exit "$final"
-}
-signal_handler() {
-  local sig=$1
-  err "中断 (signal ${sig})"
-  FROZEN_EXIT=130
-  exit 130
-}
+# teardown and the trap chain is single. exit_handler/signal_handler live in
+# the lib so the real handler chain is unit-tested.
 trap exit_handler EXIT
 trap 'signal_handler INT'  INT
 trap 'signal_handler TERM' TERM
@@ -265,6 +260,13 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
   # ── 串行路径（原行为）──────────────────────────────────────────────
   E2E_DB_NAME="exam_e2e"
 
+  # Register the DB identity BEFORE any failing operation (ensure/migrate/
+  # seed/health): the EXIT-trap cleanup must know exam_e2e on every exit path
+  # (issue #256-A review P1-1). Serial exam_e2e persists across runs by
+  # default (--no-reseed depends on it), so cleanup never drops it — the
+  # registration drives the failure-retention diagnostics.
+  WORKER_DBS_SERIAL=("$E2E_DB_NAME")
+
   # 确保 exam_e2e 库存在
   ensure_db_exists "$E2E_DB_NAME"
 
@@ -285,19 +287,15 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
   log "等待 api 健康..."
   wait_health "$APP_PORT" "$API_PID" /tmp/e2e-wsl-api.log || exit 1
 
-  # Track the worker DB so run_cleanup (EXIT trap) drops it after the server
-  # stops. The serial path uses exam_e2e (not exam_e2e_w<N>).
-  WORKER_DBS_SERIAL=("$E2E_DB_NAME")
-
   log "运行 Playwright（WSL 本地，workers=1）..."
   cd apps/e2e
   assemble_pw_args
   set +e
   E2E_BASE_URL="http://localhost:${APP_PORT}" npx playwright test "${PW_ARGS[@]}" --reporter=list
   # Freeze Playwright's real exit code; the EXIT trap (exit_handler) will
-  # run_cleanup (stop server → drop DB → artifacts) and compute the final
-  # priority-matrix code. We must NOT `exit $?` directly — that would skip
-  # freezing and the trap would see the wrong FROZEN_EXIT.
+  # run_cleanup (stop server → keep persistent exam_e2e → artifacts) and
+  # compute the final priority-matrix code. We must NOT `exit $?` directly —
+  # that would skip freezing and the trap would see the wrong FROZEN_EXIT.
   FROZEN_EXIT=$?
   set -e
   exit "$FROZEN_EXIT"
@@ -310,8 +308,11 @@ fi
 # 隔离（不同库）。汇总所有 shard 退出码：任一非零则整体失败。
 log "并行模式：E2E_WORKERS=${E2E_WORKERS}，每 shard 独立 DB + server。"
 
-# 1. 为每个 shard 建库（幂等）。
+# 1. 为每个 shard 建库（幂等）。先登记 DB identity（EXIT trap cleanup 在
+#    migrate/seed/health 失败时也要知道要清理哪些库，issue #256-A review
+#    P1-1），再创建。
 for (( i=0; i<E2E_WORKERS; i++ )); do
+  SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")
   ensure_db_exists "${WORKER_DB_PREFIX}${i}"
 done
 
@@ -344,9 +345,6 @@ for (( i=0; i<E2E_WORKERS; i++ )); do
   local_port=$((E2E_WORKER_BASE_PORT+i))
   logfile="/tmp/e2e-wsl-w${i}-api.log"
   SHARD_LOGS+=("$logfile")
-  # Record the worker DB name so run_cleanup (EXIT trap) drops it AFTER
-  # stopping this server (issue #256-A: must stop server before DROP).
-  SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")
   # start 模式：用构建产物 node dist/server.js（无 tsx watch 文件监听），
   # 避免多 server 共享源码树时互相触发重启。
   launch_api "$local_url" "$local_port" "$logfile" start

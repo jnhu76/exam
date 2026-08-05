@@ -26,11 +26,27 @@
 #   3. Exit-code priority: Playwright's exit code is frozen first; a cleanup
 #      failure can never turn a failing run into exit 0, and never overrides a
 #      test failure (FAIL/FAIL → Playwright exit, cleanup error printed).
+#      The real trap chain (exit_handler / signal_handler) lives here so the
+#      actual handler code is unit-tested, not just compute_final_exit.
 #   4. DB-name prefix guard: only `exam_e2e` and `exam_e2e_w<N>` are accepted.
 #      `exam`, `postgres`, `exam_test`, production, and injection attempts are
 #      rejected.
 #   5. Idempotent cleanup: INT/TERM/EXIT/re-entrant calls run cleanup at most
 #      once.
+#   6. Serial persistence: the serial DB (`exam_e2e`) is NEVER dropped — it is
+#      the persistent dev-e2e DB that `--no-reseed` reuses across runs
+#      (historical default; the old script only ever dropped `exam_e2e_w<N>`).
+#      Only parallel worker DBs are ephemeral. The serial identity is still
+#      registered up-front so every exit path (migrate/seed/health) can name
+#      it.
+#   7. Whole-group shutdown: stop_process_group waits for the entire process
+#      group, not just the leader — a TERM-ignoring child must not outlive
+#      the leader and keep a port/connection.
+#   8. Loud compose teardown: `docker compose ps`/`down` failures set
+#      CLEANUP_FAILURE instead of being swallowed (a missing DB container with
+#      pending drops is a cleanup failure, not a silent skip).
+#   9. Flag validation: validate_run_flags rejects `--keep-server` and
+#      `--no-reseed` in parallel mode (undefined lifecycle semantics).
 
 # ── DB-name safety ────────────────────────────────────────────────────────
 # Matches ONLY:
@@ -77,39 +93,64 @@ wait_for_process_exit() {
   return 1
 }
 
+# ── Process-group liveness ────────────────────────────────────────────────
+# process_group_alive <pid> → 0 if ANY member of the process group exists.
+# `kill -0 -- -pgid` succeeds while any member (including a TERM-ignoring
+# child) remains, and fails with ESRCH only when the group is empty. This is
+# the "whole group" liveness check that a bare `kill -0 $pid` (leader only)
+# misses. The caller launches servers with `setsid`, so pid == pgid.
+process_group_alive() {
+  kill -0 -- "-$1" 2>/dev/null
+}
+
 # ── Stop a process group (TERM → grace → KILL → wait) ─────────────────────
 # stop_process_group <pid> [max_iters] [sleep_seconds]
-# Sends TERM to the whole process group (-$pid), polls for exit, escalates to
-# KILL only if still alive, then reaps. Safe to call when the pid is already
-# gone. Idempotent.
+# Sends TERM to the whole process group (-$pid), polls for the WHOLE GROUP to
+# disappear, escalates to KILL only if still alive, then reaps. Safe to call
+# when the pid is already gone. Idempotent.
 #
 # `setsid` in run-wsl.sh launched each API server in its own process group
 # with pgid == child pid, so `kill -- -PID` reaches the server and any
 # descendant (tsx, node children). We ALSO send the signal to the positive
 # pid as a belt-and-braces fallback — some environments (notably WSL1 / certain
 # cgroup setups) deliver negative-pid kills erratically even when the group
-# exists. Returns nonzero if the pid is still alive at the end, so the caller
-# can flag cleanup failure and avoid a doomed DROP.
+# exists.
+#
+# The liveness source of truth is the GROUP, not the leader: a child may
+# ignore TERM and outlive the leader (the leader exits on TERM while the child
+# keeps the port). Polling only the leader would declare success too early and
+# leak the child. Returns nonzero if the group is still alive at the end, so
+# the caller can flag cleanup failure and avoid a doomed DROP.
 stop_process_group() {
-  local pid="$1" max="${2:-100}" sleep_secs="${3:-0.1}"
+  local pid="$1" max="${2:-100}" sleep_secs="${3:-0.1}" i
   [[ -z "$pid" ]] && return 0
-  kill -0 "$pid" 2>/dev/null || return 0
   # Signal the whole group first (reaches descendants), then the leader pid
-  # directly as a fallback. Both are best-effort; the wait poll is the source
+  # directly as a fallback. Both are best-effort; the group poll is the source
   # of truth for "is it really gone".
   kill -TERM -- "-$pid" 2>/dev/null || true
   kill -TERM "$pid" 2>/dev/null || true
-  if ! wait_for_process_exit "$pid" "$max" "$sleep_secs"; then
-    kill -KILL -- "-$pid" 2>/dev/null || true
-    kill -KILL "$pid" 2>/dev/null || true
-    wait_for_process_exit "$pid" "$max" "$sleep_secs" || true
-  fi
-  wait "$pid" 2>/dev/null || true
-  # Final guard: if the pid is somehow still alive, signal failure so the
-  # caller does not proceed to DROP a DB the server still holds.
-  if kill -0 "$pid" 2>/dev/null; then
+  for (( i=0; i<max; i++ )); do
+    if ! process_group_alive "$pid"; then
+      wait "$pid" 2>/dev/null || true
+      return 0
+    fi
+    sleep "$sleep_secs"
+  done
+  kill -KILL -- "-$pid" 2>/dev/null || true
+  kill -KILL "$pid" 2>/dev/null || true
+  for (( i=0; i<max; i++ )); do
+    if ! process_group_alive "$pid"; then
+      wait "$pid" 2>/dev/null || true
+      return 0
+    fi
+    sleep "$sleep_secs"
+  done
+  # Final guard: if the group is somehow still alive, signal failure so the
+  # caller does not proceed to DROP a DB the server may still hold.
+  if process_group_alive "$pid"; then
     return 1
   fi
+  wait "$pid" 2>/dev/null || true
   return 0
 }
 
@@ -217,34 +258,50 @@ run_cleanup() {
   fi
 
   # ---- 2. Drop worker DBs (only after servers are stopped). ----
+  # Parallel: exam_e2e_w<N> are ephemeral — dropped every run (retention only
+  # with E2E_KEEP_WORKER_DB_ON_FAILURE=1 on failure). Serial: exam_e2e is the
+  # persistent dev-e2e DB (--no-reseed depends on it surviving between runs;
+  # matches the historical script, which only ever dropped exam_e2e_w<N>), so
+  # it is never a drop candidate. run-wsl.sh registers both identities BEFORE
+  # any failing operation (migrate/seed/health), so every exit path is
+  # covered.
   local -a dbs_to_drop=()
   local keep_dbs=0
   if [[ "${E2E_WORKERS:-1}" -gt 1 ]]; then
     dbs_to_drop=("${SHARD_WORKER_DBS[@]:-}")
-  else
-    dbs_to_drop=("${WORKER_DBS_SERIAL[@]:-}")
-  fi
-  # Retention: only on test failure. On success we always clean (matches the
-  # historical default; documented in run-wsl.sh).
-  if [[ "$code" -ne 0 && "${E2E_KEEP_WORKER_DB_ON_FAILURE:-0}" == "1" ]]; then
-    keep_dbs=1
+    if [[ "$code" -ne 0 && "${E2E_KEEP_WORKER_DB_ON_FAILURE:-0}" == "1" ]]; then
+      keep_dbs=1
+      warn "测试失败 + E2E_KEEP_WORKER_DB_ON_FAILURE=1：保留 worker 库便于诊断。"
+      local db
+      for db in "${dbs_to_drop[@]:-}"; do
+        [[ -z "$db" ]] && continue
+        warn "  保留 ${db}（手动删: docker exec <db-ct> psql -U exam -d postgres -c 'DROP DATABASE \"${db}\" WITH (FORCE)')"
+      done
+    fi
+  elif [[ "$code" -ne 0 && -v WORKER_DBS_SERIAL && "${#WORKER_DBS_SERIAL[@]}" -gt 0 ]]; then
+    warn "serial 库 ${WORKER_DBS_SERIAL[*]} 失败保留（持久化策略；--no-reseed 依赖此库跨运行存在，下次运行 migrate 幂等自愈）"
   fi
 
-  if [[ "$keep_dbs" == "1" ]]; then
-    warn "测试失败 + E2E_KEEP_WORKER_DB_ON_FAILURE=1：保留 worker 库便于诊断。"
-    local db
-    for db in "${dbs_to_drop[@]:-}"; do
-      [[ -z "$db" ]] && continue
-      warn "  保留 ${db}（手动删: docker exec <db-ct> psql -U exam -d postgres -c 'DROP DATABASE \"${db}\" WITH (FORCE)')"
-    done
-  else
+  if [[ "${#dbs_to_drop[@]}" -gt 0 && "$keep_dbs" == "0" ]]; then
     # Resolve the dev-compose db container id ONLY if the caller did not
     # pre-set DROP_DB_CID (tests inject a fake cid + stub drop_worker_db_loud;
-    # production always supplies DEV_COMPOSE). If we cannot resolve a cid and
-    # none was provided, we assume the DB is already gone (e.g. compose down
-    # ran first) and skip drop without erroring.
+    # production always supplies DEV_COMPOSE). Distinguish a REAL command
+    # failure from "no container": a failed `compose ps` or a missing
+    # container with pending drops is a cleanup failure (loud), not a
+    # silent skip.
     if [[ -z "${DROP_DB_CID:-}" && -n "${DEV_COMPOSE:-}" && -f "$DEV_COMPOSE" ]]; then
-      DROP_DB_CID="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)"
+      local ps_out ps_rc=0
+      ps_out="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>&1)" || ps_rc=$?
+      if [[ "$ps_rc" -ne 0 ]]; then
+        err "run_cleanup: 无法解析 dev compose db 容器（rc=${ps_rc}）:"
+        printf '%s\n' "$ps_out" >&2
+        CLEANUP_FAILURE=1
+      elif [[ -z "$ps_out" ]]; then
+        err "run_cleanup: 存在待删除 worker 库（${#dbs_to_drop[@]} 个），但 dev compose db 容器未运行"
+        CLEANUP_FAILURE=1
+      else
+        DROP_DB_CID="$ps_out"
+      fi
     fi
     if [[ -n "${DROP_DB_CID:-}" ]]; then
       local db
@@ -254,8 +311,6 @@ run_cleanup() {
           CLEANUP_FAILURE=1
         fi
       done
-    elif [[ -n "${DEV_COMPOSE:-}" && -f "$DEV_COMPOSE" ]]; then
-      err "run_cleanup: dev compose db 容器未运行，跳过 DROP（DB 可能已随 compose down 移除）"
     fi
   fi
 
@@ -268,24 +323,34 @@ run_cleanup() {
     done
   fi
 
-  # ---- 4. Artifact cleanup (temp logs) only on a fully-clean success. ----
-  if [[ "$code" -eq 0 && "$CLEANUP_FAILURE" == "0" ]]; then
+  # ---- 4. Artifact cleanup (temp logs) only on a fully-clean success, and
+  #         only when the server is not being kept (it still writes the log). ----
+  if [[ "$code" -eq 0 && "$CLEANUP_FAILURE" == "0" && "${KEEP_SERVER:-0}" != "1" ]]; then
     rm -f /tmp/e2e-wsl-w*-migrate.log /tmp/e2e-wsl-w*-api.log \
           /tmp/e2e-wsl-w*-pw.log /tmp/e2e-wsl-api.log 2>/dev/null || true
   fi
 
-  # ---- 5. Dev compose teardown (only if this script started it). ----
-  # Subshell scopes the `cd`; no `local` inside it.
-  if [[ -n "${ROOT_DIR:-}" && -n "${DEV_COMPOSE:-}" && -f "$DEV_COMPOSE" && \
-        "${DEV_COMPOSE_WAS_UP:-0}" == "0" ]]; then
+  # ---- 5. Dev compose teardown (only if this script started it, and never
+  #         under KEEP_SERVER — a kept server needs its DB + compose). ----
+  # Subshell scopes the `cd`; no `local` inside it. `compose ps` / `down`
+  # failures are loud: they set CLEANUP_FAILURE via the subshell rc.
+  if [[ "${KEEP_SERVER:-0}" != "1" && -n "${ROOT_DIR:-}" && -n "${DEV_COMPOSE:-}" && \
+        -f "$DEV_COMPOSE" && "${DEV_COMPOSE_WAS_UP:-0}" == "0" ]]; then
     (
       cd "$ROOT_DIR" || exit 0
-      _sc_still="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)"
+      if ! _sc_still="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>&1)"; then
+        err "run_cleanup: compose ps 失败，跳过 dev compose teardown："
+        printf '%s\n' "$_sc_still" >&2
+        exit 3
+      fi
       if [[ -n "$_sc_still" ]]; then
         log "关 dev compose（由 run-wsl.sh 启动）..."
-        docker compose -f "$DEV_COMPOSE" down -v >/dev/null 2>&1 || true
+        if ! docker compose -f "$DEV_COMPOSE" down -v >/dev/null 2>&1; then
+          err "run_cleanup: docker compose down -v 失败"
+          exit 4
+        fi
       fi
-    ) || true
+    ) || CLEANUP_FAILURE=1
   fi
 
   CLEANUP_DONE=1
@@ -298,7 +363,7 @@ run_cleanup() {
 # compute_final_exit
 # Implements the exit-code priority matrix (spec §7). Pure: reads
 # FROZEN_EXIT + CLEANUP_FAILURE, returns the int exit code, does not exit.
-# run-wsl.sh calls `exit "$(compute_final_exit)"` from its EXIT trap.
+# exit_handler (below) calls `exit "$(…)"` from the EXIT trap.
 #
 #   Playwright | Cleanup | Final
 #   -----------+---------+------------------------------
@@ -316,4 +381,63 @@ compute_final_exit() {
     return 70
   fi
   return "$code"
+}
+
+# ── Trap handlers (shared with run-wsl.sh so the real chain is testable) ──
+# exit_handler: installed on EXIT. Freezes the code the shell was about to
+# exit with, runs cleanup once, then computes the priority-matrix final code.
+# `compute_final_exit` may return 7/70; under `set -e` a bare call would abort
+# the handler (errexit fires inside the trap), so its return is captured with
+# `||`. `trap - EXIT` prevents re-entry when `exit` fires inside the handler.
+exit_handler() {
+  local code=$?
+  # `$?` here is the code the shell was about to exit with. Freeze it so
+  # cleanup diagnostics + compute_final_exit see the real Playwright/signal
+  # code, not whatever a cleanup sub-step happened to return.
+  FROZEN_EXIT="$code"
+  run_cleanup || CLEANUP_FAILURE=1
+  local final=0
+  compute_final_exit || final=$?
+  if [[ "$final" -ne "$code" && "$final" -eq 70 ]]; then
+    err "cleanup 失败（见上方 stderr）。以 sentinel 70 退出。"
+  fi
+  trap - EXIT
+  exit "$final"
+}
+
+# signal_handler <sig>: INT → 130, TERM → 143 (conventional codes). `exit`
+# from the handler fires the EXIT trap, so cleanup runs exactly once through
+# exit_handler — the trap chain is single.
+signal_handler() {
+  local sig=$1
+  err "中断 (signal ${sig})"
+  if [[ "$sig" == "TERM" ]]; then
+    FROZEN_EXIT=143
+    exit 143
+  fi
+  FROZEN_EXIT=130
+  exit 130
+}
+
+# ── CLI flag validation (fail-fast, before any side effect) ───────────────
+# validate_run_flags <reseed> <workers> <keep_server>
+# Returns 2 for combinations with undefined lifecycle semantics:
+#   --keep-server + E2E_WORKERS>1 — preserving N shard servers + N worker
+#                                   DBs + compose has no defined product
+#                                   contract (issue #256-A review P1-2).
+#   --no-reseed   + E2E_WORKERS>1 — parallel worker DBs are ephemeral and
+#                                   dropped after every run, so there is no
+#                                   existing seed to reuse (P1-3).
+# Returns 0 otherwise. Pure (no side effects).
+validate_run_flags() {
+  local reseed="$1" workers="$2" keep_server="$3"
+  if [[ "$keep_server" == "1" && "$workers" -gt 1 ]]; then
+    err "--keep-server 仅支持 E2E_WORKERS=1（并行 shard 保留语义未定义）"
+    return 2
+  fi
+  if [[ "$reseed" == "0" && "$workers" -gt 1 ]]; then
+    err "--no-reseed 仅支持 E2E_WORKERS=1（并行 worker 库每次运行后清理，无现有 seed 可复用）"
+    return 2
+  fi
+  return 0
 }
