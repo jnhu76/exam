@@ -121,6 +121,15 @@ export async function main(): Promise<void> {
       process.stdout.write(
         `Dropped attempt_command_receipts (row count before: ${result.rowCount}).\n`,
       );
+      // 0028 owns two schema effects: the receipt table AND the
+      // users_org_id_unique composite-FK target index. Report the index
+      // outcome explicitly so an operator can tell whether the rollback
+      // closed the full 0028 effect or only the table.
+      process.stdout.write(
+        result.indexDropped
+          ? "Dropped users_org_id_unique (0028 composite-FK target index).\n"
+          : "users_org_id_unique already absent — index not dropped.\n",
+      );
     } else if (result.blocked) {
       // Unreachable: the core throws on a non-empty table rather than returning
       // blocked=true. Kept for exhaustive result handling.

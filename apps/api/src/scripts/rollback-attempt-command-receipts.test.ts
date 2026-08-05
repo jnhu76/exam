@@ -301,6 +301,7 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
       dropped: true,
       absent: false,
       blocked: false,
+      indexDropped: true,
     });
 
     await main();
@@ -313,6 +314,8 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
     expect(process.exitCode).toBe(1);
     expect(capturedStderr.join("")).toMatch(/Failed to close the connection/);
     expect(capturedStdout.join("")).toMatch(/Dropped attempt_command_receipts/);
+    // The CLI reports the full 0028 effect (table + index) on the success path.
+    expect(capturedStdout.join("")).toMatch(/Dropped users_org_id_unique/);
   });
 
   it("preserves an existing non-zero exit code when sql.end() also fails", async () => {
@@ -345,6 +348,7 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
       dropped: true,
       absent: false,
       blocked: false,
+      indexDropped: true,
     });
 
     await main();
@@ -353,8 +357,31 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
     // treats as 0.
     expect(process.exitCode).toBeUndefined();
     expect(capturedStdout.join("")).toMatch(/Dropped attempt_command_receipts/);
+    expect(capturedStdout.join("")).toMatch(/Dropped users_org_id_unique/);
     expect(capturedStderr.join("")).not.toMatch(
       /Failed to close the connection/,
+    );
+  });
+
+  it("exit 0 on full success when the index was already absent", async () => {
+    const sqlEnd = vi.fn().mockResolvedValue(undefined);
+    recoveryMocks.createDatabase.mockResolvedValue({
+      db: {},
+      sql: { end: sqlEnd },
+    });
+    recoveryMocks.rollbackAttemptCommandReceipts.mockResolvedValue({
+      rowCount: 0,
+      dropped: true,
+      absent: false,
+      blocked: false,
+      indexDropped: false,
+    });
+
+    await main();
+
+    expect(process.exitCode).toBeUndefined();
+    expect(capturedStdout.join("")).toMatch(
+      /users_org_id_unique already absent/,
     );
   });
 
@@ -369,6 +396,7 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
       dropped: false,
       absent: true,
       blocked: false,
+      indexDropped: false,
     });
 
     await main();

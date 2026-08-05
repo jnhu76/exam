@@ -86,6 +86,24 @@ async function tableExists(sql: SqlDriver, name: string): Promise<boolean> {
   return rows[0]?.reg != null;
 }
 
+async function indexExists(sql: SqlDriver, name: string): Promise<boolean> {
+  // to_regclass resolves indexes too (an index is a relation). Scoped to the
+  // current schema via search_path, so isolated test schemas see their own
+  // copy and a same-name index in another schema cannot false-positive.
+  const rows = (await sql.unsafe(`
+    SELECT to_regclass(${s(name)})::text AS reg
+  `)) as Array<{ reg: string | null }>;
+  return rows[0]?.reg != null;
+}
+
+/** Re-apply the 0028 migration statements in this connection's schema. */
+async function applyMigration0028(sql: SqlDriver): Promise<void> {
+  const statements = readMigrationStatements("0028_attempt_command_receipts");
+  await sql.begin(async (tx) => {
+    for (const stmt of statements) await tx.unsafe(stmt);
+  });
+}
+
 async function seedOrgAttempt(
   sql: SqlDriver,
   suffix: string,
@@ -159,12 +177,41 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
       expect(await tableExists(conn.sql, "attempt_command_receipts")).toBe(
         true,
       );
+      // 0028 created users_org_id_unique alongside the table.
+      expect(await indexExists(conn.sql, "users_org_id_unique")).toBe(true);
       const result = await rollbackAttemptCommandReceipts(conn.db);
       expect(result.dropped).toBe(true);
       expect(result.rowCount).toBe(0);
+      expect(result.indexDropped).toBe(true);
       expect(await tableExists(conn.sql, "attempt_command_receipts")).toBe(
         false,
       );
+      // The full 0028 effect is closed: the composite-FK target index is gone
+      // too, so a re-deploy of 0028 will not fail with "duplicate relation".
+      expect(await indexExists(conn.sql, "users_org_id_unique")).toBe(false);
+    } finally {
+      await conn.sql.end();
+      await iso.cleanup();
+    }
+  });
+
+  it("a clean rollback lets 0028 be re-applied with no manual cleanup (P1-1)", async () => {
+    // The pre-fix rollback left users_org_id_unique behind, so re-applying
+    // 0028 failed with "relation already exists". With the index owned by the
+    // rollback, a re-deploy must succeed against the same schema.
+    iso = await setupIsolatedTestDb({ namespace: "mig0028rb-rerun" });
+    conn = await createDatabase(iso.databaseUrl, iso.schemaName);
+    try {
+      await applyAllMigrations(conn.sql, iso.databaseUrl);
+      const result = await rollbackAttemptCommandReceipts(conn.db);
+      expect(result.dropped).toBe(true);
+      expect(result.indexDropped).toBe(true);
+      // Re-apply 0028 in full — no manual DROP INDEX anywhere.
+      await expect(applyMigration0028(conn.sql)).resolves.toBeUndefined();
+      expect(await tableExists(conn.sql, "attempt_command_receipts")).toBe(
+        true,
+      );
+      expect(await indexExists(conn.sql, "users_org_id_unique")).toBe(true);
     } finally {
       await conn.sql.end();
       await iso.cleanup();
@@ -200,10 +247,15 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
         rollbackAttemptCommandReceipts(nonEmptyConn.db),
       ).rejects.toThrow(/Guard tripped/);
 
-      // The table AND the receipt row remain intact.
+      // The table AND the receipt row remain intact. The index also survives —
+      // the guard tripped before any DROP ran, so the whole 0028 effect set is
+      // preserved atomically.
       expect(
         await tableExists(nonEmptyConn.sql, "attempt_command_receipts"),
       ).toBe(true);
+      expect(await indexExists(nonEmptyConn.sql, "users_org_id_unique")).toBe(
+        true,
+      );
       const rows = (await nonEmptyConn.sql.unsafe(`
         SELECT count(*)::int AS n FROM attempt_command_receipts WHERE operation_id = ${s(opId)}
       `)) as Array<{ n: number }>;
@@ -214,7 +266,7 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
     }
   });
 
-  it("is a safe no-op when the table is absent", async () => {
+  it("is a safe no-op when the table is absent (and cleans a leftover index)", async () => {
     const absentIso = await setupIsolatedTestDb({
       namespace: "mig0028rb-absent",
     });
@@ -224,22 +276,78 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
     );
     try {
       await applyAllMigrations(absentConn.sql, absentIso.databaseUrl);
-      // Manually drop the table to simulate the absent case.
+      // Manually drop the table to simulate the absent case. The
+      // users_org_id_unique index survives the table drop (it is on `users`).
       await absentConn.sql.unsafe(
         `DROP TABLE IF EXISTS "attempt_command_receipts"`,
       );
       expect(
         await tableExists(absentConn.sql, "attempt_command_receipts"),
       ).toBe(false);
+      expect(await indexExists(absentConn.sql, "users_org_id_unique")).toBe(
+        true,
+      );
       const result = await rollbackAttemptCommandReceipts(absentConn.db);
       expect(result.absent).toBe(true);
       expect(result.dropped).toBe(false);
+      // Scenario C (P1-1): the table is gone but the exact leftover index is
+      // cleaned up so a re-deploy of 0028 succeeds.
+      expect(result.indexDropped).toBe(true);
       expect(
         await tableExists(absentConn.sql, "attempt_command_receipts"),
       ).toBe(false);
+      expect(await indexExists(absentConn.sql, "users_org_id_unique")).toBe(
+        false,
+      );
     } finally {
       await absentConn.sql.end();
       await absentIso.cleanup();
+    }
+  });
+
+  it("absent table + an incompatible same-name index fails closed (P1-1)", async () => {
+    const incompatibleIso = await setupIsolatedTestDb({
+      namespace: "mig0028rb-incompat",
+    });
+    const incompatibleConn = await createDatabase(
+      incompatibleIso.databaseUrl,
+      incompatibleIso.schemaName,
+    );
+    try {
+      await applyAllMigrations(
+        incompatibleConn.sql,
+        incompatibleIso.databaseUrl,
+      );
+      // Drop the receipt table FIRST — this removes the only 0028-era FK
+      // (attempt_command_receipts_actor_fk) that depends on the index, so the
+      // index swap below is not blocked by a live FK dependency.
+      await incompatibleConn.sql.unsafe(
+        `DROP TABLE IF EXISTS "attempt_command_receipts"`,
+      );
+      // Replace the 0028 index with a same-name index that does NOT match the
+      // 0028 definition (single-column, non-unique). This is a state 0028 did
+      // not create.
+      await incompatibleConn.sql.unsafe(
+        `DROP INDEX IF EXISTS "users_org_id_unique"`,
+      );
+      await incompatibleConn.sql.unsafe(
+        `CREATE INDEX "users_org_id_unique" ON "users" ("id")`,
+      );
+      // The table is absent; the rollback hits the absent→cleanup path, where
+      // the incompatible index must fail closed (not silently dropped). The
+      // error surfaces the table-absent context AND the index-state reason.
+      await expect(
+        rollbackAttemptCommandReceipts(incompatibleConn.db),
+      ).rejects.toThrow(
+        /definition does not match the 0028 index|incompatible/,
+      );
+      // Nothing was dropped — the foreign index is preserved.
+      expect(
+        await indexExists(incompatibleConn.sql, "users_org_id_unique"),
+      ).toBe(true);
+    } finally {
+      await incompatibleConn.sql.end();
+      await incompatibleIso.cleanup();
     }
   });
 });
@@ -332,13 +440,15 @@ describe(
      * Recreates the receipt table from the 0028 migration statements. Needed
      * after a case that drops the table (the full journal cannot be re-applied
      * because earlier migrations create indexes without IF NOT EXISTS).
-     * Idempotent: drops the table first if it still exists (tests may run in
-     * any order / isolation).
+     * Idempotent: drops the table first if it still exists. The
+     * users_org_id_unique index is NOT manually dropped here — the guarded
+     * rollback owns that effect, and when recreateReceiptTable is called after
+     * a guarded rollback the index is already gone. The fallback DROP INDEX
+     * only covers a pre-existing leftover from a partial 0028 or a prior
+     * manual schema setup.
      */
     async function recreateReceiptTable(): Promise<void> {
       await connA.sql.unsafe(`DROP TABLE IF EXISTS "attempt_command_receipts"`);
-      // The 0028 statements also create users_org_id_unique (the composite-FK
-      // target), which survives the table drop.
       await connA.sql.unsafe(`DROP INDEX IF EXISTS "users_org_id_unique"`);
       const statements = readMigrationStatements(
         "0028_attempt_command_receipts",
