@@ -7,6 +7,23 @@
  *   - table present, 0 rows   → allowed; DROP
  *   - table present, rows > 0 → fail closed; preserve all receipt data
  *
+ * Plus the two-connection concurrency matrix (audit §10, overnight
+ * hardening): a receipt that COMMITS while the rollback is mid-flight must
+ * never be destroyed. The rollback takes `LOCK TABLE ... IN ACCESS EXCLUSIVE
+ * MODE` before any snapshot-establishing read; these tests prove the lock is
+ * the serialization point with real physical connections and a deterministic
+ * barrier:
+ *
+ *   - Case A: command commits first → rollback sees the row → fail closed.
+ *   - Case B: rollback locks first → concurrent insert fails (table gone) or
+ *     the rollback trips — never "insert committed + rollback success +
+ *     receipt gone".
+ *   - The race: insert is uncommitted when the rollback starts, commits while
+ *     the rollback is blocked on the table lock → the rollback MUST fail
+ *     closed. On the pre-fix implementation (count-then-DROP without a
+ *     preceding lock) this scenario destroyed the committed receipt and
+ *     returned success — the regression test fails on that implementation.
+ *
  * Mirrors the rollback-test pattern from `0023-incident-fk-and-rollback.test.ts`.
  */
 
@@ -14,7 +31,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../database.js";
 import { setupIsolatedTestDb, type IsolatedTestDb } from "../testIsolation.js";
 import { withTestInfraLifecycleLock } from "../testInfraLock.js";
@@ -226,3 +243,267 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
     }
   });
 });
+
+// ── Two-connection concurrency matrix (overnight hardening) ───────────
+
+/** One-shot deferred used to hold/order the two physical connections. */
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (err: unknown) => void;
+  isSettled: () => boolean;
+}
+
+function createDeferred(label: string, timeoutMs = 15_000): Deferred {
+  let resolveFn!: () => void;
+  let rejectFn!: (err: unknown) => void;
+  let settled = false;
+  const promise = new Promise<void>((res, rej) => {
+    resolveFn = res;
+    rejectFn = rej;
+  });
+  const timer = setTimeout(() => {
+    rejectFn(
+      new Error(
+        `Barrier timeout [${label}] after ${timeoutMs}ms — the expected ` +
+          "signal was never received. This indicates a stuck transaction.",
+      ),
+    );
+  }, timeoutMs);
+  const mark = () => {
+    settled = true;
+    clearTimeout(timer);
+  };
+  return {
+    promise: promise.finally(mark),
+    resolve: () => {
+      mark();
+      resolveFn();
+    },
+    reject: (err: unknown) => {
+      mark();
+      rejectFn(err);
+    },
+    isSettled: () => settled,
+  };
+}
+
+describe(
+  "0028 guarded rollback concurrency matrix",
+  { timeout: 120_000 },
+  () => {
+    let iso: IsolatedTestDb;
+    let connA: Awaited<ReturnType<typeof createDatabase>>;
+    let connB: Awaited<ReturnType<typeof createDatabase>>;
+    let connC: Awaited<ReturnType<typeof createDatabase>>;
+    let fix: { orgId: string; adminId: string; attemptId: string };
+
+    beforeAll(async () => {
+      iso = await setupIsolatedTestDb({
+        namespace: "mig0028rb-concurrency",
+      });
+      connA = await createDatabase(iso.databaseUrl, iso.schemaName);
+      connB = await createDatabase(iso.databaseUrl, iso.schemaName);
+      connC = await createDatabase(iso.databaseUrl, iso.schemaName);
+      await applyAllMigrations(connA.sql, iso.databaseUrl);
+      fix = await seedOrgAttempt(connA.sql, "conc");
+    }, 120_000);
+
+    afterAll(async () => {
+      await connC?.sql.end();
+      await connB?.sql.end();
+      await connA?.sql.end();
+      await iso?.cleanup();
+    });
+
+    function insertReceiptStatement(opId: string): string {
+      return `
+      INSERT INTO "attempt_command_receipts"
+        ("id", "organization_id", "attempt_id", "operation_id", "command_type",
+         "request_payload", "result_payload", "outcome", "actor_id")
+      VALUES (
+        ${s(randomUUID())}, ${s(fix.orgId)}, ${s(fix.attemptId)}, ${s(opId)},
+        'force_submit', '{"reason":"x"}'::jsonb, '{}'::jsonb, 'applied', ${s(fix.adminId)}
+      )
+    `;
+    }
+
+    /**
+     * Recreates the receipt table from the 0028 migration statements. Needed
+     * after a case that drops the table (the full journal cannot be re-applied
+     * because earlier migrations create indexes without IF NOT EXISTS).
+     * Idempotent: drops the table first if it still exists (tests may run in
+     * any order / isolation).
+     */
+    async function recreateReceiptTable(): Promise<void> {
+      await connA.sql.unsafe(`DROP TABLE IF EXISTS "attempt_command_receipts"`);
+      // The 0028 statements also create users_org_id_unique (the composite-FK
+      // target), which survives the table drop.
+      await connA.sql.unsafe(`DROP INDEX IF EXISTS "users_org_id_unique"`);
+      const statements = readMigrationStatements(
+        "0028_attempt_command_receipts",
+      );
+      await connA.sql.begin(async (tx) => {
+        for (const stmt of statements) await tx.unsafe(stmt);
+      });
+    }
+
+    /** Wait until the rollback connection holds the ACCESS EXCLUSIVE lock. */
+    async function waitForAccessExclusiveLock(): Promise<void> {
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        const rows = (await connC.sql.unsafe(`
+        SELECT count(*)::int AS n FROM pg_locks
+        WHERE locktype = 'relation'
+          AND mode = 'AccessExclusiveLock'
+          AND relation = 'attempt_command_receipts'::regclass
+      `)) as Array<{ n: number }>;
+        if (Number(rows[0]?.n ?? 0) > 0) return;
+        if (Date.now() > deadline) {
+          throw new Error(
+            "Timed out waiting for the rollback ACCESS EXCLUSIVE lock on " +
+              "attempt_command_receipts",
+          );
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    }
+
+    it("Case A: a receipt committed before the rollback trips the guard (fail closed)", async () => {
+      const opId = randomUUID();
+      await connB.sql.unsafe("BEGIN");
+      try {
+        await connB.sql.unsafe(insertReceiptStatement(opId));
+        await connB.sql.unsafe("COMMIT");
+      } catch (err) {
+        await connB.sql.unsafe("ROLLBACK");
+        throw err;
+      }
+
+      await expect(rollbackAttemptCommandReceipts(connA.db)).rejects.toThrow(
+        /Guard tripped/,
+      );
+
+      // Table and the committed receipt survive.
+      expect(await tableExists(connA.sql, "attempt_command_receipts")).toBe(
+        true,
+      );
+      const rows = (await connA.sql.unsafe(`
+      SELECT count(*)::int AS n FROM attempt_command_receipts WHERE operation_id = ${s(opId)}
+    `)) as Array<{ n: number }>;
+      expect(Number(rows[0]?.n ?? 0)).toBe(1);
+    });
+
+    it("the race: a receipt that commits while the rollback is mid-flight is never destroyed", async () => {
+      const opId = randomUUID();
+
+      // Tx B: BEGIN + INSERT (uncommitted), then hold until the controller
+      // commits it. The insert must be in flight before the rollback starts.
+      const insertDone = createDeferred("B insert done");
+      const commitB = createDeferred("commit B");
+      const txB = (async () => {
+        await connB.sql.unsafe("BEGIN");
+        await connB.sql.unsafe(insertReceiptStatement(opId));
+        insertDone.resolve();
+        await commitB.promise;
+        await connB.sql.unsafe("COMMIT");
+      })().catch((err: unknown) => {
+        insertDone.reject(err);
+        throw err;
+      });
+      await insertDone.promise;
+
+      // Tx A: rollback. Its LOCK TABLE blocks on B's uncommitted insert (old
+      // implementation: its count runs first, sees 0, and its DROP blocks).
+      const rollbackPromise = rollbackAttemptCommandReceipts(connA.db);
+      await waitForAccessExclusiveLock();
+
+      // Tx B: COMMIT — the receipt is durable now.
+      commitB.resolve();
+      await txB;
+
+      // The rollback MUST fail closed: the count (taken after the lock) sees
+      // the committed row. Pre-fix this returned success and destroyed the
+      // committed receipt.
+      await expect(rollbackPromise).rejects.toThrow(/Guard tripped/);
+
+      expect(await tableExists(connA.sql, "attempt_command_receipts")).toBe(
+        true,
+      );
+      const rows = (await connA.sql.unsafe(`
+      SELECT count(*)::int AS n FROM attempt_command_receipts WHERE operation_id = ${s(opId)}
+    `)) as Array<{ n: number }>;
+      expect(Number(rows[0]?.n ?? 0)).toBe(1);
+    });
+
+    it("Case B: rollback lock first — a concurrent uncommitted insert cannot survive the drop", async () => {
+      // Earlier cases leave receipts in the shared concurrency schema; reset to
+      // an empty table so this case exercises the drop path.
+      await connA.sql.unsafe(`DELETE FROM "attempt_command_receipts"`);
+      const opId = randomUUID();
+
+      // Tx B: BEGIN + INSERT (uncommitted). The insert is in flight but B never
+      // commits — it is rolled back by the controller.
+      const insertDone = createDeferred("B insert done (Case B)");
+      const rollbackB = createDeferred("rollback B (Case B)");
+      const txB = (async () => {
+        await connB.sql.unsafe("BEGIN");
+        await connB.sql.unsafe(insertReceiptStatement(opId));
+        insertDone.resolve();
+        await rollbackB.promise;
+        await connB.sql.unsafe("ROLLBACK");
+      })().catch((err: unknown) => {
+        insertDone.reject(err);
+        throw err;
+      });
+      await insertDone.promise;
+
+      // Tx A: the rollback. Its ACCESS EXCLUSIVE lock blocks on B's uncommitted
+      // insert (B's ROW EXCLUSIVE) until B rolls back. B never commits, so the
+      // forbidden outcome (committed receipt destroyed by a successful
+      // rollback) is impossible: either the insert commits first (rollback
+      // trips — Case A) or the rollback drops first (insert fails/rolls back).
+      const rollbackPromise = rollbackAttemptCommandReceipts(connA.db);
+      await waitForAccessExclusiveLock();
+
+      rollbackB.resolve();
+      await txB;
+
+      const result = await rollbackPromise;
+      expect(result.dropped).toBe(true);
+      expect(result.rowCount).toBe(0);
+
+      // The table is gone and B's insert left nothing behind.
+      expect(await tableExists(connA.sql, "attempt_command_receipts")).toBe(
+        false,
+      );
+    });
+
+    it("Case B2: an insert that starts after the drop fails with undefined_table (42P01)", async () => {
+      // Case B dropped the table in this schema; recreate it from the 0028
+      // statements so this case starts from the migrated state.
+      await recreateReceiptTable();
+      expect(await tableExists(connA.sql, "attempt_command_receipts")).toBe(
+        true,
+      );
+      await connA.sql.unsafe(`DELETE FROM "attempt_command_receipts"`);
+
+      // Tx A completes the rollback (empty table, lock first).
+      const result = await rollbackAttemptCommandReceipts(connA.db);
+      expect(result.dropped).toBe(true);
+
+      // Tx B: the command insert can no longer reach the table.
+      const opId = randomUUID();
+      let code: string | undefined;
+      await connB.sql.unsafe("BEGIN");
+      try {
+        await connB.sql.unsafe(insertReceiptStatement(opId));
+        await connB.sql.unsafe("COMMIT");
+      } catch (err) {
+        code = (err as { code?: string }).code;
+        await connB.sql.unsafe("ROLLBACK");
+      }
+      expect(code).toBe("42P01");
+    });
+  },
+);
