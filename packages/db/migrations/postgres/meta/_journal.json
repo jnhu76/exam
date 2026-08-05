@@ -190,6 +190,13 @@
       "when": 1788100000000,
       "tag": "0026_exam_attempts_org_exam_status_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788200000000,
+      "tag": "0027_converge_skipped_migrations",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,7 @@
     "lint:copy": "node scripts/check-hardcoded-copy.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",
     "lint:db-config": "node scripts/check-db-config.mjs",
+    "lint:db-journal": "node scripts/db/check-postgres-migration-journal.mjs",
     "lint:env-contract": "node scripts/repository-contract/verify-static-includes-guards.mjs && node scripts/check-test-env-contract.mjs && node scripts/check-test-time-contract.mjs",
     "lint:repo-contract": "node scripts/repository-contract/turbo-config-contract.mjs && node scripts/repository-contract/package-script-contract.mjs && node scripts/repository-contract/seed-authority-contract.mjs && node scripts/repository-contract/adr-status-contract.mjs && node scripts/repository-contract/deployment-topology-contract.mjs",
     "lint:ui-gates": "node scripts/check-ant-residue.mjs && node scripts/check-token-bypass.mjs && node scripts/check-raw-color-usage.mjs && node scripts/check-high-font-weight.mjs && node scripts/check-row-action-icons.mjs && node scripts/check-stale-ui-docs.mjs",
@@ -44,7 +45,7 @@
     "coverage:db": "pnpm --filter @exam/db coverage",
     "coverage:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
     "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
-    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check && pnpm test:e2e-runner",
+    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:db-journal && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check && pnpm test:e2e-runner && pnpm test:db-journal",
     "formal:recovery:safety": "node scripts/formal/run-recovery-tlc.mjs safety",
     "formal:recovery:safety:route": "node scripts/formal/run-recovery-tlc.mjs safety:route",
     "formal:recovery:safety:submission": "node scripts/formal/run-recovery-tlc.mjs safety:submission",
@@ -61,6 +62,7 @@
     "test:operator-grant-race": "pnpm --filter @exam/api exec vitest run src/routes/attempts/admin-time-grants.concurrency.test.ts --reporter=verbose",
     "test:operator-grant-race:repeat": "node scripts/test/run-operator-grant-race-repeat.mjs",
     "test:e2e-runner": "node --test scripts/e2e/run-wsl-lib.test.mjs",
+    "test:db-journal": "node --test scripts/db/check-postgres-migration-journal.test.mjs",
     "prepare": "husky"
   },
   "lint-staged": {
