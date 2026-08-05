@@ -21,14 +21,25 @@
 #   bash scripts/e2e/run-wsl.sh                       # 跑全部 spec
 #   bash scripts/e2e/run-wsl.sh candidate-happy-path  # 关键字匹配 spec 文件
 #   bash scripts/e2e/run-wsl.sh --grep "happy path"   # Playwright 标题正则
-#   bash scripts/e2e/run-wsl.sh --no-reseed           # 复用现有 seed（不重 seed）
-#   bash scripts/e2e/run-wsl.sh --keep-server         # 跑完保留 dev server
+#   bash scripts/e2e/run-wsl.sh --no-reseed           # 复用现有 seed（不重 seed，仅串行）
+#   bash scripts/e2e/run-wsl.sh --keep-server         # 跑完保留 dev server（仅串行）
 #
 # 环境变量：
 #   APP_PORT          api/dev server 端口，默认 3000
 #   KEEP_SERVER=1     等价于 --keep-server
+#   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
 #
-# 退出码：直接透传 playwright 退出码。
+# 数据库生命周期（issue #256-A review）：
+#   - 并行 worker 库 exam_e2e_w<N> 为 ephemeral：每次运行结束（stop server 后）
+#     一律 DROP（失败保留仅限 E2E_KEEP_WORKER_DB_ON_FAILURE=1）。
+#   - 串行 exam_e2e 库持久保留（历史默认；--no-reseed 依赖它跨运行存在），
+#     脚本从不主动 DROP 它。DB identity 在可能失败的操作（migrate/seed/
+#     health）之前登记，确保任何退出路径 cleanup 都知道要清理/保留什么。
+#
+# 退出码：Playwright 退出码（任一 shard 失败则取最差非零）；若 cleanup 失败
+#   且测试本身通过，则用 sentinel 70 覆盖（见 run-wsl-lib.sh 的
+#   compute_final_exit）。cleanup 永不掩盖 Playwright 失败。INT/TERM 中断为
+#   130/143（signal_handler），参数组合非法为 2。
 
 set -Eeuo pipefail
 
@@ -106,6 +117,25 @@ DB_BASE_URL_NO_NAME="postgresql://exam:exam@localhost:${DB_HOST_PORT_VAL}"
 WORKER_DB_PREFIX="exam_e2e_w"
 SHARD_PIDS=()
 SHARD_LOGS=()
+SHARD_WORKER_DBS=()
+WORKER_DBS_SERIAL=()
+
+# Source the testable cleanup/cleanup-helper library. The lib defines:
+#   is_safe_worker_db_name, wait_for_process_exit, process_group_alive,
+#   stop_process_group, drop_worker_db_loud, run_cleanup,
+#   compute_final_exit, exit_handler, signal_handler, validate_run_flags
+# It owns ALL teardown ordering and the loud-DROP contract (issue #256-A):
+# the historical script dropped worker DBs before stopping the shard API
+# servers, and `>/dev/null 2>&1 || true` swallowed the resulting
+# "database is being accessed by other users" error, leaking exam_e2e_w*.
+# run_cleanup is wired to EXIT/INT/TERM below; the parallel path NO LONGER
+# drops DBs inline — run_cleanup does it after the servers are stopped.
+# shellcheck source=./run-wsl-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/run-wsl-lib.sh"
+
+# ── 参数组合校验（fail fast，任何副作用之前）────────────────────────────
+# --keep-server / --no-reseed 的保留/复用语义只在单 server 串行路径有定义。
+validate_run_flags "$RESEED" "$E2E_WORKERS" "$KEEP_SERVER" || exit 2
 
 # ensure_db_exists <db_name>：幂等创建库（连 exam 库执行 CREATE DATABASE）。
 ensure_db_exists() {
@@ -115,17 +145,6 @@ ensure_db_exists() {
     "SELECT 1 FROM pg_database WHERE datname='${db}'" | grep -q 1; then
     docker exec "$cid" psql -U exam -c "CREATE DATABASE ${db}" >/dev/null
   fi
-}
-
-# drop_db_if_allowed <db_name>：成功或非保留模式时丢弃 worker 库。
-drop_db_if_allowed() {
-  local db="$1" cid
-  if [[ "$E2E_KEEP_WORKER_DB_ON_FAILURE" == "1" ]]; then
-    warn "保留 worker 库 ${db}（E2E_KEEP_WORKER_DB_ON_FAILURE=1）。手动删：docker exec <db-ct> psql -U exam -d postgres -c 'DROP DATABASE ${db}'"
-    return 0
-  fi
-  cid="$(docker compose -f "$DEV_COMPOSE" ps -q db)"
-  docker exec "$cid" psql -U exam -d postgres -c "DROP DATABASE IF EXISTS ${db}" >/dev/null 2>&1 || true
 }
 
 # migrate_db <db_url>：对指定库跑 migrate（stderr 保留）。
@@ -195,52 +214,26 @@ if [[ -n "$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)" ]]; 
   DEV_COMPOSE_WAS_UP=1
 fi
 API_PID=""
-cleanup() {
-  local code=$?
-  # 串行路径：停单 server。
-  if [[ -n "$API_PID" ]] && kill -0 "$API_PID" 2>/dev/null; then
-    if [[ "$KEEP_SERVER" == "1" ]]; then
-      warn "KEEP_SERVER=1，保留 dev server (pid $API_PID)。手动停：kill $API_PID"
-    else
-      log "停 dev server (pid $API_PID)..."
-      kill -TERM "-$API_PID" 2>/dev/null || true
-      sleep 1
-      kill -KILL "-$API_PID" 2>/dev/null || true
-      wait "$API_PID" 2>/dev/null || true
-    fi
-  fi
-  # 并行 shard 路径：停所有 shard server（进程组）。
-  local sp
-  for sp in "${SHARD_PIDS[@]:-}"; do
-    [[ -z "$sp" ]] && continue
-    if kill -0 "$sp" 2>/dev/null; then
-      kill -TERM "-$sp" 2>/dev/null || true
-      sleep 0.5
-      kill -KILL "-$sp" 2>/dev/null || true
-      wait "$sp" 2>/dev/null || true
-    fi
-  done
-  # 失败时保留 worker 库诊断：打印每个 shard 的 worker/port/db/log。
-  if [[ "$E2E_WORKERS" -gt 1 && "$code" -ne 0 ]]; then
-    err "并行 shard 失败。诊断："
-    local idx
-    for (( idx=0; idx<E2E_WORKERS; idx++ )); do
-      err "  shard $((idx+1))/$E2E_WORKERS  port=$((E2E_WORKER_BASE_PORT+idx))  db=${WORKER_DB_PREFIX}${idx}  log=${SHARD_LOGS[$idx]:-n/a}"
-    done
-  fi
-  # 由本脚本启动的 dev compose，跑完关掉；进来前已运行的，不动。
-  # 同样以 ps -q db 的 stdout 非空判断（见上方 DEV_COMPOSE_WAS_UP 注释）。
-  cd "$ROOT_DIR"
-  local _still_up
-  _still_up="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)"
-  if [[ "$DEV_COMPOSE_WAS_UP" == "0" && -n "$_still_up" ]]; then
-    log "关 dev compose（由 run-wsl.sh 启动）..."
-    docker compose -f "$DEV_COMPOSE" down -v >/dev/null 2>&1 || true
-  fi
-  return "$code"
-}
-trap cleanup EXIT
-trap 'err "中断"; exit 130' INT TERM
+# FROZEN_EXIT is set by the run phases before any trap can fire; run_cleanup +
+# compute_final_exit read it. Defaults to 0 if the script exits early (e.g.
+# migrate failure → `exit 1` below sets it first).
+FROZEN_EXIT=0
+CLEANUP_FAILURE=0
+CLEANUP_DONE=0
+CLEANUP_RUNNING=0
+
+# ── Unified cleanup (issue #256-A) ────────────────────────────────────────
+# All teardown is owned by run_cleanup (from run-wsl-lib.sh). The EXIT trap
+# freezes the real exit code (FROZEN_EXIT) BEFORE running cleanup, runs
+# cleanup once, then calls compute_final_exit to pick the priority-matrix
+# code (Playwright code wins; cleanup failure can only escalate 0 → 70).
+# INT/TERM freeze 130/143 and run the SAME cleanup via the EXIT trap
+# (`exit` from a signal handler triggers EXIT), so signals never bypass DB
+# teardown and the trap chain is single. exit_handler/signal_handler live in
+# the lib so the real handler chain is unit-tested.
+trap exit_handler EXIT
+trap 'signal_handler INT'  INT
+trap 'signal_handler TERM' TERM
 
 # 1. dev compose（db + redis）——串行/并行共用。
 log "启动 dev compose (db + redis)..."
@@ -267,6 +260,13 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
   # ── 串行路径（原行为）──────────────────────────────────────────────
   E2E_DB_NAME="exam_e2e"
 
+  # Register the DB identity BEFORE any failing operation (ensure/migrate/
+  # seed/health): the EXIT-trap cleanup must know exam_e2e on every exit path
+  # (issue #256-A review P1-1). Serial exam_e2e persists across runs by
+  # default (--no-reseed depends on it), so cleanup never drops it — the
+  # registration drives the failure-retention diagnostics.
+  WORKER_DBS_SERIAL=("$E2E_DB_NAME")
+
   # 确保 exam_e2e 库存在
   ensure_db_exists "$E2E_DB_NAME"
 
@@ -290,8 +290,15 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
   log "运行 Playwright（WSL 本地，workers=1）..."
   cd apps/e2e
   assemble_pw_args
+  set +e
   E2E_BASE_URL="http://localhost:${APP_PORT}" npx playwright test "${PW_ARGS[@]}" --reporter=list
-  exit $?
+  # Freeze Playwright's real exit code; the EXIT trap (exit_handler) will
+  # run_cleanup (stop server → keep persistent exam_e2e → artifacts) and
+  # compute the final priority-matrix code. We must NOT `exit $?` directly —
+  # that would skip freezing and the trap would see the wrong FROZEN_EXIT.
+  FROZEN_EXIT=$?
+  set -e
+  exit "$FROZEN_EXIT"
 fi
 
 # ── 并行 shard 路径（E2E_WORKERS>1）────────────────────────────────────
@@ -301,8 +308,11 @@ fi
 # 隔离（不同库）。汇总所有 shard 退出码：任一非零则整体失败。
 log "并行模式：E2E_WORKERS=${E2E_WORKERS}，每 shard 独立 DB + server。"
 
-# 1. 为每个 shard 建库（幂等）。
+# 1. 为每个 shard 建库（幂等）。先登记 DB identity（EXIT trap cleanup 在
+#    migrate/seed/health 失败时也要知道要清理哪些库，issue #256-A review
+#    P1-1），再创建。
 for (( i=0; i<E2E_WORKERS; i++ )); do
+  SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")
   ensure_db_exists "${WORKER_DB_PREFIX}${i}"
 done
 
@@ -355,6 +365,10 @@ assemble_pw_args
 # 给 shard 进程建独立进程组（setsid），便于 cleanup。
 # 每个 shard 输出到独立目录，避免并发写冲突。
 run_pids=()
+# `set +e`: a shard failure returns nonzero from `wait` below; we must NOT let
+# `set -e` abort before we freeze the worst Playwright exit code. set -e is
+# restored right after the wait loop.
+set +e
 for (( i=0; i<E2E_WORKERS; i++ )); do
   local_port=$((E2E_WORKER_BASE_PORT+i))
   shard_out_dir="test-results/shard-${i}"
@@ -372,7 +386,7 @@ for (( i=0; i<E2E_WORKERS; i++ )); do
   run_pids+=($!)
 done
 
-# 6. 汇总退出码。
+# 6. 汇总退出码（任一 shard 非零则整体失败）。
 WORST=0
 for (( i=0; i<E2E_WORKERS; i++ )); do
   if wait "${run_pids[$i]}"; then
@@ -384,6 +398,7 @@ for (( i=0; i<E2E_WORKERS; i++ )); do
     WORST=$ec
   fi
 done
+set -e
 
 # 7. 合并 blob report（各 shard 的 blob 合为一份 HTML report）。
 if ls blob-report/shard-*/report-*.zip >/dev/null 2>&1; then
@@ -400,12 +415,14 @@ fi
 # 8. 切回 root dir（cleanup 中 docker compose down 需要正确 project context）。
 cd "$ORIG_CWD"
 
-# 9. 清理 worker 库 + 临时日志（成功路径）。cleanup() 会停 server。
-for (( i=0; i<E2E_WORKERS; i++ )); do
-  drop_db_if_allowed "${WORKER_DB_PREFIX}${i}"
-done
-if [[ "$WORST" -eq 0 ]]; then
-  rm -f /tmp/e2e-wsl-w*-migrate.log /tmp/e2e-wsl-w*-api.log /tmp/e2e-wsl-w*-pw.log /tmp/e2e-wsl-api.log
-fi
-
+# 9. Freeze the worst Playwright exit code and exit. The EXIT trap
+# (exit_handler → run_cleanup) now owns ALL teardown in the correct order:
+#   stop shard servers (process groups, bounded wait)
+#   → drop worker DBs (loud; no `|| true`)
+#   → remove temp logs (success path only)
+#   → compose down (if this script started it)
+# This replaces the OLD inline `drop_db_if_allowed` loop that ran BEFORE the
+# servers were stopped (issue #256-A root cause). Cleanup failure is folded
+# into the final code by compute_final_exit per the priority matrix.
+FROZEN_EXIT="$WORST"
 exit "$WORST"

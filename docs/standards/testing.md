@@ -371,7 +371,9 @@ durability boundary.
 | **TEST_DATABASE_URL** | Explicitly unset | `db:5432/exam_test` |
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
 | **Blob reports** | Merged locally after run | Not used (list reporter only) |
-| **Cleanup** | Drops worker DBs, stops servers | `docker compose down -v` |
+| **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs | `docker compose down -v` |
+| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed | N/A (single compose down) |
+| **DB retention** | `E2E_KEEP_WORKER_DB_ON_FAILURE=1` retains `exam_e2e_w*` only on Playwright failure (success always cleans) | N/A |
 | **Use case** | Fast local iteration | CI-like parity, reproducible builds |
 
 ### 4.2 CI E2E Shard Rules
@@ -412,6 +414,48 @@ npx playwright merge-reports --reporter html ./all-blob-reports
 - Feeding HTML report zips to `merge-reports` (only blob zips are valid input).
 - Artifact name collisions (two shards with the same artifact name → second overwrites first).
 - Sharing data state between shards (each shard must be self-contained).
+
+### 4.4 run-wsl.sh Cleanup Contract (issue #256-A)
+
+The WSL runner owns a strict teardown lifecycle. All cleanup logic lives in
+`scripts/e2e/run-wsl-lib.sh` (sourced by `run-wsl.sh`) and is unit-tested by
+`scripts/e2e/run-wsl-lib.test.mjs` (run via `pnpm test:e2e-runner`, also part of
+`verify:static`).
+
+**Lifecycle (after Playwright shards finish):**
+
+```
+freeze worst Playwright exit code → FROZEN_EXIT
+→ run_cleanup (EXIT/INT/TERM trap, idempotent):
+    1. stop shard API process groups (TERM → bounded wait → KILL)
+    2. drop worker DBs (loud, after servers released connections)
+    3. diagnostics on failure (shard port/db/log)
+    4. temp-log cleanup (success path only)
+    5. dev compose down (only if this script started it)
+→ compute_final_exit picks the priority-matrix exit code
+```
+
+**Why this order:** PostgreSQL refuses `DROP DATABASE` while connections are
+open. The historical script dropped before stopping servers and swallowed the
+error with `>/dev/null 2>&1 || true`, so `exam_e2e_w*` leaked permanently
+(issue #256). Stopping servers first + `DROP DATABASE ... WITH (FORCE)`
+(PG 13+; this repo runs 18.4) makes the drop reliable; a loud, unswallowed
+failure surfaces it instead of hiding it.
+
+**Exit-code priority matrix:**
+
+| Playwright | Cleanup | Final exit |
+|------------|---------|---------------------|
+| PASS (0)   | PASS    | 0 |
+| FAIL (!=0) | PASS    | Playwright code |
+| PASS (0)   | FAIL    | 70 (cleanup sentinel) |
+| FAIL (!=0) | FAIL    | Playwright code (cleanup error printed) |
+
+Cleanup never masks a test failure and never turns a failing cleanup into 0.
+
+**DB-name prefix guard:** only `exam_e2e` and `exam_e2e_w<N>` are dropped.
+`exam`, `postgres`, `exam_test`, production names, and injection attempts are
+rejected by `is_safe_worker_db_name`.
 
 ---
 
