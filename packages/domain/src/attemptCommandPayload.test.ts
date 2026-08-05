@@ -5,6 +5,11 @@
  * Freezes the canonicalization rules and the pure replay/conflict classifier.
  * These are pure-function tests — no database — so they live next to the
  * helper module.
+ *
+ * The force_submit reason contract follows J5-R0 §8.1 (server-required,
+ * trimmed, 1..500): the canonical payload NEVER contains null/blank, and the
+ * compile-time tests below prove the commandType ↔ input binding (a
+ * mismatched payload cannot be expressed).
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,23 +29,13 @@ describe("canonical force_submit payload", () => {
     });
   });
 
-  it("canonicalizes undefined reason to { reason: null }", () => {
-    expect(canonicalizeForceSubmitPayload({})).toEqual({ reason: null });
-    expect(canonicalizeForceSubmitPayload({ reason: undefined })).toEqual({
-      reason: null,
-    });
-  });
-
-  it("canonicalizes null / empty / whitespace-only reason to { reason: null }", () => {
-    expect(canonicalizeForceSubmitPayload({ reason: null })).toEqual({
-      reason: null,
-    });
-    expect(canonicalizeForceSubmitPayload({ reason: "" })).toEqual({
-      reason: null,
-    });
-    expect(canonicalizeForceSubmitPayload({ reason: "   " })).toEqual({
-      reason: null,
-    });
+  it("rejects a blank-after-trim reason (canonical form is never null/empty)", () => {
+    expect(() => canonicalizeForceSubmitPayload({ reason: "" })).toThrow(
+      /non-empty reason/,
+    );
+    expect(() => canonicalizeForceSubmitPayload({ reason: "   " })).toThrow(
+      /non-empty reason/,
+    );
   });
 });
 
@@ -75,6 +70,48 @@ describe("canonicalizeAttemptCommandRequest dispatch", () => {
         notes: " n ",
       }),
     ).toEqual({ severity: "serious", notes: "n" });
+  });
+
+  it("binds the return payload to the requested command type (compile-time)", () => {
+    const forceSubmit = canonicalizeAttemptCommandRequest("force_submit", {
+      reason: "x",
+    });
+    const misconduct = canonicalizeAttemptCommandRequest("misconduct_mark", {
+      severity: "warning",
+      notes: "n",
+    });
+    // Both are narrowed to their command's canonical payload at compile time;
+    // assigning them to the wrong shape must not typecheck.
+    const _forceSubmitCheck: { reason: string } = forceSubmit;
+    const _misconductCheck: {
+      severity: "warning" | "serious";
+      notes: string;
+    } = misconduct;
+    expect(_forceSubmitCheck.reason).toBe("x");
+    expect(_misconductCheck.notes).toBe("n");
+  });
+
+  // ── Compile-time binding guards ──────────────────────────────────
+  // The @ts-expect-error directives fail typecheck (TS2578 unused) if the
+  // commandType ↔ input binding ever regresses to a loose union. The calls
+  // are guarded by `if (false)` so they are type-checked but NEVER executed
+  // (a mismatched call must not silently canonicalize at runtime).
+
+  it("rejects a misconduct payload for force_submit (compile-time)", () => {
+    if (false) {
+      // @ts-expect-error — force_submit input is { reason: string }; a misconduct { severity, notes } shape must not compile.
+      canonicalizeAttemptCommandRequest("force_submit", {
+        severity: "warning",
+        notes: "x",
+      });
+    }
+  });
+
+  it("rejects a force-submit payload for misconduct_mark (compile-time)", () => {
+    if (false) {
+      // @ts-expect-error — misconduct_mark input is { severity, notes }; a force-submit { reason } shape must not compile.
+      canonicalizeAttemptCommandRequest("misconduct_mark", { reason: "x" });
+    }
   });
 });
 

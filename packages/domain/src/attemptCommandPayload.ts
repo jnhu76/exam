@@ -25,6 +25,9 @@
 
 // ── Canonical command identity (leaf-level) ────────────────────────
 
+import type { AttemptStatus } from "./enums.js";
+import type { MisconductFlag } from "./types.js";
+
 /**
  * The two dangerous Attempt commands sharing one receipt table. This is the
  * domain-level canonical literal union; the contract layer mirrors it as
@@ -34,11 +37,12 @@ export type AttemptCommandType = "force_submit" | "misconduct_mark";
 
 /**
  * Canonical `force_submit` request payload stored in a receipt's
- * `request_payload` jsonb (audit §4.1/§4.2). `reason` is normalized to `null`
- * when missing/blank so the durable shape is unambiguous.
+ * `request_payload` jsonb (audit §4.1/§4.2). `reason` is REQUIRED and
+ * non-empty after trim (J5-R0 §8.1 upgraded it to server-required; the
+ * durable shape never contains null/blank).
  */
 export interface ForceSubmitRequestPayload {
-  reason: string | null;
+  reason: string;
 }
 
 /**
@@ -55,6 +59,41 @@ export interface MisconductMarkRequestPayload {
 export type AttemptCommandRequestPayload =
   | ForceSubmitRequestPayload
   | MisconductMarkRequestPayload;
+
+/**
+ * Canonical `force_submit` result payload stored in a receipt's
+ * `result_payload` jsonb (audit §4.2). The immutable committed fact: the
+ * statuses observed under the EA lock and the attempt timestamps at commit —
+ * returned verbatim on replay, NEVER re-derived from the live attempt.
+ * Timestamps are ISO-8601 strings (the jsonb wire shape). `commandType` is
+ * duplicated inside the payload so the stored fact is self-describing and the
+ * discriminated union is usable at the db layer.
+ */
+export interface ForceSubmitResultPayload {
+  commandType: "force_submit";
+  beforeStatus: AttemptStatus;
+  afterStatus: AttemptStatus;
+  submittedAt: string | null;
+  gradedAt: string | null;
+  appliedAt: string;
+}
+
+/**
+ * Canonical `misconduct_mark` result payload stored in a receipt's
+ * `result_payload` jsonb (audit §4.4). The immutable committed fact: the
+ * MisconductFlag this receipt establishes (null on no_change) and the
+ * receipt's server time.
+ */
+export interface MisconductMarkResultPayload {
+  commandType: "misconduct_mark";
+  misconduct: MisconductFlag | null;
+  appliedAt: string;
+}
+
+/** Union of the canonical per-command result payloads. */
+export type AttemptCommandResultPayload =
+  | ForceSubmitResultPayload
+  | MisconductMarkResultPayload;
 
 // ── Canonical jsonb equality primitive ─────────────────────────────
 
@@ -88,31 +127,27 @@ export function attemptCommandPayloadsEqual(a: unknown, b: unknown): boolean {
 // ── Per-command canonicalization ───────────────────────────────────
 
 /**
- * Trim a free-text field and normalize whitespace-only/empty to `null`. Used
- * for `force_submit.reason`: a missing/blank reason canonicalizes to
- * `{ reason: null }`, which is more durable for JSON comparison than a field
- * that is sometimes-present-undefined (audit §8 force_submit canonical payload).
- */
-function trimToNullable(value: string | undefined | null): string | null {
-  if (value == null) return null;
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
-/**
  * Canonicalize a `force_submit` request into the durable `request_payload`
- * shape stored in the receipt. The input accepts the loose legacy form
- * (`reason?` optional) so the canonicalizer is the single place that decides
- * the stable shape; the orchestrator passes whatever the route received.
+ * shape stored in the receipt. The input accepts the operation-aware wire
+ * shape (`reason` required — J5-R0 §8.1) and applies trim; a blank-after-trim
+ * reason throws so the canonical form is never ambiguous (mirrors
+ * {@link canonicalizeMisconductPayload}).
  *
  * Canonical rules (frozen by tests):
  *   - `reason` is trimmed.
- *   - missing / undefined / null / whitespace-only → `null`.
+ *   - missing / blank-after-trim → throw (the wire layer already rejects
+ *     these; this helper makes the canonical form unambiguous).
  */
 export function canonicalizeForceSubmitPayload(input: {
-  reason?: string | null | undefined;
+  reason: string;
 }): ForceSubmitRequestPayload {
-  return { reason: trimToNullable(input.reason ?? null) };
+  const trimmedReason = input.reason.trim();
+  if (trimmedReason.length === 0) {
+    throw new Error(
+      "force_submit canonical payload requires a non-empty reason after trim (J5-R0 §8.1)",
+    );
+  }
+  return { reason: trimmedReason };
 }
 
 /**
@@ -135,26 +170,62 @@ export function canonicalizeMisconductPayload(input: {
   return { severity: input.severity, notes: trimmedNotes };
 }
 
+// ── Command → input / payload type binding (compile-time) ──────────
+
+/**
+ * Per-command canonical INPUT shapes. `canonicalizeAttemptCommandRequest`
+ * is generic over this map, so a `force_submit` call can only ever pass a
+ * force-submit-shaped input and a `misconduct_mark` call can only ever pass a
+ * misconduct-shaped input — a mismatched payload is a TypeScript error, not a
+ * runtime `as` cast (overnight hardening: the previous loose union + casts
+ * let both wrong combinations compile and silently canonicalize to a
+ * different command's identity).
+ */
+export interface AttemptCommandInputByType {
+  force_submit: { reason: string };
+  misconduct_mark: { severity: "warning" | "serious"; notes: string };
+}
+
+/**
+ * Per-command canonical PAYLOAD shapes returned by
+ * {@link canonicalizeAttemptCommandRequest} (compile-time bound to the input
+ * via {@link AttemptCommandInputByType}).
+ */
+export interface AttemptCommandPayloadByType {
+  force_submit: ForceSubmitRequestPayload;
+  misconduct_mark: MisconductMarkRequestPayload;
+}
+
+/**
+ * Per-command canonicalizer table. Indexing this by a command type `C` yields
+ * exactly `(input: AttemptCommandInputByType[C]) => AttemptCommandPayloadByType[C]`,
+ * so {@link canonicalizeAttemptCommandRequest} dispatches WITHOUT any type
+ * assertion — the command→input→payload binding is structural, not cast.
+ */
+const attemptCommandCanonicalizers: {
+  [C in AttemptCommandType]: {
+    canonicalize: (
+      input: AttemptCommandInputByType[C],
+    ) => AttemptCommandPayloadByType[C];
+  };
+} = {
+  force_submit: { canonicalize: canonicalizeForceSubmitPayload },
+  misconduct_mark: { canonicalize: canonicalizeMisconductPayload },
+};
+
 /**
  * Dispatching canonicalizer: produces the canonical `request_payload` for a
- * given command type. Throws on an unknown command type so a future command
- * cannot silently reuse the wrong canonicalizer.
+ * given command type. The `commandType` argument and the `input` argument are
+ * bound together at compile time ({@link AttemptCommandInputByType} →
+ * {@link AttemptCommandPayloadByType}), so a payload that belongs to a
+ * different command cannot be expressed. Throws on an unknown command type so
+ * a future command cannot silently reuse the wrong canonicalizer.
  */
-export function canonicalizeAttemptCommandRequest(
-  commandType: AttemptCommandType,
-  input:
-    | { reason?: string | null }
-    | { severity: "warning" | "serious"; notes: string },
-): AttemptCommandRequestPayload {
-  if (commandType === "force_submit") {
-    return canonicalizeForceSubmitPayload(input as { reason?: string | null });
-  }
-  if (commandType === "misconduct_mark") {
-    return canonicalizeMisconductPayload(
-      input as { severity: "warning" | "serious"; notes: string },
-    );
-  }
-  throw new Error(`Unknown attempt command type: ${String(commandType)}`);
+export function canonicalizeAttemptCommandRequest<C extends AttemptCommandType>(
+  commandType: C,
+  input: AttemptCommandInputByType[C],
+): AttemptCommandPayloadByType[C] {
+  return attemptCommandCanonicalizers[commandType].canonicalize(input);
 }
 
 // ── Replay / conflict decision ─────────────────────────────────────
