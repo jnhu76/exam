@@ -1,13 +1,15 @@
 /**
- * Rollback CLI (rollback-incident-tables.ts) — URL parsing + controlled error
- * path (ADR-014 §14, P2-D).
+ * Rollback CLI (rollback-attempt-command-receipts.ts) — URL parsing +
+ * controlled error path + real-PG lifecycle (J5-I1C Slice 1 audit §10;
+ * overnight hardening: mirrors `rollback-incident-tables.test.ts`).
  *
  * Unit tests cover `parseDatabaseName` (query params, trailing slash,
- * percent-encoding, malformed URLs). Subprocess tests spawn the real CLI via
- * tsx and assert the full contract: clear stderr, nonzero exit, connection
- * closed when opened, no unhandledRejection. The PG-dependent subprocess tests
- * run against isolated test schemas (search_path via URL options), so they
- * never touch dev/test database state outside their own schema.
+ * percent-encoding, malformed URLs, malformed percent-encoding → fail
+ * closed). Subprocess tests spawn the real CLI via tsx and assert the full
+ * contract: clear stderr, nonzero exit, connection closed when opened, no
+ * unhandledRejection. The PG-dependent subprocess tests run against isolated
+ * test schemas (search_path via URL options), so they never touch dev/test
+ * database state outside their own schema.
  */
 
 import {
@@ -25,7 +27,6 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { parseDatabaseName } from "@exam/db";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import {
@@ -39,7 +40,7 @@ import { withTestInfraLifecycleLock } from "@exam/db/src/testInfraLock.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPT_PATH = resolve(__dirname, "rollback-incident-tables.ts");
+const SCRIPT_PATH = resolve(__dirname, "rollback-attempt-command-receipts.ts");
 const require = createRequire(import.meta.url);
 const TSX_CLI = require.resolve("tsx/cli");
 
@@ -145,6 +146,15 @@ describe("parseDatabaseName", () => {
   it("throws on a malformed URL", () => {
     expect(() => parseDatabaseName("not a url")).toThrow();
   });
+
+  it("throws on malformed percent-encoding (fail closed, no raw fallback)", () => {
+    // The incident rollback script falls back to the raw segment; this script
+    // deliberately fails closed — a name the guard cannot evaluate reliably
+    // must not be proceeded with (overnight hardening).
+    expect(() =>
+      parseDatabaseName("postgres://exam:exam@localhost:15432/exam_%ZZ"),
+    ).toThrow(/Malformed percent-encoding/);
+  });
 });
 
 describe("rollback CLI — controlled error path (no DB needed)", () => {
@@ -163,6 +173,15 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     });
     expect(res.code).toBe(2);
     expect(res.stderr).toMatch(/Invalid DATABASE_URL/);
+    expect(res.stderr).not.toMatch(/unhandledRejection/i);
+  });
+
+  it("rejects malformed percent-encoding in DATABASE_URL (exit 2, stderr)", async () => {
+    const res = await runCli(["--confirm"], {
+      DATABASE_URL: "postgres://exam:exam@localhost:15432/exam_%ZZ",
+    });
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/Malformed percent-encoding/);
     expect(res.stderr).not.toMatch(/unhandledRejection/i);
   });
 
@@ -193,9 +212,9 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
   });
 
   // ── Review P1-1 counterexamples (the loose regex falsely accepted these) ──
-  // Shared with rollback-attempt-command-receipts.test.ts: each name below
-  // PASSED the old `/^(exam|.*e2e|.*test|.*ci)/i` regex but must be REJECTED
-  // by the exact allowlist. Subprocess test exercises the full CLI guard path.
+  // Each name below PASSED the old `/^(exam|.*e2e|.*test|.*ci)/i` regex but
+  // must be REJECTED by the exact allowlist. These are subprocess tests (not
+  // unit tests on the helper) so they exercise the full CLI guard path.
   for (const dbName of [
     "examproduction",
     "precision_prod",
@@ -229,15 +248,17 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
 
 // ── Exit-code regression (in-process, no DB) ────────────────────────────
 //
-// The subprocess PG tests above cannot force `conn.sql.end()` to reject on a
-// clean schema, so the close-failure exit-code bug is invisible to them. These
-// in-process tests drive `main()` directly with `@exam/db` mocked, so the
-// three exit-code branches are deterministic. They mock the barrel `@exam/db`
-// (the script's own import surface); existing tests use deep-path imports and
-// subprocess spawning, neither of which is affected by this barrel mock.
+// The subprocess PG tests cannot force `conn.sql.end()` to reject on a clean
+// schema, so the close-failure exit-code path is invisible to them. These
+// in-process tests drive `main()` directly with `@exam/db` mocked. The mock
+// replaces the rollback + createDatabase barrel exports but re-uses the REAL
+// database-name guard helpers from `@exam/db/src/scripts/destructiveDbNameGuard`
+// so the guard stage evaluates the real allowlist (the runtimeConfig mock
+// returns ".../exam", which is on the allowlist, so the guard passes and
+// execution reaches the mocked rollback).
 const recoveryMocks = vi.hoisted(() => ({
   createDatabase: vi.fn(),
-  rollbackIncidentTables: vi.fn(),
+  rollbackAttemptCommandReceipts: vi.fn(),
 }));
 
 vi.mock("@exam/db", async (importOriginal) => {
@@ -248,8 +269,8 @@ vi.mock("@exam/db", async (importOriginal) => {
   return {
     createDatabase: (...args: unknown[]) =>
       recoveryMocks.createDatabase(...args),
-    rollbackIncidentTables: (...args: unknown[]) =>
-      recoveryMocks.rollbackIncidentTables(...args),
+    rollbackAttemptCommandReceipts: (...args: unknown[]) =>
+      recoveryMocks.rollbackAttemptCommandReceipts(...args),
     isDestructiveRollbackTarget: real.isDestructiveRollbackTarget,
     parseDatabaseName: real.parseDatabaseName,
     refuseDbNameMessage: real.refuseDbNameMessage,
@@ -267,7 +288,7 @@ vi.mock("../config/runtimeConfig.js", () => ({
 
 // Imported after the mocks are registered. `main` is exported precisely so it
 // can be unit-tested in-process without spawning a subprocess.
-const { main } = await import("./rollback-incident-tables.js");
+const { main } = await import("./rollback-attempt-command-receipts.js");
 
 describe("rollback CLI main() — close-failure exit code (no DB needed)", () => {
   let stdoutSpy: ReturnType<typeof vi.spyOn>;
@@ -276,13 +297,9 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
   let capturedStderr: string[];
 
   beforeEach(() => {
-    // Reset the process-wide exit code before each case. `undefined` is the
-    // Node default and is exactly the state the bug hid in.
     process.exitCode = undefined;
     capturedStdout = [];
     capturedStderr = [];
-    // Suppress real output AND capture it. Returning true satisfies the
-    // WriteSync callback contract.
     stdoutSpy = vi
       .spyOn(process.stdout, "write")
       .mockImplementation((chunk: string | Uint8Array) => {
@@ -296,39 +313,47 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
         return true;
       });
     recoveryMocks.createDatabase.mockReset();
-    recoveryMocks.rollbackIncidentTables.mockReset();
-    // --confirm is required; the env mock makes the URL pass the name guard.
-    process.argv = ["node", "rollback-incident-tables.ts", "--confirm"];
+    recoveryMocks.rollbackAttemptCommandReceipts.mockReset();
+    process.argv = [
+      "node",
+      "rollback-attempt-command-receipts.ts",
+      "--confirm",
+    ];
   });
 
   afterEach(() => {
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();
     process.exitCode = undefined;
-    process.argv = ["node", "rollback-incident-tables.ts"];
+    process.argv = ["node", "rollback-attempt-command-receipts.ts"];
   });
 
-  it("exit 1 when rollback succeeds but sql.end() rejects (the bug)", async () => {
+  it("exit 1 when rollback succeeds but sql.end() rejects", async () => {
     const sqlEnd = vi.fn().mockRejectedValue(new Error("pool teardown failed"));
     recoveryMocks.createDatabase.mockResolvedValue({
       db: {},
       sql: { end: sqlEnd },
     });
-    recoveryMocks.rollbackIncidentTables.mockResolvedValue({
-      nonNullIncidentCount: 0,
+    recoveryMocks.rollbackAttemptCommandReceipts.mockResolvedValue({
+      rowCount: 0,
       dropped: true,
+      absent: false,
       blocked: false,
+      indexDropped: true,
     });
 
     await main();
 
-    expect(recoveryMocks.rollbackIncidentTables).toHaveBeenCalledTimes(1);
+    expect(recoveryMocks.rollbackAttemptCommandReceipts).toHaveBeenCalledTimes(
+      1,
+    );
     expect(sqlEnd).toHaveBeenCalledTimes(1);
-    // The regression: before the fix exitCode stayed `undefined` → process
-    // exits 0. The fix must surface close failure as non-zero.
+    // A close failure must surface as non-zero.
     expect(process.exitCode).toBe(1);
     expect(capturedStderr.join("")).toMatch(/Failed to close the connection/);
-    expect(capturedStdout.join("")).toMatch(/Dropped incident tables/);
+    expect(capturedStdout.join("")).toMatch(/Dropped attempt_command_receipts/);
+    // The CLI reports the full 0028 effect (table + index) on the success path.
+    expect(capturedStdout.join("")).toMatch(/Dropped users_org_id_unique/);
   });
 
   it("preserves an existing non-zero exit code when sql.end() also fails", async () => {
@@ -339,16 +364,14 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
       db: {},
       sql: { end: sqlEnd },
     });
-    recoveryMocks.rollbackIncidentTables.mockRejectedValue(
-      new Error("rollback boom"),
+    recoveryMocks.rollbackAttemptCommandReceipts.mockRejectedValue(
+      new Error("Guard tripped: 1 row(s) exist in attempt_command_receipts"),
     );
 
     await main();
 
-    // Rollback failure sets exitCode 1; the subsequent close failure must NOT
-    // clobber it back to undefined or leave it untouched-as-undefined.
     expect(process.exitCode).toBe(1);
-    expect(capturedStderr.join("")).toMatch(/rollback boom/);
+    expect(capturedStderr.join("")).toMatch(/Guard tripped/);
     expect(capturedStderr.join("")).toMatch(/Failed to close the connection/);
   });
 
@@ -358,21 +381,66 @@ describe("rollback CLI main() — close-failure exit code (no DB needed)", () =>
       db: {},
       sql: { end: sqlEnd },
     });
-    recoveryMocks.rollbackIncidentTables.mockResolvedValue({
-      nonNullIncidentCount: 0,
+    recoveryMocks.rollbackAttemptCommandReceipts.mockResolvedValue({
+      rowCount: 0,
       dropped: true,
+      absent: false,
       blocked: false,
+      indexDropped: true,
     });
 
     await main();
 
-    // Guards against an over-fix that always sets non-zero. On the clean
-    // success path exitCode stays `undefined`, which the OS treats as 0.
+    // On the clean success path exitCode stays `undefined`, which the OS
+    // treats as 0.
     expect(process.exitCode).toBeUndefined();
-    expect(capturedStdout.join("")).toMatch(/Dropped incident tables/);
+    expect(capturedStdout.join("")).toMatch(/Dropped attempt_command_receipts/);
+    expect(capturedStdout.join("")).toMatch(/Dropped users_org_id_unique/);
     expect(capturedStderr.join("")).not.toMatch(
       /Failed to close the connection/,
     );
+  });
+
+  it("exit 0 on full success when the index was already absent", async () => {
+    const sqlEnd = vi.fn().mockResolvedValue(undefined);
+    recoveryMocks.createDatabase.mockResolvedValue({
+      db: {},
+      sql: { end: sqlEnd },
+    });
+    recoveryMocks.rollbackAttemptCommandReceipts.mockResolvedValue({
+      rowCount: 0,
+      dropped: true,
+      absent: false,
+      blocked: false,
+      indexDropped: false,
+    });
+
+    await main();
+
+    expect(process.exitCode).toBeUndefined();
+    expect(capturedStdout.join("")).toMatch(
+      /users_org_id_unique already absent/,
+    );
+  });
+
+  it("exit 0 on the absent-table no-op with clean close", async () => {
+    const sqlEnd = vi.fn().mockResolvedValue(undefined);
+    recoveryMocks.createDatabase.mockResolvedValue({
+      db: {},
+      sql: { end: sqlEnd },
+    });
+    recoveryMocks.rollbackAttemptCommandReceipts.mockResolvedValue({
+      rowCount: 0,
+      dropped: false,
+      absent: true,
+      blocked: false,
+      indexDropped: false,
+    });
+
+    await main();
+
+    expect(process.exitCode).toBeUndefined();
+    expect(capturedStdout.join("")).toMatch(/absent — no-op/);
   });
 });
 
@@ -401,22 +469,22 @@ PG_DESCRIBE(
         );
         await conn.sql.end();
       }
-      // Seed the guard schema with a non-null incident_id adjustment row
-      // (activation state), so the CLI must refuse to drop.
-      await seedActivatedIncident(guardIso.schemaName);
+      // Seed the guard schema with one receipt row (activation state), so the
+      // CLI must refuse to drop.
+      await seedActivatedReceipt(guardIso.schemaName);
     }, 120_000);
 
     afterAll(async () => {
       await Promise.allSettled([cleanIso?.cleanup(), guardIso?.cleanup()]);
     });
 
-    it("drops the five tables on a clean schema and exits 0 (connection closed)", async () => {
+    it("drops the table on a clean schema and exits 0 (connection closed)", async () => {
       const url = addSearchPathToUrl(BASE_URL, cleanIso.schemaName);
       const res = await runCli(["--confirm"], {
         DATABASE_URL: url,
       });
       expect(res.code).toBe(0);
-      expect(res.stdout).toMatch(/Dropped incident tables/);
+      expect(res.stdout).toMatch(/Dropped attempt_command_receipts/);
       // Exit 0 within the timeout proves the connection was closed (a leaked
       // postgres.js pool would keep the process alive until the timeout).
       const conn = await createPostgresDatabase(BASE_URL);
@@ -424,11 +492,7 @@ PG_DESCRIBE(
         const rows = await conn.sql`
           SELECT table_name FROM information_schema.tables
           WHERE table_schema = ${cleanIso.schemaName}
-            AND table_name IN (
-              'exam_incidents', 'exam_incident_events',
-              'exam_incident_actions', 'exam_incident_attempts',
-              'exam_incident_interruption_links'
-            )
+            AND table_name = 'attempt_command_receipts'
         `;
         expect(rows).toHaveLength(0);
       } finally {
@@ -436,7 +500,7 @@ PG_DESCRIBE(
       }
     });
 
-    it("fails closed when a non-null incident_id exists (exit 1, Guard tripped, tables preserved)", async () => {
+    it("fails closed when a receipt row exists (exit 1, Guard tripped, table preserved)", async () => {
       const url = addSearchPathToUrl(BASE_URL, guardIso.schemaName);
       const res = await runCli(["--confirm"], {
         DATABASE_URL: url,
@@ -449,15 +513,9 @@ PG_DESCRIBE(
         const rows = await conn.sql`
           SELECT table_name FROM information_schema.tables
           WHERE table_schema = ${guardIso.schemaName}
-            AND table_name = 'exam_incidents'
+            AND table_name = 'attempt_command_receipts'
         `;
         expect(rows).toHaveLength(1);
-        const adjRows = await conn.sql`
-          SELECT count(*)::int AS n
-          FROM ${conn.sql(guardIso.schemaName)}.attempt_time_adjustments
-          WHERE incident_id IS NOT NULL
-        `;
-        expect(Number(adjRows[0]?.n ?? 0)).toBe(1);
       } finally {
         await conn.sql.end();
       }
@@ -465,8 +523,8 @@ PG_DESCRIBE(
   },
 );
 
-/** Seeds org → user → course → exam → enrollment → attempt → incident → activated adjustment. */
-async function seedActivatedIncident(schemaName: string): Promise<void> {
+/** Seeds org → user → course → exam → enrollment → attempt → one receipt. */
+async function seedActivatedReceipt(schemaName: string): Promise<void> {
   const conn = await createDatabase(BASE_URL, schemaName);
   const db = conn.db;
   try {
@@ -478,7 +536,6 @@ async function seedActivatedIncident(schemaName: string): Promise<void> {
     const candidateId = randomUUID();
     const enrollmentId = randomUUID();
     const attemptId = randomUUID();
-    const incidentId = randomUUID();
 
     await db.insert(schema.organizations).values({
       id: orgId,
@@ -491,9 +548,9 @@ async function seedActivatedIncident(schemaName: string): Promise<void> {
     await db.insert(schema.users).values({
       id: actorId,
       organizationId: orgId,
-      username: `usr-${randomUUID().slice(0, 6)}`,
-      passwordHash: "x",
-      name: "Actor",
+      username: `cli-${randomUUID().slice(0, 8)}`,
+      passwordHash: "hash",
+      name: "Admin",
       role: "Admin",
       isActive: true,
       createdAt: now,
@@ -510,8 +567,8 @@ async function seedActivatedIncident(schemaName: string): Promise<void> {
     await db.insert(schema.courses).values({
       id: courseId,
       organizationId: orgId,
-      name: "c",
-      code: `code-${randomUUID().slice(0, 6)}`,
+      name: "Course",
+      code: `c-${randomUUID().slice(0, 8)}`,
       description: "",
       createdAt: now,
       updatedAt: now,
@@ -519,14 +576,14 @@ async function seedActivatedIncident(schemaName: string): Promise<void> {
     await db.insert(schema.exams).values({
       id: examId,
       organizationId: orgId,
-      title: "t",
+      title: "Exam",
       description: "",
       courseId,
       status: "open",
       timingMode: "timed_window",
       durationMinutes: 60,
       openAt: now,
-      closeAt: new Date(now.getTime() + 86400_000),
+      closeAt: new Date("2026-01-02T00:00:00.000Z"),
       passingScore: 60,
       totalScore: 100,
       questionSelectionMode: "manual",
@@ -547,7 +604,6 @@ async function seedActivatedIncident(schemaName: string): Promise<void> {
       retakePolicy: "unlimited",
       scoreStrategy: "highest",
       maxAttempts: 1,
-      interruptionTimePolicy: "operator_incident",
       createdAt: now,
       updatedAt: now,
     });
@@ -572,46 +628,29 @@ async function seedActivatedIncident(schemaName: string): Promise<void> {
       questionSnapshot: [],
       answers: [],
       startedAt: now,
-      deadlineAt: new Date(now.getTime() + 3600_000),
+      deadlineAt: new Date("2026-01-01T01:00:00.000Z"),
       lastActivityAt: now,
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(schema.examIncidents).values({
-      id: incidentId,
-      organizationId: orgId,
-      examId,
-      type: "other",
-      severity: "info",
-      status: "open",
-      description: "activation",
-      reportedBy: actorId,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    // source=system_incident satisfies the source_shape CHECK with a non-null
-    // incident_id (no actor/reasonText required).
-    await db.insert(schema.attemptTimeAdjustments).values({
+    await db.insert(schema.attemptCommandReceipts).values({
       id: randomUUID(),
-      operationId: randomUUID(),
       organizationId: orgId,
       attemptId,
-      incidentId,
-      policy: "operator_incident",
-      source: "system_incident",
-      beforeDeadline: now,
-      afterDeadline: new Date(now.getTime() + 300_000),
-      addedSeconds: 300,
-      reasonCode: "activation",
-      createdAt: now,
+      operationId: randomUUID(),
+      commandType: "force_submit",
+      requestPayload: { reason: "cli-seed" },
+      resultPayload: {
+        commandType: "force_submit",
+        beforeStatus: "in_progress",
+        afterStatus: "graded",
+        submittedAt: now.toISOString(),
+        gradedAt: now.toISOString(),
+        appliedAt: now.toISOString(),
+      },
+      outcome: "applied",
+      actorId,
     });
-    // Guard sanity: the activated row is visible through the isolated schema.
-    const count = await db
-      .select()
-      .from(schema.attemptTimeAdjustments)
-      .where(eq(schema.attemptTimeAdjustments.organizationId, orgId));
-    expect(count).toHaveLength(1);
   } finally {
     await conn.sql.end();
   }

@@ -16,6 +16,7 @@
     "db:seed:demo:verify": "tsx src/demo-seed-verify.ts",
     "db:seed:e2e": "tsx src/e2e-seed.ts",
     "db:rollback:incidents": "tsx src/scripts/rollback-incident-tables.ts",
+    "db:rollback:attempt-command-receipts": "tsx src/scripts/rollback-attempt-command-receipts.ts",
     "bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts",
     "reset:admin-password": "tsx src/scripts/reset-admin-password.ts",
     "backfill:submitted-answers": "tsx src/scripts/backfill-submitted-answers.ts",

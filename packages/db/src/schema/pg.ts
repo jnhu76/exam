@@ -134,6 +134,12 @@ export const users = pgTable(
       table.organizationId,
       table.username,
     ),
+    // Composite-FK target for org-owned actor references (e.g.
+    // attempt_command_receipts(organization_id, actor_id)): proves the actor
+    // is a MEMBER of the same organization, not merely an existing user.
+    // users.organization_id is NOT NULL, so a cross-org actor cannot satisfy
+    // the composite FK.
+    uniqueIndex("users_org_id_unique").on(table.organizationId, table.id),
   ],
 );
 
@@ -1661,6 +1667,105 @@ export const examProctorAssignmentEvents = pgTable(
   ],
 );
 
+/**
+ * Durable attempt command receipt (J5-I1C Slice 1 / J5-I1C0 audit §6.2).
+ *
+ * One shared append-only table for the two dangerous Attempt commands
+ * (`force_submit`, `misconduct_mark`), arbitrated by the single
+ * `UNIQUE (organization_id, operation_id)` constraint. That constraint is the
+ * ONE cross-command idempotency arbiter: a force_submit and a misconduct_mark
+ * carrying the same operationId within one organization cannot both insert.
+ * operationId scope is PER ORGANIZATION (not per attempt, not per command).
+ *
+ * `requestPayload` is the canonical input (replay/conflict comparison input);
+ * `resultPayload` is the immutable committed fact (returned verbatim on replay
+ * — never re-derived from the live attempt). The persistent `outcome` column
+ * is restricted to ('applied', 'no_change'); the HTTP layer may surface a
+ * third wire disposition `idempotent_replay`, but it is NEVER written here and
+ * NEVER mutates an existing receipt (audit §3.3).
+ *
+ * Shape mirrors `exam_proctor_assignment_events` (canonical jsonb + outcome +
+ * actor) and the unified-arbiter discipline of `exam_incident_events` (one
+ * table, one UNIQUE(org, operation_id), many commandType values).
+ */
+export const attemptCommandReceipts = pgTable(
+  "attempt_command_receipts",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    operationId: uuid("operation_id").notNull(),
+    commandType: text("command_type").notNull(),
+    requestPayload: jsonb("request_payload").notNull(),
+    resultPayload: jsonb("result_payload").notNull(),
+    outcome: text("outcome").notNull(),
+    actorId: text("actor_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // The idempotency arbiter (ADR-014 §9 / ADR-015 §4.2 / J5-I1C0 §4.5).
+    uniqueIndex("attempt_command_receipts_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    // PRIMARY per-attempt history index (audit §6.2 name + id tie-breaker):
+    // serves the unfiltered listByAttempt ordering (created_at ASC, id ASC)
+    // directly. The command-filtered listByAttempt gets its own index below —
+    // a single index cannot cover both orderings (command_type sits between
+    // attempt_id and created_at in the B-tree key).
+    index("attempt_command_receipts_org_attempt_created_idx").on(
+      table.organizationId,
+      table.attemptId,
+      table.createdAt,
+      table.id,
+    ),
+    // Command-filtered history: (organization_id, attempt_id, command_type)
+    // equality prefix + the same (created_at, id) ordering tail.
+    index("attempt_command_receipts_org_attempt_command_created_idx").on(
+      table.organizationId,
+      table.attemptId,
+      table.commandType,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "attempt_command_receipts_command_type_check",
+      sql`${table.commandType} IN ('force_submit', 'misconduct_mark')`,
+    ),
+    check(
+      "attempt_command_receipts_outcome_check",
+      sql`${table.outcome} IN ('applied', 'no_change')`,
+    ),
+    check(
+      "attempt_command_receipts_request_payload_check",
+      sql`jsonb_typeof(${table.requestPayload}) = 'object'`,
+    ),
+    check(
+      "attempt_command_receipts_result_payload_check",
+      sql`jsonb_typeof(${table.resultPayload}) = 'object'`,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "attempt_command_receipts_org_attempt_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organizations.id],
+      name: "attempt_command_receipts_org_fk",
+    }),
+    // Composite org+actor FK → users(organization_id, id) (target index:
+    // users_org_id_unique). The identity graph is DB-enforced: an actor from
+    // a DIFFERENT organization cannot be recorded on a receipt (overnight
+    // hardening — the previous plain users(id) FK only proved existence).
+    foreignKey({
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [users.organizationId, users.id],
+      name: "attempt_command_receipts_actor_fk",
+    }),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -1690,4 +1795,5 @@ export const schema = {
   examIncidentInterruptionLinks,
   examProctorAssignments,
   examProctorAssignmentEvents,
+  attemptCommandReceipts,
 };

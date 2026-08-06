@@ -1,20 +1,21 @@
 /**
- * Guarded, opt-in rollback of the five exam-incident tables (ADR-014 §14).
+ * Guarded, opt-in rollback of the `attempt_command_receipts` table
+ * (J5-I1C Slice 1 / J5-I1C0 audit §10).
  *
  * The migration runner is forward-only: there is no automatic down migration.
  * This script is the executable, pre-activation guard wrapper. The core logic
- * (`rollbackIncidentTables`) lives in `@exam/db` so it can be unit-tested at
- * the db layer without a reverse package dependency. This entrypoint owns only
- * env resolution, the `--confirm` flag, and the database-name safety guard.
+ * (`rollbackAttemptCommandReceipts`) lives in `@exam/db` so it can be
+ * unit-tested at the db layer without a reverse package dependency. This
+ * entrypoint owns only env resolution, the `--confirm` flag, and the
+ * database-name safety guard.
  *
- * It runs ONLY when invoked directly with `--confirm`, and ONLY when no
- * `attempt_time_adjustments.incident_id` is non-null. After the first non-null
- * incident correlation write, a destructive DROP is prohibited (it would leave
- * dangling correlation UUIDs with no referential guard); the script fails
- * closed and drops nothing.
+ * It runs ONLY when invoked directly with `--confirm`, and ONLY when the
+ * `attempt_command_receipts` table is empty (or absent). After the first
+ * receipt row is written, a destructive DROP is prohibited (receipt data is
+ * durable command evidence); the script fails closed and drops nothing.
  *
  * Invocation:
- *   pnpm db:rollback:incidents -- --confirm
+ *   pnpm db:rollback:attempt-command-receipts -- --confirm
  *
  * Never run by migrate, build, or test. All failure modes (missing env,
  * malformed URL, connection failure, guard trip, close failure) exit non-zero
@@ -27,7 +28,7 @@ import {
   isDestructiveRollbackTarget,
   parseDatabaseName,
   refuseDbNameMessage,
-  rollbackIncidentTables,
+  rollbackAttemptCommandReceipts,
 } from "@exam/db";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
@@ -39,9 +40,9 @@ export async function main(): Promise<void> {
   if (!args.includes("--confirm")) {
     process.stderr.write(
       "Refusing to run without an explicit --confirm flag.\n" +
-        "This script drops the five exam-incident tables. It is opt-in and\n" +
+        "This script drops the attempt_command_receipts table. It is opt-in and\n" +
         "never run by migrate, build, or test. Usage:\n" +
-        "  pnpm db:rollback:incidents -- --confirm\n",
+        "  pnpm db:rollback:attempt-command-receipts -- --confirm\n",
     );
     process.exitCode = 2;
     return;
@@ -74,7 +75,9 @@ export async function main(): Promise<void> {
     return;
   }
 
-  process.stdout.write(`Guarded incident rollback against "${dbName}"...\n`);
+  process.stdout.write(
+    `Guarded attempt_command_receipts rollback against "${dbName}"...\n`,
+  );
 
   let conn: Awaited<ReturnType<typeof createDatabase>>;
   try {
@@ -86,11 +89,31 @@ export async function main(): Promise<void> {
   }
 
   try {
-    const result = await rollbackIncidentTables(conn.db);
-    process.stdout.write(
-      `Dropped incident tables ` +
-        `(non-null incident_id count before: ${result.nonNullIncidentCount}).\n`,
-    );
+    const result = await rollbackAttemptCommandReceipts(conn.db);
+    if (result.absent) {
+      process.stdout.write(
+        "Table attempt_command_receipts absent — no-op (nothing to drop).\n",
+      );
+    } else if (result.dropped) {
+      process.stdout.write(
+        `Dropped attempt_command_receipts (row count before: ${result.rowCount}).\n`,
+      );
+      // 0028 owns two schema effects: the receipt table AND the
+      // users_org_id_unique composite-FK target index. Report the index
+      // outcome explicitly so an operator can tell whether the rollback
+      // closed the full 0028 effect or only the table.
+      process.stdout.write(
+        result.indexDropped
+          ? "Dropped users_org_id_unique (0028 composite-FK target index).\n"
+          : "users_org_id_unique already absent — index not dropped.\n",
+      );
+    } else if (result.blocked) {
+      // Unreachable: the core throws on a non-empty table rather than returning
+      // blocked=true. Kept for exhaustive result handling.
+      process.stdout.write(
+        `Blocked: ${result.rowCount} row(s) present — table preserved.\n`,
+      );
+    }
   } catch (err) {
     process.stderr.write(`${(err as Error).message}\n`);
     process.exitCode = 1;
@@ -101,12 +124,8 @@ export async function main(): Promise<void> {
       process.stderr.write(
         `Failed to close the connection: ${(err as Error).message}\n`,
       );
-      // On the success path exitCode is never set, so its default is
-      // `undefined` (NOT 0). The loose `=== 0` guard therefore missed the
-      // close-failure-after-success case and let the process exit 0, masking a
-      // resource-close failure as success. Treat undefined as 0 here so a
-      // close failure always surfaces as non-zero, while preserving any
-      // already-set non-zero code from an earlier failure path.
+      // Treat undefined as 0 here so a close failure always surfaces as
+      // non-zero, while preserving any already-set non-zero code.
       if (process.exitCode === undefined || process.exitCode === 0) {
         process.exitCode = 1;
       }

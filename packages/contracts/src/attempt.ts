@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AttemptCommandType as DomainAttemptCommandType } from "@exam/domain";
 import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 import { InterruptionTimePolicySchema } from "./interruption.js";
@@ -445,6 +446,324 @@ export const ForceSubmitRequestSchema = z.object({
 
 /** Type for a force-submit request body. */
 export type ForceSubmitRequest = z.infer<typeof ForceSubmitRequestSchema>;
+
+// ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────
+//
+// Durable, operationId-keyed command-receipt contracts for the two dangerous
+// Attempt commands (`force_submit`, `misconduct_mark`). These coexist with the
+// legacy `ForceSubmitRequestSchema` / `FlagMisconductRequestSchema` above and
+// are NOT yet wired into any route (J5-I1C0 audit §8 Slice 1: backend
+// foundation only, zero behavior change). Slices 2/3 will flip the routes to
+// these operationId-carrying shapes.
+//
+// See docs/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
+
+/**
+ * The two dangerous Attempt commands sharing one receipt table.
+ * The DB CHECK constraint `attempt_command_receipts_command_type_check`
+ * enforces this exact set. The canonical value union lives in `@exam/domain`
+ * (`AttemptCommandType`); this Zod schema is the wire validator that mirrors
+ * it (single source of truth = the domain union).
+ */
+export const AttemptCommandTypeSchema = z.enum([
+  "force_submit",
+  "misconduct_mark",
+]);
+/**
+ * The canonical Attempt command type (re-exported from `@exam/domain`, the
+ * single source of truth). This is the value union; the Zod schema above is
+ * the wire validator that mirrors it.
+ */
+export type AttemptCommandType = DomainAttemptCommandType;
+
+/**
+ * The persistent receipt outcome written to the `attempt_command_receipts`
+ * table. The DB CHECK constraint `attempt_command_receipts_outcome_check`
+ * enforces this exact set. The HTTP layer may surface a third wire disposition
+ * `idempotent_replay` (see {@link AttemptCommandDispositionSchema}), but that
+ * value is NEVER written to the table and NEVER mutates an existing receipt
+ * (audit §3.3): a replay returns the original stored receipt verbatim.
+ */
+export const AttemptCommandOutcomeSchema = z.enum(["applied", "no_change"]);
+/** Type for a persistent attempt command receipt outcome. */
+export type AttemptCommandOutcome = z.infer<typeof AttemptCommandOutcomeSchema>;
+
+/**
+ * The wire-level disposition an attempt command may return. Adds
+ * `idempotent_replay` to the persistent outcomes: a replay does not write a new
+ * row, it returns the stored {@link AttemptCommandReceiptResultPayloadSchema}
+ * of the original receipt.
+ */
+export const AttemptCommandDispositionSchema = z.enum([
+  "applied",
+  "no_change",
+  "idempotent_replay",
+]);
+/** Type for an attempt command wire disposition. */
+export type AttemptCommandDisposition = z.infer<
+  typeof AttemptCommandDispositionSchema
+>;
+
+/**
+ * Canonical request payload for a `force_submit` receipt (audit §4.1/§4.2).
+ * `reason` is REQUIRED and non-empty after trim (J5-R0 §8.1 upgraded it to
+ * server-required): the durable identity never contains null/blank — a
+ * `{ reason: null }` and a missing reason would otherwise collide into one
+ * canonical identity and silently merge two different operations.
+ * `.strict()` rejects unknown fields so two requests cannot canonicalize to
+ * the same receipt while one carried an extra field.
+ */
+export const ForceSubmitRequestPayloadSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+/** Canonical force_submit request payload stored in a receipt. */
+export type ForceSubmitRequestPayload = z.infer<
+  typeof ForceSubmitRequestPayloadSchema
+>;
+
+/**
+ * Canonical request payload for a `misconduct_mark` receipt (audit §4.3/§4.4).
+ * `severity` reuses the existing {@link MisconductSeverityEnum}; `notes` is
+ * trimmed to a non-empty bounded string (the legacy
+ * {@link FlagMisconductRequestSchema} already enforces 1..1000). `.strict()`
+ * rejects unknown fields for the same canonical-identity reason as
+ * {@link ForceSubmitRequestPayloadSchema}.
+ *
+ * `notes` is `.trim()`-ed at this canonical layer so the durable payload
+ * agrees with {@link MisconductMarkWithOperationRequestSchema} and the
+ * domain canonicalizer (review J5-I1C0 PR #261 P1-2): without the trim, a
+ * `notes: "  x  "` payload would persist with surrounding whitespace while
+ * the wire request / domain canonicalizer would store `"x"` — three
+ * representations of the same operation identity. The trim here makes the
+ * canonical receipt the single source of truth.
+ */
+export const MisconductMarkRequestPayloadSchema = z
+  .object({
+    severity: MisconductSeverityEnum,
+    notes: z.string().trim().min(1).max(1000),
+  })
+  .strict();
+/** Canonical misconduct_mark request payload stored in a receipt. */
+export type MisconductMarkRequestPayload = z.infer<
+  typeof MisconductMarkRequestPayloadSchema
+>;
+
+/**
+ * operationId-carrying force-submit request (audit §4.1). Future shape for
+ * `POST /admin/attempts/:attemptId/force-submit`; does NOT replace the legacy
+ * {@link ForceSubmitRequestSchema} in this slice. `reason` follows J5-R0 §8.1
+ * (upgraded to required, trimmed, 1..500). `.strict()` rejects unknown fields
+ * (the wire request is the operation identity input).
+ */
+export const ForceSubmitWithOperationRequestSchema = z
+  .object({
+    operationId: z.string().uuid(),
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+/** Type for an operationId-carrying force-submit request body. */
+export type ForceSubmitWithOperationRequest = z.infer<
+  typeof ForceSubmitWithOperationRequestSchema
+>;
+
+/**
+ * operationId-carrying misconduct-mark request (audit §4.3). Future shape for
+ * `POST /admin/attempts/:attemptId/misconduct`; does NOT replace the legacy
+ * {@link FlagMisconductRequestSchema} in this slice. Reuses the existing
+ * `severity` + `notes` field constraints. `.strict()` rejects unknown fields.
+ */
+export const MisconductMarkWithOperationRequestSchema = z
+  .object({
+    operationId: z.string().uuid(),
+    severity: MisconductSeverityEnum,
+    notes: z.string().trim().min(1).max(1000),
+  })
+  .strict();
+/** Type for an operationId-carrying misconduct-mark request body. */
+export type MisconductMarkWithOperationRequest = z.infer<
+  typeof MisconductMarkWithOperationRequestSchema
+>;
+
+/**
+ * The immutable committed fact stored in a receipt's `result_payload` jsonb and
+ * returned verbatim on replay (audit §4.2/§4.4). A discriminated union on
+ * `commandType` freezes the FULL per-command result shapes (overnight
+ * hardening: the previous envelope-only union carried no committed fact, so a
+ * replay could not tell the client what the original command actually did).
+ * Note: the `commandType` discriminator is duplicated inside the jsonb payload
+ * so the stored fact is self-describing and the union is discriminable; the
+ * audit §4.2/§4.4 field sets are preserved verbatim.
+ */
+export const AttemptCommandReceiptResultPayloadSchema = z.discriminatedUnion(
+  "commandType",
+  [
+    z
+      .object({
+        commandType: z.literal("force_submit"),
+        // The immutable committed fact for force_submit (audit §4.2): the
+        // statuses observed under the EA lock and the attempt timestamps at
+        // commit — NOT re-derived from the live attempt on replay.
+        beforeStatus: AttemptStatusEnum,
+        afterStatus: AttemptStatusEnum,
+        submittedAt: z.string().datetime().nullable(),
+        gradedAt: z.string().datetime().nullable(),
+        appliedAt: z.string().datetime(),
+      })
+      .strict(),
+    z
+      .object({
+        commandType: z.literal("misconduct_mark"),
+        // The immutable committed fact for misconduct_mark (audit §4.4): the
+        // MisconductFlag this receipt establishes (null on no_change).
+        misconduct: MisconductFlagSchema.nullable(),
+        appliedAt: z.string().datetime(),
+      })
+      .strict(),
+  ],
+);
+/**
+ * DTO for the immutable committed fact stored in a receipt's `result_payload`.
+ */
+export type AttemptCommandReceiptResultPayload = z.infer<
+  typeof AttemptCommandReceiptResultPayloadSchema
+>;
+
+/** Canonical request payloads (per command) stored in a receipt row. */
+export const AttemptCommandReceiptRequestPayloadSchema = z.union([
+  ForceSubmitRequestPayloadSchema,
+  MisconductMarkRequestPayloadSchema,
+]);
+/** DTO for the canonical request payload stored in a receipt row. */
+export type AttemptCommandReceiptRequestPayload = z.infer<
+  typeof AttemptCommandReceiptRequestPayloadSchema
+>;
+
+/**
+ * A durable attempt command receipt record (the DB row projection, audit §7).
+ * This is the internal record contract; the wire response contract
+ * {@link AttemptCommandReceiptResponseSchema} below intentionally does not leak
+ * every internal column (e.g. `actorId` surfacing is deferred to the route
+ * slices per audit §4). The jsonb payloads are bound to the frozen canonical /
+ * result unions so a row with a mismatched payload shape cannot be expressed.
+ */
+export const AttemptCommandReceiptRecordSchema = z
+  .object({
+    id: z.string().uuid(),
+    organizationId: z.string(),
+    attemptId: z.string(),
+    operationId: z.string().uuid(),
+    commandType: AttemptCommandTypeSchema,
+    requestPayload: AttemptCommandReceiptRequestPayloadSchema,
+    resultPayload: AttemptCommandReceiptResultPayloadSchema,
+    outcome: AttemptCommandOutcomeSchema,
+    actorId: z.string(),
+    createdAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, ctx) => {
+    // The row's jsonb payloads must belong to the row's command type — a
+    // force_submit row storing a misconduct payload is a corrupted identity.
+    const requestCommandType =
+      "reason" in record.requestPayload ? "force_submit" : "misconduct_mark";
+    if (requestCommandType !== record.commandType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `requestPayload shape belongs to ${requestCommandType}, not ${record.commandType}`,
+        path: ["requestPayload"],
+      });
+    }
+    if (record.resultPayload.commandType !== record.commandType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `resultPayload.commandType ${record.resultPayload.commandType} does not match ${record.commandType}`,
+        path: ["resultPayload"],
+      });
+    }
+  });
+/** DTO for a durable attempt command receipt DB record. */
+export type AttemptCommandReceiptRecord = z.infer<
+  typeof AttemptCommandReceiptRecordSchema
+>;
+
+/**
+ * Wire response contract for a dangerous Attempt command (audit §4.2/§4.4).
+ * Carries the operation identity, the persistent receipt outcome, and the
+ * immutable committed fact (returned verbatim on replay).
+ *
+ * The `disposition`/`outcome` pair is a discriminated union, so semantically
+ * inconsistent combinations are un-representable:
+ *
+ *   - first execution:      disposition == outcome ∈ {applied, no_change}
+ *   - replay:               disposition = idempotent_replay, outcome = the
+ *                           ORIGINAL stored outcome (applied | no_change)
+ *
+ * A replay does not write a new row — it returns the original receipt's fact.
+ *
+ * The outer `commandType` and the inner `resultPayload.commandType` must
+ * agree (review J5-I1C0 PR #261 P1-2): a replay response claiming two
+ * different command identities is corrupted and must be rejected. This
+ * mirrors the {@link AttemptCommandReceiptRecordSchema} consistency rule — a
+ * discriminator-by-disposition wrapper cannot express cross-field binding by
+ * itself, so a `superRefine` is layered on top of the union.
+ */
+const AttemptCommandReceiptResponseBranchSchema = z.discriminatedUnion(
+  "disposition",
+  [
+    z
+      .object({
+        operationId: z.string().uuid(),
+        commandType: AttemptCommandTypeSchema,
+        disposition: z.literal("applied"),
+        outcome: z.literal("applied"),
+        resultPayload: AttemptCommandReceiptResultPayloadSchema,
+        createdAt: z.string().datetime(),
+      })
+      .strict(),
+    z
+      .object({
+        operationId: z.string().uuid(),
+        commandType: AttemptCommandTypeSchema,
+        disposition: z.literal("no_change"),
+        outcome: z.literal("no_change"),
+        resultPayload: AttemptCommandReceiptResultPayloadSchema,
+        createdAt: z.string().datetime(),
+      })
+      .strict(),
+    z
+      .object({
+        operationId: z.string().uuid(),
+        commandType: AttemptCommandTypeSchema,
+        disposition: z.literal("idempotent_replay"),
+        // The original stored outcome of the replayed receipt.
+        outcome: AttemptCommandOutcomeSchema,
+        resultPayload: AttemptCommandReceiptResultPayloadSchema,
+        createdAt: z.string().datetime(),
+      })
+      .strict(),
+  ],
+);
+
+/**
+ * The frozen wire response. Use {@link AttemptCommandReceiptResponseSchema}
+ * (not the raw branch union) — the wrapper enforces the outer/inner
+ * commandType consistency that the discriminator-by-disposition union cannot.
+ */
+export const AttemptCommandReceiptResponseSchema =
+  AttemptCommandReceiptResponseBranchSchema.superRefine((response, ctx) => {
+    if (response.resultPayload.commandType !== response.commandType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `resultPayload.commandType ${response.resultPayload.commandType} does not match commandType ${response.commandType}`,
+        path: ["resultPayload", "commandType"],
+      });
+    }
+  });
+/** DTO for a dangerous Attempt command wire response. */
+export type AttemptCommandReceiptResponse = z.infer<
+  typeof AttemptCommandReceiptResponseSchema
+>;
 
 // ── Operator Time Grant (Admin) ──────────────────────────────────
 
