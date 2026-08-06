@@ -20,7 +20,7 @@
  * See docs/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§5.
  */
 
-import { ValidationError } from "@exam/domain";
+import { AppError } from "@exam/domain";
 import { classifyAttemptCommandReplay } from "@exam/domain";
 import type {
   AttemptCommandReplayDecision,
@@ -111,9 +111,15 @@ export function matchAttemptCommandReceiptOperationUniqueViolation(
  * Validates a stored receipt row against
  * {@link AttemptCommandReceiptRecordSchema} (commandType, request/result
  * payload shapes, outer/inner commandType consistency, outcome, timestamps).
- * A malformed stored row fails closed with a domain ValidationError — the
+ * A malformed stored row fails closed with an internal-invariant error — the
  * orchestrator must never guess a result from the live attempt when the
  * durable receipt is corrupted (audit §8 stored-row validation).
+ *
+ * This is durable-state corruption (a row the server itself wrote and must be
+ * able to read back), NOT a bad client request, so it surfaces as HTTP 500
+ * `INTERNAL_INVARIANT_VIOLATION`. Mapping it to a 400 would invite the client
+ * to believe it can fix the issue by changing the command identity, which it
+ * cannot.
  */
 export function receiptRowToRecord(
   row: AttemptCommandReceiptRow,
@@ -131,8 +137,10 @@ export function receiptRowToRecord(
     createdAt: row.createdAt.toISOString(),
   });
   if (!parsed.success) {
-    throw new ValidationError(
+    throw new AppError(
       `Stored attempt command receipt ${row.id} is malformed; refusing to classify`,
+      "INTERNAL_INVARIANT_VIOLATION",
+      500,
     );
   }
   return parsed.data;

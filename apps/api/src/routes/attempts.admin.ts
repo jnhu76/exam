@@ -185,7 +185,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       const result = await forceSubmitWithOperationRaceRecovery(
         fastify.db,
         ctx,
-        { attemptId, operationId, reason, actorId: ctx.actorId, now },
+        { attemptId, operationId, reason, now },
         { audit: { request } },
       );
 

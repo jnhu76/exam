@@ -56,7 +56,7 @@ import { createDeferred } from "../../testing/barrier.js";
 import type { Deferred } from "../../testing/barrier.js";
 import { collectConnectionEvidence } from "../../testing/operatorGrantConcurrencyHarness.js";
 import {
-  forceSubmitWithOperationRaceRecovery,
+  forceSubmitWithOperationRaceRecoveryTestOnly as forceSubmitWithOperationRaceRecovery,
   type ForceSubmitExecutionObserver,
 } from "../../orchestrators/forceSubmitExecution.js";
 import { ATTEMPT_COMMAND_RECEIPT_OPERATION_UNIQUE_CONSTRAINT } from "../../orchestrators/attemptCommandReceiptExecution.js";
@@ -592,14 +592,12 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: opA,
       reason: "matrix A T1",
-      actorId: adminCtx.actorId,
       now,
     };
     const input2 = {
       attemptId,
       operationId: opB,
       reason: "matrix A T2",
-      actorId: adminCtx.actorId,
       now,
     };
 
@@ -680,6 +678,11 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     expect(receipts.find((r) => r.operationId === opB)?.outcome).toBe(
       "no_change",
     );
+    // P2-2: the receipt actor authority is ctx.actorId (single source), not a
+    // command input — both receipts carry the authenticated admin.
+    for (const r of receipts) {
+      expect(r.actorId).toBe(adminCtx.actorId);
+    }
     expect((await countForceSubmitAudits(attemptId)).length).toBe(1);
     const attempt = await createAttemptRepo(ctx.db).findById(
       adminCtx,
@@ -696,7 +699,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: sharedOp,
       reason: "matrix B retry",
-      actorId: adminCtx.actorId,
       now,
     };
     const input2 = { ...input1 };
@@ -802,14 +804,12 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: sharedOp,
       reason: "matrix C winner payload",
-      actorId: adminCtx.actorId,
       now,
     };
     const input2 = {
       attemptId,
       operationId: sharedOp,
       reason: "matrix C DRIFTED payload",
-      actorId: adminCtx.actorId,
       now,
     };
 
@@ -898,14 +898,12 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId: a1.attemptId,
       operationId: sharedOp,
       reason: "matrix D T1 on A1",
-      actorId: t.adminCtx.actorId,
       now,
     };
     const input2 = {
       attemptId: a2.attemptId,
       operationId: sharedOp,
       reason: "matrix D T2 on A2",
-      actorId: t.adminCtx.actorId,
       now,
     };
 
@@ -1022,7 +1020,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: op,
       reason: "matrix E lost response",
-      actorId: adminCtx.actorId,
       now,
     };
 
@@ -1060,7 +1057,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: randomUUID(),
       reason: "fault after receipt insert",
-      actorId: adminCtx.actorId,
       now: new Date(),
     };
     const faultObserver: ForceSubmitExecutionObserver = {
@@ -1093,7 +1089,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: randomUUID(),
       reason: "fault before audit",
-      actorId: adminCtx.actorId,
       now: new Date(),
     };
     const faultObserver: ForceSubmitExecutionObserver = {
@@ -1134,7 +1129,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: randomUUID(),
       reason: "fault after audit",
-      actorId: adminCtx.actorId,
       now: new Date(),
     };
     const faultObserver: ForceSubmitExecutionObserver = {
@@ -1166,7 +1160,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: randomUUID(),
       reason: "unrelated unique violation",
-      actorId: adminCtx.actorId,
       now: new Date(),
     };
     let recoveryStarted = false;
@@ -1219,7 +1212,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       attemptId,
       operationId: randomUUID(),
       reason: "postcondition divergence",
-      actorId: adminCtx.actorId,
       now: new Date(),
     };
     const faultObserver: ForceSubmitExecutionObserver = {

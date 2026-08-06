@@ -93,12 +93,17 @@ import {
  * orchestrator is called; the orchestrator still re-canonicalizes it so the
  * durable request identity comes from the single domain canonicalizer, not a
  * third hand-written trim in the route/orchestrator/repo layers.
+ *
+ * The receipt actor is NOT part of the command input — it always comes from
+ * `ctx.actorId`, the single server-context authority. Letting callers pass an
+ * independent `actorId` would allow receipt.actorId and audit.actorId to
+ * diverge while still satisfying the composite `(organization_id, actor_id)`
+ * FK, which is a contract hole the type system must close (review P2-2).
  */
 export interface ForceSubmitOperationInput {
   attemptId: string;
   operationId: string;
   reason: string;
-  actorId: string;
   /** One authoritative server timestamp threaded through receipt + submit + grade + audit. */
   now: Date;
 }
@@ -203,18 +208,49 @@ export interface ForceSubmitExecutionObserver {
 }
 
 /**
- * Options shared by both callers. The route supplies `audit`; the
- * deterministic tests supply `observer` + `label`. Neither is required for
- * correctness — omitting `audit` skips the compliance audit (the engine
- * mutation still runs), and omitting `observer` runs with no test hooks.
+ * Internal options shared by the production entry and the test-only adapter.
+ * `audit` is optional HERE ONLY so the test-only adapter can omit it; the
+ * production entry ({@link forceSubmitWithOperationRaceRecovery}) takes a
+ * separate options type that makes `audit` REQUIRED, so an "applied
+ * force-submit with no compliance audit" is unrepresentable in production
+ * code (review P2-3). Replay / `no_change` / conflict paths never write an
+ * audit regardless.
  */
-export interface ForceSubmitExecutionOptions {
+export interface ForceSubmitExecutionInternalOptions {
   /** When set, records the atomic `attempt.forceSubmit` audit inside the txn. */
   audit?: { request: FastifyRequest };
   /** Test-only observation + barrier gate hooks. */
   observer?: ForceSubmitExecutionObserver;
   /** Test-only label ("T1"/"T2"). Ignored when no observer is set. */
   label?: ForceSubmitExecutionLabel;
+}
+
+/**
+ * Production options for {@link forceSubmitWithOperationRaceRecovery}. `audit`
+ * is REQUIRED — every applied force-submit transition must record the
+ * `attempt.forceSubmit` compliance audit atomically with the receipt + mutation.
+ * Test hooks (`observer`/`label`) are deliberately NOT accepted here so they
+ * cannot leak into the production call boundary.
+ */
+export interface ForceSubmitExecutionOptions {
+  /** Records the atomic `attempt.forceSubmit` audit inside the txn (required). */
+  audit: { request: FastifyRequest };
+}
+
+/**
+ * Test-only options for {@link forceSubmitWithOperationRaceRecoveryTestOnly}.
+ * Accepts `observer`/`label` (deterministic race barrier gates) and an optional
+ * `audit` so a test that needs to assert audit ABSENCE on the no-audit path can
+ * omit it by name. Never import this from production code — the name is the
+ * contract that the audit-mandatory invariant only relaxes inside tests.
+ */
+export interface ForceSubmitExecutionTestOptions {
+  /** Test-only observation + barrier gate hooks. */
+  observer?: ForceSubmitExecutionObserver;
+  /** Test-only label ("T1"/"T2"). Ignored when no observer is set. */
+  label?: ForceSubmitExecutionLabel;
+  /** When set, records the atomic audit; omit to assert audit absence. */
+  audit?: { request: FastifyRequest };
 }
 
 /** Backend identity captured inside a transaction callback. */
@@ -489,7 +525,7 @@ async function preReadStoredReceipt(
   ctx: RequestContext,
   input: ForceSubmitOperationInput,
   canonicalPayload: ForceSubmitRequestPayload,
-  options: ForceSubmitExecutionOptions,
+  options: ForceSubmitExecutionInternalOptions,
   label: ForceSubmitExecutionLabel,
 ): Promise<AttemptCommandReceiptResponse | null> {
   const receiptRepo = createAttemptCommandReceiptRepo(db);
@@ -528,7 +564,7 @@ async function runForceSubmitTransaction(
   ctx: RequestContext,
   input: ForceSubmitOperationInput,
   canonicalPayload: ForceSubmitRequestPayload,
-  options: ForceSubmitExecutionOptions,
+  options: ForceSubmitExecutionInternalOptions,
   label: ForceSubmitExecutionLabel,
 ): Promise<ForceSubmitTransactionOutcome> {
   const observer = options.observer;
@@ -587,7 +623,7 @@ async function runForceSubmitTransaction(
         requestPayload: canonicalPayload,
         resultPayload: plan.resultPayload,
         outcome: plan.outcome,
-        actorId: input.actorId,
+        actorId: ctx.actorId,
         createdAt: input.now,
       });
 
@@ -728,7 +764,7 @@ async function runReceiptRecovery(
   ctx: RequestContext,
   input: ForceSubmitOperationInput,
   canonicalPayload: ForceSubmitRequestPayload,
-  options: ForceSubmitExecutionOptions,
+  options: ForceSubmitExecutionInternalOptions,
   label: ForceSubmitExecutionLabel,
 ): Promise<ForceSubmitTransactionOutcome> {
   const observer = options.observer;
@@ -790,11 +826,48 @@ async function runReceiptRecovery(
  * other error unchanged. The original `now` is threaded through so the
  * command identity stays byte-identical across the primary and any recovery.
  */
+/**
+ * PRODUCTION entry point for force-submit with operationId race recovery.
+ * `audit` is REQUIRED — every applied force-submit transition records the
+ * `attempt.forceSubmit` compliance audit atomically with the receipt + mutation.
+ * Replay / `no_change` / conflict paths write no audit (they are not real
+ * transitions). Delegates to the shared core; the type-level `audit` invariant
+ * is enforced HERE, at the only production call boundary.
+ */
 export async function forceSubmitWithOperationRaceRecovery(
   db: Database,
   ctx: RequestContext,
   input: ForceSubmitOperationInput,
-  options: ForceSubmitExecutionOptions = {},
+  options: ForceSubmitExecutionOptions,
+): Promise<AttemptCommandReceiptResponse> {
+  return runForceSubmitWithRaceRecovery(db, ctx, input, options);
+}
+
+/**
+ * TEST-ONLY entry point. Mirrors the production entry but allows omitting the
+ * audit (so deterministic tests can assert audit ABSENCE on the no-audit path
+ * by name) and accepts observer/label hooks. Production code MUST NOT import
+ * this — the name is the contract that the audit-mandatory invariant only
+ * relaxes inside tests.
+ */
+export async function forceSubmitWithOperationRaceRecoveryTestOnly(
+  db: Database,
+  ctx: RequestContext,
+  input: ForceSubmitOperationInput,
+  options: ForceSubmitExecutionTestOptions = {},
+): Promise<AttemptCommandReceiptResponse> {
+  return runForceSubmitWithRaceRecovery(db, ctx, input, options);
+}
+
+/**
+ * Shared core of the two entry points above. Receives the internal options
+ * (audit optional) already normalized by the entry-specific option types.
+ */
+async function runForceSubmitWithRaceRecovery(
+  db: Database,
+  ctx: RequestContext,
+  input: ForceSubmitOperationInput,
+  options: ForceSubmitExecutionInternalOptions,
 ): Promise<AttemptCommandReceiptResponse> {
   // The wire schema already validated/trimmed reason; canonicalizing here
   // guarantees the durable request_payload comes from the ONE domain
@@ -833,8 +906,8 @@ export async function forceSubmitWithOperationRaceRecovery(
   }
 
   // The primary transaction was rolled back by the exact 23505. Observe the
-  // real violation fields (extracted from the caught error) together with
-  // the PRIMARY transaction's identity, then arbitrate the winner in a fresh
+  // real violation fields (extracted from the caught error) together with the
+  // PRIMARY transaction's identity, then arbitrate the winner in a fresh
   // transaction — at most once.
   const observer = options.observer;
   await observer?.onUniqueViolation?.({
