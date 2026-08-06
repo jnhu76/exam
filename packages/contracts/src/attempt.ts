@@ -530,11 +530,19 @@ export type ForceSubmitRequestPayload = z.infer<
  * {@link FlagMisconductRequestSchema} already enforces 1..1000). `.strict()`
  * rejects unknown fields for the same canonical-identity reason as
  * {@link ForceSubmitRequestPayloadSchema}.
+ *
+ * `notes` is `.trim()`-ed at this canonical layer so the durable payload
+ * agrees with {@link MisconductMarkWithOperationRequestSchema} and the
+ * domain canonicalizer (review J5-I1C0 PR #261 P1-2): without the trim, a
+ * `notes: "  x  "` payload would persist with surrounding whitespace while
+ * the wire request / domain canonicalizer would store `"x"` — three
+ * representations of the same operation identity. The trim here makes the
+ * canonical receipt the single source of truth.
  */
 export const MisconductMarkRequestPayloadSchema = z
   .object({
     severity: MisconductSeverityEnum,
-    notes: z.string().min(1).max(1000),
+    notes: z.string().trim().min(1).max(1000),
   })
   .strict();
 /** Canonical misconduct_mark request payload stored in a receipt. */

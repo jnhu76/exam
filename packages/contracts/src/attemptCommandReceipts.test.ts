@@ -148,6 +148,30 @@ describe("MisconductMarkRequestPayloadSchema (canonical, durable)", () => {
       }),
     ).toThrow();
   });
+
+  // ── Review J5-I1C0 PR #261 P1-2: canonical notes trim ──────────────
+  // Without `.trim()`, a `notes: "  x  "` payload would persist with
+  // surrounding whitespace while the wire request and the domain
+  // canonicalizer both produced "x" — three representations of one
+  // operation identity. The trim here makes the canonical receipt agree
+  // with the other two layers.
+  it("trims surrounding whitespace from notes (P1-2)", () => {
+    expect(
+      MisconductMarkRequestPayloadSchema.parse({
+        severity: "warning",
+        notes: "  x  ",
+      }),
+    ).toEqual({ severity: "warning", notes: "x" });
+  });
+
+  it("rejects whitespace-only notes after trim (P1-2)", () => {
+    expect(() =>
+      MisconductMarkRequestPayloadSchema.parse({
+        severity: "warning",
+        notes: "   ",
+      }),
+    ).toThrow();
+  });
 });
 
 describe("ForceSubmitWithOperationRequestSchema", () => {
