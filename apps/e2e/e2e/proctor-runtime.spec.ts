@@ -65,15 +65,21 @@ test.describe("Proctor Runtime E2E", () => {
   });
 
   test("admin force-submits the in_progress attempt", async ({ request }) => {
+    // J5-I1C Slice 2: force-submit is an operationId-keyed durable command;
+    // the response is the operation receipt (applied + committed fact), not
+    // a rebuilt attempt projection.
     const res = await adminPost(
       request,
       adminToken,
       `/api/admin/attempts/${attemptId}/force-submit`,
-      { reason: "E2E force-submit test" },
+      { operationId: crypto.randomUUID(), reason: "E2E force-submit test" },
     );
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.status).toBe("graded");
+    expect(body.disposition).toBe("applied");
+    expect(body.commandType).toBe("force_submit");
+    expect(body.resultPayload.beforeStatus).toBe("in_progress");
+    expect(body.resultPayload.afterStatus).toBe("graded");
   });
 
   test("status reflects graded after force-submit", async ({ request }) => {

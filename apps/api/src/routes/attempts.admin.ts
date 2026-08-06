@@ -3,10 +3,10 @@ import { z } from "zod";
 import {
   FlagMisconductRequestSchema,
   FlagMisconductResponseSchema,
-  ForceSubmitRequestSchema,
+  ForceSubmitWithOperationRequestSchema,
+  AttemptCommandReceiptResponseSchema,
   TimeGrantRequestSchema,
   TimeGrantResponseSchema,
-  LoadAttemptResponseSchema,
   AttemptTimelineResponseSchema,
   AttemptIdParamsSchema,
   AttemptExportResponseSchema,
@@ -14,43 +14,27 @@ import {
   type AttemptExportQuestionResult,
   ErrorResponseSchema,
 } from "@exam/contracts";
-import type { RequestContext, ExamAttempt } from "@exam/domain";
+import type { RequestContext } from "@exam/domain";
 import { generateCSV } from "@exam/import-export";
-import { NotFoundError, InvalidStateTransitionError } from "@exam/domain";
-import {
-  submitAttempt,
-  gradeAttemptIdempotent,
-  flagMisconduct,
-  lockEnrollmentAndAttempt,
-} from "@exam/exam-engine";
-import type { SubmitInterruptionResolution } from "@exam/exam-engine";
+import { NotFoundError } from "@exam/domain";
+import { flagMisconduct } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
-import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
-import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
-import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
-import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
-import {
-  createAttemptRepoAdapter,
-  createExamEngineRepos,
-  createGradingWorksetRepoAdapter,
-  createInterruptionEpisodeRepoAdapter,
-  createInterruptionEventRepoAdapter,
-} from "../adapters/repoAdapters.js";
+import { createAttemptRepoAdapter } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
   formatZodError,
   getRequestContext,
 } from "./helpers.js";
-import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
+import { cookieAuth } from "./attempts.shared.js";
 import {
   recordAtomicHttpAudit,
   recordSensitiveReadAudit,
 } from "../audit/auditWriter.js";
 import { grantWithOperationRaceRecovery } from "../orchestrators/operatorGrantExecution.js";
+import { forceSubmitWithOperationRaceRecovery } from "../orchestrators/forceSubmitExecution.js";
 
 /**
  * Registers all admin-facing attempt routes: misconduct flag, force-submit,
@@ -132,8 +116,19 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * in_progress or disrupted attempt, then grades it inside the SAME
    * transaction (no submitted-but-not-graded crash window). A `submitted` row
    * left by a crashed earlier operation is recovered to `graded` here.
-   * Idempotent for grading/graded (returns current result). voided is rejected.
-   * Audit event: attempt.forceSubmit (with admin identity + optional reason).
+   *
+   * J5-I1C Slice 2: the request carries an operationId (client-generated
+   * command identity, J5-R0 §8.2) and a REQUIRED canonical reason (J5-R0
+   * §8.1). The execution is a durable, operationId-keyed command arbitrated
+   * by the shared `attempt_command_receipts` table: the first execution
+   * atomically commits receipt + mutation + audit; a replay of the same
+   * operationId + canonical payload returns the STORED immutable
+   * result_payload (no re-submit, no re-grade, no new audit); any drift
+   * (different payload / command / attempt) is a 409 IDEMPOTENCY_CONFLICT; a
+   * NEW operationId against an already-terminal attempt leaves a durable
+   * `no_change` receipt. The response is the operation receipt — NOT a
+   * rebuilt Attempt projection (the old LoadAttemptResponse path is retired).
+   * Audit event: attempt.forceSubmit (metadata carries operationId + reason).
    */
   fastify.post(
     "/admin/attempts/:attemptId/force-submit",
@@ -152,11 +147,11 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       ],
       schema: {
         params: AttemptIdParamsSchema,
-        body: ForceSubmitRequestSchema,
+        body: ForceSubmitWithOperationRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
         response: {
-          200: LoadAttemptResponseSchema,
+          200: AttemptCommandReceiptResponseSchema,
           400: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
@@ -169,150 +164,32 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const body = ForceSubmitRequestSchema.safeParse(request.body ?? {});
+      const body = ForceSubmitWithOperationRequestSchema.safeParse(
+        request.body ?? {},
+      );
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
-      const reason = body.data.reason;
-      // ADR-006: capture ONE operation `now` and thread it through submit +
-      // grading so the two timestamps agree within this request. (fastify.now()
-      // defaults to the wall clock, so calling it twice could otherwise yield
-      // slightly different submit/grade instants.)
+      const { operationId, reason } = body.data;
+      // ADR-006: capture ONE operation `now` and thread it through the
+      // orchestrator so receipt + submit + grading + audit agree within this
+      // request.
       const now = fastify.now();
 
-      // Submit + grade in ONE transaction so there is no submitted-but-not-graded
-      // crash window. Matches `autoSubmitAndGrade` / `submitAndGradeAttempt`:
-      // lock the attempt row, submit (if needed) under that lock, then grade
-      // idempotently inside the same tx. If the process dies mid-operation the
-      // whole tx rolls back atomically — the attempt can never be left
-      // `submitted` without grading. The `forceSubmitted` flag still drives the
-      // audit-on-real-transition-only rule below.
-      await executeInTransaction(fastify.db, async (tx) => {
-        // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
-        // capability via the canonical seam, and thread the same instances
-        // + capability to the grading consumer.
-        const txAttemptRepo = createAttemptRepo(tx);
-        const txEnrollmentRepo = createEnrollmentRepo(tx);
-        const { exams, enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: txAttemptRepo,
-            enrollmentRepo: txEnrollmentRepo,
-          },
-          ctx,
-        );
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
-          attemptId,
-        );
-        const locked = await attempts.findById(attemptId);
-        if (!locked) {
-          throw new NotFoundError("Attempt not found");
-        }
-        // voided is the only truly invalid state for force-submit.
-        if (locked.status === "voided") {
-          throw new InvalidStateTransitionError(
-            `Cannot force-submit attempt in ${locked.status} state`,
-          );
-        }
-
-        // Idempotent: already terminal (submitted/grading/graded) -> skip
-        // submit, but still run gradeAttemptIdempotent so a `submitted` row
-        // left by a crashed earlier attempt is recovered to `graded` here.
-        const needsSubmit =
-          locked.status === "in_progress" || locked.status === "disrupted";
-        // Slice 4: the grading workset repo is needed both for submitAttempt
-        // (when materializing) and for gradeAttemptIdempotent (when
-        // aggregating from the entries). Hoist it out of the `needsSubmit`
-        // block so the crash-recovery path (`submitted` row, no submit) can
-        // still aggregate from the previously-materialized workset.
-        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-          createAttemptGradingEntryRepo(tx),
-          ctx,
-        );
-        if (needsSubmit) {
-          // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
-          // guard (source = "proctor" — the SubmitSource for admin/proctor
-          // intervention; "admin" is not a valid SubmitSource value).
-          // P3-L0-2E: submitAttempt owns grading workset materialization.
-
-          // For disrupted→submitted, build the interruption resolution (R1).
-          // For in_progress, mode=none (no active interruption).
-          const episodeRepo = createInterruptionEpisodeRepoAdapter(
-            createAttemptInterruptionRepo(tx),
-            ctx,
-          );
-          const eventRepo = createInterruptionEventRepoAdapter(
-            createAttemptInterruptionEventRepo(tx),
-            ctx,
-          );
-          const resolution: SubmitInterruptionResolution =
-            locked.status === "disrupted"
-              ? {
-                  mode: "active_interruption",
-                  episodeRepo,
-                  eventRepo,
-                  hint: {
-                    policy:
-                      locked.interruptionTimingPolicySnapshot?.policy ??
-                      "strict",
-                    eligibleSeconds: null,
-                    adjustmentId: null,
-                    reasonCode: "admin_force_submit_terminalization",
-                  },
-                }
-              : { mode: "none", episodeRepo, eventRepo };
-
-          await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
-            source: "proctor",
-            resolution,
-          });
-        }
-
-        // Grade inside the SAME locked tx. `gradeAttemptIdempotent` handles
-        // `submitted`->graded (the crash-recovery path: a submitted row left
-        // by a crashed earlier attempt, or the row we just submitted) and is
-        // a no-op for `graded`. `grading` is a transient mid-flight state we
-        // cannot resume from a row read alone (it is the candidate-path's
-        // own submit-tx mid-transition) — leave it untouched.
-        // Slice 4: gradeAttemptIdempotent aggregates from the tx-scoped
-        // workset repo (created above for submitAttempt).
-        // P3-FORMAL-P0-D2: the capability is the EA protocol authority.
-        if (locked.status !== "grading") {
-          await gradeAttemptIdempotent(
-            exams,
-            enrollments,
-            attempts,
-            gradingWorksetRepo,
-            cap,
-            now,
-          );
-        }
-
-        if (needsSubmit) {
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: "attempt.forceSubmit",
-            targetType: "attempt",
-            targetId: attemptId,
-            metadata: { ...(reason ? { reason } : {}) },
-          });
-        }
-
-        return needsSubmit;
-      });
-
-      const attemptRepo = createAttemptRepo(fastify.db);
-      const attempt = await attemptRepo.findById(ctx, attemptId);
-      if (!attempt) {
-        throw new NotFoundError("Attempt not found after force-submit");
-      }
-
-      return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
+      // The orchestrator owns the transaction: pre-read replay/conflict, EA
+      // lock, receipt-first insert, submit+grade, fact verification, audit,
+      // and the exact-23505 fresh-transaction recovery. The route never
+      // re-reads the attempt after the orchestrator returns.
+      const result = await forceSubmitWithOperationRaceRecovery(
+        fastify.db,
+        ctx,
+        { attemptId, operationId, reason, actorId: ctx.actorId, now },
+        { audit: { request } },
       );
+
+      return reply.send(AttemptCommandReceiptResponseSchema.parse(result));
     },
   );
 

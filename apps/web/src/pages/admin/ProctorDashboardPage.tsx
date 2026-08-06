@@ -269,7 +269,12 @@ export function ProctorDashboardPage() {
   async function handleForceSubmit(attemptId: string) {
     setForceSubmitting(true);
     try {
+      // J5-I1C Slice 2: force-submit is now an operationId-keyed durable
+      // command. Mint ONE operationId per user action and reuse it on any
+      // retry of the same action (J5-R0 §8.2) so a blind retry after a
+      // network failure replays instead of conflicting.
       await api.post(`/api/admin/attempts/${attemptId}/force-submit`, {
+        operationId: createContextSafeUuid(),
         reason: t("admin.proctorDashboard.forceSubmit.reason"),
       });
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
