@@ -859,7 +859,7 @@ describe("ProctorDashboardPage", () => {
     });
   });
 
-  describe("force-submit retry identity (J5-I1C Slice 2 review P1-2)", () => {
+  describe("force-submit retry identity (J5-I1C Slice 2 review P1-1/P1-2 + re-review)", () => {
     async function openForceSubmitDialog() {
       const trigger = await screen.findByRole("button", { name: "强制交卷" });
       fireEvent.click(trigger);
@@ -874,6 +874,11 @@ describe("ProctorDashboardPage", () => {
         name: /确认|重试强制交卷/,
       });
       fireEvent.click(confirmBtn);
+    }
+
+    /** Returns the page-level pending banner, or fails if it is absent. */
+    async function pendingBanner() {
+      return screen.findByTestId("pending-force-submit-banner");
     }
 
     it("reuses the SAME operationId + reason on retry after an indeterminate (network) failure", async () => {
@@ -909,16 +914,20 @@ describe("ProctorDashboardPage", () => {
       expect(stored).not.toBeNull();
       expect(JSON.parse(stored!).command.operationId).toBe(firstOpId);
 
-      // Reopen + confirm — the retry must reuse the frozen command verbatim.
-      await openForceSubmitDialog();
-      await confirmForceSubmit();
+      // The PAGE-LEVEL banner appears (re-review P1-1: recovery independent
+      // of candidate live status). Retry from the banner.
+      const banner = await pendingBanner();
+      const retryBtn = screen.getByRole("button", {
+        name: "重试未确认强制交卷",
+      });
+      fireEvent.click(retryBtn);
 
       await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
       const retryBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
       expect(retryBody.operationId).toBe(firstOpId);
       expect(retryBody.reason).toBe(firstBody.reason);
 
-      // Confirmed success clears the pending command.
+      // Confirmed success clears the pending command + banner.
       await waitFor(() => {
         expect(toast.success).toHaveBeenCalledWith(
           expect.stringContaining("已强制交卷"),
@@ -956,6 +965,8 @@ describe("ProctorDashboardPage", () => {
       expect(
         sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
       ).toBeNull();
+      // No page-level banner after a confirmed rejection.
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
       // A second open mints a NEW operationId (not the cleared one).
       await openForceSubmitDialog();
       await confirmForceSubmit();
@@ -965,9 +976,71 @@ describe("ProctorDashboardPage", () => {
       expect(secondOpId).not.toBe(firstOpId);
     });
 
-    it("restores the pending command after a refresh (same-tab persistence)", async () => {
-      // Seed sessionStorage as if a prior lost response left a pending command.
+    // ── Re-review P1-1: page-level recovery independent of candidate live
+    //    status. The server commits but the response is lost; by the next
+    //    status poll the candidate is graded and the card lost its force-
+    //    submit button. The banner must still surface retry + dismiss.
+    it("hydrates the pending command on mount and surfaces the page-level banner even when the candidate is no longer live", async () => {
       const pendingOpId = "00000000-0000-4000-8000-000000000abc";
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      // The candidate is now GRADED — no force-submit button on the card.
+      apiGet.mockResolvedValue({
+        candidates: [
+          makeCandidate({
+            status: "graded",
+            attemptId: "att-1",
+          }),
+        ],
+        total: 1,
+      });
+      // Retry succeeds (idempotent_replay — the server already committed).
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
+
+      renderPage();
+
+      // The page-level banner appears on mount (hydrate), independent of the
+      // candidate's graded status — the card has no force-submit button.
+      const banner = await pendingBanner();
+      expect(
+        screen.queryByRole("button", { name: "强制交卷" }),
+      ).not.toBeInTheDocument();
+
+      // Retry from the banner reuses the persisted operationId verbatim.
+      fireEvent.click(
+        screen.getByRole("button", { name: "重试未确认强制交卷" }),
+      );
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      expect(body.operationId).toBe(pendingOpId);
+      expect(body.reason).toBe("管理员强制交卷");
+
+      // Confirmed outcome clears the banner + sessionStorage.
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalled();
+      });
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+    });
+
+    // ── Re-review P1-1 second scenario: reload after a lost response, then
+    //    retry from the banner → idempotent_replay (same operationId).
+    it("restores the pending command after a full reload and retries via the banner", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-000000000def";
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
@@ -986,19 +1059,148 @@ describe("ProctorDashboardPage", () => {
         candidates: [makeCandidate()],
         total: 1,
       });
-      // Retry after refresh succeeds.
       apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
 
       renderPage();
-      await openForceSubmitDialog();
-      // The dialog reopens in the indeterminate state (retry description).
-      await screen.findByText(/上一次强制交卷的提交状态未确认/);
-      await confirmForceSubmit();
+
+      const banner = await pendingBanner();
+      fireEvent.click(
+        screen.getByRole("button", { name: "重试未确认强制交卷" }),
+      );
 
       await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
       const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
-      // The retry reused the persisted operationId verbatim.
       expect(body.operationId).toBe(pendingOpId);
+    });
+
+    // ── Re-review P1-1: explicit dismiss from the banner clears the slot.
+    it("explicit dismiss from the banner clears the pending command", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-000000000eee";
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      // Candidate is GRADED so the card does not render its own dismiss
+      // button — only the page-level banner offers dismiss here.
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate({ status: "graded", attemptId: "att-1" })],
+        total: 1,
+      });
+
+      renderPage();
+      await pendingBanner();
+      fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+      });
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+      // No POST was ever sent.
+      expect(apiPost).not.toHaveBeenCalled();
+    });
+
+    // ── Re-review P1-2: fail-closed persistence. When sessionStorage cannot
+    //    be written, the POST MUST be suppressed.
+    it("suppresses the POST when the pending command cannot be persisted (fail-closed)", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // Poison sessionStorage.setItem so persistence fails.
+      const setterSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {
+          throw new DOMException("quota exceeded", "QuotaExceededError");
+        });
+
+      renderPage();
+      await openForceSubmitDialog();
+      await confirmForceSubmit();
+
+      // Fail-closed: NO POST was sent.
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("无法安全保存强制交卷命令"),
+        );
+      });
+      expect(apiPost).not.toHaveBeenCalled();
+
+      setterSpy.mockRestore();
+    });
+
+    // ── Re-review P2-2: a damaged pending record is cleared + surfaced, not
+    //    silently treated as "no pending".
+    it("clears and surfaces a corrupt pending authority on hydrate", async () => {
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        "not-valid-json{{{",
+      );
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("检测到损坏"),
+        );
+      });
+      // The corrupt record was removed.
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+      // No banner (nothing valid to recover) and no POST.
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+      expect(apiPost).not.toHaveBeenCalled();
+    });
+
+    it("rejects a pending authority whose org/actor does not match the lookup key", async () => {
+      // Valid shape but for a DIFFERENT admin — must be treated as corrupt
+      // (cleared + surfaced), not silently accepted.
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "other-org",
+          actorId: "other-user",
+          command: {
+            attemptId: "att-1",
+            operationId: "00000000-0000-4000-8000-000000000fff",
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("检测到损坏"),
+        );
+      });
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
     });
   });
 });
