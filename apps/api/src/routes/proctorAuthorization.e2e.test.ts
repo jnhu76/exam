@@ -451,7 +451,12 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         method: "POST",
         url: `/api/admin/attempts/${examA.attemptId}/force-submit`,
         cookies: { "auth-token": p1Token },
-        payload: {},
+        // Valid operation-aware payload (J5-I1C Slice 2) so the capability
+        // gate — not body validation — is what denies the Proctor.
+        payload: {
+          operationId: crypto.randomUUID(),
+          reason: "proctor must be denied",
+        },
       });
       expect(res.statusCode).toBe(403);
     });

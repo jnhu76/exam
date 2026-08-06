@@ -89,13 +89,15 @@ describe("RBAC permission matrix — proctor routes", () => {
   });
 
   // J4-I1B (ADR-015 §13): AttemptForceSubmit is REMOVED from the Proctor
-  // preset — force-submit is Admin-only while staying scoped.
+  // preset — force-submit is Admin-only while staying scoped. (J5-I1C Slice 2:
+  // the force-submit request now requires operationId + canonical reason; the
+  // payload is valid so the capability gate, not body validation, decides.)
   it("Proctor is denied force-submit after J4-I1B (grant removed)", async () => {
     const verdict = await fixture.verdict(
       "Proctor",
       "POST",
       `/api/admin/attempts/${ATTEMPT_ID}/force-submit`,
-      {},
+      { operationId: crypto.randomUUID(), reason: "matrix verdict" },
     );
     expect(verdict).toBe("denied");
   });

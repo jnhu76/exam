@@ -448,11 +448,14 @@ describe("attempt routes", () => {
         cookies: { "auth-token": t.candidateToken },
       });
 
-      // Force-submit to trigger grading.
+      // Force-submit to trigger grading (J5-I1C Slice 2: operation-aware).
       await ctx.app.inject({
         method: "POST",
         url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
+        payload: {
+          operationId: crypto.randomUUID(),
+          reason: "export fixture force-submit",
+        },
         cookies: { "auth-token": t.adminToken },
       });
 

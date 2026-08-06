@@ -263,10 +263,14 @@ const AE_ENTRY_POINTS: {
   {
     file: "apps/api/src/routes/attempts.admin.ts",
     label: "admin force-submit",
-    // force-submit mints the seam directly inside its handler body.
+    // force-submit routes through a recovery wrapper; the seam lives in the
+    // module-level runForceSubmitTransaction, extracted into the shared
+    // orchestrator module (forceSubmitExecution.ts) so the route and the
+    // deterministic concurrency test call the SAME production function.
     routeAnchor: "/admin/attempts/:attemptId/force-submit",
-    wire: "lockEnrollmentAndAttempt",
-    seamFn: "force-submit-handler",
+    wire: "forceSubmitWithOperationRaceRecovery",
+    seamFn: "runForceSubmitTransaction",
+    seamFile: "apps/api/src/orchestrators/forceSubmitExecution.ts",
     consumer: "gradeAttemptIdempotent",
   },
   {
