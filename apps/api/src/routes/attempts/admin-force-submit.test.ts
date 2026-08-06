@@ -6,6 +6,7 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createAttemptCommandReceiptRepo } from "@exam/db/src/repository/attemptCommandReceiptRepo.js";
 import { materializeGradingWorkset } from "@exam/exam-engine";
 import { createGradingWorksetRepoAdapter } from "../../adapters/repoAdapters.js";
 import { signJWT } from "@exam/auth/src/session.js";
@@ -253,6 +254,38 @@ describe("attempt routes", () => {
       };
     }
 
+    /** Force-submits via the production route with the operation-aware body. */
+    async function forceSubmit(
+      t: IsolatedTestOrg,
+      attemptId: string,
+      body: { operationId: string; reason: string },
+      token?: string,
+    ) {
+      return ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: body,
+        cookies: { "auth-token": token ?? t.adminToken },
+      });
+    }
+
+    async function listReceipts(attemptId: string) {
+      return ctx.db
+        .select()
+        .from(schema.attemptCommandReceipts)
+        .where(eq(schema.attemptCommandReceipts.attemptId, attemptId))
+        .orderBy(schema.attemptCommandReceipts.createdAt);
+    }
+
+    async function countForceSubmitAudits(attemptId: string) {
+      await ctx.drainAuditWrites();
+      const auditRows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      return auditRows.filter((r) => r.action === "attempt.forceSubmit");
+    }
+
     beforeEach(async () => {
       await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
@@ -275,24 +308,34 @@ describe("attempt routes", () => {
       }
     });
 
-    it("force-submits an in_progress attempt, grades it, and audits the admin action (200)", async () => {
+    it("force-submits an in_progress attempt: applied receipt + graded + operationId audit (200)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit InProgress Exam",
       );
+      const operationId = crypto.randomUUID();
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: { reason: "candidate abandoned exam" },
-        cookies: { "auth-token": t.adminToken },
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "candidate abandoned exam",
       });
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
-      expect(body.status).toBe("graded");
-      expect(body.id).toBe(attemptId);
+      expect(body.disposition).toBe("applied");
+      expect(body.outcome).toBe("applied");
+      expect(body.commandType).toBe("force_submit");
+      expect(body.operationId).toBe(operationId);
+      expect(body.resultPayload).toMatchObject({
+        commandType: "force_submit",
+        beforeStatus: "in_progress",
+        afterStatus: "graded",
+      });
+      expect(body.resultPayload.submittedAt).toBeTruthy();
+      expect(body.resultPayload.gradedAt).toBeTruthy();
+      expect(body.resultPayload.appliedAt).toBeTruthy();
+      expect(body.createdAt).toBe(body.resultPayload.appliedAt);
 
       const attempt = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
@@ -302,39 +345,48 @@ describe("attempt routes", () => {
       expect(attempt?.submittedAt).toBeDefined();
       expect(attempt?.gradedAt).toBeDefined();
 
-      await ctx.drainAuditWrites();
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      const forceSubmitRows = auditRows.filter(
-        (r) => r.action === "attempt.forceSubmit",
-      );
-      expect(forceSubmitRows).toHaveLength(1);
-      expect(forceSubmitRows[0]!.actorId).toBe(t.adminUserId);
-      expect(forceSubmitRows[0]!.targetType).toBe("attempt");
-      expect(forceSubmitRows[0]!.metadata).toMatchObject({
+      // Exactly one durable receipt, outcome=applied, canonical payload stored.
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.operationId).toBe(operationId);
+      expect(receipts[0]!.commandType).toBe("force_submit");
+      expect(receipts[0]!.outcome).toBe("applied");
+      expect(receipts[0]!.actorId).toBe(t.adminUserId);
+      expect(receipts[0]!.requestPayload).toEqual({
+        reason: "candidate abandoned exam",
+      });
+      expect(receipts[0]!.resultPayload).toEqual(body.resultPayload);
+
+      // Exactly one forceSubmit audit, metadata carries operationId + canonical reason.
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.actorId).toBe(t.adminUserId);
+      expect(audits[0]!.targetType).toBe("attempt");
+      expect(audits[0]!.metadata).toMatchObject({
+        operationId,
         reason: "candidate abandoned exam",
       });
     });
 
-    it("force-submits a disrupted attempt and grades it (200)", async () => {
+    it("force-submits a disrupted attempt: interruption terminalized + applied receipt (200)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Disrupted Exam",
       );
       await disruptAttempt(ctx.db, t.orgId, attemptId);
+      const operationId = crypto.randomUUID();
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "candidate disconnected; force terminalize",
       });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json().status).toBe("graded");
+      const body = res.json();
+      expect(body.disposition).toBe("applied");
+      expect(body.resultPayload.beforeStatus).toBe("disrupted");
+      expect(body.resultPayload.afterStatus).toBe("graded");
 
       const attempt = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
@@ -342,61 +394,255 @@ describe("attempt routes", () => {
       );
       expect(attempt?.status).toBe("graded");
       expect(attempt?.gradedAt).toBeDefined();
+
+      // The active interruption episode has a terminalized outcome event
+      // (reasonCode admin_force_submit_terminalization) and the attempt's
+      // interruption pointers were cleared.
+      const episodeRows = await ctx.db
+        .select()
+        .from(schema.attemptInterruptions)
+        .where(eq(schema.attemptInterruptions.attemptId, attemptId));
+      expect(episodeRows).toHaveLength(1);
+      const events = await ctx.db
+        .select()
+        .from(schema.attemptInterruptionEvents)
+        .where(
+          eq(
+            schema.attemptInterruptionEvents.interruptionId,
+            episodeRows[0]!.id,
+          ),
+        );
+      expect(events.map((e) => e.eventType)).toEqual([
+        "detected",
+        "terminalized",
+      ]);
+      expect(events[1]!.reasonCode).toBe("admin_force_submit_terminalization");
+      expect(attempt?.currentInterruptionId).toBeNull();
+      expect(attempt?.interruptedAt).toBeNull();
+
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.outcome).toBe("applied");
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(1);
     });
 
-    it("is idempotent for an already-graded attempt (200, no re-grade, no duplicate audit)", async () => {
+    it("replays the same operationId: returns the stored immutable fact, no re-grade, no new audit/receipt", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
-        "Force Submit Idempotent Exam",
+        "Force Submit Replay Exam",
       );
-      // First force-submit grades it.
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
-      });
-      const first = await createAttemptRepo(ctx.db).findById(
-        makeAdminCtx(t),
-        attemptId,
-      );
-      const firstGradedAt = first?.gradedAt;
+      const operationId = crypto.randomUUID();
 
-      // Second force-submit: idempotent.
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
+      const first = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "candidate abandoned exam",
+      });
+      expect(first.statusCode).toBe(200);
+      const firstBody = first.json();
+      const firstGradedAt = (
+        await createAttemptRepo(ctx.db).findById(makeAdminCtx(t), attemptId)
+      )?.gradedAt;
+
+      // Same operationId + canonical-equivalent reason (whitespace trimmed by
+      // the wire schema AND the domain canonicalizer) → idempotent_replay.
+      const second = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "  candidate abandoned exam  ",
       });
 
-      expect(res.statusCode).toBe(200);
-      expect(res.json().status).toBe("graded");
+      expect(second.statusCode).toBe(200);
+      const replay = second.json();
+      expect(replay.disposition).toBe("idempotent_replay");
+      expect(replay.outcome).toBe(firstBody.outcome);
+      // The replay response IS the stored immutable fact — byte-identical.
+      expect(replay.resultPayload).toEqual(firstBody.resultPayload);
+      expect(replay.createdAt).toBe(firstBody.createdAt);
+      expect(replay.operationId).toBe(operationId);
+      expect(replay.commandType).toBe("force_submit");
+
+      // No new receipt, no new audit, no re-grade (gradedAt unchanged).
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(1);
       const after = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,
       );
       expect(after?.gradedAt?.getTime()).toBe(firstGradedAt?.getTime());
-
-      await ctx.drainAuditWrites();
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      // Only the first (state-changing) force-submit emits an audit row; the
-      // idempotent second call is a no-op and must NOT duplicate the audit.
-      const forceSubmitCount = auditRows.filter(
-        (r) => r.action === "attempt.forceSubmit",
-      ).length;
-      expect(forceSubmitCount).toBe(1);
     });
 
-    it("recovers a submitted-but-not-graded attempt to graded in one tx (no submitted-only state)", async () => {
+    it("rejects payload drift on the same operationId with 409 IDEMPOTENCY_CONFLICT (no mutation, no receipt, no audit)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Drift Exam",
+      );
+      const operationId = crypto.randomUUID();
+
+      const first = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "candidate abandoned exam",
+      });
+      expect(first.statusCode).toBe(200);
+
+      const drift = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "a completely different reason",
+      });
+      expect(drift.statusCode).toBe(409);
+      expect(drift.json().error?.code).toBe("IDEMPOTENCY_CONFLICT");
+
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(1);
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("graded");
+    });
+
+    it("rejects a cross-command operationId reuse with 409 IDEMPOTENCY_CONFLICT (shared arbiter)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Cross Command Exam",
+      );
+      const operationId = crypto.randomUUID();
+      // Pre-insert a misconduct_mark receipt with the same operationId —
+      // WITHOUT calling the misconduct production route (J5-I1C Slice 3 not
+      // activated). The shared UNIQUE(org, operation_id) arbiter must reject
+      // the force-submit reuse.
+      await createAttemptCommandReceiptRepo(ctx.db).insertReceipt(
+        makeAdminCtx(t),
+        {
+          attemptId,
+          operationId,
+          commandType: "misconduct_mark",
+          requestPayload: { severity: "warning", notes: "fixture mark" },
+          resultPayload: {
+            commandType: "misconduct_mark",
+            misconduct: null,
+            appliedAt: new Date().toISOString(),
+          },
+          outcome: "applied",
+          actorId: t.adminUserId,
+          createdAt: new Date(),
+        },
+      );
+
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "should conflict across commands",
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error?.code).toBe("IDEMPOTENCY_CONFLICT");
+
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.commandType).toBe("misconduct_mark");
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("in_progress");
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(0);
+    });
+
+    it("rejects a cross-attempt operationId reuse with 409 IDEMPOTENCY_CONFLICT (attempt B untouched)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId: attemptA } = await createStartedAttempt(
+        t,
+        "Force Submit Cross Attempt A",
+      );
+      const { attemptId: attemptB } = await createStartedAttempt(
+        t,
+        "Force Submit Cross Attempt B",
+      );
+      const operationId = crypto.randomUUID();
+
+      const first = await forceSubmit(t, attemptA, {
+        operationId,
+        reason: "belongs to attempt A",
+      });
+      expect(first.statusCode).toBe(200);
+
+      const res = await forceSubmit(t, attemptB, {
+        operationId,
+        reason: "attempt B must conflict",
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error?.code).toBe("IDEMPOTENCY_CONFLICT");
+
+      const attemptBAfter = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptB,
+      );
+      expect(attemptBAfter?.status).toBe("in_progress");
+      expect(await listReceipts(attemptB)).toHaveLength(0);
+      const audits = await countForceSubmitAudits(attemptB);
+      expect(audits).toHaveLength(0);
+      // attempt A keeps exactly its one applied receipt.
+      expect(await listReceipts(attemptA)).toHaveLength(1);
+    });
+
+    it("records a durable no_change receipt for a NEW operationId on an already-graded attempt (no audit, gradedAt unchanged)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Graded No-Change Exam",
+      );
+      const firstOp = crypto.randomUUID();
+      const first = await forceSubmit(t, attemptId, {
+        operationId: firstOp,
+        reason: "first force-submit grades it",
+      });
+      expect(first.statusCode).toBe(200);
+      const firstGradedAt = (
+        await createAttemptRepo(ctx.db).findById(makeAdminCtx(t), attemptId)
+      )?.gradedAt;
+
+      // A NEW operationId against the terminal attempt → no_change receipt,
+      // NOT silent success.
+      const secondOp = crypto.randomUUID();
+      const res = await forceSubmit(t, attemptId, {
+        operationId: secondOp,
+        reason: "second independent operation on graded attempt",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.disposition).toBe("no_change");
+      expect(body.outcome).toBe("no_change");
+      expect(body.resultPayload.beforeStatus).toBe("graded");
+      expect(body.resultPayload.afterStatus).toBe("graded");
+
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(2);
+      expect(receipts[1]!.operationId).toBe(secondOp);
+      expect(receipts[1]!.outcome).toBe("no_change");
+
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(1);
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(after?.gradedAt?.getTime()).toBe(firstGradedAt?.getTime());
+    });
+
+    it("recovers a submitted-but-not-graded attempt: no_change receipt, grading recovery retained, no audit", async () => {
       // Crash-recovery contract (single-tx submit+grade): an attempt left
       // `submitted` by a crashed earlier operation is recovered to `graded`
-      // by a force-submit, with no audit row (no state *transition* off the
-      // in_progress/disrupted baseline — only grading completes).
+      // by a force-submit, with no forceSubmit audit row (no force-submit
+      // transition off the in_progress/disrupted baseline — only grading
+      // completes). The receipt's result_payload reflects the committed fact
+      // (before=submitted, after=graded).
       //
       // Slice 4: the submit freeze barrier materializes grading workset
       // entries atomically with the status flip, so a real crashed-after-submit
@@ -408,10 +654,6 @@ describe("attempt routes", () => {
         t,
         "Force Submit Recovery Submitted Exam",
       );
-      // Faithfully simulate a crashed-after-submit row: the status flip AND the
-      // frozen submittedAnswers snapshot are both persisted by the submit freeze
-      // barrier, so a real crashed-after-submit attempt carries both. (Slice 4
-      // also requires the materialized workset, which we seed below.)
       const frozenAttemptForAnswers = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,
@@ -445,15 +687,19 @@ describe("attempt routes", () => {
         ),
       );
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
+      const operationId = crypto.randomUUID();
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "recover submitted crash row",
       });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json().status).toBe("graded");
+      const body = res.json();
+      expect(body.disposition).toBe("no_change");
+      expect(body.outcome).toBe("no_change");
+      expect(body.resultPayload.beforeStatus).toBe("submitted");
+      expect(body.resultPayload.afterStatus).toBe("graded");
+
       const after = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,
@@ -461,20 +707,17 @@ describe("attempt routes", () => {
       expect(after?.status).toBe("graded");
       expect(after?.gradedAt).not.toBeNull();
 
-      // No real submit transition occurred (the row was already submitted), so
-      // no forceSubmit audit row is emitted.
-      await ctx.drainAuditWrites();
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      const forceSubmitCount = auditRows.filter(
-        (r) => r.action === "attempt.forceSubmit",
-      ).length;
-      expect(forceSubmitCount).toBe(0);
+      // 1 durable receipt, 0 forceSubmit audit (grading recovery is not a
+      // force-submit transition).
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.outcome).toBe("no_change");
+      expect(receipts[0]!.resultPayload).toEqual(body.resultPayload);
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(0);
     });
 
-    it("is idempotent for a grading attempt (200, no re-grade)", async () => {
+    it("leaves a grading attempt untouched with a no_change receipt (no audit)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
@@ -485,21 +728,32 @@ describe("attempt routes", () => {
         .set({ status: "grading" })
         .where(eq(schema.examAttempts.id, attemptId));
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
+      const operationId = crypto.randomUUID();
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "grading row must stay untouched",
       });
 
       expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.disposition).toBe("no_change");
+      expect(body.resultPayload.beforeStatus).toBe("grading");
+      expect(body.resultPayload.afterStatus).toBe("grading");
+
       const after = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,
       );
       expect(after?.status).toBe("grading");
+
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.outcome).toBe("no_change");
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(0);
     });
-    it("rejects a voided attempt with 409 INVALID_STATE", async () => {
+
+    it("rejects a voided attempt with 409 INVALID_STATE_TRANSITION (0 receipt, 0 audit, 0 mutation)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
@@ -510,28 +764,107 @@ describe("attempt routes", () => {
         .set({ status: "voided" })
         .where(eq(schema.examAttempts.id, attemptId));
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
+      const res = await forceSubmit(t, attemptId, {
+        operationId: crypto.randomUUID(),
+        reason: "voided must be rejected",
       });
 
       expect(res.statusCode).toBe(409);
+      expect(res.json().error?.code).toBe("INVALID_STATE_TRANSITION");
       const attempt = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,
       );
       expect(attempt?.status).toBe("voided");
+      expect(await listReceipts(attemptId)).toHaveLength(0);
+      const audits = await countForceSubmitAudits(attemptId);
+      expect(audits).toHaveLength(0);
+    });
+
+    it("allows the same operationId independently across two organizations", async () => {
+      const t1 = await createIsolatedTestOrg();
+      const t2 = await createIsolatedTestOrg();
+      const { attemptId: a1 } = await createStartedAttempt(
+        t1,
+        "Force Submit Cross Org A",
+      );
+      const { attemptId: a2 } = await createStartedAttempt(
+        t2,
+        "Force Submit Cross Org B",
+      );
+      const operationId = crypto.randomUUID();
+
+      const r1 = await forceSubmit(t1, a1, { operationId, reason: "org A" });
+      const r2 = await forceSubmit(t2, a2, { operationId, reason: "org B" });
+
+      expect(r1.statusCode).toBe(200);
+      expect(r1.json().disposition).toBe("applied");
+      expect(r2.statusCode).toBe(200);
+      expect(r2.json().disposition).toBe("applied");
+      expect((await listReceipts(a1)).length).toBe(1);
+      expect((await listReceipts(a2)).length).toBe(1);
+    });
+
+    it("rejects a non-admin caller with 403", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Auth Exam",
+      );
+
+      const res = await forceSubmit(
+        t,
+        attemptId,
+        {
+          operationId: crypto.randomUUID(),
+          reason: "candidate must be denied",
+        },
+        t.candidateToken,
+      );
+
+      expect(res.statusCode).toBe(403);
+      expect(await listReceipts(attemptId)).toHaveLength(0);
+    });
+
+    it("requires operationId (400 when missing)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Missing OpId Exam",
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: { reason: "no operationId" },
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(await listReceipts(attemptId)).toHaveLength(0);
+    });
+
+    it("requires a non-blank canonical reason (400 when blank)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Blank Reason Exam",
+      );
+
+      const res = await forceSubmit(t, attemptId, {
+        operationId: crypto.randomUUID(),
+        reason: "   ",
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(await listReceipts(attemptId)).toHaveLength(0);
     });
 
     it("returns 404 for a non-existent attempt", async () => {
       const t = await createIsolatedTestOrg();
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${crypto.randomUUID()}/force-submit`,
-        payload: {},
-        cookies: { "auth-token": t.adminToken },
+      const res = await forceSubmit(t, crypto.randomUUID(), {
+        operationId: crypto.randomUUID(),
+        reason: "missing attempt",
       });
       expect(res.statusCode).toBe(404);
     });
