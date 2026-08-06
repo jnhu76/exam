@@ -43,7 +43,9 @@ describe("attempt routes", () => {
       questionId: string;
     }
 
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
+    async function createIsolatedTestOrg(
+      opts: { questionType?: "single_choice" | "text_response" } = {},
+    ): Promise<IsolatedTestOrg> {
       const slug = `${FORCE_SUBMIT_TEST_PREFIX}${uniquePrefix()}`;
       const now = new Date();
 
@@ -148,34 +150,63 @@ describe("attempt routes", () => {
           .returning()
       )[0]!;
 
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
+      const question =
+        opts.questionType === "text_response"
+          ? (
+              await ctx.db
+                .insert(schema.questions)
+                .values({
+                  id: crypto.randomUUID(),
+                  organizationId: org.id,
+                  courseId: course.id,
+                  type: "text_response",
+                  content: "Explain the meaning of life.",
+                  options: [],
+                  standardAnswer: null,
+                  // P3-L0-5: text_response requires a non-empty rubric at
+                  // publish time (standardAnswer is optional for it).
+                  rubric: "Score 0–100 by clarity and depth.",
+                  attachments: [],
+                  score: 100,
+                  difficulty: 1,
+                  tags: [],
+                  gradingRule: {
+                    multiSelectScoring: "all_correct_full",
+                    fillBlankMatchMode: "exact",
+                  },
+                  createdAt: now,
+                  updatedAt: now,
+                })
+                .returning()
+            )[0]!
+          : (
+              await ctx.db
+                .insert(schema.questions)
+                .values({
+                  id: crypto.randomUUID(),
+                  organizationId: org.id,
+                  courseId: course.id,
+                  type: "single_choice",
+                  content: "What is 1+1?",
+                  options: [
+                    { id: "a", content: "1" },
+                    { id: "b", content: "2" },
+                    { id: "c", content: "3" },
+                  ],
+                  standardAnswer: "b",
+                  attachments: [],
+                  score: 100,
+                  difficulty: 1,
+                  tags: [],
+                  gradingRule: {
+                    multiSelectScoring: "all_correct_full",
+                    fillBlankMatchMode: "exact",
+                  },
+                  createdAt: now,
+                  updatedAt: now,
+                })
+                .returning()
+            )[0]!;
 
       const { jwtSecret } = getRuntimeConfig().authSecret;
       const adminToken = signJWT(
@@ -867,6 +898,148 @@ describe("attempt routes", () => {
         reason: "missing attempt",
       });
       expect(res.statusCode).toBe(404);
+    });
+
+    // P2-4: manual-grading integration proof. The planner has two
+    // pending_manual branches that diverge from the auto path; these two
+    // cases prove the receipt-first stored fact matches the engine fact for
+    // each, and that replay returns the stored fact verbatim.
+    it("applied on in_progress + text_response → submitted + pending_manual (gradedAt null, 1 audit) and replays verbatim", async () => {
+      const t = await createIsolatedTestOrg({ questionType: "text_response" });
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Manual Exam",
+      );
+
+      const operationId = crypto.randomUUID();
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "manual-grading applied path",
+      });
+
+      // applied transition, but the manual question holds the attempt at
+      // `submitted` + pending_manual — gradedAt stays null.
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.disposition).toBe("applied");
+      expect(body.outcome).toBe("applied");
+      expect(body.resultPayload.beforeStatus).toBe("in_progress");
+      expect(body.resultPayload.afterStatus).toBe("submitted");
+      expect(body.resultPayload.gradedAt).toBeNull();
+
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("submitted");
+      expect(after?.gradingStatus).toBe("pending_manual");
+      expect(after?.gradedAt).toBeNull();
+
+      // 1 applied receipt, 1 forceSubmit audit (real transition).
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.outcome).toBe("applied");
+      expect(receipts[0]!.resultPayload).toEqual(body.resultPayload);
+      expect((await countForceSubmitAudits(attemptId)).length).toBe(1);
+
+      // Replay returns the stored immutable fact byte-for-byte; no new rows.
+      const replay = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "manual-grading applied path",
+      });
+      expect(replay.statusCode).toBe(200);
+      const replayBody = replay.json();
+      expect(replayBody.disposition).toBe("idempotent_replay");
+      expect(replayBody.outcome).toBe("applied");
+      expect(replayBody.resultPayload).toEqual(body.resultPayload);
+      expect(await listReceipts(attemptId)).toHaveLength(1);
+      expect((await countForceSubmitAudits(attemptId)).length).toBe(1);
+    });
+
+    it("no_change on submitted + pending_manual workset → stays submitted (gradedAt null, 0 audit) and replays verbatim", async () => {
+      const t = await createIsolatedTestOrg({ questionType: "text_response" });
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Manual Recovery Exam",
+      );
+      // Simulate a crashed-after-submit row that left the attempt in
+      // `submitted` + `pending_manual` with a materialized workset — exactly
+      // the shape a real crashed submit of a text_response exam produces.
+      const adminCtx = makeAdminCtx(t);
+      const frozenAttemptForAnswers = await createAttemptRepo(ctx.db).findById(
+        adminCtx,
+        attemptId,
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({
+          status: "submitted",
+          submittedAt: new Date(),
+          submittedAnswers: {
+            schemaVersion: 1,
+            answers: frozenAttemptForAnswers!.answers.map((a) => ({
+              questionId: a.questionId,
+              value: a.answer,
+            })),
+          },
+          gradingStatus: "pending_manual",
+        })
+        .where(eq(schema.examAttempts.id, attemptId));
+      const frozenAttempt = await createAttemptRepo(ctx.db).findById(
+        adminCtx,
+        attemptId,
+      );
+      await materializeGradingWorkset(
+        frozenAttempt! as never,
+        createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(ctx.db),
+          adminCtx,
+        ),
+      );
+
+      const operationId = crypto.randomUUID();
+      const res = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "manual-grading no_change path",
+      });
+
+      // no_change: the pending_manual workset cannot be auto-advanced, so the
+      // attempt holds at submitted and gradedAt stays null.
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.disposition).toBe("no_change");
+      expect(body.outcome).toBe("no_change");
+      expect(body.resultPayload.beforeStatus).toBe("submitted");
+      expect(body.resultPayload.afterStatus).toBe("submitted");
+      expect(body.resultPayload.gradedAt).toBeNull();
+
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("submitted");
+      expect(after?.gradingStatus).toBe("pending_manual");
+      expect(after?.gradedAt).toBeNull();
+
+      // 1 no_change receipt, 0 forceSubmit audit (no real transition).
+      const receipts = await listReceipts(attemptId);
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.outcome).toBe("no_change");
+      expect(receipts[0]!.resultPayload).toEqual(body.resultPayload);
+      expect((await countForceSubmitAudits(attemptId)).length).toBe(0);
+
+      // Replay returns the stored immutable fact byte-for-byte; no new rows.
+      const replay = await forceSubmit(t, attemptId, {
+        operationId,
+        reason: "manual-grading no_change path",
+      });
+      expect(replay.statusCode).toBe(200);
+      const replayBody = replay.json();
+      expect(replayBody.disposition).toBe("idempotent_replay");
+      expect(replayBody.outcome).toBe("no_change");
+      expect(replayBody.resultPayload).toEqual(body.resultPayload);
+      expect(await listReceipts(attemptId)).toHaveLength(1);
+      expect((await countForceSubmitAudits(attemptId)).length).toBe(0);
     });
   });
 });
