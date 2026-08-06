@@ -22,9 +22,15 @@
 > **J5-I1B is CLOSED** (Recovery Center frontend + Exam Recovery Context:
 > queue page, incident detail, attempt operations, exam recovery detail —
 > I1B1–I1B4, one branch, PR #254).
-> J5-I1C–I1D NOT STARTED. J6/J7 NOT STARTED.
+> **J5-I1C Slice 2 CLOSED** — force-submit is an operationId-keyed durable
+> command (receipt-first transaction, replay/conflict arbitration, exact-23505
+> fresh-transaction recovery, true transaction-overlap concurrency matrices,
+> mandatory audit on applied, ctx.actorId single actor authority, same-tab
+> pending force-submit retry identity in the proctor dashboard). J5-I1C
+> misconduct activation NOT STARTED (experiment-gated). J5-I1D NOT STARTED.
+> J6/J7 NOT STARTED.
 >
-> Updated: 2026-08-04
+> Updated: 2026-08-06
 >
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
