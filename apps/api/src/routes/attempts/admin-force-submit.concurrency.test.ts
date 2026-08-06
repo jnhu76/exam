@@ -348,8 +348,8 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let db1: Database;
   let db2: Database;
-  let sql1: { end(): Promise<void> };
-  let sql2: { end(): Promise<void> };
+  let sql1: ObserverSql;
+  let sql2: ObserverSql;
   /**
    * A THIRD, independent connection used ONLY as an observer for the
    * real-overlap pg_locks/pg_stat_activity probes. This must NOT be db1/db2
@@ -357,7 +357,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
    * an open transaction, any query on the SAME pool would queue behind it
    * and could never observe the wait state. The observer pool stays free.
    */
-  let sqlObserver: { end(): Promise<void> };
+  let sqlObserver: ObserverSql;
 
   beforeAll(async () => {
     const testDbUrl =
@@ -702,6 +702,17 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
   }
 
   /**
+   * The subset of the postgres-js driver surface the overlap probes need.
+   * The test declares its connections with this narrow type instead of the
+   * full `postgres.Sql` so the probe helpers stay typed without importing
+   * the driver's types into the test.
+   */
+  interface ObserverSql {
+    unsafe(query: string, params?: unknown[]): Promise<unknown[]>;
+    end(): Promise<void>;
+  }
+
+  /**
    * PROOF that `waiterPid` is genuinely blocked inside a DB transaction.
    * Returns the waiter's `wait_event_type`/`wait_event` from
    * `pg_stat_activity` and the count of the granted/blocked locks it holds
@@ -711,7 +722,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
    * actually in an active transaction (the real-overlap invariant).
    */
   async function snapshotBackendState(
-    sql: { unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> },
+    sql: ObserverSql,
     pid: number,
   ): Promise<{
     active: boolean;
@@ -760,7 +771,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
    * race surfaces instead of silently passing.
    */
   async function waitForTransactionStarted(
-    sql: { unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> },
+    sql: ObserverSql,
     pid: number,
     timeoutMs = 2_000,
   ): Promise<void> {
@@ -784,7 +795,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
    * persists for the whole wait, so sampling cannot miss a transient window.
    */
   async function waitForBackendBlocked(
-    sql: { unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> },
+    sql: ObserverSql,
     pid: number,
     timeoutMs = 8_000,
   ): Promise<{ blockedOnLocktype: string; mode: string }> {
