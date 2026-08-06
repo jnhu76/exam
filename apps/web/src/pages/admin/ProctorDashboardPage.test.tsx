@@ -858,4 +858,147 @@ describe("ProctorDashboardPage", () => {
       });
     });
   });
+
+  describe("force-submit retry identity (J5-I1C Slice 2 review P1-2)", () => {
+    async function openForceSubmitDialog() {
+      const trigger = await screen.findByRole("button", { name: "强制交卷" });
+      fireEvent.click(trigger);
+      // The dialog content renders after the click.
+      await screen.findByText("确认强制交卷");
+    }
+
+    async function confirmForceSubmit() {
+      // The confirm button label differs by state: "确认" on a fresh action,
+      // "重试强制交卷" when an indeterminate command is being retried.
+      const confirmBtn = await screen.findByRole("button", {
+        name: /确认|重试强制交卷/,
+      });
+      fireEvent.click(confirmBtn);
+    }
+
+    it("reuses the SAME operationId + reason on retry after an indeterminate (network) failure", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // First attempt: network failure (status 0) → indeterminate.
+      apiPost.mockRejectedValueOnce(new Error("Network request failed"));
+      // Retry: succeeds (any 200 disposition).
+      apiPost.mockResolvedValueOnce({ disposition: "applied" });
+
+      renderPage();
+      await openForceSubmitDialog();
+      await confirmForceSubmit();
+
+      // First POST captured.
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstBody = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      const firstOpId = firstBody.operationId as string;
+      expect(firstBody.reason).toBe("管理员强制交卷");
+
+      // After the indeterminate failure, the pending command is RETAINED.
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("提交状态未确认"),
+        );
+      });
+      // The pending command is persisted in sessionStorage.
+      const stored = sessionStorage.getItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+      );
+      expect(stored).not.toBeNull();
+      expect(JSON.parse(stored!).command.operationId).toBe(firstOpId);
+
+      // Reopen + confirm — the retry must reuse the frozen command verbatim.
+      await openForceSubmitDialog();
+      await confirmForceSubmit();
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const retryBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
+      expect(retryBody.operationId).toBe(firstOpId);
+      expect(retryBody.reason).toBe(firstBody.reason);
+
+      // Confirmed success clears the pending command.
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("已强制交卷"),
+        );
+      });
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+    });
+
+    it("clears the command on a confirmed rejection (4xx)", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // 409 IDEMPOTENCY_CONFLICT → idempotency_conflict (clears).
+      const conflict = Object.assign(new Error("conflict"), {
+        status: 409,
+        code: "IDEMPOTENCY_CONFLICT",
+      });
+      apiPost.mockRejectedValueOnce(conflict);
+
+      renderPage();
+      await openForceSubmitDialog();
+      await confirmForceSubmit();
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstOpId = (apiPost.mock.calls[0]![1] as { operationId: string })
+        .operationId;
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalled();
+      });
+      // Confirmed rejection clears the pending command.
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+      // A second open mints a NEW operationId (not the cleared one).
+      await openForceSubmitDialog();
+      await confirmForceSubmit();
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const secondOpId = (apiPost.mock.calls[1]![1] as { operationId: string })
+        .operationId;
+      expect(secondOpId).not.toBe(firstOpId);
+    });
+
+    it("restores the pending command after a refresh (same-tab persistence)", async () => {
+      // Seed sessionStorage as if a prior lost response left a pending command.
+      const pendingOpId = "00000000-0000-4000-8000-000000000abc";
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // Retry after refresh succeeds.
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
+
+      renderPage();
+      await openForceSubmitDialog();
+      // The dialog reopens in the indeterminate state (retry description).
+      await screen.findByText(/上一次强制交卷的提交状态未确认/);
+      await confirmForceSubmit();
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      // The retry reused the persisted operationId verbatim.
+      expect(body.operationId).toBe(pendingOpId);
+    });
+  });
 });

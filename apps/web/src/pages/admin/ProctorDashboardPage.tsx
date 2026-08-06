@@ -12,7 +12,6 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +37,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import { createContextSafeUuid } from "@/lib/uuid";
 import { getPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
+import {
+  loadPendingForceSubmit,
+  savePendingForceSubmit,
+  clearPendingForceSubmit,
+  type PendingForceSubmitCommand,
+} from "@/features/force-submit/pendingForceSubmitAuthority";
 import {
   CoordinationUnavailableError,
   AlreadyPendingError,
@@ -220,6 +225,41 @@ export function ProctorDashboardPage() {
 
   const [forceSubmitting, setForceSubmitting] = useState(false);
 
+  /**
+   * Force-submit retry-identity state (J5-I1C Slice 2 review P1-2). A
+   * force-submit is an operationId-keyed durable command; a lost response
+   * after the server committed must NOT cause a retry to mint a NEW
+   * operationId, or the effect is applied twice. The frozen command is
+   * persisted in sessionStorage (same-tab) and reused verbatim on retry.
+   *
+   *   idle         — no command in flight.
+   *   submitting   — a frozen command is in flight.
+   *   indeterminate— the POST failed without a confirmed outcome (network
+   *                  drop / 5xx); the frozen command is RETAINED and reused
+   *                  verbatim on retry so the same operationId replays.
+   */
+  type ForceSubmitPhase =
+    | { phase: "idle" }
+    | {
+        phase: "submitting";
+        command: PendingForceSubmitCommand;
+      }
+    | { phase: "indeterminate"; command: PendingForceSubmitCommand };
+  const [forceSubmitState, setForceSubmitState] = useState<ForceSubmitPhase>({
+    phase: "idle",
+  });
+  /**
+   * The attempt the force-submit dialog currently targets, and any pre-existing
+   * pending command for a DIFFERENT attempt (which blocks opening the dialog
+   * until resolved).
+   */
+  const [forceSubmitTargetAttemptId, setForceSubmitTargetAttemptId] = useState<
+    string | null
+  >(null);
+  const [forceSubmitBlockedReason, setForceSubmitBlockedReason] = useState<
+    string | null
+  >(null);
+
   /** Fetches candidate status from the API. */
   const loadStatus = useCallback(async () => {
     if (!examId) return;
@@ -265,21 +305,91 @@ export function ProctorDashboardPage() {
     return () => unsubscribe();
   }, [grantState.phase]);
 
-  /** Handles force-submit for a candidate. */
-  async function handleForceSubmit(attemptId: string) {
+  /**
+   * Opens the force-submit confirmation for `attemptId`. Detects a pre-existing
+   * pending command for the SAME attempt (e.g. from a prior lost response) and
+   * restores it as `indeterminate` so the retry reuses the frozen operationId.
+   * If a pending command exists for a DIFFERENT attempt, surfaces a block
+   * warning. Sets the target attempt for the dialog description rendering.
+   */
+  function openForceSubmitDialog(attemptId: string) {
+    if (!user) return;
+    const pending = loadPendingForceSubmit(user.organizationId, user.id);
+    setForceSubmitBlockedReason(null);
+    setForceSubmitTargetAttemptId(attemptId);
+    if (pending && pending.command.attemptId !== attemptId) {
+      setForceSubmitBlockedReason(
+        t("admin.proctorDashboard.forceSubmit.blockedPending"),
+      );
+      setForceSubmitState({ phase: "idle" });
+      return;
+    }
+    if (pending && pending.command.attemptId === attemptId) {
+      setForceSubmitState({ phase: "indeterminate", command: pending.command });
+      return;
+    }
+    setForceSubmitState({ phase: "idle" });
+  }
+
+  /**
+   * Force-submit confirm handler. Freezes the command (minting ONE
+   * operationId for the whole user action, OR reusing the existing pending
+   * command if this is a retry of the same attempt), persists it BEFORE the
+   * POST (fail-closed), sends it, and classifies the outcome:
+   *   - success (200, any disposition) → clear + success toast + reload;
+   *   - indeterminate (network drop / 5xx, commit status unknown) → retain
+   *     the frozen command and move to `indeterminate` so a retry reuses the
+   *     SAME operationId (the lost-response retry-identity fix);
+   *   - confirmed rejection (4xx) / idempotency conflict → clear + error toast.
+   * On a retry (indeterminate → confirm), the frozen command is reused
+   * verbatim — no new operationId is minted.
+   */
+  async function handleForceSubmitConfirm(attemptId: string) {
+    if (!user) return;
+    // If there is already a pending command for THIS attempt (a retry after a
+    // lost response, possibly restored from sessionStorage), reuse it verbatim
+    // — never mint a new operationId for the same user action.
+    const pending = loadPendingForceSubmit(user.organizationId, user.id);
+    const command =
+      pending && pending.command.attemptId === attemptId
+        ? pending.command
+        : {
+            attemptId,
+            operationId: createContextSafeUuid(),
+            reason: t("admin.proctorDashboard.forceSubmit.reason"),
+          };
+    savePendingForceSubmit({
+      schemaVersion: 1,
+      organizationId: user.organizationId,
+      actorId: user.id,
+      command,
+      createdAt: Date.now(),
+    });
+    // Close the dialog immediately — the outcome (and any indeterminate
+    // retry affordance) is shown on the candidate card.
+    setForceSubmitTargetAttemptId(null);
+    setForceSubmitBlockedReason(null);
+    setForceSubmitState({ phase: "submitting", command });
     setForceSubmitting(true);
     try {
-      // J5-I1C Slice 2: force-submit is now an operationId-keyed durable
-      // command. Mint ONE operationId per user action and reuse it on any
-      // retry of the same action (J5-R0 §8.2) so a blind retry after a
-      // network failure replays instead of conflicting.
       await api.post(`/api/admin/attempts/${attemptId}/force-submit`, {
-        operationId: createContextSafeUuid(),
-        reason: t("admin.proctorDashboard.forceSubmit.reason"),
+        operationId: command.operationId,
+        reason: command.reason,
       });
+      clearPendingForceSubmit(user.organizationId, user.id);
+      setForceSubmitState({ phase: "idle" });
+      setForceSubmitTargetAttemptId(null);
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
       await loadStatus();
     } catch (err) {
+      const failure = classifyGrantFailure(err);
+      if (failure === "indeterminate") {
+        setForceSubmitState({ phase: "indeterminate", command });
+        toast.error(t("admin.proctorDashboard.forceSubmit.indeterminate"));
+        return;
+      }
+      clearPendingForceSubmit(user.organizationId, user.id);
+      setForceSubmitState({ phase: "idle" });
       toast.error(
         err instanceof Error
           ? err.message
@@ -288,6 +398,14 @@ export function ProctorDashboardPage() {
     } finally {
       setForceSubmitting(false);
     }
+  }
+
+  /** Clears a retained indeterminate force-submit command (user dismissal). */
+  function dismissForceSubmitIndeterminate() {
+    if (!user) return;
+    clearPendingForceSubmit(user.organizationId, user.id);
+    setForceSubmitState({ phase: "idle" });
+    setForceSubmitTargetAttemptId(null);
   }
 
   /**
@@ -1061,6 +1179,68 @@ export function ProctorDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Force-submit confirmation dialog (J5-I1C Slice 2 review P1-2).
+          Controlled Dialog (like the time-grant dialog) so opening is driven by
+          React state, and the retry state is rendered inside the dialog. */}
+      <Dialog
+        open={forceSubmitTargetAttemptId !== null}
+        onOpenChange={(open) => {
+          if (!open && forceSubmitState.phase !== "submitting") {
+            setForceSubmitTargetAttemptId(null);
+            setForceSubmitBlockedReason(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {t("admin.proctorDashboard.forceSubmit.title")}
+            </DialogTitle>
+            <DialogDescription>
+              {forceSubmitState.phase === "indeterminate" &&
+              forceSubmitState.command.attemptId === forceSubmitTargetAttemptId
+                ? t("admin.proctorDashboard.forceSubmit.retryDescription")
+                : t("admin.proctorDashboard.forceSubmit.description", {
+                    name:
+                      data?.candidates.find(
+                        (c) => c.attemptId === forceSubmitTargetAttemptId,
+                      )?.name ?? "",
+                  })}
+            </DialogDescription>
+          </DialogHeader>
+          {forceSubmitBlockedReason && (
+            <p className="text-sm text-destructive">
+              {forceSubmitBlockedReason}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={forceSubmitting}
+              onClick={() => {
+                setForceSubmitTargetAttemptId(null);
+                setForceSubmitBlockedReason(null);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={forceSubmitting || forceSubmitBlockedReason !== null}
+              onClick={() => {
+                if (forceSubmitTargetAttemptId) {
+                  void handleForceSubmitConfirm(forceSubmitTargetAttemptId);
+                }
+              }}
+            >
+              {forceSubmitState.phase === "indeterminate"
+                ? t("admin.proctorDashboard.forceSubmit.retry")
+                : t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -1126,26 +1306,36 @@ export function ProctorDashboardPage() {
                   <div className="flex flex-wrap gap-2 mt-1">
                     {(candidate.status === "in_progress" ||
                       candidate.status === "disrupted") && (
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={forceSubmitting}
-                          >
-                            {t("admin.proctorDashboard.card.forceSubmit")}
-                          </Button>
-                        }
-                        title={t("admin.proctorDashboard.forceSubmit.title")}
-                        description={t(
-                          "admin.proctorDashboard.forceSubmit.description",
-                          { name: candidate.name },
-                        )}
-                        destructive
-                        onConfirm={() =>
-                          void handleForceSubmit(candidate.attemptId!)
-                        }
-                      />
+                      <>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={forceSubmitting}
+                          onClick={() =>
+                            openForceSubmitDialog(candidate.attemptId!)
+                          }
+                        >
+                          {t("admin.proctorDashboard.card.forceSubmit")}
+                        </Button>
+                        {forceSubmitState.phase === "indeterminate" &&
+                          forceSubmitState.command.attemptId ===
+                            candidate.attemptId && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={forceSubmitting}
+                              onClick={() => dismissForceSubmitIndeterminate()}
+                            >
+                              {t("admin.proctorDashboard.forceSubmit.dismiss")}
+                            </Button>
+                          )}
+                        {forceSubmitTargetAttemptId === candidate.attemptId &&
+                          forceSubmitBlockedReason && (
+                            <span className="text-destructive text-xs self-center">
+                              {forceSubmitBlockedReason}
+                            </span>
+                          )}
+                      </>
                     )}
                     {candidate.attemptId && user && isAdmin(user) && (
                       <Button

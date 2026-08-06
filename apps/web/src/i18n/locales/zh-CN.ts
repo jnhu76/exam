@@ -1498,6 +1498,12 @@ const zhCN = {
         description: "确定要强制提交考生「{{name}}」的答卷吗？此操作不可撤销。",
         reason: "管理员强制交卷",
         done: "已强制交卷",
+        indeterminate: "强制交卷提交状态未确认，可重试（将复用同一命令）。",
+        retry: "重试强制交卷",
+        retryDescription:
+          "上一次强制交卷的提交状态未确认（可能已成功）。重试将使用与上次完全相同的命令标识，服务器会幂等重放而不会重复执行。",
+        dismiss: "清除未确认命令",
+        blockedPending: "存在未确认的强制交卷命令，请先解决后再操作。",
       },
       extendDialog: {
         title: "延长考试时间",
