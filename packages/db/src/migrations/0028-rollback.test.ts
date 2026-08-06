@@ -509,12 +509,14 @@ describe(
      * Recreates the receipt table from the 0028 migration statements. Needed
      * after a case that drops the table (the full journal cannot be re-applied
      * because earlier migrations create indexes without IF NOT EXISTS).
-     * Idempotent: drops the table first if it still exists. The
-     * users_org_id_unique index is NOT manually dropped here — the guarded
-     * rollback owns that effect, and when recreateReceiptTable is called after
-     * a guarded rollback the index is already gone. The fallback DROP INDEX
-     * only covers a pre-existing leftover from a partial 0028 or a prior
-     * manual schema setup.
+     * Idempotent: drops the table first if it still exists, and drops any
+     * leftover users_org_id_unique index (0028 creates it WITHOUT IF NOT
+     * EXISTS, so a stale copy would make the re-apply fail with "relation
+     * already exists"). On the recorded path (called after a full guarded
+     * rollback) the index is already gone, so the DROP INDEX is a no-op; it
+     * is a defensive sweep for a pre-existing leftover from a partial 0028 or
+     * a prior manual schema setup. The 0028 effect-set ownership itself lives
+     * in the guarded rollback, not here.
      */
     async function recreateReceiptTable(): Promise<void> {
       await connA.sql.unsafe(`DROP TABLE IF EXISTS "attempt_command_receipts"`);
