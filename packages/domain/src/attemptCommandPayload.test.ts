@@ -13,6 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { ValidationError } from "./errors.js";
 import {
   attemptCommandPayloadsEqual,
   canonicalizeAttemptCommandRequest,
@@ -38,6 +39,22 @@ describe("canonical force_submit payload", () => {
       /non-empty reason/,
     );
   });
+
+  // ── Review J5-I1C0 PR #261 P2-2: unified errors ─────────────────────
+  // AGENTS.md mandates the `packages/domain/src/errors.ts` error hierarchy
+  // over `throw new Error()`. The canonicalizers must raise ValidationError
+  // (HTTP 400, code VALIDATION_ERROR) so a future caller that skips the wire
+  // layer and calls the canonicalizer directly still surfaces a typed error.
+  it("raises a ValidationError (not a generic Error) on a blank reason (P2-2)", () => {
+    try {
+      canonicalizeForceSubmitPayload({ reason: "   " });
+      throw new Error("expected canonicalizeForceSubmitPayload to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      expect((err as ValidationError).code).toBe("VALIDATION_ERROR");
+      expect((err as ValidationError).statusCode).toBe(400);
+    }
+  });
 });
 
 describe("canonical misconduct_mark payload", () => {
@@ -54,6 +71,16 @@ describe("canonical misconduct_mark payload", () => {
     expect(() =>
       canonicalizeMisconductPayload({ severity: "serious", notes: "   " }),
     ).toThrow(/non-empty notes/);
+  });
+
+  it("raises a ValidationError (not a generic Error) on blank notes (P2-2)", () => {
+    try {
+      canonicalizeMisconductPayload({ severity: "warning", notes: "   " });
+      throw new Error("expected canonicalizeMisconductPayload to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      expect((err as ValidationError).code).toBe("VALIDATION_ERROR");
+    }
   });
 });
 

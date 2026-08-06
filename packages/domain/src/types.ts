@@ -767,3 +767,100 @@ export interface ExamProctorAssignmentCommandResult {
   outcome: ExamProctorAssignmentCommandOutcome;
   assignment: ExamProctorAssignment;
 }
+
+// ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────
+//
+// Pure domain types for the durable Attempt command receipt foundation. Per
+// AGENTS.md, domain types live in `types.ts`; the canonicalizers, equality
+// primitive, and replay classifier live in `attemptCommandPayload.ts`. This
+// split keeps the type authority in one place while the logic module stays a
+// leaf consumer of these types (review J5-I1C0 PR #261 P2-1).
+
+/**
+ * The two dangerous Attempt commands sharing one receipt table. This is the
+ * domain-level canonical literal union; the contract layer mirrors it as
+ * `AttemptCommandTypeSchema` (single source of truth is this union).
+ */
+export type AttemptCommandType = "force_submit" | "misconduct_mark";
+
+/**
+ * Canonical `force_submit` request payload stored in a receipt's
+ * `request_payload` jsonb (audit §4.1/§4.2). `reason` is REQUIRED and
+ * non-empty after trim (J5-R0 §8.1 upgraded it to server-required; the
+ * durable shape never contains null/blank).
+ */
+export interface ForceSubmitRequestPayload {
+  reason: string;
+}
+
+/**
+ * Canonical `misconduct_mark` request payload stored in a receipt's
+ * `request_payload` jsonb (audit §4.3/§4.4). `severity` is the validated
+ * literal; `notes` is trimmed and non-empty.
+ */
+export interface MisconductMarkRequestPayload {
+  severity: "warning" | "serious";
+  notes: string;
+}
+
+/** Union of the canonical per-command request payloads. */
+export type AttemptCommandRequestPayload =
+  | ForceSubmitRequestPayload
+  | MisconductMarkRequestPayload;
+
+/**
+ * Canonical `force_submit` result payload stored in a receipt's
+ * `result_payload` jsonb (audit §4.2). The immutable committed fact: the
+ * statuses observed under the EA lock and the attempt timestamps at commit —
+ * returned verbatim on replay, NEVER re-derived from the live attempt.
+ * Timestamps are ISO-8601 strings (the jsonb wire shape). `commandType` is
+ * duplicated inside the payload so the stored fact is self-describing and the
+ * discriminated union is usable at the db layer.
+ */
+export interface ForceSubmitResultPayload {
+  commandType: "force_submit";
+  beforeStatus: AttemptStatus;
+  afterStatus: AttemptStatus;
+  submittedAt: string | null;
+  gradedAt: string | null;
+  appliedAt: string;
+}
+
+/**
+ * Canonical `misconduct_mark` result payload stored in a receipt's
+ * `result_payload` jsonb (audit §4.4). The immutable committed fact: the
+ * MisconductFlag this receipt establishes (null on no_change) and the
+ * receipt's server time.
+ */
+export interface MisconductMarkResultPayload {
+  commandType: "misconduct_mark";
+  misconduct: MisconductFlag | null;
+  appliedAt: string;
+}
+
+/** Union of the canonical per-command result payloads. */
+export type AttemptCommandResultPayload =
+  | ForceSubmitResultPayload
+  | MisconductMarkResultPayload;
+
+/**
+ * Per-command canonical INPUT shapes. `canonicalizeAttemptCommandRequest`
+ * (in `attemptCommandPayload.ts`) is generic over this map, so a `force_submit`
+ * call can only ever pass a force-submit-shaped input and a `misconduct_mark`
+ * call can only ever pass a misconduct-shaped input — a mismatched payload is
+ * a TypeScript error, not a runtime `as` cast.
+ */
+export interface AttemptCommandInputByType {
+  force_submit: { reason: string };
+  misconduct_mark: { severity: "warning" | "serious"; notes: string };
+}
+
+/**
+ * Per-command canonical PAYLOAD shapes returned by
+ * `canonicalizeAttemptCommandRequest` (compile-time bound to the input via
+ * {@link AttemptCommandInputByType}).
+ */
+export interface AttemptCommandPayloadByType {
+  force_submit: ForceSubmitRequestPayload;
+  misconduct_mark: MisconductMarkRequestPayload;
+}

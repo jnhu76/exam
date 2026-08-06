@@ -17,83 +17,48 @@
  * module is the leaf-node (no internal dependency) home so both the engine and
  * the future api orchestrators can import it without a cycle.
  *
- * This module is dependency-free. The `@exam/contracts` Zod schemas
- * (`ForceSubmitRequestPayloadSchema`, `MisconductMarkRequestPayloadSchema`,
- * `AttemptCommandTypeSchema`) are the wire-level projection of the canonical
- * shapes defined here; contracts depends on domain, never the reverse.
+ * Pure domain types (the canonical command union, request/result payload
+ * interfaces, and the per-command input/payload maps) live in `./types.ts`,
+ * the single source of truth for domain types (review J5-I1C0 PR #261 P2-1).
+ * This module re-exports them so existing deep-path imports
+ * (`from "./attemptCommandPayload.js"`) keep working; new callers should import
+ * them from `@exam/domain` directly.
+ *
+ * The `@exam/contracts` Zod schemas (`ForceSubmitRequestPayloadSchema`,
+ * `MisconductMarkRequestPayloadSchema`, `AttemptCommandTypeSchema`) are the
+ * wire-level projection of the canonical shapes defined in `./types.js`;
+ * contracts depends on domain, never the reverse.
  */
 
-// ── Canonical command identity (leaf-level) ────────────────────────
+// ── Canonical command identity (re-exported from types.ts) ─────────
+//
+// The type authority lives in `./types.ts` per AGENTS.md. Re-exported here so
+// the existing deep-path imports from this module keep working without a
+// churn-only diff across the engine / api / db layers.
+import { ValidationError } from "./errors.js";
+import type {
+  AttemptCommandInputByType,
+  AttemptCommandPayloadByType,
+  AttemptCommandRequestPayload,
+  AttemptCommandResultPayload,
+  AttemptCommandType,
+  ForceSubmitRequestPayload,
+  ForceSubmitResultPayload,
+  MisconductMarkRequestPayload,
+  MisconductMarkResultPayload,
+} from "./types.js";
 
-import type { AttemptStatus } from "./enums.js";
-import type { MisconductFlag } from "./types.js";
-
-/**
- * The two dangerous Attempt commands sharing one receipt table. This is the
- * domain-level canonical literal union; the contract layer mirrors it as
- * `AttemptCommandTypeSchema` (single source of truth is this union).
- */
-export type AttemptCommandType = "force_submit" | "misconduct_mark";
-
-/**
- * Canonical `force_submit` request payload stored in a receipt's
- * `request_payload` jsonb (audit §4.1/§4.2). `reason` is REQUIRED and
- * non-empty after trim (J5-R0 §8.1 upgraded it to server-required; the
- * durable shape never contains null/blank).
- */
-export interface ForceSubmitRequestPayload {
-  reason: string;
-}
-
-/**
- * Canonical `misconduct_mark` request payload stored in a receipt's
- * `request_payload` jsonb (audit §4.3/§4.4). `severity` is the validated
- * literal; `notes` is trimmed and non-empty.
- */
-export interface MisconductMarkRequestPayload {
-  severity: "warning" | "serious";
-  notes: string;
-}
-
-/** Union of the canonical per-command request payloads. */
-export type AttemptCommandRequestPayload =
-  | ForceSubmitRequestPayload
-  | MisconductMarkRequestPayload;
-
-/**
- * Canonical `force_submit` result payload stored in a receipt's
- * `result_payload` jsonb (audit §4.2). The immutable committed fact: the
- * statuses observed under the EA lock and the attempt timestamps at commit —
- * returned verbatim on replay, NEVER re-derived from the live attempt.
- * Timestamps are ISO-8601 strings (the jsonb wire shape). `commandType` is
- * duplicated inside the payload so the stored fact is self-describing and the
- * discriminated union is usable at the db layer.
- */
-export interface ForceSubmitResultPayload {
-  commandType: "force_submit";
-  beforeStatus: AttemptStatus;
-  afterStatus: AttemptStatus;
-  submittedAt: string | null;
-  gradedAt: string | null;
-  appliedAt: string;
-}
-
-/**
- * Canonical `misconduct_mark` result payload stored in a receipt's
- * `result_payload` jsonb (audit §4.4). The immutable committed fact: the
- * MisconductFlag this receipt establishes (null on no_change) and the
- * receipt's server time.
- */
-export interface MisconductMarkResultPayload {
-  commandType: "misconduct_mark";
-  misconduct: MisconductFlag | null;
-  appliedAt: string;
-}
-
-/** Union of the canonical per-command result payloads. */
-export type AttemptCommandResultPayload =
-  | ForceSubmitResultPayload
-  | MisconductMarkResultPayload;
+export type {
+  AttemptCommandInputByType,
+  AttemptCommandPayloadByType,
+  AttemptCommandRequestPayload,
+  AttemptCommandResultPayload,
+  AttemptCommandType,
+  ForceSubmitRequestPayload,
+  ForceSubmitResultPayload,
+  MisconductMarkRequestPayload,
+  MisconductMarkResultPayload,
+};
 
 // ── Canonical jsonb equality primitive ─────────────────────────────
 
@@ -143,7 +108,7 @@ export function canonicalizeForceSubmitPayload(input: {
 }): ForceSubmitRequestPayload {
   const trimmedReason = input.reason.trim();
   if (trimmedReason.length === 0) {
-    throw new Error(
+    throw new ValidationError(
       "force_submit canonical payload requires a non-empty reason after trim (J5-R0 §8.1)",
     );
   }
@@ -163,7 +128,7 @@ export function canonicalizeMisconductPayload(input: {
 }): MisconductMarkRequestPayload {
   const trimmedNotes = input.notes.trim();
   if (trimmedNotes.length === 0) {
-    throw new Error(
+    throw new ValidationError(
       "misconduct_mark canonical payload requires non-empty notes after trim",
     );
   }
@@ -171,30 +136,16 @@ export function canonicalizeMisconductPayload(input: {
 }
 
 // ── Command → input / payload type binding (compile-time) ──────────
-
-/**
- * Per-command canonical INPUT shapes. `canonicalizeAttemptCommandRequest`
- * is generic over this map, so a `force_submit` call can only ever pass a
- * force-submit-shaped input and a `misconduct_mark` call can only ever pass a
- * misconduct-shaped input — a mismatched payload is a TypeScript error, not a
- * runtime `as` cast (overnight hardening: the previous loose union + casts
- * let both wrong combinations compile and silently canonicalize to a
- * different command's identity).
- */
-export interface AttemptCommandInputByType {
-  force_submit: { reason: string };
-  misconduct_mark: { severity: "warning" | "serious"; notes: string };
-}
-
-/**
- * Per-command canonical PAYLOAD shapes returned by
- * {@link canonicalizeAttemptCommandRequest} (compile-time bound to the input
- * via {@link AttemptCommandInputByType}).
- */
-export interface AttemptCommandPayloadByType {
-  force_submit: ForceSubmitRequestPayload;
-  misconduct_mark: MisconductMarkRequestPayload;
-}
+//
+// The per-command INPUT and PAYLOAD maps (`AttemptCommandInputByType`,
+// `AttemptCommandPayloadByType`) are the compile-time binding between a
+// command type and its payload shapes. They live in `./types.ts` (the domain
+// type authority) and are imported above; the canonicalizer table below
+// indexes them so `canonicalizeAttemptCommandRequest` dispatches WITHOUT any
+// type assertion — the command→input→payload binding is structural, not cast
+// (overnight hardening: the previous loose union + casts let both wrong
+// combinations compile and silently canonicalize to a different command's
+// identity).
 
 /**
  * Per-command canonicalizer table. Indexing this by a command type `C` yields
