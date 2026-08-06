@@ -22,34 +22,15 @@
  */
 
 import { pathToFileURL } from "node:url";
-import { createDatabase, rollbackIncidentTables } from "@exam/db";
+import {
+  createDatabase,
+  isDestructiveRollbackTarget,
+  parseDatabaseName,
+  refuseDbNameMessage,
+  rollbackIncidentTables,
+} from "@exam/db";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
-
-/**
- * Extracts the database name from a connection URL. Query params are
- * excluded, a trailing slash is handled, and the final non-empty pathname
- * segment is used (percent-decoded). Throws on a malformed URL.
- */
-export function parseDatabaseName(databaseUrl: string): string {
-  const parsed = new URL(databaseUrl);
-  const lastSegment = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
-  try {
-    return decodeURIComponent(lastSegment);
-  } catch {
-    // Malformed percent-encoding: fall back to the raw segment so the name
-    // guard can still evaluate it.
-    return lastSegment;
-  }
-}
-
-/** Error message for the database-name safety guard. */
-function refuseDbName(dbName: string): string {
-  return (
-    `Refusing to run against database "${dbName}": name must start with ` +
-    "exam, or contain e2e/test/ci. Set DATABASE_URL to a guarded target."
-  );
-}
 
 export async function main(): Promise<void> {
   loadRootEnv();
@@ -87,8 +68,8 @@ export async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  if (!/^(exam|.*e2e|.*test|.*ci)/i.test(dbName)) {
-    process.stderr.write(`${refuseDbName(dbName)}\n`);
+  if (!isDestructiveRollbackTarget(dbName)) {
+    process.stderr.write(`${refuseDbNameMessage(dbName)}\n`);
     process.exitCode = 2;
     return;
   }

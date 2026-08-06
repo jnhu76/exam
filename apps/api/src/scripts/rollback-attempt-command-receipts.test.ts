@@ -27,7 +27,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { parseDatabaseName } from "./rollback-attempt-command-receipts.js";
+import { parseDatabaseName } from "@exam/db";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import {
   addSearchPathToUrl,
@@ -199,7 +199,7 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     expect(res.stderr).not.toMatch(/unhandledRejection/i);
   });
 
-  it("refuses a database name outside the guard regex (exit 2, stderr)", async () => {
+  it("refuses a database name outside the guard allowlist (exit 2, stderr)", async () => {
     const res = await runCli(["--confirm"], {
       DATABASE_URL: "postgres://exam:exam@localhost:15432/production_db",
     });
@@ -207,8 +207,31 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     expect(res.stderr).toMatch(
       /Refusing to run against database "production_db"/,
     );
+    expect(res.stderr).toMatch(/destructive rollback/);
     expect(res.stderr).not.toMatch(/unhandledRejection/i);
   });
+
+  // ── Review P1-1 counterexamples (the loose regex falsely accepted these) ──
+  // Each name below PASSED the old `/^(exam|.*e2e|.*test|.*ci)/i` regex but
+  // must be REJECTED by the exact allowlist. These are subprocess tests (not
+  // unit tests on the helper) so they exercise the full CLI guard path.
+  for (const dbName of [
+    "examproduction",
+    "precision_prod",
+    "incident_store",
+    "decision_db",
+  ]) {
+    it(`rejects the look-alike "${dbName}" (review P1-1 counterexample)`, async () => {
+      const res = await runCli(["--confirm"], {
+        DATABASE_URL: `postgres://exam:exam@localhost:15432/${dbName}?connect_timeout=2`,
+      });
+      expect(res.code).toBe(2);
+      expect(res.stderr).toMatch(
+        `Refusing to run against database "${dbName}"`,
+      );
+      expect(res.stderr).not.toMatch(/unhandledRejection/i);
+    });
+  }
 
   it("surfaces a createDatabase/query failure as exit 1 with stderr", async () => {
     // Port 1 refuses connections; the name guard passes ("exam_test"), so the
@@ -227,17 +250,32 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
 //
 // The subprocess PG tests cannot force `conn.sql.end()` to reject on a clean
 // schema, so the close-failure exit-code path is invisible to them. These
-// in-process tests drive `main()` directly with `@exam/db` mocked.
+// in-process tests drive `main()` directly with `@exam/db` mocked. The mock
+// replaces the rollback + createDatabase barrel exports but re-uses the REAL
+// database-name guard helpers from `@exam/db/src/scripts/destructiveDbNameGuard`
+// so the guard stage evaluates the real allowlist (the runtimeConfig mock
+// returns ".../exam", which is on the allowlist, so the guard passes and
+// execution reaches the mocked rollback).
 const recoveryMocks = vi.hoisted(() => ({
   createDatabase: vi.fn(),
   rollbackAttemptCommandReceipts: vi.fn(),
 }));
 
-vi.mock("@exam/db", () => ({
-  createDatabase: (...args: unknown[]) => recoveryMocks.createDatabase(...args),
-  rollbackAttemptCommandReceipts: (...args: unknown[]) =>
-    recoveryMocks.rollbackAttemptCommandReceipts(...args),
-}));
+vi.mock("@exam/db", async (importOriginal) => {
+  const real =
+    await importOriginal<
+      typeof import("@exam/db/src/scripts/destructiveDbNameGuard.js")
+    >();
+  return {
+    createDatabase: (...args: unknown[]) =>
+      recoveryMocks.createDatabase(...args),
+    rollbackAttemptCommandReceipts: (...args: unknown[]) =>
+      recoveryMocks.rollbackAttemptCommandReceipts(...args),
+    isDestructiveRollbackTarget: real.isDestructiveRollbackTarget,
+    parseDatabaseName: real.parseDatabaseName,
+    refuseDbNameMessage: real.refuseDbNameMessage,
+  };
+});
 
 // loadRootEnv is a no-op for these tests (env is controlled); runtimeConfig
 // returns a guard-passing URL so the parse/guard stages never short-circuit.

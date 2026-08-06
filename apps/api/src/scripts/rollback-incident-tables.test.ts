@@ -26,7 +26,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { parseDatabaseName } from "./rollback-incident-tables.js";
+import { parseDatabaseName } from "@exam/db";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import {
   addSearchPathToUrl,
@@ -180,7 +180,7 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     expect(res.stderr).not.toMatch(/unhandledRejection/i);
   });
 
-  it("refuses a database name outside the guard regex (exit 2, stderr)", async () => {
+  it("refuses a database name outside the guard allowlist (exit 2, stderr)", async () => {
     const res = await runCli(["--confirm"], {
       DATABASE_URL: "postgres://exam:exam@localhost:15432/production_db",
     });
@@ -188,8 +188,31 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     expect(res.stderr).toMatch(
       /Refusing to run against database "production_db"/,
     );
+    expect(res.stderr).toMatch(/destructive rollback/);
     expect(res.stderr).not.toMatch(/unhandledRejection/i);
   });
+
+  // ── Review P1-1 counterexamples (the loose regex falsely accepted these) ──
+  // Shared with rollback-attempt-command-receipts.test.ts: each name below
+  // PASSED the old `/^(exam|.*e2e|.*test|.*ci)/i` regex but must be REJECTED
+  // by the exact allowlist. Subprocess test exercises the full CLI guard path.
+  for (const dbName of [
+    "examproduction",
+    "precision_prod",
+    "incident_store",
+    "decision_db",
+  ]) {
+    it(`rejects the look-alike "${dbName}" (review P1-1 counterexample)`, async () => {
+      const res = await runCli(["--confirm"], {
+        DATABASE_URL: `postgres://exam:exam@localhost:15432/${dbName}?connect_timeout=2`,
+      });
+      expect(res.code).toBe(2);
+      expect(res.stderr).toMatch(
+        `Refusing to run against database "${dbName}"`,
+      );
+      expect(res.stderr).not.toMatch(/unhandledRejection/i);
+    });
+  }
 
   it("surfaces a createDatabase/query failure as exit 1 with stderr", async () => {
     // Port 1 refuses connections; the name guard passes ("exam_test"), so the
@@ -217,11 +240,21 @@ const recoveryMocks = vi.hoisted(() => ({
   rollbackIncidentTables: vi.fn(),
 }));
 
-vi.mock("@exam/db", () => ({
-  createDatabase: (...args: unknown[]) => recoveryMocks.createDatabase(...args),
-  rollbackIncidentTables: (...args: unknown[]) =>
-    recoveryMocks.rollbackIncidentTables(...args),
-}));
+vi.mock("@exam/db", async (importOriginal) => {
+  const real =
+    await importOriginal<
+      typeof import("@exam/db/src/scripts/destructiveDbNameGuard.js")
+    >();
+  return {
+    createDatabase: (...args: unknown[]) =>
+      recoveryMocks.createDatabase(...args),
+    rollbackIncidentTables: (...args: unknown[]) =>
+      recoveryMocks.rollbackIncidentTables(...args),
+    isDestructiveRollbackTarget: real.isDestructiveRollbackTarget,
+    parseDatabaseName: real.parseDatabaseName,
+    refuseDbNameMessage: real.refuseDbNameMessage,
+  };
+});
 
 // loadRootEnv is a no-op for these tests (env is controlled); runtimeConfig
 // returns a guard-passing URL so the parse/guard stages never short-circuit.

@@ -23,38 +23,15 @@
  */
 
 import { pathToFileURL } from "node:url";
-import { createDatabase, rollbackAttemptCommandReceipts } from "@exam/db";
+import {
+  createDatabase,
+  isDestructiveRollbackTarget,
+  parseDatabaseName,
+  refuseDbNameMessage,
+  rollbackAttemptCommandReceipts,
+} from "@exam/db";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
-
-/**
- * Extracts the database name from a connection URL. Query params are
- * excluded, a trailing slash is handled, and the final non-empty pathname
- * segment is used (percent-decoded). Throws on a malformed URL and on
- * malformed percent-encoding — a name the guard cannot evaluate reliably
- * must fail closed, never fall back to a raw guess.
- */
-export function parseDatabaseName(databaseUrl: string): string {
-  const parsed = new URL(databaseUrl);
-  const lastSegment = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
-  try {
-    return decodeURIComponent(lastSegment);
-  } catch {
-    // Malformed percent-encoding: fail closed. A raw-segment fallback could
-    // let an unparseable name slip past the database-name safety guard.
-    throw new Error(
-      `Malformed percent-encoding in DATABASE_URL path segment "${lastSegment}"`,
-    );
-  }
-}
-
-/** Error message for the database-name safety guard. */
-function refuseDbName(dbName: string): string {
-  return (
-    `Refusing to run against database "${dbName}": name must start with ` +
-    "exam, or contain e2e/test/ci. Set DATABASE_URL to a guarded target."
-  );
-}
 
 export async function main(): Promise<void> {
   loadRootEnv();
@@ -92,8 +69,8 @@ export async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  if (!/^(exam|.*e2e|.*test|.*ci)/i.test(dbName)) {
-    process.stderr.write(`${refuseDbName(dbName)}\n`);
+  if (!isDestructiveRollbackTarget(dbName)) {
+    process.stderr.write(`${refuseDbNameMessage(dbName)}\n`);
     process.exitCode = 2;
     return;
   }
