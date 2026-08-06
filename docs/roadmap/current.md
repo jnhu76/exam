@@ -71,12 +71,15 @@ J5-I1A3 (Attempt Operations Context,
 **J5-I1A is CLOSED.** **J5-I1B (Recovery Center UI) is CLOSED** — queue,
 incident detail, attempt operations, and exam recovery detail pages plus the
 Exam Recovery Context aggregate (`GET /admin/recovery/exams/:examId`, §6.5).
-**J5-I1C0 audit CLOSED** (PR #255). **J5-I1C Slice 1 IN REVIEW** — durable
-`attempt_command_receipts` foundation (shared table + contracts + domain
-canonicalization + repository + rollback guard + migration/repository tests;
-no force-submit/misconduct behavior activation). J5-I1C force-submit
-activation NOT STARTED; J5-I1C misconduct activation NOT STARTED (gated on
-the §5.2 PostgreSQL concurrency experiment). J5-I1D NOT STARTED.
+**J5-I1C0 audit CLOSED** (PR #255). **J5-I1C Slice 1 CLOSED** (PR #261) —
+durable `attempt_command_receipts` foundation (shared table + contracts +
+domain canonicalization + repository + rollback guard + migration/repository
+tests; no behavior activation). **J5-I1C Slice 2 IN REVIEW** — force-submit
+is now an operationId-keyed durable command (receipt-first transaction,
+replay/conflict arbitration, exact-23505 fresh-transaction recovery,
+deterministic concurrency matrices, audit carries operationId). J5-I1C
+misconduct activation NOT STARTED (gated on the §5.2 PostgreSQL concurrency
+experiment). J5-I1D NOT STARTED.
 
 ### Plain-text subjective question loop
 
