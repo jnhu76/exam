@@ -350,6 +350,75 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
       await incompatibleIso.cleanup();
     }
   });
+
+  it("fails closed when a newer composite FK depends on users_org_id_unique (P2-3)", async () => {
+    // Review J5-I1C0 PR #261 P2-3: the previous confkey probe hardcoded
+    // `con.confkey = ARRAY[1, 2]`, but `users` physical column order is
+    // id (attnum 1) then organization_id (attnum 2), so the real composite FK
+    // `(... org_id, actor_id) → users(organization_id, id)` carries
+    // confkey = [2, 1]. The hardcoded check never matched, so the in-use
+    // branch was dead. This test creates a NEWER table with exactly such a
+    // composite FK (simulating a future migration that reuses the index) and
+    // proves the rollback now actively reports in-use and preserves both the
+    // index AND the (empty) receipt table.
+    const inUseIso = await setupIsolatedTestDb({
+      namespace: "mig0028rb-inuse",
+    });
+    const inUseConn = await createDatabase(
+      inUseIso.databaseUrl,
+      inUseIso.schemaName,
+    );
+    try {
+      await applyAllMigrations(inUseConn.sql, inUseIso.databaseUrl);
+
+      // Create a NEWER table with a composite FK targeting
+      // users(organization_id, id) — exactly what a future migration might
+      // add that reuses the 0028 unique index as its referenced key. The
+      // receipt table is empty, so without the in-use check the rollback
+      // would drop both the table and the index.
+      await inUseConn.sql.unsafe(`
+        CREATE TABLE "future_org_actor_owner" (
+          "organization_id" text NOT NULL,
+          "actor_id" text NOT NULL,
+          "note" text NOT NULL,
+          CONSTRAINT "future_org_actor_owner_actor_fk"
+            FOREIGN KEY ("organization_id", "actor_id")
+            REFERENCES "users"("organization_id", "id")
+            ON DELETE no action ON UPDATE no action
+        )
+      `);
+
+      // The rollback must fail closed: the dependent FK makes dropping the
+      // index unsafe. The receipt table is empty, so the table-DROP itself
+      // would succeed — the in-use check is what protects the index.
+      await expect(
+        rollbackAttemptCommandReceipts(inUseConn.db),
+      ).rejects.toThrow(/referenced by foreign-key constraint|in-use/);
+
+      // Nothing was dropped — the index survives (the dependent FK still
+      // needs it) AND the receipt table survives (the whole 0028 effect set
+      // is preserved atomically; the table DROP was issued but the
+      // transaction rolls back when the index-DROP guard throws).
+      expect(await indexExists(inUseConn.sql, "users_org_id_unique")).toBe(
+        true,
+      );
+      expect(await tableExists(inUseConn.sql, "attempt_command_receipts")).toBe(
+        true,
+      );
+      // The newer dependent table and its FK survive too.
+      const dependentRows = (await inUseConn.sql.unsafe(`
+        SELECT con.conname
+        FROM pg_constraint con
+        JOIN pg_class rel ON rel.oid = con.conrelid
+        WHERE con.contype = 'f'
+          AND con.conname = 'future_org_actor_owner_actor_fk'
+      `)) as Array<{ conname: string }>;
+      expect(dependentRows).toHaveLength(1);
+    } finally {
+      await inUseConn.sql.end();
+      await inUseIso.cleanup();
+    }
+  });
 });
 
 // ── Two-connection concurrency matrix (overnight hardening) ───────────

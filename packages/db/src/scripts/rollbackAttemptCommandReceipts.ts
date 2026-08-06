@@ -179,21 +179,36 @@ async function verifyUsersOrgIdUniqueIndex(
   // id). After the receipt table is dropped this set should be empty; a
   // non-empty set means a newer migration depends on the index and the
   // rollback must not drop it.
+  //
+  // Resolve the referenced attnums by NAME via pg_attribute (review J5-I1C0
+  // PR #261 P2-3): `users` physical column order is id (attnum 1) then
+  // organization_id (attnum 2), so the composite FK
+  // `(organization_id, actor_id) → users(organization_id, id)` carries
+  // confkey = [2, 1], NOT [1, 2]. Hardcoding `con.confkey = ARRAY[1, 2]` (the
+  // previous code) never matched the real 0028 FK, so the in-use branch was
+  // dead. The name-based resolution below is robust to physical column
+  // reordering and matches a FK whose referenced columns are exactly
+  // (organization_id, id) in that referenced order.
   const dependents = (await tx.execute(
     sql`SELECT con.conname
         FROM pg_constraint con
         JOIN pg_class rel ON rel.oid = con.conrelid
         JOIN pg_namespace n ON n.oid = rel.relnamespace
+        JOIN pg_class u ON u.oid = con.confrelid
+        JOIN pg_namespace un ON un.oid = u.relnamespace
         WHERE con.contype = 'f'
           AND n.nspname = current_schema()
-          AND con.confrelid = (
-            SELECT u.oid FROM pg_class u
-            JOIN pg_namespace un ON un.oid = u.relnamespace
-            WHERE un.nspname = current_schema() AND u.relname = 'users'
+          AND un.nspname = current_schema()
+          AND u.relname = 'users'
+          AND array_length(con.confkey, 1) = 2
+          AND con.confkey[1] = (
+            SELECT a.attnum FROM pg_attribute a
+            WHERE a.attrelid = u.oid AND a.attname = 'organization_id'
           )
-          AND con.confkey = ARRAY[1, 2]::int2[]
-          AND con.confkey[1] = 1
-          AND con.confkey[2] = 2`,
+          AND con.confkey[2] = (
+            SELECT a.attnum FROM pg_attribute a
+            WHERE a.attrelid = u.oid AND a.attname = 'id'
+          )`,
   )) as unknown as Array<{ conname: string }>;
   if (dependents.length > 0) {
     return {
