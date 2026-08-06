@@ -5,21 +5,32 @@
  * Proves, against the SAME production entrypoint the HTTP route uses
  * (`forceSubmitWithOperationRaceRecovery` from
  * `orchestrators/forceSubmitExecution.ts`), the five frozen race matrices of
- * the J5-I1C0 audit §7/§14:
+ * the J5-I1C0 audit §7/§14. Each race uses TRUE transaction overlap: T1
+ * inserts its receipt and then HOLDS ITS TRANSACTION OPEN (via the
+ * `afterReceiptInsert` observer hook awaiting `releaseT1Commit`), so T2
+ * starts a genuinely concurrent transaction while T1 is still uncommitted.
+ * A THIRD observer connection (`sqlObserver`) probes `pg_locks` to PROVE T2
+ * is really blocked on T1 (db1/db2 are max:1 pools held open by the racers,
+ * so a probe on them would queue forever).
  *
- *   A. same Attempt, different operationIds → one `applied`, one `no_change`;
- *      2 durable receipts, 1 forceSubmit audit, final `graded`.
- *   B. same Attempt, same operationId, same canonical payload → one
- *      `applied`, one `idempotent_replay`; the loser provably hits the REAL
- *      23505 on `attempt_command_receipts_org_operation_unique` and recovers
- *      in a FRESH transaction (recovery txid != primary txid); winner fact ==
+ *   A. same Attempt, different operationIds → T2 blocks on T1's EA row lock,
+ *      then on commit 40001-retries (PROVEN via distinct txids across
+ *      attempts) and sees `graded` → one `applied`, one `no_change`; 2 durable
+ *      receipts, 1 forceSubmit audit, final `graded`.
+ *   B. same Attempt, same operationId, same canonical payload → T2 blocks on
+ *      the EA lock, 40001-retries, then its receipt INSERT hits the REAL 23505
+ *      on `attempt_command_receipts_org_operation_unique` and recovers in a
+ *      FRESH transaction (recovery txid != primary txid); winner fact ==
  *      replay fact byte-for-byte; 1 receipt, 1 audit.
  *   C. same Attempt, same operationId, different payload → 409
- *      IDEMPOTENCY_CONFLICT; 1 receipt, 1 audit.
+ *      IDEMPOTENCY_CONFLICT; 1 receipt, 1 audit. (Serialized T1-then-T2; the
+ *      cross-payload conflict is read-time, not an overlap race.)
  *   D. different Attempts, same operationId (NO shared EA lock — the most
- *      important matrix) → the loser's PRIMARY transaction rolls back
- *      entirely: the loser's attempt is never submitted/graded, has no audit
- *      and no receipt; recovery classifies attempt_id conflict.
+ *      important matrix) → T2 BLOCKS on T1's UNCOMMITTED unique-index entry
+ *      (a `transactionid`/`tuple` lock, NOT a row lock), then on T1's commit
+ *      gets the REAL 23505 → its WHOLE primary transaction rolls back before
+ *      the mutation; A2 is untouched; recovery classifies attempt_id conflict
+ *      → IdempotencyConflictError.
  *   E. commit + lost response → a fresh call with the same operationId
  *      returns `idempotent_replay` with the original stored fact.
  *
@@ -87,9 +98,28 @@ async function teardownAll(
 }
 
 /**
- * Barrier for the deterministic force-submit races. T1/T2 are gated on the
- * pre-read-absent hook (outside any transaction — pure ordering); the
- * in-transaction hooks (beforeReceiptInsert, onUniqueViolation,
+ * Barrier for the deterministic force-submit races. The race model is:
+ *
+ *  1. both pre-reads resolve `t1ReadAbsent`/`t2ReadAbsent` and gate on
+ *     `releaseT1`/`releaseT2` (pure ordering — the pre-read is outside any
+ *     txn);
+ *  2. T1 enters its transaction, inserts its receipt, then signals
+ *     `t1AfterReceiptInsert` and HOLDS ITS TRANSACTION OPEN by awaiting
+ *     `releaseT1Commit` (T1 is now holding the EA row lock with an
+ *     uncommitted receipt);
+ *  3. T2 enters its own transaction (`t2TransactionAttempt` proves it
+ *     started while T1 is still uncommitted) and either blocks on the EA
+ *     row lock (Matrix A/B — same attempt) or reaches its own receipt
+ *     INSERT and blocks on the unique index (Matrix D — different attempt);
+ *  4. the test controller asserts via `pg_locks` that T2 is genuinely
+ *     blocked, then resolves `releaseT1Commit` → T1 commits → T2 wakes;
+ *  5. under REPEATABLE READ T2's first attempt fails with 40001 and
+ *     `executeInTransaction` auto-retries; `t2TransactionAttempts` collects
+ *     every attempt's pid/txid so the test PROVES the retry happened with a
+ *     fresh txid. For Matrix D T2's INSERT hits the real 23505 and the
+ *     fresh recovery transaction classifies the winner.
+ *
+ * The in-transaction hooks (beforeReceiptInsert, onUniqueViolation,
  * onRecoveryTransaction, onPrimaryCommitted) carry the real pid/txid
  * evidence.
  */
@@ -105,6 +135,15 @@ interface ForceSubmitRaceBarrier {
     attemptId: string;
   }>;
   releaseT1: Deferred<void>;
+  /** T1 has inserted its receipt and is now holding its txn OPEN (uncommitted). */
+  t1AfterReceiptInsert: Deferred<{
+    pid: number;
+    txid: string;
+    operationId: string;
+    attemptId: string;
+  }>;
+  /** Gate T1 awaits AFTER inserting the receipt, so the test can hold the txn open. */
+  releaseT1Commit: Deferred<void>;
   t1PrimaryCommitted: Deferred<{
     pid: number;
     txid: string;
@@ -124,6 +163,10 @@ interface ForceSubmitRaceBarrier {
     txid: string;
   }>;
   t2RecoveryStarted: Deferred<{ pid: number; txid: string }>;
+  /** Every `onTransactionAttempt` observation for T2 (primary + each retry + recovery). */
+  t2TransactionAttempts: Deferred<
+    Array<{ phase: string; attempt: number; pid: number; txid: string }>
+  >;
   dispose(): void;
 }
 
@@ -140,6 +183,13 @@ function createForceSubmitRaceBarrier(): ForceSubmitRaceBarrier {
       attemptId: string;
     }>("T2 read absent"),
     releaseT1: createDeferred<void>("release T1"),
+    t1AfterReceiptInsert: createDeferred<{
+      pid: number;
+      txid: string;
+      operationId: string;
+      attemptId: string;
+    }>("T1 after receipt insert (txn open)"),
+    releaseT1Commit: createDeferred<void>("release T1 commit"),
     t1PrimaryCommitted: createDeferred<{
       pid: number;
       txid: string;
@@ -161,6 +211,9 @@ function createForceSubmitRaceBarrier(): ForceSubmitRaceBarrier {
     t2RecoveryStarted: createDeferred<{ pid: number; txid: string }>(
       "T2 recovery started",
     ),
+    t2TransactionAttempts: createDeferred<
+      Array<{ phase: string; attempt: number; pid: number; txid: string }>
+    >("T2 transaction attempts"),
   };
   return {
     ...deferreds,
@@ -176,17 +229,38 @@ function createForceSubmitRaceBarrier(): ForceSubmitRaceBarrier {
 
 /**
  * Builds the barrier-backed {@link ForceSubmitExecutionObserver} for one
- * label (T1/T2). The `afterOperationLookupAbsent` hook gates the transaction
- * until the test controller releases it — this is what fixes the
- * T1-before-T2 ordering. The other hooks resolve the evidence deferreds with
- * the real in-transaction values from the production module.
+ * label (T1/T2). When `holdT1OpenForOverlap` is true, T1's
+ * `afterReceiptInsert` hook holds its transaction OPEN by awaiting
+ * `releaseT1Commit` — this is the real-overlap mechanism used by Matrices
+ * A/B/D. When false (Matrices C/E), T1 commits immediately and the test
+ * serializes T1-before-T2 via `t1PrimaryCommitted` (the original model).
+ * The other hooks resolve the evidence deferreds with the real
+ * in-transaction values from the production module.
  */
 function createBarrierBackedForceSubmitObserver(
   barrier: ForceSubmitRaceBarrier,
   label: "T1" | "T2",
   operationId: string,
   attemptId: string,
+  holdT1OpenForOverlap = false,
 ): ForceSubmitExecutionObserver {
+  // T2 collects every transaction attempt (primary + each 40001 retry +
+  // recovery) so the test can prove a serialization retry happened with a
+  // distinct txid. Resolved once, after the racer settles.
+  const t2Attempts: Array<{
+    phase: string;
+    attempt: number;
+    pid: number;
+    txid: string;
+  }> = [];
+  const flushT2Attempts = (() => {
+    let flushed = false;
+    return () => {
+      if (flushed) return;
+      flushed = true;
+      barrier.t2TransactionAttempts.resolve([...t2Attempts]);
+    };
+  })();
   return {
     afterOperationLookupAbsent: async (obs) => {
       if (obs.operationId !== operationId) return;
@@ -203,6 +277,20 @@ function createBarrierBackedForceSubmitObserver(
         await barrier.releaseT2.promise;
       }
     },
+    afterReceiptInsert: async (obs) => {
+      if (label === "T1" && holdT1OpenForOverlap) {
+        // Hold T1's transaction OPEN (receipt inserted, uncommitted) so T2
+        // can genuinely overlap. The EA row lock and the uncommitted unique
+        // index entry are both held until releaseT1Commit resolves.
+        barrier.t1AfterReceiptInsert.resolve({
+          pid: obs.pid,
+          txid: obs.txid,
+          operationId: obs.operationId,
+          attemptId: obs.attemptId,
+        });
+        await barrier.releaseT1Commit.promise;
+      }
+    },
     beforeReceiptInsert: async (obs) => {
       if (label === "T2") {
         barrier.t2BeforeReceiptInsert.resolve({
@@ -213,6 +301,16 @@ function createBarrierBackedForceSubmitObserver(
         });
       }
     },
+    onTransactionAttempt: async (obs) => {
+      if (label === "T2") {
+        t2Attempts.push({
+          phase: obs.phase,
+          attempt: obs.attempt,
+          pid: obs.pid,
+          txid: obs.txid,
+        });
+      }
+    },
     onPrimaryCommitted: async (obs) => {
       if (obs.label === "T1") {
         barrier.t1PrimaryCommitted.resolve({
@@ -220,6 +318,11 @@ function createBarrierBackedForceSubmitObserver(
           txid: obs.txid,
           disposition: obs.disposition,
         });
+      } else if (obs.label === "T2") {
+        // T2 committed on a primary attempt (e.g. no_change after retry).
+        // By now every primary attempt (including the retry) has fired
+        // onTransactionAttempt, so this is the correct flush point.
+        flushT2Attempts();
       }
     },
     onUniqueViolation: async (obs) => {
@@ -229,6 +332,7 @@ function createBarrierBackedForceSubmitObserver(
         pid: obs.pid,
         txid: obs.txid,
       });
+      flushT2Attempts();
     },
     onRecoveryTransaction: async (obs) => {
       barrier.t2RecoveryStarted.resolve({
@@ -246,6 +350,14 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
   let db2: Database;
   let sql1: { end(): Promise<void> };
   let sql2: { end(): Promise<void> };
+  /**
+   * A THIRD, independent connection used ONLY as an observer for the
+   * real-overlap pg_locks/pg_stat_activity probes. This must NOT be db1/db2
+   * because those are max:1 pools: while T1/T2 hold their connection inside
+   * an open transaction, any query on the SAME pool would queue behind it
+   * and could never observe the wait state. The observer pool stays free.
+   */
+  let sqlObserver: { end(): Promise<void> };
 
   beforeAll(async () => {
     const testDbUrl =
@@ -273,10 +385,16 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     db2 = conn2.db;
     sql1 = conn1.sql;
     sql2 = conn2.sql;
+    const connObserver = await createPostgresDatabase(
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+    sqlObserver = connObserver.sql;
   }, 60_000);
 
   afterAll(async () => {
     await teardownAll(
+      () => sqlObserver.end(),
       () => sql2.end(),
       () => sql1.end(),
       () => ctx.cleanup(),
@@ -583,8 +701,120 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     return rows;
   }
 
-  it("Matrix A: same attempt, different operationIds → one applied, one no_change, 2 receipts, 1 audit", async () => {
+  /**
+   * PROOF that `waiterPid` is genuinely blocked inside a DB transaction.
+   * Returns the waiter's `wait_event_type`/`wait_event` from
+   * `pg_stat_activity` and the count of the granted/blocked locks it holds
+   * that prove it has an open transaction (≥1 transactionid lock) plus, when
+   * `blockedOnBlockerPid` is set, that it is waiting on something held by
+   * that backend. Deterministic — no sleep. Throws if the waiter is not
+   * actually in an active transaction (the real-overlap invariant).
+   */
+  async function snapshotBackendState(
+    sql: { unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> },
+    pid: number,
+  ): Promise<{
+    active: boolean;
+    waitEventType: string | null;
+    waitEvent: string | null;
+    inTransaction: boolean;
+  }> {
+    const rows = (await sql.unsafe(
+      `SELECT
+         pid,
+         state,
+         wait_event_type,
+         wait_event,
+         xact_start IS NOT NULL AS in_transaction
+       FROM pg_stat_activity
+       WHERE pid = $1`,
+      [pid],
+    )) as Array<{
+      pid: number;
+      state: string;
+      wait_event_type: string | null;
+      wait_event: string | null;
+      in_transaction: boolean;
+    }>;
+    const row = rows[0];
+    if (!row) {
+      return {
+        active: false,
+        waitEventType: null,
+        waitEvent: null,
+        inTransaction: false,
+      };
+    }
+    return {
+      active: row.state === "active" || row.state === "idle in transaction",
+      waitEventType: row.wait_event_type,
+      waitEvent: row.wait_event,
+      inTransaction: Boolean(row.in_transaction),
+    };
+  }
+
+  /**
+   * Polls (bounded, deterministic) until `waiterPid` reports an open
+   * transaction (`xact_start IS NOT NULL`) — proof the waiter's BEGIN has
+   * executed. Resolves with the snapshot; rejects on timeout so a broken
+   * race surfaces instead of silently passing.
+   */
+  async function waitForTransactionStarted(
+    sql: { unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> },
+    pid: number,
+    timeoutMs = 2_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const snap = await snapshotBackendState(sql, pid);
+      if (snap.inTransaction) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(
+      `Backend ${pid} did not start a transaction within ${timeoutMs}ms`,
+    );
+  }
+
+  /**
+   * Polls (bounded, deterministic) until `waiterPid` reports a non-granted
+   * lock request in `pg_locks` — proof it is blocked waiting for a lock held
+   * by another transaction (T1's EA row lock or the uncommitted unique index
+   * entry). The primary real-overlap signal. Uses `pg_locks` (rather than
+   * `pg_stat_activity.wait_event_type`) because the ungranted-lock row
+   * persists for the whole wait, so sampling cannot miss a transient window.
+   */
+  async function waitForBackendBlocked(
+    sql: { unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> },
+    pid: number,
+    timeoutMs = 8_000,
+  ): Promise<{ blockedOnLocktype: string; mode: string }> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const rows = (await sql.unsafe(
+        `SELECT locktype, mode
+         FROM pg_locks
+         WHERE pid = $1 AND granted = false
+         LIMIT 1`,
+        [pid],
+      )) as Array<{ locktype: string; mode: string }>;
+      if (rows.length > 0) {
+        return { blockedOnLocktype: rows[0]!.locktype, mode: rows[0]!.mode };
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(
+      `Backend ${pid} did not report an ungranted lock within ${timeoutMs}ms ` +
+        "(the race did not produce real overlap)",
+    );
+  }
+
+  it("Matrix A: same attempt, different operationIds → one applied, one no_change, 2 receipts, 1 audit (true overlap, 40001 retry)", async () => {
     const { adminCtx, attemptId } = await createOrgAndAttempt("FS Matrix A");
+    // db1/db2 are distinct max:1 pools → distinct stable backend PIDs for the
+    // pg_stat_activity overlap proof.
+    const t1BackendPid = (await collectConnectionEvidence(db1)).pid;
+    const t2BackendPid = (await collectConnectionEvidence(db2)).pid;
+    expect(t1BackendPid).not.toBe(t2BackendPid);
     const opA = randomUUID();
     const opB = randomUUID();
     const now = new Date();
@@ -612,6 +842,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
           "T1",
           opA,
           attemptId,
+          true,
         ),
         label: "T1",
         audit: { request: fakeAuditRequest() },
@@ -627,6 +858,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
           "T2",
           opB,
           attemptId,
+          true,
         ),
         label: "T2",
         audit: { request: fakeAuditRequest() },
@@ -641,25 +873,64 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       expect(t2Absent.operationId).toBe(opB);
       expect(t1Absent.attemptId).toBe(attemptId);
 
-      // T1 wins the EA lock (it was released first), commits applied.
+      // --- REAL OVERLAP, Phase 1: T1 enters its txn and inserts its receipt,
+      // then HOLDS ITS TRANSACTION OPEN (awaiting releaseT1Commit). T1 now
+      // holds the EA row lock with an uncommitted applied receipt. ---
       barrier.releaseT1.resolve();
+      const t1Open = await barrier.t1AfterReceiptInsert.promise;
+      expect(t1Open.operationId).toBe(opA);
+
+      // --- REAL OVERLAP, Phase 2: release T2. T2 enters its OWN transaction
+      // (this is the proof the old test lacked — T2's txn starts while T1 is
+      // still uncommitted). T2 then blocks on the EA row lock T1 holds. ---
+      barrier.releaseT2.resolve();
+      await waitForTransactionStarted(sqlObserver, t2BackendPid);
+
+      // Prove T2 is genuinely BLOCKED waiting on T1's EA row lock —
+      // deterministic, no sleep. This is the real-overlap invariant: T2 has
+      // an ungranted lock request (relation/transactionid/tuple) while T1
+      // is still uncommitted. The probe MUST run on sqlObserver (a third,
+      // independent connection) — db1/db2 are max:1 pools held open by the
+      // racers, so a probe on them would queue forever behind the open txn.
+      const t2Blocked = await waitForBackendBlocked(sqlObserver, t2BackendPid);
+      expect(["relation", "transactionid", "tuple"]).toContain(
+        t2Blocked.blockedOnLocktype,
+      );
+
+      // --- REAL OVERLAP, Phase 3: commit T1. T2 wakes; under REPEATABLE READ
+      // its first attempt's snapshot predates T1's commit, so its locked
+      // re-read of the attempt raises 40001 serialization_failure and
+      // executeInTransaction auto-retries with a fresh txid. ---
+      barrier.releaseT1Commit.resolve();
       const t1Result = await t1Promise;
       expect(t1Result.disposition).toBe("applied");
       expect(t1Result.resultPayload).toMatchObject({
         commandType: "force_submit",
         beforeStatus: "in_progress",
+        afterStatus: "graded",
       });
-      expect(t1Result.resultPayload).toMatchObject({ afterStatus: "graded" });
       const t1Commit = await barrier.t1PrimaryCommitted.promise;
       expect(t1Commit.disposition).toBe("applied");
 
-      // T2 acquires the lock AFTER T1's commit → sees graded → no_change.
-      barrier.releaseT2.resolve();
+      // T2 settles: on the retry its new snapshot sees graded → no_change.
       const t2Result = await t2Promise;
       expect(t2Result.disposition).toBe("no_change");
       expect(t2Result.outcome).toBe("no_change");
       expect(t2Result.resultPayload).toMatchObject({ beforeStatus: "graded" });
       expect(t2Result.resultPayload).toMatchObject({ afterStatus: "graded" });
+
+      // PROVE the 40001 retry happened: T2 logged ≥2 primary attempts with
+      // DISTINCT txids. (If a future PG does not raise 40001 here, T2 would
+      // have logged exactly 1 primary attempt — the assertion below would
+      // fail loudly rather than silently regress the race proof.)
+      const t2Attempts = await barrier.t2TransactionAttempts.promise;
+      const primaryAttempts = t2Attempts.filter((a) => a.phase === "primary");
+      expect(
+        primaryAttempts.length,
+        "T2 must have retried its primary transaction after a 40001",
+      ).toBeGreaterThanOrEqual(2);
+      const primaryTxids = new Set(primaryAttempts.map((a) => a.txid));
+      expect(primaryTxids.size).toBe(primaryAttempts.length);
     } finally {
       barrier.dispose();
       await Promise.allSettled([t1Promise, t2Promise]);
@@ -691,8 +962,11 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     expect(attempt?.status).toBe("graded");
   }, 30_000);
 
-  it("Matrix B: same attempt, same operationId, same payload → applied + idempotent_replay with real 23505 + fresh recovery txid", async () => {
+  it("Matrix B: same attempt, same operationId, same payload → applied + idempotent_replay with real 23505 + fresh recovery txid (true overlap)", async () => {
     const { adminCtx, attemptId } = await createOrgAndAttempt("FS Matrix B");
+    const t1BackendPid = (await collectConnectionEvidence(db1)).pid;
+    const t2BackendPid = (await collectConnectionEvidence(db2)).pid;
+    expect(t1BackendPid).not.toBe(t2BackendPid);
     const sharedOp = randomUUID();
     const now = new Date();
     const input1 = {
@@ -714,6 +988,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
           "T1",
           sharedOp,
           attemptId,
+          true,
         ),
         label: "T1",
         audit: { request: fakeAuditRequest() },
@@ -729,6 +1004,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
           "T2",
           sharedOp,
           attemptId,
+          true,
         ),
         label: "T2",
         audit: { request: fakeAuditRequest() },
@@ -736,20 +1012,34 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     );
 
     try {
-      // Both pre-reads complete before T1 inserts — both see absent, so T2 is
-      // guaranteed to hit the 23505 inside its primary transaction.
+      // Both pre-reads see absent (T1 still uncommitted at pre-read time).
       await barrier.t1ReadAbsent.promise;
       const t2Absent = await barrier.t2ReadAbsent.promise;
       expect(t2Absent.operationId).toBe(sharedOp);
 
+      // --- REAL OVERLAP: T1 enters txn, inserts receipt, HOLDS OPEN. ---
       barrier.releaseT1.resolve();
+      const t1Open = await barrier.t1AfterReceiptInsert.promise;
+      expect(t1Open.operationId).toBe(sharedOp);
+
+      // T2 enters its own txn while T1 is uncommitted, then blocks on the EA
+      // row lock (same attempt → shared lock). Prove the block on sqlObserver.
+      barrier.releaseT2.resolve();
+      await waitForTransactionStarted(sqlObserver, t2BackendPid);
+      const t2Blocked = await waitForBackendBlocked(sqlObserver, t2BackendPid);
+      expect(["relation", "transactionid", "tuple"]).toContain(
+        t2Blocked.blockedOnLocktype,
+      );
+
+      // Commit T1. T2 wakes; under RR its primary attempt 40001-retries, then
+      // its fresh snapshot sees graded → plans no_change → its receipt INSERT
+      // hits the REAL 23505 on the committed unique entry → fresh recovery
+      // → idempotent_replay of the winner's stored fact.
+      barrier.releaseT1Commit.resolve();
       const t1Result = await t1Promise;
       expect(t1Result.disposition).toBe("applied");
       await barrier.t1PrimaryCommitted.promise;
 
-      barrier.releaseT2.resolve();
-      // T2: primary insert violates the shared arbiter → fresh recovery →
-      // replay (same command + attempt + payload).
       let t2Resolved = false;
       let t2Result: Awaited<
         ReturnType<typeof forceSubmitWithOperationRaceRecovery>
@@ -883,11 +1173,13 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     expect((await countForceSubmitAudits(attemptId)).length).toBe(1);
   }, 30_000);
 
-  it("Matrix D: different attempts, same organization, same operationId → loser's primary tx fully rolls back (attempt untouched, no audit, no receipt)", async () => {
+  it("Matrix D: different attempts, same organization, same operationId → loser blocks on uncommitted unique index, real 23505, full rollback (attempt untouched, no audit, no receipt)", async () => {
     // The most important matrix: BOTH attempts live in the SAME organization
     // (the arbiter is organization-scoped) but on DIFFERENT exams, so neither
     // the EA lock nor any other row lock overlaps — the shared
-    // UNIQUE(organization_id, operation_id) index is the only mutex.
+    // UNIQUE(organization_id, operation_id) index is the only mutex. This is
+    // the unique-index race the reviewer required: T2 blocks on the
+    // UNCOMMITTED unique entry, then gets the REAL 23505 once T1 commits.
     const t = await createOrg();
     const a1 = await createAttemptInOrg(t, "FS Matrix D A1");
     const a2 = await createAttemptInOrg(t, "FS Matrix D A2");
@@ -910,7 +1202,9 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     // Prove the two connections are distinct backends in one schema.
     const ev1 = await collectConnectionEvidence(db1);
     const ev2 = await collectConnectionEvidence(db2);
-    expect(ev1.pid).not.toBe(ev2.pid);
+    const t1BackendPid = ev1.pid;
+    const t2BackendPid = ev2.pid;
+    expect(t1BackendPid).not.toBe(t2BackendPid);
     expect(ev1.currentSchema).toBe(ev2.currentSchema);
     expect(ev1.currentSchema).toBe(iso.schemaName);
 
@@ -925,6 +1219,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
           "T1",
           sharedOp,
           a1.attemptId,
+          true,
         ),
         label: "T1",
         audit: { request: fakeAuditRequest() },
@@ -940,6 +1235,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
           "T2",
           sharedOp,
           a2.attemptId,
+          true,
         ),
         label: "T2",
         audit: { request: fakeAuditRequest() },
@@ -950,8 +1246,32 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       await barrier.t1ReadAbsent.promise;
       await barrier.t2ReadAbsent.promise;
 
-      // Release T1: it locks A1, inserts the applied receipt, commits.
+      // --- REAL OVERLAP: T1 enters txn, inserts its receipt for A1, then
+      // HOLDS ITS TRANSACTION OPEN (awaiting releaseT1Commit). The uncommitted
+      // unique-index entry for sharedOp is now held by T1. ---
       barrier.releaseT1.resolve();
+      const t1Open = await barrier.t1AfterReceiptInsert.promise;
+      expect(t1Open.operationId).toBe(sharedOp);
+      expect(t1Open.attemptId).toBe(a1.attemptId);
+
+      // Release T2: it locks A2 (a DIFFERENT row — no EA-lock overlap with
+      // T1), reaches its own receipt INSERT for the SAME sharedOp, and BLOCKS
+      // on T1's uncommitted unique-index entry. Prove the block on sqlObserver.
+      barrier.releaseT2.resolve();
+      await waitForTransactionStarted(sqlObserver, t2BackendPid);
+      const t2Blocked = await waitForBackendBlocked(sqlObserver, t2BackendPid);
+      // T2 is blocked on the uncommitted unique-index entry — the wait is on
+      // the inserting transaction's transactionid (or the tuple), NOT on a
+      // relation/row lock (the attempts are different rows).
+      expect(["transactionid", "tuple", "relation"]).toContain(
+        t2Blocked.blockedOnLocktype,
+      );
+
+      // Commit T1. T2's blocked INSERT now resolves to the REAL 23505; the
+      // whole primary transaction rolls back BEFORE the submit/grade mutation;
+      // the fresh recovery transaction classifies an attempt_id conflict →
+      // IdempotencyConflictError.
+      barrier.releaseT1Commit.resolve();
       const t1Result = await t1Promise;
       expect(t1Result.disposition).toBe("applied");
       expect(t1Result.resultPayload).toMatchObject({
@@ -960,10 +1280,6 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       });
       await barrier.t1PrimaryCommitted.promise;
 
-      // Release T2: no shared lock with T1, so its receipt insert is the race
-      // point — it violates the arbiter and its WHOLE primary transaction
-      // rolls back before it ever submits/grades A2.
-      barrier.releaseT2.resolve();
       let t2Resolved = false;
       let t2Error: unknown = null;
       try {

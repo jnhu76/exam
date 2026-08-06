@@ -205,6 +205,23 @@ export interface ForceSubmitExecutionObserver {
     txid: string;
     disposition: "applied" | "no_change" | "idempotent_replay";
   }): Promise<void>;
+  /**
+   * Fires at the TOP of each `executeInTransaction` callback, right after
+   * {@link captureBackendIdentity}, for both the primary and recovery
+   * transactions. `attempt` is the 1-based index within a single racer's
+   * lifetime: the primary transaction is attempt 1; each auto-retry after a
+   * 40001/40P01 increments it; the fresh recovery transaction starts again at
+   * attempt 1 with `phase: "recovery"`. A test uses this to PROVE a retry
+   * actually happened (distinct txids across attempts) when the primary
+   * transaction serializes behind a concurrent winner under REPEATABLE READ.
+   */
+  onTransactionAttempt?(observation: {
+    label: ForceSubmitExecutionLabel;
+    phase: "primary" | "recovery";
+    attempt: number;
+    pid: number;
+    txid: string;
+  }): Promise<void>;
 }
 
 /**
@@ -570,9 +587,22 @@ async function runForceSubmitTransaction(
   const observer = options.observer;
   let identity: BackendIdentity = { pid: 0, txid: "" };
   let committedDisposition: "applied" | "no_change" | undefined;
+  // 1-based attempt index: increments on EACH `executeInTransaction` callback
+  // invocation (initial + every 40001/40P01 auto-retry). A test observer uses
+  // this to PROVE a serialization retry actually happened (distinct txids
+  // across attempts) when the primary serializes behind a concurrent winner.
+  let primaryAttempt = 0;
   try {
     const response = await executeInTransaction(db, async (tx) => {
       identity = await captureBackendIdentity(tx);
+      primaryAttempt += 1;
+      await observer?.onTransactionAttempt?.({
+        label,
+        phase: "primary",
+        attempt: primaryAttempt,
+        pid: identity.pid,
+        txid: identity.txid,
+      });
 
       const receiptRepo = createAttemptCommandReceiptRepo(tx);
       const txAttemptRepo = createAttemptRepo(tx);
@@ -774,6 +804,13 @@ async function runReceiptRecovery(
       identity = await captureBackendIdentity(tx);
       await observer?.onRecoveryTransaction?.({
         label,
+        pid: identity.pid,
+        txid: identity.txid,
+      });
+      await observer?.onTransactionAttempt?.({
+        label,
+        phase: "recovery",
+        attempt: 1,
         pid: identity.pid,
         txid: identity.txid,
       });
