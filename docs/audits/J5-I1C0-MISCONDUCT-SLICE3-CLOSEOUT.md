@@ -2,6 +2,11 @@
 
 > **Status:** BACKEND CLOSED — I1C1 (operations UI) + I1D (browser E2E) remain open.
 >
+> **Follow-up (2026-08-08):** I1C1 (Recovery Center operations UI) and I1D
+> (browser E2E + accessibility/responsive closeout) have since CLOSED on the
+> same branch; see `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md` (the J5
+> closeout). This document remains the backend-specific record of Slice 3.
+>
 > Branch: `feat/j5-i1c1-admin-operations-closeout` (NOT MERGED — for morning review).
 >
 > Authority chain: `AGENTS.md` → `docs/SPEC.md` →

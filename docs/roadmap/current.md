@@ -91,11 +91,27 @@ serializes concurrent marks (the recorded §17 exception to the old
 overwrite-only no-row-lock property); deterministic misconduct concurrency
 matrices A-E + failure atomicity are green. The audit policy schema for
 `attempt.misconductFlagged` now carries `operationId`. **J5-I1C1 (Admin
-operations UI) and J5-I1D (browser E2E + accessibility/responsive closeout)
-are NOT STARTED** — the Recovery Center detail pages remain read-only; the
-ProctorDashboard misconduct flow was updated to send `operationId` (the new
-contract) so it stays green, but the Recovery Center operations surface +
-the J5 browser E2E workflows remain open.
+operations UI) CLOSED (2026-08-08)** — the Recovery Attempt / Incident /
+Exam detail pages render a server-`allowedActions`-gated Operations surface:
+time grant, force-submit (required canonical reason + pending-authority
+retry identity), misconduct mark (severity + notes + pending-authority retry
+identity), incident investigate / add-note / change-severity / resolve /
+dismiss (all with `operationId` + `expectedVersion`; 409
+`INCIDENT_VERSION_CONFLICT` surfaces reload-and-retry), and proctor
+assign/revoke; every confirmed outcome reloads the authoritative projection;
+the shared `useRecoveryOperation` controller freezes ONE operationId per
+dialog session (retry-safe, J5-R0 §8.2) with fail-closed pending-authority
+persistence and focus-return on dialog close.
+**J5-I1D (browser E2E + accessibility/responsive closeout) CLOSED
+(2026-08-08)** — six new E2E specs (incident workflow incl. version
+conflict, time-grant deadline delta, force-submit + misconduct with
+commit-then-masked-500 lost-response retry proving same operationId + parsed
+`idempotent_replay` + same receipt `createdAt` + one audit, proctor
+assignment, and a11y/responsive) ran green via `bash scripts/e2e/run-wsl.sh`
+(2 shards). J5 closeout:
+`docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`. Issue #263 (cross-tab
+force-submit authority) remains a recorded P2 follow-up — deliberately NOT
+built per the mission scope.
 
 ### Plain-text subjective question loop
 

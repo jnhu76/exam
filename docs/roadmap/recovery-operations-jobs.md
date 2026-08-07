@@ -36,9 +36,21 @@
 > deterministic misconduct concurrency matrices A-E + failure atomicity are
 > green; the `attempt.misconductFlagged` audit schema now carries `operationId`.
 > The ProctorDashboard misconduct flow was updated to send `operationId`.
-> **J5-I1C1 (Admin operations UI) and J5-I1D (browser E2E +
-> accessibility/responsive closeout) are NOT STARTED** — the Recovery Center
-> detail pages remain read-only and the J5 browser E2E workflows remain open.
+> **J5-I1C1 (Admin operations UI) CLOSED (2026-08-08)** — server-
+> `allowedActions`-gated Operations surfaces on the Attempt / Incident / Exam
+> recovery pages (time grant, force submit, misconduct mark, incident
+> investigate/note/severity/resolve/dismiss with `operationId` +
+> `expectedVersion`, proctor assign/revoke), one frozen operationId per
+> dialog session via the shared `useRecoveryOperation` controller +
+> `RecoveryCommandDialog` (retry-safe, fail-closed pending-authority
+> persistence, focus-return). **J5-I1D (browser E2E + accessibility/
+> responsive closeout) CLOSED (2026-08-08)** — six new specs (incident
+> workflow incl. 409 version conflict, time-grant deadline delta, force-
+> submit + misconduct lost-response retry evidence, proctor assignment,
+> a11y/responsive) green via `bash scripts/e2e/run-wsl.sh` (2 shards).
+> **J5 CLOSED** — closeout: `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`.
+> Issue #263 (cross-tab force-submit authority) is a recorded P2 follow-up,
+> deliberately NOT built per the mission scope.
 > J6/J7 NOT STARTED.
 >
 > Updated: 2026-08-08
