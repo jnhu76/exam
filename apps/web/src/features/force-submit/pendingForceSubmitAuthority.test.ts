@@ -14,13 +14,15 @@ function validAuthority(
   overrides: Partial<PendingForceSubmitAuthority> = {},
 ): PendingForceSubmitAuthority {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     organizationId: ORG_ID,
     actorId: ACTOR_ID,
     command: {
       attemptId: "00000000-0000-4000-8000-000000000001",
       operationId: "00000000-0000-4000-8000-000000000002",
       reason: "管理员强制交卷",
+      examId: "exam-1",
+      candidateName: "张三",
     },
     createdAt: Date.now(),
     ...overrides,
@@ -46,7 +48,7 @@ describe("pendingForceSubmitAuthority", () => {
       const stored = sessionStorage.getItem(STORAGE_KEY);
       expect(stored).not.toBeNull();
       const parsed = JSON.parse(stored!);
-      expect(parsed.schemaVersion).toBe(1);
+      expect(parsed.schemaVersion).toBe(2);
       expect(parsed.command.attemptId).toBe(auth.command.attemptId);
       expect(parsed.command.operationId).toBe(auth.command.operationId);
     });
@@ -189,9 +191,9 @@ describe("pendingForceSubmitAuthority", () => {
       expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
-    it("returns corrupt when schemaVersion is not 1", () => {
+    it("returns corrupt when schemaVersion is not 2", () => {
       const auth = validAuthority() as unknown as Record<string, unknown>;
-      auth.schemaVersion = 2;
+      auth.schemaVersion = 3;
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
       const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
       expect(result.kind).toBe("corrupt");
@@ -224,6 +226,50 @@ describe("pendingForceSubmitAuthority", () => {
     it("returns corrupt when reason has leading whitespace", () => {
       const auth = validAuthority();
       auth.command.reason = " 管理员强制交卷";
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
+      expect(result.kind).toBe("corrupt");
+    });
+
+    it("returns corrupt when examId is missing", () => {
+      const auth = validAuthority() as unknown as {
+        command: Record<string, unknown>;
+      };
+      delete auth.command.examId;
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
+      expect(result.kind).toBe("corrupt");
+    });
+
+    it("returns corrupt when examId is empty", () => {
+      const auth = validAuthority();
+      auth.command.examId = "";
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
+      expect(result.kind).toBe("corrupt");
+    });
+
+    it("returns corrupt when candidateName is missing", () => {
+      const auth = validAuthority() as unknown as {
+        command: Record<string, unknown>;
+      };
+      delete auth.command.candidateName;
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
+      expect(result.kind).toBe("corrupt");
+    });
+
+    it("returns corrupt when candidateName is empty", () => {
+      const auth = validAuthority();
+      auth.command.candidateName = "";
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
+      expect(result.kind).toBe("corrupt");
+    });
+
+    it("returns corrupt when candidateName exceeds 200 chars", () => {
+      const auth = validAuthority();
+      auth.command.candidateName = "名".repeat(201);
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
       const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
       expect(result.kind).toBe("corrupt");

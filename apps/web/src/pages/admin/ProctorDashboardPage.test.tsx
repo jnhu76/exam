@@ -1002,13 +1002,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1065,13 +1067,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1104,13 +1108,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1152,13 +1158,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1272,13 +1280,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1325,13 +1335,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1410,13 +1422,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1480,6 +1494,72 @@ describe("ProctorDashboardPage", () => {
 
       removerSpy.mockRestore();
     });
+
+    // ── Review P1-2: the pending authority carries its target exam identity.
+    //    When the banner renders on a DIFFERENT exam's page it must identify
+    //    the command's target (exam + candidate) and MUST NOT offer the
+    //    destructive retry — retrying there would force-submit the OTHER
+    //    exam's candidate from a page that gives no context. Navigation back
+    //    to the owning exam and dismiss (global-slot cleanup) remain
+    //    available. This test fails if the exam-scope guard is removed.
+    it("identifies the target exam and withholds the destructive retry when the pending command belongs to a DIFFERENT exam", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000fff2";
+      // The pending command targets exam-9 / 王五 (att-9) — NOT the page's
+      // exam-1. The page renders /admin/exams/exam-1/proctor.
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 2,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-9",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+            examId: "exam-9",
+            candidateName: "王五",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+
+      renderPage();
+      const banner = await pendingBanner();
+
+      // The banner identifies the command's target: the owning exam + the
+      // candidate snapshot.
+      expect(banner).toHaveTextContent("其他考试");
+      expect(banner).toHaveTextContent("exam-9");
+      expect(banner).toHaveTextContent("王五");
+
+      // NO destructive retry on the wrong exam page.
+      expect(
+        screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeNull();
+      // Navigation back to the owning exam + dismiss are available.
+      expect(
+        screen.getByRole("button", { name: "返回原考试页面" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "清除未确认命令" }),
+      ).toBeInTheDocument();
+      // No POST was ever sent — the pending command stays untouched.
+      expect(apiPost).not.toHaveBeenCalled();
+
+      // Dismiss from the banner clears the stale storage record.
+      fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
+      await waitFor(() => {
+        expect(
+          sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+        ).toBeNull();
+      });
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+    });
+
     //    the server confirmed the command — the same bytes may be a lost
     //    response (indeterminate, retry REQUIRED) or a confirmed outcome whose
     //    cleanup failed. When React state drifted to idle (simulated by
@@ -1519,13 +1599,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "org-1",
           actorId: "admin-1",
           command: {
             attemptId: "att-1",
             operationId: pendingOpId,
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
@@ -1652,13 +1734,15 @@ describe("ProctorDashboardPage", () => {
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           organizationId: "other-org",
           actorId: "other-user",
           command: {
             attemptId: "att-1",
             operationId: "00000000-0000-4000-8000-000000000fff",
             reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
           },
           createdAt: Date.now(),
         }),
