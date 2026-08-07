@@ -223,6 +223,13 @@ export function ProctorDashboardPage() {
   const [flagging, setFlagging] = useState(false);
   const [misconductTarget, setMisconductTarget] =
     useState<CandidateStatusItem | null>(null);
+  // J5-I1C Slice 3: misconduct is now an operationId-keyed durable command
+  // (J5-R0 §8.2). The operationId is minted once when the dialog opens and
+  // reused for the lifetime of this single-shot mark; a retry within the same
+  // dialog session reuses it so the server treats it as an idempotent replay.
+  const [misconductOperationId, setMisconductOperationId] = useState<
+    string | null
+  >(null);
 
   const [forceSubmitting, setForceSubmitting] = useState(false);
 
@@ -1023,11 +1030,16 @@ export function ProctorDashboardPage() {
   /** Handles misconduct flag for a candidate. */
   async function handleFlagMisconduct() {
     if (!misconductTarget?.attemptId || flagging) return;
+    // Reuse the frozen operationId for the lifetime of this mark so a retry
+    // within the same dialog session is an idempotent replay (J5-R0 §8.2).
+    const operationId = misconductOperationId ?? createContextSafeUuid();
+    setMisconductOperationId(operationId);
     setFlagging(true);
     try {
       await api.post(
         `/api/admin/attempts/${misconductTarget.attemptId}/misconduct`,
         {
+          operationId,
           severity: misconductSeverity,
           notes:
             misconductNotes ||
@@ -1037,6 +1049,7 @@ export function ProctorDashboardPage() {
       toast.success(t("admin.proctorDashboard.misconductDialog.done"));
       setMisconductDialogOpen(false);
       setMisconductNotes("");
+      setMisconductOperationId(null);
       await loadStatus();
     } catch (err) {
       toast.error(
@@ -1636,6 +1649,10 @@ export function ProctorDashboardPage() {
                           setMisconductTarget(candidate);
                           setMisconductSeverity("warning");
                           setMisconductNotes("");
+                          // Mint a fresh operationId for this new mark; it is
+                          // reused for the lifetime of the open dialog so a
+                          // retry is an idempotent replay (J5-I1C Slice 3).
+                          setMisconductOperationId(createContextSafeUuid());
                           setMisconductDialogOpen(true);
                         }}
                       >

@@ -22,23 +22,26 @@
 > **J5-I1B is CLOSED** (Recovery Center frontend + Exam Recovery Context:
 > queue page, incident detail, attempt operations, exam recovery detail —
 > I1B1–I1B4, one branch, PR #254).
-> **J5-I1C Slice 2 IN REVIEW (PR #262)** — force-submit is an operationId-keyed
-> durable command (receipt-first transaction, replay/conflict arbitration,
-> exact-23505 fresh-transaction recovery, true transaction-overlap concurrency
-> matrices, mandatory audit on applied, ctx.actorId single actor authority,
-> same-tab pending force-submit retry identity in the proctor dashboard). A
-> re-review of PR #262 found the remaining work concentrated on the client-side
-> pending-command authority; fixes in flight on the same branch:
-> page-level recovery banner independent of candidate live status (P1-1),
-> fail-closed persisted-command save with read-back verification (P1-2),
-> a structural test locking the test-only orchestrator entry out of production
-> source (P2-1), strict sessionStorage authority validation with corrupt-record
-> surfacing (P2-2), and a lost-response E2E that proves identical operationId +
-> parsed `idempotent_replay` + one receipt via createdAt match (P2-3). J5-I1C
-> misconduct activation NOT STARTED (experiment-gated). J5-I1D NOT STARTED.
+> **J5-I1C Slice 2 CLOSED (PR #262 merged)** — force-submit is an
+> operationId-keyed durable command (receipt-first transaction, replay/conflict
+> arbitration, exact-23505 fresh-transaction recovery, true transaction-overlap
+> concurrency matrices, mandatory audit on applied, ctx.actorId single actor
+> authority, same-tab pending force-submit retry identity in the proctor
+> dashboard). **J5-I1C Slice 3 (misconduct-mark durable command) — backend
+> CLOSED**: the misconduct route is now an operationId-keyed durable command
+> arbitrated by the same shared `attempt_command_receipts` table; the §5.2/§8
+> PostgreSQL concurrency experiment (2026-08-07) adjudicated the projection
+> mechanism (`exam_attempts FOR UPDATE` inside the receipt transaction — the
+> recorded §17 exception to the old overwrite-only no-row-lock property);
+> deterministic misconduct concurrency matrices A-E + failure atomicity are
+> green; the `attempt.misconductFlagged` audit schema now carries `operationId`.
+> The ProctorDashboard misconduct flow was updated to send `operationId`.
+> **J5-I1C1 (Admin operations UI) and J5-I1D (browser E2E +
+> accessibility/responsive closeout) are NOT STARTED** — the Recovery Center
+> detail pages remain read-only and the J5 browser E2E workflows remain open.
 > J6/J7 NOT STARTED.
 >
-> Updated: 2026-08-07
+> Updated: 2026-08-08
 >
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
@@ -1181,7 +1184,10 @@ PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
        implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
          (J5-I1A1 CLOSED, PR #252; J5-I1A2 CLOSED, PR #253;
           J5-I1A3 CLOSED, PR #254; J5-I1A CLOSED;
-          J5-I1B CLOSED — Recovery Center UI, PR #254; J5-I1C–I1D NOT STARTED)
+          J5-I1B CLOSED — Recovery Center UI, PR #254; J5-I1C0 audit CLOSED
+          (PR #255); J5-I1C Slice 1 CLOSED (PR #261); J5-I1C Slice 2 CLOSED
+          (PR #262 merged); J5-I1C Slice 3 (misconduct backend) CLOSED;
+          J5-I1C1 (operations UI) + J5-I1D (E2E) NOT STARTED)
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
@@ -1204,7 +1210,13 @@ Operations Context) are **CLOSED** (PR #252, PR #253, PR #254) — **J5-I1A is
 CLOSED**. **J5-I1B (Recovery Center UI) is CLOSED** (queue, incident detail,
 attempt operations, and exam recovery detail pages, PR #254) — including the
 Exam Recovery Context aggregate (`GET /admin/recovery/exams/:examId`,
-contract §6.5). J5-I1C–I1D are NOT STARTED.
+contract §6.5). **J5-I1C0 audit CLOSED (PR #255). J5-I1C Slice 1 CLOSED (PR
+#261). J5-I1C Slice 2 CLOSED (PR #262 merged). J5-I1C Slice 3 (misconduct
+durable command backend) CLOSED**: misconduct is now an operationId-keyed
+durable command (the §5.2/§8 PostgreSQL experiment adjudicated the
+`exam_attempts FOR UPDATE` projection mechanism; misconduct concurrency
+matrices A-E + failure atomicity green). J5-I1C1 (Admin operations UI) and
+J5-I1D (browser E2E + accessibility/responsive closeout) are NOT STARTED.
 J5 consumes the already-shipped authorities of J1 (Admin time-grant path),
 J3 (Incident aggregate + commands + API), and J4-I1 (Proctor→Exam assignment
 persistence, API, resource-scope resolution, minimum Proctor incident
