@@ -332,10 +332,12 @@ export interface ForceSubmitExecutionPlan {
  *   (gradedAt=now) when auto-gradable; a pending-manual workset stays
  *   `submitted` (gradeAttemptIdempotent returns a partial result without a
  *   transition). outcome=applied, audit written.
- * - `submitted`: NO new submit transition (crash-recovery row) — only
- *   grading completes. outcome=no_change, no audit. `submittedAt` is the
- *   row's existing value; `gradedAt` is `now` (auto) or stays null
- *   (pending_manual).
+ * - `submitted`: terminal no-op (frozen J5-I1C0 §4.2: `no_change` means
+ *   afterStatus === beforeStatus). A crash-window row left by ANOTHER
+ *   operation is NOT re-graded here — completing grading behind a
+ *   "no_change" receipt would make the receipt's immutable fact lie. The
+ *   candidate submit orchestrator (`submitAndGradeAttempt`) owns crash
+ *   recovery of its own `submitted` rows. outcome=no_change, no audit.
  * - `grading`: transient mid-flight state not resumable from a row read —
  *   untouched (existing route contract). outcome=no_change, no audit.
  * - `graded`: terminal no-op. outcome=no_change, no audit.
@@ -352,33 +354,8 @@ export function planForceSubmitExecution(
     case "in_progress":
     case "disrupted":
       return appliedPlan(beforeStatus, locked, appliedAt);
-    case "submitted": {
-      // gradeAttemptIdempotent transitions submitted → graded only when the
-      // workset is auto-gradable; a pending_manual workset returns a partial
-      // result and the status stays submitted (engine authority).
-      const pendingManual = locked.gradingStatus === "pending_manual";
-      const afterStatus = pendingManual ? "submitted" : "graded";
-      const submittedAt = locked.submittedAt?.toISOString() ?? null;
-      const gradedAt = pendingManual ? null : appliedAt;
-      return {
-        beforeStatus,
-        afterStatus,
-        outcome: "no_change",
-        needsSubmit: false,
-        needsGrade: true,
-        needsAudit: false,
-        submittedAt,
-        gradedAt,
-        resultPayload: {
-          commandType: "force_submit",
-          beforeStatus,
-          afterStatus,
-          submittedAt,
-          gradedAt,
-          appliedAt,
-        },
-      };
-    }
+    case "submitted":
+      return noOpPlan("submitted", locked, appliedAt);
     case "grading":
       return noOpPlan("grading", locked, appliedAt);
     case "graded":
@@ -424,9 +401,9 @@ function appliedPlan(
   };
 }
 
-/** Plan for a terminal no-op (`graded`) or untouchable (`grading`) row. */
+/** Plan for a terminal no-op (`submitted`/`grading`/`graded`) row. */
 function noOpPlan(
-  afterStatus: "grading" | "graded",
+  afterStatus: "submitted" | "grading" | "graded",
   locked: ExamAttempt,
   appliedAt: string,
 ): ForceSubmitExecutionPlan {
@@ -669,9 +646,10 @@ async function runForceSubmitTransaction(
       // Execute the existing engine mutation, unchanged: submitAttempt (with
       // active-interruption terminalization for disrupted, reasonCode
       // admin_force_submit_terminalization) then gradeAttemptIdempotent,
-      // inside the SAME locked transaction (no submitted-but-not-graded crash
-      // window; a `submitted` row left by a crashed earlier operation is
-      // recovered to graded here).
+      // inside the SAME locked transaction — no submitted-but-not-graded
+      // crash window is created here (the plan runs BOTH steps only on
+      // in_progress/disrupted; a `submitted` row plans a pure no_change with
+      // no mutation, per J5-I1C0 §4.2).
       const gradingWorksetRepo = createGradingWorksetRepoAdapter(
         createAttemptGradingEntryRepo(tx),
         ctx,

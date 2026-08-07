@@ -115,7 +115,9 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * POST /admin/attempts/:attemptId/force-submit — Admin force-submits an
    * in_progress or disrupted attempt, then grades it inside the SAME
    * transaction (no submitted-but-not-graded crash window). A `submitted` row
-   * left by a crashed earlier operation is recovered to `graded` here.
+   * is a terminal no-op: `no_change` receipt with afterStatus === beforeStatus
+   * (frozen J5-I1C0 §4.2 — the command never mutates behind a "no_change"
+   * fact).
    *
    * J5-I1C Slice 2: the request carries an operationId (client-generated
    * command identity, J5-R0 §8.2) and a REQUIRED canonical reason (J5-R0
