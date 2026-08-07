@@ -667,13 +667,13 @@ describe("attempt routes", () => {
       expect(after?.gradedAt?.getTime()).toBe(firstGradedAt?.getTime());
     });
 
-    it("recovers a submitted-but-not-graded attempt: no_change receipt, grading recovery retained, no audit", async () => {
-      // Crash-recovery contract (single-tx submit+grade): an attempt left
-      // `submitted` by a crashed earlier operation is recovered to `graded`
-      // by a force-submit, with no forceSubmit audit row (no force-submit
-      // transition off the in_progress/disrupted baseline — only grading
-      // completes). The receipt's result_payload reflects the committed fact
-      // (before=submitted, after=graded).
+    it("leaves a submitted-but-not-graded attempt untouched: pure no_change receipt, no grading recovery, no audit", async () => {
+      // Frozen J5-I1C0 §4.2: `no_change` means afterStatus === beforeStatus —
+      // the receipt's immutable fact must be honest. A `submitted` crash-window
+      // row is a terminal no-op for the force-submit command: it must NOT
+      // silently complete grading behind a "no_change" receipt (grading
+      // recovery of a crashed submit belongs to the candidate submit
+      // orchestrator, `submitAndGradeAttempt`, not to a no_change command).
       //
       // Slice 4: the submit freeze barrier materializes grading workset
       // entries atomically with the status flip, so a real crashed-after-submit
@@ -718,10 +718,14 @@ describe("attempt routes", () => {
         ),
       );
 
+      const submittedBefore = await createAttemptRepo(ctx.db).findById(
+        adminCtx,
+        attemptId,
+      );
       const operationId = crypto.randomUUID();
       const res = await forceSubmit(t, attemptId, {
         operationId,
-        reason: "recover submitted crash row",
+        reason: "submitted row is terminal",
       });
 
       expect(res.statusCode).toBe(200);
@@ -729,17 +733,21 @@ describe("attempt routes", () => {
       expect(body.disposition).toBe("no_change");
       expect(body.outcome).toBe("no_change");
       expect(body.resultPayload.beforeStatus).toBe("submitted");
-      expect(body.resultPayload.afterStatus).toBe("graded");
+      expect(body.resultPayload.afterStatus).toBe("submitted");
 
+      // NO mutation: the row stays exactly as the crashed submit left it.
       const after = await createAttemptRepo(ctx.db).findById(
-        makeAdminCtx(t),
+        adminCtx,
         attemptId,
       );
-      expect(after?.status).toBe("graded");
-      expect(after?.gradedAt).not.toBeNull();
+      expect(after?.status).toBe("submitted");
+      expect(after?.gradedAt).toBeNull();
+      expect(after?.submittedAt?.getTime()).toBe(
+        submittedBefore?.submittedAt?.getTime(),
+      );
 
-      // 1 durable receipt, 0 forceSubmit audit (grading recovery is not a
-      // force-submit transition).
+      // 1 durable receipt whose stored fact is honest, 0 forceSubmit audit
+      // (no real transition).
       const receipts = await listReceipts(attemptId);
       expect(receipts).toHaveLength(1);
       expect(receipts[0]!.outcome).toBe("no_change");
