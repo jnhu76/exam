@@ -311,6 +311,21 @@ export function ProctorDashboardPage() {
       setForceSubmitState({ phase: "idle" });
       return;
     }
+    // Re-review P2: never downgrade a stronger in-session fact. Storage alone
+    // reconstructs `indeterminate`, but when the session ALREADY knows the
+    // outcome was confirmed (cleanup_failed) — or a POST is still in flight
+    // (submitting) — for the SAME operationId, keep the stronger state: the
+    // record cannot prove the outcome, so it must not overwrite what the
+    // execution path knows. (This callback is recreated exactly when the
+    // effect re-runs — user/t change — so the captured state is current.)
+    if (
+      (forceSubmitState.phase === "cleanup_failed" ||
+        forceSubmitState.phase === "submitting") &&
+      forceSubmitState.command.operationId ===
+        result.authority.command.operationId
+    ) {
+      return;
+    }
     setForceSubmitState({
       phase: "indeterminate",
       command: result.authority.command,
@@ -536,10 +551,17 @@ export function ProctorDashboardPage() {
             // authority must know which exam/candidate it belongs to, so a
             // recovery surface on a DIFFERENT exam page can identify the
             // command instead of offering a contextless destructive retry.
+            // The candidate snapshot must NEVER be empty — the loader treats
+            // an empty label as corrupt and clears the record, destroying the
+            // operation identity this save is meant to protect (re-review
+            // P1); fall back to a stable non-empty label when the candidate
+            // left the polling projection while the dialog was open.
             examId,
             candidateName:
               data?.candidates.find((c) => c.attemptId === attemptId)?.name ??
-              "",
+              t("admin.proctorDashboard.forceSubmit.candidateFallback", {
+                attemptId,
+              }),
           };
     await sendForceSubmitCommand(command, { fromDialog: true });
   }

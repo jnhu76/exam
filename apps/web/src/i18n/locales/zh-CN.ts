@@ -1515,6 +1515,7 @@ const zhCN = {
         bannerOtherExamBody:
           "该命令针对「{{examId}}」考试的考生「{{candidateName}}」。为避免在错误的考试页面执行强制交卷，请返回原考试页面处理，或清除该记录。",
         bannerGoToExam: "返回原考试页面",
+        candidateFallback: "考生（{{attemptId}}）",
         bannerRetry: "重试未确认强制交卷",
         bannerDismiss: "清除未确认命令",
         dismissFailed:

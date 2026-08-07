@@ -81,7 +81,8 @@ export type PendingForceSubmitLoadResult =
 export type SavePendingForceSubmitError =
   | "storage_unavailable"
   | "write_failed"
-  | "readback_mismatch";
+  | "readback_mismatch"
+  | "invalid_authority";
 
 /** Explicit result of {@link savePendingForceSubmit} (re-review P1-2). */
 export type SavePendingForceSubmitResult =
@@ -225,15 +226,26 @@ export function loadPendingForceSubmit(
  * treats as mandatory authority fields (`isValidAuthority`), and any future
  * field — no field can be damaged without breaking equality.
  *
+ * The authority is ALSO validated with the SAME full validator the loader
+ * uses BEFORE the write (re-review P1): the byte read-back only proves the
+ * write stuck — it cannot catch a semantically invalid record (e.g. an empty
+ * candidateName snapshot from a stale candidate projection), which the loader
+ * would then treat as corrupt and DELETE, silently destroying the operation
+ * identity this save was meant to protect. "Writer can write" and "reader
+ * can read" can never diverge: a record that passes here always passes
+ * `loadPendingForceSubmit`.
+ *
  * Returns `{ ok: true }` only when the verified record is durably stored.
  * Returns `{ ok: false, error }` when:
- *   - storage is unavailable / blocked         → `storage_unavailable`;
- *   - `setItem` threw (quota, blocked, ...)    → `write_failed`;
- *   - the read-back is missing                 → `write_failed` (the write
+ *   - the authority fails `isValidAuthority`      → `invalid_authority`
+ *     (nothing is written; the caller must fix the record, not the storage);
+ *   - storage is unavailable / blocked             → `storage_unavailable`;
+ *   - `setItem` threw (quota, blocked, ...)        → `write_failed`;
+ *   - the read-back is missing                     → `write_failed` (the write
  *     did not stick);
  *   - the read-back differs from the written
- *     bytes                                    → `readback_mismatch` (the bad
- *     bytes are removed so the next save starts clean).
+ *     bytes                                        → `readback_mismatch` (the
+ *     bad bytes are removed so the next save starts clean).
  *
  * Callers MUST NOT send the POST when the result is not ok — the retry-
  * identity contract includes refresh recovery, so an unpersisted command
@@ -243,6 +255,13 @@ export function loadPendingForceSubmit(
 export function savePendingForceSubmit(
   authority: PendingForceSubmitAuthority,
 ): SavePendingForceSubmitResult {
+  // Same validator the loader runs — fail closed BEFORE any write so a record
+  // that could never be read back (corrupt → cleared) is never persisted.
+  if (
+    !isValidAuthority(authority, authority.organizationId, authority.actorId)
+  ) {
+    return { ok: false, error: "invalid_authority" };
+  }
   const storage = getStorage();
   if (!storage) return { ok: false, error: "storage_unavailable" };
   const key = storageKey(authority.organizationId, authority.actorId);
