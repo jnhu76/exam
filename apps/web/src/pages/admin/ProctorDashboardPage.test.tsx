@@ -1,4 +1,10 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
@@ -873,7 +879,14 @@ describe("ProctorDashboardPage", () => {
       const confirmBtn = await screen.findByRole("button", {
         name: /确认|重试强制交卷/,
       });
-      fireEvent.click(confirmBtn);
+      // The click handler is async: `handleForceSubmitConfirm` → POST →
+      // continuation state updates, and on success a chained `loadStatus()`.
+      // fireEvent only wraps the synchronous dispatch in act(); awaiting
+      // act() flushes the whole continuation chain, so no render lands
+      // outside act() (removes the "not wrapped in act" warnings).
+      await act(async () => {
+        fireEvent.click(confirmBtn);
+      });
     }
 
     /** Returns the page-level pending banner, or fails if it is absent. */
@@ -920,7 +933,11 @@ describe("ProctorDashboardPage", () => {
       const retryBtn = screen.getByRole("button", {
         name: "重试未确认强制交卷",
       });
-      fireEvent.click(retryBtn);
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
+      await act(async () => {
+        fireEvent.click(retryBtn);
+      });
 
       await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
       const retryBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
@@ -1019,9 +1036,13 @@ describe("ProctorDashboardPage", () => {
       ).not.toBeInTheDocument();
 
       // Retry from the banner reuses the persisted operationId verbatim.
-      fireEvent.click(
-        screen.getByRole("button", { name: "重试未确认强制交卷" }),
-      );
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
+        );
+      });
       await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
       const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
       expect(body.operationId).toBe(pendingOpId);
@@ -1064,9 +1085,13 @@ describe("ProctorDashboardPage", () => {
       renderPage();
 
       const banner = await pendingBanner();
-      fireEvent.click(
-        screen.getByRole("button", { name: "重试未确认强制交卷" }),
-      );
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
+        );
+      });
 
       await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
       const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
@@ -1109,6 +1134,233 @@ describe("ProctorDashboardPage", () => {
       ).toBeNull();
       // No POST was ever sent.
       expect(apiPost).not.toHaveBeenCalled();
+    });
+
+    // ── Re-review P1 (mutation-proof): a pending command for attempt A must
+    //    stay recoverable even after the admin opens (and closes) a BLOCKED
+    //    force-submit dialog for a different attempt B. The old code reset
+    //    `forceSubmitState` to `idle` in the blocked branch, which dropped
+    //    the page-level banner (it renders only in the `indeterminate` phase)
+    //    while the durable record was still present — re-introducing the
+    //    unreachable-slot bug from a second entry point.
+    it("keeps the pending banner alive when a DIFFERENT candidate's force-submit dialog is blocked and closed", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000aaa1";
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      // A (att-1) is GRADED — no card button; B (att-2) is still in_progress.
+      apiGet.mockResolvedValue({
+        candidates: [
+          makeCandidate({ status: "graded", attemptId: "att-1" }),
+          makeCandidate({
+            candidateId: "cand-2",
+            name: "李四",
+            attemptId: "att-2",
+            status: "in_progress",
+          }),
+        ],
+        total: 2,
+      });
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
+
+      renderPage();
+      const banner = await pendingBanner();
+
+      // Click B's force-submit → the dialog opens but is BLOCKED by the
+      // pending A (the global per-admin slot holds at most one command).
+      const forceSubmitButtons = screen.getAllByRole("button", {
+        name: "强制交卷",
+      });
+      expect(forceSubmitButtons).toHaveLength(1); // only B's card has one
+      fireEvent.click(forceSubmitButtons[0]!);
+      await screen.findByText("确认强制交卷");
+      await screen.findAllByText(
+        "存在未确认的强制交卷命令，请先解决后再操作。",
+      );
+
+      // Close the B dialog (cancel).
+      fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+      // The banner for A is STILL visible — opening/blocking/closing B must
+      // not have discarded A's recovery surface.
+      expect(
+        screen.getByTestId("pending-force-submit-banner"),
+      ).toBeInTheDocument();
+
+      // Retry from the banner → POST replays op-A for att-1 verbatim.
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
+        );
+      });
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      expect(apiPost.mock.calls[0]![0]).toContain("/att-1/force-submit");
+      expect(body.operationId).toBe(pendingOpId);
+      expect(body.reason).toBe("管理员强制交卷");
+    });
+
+    // ── Re-review P2: save read-back is byte-for-byte. A storage layer that
+    //    returns the SAME record re-serialized with different formatting is
+    //    semantically identical but byte-different — the old field-level
+    //    comparison would accept it; the fail-closed contract must not.
+    it("fails closed when the read-back bytes differ from the written record", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // The read-back re-serializes pending force-submit records with pretty
+      // formatting: same parsed object (all fields intact), different bytes.
+      const originalGetItem = Storage.prototype.getItem;
+      const getItemSpy = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockImplementation(function (this: Storage, key: string) {
+          const value = originalGetItem.call(this, key);
+          if (key.startsWith("exam.pendingForceSubmit:") && value !== null) {
+            return JSON.stringify(JSON.parse(value), null, 2);
+          }
+          return value;
+        });
+
+      renderPage();
+      await openForceSubmitDialog();
+      await confirmForceSubmit();
+
+      // Fail-closed: no POST, persistence failure surfaced, bad bytes removed.
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("无法安全保存强制交卷命令"),
+        );
+      });
+      expect(apiPost).not.toHaveBeenCalled();
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
+
+      getItemSpy.mockRestore();
+    });
+
+    // ── Re-review P2: explicit dismiss must NOT switch the UI to "cleared"
+    //    when the durable record could not be removed. The banner stays and
+    //    an error is surfaced, so the admin never believes the slot is free
+    //    while a stale record still blocks later force-submits.
+    it("keeps the banner and surfaces an error when explicit dismiss cannot clear the record", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000ccc1";
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate({ status: "graded", attemptId: "att-1" })],
+        total: 1,
+      });
+      // Poison removeItem so the clear fails.
+      const removerSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {
+          throw new DOMException("blocked", "SecurityError");
+        });
+
+      renderPage();
+      await pendingBanner();
+      fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("无法清除未确认的强制交卷命令"),
+        );
+      });
+      // The banner is KEPT and the durable record is still present.
+      expect(
+        screen.getByTestId("pending-force-submit-banner"),
+      ).toBeInTheDocument();
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).not.toBeNull();
+      // No POST was ever sent.
+      expect(apiPost).not.toHaveBeenCalled();
+
+      removerSpy.mockRestore();
+    });
+
+    // ── Re-review P2: a CONFIRMED outcome still advances the UI even when
+    //    the durable record cannot be cleared — but the failed cleanup is
+    //    surfaced instead of silently swallowing it.
+    it("warns but advances the UI when a confirmed success cannot clear the record", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000ddd1";
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate({ status: "graded", attemptId: "att-1" })],
+        total: 1,
+      });
+      // The server confirms (idempotent replay) but the clear fails.
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
+      const removerSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {
+          throw new DOMException("blocked", "SecurityError");
+        });
+
+      renderPage();
+      await pendingBanner();
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
+        );
+      });
+
+      // Confirmed success: success toast + warning about the failed cleanup.
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("已强制交卷"),
+        );
+      });
+      expect(toast.warning).toHaveBeenCalledWith(
+        expect.stringContaining("清理失败"),
+      );
+      // The UI advances (banner gone) — only the stale durable record stays,
+      // which would replay the SAME operationId (idempotent) on next load.
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+
+      removerSpy.mockRestore();
     });
 
     // ── Re-review P1-2: fail-closed persistence. When sessionStorage cannot
