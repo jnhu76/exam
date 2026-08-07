@@ -210,7 +210,16 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "atomic",
     "privileged_mutation",
     "low",
-    z.object({ reason: z.string().max(500).optional() }).strict(),
+    // J5-I1C Slice 2: metadata now carries the operationId the receipt was
+    // committed under (audit links to operation identity — J5-I1C0 §2.1
+    // "operationId in audit evidence"). `reason` is required by the
+    // operation-aware contract (J5-R0 §8.1) and always canonical-trimmed.
+    z
+      .object({
+        operationId: z.string().uuid(),
+        reason: z.string().trim().min(1).max(500),
+      })
+      .strict(),
   ),
   // REC-I4-I3B2: the old POST /extend-time route was cut. The action is retained
   // verbatim (ADR "NO rename") but deprecated — no production emitter remains.

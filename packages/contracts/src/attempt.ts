@@ -435,26 +435,21 @@ export type MarkProctorIncidentResponse = z.infer<
 >;
 
 // ── Force Submit (Admin) ──────────────────────────────────────────
-
-/**
- * Request body schema for an admin force-submitting an attempt.
- * `reason` is an optional human-readable note recorded in the audit log.
- */
-export const ForceSubmitRequestSchema = z.object({
-  reason: z.string().max(500).optional(),
-});
-
-/** Type for a force-submit request body. */
-export type ForceSubmitRequest = z.infer<typeof ForceSubmitRequestSchema>;
+//
+// The legacy `ForceSubmitRequestSchema` (optional `reason`, no operationId)
+// was REMOVED in J5-I1C Slice 2: the operation-aware
+// {@link ForceSubmitWithOperationRequestSchema} below is the only accepted
+// force-submit wire shape (J5-R0 §8.1/§8.2 — required canonical reason +
+// client-generated operationId). The receipt payload schemas below carry the
+// canonical request identity.
 
 // ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────
 //
 // Durable, operationId-keyed command-receipt contracts for the two dangerous
-// Attempt commands (`force_submit`, `misconduct_mark`). These coexist with the
-// legacy `ForceSubmitRequestSchema` / `FlagMisconductRequestSchema` above and
-// are NOT yet wired into any route (J5-I1C0 audit §8 Slice 1: backend
-// foundation only, zero behavior change). Slices 2/3 will flip the routes to
-// these operationId-carrying shapes.
+// Attempt commands (`force_submit`, `misconduct_mark`). Slice 2 has wired
+// the force-submit route to these shapes; the legacy
+// `FlagMisconductRequestSchema` above remains for the not-yet-activated
+// misconduct route (Slice 3).
 //
 // See docs/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
 
@@ -551,10 +546,10 @@ export type MisconductMarkRequestPayload = z.infer<
 >;
 
 /**
- * operationId-carrying force-submit request (audit §4.1). Future shape for
- * `POST /admin/attempts/:attemptId/force-submit`; does NOT replace the legacy
- * {@link ForceSubmitRequestSchema} in this slice. `reason` follows J5-R0 §8.1
- * (upgraded to required, trimmed, 1..500). `.strict()` rejects unknown fields
+ * operationId-carrying force-submit request (audit §4.1, J5-R0 §8.1/§8.2).
+ * The ONLY accepted wire shape for `POST /admin/attempts/:attemptId/force-submit`
+ * since J5-I1C Slice 2 (the legacy optional-reason shape was removed).
+ * `reason` is required, trimmed, 1..500. `.strict()` rejects unknown fields
  * (the wire request is the operation identity input).
  */
 export const ForceSubmitWithOperationRequestSchema = z

@@ -12,7 +12,6 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +37,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import { createContextSafeUuid } from "@/lib/uuid";
 import { getPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
+import {
+  loadPendingForceSubmit,
+  savePendingForceSubmit,
+  clearPendingForceSubmit,
+  type PendingForceSubmitAuthority,
+  type PendingForceSubmitCommand,
+} from "@/features/force-submit/pendingForceSubmitAuthority";
 import {
   CoordinationUnavailableError,
   AlreadyPendingError,
@@ -220,6 +226,116 @@ export function ProctorDashboardPage() {
 
   const [forceSubmitting, setForceSubmitting] = useState(false);
 
+  /**
+   * Force-submit retry-identity state (J5-I1C Slice 2 review P1-2 + re-review
+   * P1-1). A force-submit is an operationId-keyed durable command; a lost
+   * response after the server committed must NOT cause a retry to mint a NEW
+   * operationId, or the effect is applied twice. The frozen command is
+   * persisted in sessionStorage (same-tab) and reused verbatim on retry.
+   *
+   *   idle          — no command in flight.
+   *   submitting    — a frozen command is in flight.
+   *   indeterminate — the POST failed without a confirmed outcome (network
+   *                   drop / 5xx); the frozen command is RETAINED and reused
+   *                   verbatim on retry so the same operationId replays.
+   *   cleanup_failed — the POST outcome was CONFIRMED (applied / rejected)
+   *                   in this session but the sessionStorage clear failed; a
+   *                   stale record remains and the banner offers only dismiss
+   *                   (storage cleanup) — retrying the POST is pointless.
+   *
+   * Only the in-session execution path may ENTER cleanup_failed (it holds the
+   * confirmed fact). A record reconstructed purely from sessionStorage can be
+   * a lost response OR a confirmed + cleanup failure — the bytes cannot
+   * distinguish them — so the blocked dialog branch and the mount hydration
+   * both reconstruct `indeterminate` (fail-safe: retry is always an
+   * idempotent-safe replay of the same operationId).
+   *
+   * Page-level recovery (re-review P1-1): the frozen command is hydrated from
+   * sessionStorage on mount and whenever `user` changes, and surfaced via a
+   * PAGE-LEVEL banner that is independent of the candidate's live status. The
+   * server commits the operation but the response is lost; by the next status
+   * poll the attempt is already `submitted`/`graded`, so the candidate card
+   * loses its force-submit button. Without the page-level banner the pending
+   * command would become unreachable (the global per-admin pending slot would
+   * block every later force-submit with no path to resolve it). The banner
+   * always offers retry + explicit dismiss regardless of whether the candidate
+   * is still live.
+   */
+  type ForceSubmitPhase =
+    | { phase: "idle" }
+    | {
+        phase: "submitting";
+        command: PendingForceSubmitCommand;
+      }
+    | { phase: "indeterminate"; command: PendingForceSubmitCommand }
+    | { phase: "cleanup_failed"; command: PendingForceSubmitCommand };
+  const [forceSubmitState, setForceSubmitState] = useState<ForceSubmitPhase>({
+    phase: "idle",
+  });
+  /**
+   * The attempt the force-submit dialog currently targets, and any pre-existing
+   * pending command for a DIFFERENT attempt (which blocks opening the dialog
+   * until resolved).
+   */
+  const [forceSubmitTargetAttemptId, setForceSubmitTargetAttemptId] = useState<
+    string | null
+  >(null);
+  const [forceSubmitBlockedReason, setForceSubmitBlockedReason] = useState<
+    string | null
+  >(null);
+
+  /**
+   * Hydrates the force-submit pending authority from sessionStorage on mount /
+   * user change (re-review P1-1). On a CONFIRMED-in-session command restores
+   * it as `indeterminate` so the page-level banner shows it (independent of
+   * the candidate's live status). On a DAMAGED record surfaces a toast and
+   * leaves the slot empty. This runs synchronously during render-time state
+   * seeding via a lazy `useState` initializer is not enough because it needs
+   * `user`; instead we use a mount effect keyed on the user identity.
+   */
+  const hydrateForceSubmit = useCallback(() => {
+    if (!user) {
+      setForceSubmitState({ phase: "idle" });
+      return;
+    }
+    const result = loadPendingForceSubmit(user.organizationId, user.id);
+    if (result.kind === "none") {
+      setForceSubmitState({ phase: "idle" });
+      return;
+    }
+    if (result.kind === "corrupt") {
+      // A damaged pending record must be surfaced — silently treating it as
+      // "no pending" would hide a stuck global slot (P2-2). The record was
+      // already cleared by the authority; surface a one-shot toast.
+      toast.error(t("admin.proctorDashboard.forceSubmit.corruptCleared"));
+      setForceSubmitState({ phase: "idle" });
+      return;
+    }
+    // Re-review P2: never downgrade a stronger in-session fact. Storage alone
+    // reconstructs `indeterminate`, but when the session ALREADY knows the
+    // outcome was confirmed (cleanup_failed) — or a POST is still in flight
+    // (submitting) — for the SAME operationId, keep the stronger state: the
+    // record cannot prove the outcome, so it must not overwrite what the
+    // execution path knows. (This callback is recreated exactly when the
+    // effect re-runs — user/t change — so the captured state is current.)
+    if (
+      (forceSubmitState.phase === "cleanup_failed" ||
+        forceSubmitState.phase === "submitting") &&
+      forceSubmitState.command.operationId ===
+        result.authority.command.operationId
+    ) {
+      return;
+    }
+    setForceSubmitState({
+      phase: "indeterminate",
+      command: result.authority.command,
+    });
+  }, [user, t]);
+
+  useEffect(() => {
+    hydrateForceSubmit();
+  }, [hydrateForceSubmit]);
+
   /** Fetches candidate status from the API. */
   const loadStatus = useCallback(async () => {
     if (!examId) return;
@@ -265,16 +381,146 @@ export function ProctorDashboardPage() {
     return () => unsubscribe();
   }, [grantState.phase]);
 
-  /** Handles force-submit for a candidate. */
-  async function handleForceSubmit(attemptId: string) {
+  /**
+   * Opens the force-submit confirmation for `attemptId`. Sets the target
+   * attempt for the dialog description rendering. The page-level banner
+   * (hydrated on mount) is the authoritative recovery surface; the dialog
+   * itself only blocks when a pending command exists for a DIFFERENT attempt
+   * (the global per-admin slot can hold at most one).
+   */
+  function openForceSubmitDialog(attemptId: string) {
+    if (!user) return;
+    const result = loadPendingForceSubmit(user.organizationId, user.id);
+    setForceSubmitBlockedReason(null);
+    setForceSubmitTargetAttemptId(attemptId);
+    if (result.kind === "corrupt") {
+      // Surface the damaged record; the slot was already cleared.
+      toast.error(t("admin.proctorDashboard.forceSubmit.corruptCleared"));
+      setForceSubmitState({ phase: "idle" });
+      return;
+    }
+    if (
+      result.kind === "authority" &&
+      result.authority.command.attemptId !== attemptId
+    ) {
+      // Block THIS dialog and restore the recovery banner from durable
+      // authority. The React state may have drifted to idle via page reload or
+      // other UI state bugs — as long as the durable authority exists the
+      // banner must be visible (P2 fix: a confirmed + cleanup-failure record
+      // that was hidden blocked later operations with no recovery path).
+      //
+      // Phase reconstruction is fail-safe (re-review P1): the durable record
+      // does NOT carry the server outcome. The same bytes can mean a
+      // lost-response (indeterminate — retry REQUIRED) or a confirmed outcome
+      // whose cleanup failed (cleanup_failed — dismiss only). Only the
+      // in-session React state knows "confirmed": keep cleanup_failed when it
+      // already holds that fact for the SAME operationId, otherwise
+      // reconstruct as indeterminate so the banner keeps the retry entry
+      // (replaying the same operationId is always idempotent-safe).
+      setForceSubmitBlockedReason(
+        t("admin.proctorDashboard.forceSubmit.blockedPending"),
+      );
+      const knownConfirmed =
+        forceSubmitState.phase === "cleanup_failed" &&
+        forceSubmitState.command.operationId ===
+          result.authority.command.operationId;
+      setForceSubmitState(
+        knownConfirmed
+          ? { phase: "cleanup_failed", command: result.authority.command }
+          : { phase: "indeterminate", command: result.authority.command },
+      );
+      return;
+    }
+    if (
+      result.kind === "authority" &&
+      result.authority.command.attemptId === attemptId
+    ) {
+      setForceSubmitState({
+        phase: "indeterminate",
+        command: result.authority.command,
+      });
+      return;
+    }
+    setForceSubmitState({ phase: "idle" });
+  }
+
+  /**
+   * Sends a frozen force-submit command (the dialog confirm path). Reuses an
+   * existing pending command for the SAME attempt verbatim (a retry), else
+   * mints ONE operationId for the whole user action. Persists the command
+   * BEFORE the POST and VERIFIES the write — if persistence fails the POST is
+   * SUPPRESSED (fail-closed, re-review P1-2: the retry-identity contract
+   * includes refresh recovery, so an unpersisted command cannot be safely
+   * retried). Classifies the outcome as before.
+   */
+  async function sendForceSubmitCommand(
+    command: PendingForceSubmitCommand,
+    options: { fromDialog: boolean },
+  ): Promise<void> {
+    if (!user) return;
+    const authority: PendingForceSubmitAuthority = {
+      schemaVersion: 2,
+      organizationId: user.organizationId,
+      actorId: user.id,
+      command,
+      createdAt: Date.now(),
+    };
+    // Fail-closed persistence (re-review P1-2). Persist BEFORE the POST and
+    // verify the write; if the durable copy cannot be trusted, do NOT send —
+    // a lost response would otherwise lose the operationId forever.
+    const saved = savePendingForceSubmit(authority);
+    if (!saved.ok) {
+      toast.error(t("admin.proctorDashboard.forceSubmit.persistenceFailed"));
+      // Keep any prior in-session indeterminate command; do not clear and do
+      // not POST. Leave the dialog open so the admin can retry after fixing
+      // storage (e.g. clearing quota).
+      return;
+    }
+    if (options.fromDialog) {
+      // Close the dialog immediately — the outcome (and any indeterminate
+      // retry affordance) is shown on the candidate card / page-level banner.
+      setForceSubmitTargetAttemptId(null);
+      setForceSubmitBlockedReason(null);
+    }
+    setForceSubmitState({ phase: "submitting", command });
     setForceSubmitting(true);
     try {
-      await api.post(`/api/admin/attempts/${attemptId}/force-submit`, {
-        reason: t("admin.proctorDashboard.forceSubmit.reason"),
+      await api.post(`/api/admin/attempts/${command.attemptId}/force-submit`, {
+        operationId: command.operationId,
+        reason: command.reason,
       });
+      const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+      if (!cleared.ok) {
+        // P2 fix: the outcome is CONFIRMED, but the stale authority must not
+        // be hidden — it blocks later force-submits with no recovery path if
+        // left in sessionStorage while the UI shows idle. Transition to
+        // cleanup_failed so the page-level banner shows the stale record and
+        // offers a dismiss (storage cleanup) affordance.
+        toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
+        setForceSubmitState({ phase: "cleanup_failed", command });
+      } else {
+        setForceSubmitState({ phase: "idle" });
+        setForceSubmitTargetAttemptId(null);
+      }
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
       await loadStatus();
     } catch (err) {
+      const failure = classifyGrantFailure(err);
+      if (failure === "indeterminate") {
+        setForceSubmitState({ phase: "indeterminate", command });
+        toast.error(t("admin.proctorDashboard.forceSubmit.indeterminate"));
+        return;
+      }
+      const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+      if (!cleared.ok) {
+        // P2 fix: same as the success path — the rejection is CONFIRMED but
+        // the stale authority must not be hidden. Transition to cleanup_failed
+        // so the page-level banner offers a dismiss affordance.
+        toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
+        setForceSubmitState({ phase: "cleanup_failed", command });
+      } else {
+        setForceSubmitState({ phase: "idle" });
+      }
       toast.error(
         err instanceof Error
           ? err.message
@@ -283,6 +529,59 @@ export function ProctorDashboardPage() {
     } finally {
       setForceSubmitting(false);
     }
+  }
+
+  /**
+   * Dialog confirm: resolves the command (reuse pending for same attempt, else
+   * mint) and delegates to {@link sendForceSubmitCommand}. On a retry the
+   * frozen command is reused verbatim — no new operationId is minted.
+   */
+  async function handleForceSubmitConfirm(attemptId: string) {
+    if (!user || !examId) return;
+    const result = loadPendingForceSubmit(user.organizationId, user.id);
+    const command: PendingForceSubmitCommand =
+      result.kind === "authority" &&
+      result.authority.command.attemptId === attemptId
+        ? result.authority.command
+        : {
+            attemptId,
+            operationId: createContextSafeUuid(),
+            reason: t("admin.proctorDashboard.forceSubmit.reason"),
+            // Target identity frozen at mint time (review P1-2): the pending
+            // authority must know which exam/candidate it belongs to, so a
+            // recovery surface on a DIFFERENT exam page can identify the
+            // command instead of offering a contextless destructive retry.
+            // The candidate snapshot must NEVER be empty — the loader treats
+            // an empty label as corrupt and clears the record, destroying the
+            // operation identity this save is meant to protect (re-review
+            // P1); fall back to a stable non-empty label when the candidate
+            // left the polling projection while the dialog was open.
+            examId,
+            candidateName:
+              data?.candidates.find((c) => c.attemptId === attemptId)?.name ??
+              t("admin.proctorDashboard.forceSubmit.candidateFallback", {
+                attemptId,
+              }),
+          };
+    await sendForceSubmitCommand(command, { fromDialog: true });
+  }
+
+  /**
+   * Clears a retained indeterminate or cleanup_failed force-submit command
+   * (user dismissal). When the durable record could NOT be removed, the banner
+   * + current state are KEPT and an error is surfaced, so the admin never
+   * believes the slot was cleared while a stale record still blocks later
+   * force-submits.
+   */
+  function dismissForceSubmitIndeterminate() {
+    if (!user) return;
+    const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+    if (!cleared.ok) {
+      toast.error(t("admin.proctorDashboard.forceSubmit.dismissFailed"));
+      return;
+    }
+    setForceSubmitState({ phase: "idle" });
+    setForceSubmitTargetAttemptId(null);
   }
 
   /**
@@ -815,6 +1114,111 @@ export function ProctorDashboardPage() {
         }
       />
 
+      {/*
+        Page-level pending force-submit banner (re-review P1-1 + P2 fix).
+        Independent of the candidate's live status: the server may have
+        committed the operation but the response was lost, and by the next
+        status poll the attempt is already submitted/graded — so the candidate
+        card no longer renders a force-submit button. Without this page-level
+        banner the pending command (a global per-admin slot) would become
+        unreachable and block every later force-submit.
+
+        Two phases render the banner:
+        - `indeterminate`: outcome unknown (network drop / 5xx). Offers retry
+          (resend the frozen command) + dismiss.
+        - `cleanup_failed`: outcome confirmed (server applied / rejected) in
+          THIS session, but sessionStorage cleanup failed leaving a stale
+          record. Shows only dismiss (storage cleanup) — retrying the POST is
+          pointless since the server already committed. A record reconstructed
+          from storage alone is always `indeterminate`, never this phase.
+
+        Exam-scope guard (review P1-2): the pending command targets the exam
+        stored in its identity. When that is NOT the current page's exam, the
+        banner must identify the target (exam + candidate) and must NOT offer
+        the destructive retry — retrying here would force-submit the OTHER
+        exam's candidate from a page that gives no context. Instead: identify,
+        navigate back to the owning exam, or dismiss (clearing the global
+        slot is always safe).
+      */}
+      {(forceSubmitState.phase === "indeterminate" ||
+        forceSubmitState.phase === "cleanup_failed") && (
+        <div
+          role="alert"
+          data-testid="pending-force-submit-banner"
+          className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm text-warning"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">
+                {forceSubmitState.phase === "cleanup_failed"
+                  ? t(
+                      "admin.proctorDashboard.forceSubmit.cleanupFailedBannerTitle",
+                    )
+                  : forceSubmitState.command.examId !== examId
+                    ? t(
+                        "admin.proctorDashboard.forceSubmit.bannerOtherExamTitle",
+                      )
+                    : t("admin.proctorDashboard.forceSubmit.bannerTitle")}
+              </span>
+              <span className="text-xs">
+                {forceSubmitState.phase === "cleanup_failed"
+                  ? t(
+                      "admin.proctorDashboard.forceSubmit.cleanupFailedBannerBody",
+                    )
+                  : forceSubmitState.command.examId !== examId
+                    ? t(
+                        "admin.proctorDashboard.forceSubmit.bannerOtherExamBody",
+                        {
+                          examId: forceSubmitState.command.examId,
+                          candidateName: forceSubmitState.command.candidateName,
+                        },
+                      )
+                    : t("admin.proctorDashboard.forceSubmit.bannerBody")}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {forceSubmitState.phase === "indeterminate" &&
+                forceSubmitState.command.examId === examId && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={forceSubmitting}
+                    onClick={() => {
+                      void sendForceSubmitCommand(forceSubmitState.command, {
+                        fromDialog: false,
+                      });
+                    }}
+                  >
+                    {t("admin.proctorDashboard.forceSubmit.bannerRetry")}
+                  </Button>
+                )}
+              {forceSubmitState.command.examId !== examId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={forceSubmitting}
+                  onClick={() =>
+                    navigate(
+                      `/admin/exams/${forceSubmitState.command.examId}/proctor`,
+                    )
+                  }
+                >
+                  {t("admin.proctorDashboard.forceSubmit.bannerGoToExam")}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={forceSubmitting}
+                onClick={() => dismissForceSubmitIndeterminate()}
+              >
+                {t("admin.proctorDashboard.forceSubmit.bannerDismiss")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">
@@ -1056,6 +1460,69 @@ export function ProctorDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Force-submit confirmation dialog (J5-I1C Slice 2 review P1-2).
+          Controlled Dialog (like the time-grant dialog) so opening is driven by
+          React state, and the retry state is rendered inside the dialog. */}
+      <Dialog
+        open={forceSubmitTargetAttemptId !== null}
+        onOpenChange={(open) => {
+          if (!open && forceSubmitState.phase !== "submitting") {
+            setForceSubmitTargetAttemptId(null);
+            setForceSubmitBlockedReason(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {t("admin.proctorDashboard.forceSubmit.title")}
+            </DialogTitle>
+            <DialogDescription>
+              {forceSubmitState.phase === "indeterminate" &&
+              forceSubmitState.command.attemptId === forceSubmitTargetAttemptId
+                ? t("admin.proctorDashboard.forceSubmit.retryDescription")
+                : t("admin.proctorDashboard.forceSubmit.description", {
+                    name:
+                      data?.candidates.find(
+                        (c) => c.attemptId === forceSubmitTargetAttemptId,
+                      )?.name ?? "",
+                  })}
+            </DialogDescription>
+          </DialogHeader>
+          {forceSubmitBlockedReason && (
+            <p className="text-sm text-destructive">
+              {forceSubmitBlockedReason}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={forceSubmitting}
+              onClick={() => {
+                setForceSubmitTargetAttemptId(null);
+                setForceSubmitBlockedReason(null);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={forceSubmitting || forceSubmitBlockedReason !== null}
+              onClick={() => {
+                if (forceSubmitTargetAttemptId) {
+                  void handleForceSubmitConfirm(forceSubmitTargetAttemptId);
+                }
+              }}
+            >
+              {forceSubmitState.phase === "indeterminate" &&
+              forceSubmitBlockedReason === null
+                ? t("admin.proctorDashboard.forceSubmit.retry")
+                : t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -1121,26 +1588,36 @@ export function ProctorDashboardPage() {
                   <div className="flex flex-wrap gap-2 mt-1">
                     {(candidate.status === "in_progress" ||
                       candidate.status === "disrupted") && (
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={forceSubmitting}
-                          >
-                            {t("admin.proctorDashboard.card.forceSubmit")}
-                          </Button>
-                        }
-                        title={t("admin.proctorDashboard.forceSubmit.title")}
-                        description={t(
-                          "admin.proctorDashboard.forceSubmit.description",
-                          { name: candidate.name },
-                        )}
-                        destructive
-                        onConfirm={() =>
-                          void handleForceSubmit(candidate.attemptId!)
-                        }
-                      />
+                      <>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={forceSubmitting}
+                          onClick={() =>
+                            openForceSubmitDialog(candidate.attemptId!)
+                          }
+                        >
+                          {t("admin.proctorDashboard.card.forceSubmit")}
+                        </Button>
+                        {forceSubmitState.phase === "indeterminate" &&
+                          forceSubmitState.command.attemptId ===
+                            candidate.attemptId && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={forceSubmitting}
+                              onClick={() => dismissForceSubmitIndeterminate()}
+                            >
+                              {t("admin.proctorDashboard.forceSubmit.dismiss")}
+                            </Button>
+                          )}
+                        {forceSubmitTargetAttemptId === candidate.attemptId &&
+                          forceSubmitBlockedReason && (
+                            <span className="text-destructive text-xs self-center">
+                              {forceSubmitBlockedReason}
+                            </span>
+                          )}
+                      </>
                     )}
                     {candidate.attemptId && user && isAdmin(user) && (
                       <Button

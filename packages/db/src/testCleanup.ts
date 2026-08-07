@@ -82,6 +82,12 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.attemptGradingEntries)
     .where(eq(schema.attemptGradingEntries.organizationId, organizationId));
+  // Attempt command receipts (J5-I1C Slice 1): composite-FK
+  // (organization_id, attempt_id) → exam_attempts — delete before
+  // examAttempts to avoid composite-FK violations (no ON DELETE CASCADE).
+  await tx
+    .delete(schema.attemptCommandReceipts)
+    .where(eq(schema.attemptCommandReceipts.organizationId, organizationId));
   await tx
     .delete(schema.attemptInterruptionEvents)
     .where(eq(schema.attemptInterruptionEvents.organizationId, organizationId));

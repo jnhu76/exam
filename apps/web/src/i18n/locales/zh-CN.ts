@@ -1498,6 +1498,33 @@ const zhCN = {
         description: "确定要强制提交考生「{{name}}」的答卷吗？此操作不可撤销。",
         reason: "管理员强制交卷",
         done: "已强制交卷",
+        indeterminate: "强制交卷提交状态未确认，可重试（将复用同一命令）。",
+        retry: "重试强制交卷",
+        retryDescription:
+          "上一次强制交卷的提交状态未确认（可能已成功）。重试将使用与上次完全相同的命令标识，服务器会幂等重放而不会重复执行。",
+        dismiss: "清除未确认命令",
+        blockedPending: "存在未确认的强制交卷命令，请先解决后再操作。",
+        persistenceFailed:
+          "无法安全保存强制交卷命令，请检查浏览器存储权限后重试。",
+        corruptCleared:
+          "检测到损坏的未确认强制交卷记录，已清除。请重新发起操作。",
+        bannerTitle: "存在未确认的强制交卷命令",
+        bannerBody:
+          "上一次强制交卷的提交状态未确认（可能已成功，也可能未到达服务器）。下方按钮会以完全相同的命令标识重试，服务器会幂等重放而不会重复执行。",
+        bannerOtherExamTitle: "存在未确认的强制交卷命令（属于其他考试）",
+        bannerOtherExamBody:
+          "该命令针对「{{examId}}」考试的考生「{{candidateName}}」。为避免在错误的考试页面执行强制交卷，请返回原考试页面处理，或清除该记录。",
+        bannerGoToExam: "返回原考试页面",
+        candidateFallback: "考生（{{attemptId}}）",
+        bannerRetry: "重试未确认强制交卷",
+        bannerDismiss: "清除未确认命令",
+        dismissFailed:
+          "无法清除未确认的强制交卷命令，请检查浏览器存储权限后重试。",
+        cleanupFailed:
+          "强制交卷结果已确认，但本地记录清理失败。该记录不会导致重复执行，但可能阻止新的强制交卷操作。请刷新页面后清理该记录。",
+        cleanupFailedBannerTitle: "强制交卷结果已确认，但本地记录清理失败",
+        cleanupFailedBannerBody:
+          "该记录不会导致重复执行，但可能阻止新的强制交卷操作。请点击「清除」清理该记录，或刷新页面。",
       },
       extendDialog: {
         title: "延长考试时间",
