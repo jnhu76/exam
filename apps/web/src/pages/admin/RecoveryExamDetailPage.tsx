@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
+import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import type { ExamRecoveryContext as RecoveryExamContextResponse } from "@exam/contracts";
@@ -15,13 +17,189 @@ import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
+import { FieldError } from "@/components/shared/FieldError";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CircleAlert, ListFilter, RefreshCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RecoveryCommandDialog } from "@/features/recovery-operations/RecoveryCommandDialog";
+import { useRecoveryOperation } from "@/features/recovery-operations/useRecoveryOperation";
+import {
+  ArrowLeft,
+  CircleAlert,
+  ListFilter,
+  RefreshCw,
+  UserPlus,
+} from "lucide-react";
 
 const INCIDENT_STATUSES = ["open", "investigating", "resolved", "dismissed"];
 const INCIDENT_SEVERITIES = ["info", "minor", "major", "critical"];
 const STALE_AFTER_MS = 2 * 60_000;
 const NAMESPACE = "admin.recoveryExam";
+
+/**
+ * J5-I1C1 — assign-proctor command for the exam recovery detail. The wire has
+ * no "available proctors" list, so the admin enters a proctor userId; the
+ * server resolves the user and fail-closes (404 unknown / 403 not a proctor /
+ * 409 duplicate). One operationId per dialog session, retry-safe.
+ */
+function AssignProctorCommand({
+  examId,
+  examTitle,
+  refresh,
+}: {
+  examId: string;
+  examTitle: string;
+  refresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [proctorUserId, setProctorUserId] = useState("");
+
+  const command = useRecoveryOperation({
+    submit: (operationId) =>
+      api.post(`/api/admin/exams/${examId}/proctors`, {
+        operationId,
+        proctorUserId: proctorUserId.trim(),
+      }),
+    onSuccess: () => {
+      toast.success(t("admin.recoveryOps.actions.assignProctorDone"));
+      setOpen(false);
+      setProctorUserId("");
+      refresh();
+    },
+    onConfirmedRejection: (err) => {
+      setOpen(false);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.recoveryOps.indeterminate"),
+      );
+    },
+    onIndeterminate: () => toast.error(t("admin.recoveryOps.indeterminate")),
+  });
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          setProctorUserId("");
+          setOpen(true);
+          command.begin();
+        }}
+        disabled={command.phase === "submitting"}
+      >
+        <AppIcon icon={UserPlus} size="inline" className="mr-1" />
+        {t("admin.recoveryOps.actions.assignProctor")}
+      </Button>
+      <RecoveryCommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={t("admin.recoveryOps.actions.assignProctor")}
+        description={t("admin.recoveryOps.assignProctorDescription", {
+          title: examTitle,
+        })}
+        confirmLabel={t("admin.recoveryOps.actions.assignProctor")}
+        confirmDisabled={proctorUserId.trim().length === 0}
+        submitting={command.phase === "submitting"}
+        indeterminate={command.phase === "indeterminate"}
+        onConfirm={() => void command.run()}
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-assign-proctor-user">
+            {t("admin.recoveryOps.proctorUserIdLabel")}
+          </Label>
+          <Input
+            id="recovery-assign-proctor-user"
+            value={proctorUserId}
+            onChange={(e) => setProctorUserId(e.target.value)}
+          />
+          {proctorUserId.trim().length === 0 && (
+            <FieldError>
+              {t("admin.recoveryOps.proctorUserIdRequired")}
+            </FieldError>
+          )}
+        </div>
+      </RecoveryCommandDialog>
+    </>
+  );
+}
+
+/**
+ * J5-I1C1 — revoke-proctor command for one active proctor. Destructive
+ * confirmation naming the proctor + exam; terminal for the assignment.
+ */
+function RevokeProctorCommand({
+  examId,
+  examTitle,
+  userId,
+  displayName,
+  refresh,
+}: {
+  examId: string;
+  examTitle: string;
+  userId: string;
+  displayName: string;
+  refresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  const command = useRecoveryOperation({
+    submit: (operationId) =>
+      api.post(
+        `/api/admin/exams/${examId}/proctors/${encodeURIComponent(userId)}/revoke`,
+        { operationId },
+      ),
+    onSuccess: () => {
+      toast.success(t("admin.recoveryOps.actions.revokeProctorDone"));
+      setOpen(false);
+      refresh();
+    },
+    onConfirmedRejection: (err) => {
+      setOpen(false);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.recoveryOps.indeterminate"),
+      );
+    },
+    onIndeterminate: () => toast.error(t("admin.recoveryOps.indeterminate")),
+  });
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          setOpen(true);
+          command.begin();
+        }}
+        disabled={command.phase === "submitting"}
+      >
+        {t("admin.recoveryOps.actions.revokeProctor")}
+      </Button>
+      <RecoveryCommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={t("admin.recoveryOps.actions.revokeProctor")}
+        description={t("admin.recoveryOps.revokeProctorDescription", {
+          name: displayName,
+          title: examTitle,
+        })}
+        confirmLabel={t("admin.recoveryOps.revokeConfirmLabel")}
+        destructive
+        submitting={command.phase === "submitting"}
+        indeterminate={command.phase === "indeterminate"}
+        onConfirm={() => void command.run()}
+      >
+        <p className="text-sm text-muted-foreground">{displayName}</p>
+      </RecoveryCommandDialog>
+    </>
+  );
+}
 
 /**
  * Exam Recovery Detail (J5-I1B4, contract §6.5) — the org-wide Exam recovery
@@ -246,21 +424,40 @@ export function RecoveryExamDetailPage() {
           )}
         </PageSection>
 
-        {/* Active proctors */}
+        {/* Active proctors (J5-I1C1) — assign + per-proctor revoke commands.
+            The wire has no allowedActions for this surface; server-side
+            capability gating (ExamProctorAssignmentManage) is the authority. */}
         <PageSection title={t("admin.recoveryExam.sections.proctors")}>
           {data.activeProctors.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {t("admin.recoveryExam.noProctors")}
             </p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col gap-2">
               {data.activeProctors.map((p) => (
-                <li key={p.userId} className="text-sm">
-                  {p.displayName}
+                <li
+                  key={p.userId}
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span className="text-sm">{p.displayName}</span>
+                  <RevokeProctorCommand
+                    examId={data.examSummary.id}
+                    examTitle={data.examSummary.title}
+                    userId={p.userId}
+                    displayName={p.displayName}
+                    refresh={refresh}
+                  />
                 </li>
               ))}
             </ul>
           )}
+          <div className="mt-3 border-t pt-3">
+            <AssignProctorCommand
+              examId={data.examSummary.id}
+              examTitle={data.examSummary.title}
+              refresh={refresh}
+            />
+          </div>
         </PageSection>
 
         {/* Attempt status distribution — all attempts of the exam */}

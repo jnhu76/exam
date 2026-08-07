@@ -128,10 +128,14 @@ describe("pendingMisconductAuthority", () => {
 
   describe("savePendingMisconduct", () => {
     it("persists a valid authority and verifies the write", () => {
-      const result = savePendingMisconduct(validAuthority());
+      // Capture the authority ONCE — the byte comparison must use the exact
+      // record that was written (createdAt is Date.now()-based, so a second
+      // validAuthority() call would drift by milliseconds).
+      const authority = validAuthority();
+      const result = savePendingMisconduct(authority);
       expect(result).toEqual({ ok: true });
       const stored = sessionStorage.getItem(STORAGE_KEY);
-      expect(stored).toBe(JSON.stringify(validAuthority()));
+      expect(stored).toBe(JSON.stringify(authority));
     });
 
     it("returns invalid_authority for a semantically invalid record without writing", () => {

@@ -1,6 +1,9 @@
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
+import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { useAuthContext } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import type { AttemptOperationsContext as RecoveryAttemptOperationsResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
@@ -15,8 +18,42 @@ import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
+import { FieldError } from "@/components/shared/FieldError";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CircleAlert, Flag, RefreshCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { RecoveryCommandDialog } from "@/features/recovery-operations/RecoveryCommandDialog";
+import {
+  classifyOperationFailure,
+  useRecoveryOperation,
+} from "@/features/recovery-operations/useRecoveryOperation";
+import {
+  clearPendingForceSubmit,
+  loadPendingForceSubmit,
+  savePendingForceSubmit,
+} from "@/features/force-submit/pendingForceSubmitAuthority";
+import {
+  clearPendingMisconduct,
+  loadPendingMisconduct,
+  savePendingMisconduct,
+} from "@/features/misconduct/pendingMisconductAuthority";
+import {
+  ArrowLeft,
+  CircleAlert,
+  Clock,
+  Flag,
+  RefreshCw,
+  Send,
+  ShieldAlert,
+} from "lucide-react";
 
 const STALE_AFTER_MS = 2 * 60_000;
 const NAMESPACE = "admin.recoveryAttempt";
@@ -36,6 +73,7 @@ const NAMESPACE = "admin.recoveryAttempt";
 export function RecoveryAttemptDetailPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
+  const { user } = useAuthContext();
   const { attemptId } = useParams<{ attemptId: string }>();
 
   const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
@@ -49,6 +87,216 @@ export function RecoveryAttemptDetailPage() {
       staleAfterMs: STALE_AFTER_MS,
       deps: [attemptId],
     });
+
+  // ── J5-I1C1 Operations — three dangerous commands, one frozen operationId
+  // each (J5-R0 §8.2). Force-submit + misconduct persist a durable pending
+  // authority BEFORE the POST (fail-closed: an unpersisted identity must not
+  // be sent) and restore it on dialog open; the time grant uses the in-hook
+  // same-tab identity (the recovery surface is not the cross-tab proctor
+  // dashboard). All outcomes reload the authoritative projection — no
+  // optimistic mutation.
+  const [grantDialogOpen, setGrantDialogOpen] = useState(false);
+  const [grantMinutes, setGrantMinutes] = useState(10);
+  const [grantReasonCode, setGrantReasonCode] = useState("technical_incident");
+  const [grantReasonText, setGrantReasonText] = useState("");
+
+  const [forceSubmitDialogOpen, setForceSubmitDialogOpen] = useState(false);
+  const [forceSubmitReason, setForceSubmitReason] = useState("");
+
+  const [misconductDialogOpen, setMisconductDialogOpen] = useState(false);
+  const [misconductSeverity, setMisconductSeverity] = useState<
+    "warning" | "serious"
+  >("warning");
+  const [misconductNotes, setMisconductNotes] = useState("");
+
+  const grant = useRecoveryOperation({
+    submit: (operationId) =>
+      api.post(`/api/admin/attempts/${data?.attempt.id ?? ""}/time-grants`, {
+        operationId,
+        addedSeconds: grantMinutes * 60,
+        reasonCode: grantReasonCode,
+        reasonText: grantReasonText.trim(),
+      }),
+    onSuccess: () => {
+      toast.success(t("admin.recoveryOps.actions.timeGrantDone"));
+      setGrantDialogOpen(false);
+      refresh();
+    },
+    onConfirmedRejection: () => setGrantDialogOpen(false),
+    onIndeterminate: () => toast.error(t("admin.recoveryOps.indeterminate")),
+  });
+
+  const forceSubmit = useRecoveryOperation({
+    submit: (operationId) =>
+      api.post(`/api/admin/attempts/${data?.attempt.id ?? ""}/force-submit`, {
+        operationId,
+        reason: forceSubmitReason.trim(),
+      }),
+    beforeSubmit: (operationId) => {
+      if (!user || !data) return false;
+      const saved = savePendingForceSubmit({
+        schemaVersion: 2,
+        organizationId: user.organizationId,
+        actorId: user.id,
+        command: {
+          attemptId: data.attempt.id,
+          operationId,
+          reason: forceSubmitReason.trim(),
+          examId: data.examSummary.id,
+          candidateName: data.candidateSummary.displayName,
+        },
+        createdAt: Date.now(),
+      });
+      if (!saved.ok) {
+        toast.error(t("admin.recoveryOps.persistenceFailed"));
+        return false;
+      }
+      return true;
+    },
+    onSuccess: () => {
+      if (user) clearPendingForceSubmit(user.organizationId, user.id);
+      toast.success(t("admin.recoveryOps.actions.forceSubmitDone"));
+      setForceSubmitDialogOpen(false);
+      refresh();
+    },
+    onConfirmedRejection: () => {
+      if (user) clearPendingForceSubmit(user.organizationId, user.id);
+      setForceSubmitDialogOpen(false);
+    },
+    onIndeterminate: () => toast.error(t("admin.recoveryOps.indeterminate")),
+  });
+
+  const misconduct = useRecoveryOperation({
+    submit: (operationId) =>
+      api.post(`/api/admin/attempts/${data?.attempt.id ?? ""}/misconduct`, {
+        operationId,
+        severity: misconductSeverity,
+        notes: misconductNotes.trim(),
+      }),
+    beforeSubmit: (operationId) => {
+      if (!user || !data) return false;
+      const saved = savePendingMisconduct({
+        schemaVersion: 2,
+        organizationId: user.organizationId,
+        actorId: user.id,
+        command: {
+          attemptId: data.attempt.id,
+          operationId,
+          severity: misconductSeverity,
+          notes: misconductNotes.trim(),
+          examId: data.examSummary.id,
+          candidateName: data.candidateSummary.displayName,
+        },
+        createdAt: Date.now(),
+      });
+      if (!saved.ok) {
+        toast.error(t("admin.recoveryOps.persistenceFailed"));
+        return false;
+      }
+      return true;
+    },
+    onSuccess: () => {
+      if (user) clearPendingMisconduct(user.organizationId, user.id);
+      toast.success(t("admin.recoveryOps.actions.markMisconductDone"));
+      setMisconductDialogOpen(false);
+      refresh();
+    },
+    onConfirmedRejection: () => {
+      if (user) clearPendingMisconduct(user.organizationId, user.id);
+      setMisconductDialogOpen(false);
+    },
+    onIndeterminate: () => toast.error(t("admin.recoveryOps.indeterminate")),
+  });
+
+  /** Opens the force-submit dialog, honoring the durable pending authority. */
+  const openForceSubmitDialog = useCallback(() => {
+    if (!user || !data) return;
+    const result = loadPendingForceSubmit(user.organizationId, user.id);
+    if (result.kind === "corrupt") {
+      toast.error(t("admin.recoveryOps.corruptCleared"));
+      setForceSubmitDialogOpen(true);
+      forceSubmit.begin();
+      return;
+    }
+    if (
+      result.kind === "authority" &&
+      result.authority.command.attemptId !== data.attempt.id
+    ) {
+      // At most one pending force-submit per admin — resolve it first.
+      toast.error(t("admin.recoveryOps.blockedByPending"));
+      return;
+    }
+    if (result.kind === "authority") {
+      // Restore the frozen command verbatim — its outcome was never confirmed.
+      setForceSubmitReason(result.authority.command.reason);
+      setForceSubmitDialogOpen(true);
+      forceSubmit.begin(result.authority.command.operationId);
+      return;
+    }
+    setForceSubmitReason("");
+    setForceSubmitDialogOpen(true);
+    forceSubmit.begin();
+  }, [user, data, forceSubmit, t]);
+
+  /** Opens the misconduct dialog, honoring the durable pending authority. */
+  const openMisconductDialog = useCallback(() => {
+    if (!user || !data) return;
+    const result = loadPendingMisconduct(user.organizationId, user.id);
+    if (result.kind === "corrupt") {
+      toast.error(t("admin.recoveryOps.corruptCleared"));
+      setMisconductDialogOpen(true);
+      misconduct.begin();
+      return;
+    }
+    if (
+      result.kind === "authority" &&
+      result.authority.command.attemptId !== data.attempt.id
+    ) {
+      toast.error(t("admin.recoveryOps.blockedByPending"));
+      return;
+    }
+    if (result.kind === "authority") {
+      setMisconductSeverity(result.authority.command.severity);
+      setMisconductNotes(result.authority.command.notes);
+      setMisconductDialogOpen(true);
+      misconduct.begin(result.authority.command.operationId);
+      return;
+    }
+    setMisconductSeverity("warning");
+    setMisconductNotes("");
+    setMisconductDialogOpen(true);
+    misconduct.begin();
+  }, [user, data, misconduct, t]);
+
+  const openGrantDialog = useCallback(() => {
+    setGrantMinutes(10);
+    setGrantReasonCode("technical_incident");
+    setGrantReasonText("");
+    setGrantDialogOpen(true);
+    grant.begin();
+  }, [grant]);
+
+  const dismissForceSubmit = useCallback(() => {
+    if (!user) return;
+    const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+    if (!cleared.ok) {
+      toast.error(t("admin.recoveryOps.dismissFailed"));
+      return;
+    }
+    forceSubmit.reset();
+    setForceSubmitDialogOpen(false);
+  }, [user, forceSubmit, t]);
+
+  const dismissMisconduct = useCallback(() => {
+    if (!user) return;
+    const cleared = clearPendingMisconduct(user.organizationId, user.id);
+    if (!cleared.ok) {
+      toast.error(t("admin.recoveryOps.dismissFailed"));
+      return;
+    }
+    misconduct.reset();
+    setMisconductDialogOpen(false);
+  }, [user, misconduct, t]);
 
   if (isInitialLoading) return <LoadingState />;
   if (error && !data) {
@@ -137,6 +385,53 @@ export function RecoveryAttemptDetailPage() {
             {t("admin.recoveryAttempt.misconductDescription")}
           </span>
         </InlineErrorBanner>
+      )}
+
+      {/* Operations (J5-I1C1) — server-computed eligibility (allowedActions),
+          never a client-side derivation from status. Empty allowedActions
+          keeps the page read-only (§6.4 note: a computed result, not a
+          disabled-button state). */}
+      {data.allowedActions.length > 0 && (
+        <PageSection
+          title={t("admin.recoveryOps.operationsTitle")}
+          className="lg:col-span-2"
+        >
+          <div className="flex flex-wrap gap-2">
+            {data.allowedActions.includes("time_grant") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openGrantDialog}
+                disabled={grant.phase === "submitting"}
+              >
+                <AppIcon icon={Clock} size="inline" className="mr-1" />
+                {t("admin.recoveryOps.actions.timeGrant")}
+              </Button>
+            )}
+            {data.allowedActions.includes("force_submit") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openForceSubmitDialog}
+                disabled={forceSubmit.phase === "submitting"}
+              >
+                <AppIcon icon={Send} size="inline" className="mr-1" />
+                {t("admin.recoveryOps.actions.forceSubmit")}
+              </Button>
+            )}
+            {data.allowedActions.includes("misconduct_mark") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openMisconductDialog}
+                disabled={misconduct.phase === "submitting"}
+              >
+                <AppIcon icon={ShieldAlert} size="inline" className="mr-1" />
+                {t("admin.recoveryOps.actions.markMisconduct")}
+              </Button>
+            )}
+          </div>
+        </PageSection>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -446,6 +741,185 @@ export function RecoveryAttemptDetailPage() {
           )}
         </PageSection>
       </div>
+
+      {/* ── Operations dialogs (J5-I1C1) ── */}
+      <RecoveryCommandDialog
+        open={grantDialogOpen}
+        onOpenChange={setGrantDialogOpen}
+        title={t("admin.recoveryOps.actions.timeGrant")}
+        description={t("admin.recoveryOps.timeGrantDescription", {
+          name: data.candidateSummary.displayName,
+          no: attempt.attemptNo,
+          minutes: grantMinutes,
+        })}
+        confirmLabel={t("admin.recoveryOps.actions.timeGrant")}
+        confirmDisabled={
+          grantMinutes < 1 ||
+          grantReasonText.trim().length === 0 ||
+          grantReasonText.trim().length > 1000
+        }
+        submitting={grant.phase === "submitting"}
+        indeterminate={grant.phase === "indeterminate"}
+        onConfirm={() => void grant.run()}
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-grant-minutes">
+            {t("admin.recoveryOps.minutesLabel")}
+          </Label>
+          <Input
+            id="recovery-grant-minutes"
+            type="number"
+            min={1}
+            value={grantMinutes}
+            onChange={(e) => setGrantMinutes(Number(e.target.value))}
+          />
+          {grantMinutes < 1 && (
+            <FieldError>{t("admin.recoveryOps.minutesInvalid")}</FieldError>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-grant-reason-code">
+            {t("admin.recoveryOps.reasonCodeLabel")}
+          </Label>
+          <Select
+            value={grantReasonCode}
+            onValueChange={setGrantReasonCode}
+            disabled={grant.phase !== "idle"}
+          >
+            <SelectTrigger id="recovery-grant-reason-code">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="technical_incident">
+                {t("admin.recoveryOps.reasonCodeTechnicalIncident")}
+              </SelectItem>
+              <SelectItem value="candidate_request">
+                {t("admin.recoveryOps.reasonCodeCandidateRequest")}
+              </SelectItem>
+              <SelectItem value="other">
+                {t("admin.recoveryOps.reasonCodeOther")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-grant-reason-text">
+            {t("admin.recoveryOps.reasonTextLabel")}
+          </Label>
+          <Textarea
+            id="recovery-grant-reason-text"
+            value={grantReasonText}
+            onChange={(e) => setGrantReasonText(e.target.value)}
+          />
+          {grantReasonText.trim().length === 0 && (
+            <FieldError>{t("admin.recoveryOps.reasonRequired")}</FieldError>
+          )}
+        </div>
+      </RecoveryCommandDialog>
+
+      <RecoveryCommandDialog
+        open={forceSubmitDialogOpen}
+        onOpenChange={setForceSubmitDialogOpen}
+        title={t("admin.recoveryOps.actions.forceSubmit")}
+        description={t("admin.recoveryOps.forceSubmitDescription", {
+          name: data.candidateSummary.displayName,
+          no: attempt.attemptNo,
+          examTitle: data.examSummary.title,
+        })}
+        confirmLabel={t("admin.recoveryOps.actions.forceSubmit")}
+        confirmDisabled={
+          forceSubmitReason.trim().length === 0 ||
+          forceSubmitReason.trim().length > 500
+        }
+        destructive
+        submitting={forceSubmit.phase === "submitting"}
+        indeterminate={forceSubmit.phase === "indeterminate"}
+        onConfirm={() => void forceSubmit.run()}
+        onDismissIndeterminate={dismissForceSubmit}
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-force-submit-reason">
+            {t("admin.recoveryOps.reasonRequiredLabel")}
+          </Label>
+          <Textarea
+            id="recovery-force-submit-reason"
+            value={forceSubmitReason}
+            onChange={(e) => setForceSubmitReason(e.target.value)}
+          />
+          {forceSubmitReason.trim().length === 0 && (
+            <FieldError>{t("admin.recoveryOps.reasonRequired")}</FieldError>
+          )}
+          {forceSubmitReason.trim().length > 500 && (
+            <FieldError>
+              {t("admin.recoveryOps.reasonTooLong", { count: 500 })}
+            </FieldError>
+          )}
+        </div>
+      </RecoveryCommandDialog>
+
+      <RecoveryCommandDialog
+        open={misconductDialogOpen}
+        onOpenChange={setMisconductDialogOpen}
+        title={t("admin.recoveryOps.actions.markMisconduct")}
+        description={t("admin.recoveryOps.markMisconductDescription", {
+          name: data.candidateSummary.displayName,
+          no: attempt.attemptNo,
+          examTitle: data.examSummary.title,
+        })}
+        confirmLabel={t("admin.recoveryOps.actions.markMisconduct")}
+        confirmDisabled={
+          misconductNotes.trim().length === 0 ||
+          misconductNotes.trim().length > 1000
+        }
+        destructive
+        submitting={misconduct.phase === "submitting"}
+        indeterminate={misconduct.phase === "indeterminate"}
+        onConfirm={() => void misconduct.run()}
+        onDismissIndeterminate={dismissMisconduct}
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-misconduct-severity">
+            {t("admin.recoveryOps.severityLabel")}
+          </Label>
+          <Select
+            value={misconductSeverity}
+            onValueChange={(v) =>
+              setMisconductSeverity(v as "warning" | "serious")
+            }
+            disabled={misconduct.phase !== "idle"}
+          >
+            <SelectTrigger id="recovery-misconduct-severity">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="warning">
+                {t("admin.recoveryOps.severityWarning")}
+              </SelectItem>
+              <SelectItem value="serious">
+                {t("admin.recoveryOps.severitySerious")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="recovery-misconduct-notes">
+            {t("admin.recoveryOps.notesLabel")}
+          </Label>
+          <Textarea
+            id="recovery-misconduct-notes"
+            value={misconductNotes}
+            onChange={(e) => setMisconductNotes(e.target.value)}
+          />
+          {misconductNotes.trim().length === 0 && (
+            <FieldError>{t("admin.recoveryOps.notesRequired")}</FieldError>
+          )}
+          {misconductNotes.trim().length > 1000 && (
+            <FieldError>
+              {t("admin.recoveryOps.reasonTooLong", { count: 1000 })}
+            </FieldError>
+          )}
+        </div>
+      </RecoveryCommandDialog>
     </div>
   );
 }

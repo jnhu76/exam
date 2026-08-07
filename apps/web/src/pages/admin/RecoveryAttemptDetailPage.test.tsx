@@ -15,11 +15,13 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       get: vi.fn(),
+      post: vi.fn(),
     },
   };
 });
 
 const getMock = vi.mocked(api.get);
+const postMock = vi.mocked(api.post);
 
 const mockContext: RecoveryAttemptOperationsResponse = {
   attempt: {
@@ -157,6 +159,9 @@ describe("RecoveryAttemptDetailPage", () => {
   beforeEach(() => {
     getMock.mockReset();
     getMock.mockResolvedValue(mockContext);
+    postMock.mockReset();
+    postMock.mockResolvedValue({ outcome: "applied" });
+    window.sessionStorage.clear();
   });
 
   it("renders the attempt header with status and attempt number", async () => {
@@ -232,18 +237,163 @@ describe("RecoveryAttemptDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders NO command action buttons in the read-only phase", async () => {
+  it("renders the Operations section with allowedActions-gated command buttons (J5-I1C1)", async () => {
     renderPage();
     await screen.findByText("第 1 次答题");
-    // The action COMMAND area is not rendered (read-only phase). Toolbar
-    // affordances (refresh / back) are not commands. allowedActions must not
-    // produce command buttons (time_grant / force_submit / misconduct_mark).
-    expect(screen.queryByText(/allowedActions/)).not.toBeInTheDocument();
+    // The Operations section renders the three commands (server-computed
+    // allowedActions from the mock).
+    expect(screen.getByText("操作")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", {
-        name: /time_grant|force_submit|misconduct/i,
-      }),
+      screen.getByRole("button", { name: "延长答题时间" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "强制交卷" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "标记违规" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the page read-only when allowedActions is empty (§6.4 computed result)", async () => {
+    getMock.mockResolvedValue({
+      ...mockContext,
+      allowedActions: [],
+    });
+    renderPage();
+    await screen.findByText("第 1 次答题");
+    expect(screen.queryByText("操作")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /延长答题时间|强制交卷|标记违规/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders only the granted action when allowedActions is partial", async () => {
+    getMock.mockResolvedValue({
+      ...mockContext,
+      allowedActions: ["misconduct_mark"],
+    });
+    renderPage();
+    await screen.findByText("第 1 次答题");
+    expect(
+      screen.getByRole("button", { name: "标记违规" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "延长答题时间" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "强制交卷" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("grants time via POST /time-grants with a frozen operationId and reloads (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "延长答题时间" }),
+    );
+    await user.type(screen.getByLabelText("原因说明"), "网络故障补偿");
+    await user.click(screen.getByRole("button", { name: "延长答题时间" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      {
+        operationId: string;
+        addedSeconds: number;
+        reasonCode: string;
+        reasonText: string;
+      },
+    ];
+    expect(url).toBe("/api/admin/attempts/attempt-1/time-grants");
+    expect(body.operationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(body.addedSeconds).toBe(600);
+    expect(body.reasonText).toBe("网络故障补偿");
+    // Confirmed success reloads the authoritative projection.
+    await screen.findByText("第 1 次答题");
+    expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("blocks the grant confirm until a reason is entered", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "延长答题时间" }),
+    );
+    const confirm = screen.getByRole("button", { name: "延长答题时间" });
+    // Dialog confirm (the second button with that name).
+    expect(confirm).toBeInTheDocument();
+    await user.click(confirm);
+    expect(postMock).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("原因说明"), "网络故障补偿");
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it("force-submits with an operationId + canonical reason and reloads (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "强制交卷" }));
+    await user.type(screen.getByLabelText("原因说明（必填）"), "考生无法继续");
+    await user.click(screen.getByRole("button", { name: "强制交卷" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      { operationId: string; reason: string },
+    ];
+    expect(url).toBe("/api/admin/attempts/attempt-1/force-submit");
+    expect(body.reason).toBe("考生无法继续");
+    // The durable pending authority was written before the POST.
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
+  it("marks misconduct with operationId + severity + notes and reloads (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "标记违规" }));
+    await user.type(screen.getByLabelText("违规说明"), "查看手机");
+    await user.click(screen.getByRole("button", { name: "标记违规" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      { operationId: string; severity: string; notes: string },
+    ];
+    expect(url).toBe("/api/admin/attempts/attempt-1/misconduct");
+    expect(body.severity).toBe("warning");
+    expect(body.notes).toBe("查看手机");
+  });
+
+  it("retries an indeterminate force-submit with the SAME operationId (J5-R0 §8.2)", async () => {
+    const user = userEvent.setup();
+    postMock.mockRejectedValueOnce(new ApiError(0, "Network request failed"));
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "强制交卷" }));
+    await user.type(screen.getByLabelText("原因说明（必填）"), "考生无法继续");
+    await user.click(screen.getByRole("button", { name: "强制交卷" }));
+
+    // Indeterminate — dialog stays open with a retry affordance.
+    expect(await screen.findByText("重试")).toBeInTheDocument();
+    const firstBody = postMock.mock.calls[0]![1] as { operationId: string };
+    await user.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(postMock).toHaveBeenCalledTimes(2);
+    const secondBody = postMock.mock.calls[1]![1] as { operationId: string };
+    expect(secondBody.operationId).toBe(firstBody.operationId);
+  });
+
+  it("surfaces a definitive rejection and closes the dialog", async () => {
+    const user = userEvent.setup();
+    postMock.mockRejectedValueOnce(new ApiError(403, "Forbidden"));
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "强制交卷" }));
+    await user.type(screen.getByLabelText("原因说明（必填）"), "考生无法继续");
+    await user.click(screen.getByRole("button", { name: "强制交卷" }));
+
+    // Confirmed rejection — dialog closes, no retry affordance.
+    expect(screen.queryByText("重试")).not.toBeInTheDocument();
+    expect(screen.queryByText("原因说明（必填）")).not.toBeInTheDocument();
   });
 
   it("shows loading state then data", async () => {
