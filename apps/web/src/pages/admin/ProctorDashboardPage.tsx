@@ -376,10 +376,15 @@ export function ProctorDashboardPage() {
       result.kind === "authority" &&
       result.authority.command.attemptId !== attemptId
     ) {
+      // Re-review P1: block THIS dialog but do NOT touch forceSubmitState.
+      // A pending command for a different attempt must stay recoverable via
+      // the page-level banner — resetting it to `idle` here would silently
+      // discard the recovery affordance (the banner renders only while the
+      // phase is `indeterminate`), re-introducing the unreachable-slot bug
+      // from a second entry point.
       setForceSubmitBlockedReason(
         t("admin.proctorDashboard.forceSubmit.blockedPending"),
       );
-      setForceSubmitState({ phase: "idle" });
       return;
     }
     if (
@@ -440,7 +445,14 @@ export function ProctorDashboardPage() {
         operationId: command.operationId,
         reason: command.reason,
       });
-      clearPendingForceSubmit(user.organizationId, user.id);
+      const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+      if (!cleared.ok) {
+        // Re-review P2: the outcome is CONFIRMED, so the UI still advances —
+        // but surface the failed cleanup. The stale record only replays the
+        // SAME operationId on a later reload (idempotent server-side), so it
+        // is safe; hiding it would be a silent state mismatch.
+        toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
+      }
       setForceSubmitState({ phase: "idle" });
       setForceSubmitTargetAttemptId(null);
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
@@ -452,7 +464,13 @@ export function ProctorDashboardPage() {
         toast.error(t("admin.proctorDashboard.forceSubmit.indeterminate"));
         return;
       }
-      clearPendingForceSubmit(user.organizationId, user.id);
+      const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+      if (!cleared.ok) {
+        // Re-review P2: same as the success path — the rejection is CONFIRMED
+        // so the UI advances, but a stale record that could not be removed is
+        // surfaced (it would only replay the SAME rejected operationId).
+        toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
+      }
       setForceSubmitState({ phase: "idle" });
       toast.error(
         err instanceof Error
@@ -484,10 +502,20 @@ export function ProctorDashboardPage() {
     await sendForceSubmitCommand(command, { fromDialog: true });
   }
 
-  /** Clears a retained indeterminate force-submit command (user dismissal). */
+  /**
+   * Clears a retained indeterminate force-submit command (user dismissal).
+   * Re-review P2: the clear returns an explicit result — when the durable
+   * record could NOT be removed, the banner + indeterminate state are KEPT
+   * and an error is surfaced, so the admin never believes the slot was
+   * cleared while a stale record still blocks later force-submits.
+   */
   function dismissForceSubmitIndeterminate() {
     if (!user) return;
-    clearPendingForceSubmit(user.organizationId, user.id);
+    const cleared = clearPendingForceSubmit(user.organizationId, user.id);
+    if (!cleared.ok) {
+      toast.error(t("admin.proctorDashboard.forceSubmit.dismissFailed"));
+      return;
+    }
     setForceSubmitState({ phase: "idle" });
     setForceSubmitTargetAttemptId(null);
   }
@@ -1369,7 +1397,8 @@ export function ProctorDashboardPage() {
                 }
               }}
             >
-              {forceSubmitState.phase === "indeterminate"
+              {forceSubmitState.phase === "indeterminate" &&
+              forceSubmitBlockedReason === null
                 ? t("admin.proctorDashboard.forceSubmit.retry")
                 : t("common.confirm")}
             </Button>
