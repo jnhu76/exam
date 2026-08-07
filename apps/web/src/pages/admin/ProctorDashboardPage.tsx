@@ -256,7 +256,8 @@ export function ProctorDashboardPage() {
         phase: "submitting";
         command: PendingForceSubmitCommand;
       }
-    | { phase: "indeterminate"; command: PendingForceSubmitCommand };
+    | { phase: "indeterminate"; command: PendingForceSubmitCommand }
+    | { phase: "cleanup_failed"; command: PendingForceSubmitCommand };
   const [forceSubmitState, setForceSubmitState] = useState<ForceSubmitPhase>({
     phase: "idle",
   });
@@ -376,15 +377,19 @@ export function ProctorDashboardPage() {
       result.kind === "authority" &&
       result.authority.command.attemptId !== attemptId
     ) {
-      // Re-review P1: block THIS dialog but do NOT touch forceSubmitState.
-      // A pending command for a different attempt must stay recoverable via
-      // the page-level banner — resetting it to `idle` here would silently
-      // discard the recovery affordance (the banner renders only while the
-      // phase is `indeterminate`), re-introducing the unreachable-slot bug
-      // from a second entry point.
+      // Block THIS dialog and always restore from durable authority. The React
+      // state may have drifted to idle via cleanup failure, page reload, or
+      // other UI state bugs — as long as the durable authority exists the
+      // recovery banner must be visible (P2 fix: confirmed + cleanup failure
+      // produced a hidden stale authority that blocked later operations with
+      // no visible recovery path).
       setForceSubmitBlockedReason(
         t("admin.proctorDashboard.forceSubmit.blockedPending"),
       );
+      setForceSubmitState({
+        phase: "cleanup_failed",
+        command: result.authority.command,
+      });
       return;
     }
     if (
@@ -447,14 +452,17 @@ export function ProctorDashboardPage() {
       });
       const cleared = clearPendingForceSubmit(user.organizationId, user.id);
       if (!cleared.ok) {
-        // Re-review P2: the outcome is CONFIRMED, so the UI still advances —
-        // but surface the failed cleanup. The stale record only replays the
-        // SAME operationId on a later reload (idempotent server-side), so it
-        // is safe; hiding it would be a silent state mismatch.
+        // P2 fix: the outcome is CONFIRMED, but the stale authority must not
+        // be hidden — it blocks later force-submits with no recovery path if
+        // left in sessionStorage while the UI shows idle. Transition to
+        // cleanup_failed so the page-level banner shows the stale record and
+        // offers a dismiss (storage cleanup) affordance.
         toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
+        setForceSubmitState({ phase: "cleanup_failed", command });
+      } else {
+        setForceSubmitState({ phase: "idle" });
+        setForceSubmitTargetAttemptId(null);
       }
-      setForceSubmitState({ phase: "idle" });
-      setForceSubmitTargetAttemptId(null);
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
       await loadStatus();
     } catch (err) {
@@ -466,12 +474,14 @@ export function ProctorDashboardPage() {
       }
       const cleared = clearPendingForceSubmit(user.organizationId, user.id);
       if (!cleared.ok) {
-        // Re-review P2: same as the success path — the rejection is CONFIRMED
-        // so the UI advances, but a stale record that could not be removed is
-        // surfaced (it would only replay the SAME rejected operationId).
+        // P2 fix: same as the success path — the rejection is CONFIRMED but
+        // the stale authority must not be hidden. Transition to cleanup_failed
+        // so the page-level banner offers a dismiss affordance.
         toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
+        setForceSubmitState({ phase: "cleanup_failed", command });
+      } else {
+        setForceSubmitState({ phase: "idle" });
       }
-      setForceSubmitState({ phase: "idle" });
       toast.error(
         err instanceof Error
           ? err.message
@@ -503,11 +513,11 @@ export function ProctorDashboardPage() {
   }
 
   /**
-   * Clears a retained indeterminate force-submit command (user dismissal).
-   * Re-review P2: the clear returns an explicit result — when the durable
-   * record could NOT be removed, the banner + indeterminate state are KEPT
-   * and an error is surfaced, so the admin never believes the slot was
-   * cleared while a stale record still blocks later force-submits.
+   * Clears a retained indeterminate or cleanup_failed force-submit command
+   * (user dismissal). When the durable record could NOT be removed, the banner
+   * + current state are KEPT and an error is surfaced, so the admin never
+   * believes the slot was cleared while a stale record still blocks later
+   * force-submits.
    */
   function dismissForceSubmitIndeterminate() {
     if (!user) return;
@@ -1051,16 +1061,24 @@ export function ProctorDashboardPage() {
       />
 
       {/*
-        Page-level pending force-submit banner (re-review P1-1). Independent
-        of the candidate's live status: the server may have committed the
-        operation but the response was lost, and by the next status poll the
-        attempt is already submitted/graded — so the candidate card no longer
-        renders a force-submit button. Without this page-level banner the
-        pending command (a global per-admin slot) would become unreachable
-        and block every later force-submit. The banner ALWAYS offers retry +
-        explicit dismiss regardless of whether the candidate is still live.
+        Page-level pending force-submit banner (re-review P1-1 + P2 fix).
+        Independent of the candidate's live status: the server may have
+        committed the operation but the response was lost, and by the next
+        status poll the attempt is already submitted/graded — so the candidate
+        card no longer renders a force-submit button. Without this page-level
+        banner the pending command (a global per-admin slot) would become
+        unreachable and block every later force-submit.
+
+        Two phases render the banner:
+        - `indeterminate`: outcome unknown (network drop / 5xx). Offers retry
+          (resend the frozen command) + dismiss.
+        - `cleanup_failed`: outcome confirmed (server applied / rejected), but
+          sessionStorage cleanup failed leaving a stale record. Shows only
+          dismiss (storage cleanup) — retrying the POST is pointless since the
+          server already committed.
       */}
-      {forceSubmitState.phase === "indeterminate" && (
+      {(forceSubmitState.phase === "indeterminate" ||
+        forceSubmitState.phase === "cleanup_failed") && (
         <div
           role="alert"
           data-testid="pending-force-submit-banner"
@@ -1069,25 +1087,35 @@ export function ProctorDashboardPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-1">
               <span className="font-medium">
-                {t("admin.proctorDashboard.forceSubmit.bannerTitle")}
+                {forceSubmitState.phase === "cleanup_failed"
+                  ? t(
+                      "admin.proctorDashboard.forceSubmit.cleanupFailedBannerTitle",
+                    )
+                  : t("admin.proctorDashboard.forceSubmit.bannerTitle")}
               </span>
               <span className="text-xs">
-                {t("admin.proctorDashboard.forceSubmit.bannerBody")}
+                {forceSubmitState.phase === "cleanup_failed"
+                  ? t(
+                      "admin.proctorDashboard.forceSubmit.cleanupFailedBannerBody",
+                    )
+                  : t("admin.proctorDashboard.forceSubmit.bannerBody")}
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={forceSubmitting}
-                onClick={() => {
-                  void sendForceSubmitCommand(forceSubmitState.command, {
-                    fromDialog: false,
-                  });
-                }}
-              >
-                {t("admin.proctorDashboard.forceSubmit.bannerRetry")}
-              </Button>
+              {forceSubmitState.phase === "indeterminate" && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={forceSubmitting}
+                  onClick={() => {
+                    void sendForceSubmitCommand(forceSubmitState.command, {
+                      fromDialog: false,
+                    });
+                  }}
+                >
+                  {t("admin.proctorDashboard.forceSubmit.bannerRetry")}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

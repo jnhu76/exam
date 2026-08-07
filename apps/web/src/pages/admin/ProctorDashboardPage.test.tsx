@@ -1138,11 +1138,9 @@ describe("ProctorDashboardPage", () => {
 
     // ── Re-review P1 (mutation-proof): a pending command for attempt A must
     //    stay recoverable even after the admin opens (and closes) a BLOCKED
-    //    force-submit dialog for a different attempt B. The old code reset
-    //    `forceSubmitState` to `idle` in the blocked branch, which dropped
-    //    the page-level banner (it renders only in the `indeterminate` phase)
-    //    while the durable record was still present — re-introducing the
-    //    unreachable-slot bug from a second entry point.
+    //    force-submit dialog for a different attempt B. The blocked branch
+    //    always restores from durable authority — the banner persists and
+    //    offers a dismiss (storage cleanup) affordance.
     it("keeps the pending banner alive when a DIFFERENT candidate's force-submit dialog is blocked and closed", async () => {
       const pendingOpId = "00000000-0000-4000-8000-00000000aaa1";
       sessionStorage.setItem(
@@ -1172,10 +1170,9 @@ describe("ProctorDashboardPage", () => {
         ],
         total: 2,
       });
-      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
 
       renderPage();
-      const banner = await pendingBanner();
+      await pendingBanner();
 
       // Click B's force-submit → the dialog opens but is BLOCKED by the
       // pending A (the global per-admin slot holds at most one command).
@@ -1194,23 +1191,17 @@ describe("ProctorDashboardPage", () => {
 
       // The banner for A is STILL visible — opening/blocking/closing B must
       // not have discarded A's recovery surface.
-      expect(
-        screen.getByTestId("pending-force-submit-banner"),
-      ).toBeInTheDocument();
+      const banner = screen.getByTestId("pending-force-submit-banner");
+      expect(banner).toBeInTheDocument();
 
-      // Retry from the banner → POST replays op-A for att-1 verbatim.
-      // The banner retry handler is async (POST → continuation → chained
-      // loadStatus); flush it inside act() so no render lands outside it.
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole("button", { name: "重试未确认强制交卷" }),
-        );
+      // Dismiss from the banner → clears the stale storage record.
+      fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
+      await waitFor(() => {
+        expect(
+          sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+        ).toBeNull();
       });
-      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
-      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
-      expect(apiPost.mock.calls[0]![0]).toContain("/att-1/force-submit");
-      expect(body.operationId).toBe(pendingOpId);
-      expect(body.reason).toBe("管理员强制交卷");
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
     });
 
     // ── Re-review P2: save read-back is byte-for-byte. A storage layer that
@@ -1306,10 +1297,11 @@ describe("ProctorDashboardPage", () => {
       removerSpy.mockRestore();
     });
 
-    // ── Re-review P2: a CONFIRMED outcome still advances the UI even when
-    //    the durable record cannot be cleared — but the failed cleanup is
-    //    surfaced instead of silently swallowing it.
-    it("warns but advances the UI when a confirmed success cannot clear the record", async () => {
+    // ── P2 fix: a CONFIRMED outcome with failed cleanup now transitions to
+    //    `cleanup_failed` — the page-level banner shows the stale record and
+    //    offers only a dismiss (storage cleanup) affordance, preventing the
+    //    hidden stale authority that would block later force-submits.
+    it("shows the cleanup-failed banner when a confirmed success cannot clear the record", async () => {
       const pendingOpId = "00000000-0000-4000-8000-00000000ddd1";
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
@@ -1356,11 +1348,110 @@ describe("ProctorDashboardPage", () => {
       expect(toast.warning).toHaveBeenCalledWith(
         expect.stringContaining("清理失败"),
       );
-      // The UI advances (banner gone) — only the stale durable record stays,
-      // which would replay the SAME operationId (idempotent) on next load.
-      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+      // P2 fix: the banner is KEPT with cleanup_failed semantics — the stale
+      // record is visible and offers a dismiss (storage cleanup) affordance.
+      const banner = screen.getByTestId("pending-force-submit-banner");
+      expect(banner).toBeInTheDocument();
+      expect(banner).toHaveTextContent("清理失败");
+      // Only dismiss button, no retry (POST is pointless on confirmed outcome).
+      expect(
+        screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "清除未确认命令" }),
+      ).toBeInTheDocument();
+      // The stale durable record is still present.
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).not.toBeNull();
 
       removerSpy.mockRestore();
+    });
+
+    // ── P2 fix: when a stale cleanup_failed authority is present and the
+    //    admin opens a force-submit dialog for a DIFFERENT attempt, the
+    //    blocked branch restores the cleanup_failed state from durable
+    //    authority — the banner reappears and offers a dismiss affordance.
+    //    The stale authority is injected AFTER render to simulate a scenario
+    //    where React state drifted to idle (e.g. cleanup failure) while
+    //    sessionStorage retains the record.
+    it("restores the cleanup-failed banner when a different attempt's dialog is blocked by stale authority", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000eee1";
+      // A (att-1) is GRADED — no card button; B (att-2) is still in_progress.
+      apiGet.mockResolvedValue({
+        candidates: [
+          makeCandidate({ status: "graded", attemptId: "att-1" }),
+          makeCandidate({
+            candidateId: "cand-2",
+            name: "李四",
+            attemptId: "att-2",
+            status: "in_progress",
+          }),
+        ],
+        total: 2,
+      });
+
+      // Render WITHOUT a stored authority — state stays idle, no banner.
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByText("张三")).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+
+      // Simulate a post-cleanup-failure: inject a stale authority into
+      // sessionStorage after the page loaded (React state is still idle).
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+
+      // Click B's force-submit → the dialog opens but is BLOCKED by the
+      // stale authority for A. The blocked branch restores cleanup_failed
+      // from durable authority, making the banner reappear.
+      const forceSubmitButtons = screen.getAllByRole("button", {
+        name: "强制交卷",
+      });
+      expect(forceSubmitButtons).toHaveLength(1); // only B's card has one
+      fireEvent.click(forceSubmitButtons[0]!);
+      await screen.findByText("确认强制交卷");
+      await screen.findAllByText(
+        "存在未确认的强制交卷命令，请先解决后再操作。",
+      );
+
+      // The cleanup-failed banner is now visible (restored from durable
+      // authority in the blocked branch).
+      const banner = screen.getByTestId("pending-force-submit-banner");
+      expect(banner).toBeInTheDocument();
+      expect(banner).toHaveTextContent("清理失败");
+      // Only dismiss button, no retry.
+      expect(
+        screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeNull();
+
+      // Dismiss from banner → clears the stale storage record.
+      await act(async () => {
+        fireEvent.click(
+          screen
+            .getByTestId("pending-force-submit-banner")
+            .querySelector("button")!,
+        );
+      });
+      await waitFor(() => {
+        expect(
+          sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+        ).toBeNull();
+      });
+      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
     });
 
     // ── Re-review P1-2: fail-closed persistence. When sessionStorage cannot
