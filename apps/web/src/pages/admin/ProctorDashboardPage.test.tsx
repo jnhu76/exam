@@ -1138,9 +1138,15 @@ describe("ProctorDashboardPage", () => {
 
     // ── Re-review P1 (mutation-proof): a pending command for attempt A must
     //    stay recoverable even after the admin opens (and closes) a BLOCKED
-    //    force-submit dialog for a different attempt B. The blocked branch
-    //    always restores from durable authority — the banner persists and
-    //    offers a dismiss (storage cleanup) affordance.
+    //    force-submit dialog for a different attempt B. The old code reset
+    //    `forceSubmitState` to `idle` in the blocked branch, which dropped
+    //    the page-level banner (it renders only in the `indeterminate` phase)
+    //    while the durable record was still present — re-introducing the
+    //    unreachable-slot bug from a second entry point. A later change that
+    //    reconstructed the phase as `cleanup_failed` from the storage record
+    //    alone was equally wrong: storage cannot prove the server confirmed,
+    //    so the banner must STILL offer retry, and retry must replay op-A
+    //    verbatim (re-review P1). This test fails under either mutation.
     it("keeps the pending banner alive when a DIFFERENT candidate's force-submit dialog is blocked and closed", async () => {
       const pendingOpId = "00000000-0000-4000-8000-00000000aaa1";
       sessionStorage.setItem(
@@ -1170,9 +1176,10 @@ describe("ProctorDashboardPage", () => {
         ],
         total: 2,
       });
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
 
       renderPage();
-      await pendingBanner();
+      const banner = await pendingBanner();
 
       // Click B's force-submit → the dialog opens but is BLOCKED by the
       // pending A (the global per-admin slot holds at most one command).
@@ -1189,19 +1196,31 @@ describe("ProctorDashboardPage", () => {
       // Close the B dialog (cancel).
       fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
-      // The banner for A is STILL visible — opening/blocking/closing B must
-      // not have discarded A's recovery surface.
-      const banner = screen.getByTestId("pending-force-submit-banner");
+      // The banner for A is STILL visible AND still offers retry —
+      // opening/blocking/closing B must not have discarded A's recovery
+      // surface, and a storage-only record must not have been promoted to
+      // the dismiss-only cleanup_failed phase.
       expect(banner).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "清除未确认命令" }),
+      ).toBeInTheDocument();
 
-      // Dismiss from the banner → clears the stale storage record.
-      fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
-      await waitFor(() => {
-        expect(
-          sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
-        ).toBeNull();
+      // Retry from the banner → POST replays op-A for att-1 verbatim.
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
+        );
       });
-      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      expect(apiPost.mock.calls[0]![0]).toContain("/att-1/force-submit");
+      expect(body.operationId).toBe(pendingOpId);
+      expect(body.reason).toBe("管理员强制交卷");
     });
 
     // ── Re-review P2: save read-back is byte-for-byte. A storage layer that
@@ -1368,14 +1387,108 @@ describe("ProctorDashboardPage", () => {
       removerSpy.mockRestore();
     });
 
-    // ── P2 fix: when a stale cleanup_failed authority is present and the
-    //    admin opens a force-submit dialog for a DIFFERENT attempt, the
-    //    blocked branch restores the cleanup_failed state from durable
-    //    authority — the banner reappears and offers a dismiss affordance.
-    //    The stale authority is injected AFTER render to simulate a scenario
-    //    where React state drifted to idle (e.g. cleanup failure) while
-    //    sessionStorage retains the record.
-    it("restores the cleanup-failed banner when a different attempt's dialog is blocked by stale authority", async () => {
+    // ── P2 fix (kept): when the SESSION already holds the confirmed
+    //    cleanup_failed fact for the SAME operationId, the blocked branch must
+    //    NOT demote it back to indeterminate. A confirmed outcome + failed
+    //    cleanup is dismiss-only: retrying the POST is pointless (the server
+    //    already committed). This locks the guard in the blocked branch.
+    it("keeps cleanup_failed (dismiss-only) when a different attempt's dialog is blocked while the session knows the outcome was confirmed", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000ddd2";
+      // A (att-1) is GRADED — no card button; B (att-2) is still in_progress.
+      apiGet.mockResolvedValue({
+        candidates: [
+          makeCandidate({ status: "graded", attemptId: "att-1" }),
+          makeCandidate({
+            candidateId: "cand-2",
+            name: "李四",
+            attemptId: "att-2",
+            status: "in_progress",
+          }),
+        ],
+        total: 2,
+      });
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 1,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      // The server confirms (idempotent replay) but the clear fails — the
+      // session transitions to cleanup_failed, which KNOWS the outcome.
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
+      const removerSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {
+          throw new DOMException("blocked", "SecurityError");
+        });
+
+      renderPage();
+      await pendingBanner();
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
+        );
+      });
+      await waitFor(() => {
+        expect(toast.warning).toHaveBeenCalledWith(
+          expect.stringContaining("清理失败"),
+        );
+      });
+
+      // Session now holds cleanup_failed (confirmed + cleanup failure).
+      const banner = screen.getByTestId("pending-force-submit-banner");
+      expect(banner).toHaveTextContent("清理失败");
+      expect(
+        screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeNull();
+
+      // Click B's force-submit → blocked, but the phase is KEPT as
+      // cleanup_failed — the in-session confirmed fact is not discarded.
+      const forceSubmitButtons = screen.getAllByRole("button", {
+        name: "强制交卷",
+      });
+      expect(forceSubmitButtons).toHaveLength(1); // only B's card has one
+      fireEvent.click(forceSubmitButtons[0]!);
+      await screen.findByText("确认强制交卷");
+      await screen.findAllByText(
+        "存在未确认的强制交卷命令，请先解决后再操作。",
+      );
+
+      // Close the B dialog (cancel) — the banner must STILL be cleanup_failed:
+      // "清理失败" copy, dismiss-only, no retry (the open modal would make
+      // the page aria-hidden and hide the banner buttons from role queries).
+      fireEvent.click(screen.getByRole("button", { name: "取消" }));
+      expect(
+        screen.getByTestId("pending-force-submit-banner"),
+      ).toHaveTextContent("清理失败");
+      expect(
+        screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "清除未确认命令" }),
+      ).toBeInTheDocument();
+      // No POST was sent for the blocked B dialog.
+      expect(apiPost).toHaveBeenCalledTimes(1);
+
+      removerSpy.mockRestore();
+    });
+    //    the server confirmed the command — the same bytes may be a lost
+    //    response (indeterminate, retry REQUIRED) or a confirmed outcome whose
+    //    cleanup failed. When React state drifted to idle (simulated by
+    //    injecting the record AFTER render) and the admin opens a force-submit
+    //    dialog for a DIFFERENT attempt, the blocked branch must reconstruct
+    //    `indeterminate` (fail-safe: retry always replays the same operationId
+    //    idempotently), never the dismiss-only `cleanup_failed` phase. This
+    //    test fails under a `phase: "cleanup_failed"` reconstruction mutation.
+    it("restores the INDETERMINATE banner (with retry) when a different attempt's dialog is blocked by a storage-only authority", async () => {
       const pendingOpId = "00000000-0000-4000-8000-00000000eee1";
       // A (att-1) is GRADED — no card button; B (att-2) is still in_progress.
       apiGet.mockResolvedValue({
@@ -1390,6 +1503,9 @@ describe("ProctorDashboardPage", () => {
         ],
         total: 2,
       });
+      // Retry succeeds — the server may have committed before the lost
+      // response, so the replay returns idempotent_replay.
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
 
       // Render WITHOUT a stored authority — state stays idle, no banner.
       renderPage();
@@ -1398,8 +1514,8 @@ describe("ProctorDashboardPage", () => {
       });
       expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
 
-      // Simulate a post-cleanup-failure: inject a stale authority into
-      // sessionStorage after the page loaded (React state is still idle).
+      // Simulate a stale record appearing after the page loaded (React state
+      // is still idle — e.g. reloaded before this write became visible).
       sessionStorage.setItem(
         "exam.pendingForceSubmit:org-1:admin-1",
         JSON.stringify({
@@ -1416,8 +1532,9 @@ describe("ProctorDashboardPage", () => {
       );
 
       // Click B's force-submit → the dialog opens but is BLOCKED by the
-      // stale authority for A. The blocked branch restores cleanup_failed
-      // from durable authority, making the banner reappear.
+      // stale authority for A. The blocked branch reconstructs the banner
+      // as indeterminate — NOT cleanup_failed (storage cannot prove the
+      // outcome was confirmed).
       const forceSubmitButtons = screen.getAllByRole("button", {
         name: "强制交卷",
       });
@@ -1428,30 +1545,48 @@ describe("ProctorDashboardPage", () => {
         "存在未确认的强制交卷命令，请先解决后再操作。",
       );
 
-      // The cleanup-failed banner is now visible (restored from durable
-      // authority in the blocked branch).
+      // The banner is now visible and NOT the cleanup-failed copy (the open
+      // modal marks the page aria-hidden, so banner buttons are role-
+      // invisible until the dialog closes — text assertions still work).
       const banner = screen.getByTestId("pending-force-submit-banner");
       expect(banner).toBeInTheDocument();
-      expect(banner).toHaveTextContent("清理失败");
-      // Only dismiss button, no retry.
-      expect(
-        screen.queryByRole("button", { name: "重试未确认强制交卷" }),
-      ).toBeNull();
+      expect(banner).not.toHaveTextContent("清理失败");
 
-      // Dismiss from banner → clears the stale storage record.
+      // Close the B dialog (cancel) — the indeterminate banner must STILL
+      // offer retry + dismiss (mutations to `cleanup_failed` or `idle` fail
+      // here).
+      fireEvent.click(screen.getByRole("button", { name: "取消" }));
+      expect(
+        screen.getByRole("button", { name: "重试未确认强制交卷" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "清除未确认命令" }),
+      ).toBeInTheDocument();
+
+      // Retry from the banner → POST replays op-A for att-1 verbatim.
+      // The banner retry handler is async (POST → continuation → chained
+      // loadStatus); flush it inside act() so no render lands outside it.
       await act(async () => {
         fireEvent.click(
-          screen
-            .getByTestId("pending-force-submit-banner")
-            .querySelector("button")!,
+          screen.getByRole("button", { name: "重试未确认强制交卷" }),
         );
       });
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      expect(apiPost.mock.calls[0]![0]).toContain("/att-1/force-submit");
+      expect(body.operationId).toBe(pendingOpId);
+      expect(body.reason).toBe("管理员强制交卷");
+
+      // Confirmed replay outcome clears the banner + the durable record.
       await waitFor(() => {
-        expect(
-          sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
-        ).toBeNull();
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("已强制交卷"),
+        );
       });
       expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+      expect(
+        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
+      ).toBeNull();
     });
 
     // ── Re-review P1-2: fail-closed persistence. When sessionStorage cannot
