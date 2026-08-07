@@ -57,15 +57,20 @@ const NAMESPACE = "admin.recoveryIncident";
  * `INCIDENT_VERSION_CONFLICT` surfaces the dedicated "reload and retry"
  * message; every confirmed outcome reloads the authoritative aggregate.
  */
-interface IncidentCommandField {
+interface IncidentCommandFieldBase {
   kind: "text" | "select";
   key: string;
   labelKey: string;
-  required: boolean;
-  requiredErrorKey?: string;
   maxLength?: number;
   options?: { value: string; labelKey: string }[];
 }
+/**
+ * A required field MUST carry its required-error key (the validation path
+ * renders the FieldError from it); non-required fields may omit it.
+ */
+type IncidentCommandField =
+  | (IncidentCommandFieldBase & { required: true; requiredErrorKey: string })
+  | (IncidentCommandFieldBase & { required?: false; requiredErrorKey?: never });
 
 function IncidentCommand({
   incidentId,
@@ -115,12 +120,10 @@ function IncidentCommand({
       setOpen(false);
       if (err instanceof ApiError && err.code === "INCIDENT_VERSION_CONFLICT") {
         toast.error(t("admin.recoveryOps.versionConflict"));
+      } else if (err instanceof ApiError) {
+        toast.error(t("admin.recoveryOps.rejectionFailed"));
       } else {
-        toast.error(
-          err instanceof Error
-            ? err.message
-            : t("admin.recoveryOps.indeterminate"),
-        );
+        toast.error(t("admin.recoveryOps.indeterminate"));
       }
     },
     onIndeterminate: () => toast.error(t("admin.recoveryOps.indeterminate")),
@@ -141,7 +144,11 @@ function IncidentCommand({
         variant="outline"
         size="sm"
         onClick={() => {
-          setValues({});
+          // Reset the draft ONLY when no command session is active — a frozen
+          // command (retry) must never have its payload replaced by a reset.
+          if (command.phase === "idle" && command.operationId === null) {
+            setValues({});
+          }
           setOpen(true);
           command.begin();
         }}

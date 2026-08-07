@@ -104,27 +104,39 @@ export function useRecoveryOperation(
     onIndeterminate,
     beforeSubmit,
   } = options;
-  const [phase, setPhase] = useState<RecoveryOperationPhase>("idle");
+  const [phase, setPhaseState] = useState<RecoveryOperationPhase>("idle");
   const [operationId, setOperationId] = useState<string | null>(null);
 
-  // Refs so `begin`/`run`/`reset` stay stable while always reading the latest
-  // phase/identity (the callbacks are wired once per page lifecycle).
+  // Ref so `run`/`reset` stay stable while always reading the latest
+  // phase/identity (the callbacks are wired once per page lifecycle). The
+  // phase ref is synced by the setter below — never assigned at render time.
   const phaseRef = useRef(phase);
-  phaseRef.current = phase;
   const idRef = useRef(operationId);
   idRef.current = operationId;
 
+  const setPhase = useCallback((next: RecoveryOperationPhase) => {
+    phaseRef.current = next;
+    setPhaseState(next);
+  }, []);
+
   const begin = useCallback((restoreOperationId?: string) => {
-    if (phaseRef.current !== "idle") return;
+    // Mint the operation identity BEFORE the transition; the state updater
+    // decides whether a session is actually started (a wasted mint behind
+    // the idle guard is harmless — drift is the failure mode, not a lost id).
     const id = restoreOperationId ?? createContextSafeUuid();
-    setOperationId(id);
-    setPhase(restoreOperationId ? "indeterminate" : "idle");
+    // Read the LATEST phase through the state updater — a render-time ref
+    // could be stale mid-tick (e.g. two dialogs opened in one frame).
+    setPhaseState((current) => {
+      if (current !== "idle") return current;
+      setOperationId(id);
+      return restoreOperationId ? "indeterminate" : "idle";
+    });
   }, []);
 
   const reset = useCallback(() => {
     setOperationId(null);
     setPhase("idle");
-  }, []);
+  }, [setPhase]);
 
   const run = useCallback(async () => {
     const id = idRef.current;
@@ -133,8 +145,6 @@ export function useRecoveryOperation(
     setPhase("submitting");
     try {
       await submit(id);
-      onSuccess();
-      reset();
     } catch (err) {
       const kind = classifyOperationFailure(err);
       if (kind === "indeterminate") {
@@ -146,7 +156,12 @@ export function useRecoveryOperation(
       // Confirmed rejection — the command with this identity is dead.
       onConfirmedRejection?.(err);
       reset();
+      return;
     }
+    // Confirmed success: end the session BEFORE invoking the callback so an
+    // exception inside onSuccess is never classified into a retry state.
+    reset();
+    onSuccess();
   }, [
     submit,
     onSuccess,
@@ -154,6 +169,7 @@ export function useRecoveryOperation(
     onIndeterminate,
     beforeSubmit,
     reset,
+    setPhase,
   ]);
 
   return { phase, operationId, begin, run, reset };

@@ -454,7 +454,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         // Valid operation-aware payload (J5-I1C Slice 2) so the capability
         // gate — not body validation — is what denies the Proctor.
         payload: {
-          operationId: crypto.randomUUID(),
+          operationId: opId(),
           reason: "proctor must be denied",
         },
       });
@@ -469,7 +469,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         // J5-I1C Slice 3: misconduct now requires operationId; a valid body
         // reaches the capability gate instead of failing schema validation.
         payload: {
-          operationId: "00000000-0000-4000-8000-000000000000",
+          operationId: opId(),
           severity: "warning",
           notes: "nope",
         },

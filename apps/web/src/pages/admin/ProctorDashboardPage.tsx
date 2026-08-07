@@ -45,6 +45,12 @@ import {
   type PendingForceSubmitCommand,
 } from "@/features/force-submit/pendingForceSubmitAuthority";
 import {
+  loadPendingMisconduct,
+  savePendingMisconduct,
+  clearPendingMisconduct,
+  type PendingMisconductAuthority,
+} from "@/features/misconduct/pendingMisconductAuthority";
+import {
   CoordinationUnavailableError,
   AlreadyPendingError,
   LeaseConflictError,
@@ -1027,31 +1033,83 @@ export function ProctorDashboardPage() {
     );
   }
 
-  /** Handles misconduct flag for a candidate. */
+  /**
+   * Handles misconduct flag for a candidate. Fail-closed durable command
+   * (J5-I1C Slice 3): the frozen command is persisted BEFORE the POST and the
+   * write VERIFIED — if persistence fails the POST is SUPPRESSED (an
+   * unpersisted operationId would be lost on reload and a later retry would
+   * mint a duplicate identity). The SAME frozen operationId is reused across
+   * retries (indeterminate) and reopenings (the pending authority is restored
+   * by the open handler); it is cleared only after a confirmed outcome
+   * (success or definitive rejection).
+   */
   async function handleFlagMisconduct() {
-    if (!misconductTarget?.attemptId || flagging) return;
+    if (!user || !examId || !misconductTarget?.attemptId || flagging) return;
+    const attemptId = misconductTarget.attemptId;
     // Reuse the frozen operationId for the lifetime of this mark so a retry
     // within the same dialog session is an idempotent replay (J5-R0 §8.2).
     const operationId = misconductOperationId ?? createContextSafeUuid();
     setMisconductOperationId(operationId);
+    const notes =
+      misconductNotes.trim() ||
+      t("admin.proctorDashboard.misconductDialog.defaultNotes");
+    const authority: PendingMisconductAuthority = {
+      schemaVersion: 2,
+      organizationId: user.organizationId,
+      actorId: user.id,
+      command: {
+        attemptId,
+        operationId,
+        severity: misconductSeverity,
+        notes,
+        examId,
+        candidateName: misconductTarget.name,
+      },
+      createdAt: Date.now(),
+    };
+    // Fail-closed persistence: persist BEFORE the POST and verify the write.
+    const saved = savePendingMisconduct(authority);
+    if (!saved.ok) {
+      toast.error(
+        t("admin.proctorDashboard.misconductDialog.persistenceFailed"),
+      );
+      // Nothing was sent — keep the dialog open; a corrected retry reuses the
+      // same identity.
+      return;
+    }
     setFlagging(true);
     try {
-      await api.post(
-        `/api/admin/attempts/${misconductTarget.attemptId}/misconduct`,
-        {
-          operationId,
-          severity: misconductSeverity,
-          notes:
-            misconductNotes ||
-            t("admin.proctorDashboard.misconductDialog.defaultNotes"),
-        },
-      );
+      await api.post(`/api/admin/attempts/${attemptId}/misconduct`, {
+        operationId,
+        severity: misconductSeverity,
+        notes,
+      });
+      const cleared = clearPendingMisconduct(user.organizationId, user.id);
+      if (!cleared.ok) {
+        toast.warning(
+          t("admin.proctorDashboard.misconductDialog.cleanupFailed"),
+        );
+      }
       toast.success(t("admin.proctorDashboard.misconductDialog.done"));
       setMisconductDialogOpen(false);
       setMisconductNotes("");
       setMisconductOperationId(null);
       await loadStatus();
     } catch (err) {
+      const failure = classifyGrantFailure(err);
+      if (failure === "indeterminate") {
+        // Unconfirmed — keep the frozen command; the retry reuses the same
+        // operationId (idempotent replay).
+        toast.error(t("admin.proctorDashboard.misconductDialog.indeterminate"));
+        return;
+      }
+      // Confirmed rejection — the command with this identity is dead.
+      const cleared = clearPendingMisconduct(user.organizationId, user.id);
+      if (!cleared.ok) {
+        toast.warning(
+          t("admin.proctorDashboard.misconductDialog.cleanupFailed"),
+        );
+      }
       toast.error(
         err instanceof Error
           ? err.message
@@ -1646,13 +1704,50 @@ export function ProctorDashboardPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
+                          if (!user) return;
+                          // Honor the pending authority (J5-I1C Slice 3): an
+                          // unresolved command for THIS attempt is restored so
+                          // the retry replays the same operationId; one for a
+                          // DIFFERENT attempt blocks the dialog.
+                          const pending = loadPendingMisconduct(
+                            user.organizationId,
+                            user.id,
+                          );
+                          if (pending.kind === "corrupt") {
+                            toast.error(
+                              t(
+                                "admin.proctorDashboard.misconductDialog.corruptCleared",
+                              ),
+                            );
+                          }
+                          if (
+                            pending.kind === "authority" &&
+                            pending.authority.command.attemptId !==
+                              candidate.attemptId
+                          ) {
+                            toast.error(
+                              t(
+                                "admin.proctorDashboard.misconductDialog.blockedPending",
+                              ),
+                            );
+                            return;
+                          }
                           setMisconductTarget(candidate);
-                          setMisconductSeverity("warning");
-                          setMisconductNotes("");
-                          // Mint a fresh operationId for this new mark; it is
-                          // reused for the lifetime of the open dialog so a
-                          // retry is an idempotent replay (J5-I1C Slice 3).
-                          setMisconductOperationId(createContextSafeUuid());
+                          if (pending.kind === "authority") {
+                            // Restore the frozen command verbatim — its
+                            // outcome was never confirmed.
+                            setMisconductSeverity(
+                              pending.authority.command.severity,
+                            );
+                            setMisconductNotes(pending.authority.command.notes);
+                            setMisconductOperationId(
+                              pending.authority.command.operationId,
+                            );
+                          } else {
+                            setMisconductSeverity("warning");
+                            setMisconductNotes("");
+                            setMisconductOperationId(createContextSafeUuid());
+                          }
                           setMisconductDialogOpen(true);
                         }}
                       >

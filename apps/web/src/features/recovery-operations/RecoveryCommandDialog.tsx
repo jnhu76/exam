@@ -143,7 +143,7 @@ export function RecoveryCommandDialog({
             {submitting
               ? t("admin.recoveryOps.submitting")
               : indeterminate
-                ? t("admin.recoveryOps.retry")
+                ? `${t("admin.recoveryOps.retry")} · ${confirmLabel}`
                 : confirmLabel}
           </Button>
         </DialogFooter>

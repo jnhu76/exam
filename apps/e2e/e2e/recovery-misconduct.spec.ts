@@ -86,7 +86,7 @@ test.describe("Recovery attempt misconduct mark (J5-I1D)", () => {
       capturedDisposition = parsed.disposition ?? "";
       await route.fulfill({
         status: response.status(),
-        headers: response.headers(),
+        contentType: "application/json",
         body: JSON.stringify(parsed),
       });
     });
@@ -175,7 +175,7 @@ test.describe("Recovery attempt misconduct mark (J5-I1D)", () => {
       captured.push({ body: postBody, parsed });
       await route.fulfill({
         status: response.status(),
-        headers: response.headers(),
+        contentType: "application/json",
         body: JSON.stringify(parsed),
       });
     });

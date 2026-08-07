@@ -66,6 +66,10 @@ import {
   type MisconductMarkExecutionObserver,
 } from "../../orchestrators/misconductMarkExecution.js";
 import { ATTEMPT_COMMAND_RECEIPT_OPERATION_UNIQUE_CONSTRAINT } from "../../orchestrators/attemptCommandReceiptExecution.js";
+import {
+  countMisconductAudits as countMisconductAuditsFor,
+  listReceipts as listReceiptsFor,
+} from "./attempts.testHelpers.js";
 
 const TEST_PREFIX = "j5-i1c-mm-";
 
@@ -590,27 +594,11 @@ describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () =
     return { adminCtx: t.adminCtx, attemptId };
   }
 
-  async function listReceipts(attemptId: string) {
-    return ctx.db
-      .select()
-      .from(schema.attemptCommandReceipts)
-      .where(eq(schema.attemptCommandReceipts.attemptId, attemptId))
-      .orderBy(schema.attemptCommandReceipts.createdAt);
-  }
-
-  async function countMisconductAudits(attemptId: string) {
-    await ctx.drainAuditWrites();
-    const rows = await ctx.db
-      .select()
-      .from(schema.auditLogs)
-      .where(
-        and(
-          eq(schema.auditLogs.targetId, attemptId),
-          eq(schema.auditLogs.action, "attempt.misconductFlagged"),
-        ),
-      );
-    return rows;
-  }
+  // Shared helpers (SQL-filtered action, oldest-first receipts) bound to the
+  // suite's ctx so call sites stay unchanged.
+  const listReceipts = (attemptId: string) => listReceiptsFor(ctx, attemptId);
+  const countMisconductAudits = (attemptId: string) =>
+    countMisconductAuditsFor(ctx, attemptId);
 
   it("Matrix A: same attempt, different operationIds → both applied, 2 receipts, 2 audits, deterministic projection (true overlap, FOR UPDATE serialization)", async () => {
     const { adminCtx, attemptId } = await createOrgAndAttempt("MM Matrix A");
@@ -691,12 +679,12 @@ describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () =
 
       // PROVE the serialization retry actually happened: T2 has >=2 primary
       // attempts with distinct txids (attempt 1 = 40001 failure, attempt 2 =
-      // the retry that succeeded).
+      // the executeInTransaction retry that succeeded).
       const t2Attempts = await barrier.t2TransactionAttempts.promise;
       const primaryTxids = t2Attempts
         .filter((a) => a.phase === "primary")
         .map((a) => a.txid);
-      expect(new Set(primaryTxids).size).toBeGreaterThanOrEqual(1);
+      expect(new Set(primaryTxids).size).toBeGreaterThanOrEqual(2);
 
       // Both append receipts survive (the arbiter is (org, operationId), not
       // per-attempt — each operationId is a distinct command).

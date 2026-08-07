@@ -18,7 +18,9 @@
 This document closes the **backend** half of J5-I1C0 Slice 3 (misconduct-mark
 as an operationId-keyed durable command). It does NOT close J5 as a whole:
 the Recovery Center operations UI (J5-I1C1) and the browser E2E +
-accessibility/responsive closeout (J5-I1D) are NOT STARTED.
+accessibility/responsive closeout (J5-I1D) were NOT STARTED at this point —
+both have since been implemented on the same branch (SUPERSEDED; see
+`docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md` for the J5 status).
 
 ## 1. Implemented surface
 
@@ -114,14 +116,16 @@ receipts, two audit rows, and a deterministic final projection
 
 ## 5. Known limitations / what is NOT done
 
-- **J5-I1C1 (Admin operations UI) is NOT STARTED.** The Recovery Center detail
-  pages (Incident / Attempt Operations / Exam Recovery) remain read-only. The
-  `pendingMisconductAuthority` module is ready to wire but is not yet consumed
-  by any Recovery page. Force-submit / time-grant / misconduct / incident
-  commands / proctor assign-revoke are not yet launched from the Recovery
-  Center.
-- **J5-I1D (browser E2E + accessibility/responsive closeout) is NOT STARTED.**
-  No new J5 browser E2E specs were added.
+- **J5-I1C1 (Admin operations UI) was NOT STARTED** at Slice-3 closeout — the
+  Recovery Center detail pages (Incident / Attempt Operations / Exam Recovery)
+  were read-only, and `pendingMisconductAuthority` was not yet consumed by any
+  Recovery page. **SUPERSEDED (2026-08-08):** the operations UI shipped
+  afterward on the same branch (see
+  `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`).
+- **J5-I1D (browser E2E + accessibility/responsive closeout) was NOT STARTED**
+  at Slice-3 closeout — no new J5 browser E2E specs existed. **SUPERSEDED
+  (2026-08-08):** the browser E2E work shipped afterward on the same branch
+  (see `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`).
 - **Issue #263 (cross-tab force-submit authority) remains a P2 follow-up** —
   not implemented, as scoped.
 - **`misconduct_mark` Incident action link (ADR-014 §7)** is now UNBLOCKED by

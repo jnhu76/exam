@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { ExamRecoveryContext as RecoveryExamContextResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
 import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
@@ -70,8 +70,8 @@ function AssignProctorCommand({
     onConfirmedRejection: (err) => {
       setOpen(false);
       toast.error(
-        err instanceof Error
-          ? err.message
+        err instanceof ApiError
+          ? t("admin.recoveryOps.rejectionFailed")
           : t("admin.recoveryOps.indeterminate"),
       );
     },
@@ -84,7 +84,11 @@ function AssignProctorCommand({
         variant="outline"
         size="sm"
         onClick={() => {
-          setProctorUserId("");
+          // Reset the draft ONLY when no command session is active — a frozen
+          // command (retry) must never have its payload replaced by a reset.
+          if (command.phase === "idle" && command.operationId === null) {
+            setProctorUserId("");
+          }
           setOpen(true);
           command.begin();
         }}
@@ -160,8 +164,8 @@ function RevokeProctorCommand({
     onConfirmedRejection: (err) => {
       setOpen(false);
       toast.error(
-        err instanceof Error
-          ? err.message
+        err instanceof ApiError
+          ? t("admin.recoveryOps.rejectionFailed")
           : t("admin.recoveryOps.indeterminate"),
       );
     },

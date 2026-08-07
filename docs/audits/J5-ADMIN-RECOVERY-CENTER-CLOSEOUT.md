@@ -154,7 +154,7 @@ API assertions):
 - Web: `useRecoveryOperation` (11), `pendingMisconductAuthority` (24),
   RecoveryAttemptDetailPage (21), RecoveryIncidentDetailPage (18),
   RecoveryExamDetailPage (13).
-- E2E: the six new recovery specs (11 tests) ran green via
+- E2E: the six new recovery specs (13 tests) ran green via
   `bash scripts/e2e/run-wsl.sh` (2 shards, `exam_e2e_w0/w1`), including the
   lost-response retry evidence (same operationId, parsed `idempotent_replay`,
   same receipt `createdAt`).

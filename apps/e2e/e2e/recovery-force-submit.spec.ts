@@ -34,7 +34,7 @@ test.describe("Recovery attempt force submit (J5-I1D)", () => {
     targetAttemptId: string,
   ): Promise<number> {
     const res = await request.get(
-      `/api/admin/audit-logs?action=attempt.forceSubmit&pageSize=50`,
+      `/api/admin/audit-logs?action=attempt.forceSubmit&targetId=${targetAttemptId}&pageSize=50`,
       { headers: { Cookie: `auth-token=${token}` } },
     );
     expect(res.ok()).toBe(true);
@@ -92,7 +92,7 @@ test.describe("Recovery attempt force submit (J5-I1D)", () => {
       capturedDisposition = parsed.disposition ?? "";
       await route.fulfill({
         status: response.status(),
-        headers: response.headers(),
+        contentType: "application/json",
         body: JSON.stringify(parsed),
       });
     });
@@ -180,7 +180,7 @@ test.describe("Recovery attempt force submit (J5-I1D)", () => {
       captured.push({ body: postBody, parsed });
       await route.fulfill({
         status: response.status(),
-        headers: response.headers(),
+        contentType: "application/json",
         body: JSON.stringify(parsed),
       });
     });

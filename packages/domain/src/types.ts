@@ -827,14 +827,30 @@ export interface ForceSubmitResultPayload {
 }
 
 /**
+ * Wire/receipt form of {@link MisconductFlag}: `flaggedAt` is an ISO-8601
+ * string. The receipt `result_payload` jsonb and the wire response validate
+ * against `MisconductFlagSchema` (`z.string().datetime()`); the domain
+ * {@link MisconductFlag} (`flaggedAt: Date`) remains the engine-time shape,
+ * and the orchestrator owns the boundary where the flag is canonicalized to
+ * the wire form.
+ */
+export interface MisconductFlagWire {
+  flaggedAt: string;
+  flaggedBy: string;
+  notes: string;
+  severity: MisconductSeverity;
+}
+
+/**
  * Canonical `misconduct_mark` result payload stored in a receipt's
  * `result_payload` jsonb (audit §4.4). The immutable committed fact: the
  * MisconductFlag this receipt establishes (null on no_change) and the
- * receipt's server time.
+ * receipt's server time. `misconduct.flaggedAt` is the wire/ISO form
+ * ({@link MisconductFlagWire}), not the engine-time `Date`.
  */
 export interface MisconductMarkResultPayload {
   commandType: "misconduct_mark";
-  misconduct: MisconductFlag | null;
+  misconduct: MisconductFlagWire | null;
   appliedAt: string;
 }
 

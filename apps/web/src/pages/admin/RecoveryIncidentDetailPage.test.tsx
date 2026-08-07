@@ -179,6 +179,8 @@ describe("RecoveryIncidentDetailPage", () => {
     getMock.mockResolvedValue(mockAggregate);
     postMock.mockReset();
     postMock.mockResolvedValue({ outcome: "applied" });
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
     window.sessionStorage.clear();
   });
 

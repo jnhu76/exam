@@ -326,7 +326,7 @@ function buildAppliedResultPayload(
   return {
     commandType: "misconduct_mark",
     misconduct: {
-      flaggedAt: flaggedAtIso as unknown as Date,
+      flaggedAt: flaggedAtIso,
       flaggedBy: actorId,
       notes: canonicalNotes,
       severity,
@@ -354,40 +354,38 @@ function assertCommittedProjectionMatchesStored(
 ): void {
   const committed = final.misconduct;
   const expected = stored.misconduct;
-  const committedAtRaw = committed?.flaggedAt as unknown as
-    | string
-    | Date
-    | undefined;
-  const expectedAtRaw = expected?.flaggedAt as unknown as
-    | string
-    | Date
-    | undefined;
+  const committedAtRaw = committed?.flaggedAt;
+  const expectedAtRaw = expected?.flaggedAt;
   const committedAt =
     committedAtRaw === undefined || committedAtRaw === null
       ? null
       : typeof committedAtRaw === "string"
         ? Date.parse(committedAtRaw)
         : committedAtRaw.getTime();
+  // `expected` is the wire form — flaggedAt is ALWAYS an ISO string here.
   const expectedAt =
     expected === null || expectedAtRaw === undefined || expectedAtRaw === null
       ? null
-      : typeof expectedAtRaw === "string"
-        ? Date.parse(expectedAtRaw)
-        : expectedAtRaw.getTime();
+      : Date.parse(expectedAtRaw);
+  const notesMatch = committed?.notes === expected?.notes;
   const same =
     (committed === null || committed === undefined) ===
       (expected === null || expected === undefined) &&
     committed?.flaggedBy === expected?.flaggedBy &&
     committed?.severity === expected?.severity &&
-    committed?.notes === expected?.notes &&
+    notesMatch &&
     committedAt === expectedAt;
   if (!same) {
     throw new AppError(
       `Invariant failure: misconduct-mark committed projection ` +
         `(flaggedBy=${committed?.flaggedBy ?? null}, ` +
-        `severity=${committed?.severity ?? null}) does not match the stored ` +
+        `severity=${committed?.severity ?? null}, ` +
+        `flaggedAt=${committedAt ?? null}, ` +
+        `notesMatch=${notesMatch}) does not match the stored ` +
         `receipt result_payload (flaggedBy=${expected?.flaggedBy ?? null}, ` +
-        `severity=${expected?.severity ?? null}); transaction rolled back`,
+        `severity=${expected?.severity ?? null}, ` +
+        `flaggedAt=${expectedAt ?? null}, ` +
+        `notesMatch=${notesMatch}); transaction rolled back`,
       "INTERNAL_INVARIANT_VIOLATION",
       500,
     );
@@ -498,7 +496,12 @@ async function runMisconductMarkTransaction(
   let primaryCommitted = false;
   try {
     const response = await executeInTransaction(db, async (tx) => {
-      identity = await captureBackendIdentity(tx);
+      // Backend PID/txid evidence is OBSERVER-ONLY (the deterministic race
+      // test correlates retries to distinct transactions); skip the extra
+      // query when no observer is configured.
+      if (observer) {
+        identity = await captureBackendIdentity(tx);
+      }
       primaryAttempt += 1;
       await observer?.onTransactionAttempt?.({
         label,
@@ -562,11 +565,20 @@ async function runMisconductMarkTransaction(
       });
 
       // Projection write: update exam_attempts.misconduct to the MisconductFlag
-      // this receipt establishes. The held FOR UPDATE lock serializes this with
-      // any concurrent mark; a concurrent winner surfaces as 40001 on the
-      // loser, which executeInTransaction auto-retries.
+      // this receipt establishes (the wire ISO flaggedAt converts back to the
+      // engine-time Date for the domain projection). The held FOR UPDATE lock
+      // serializes this with any concurrent mark; a concurrent winner surfaces
+      // as 40001 on the loser, which executeInTransaction auto-retries.
       const updated = await attemptRepo.update(ctx, input.attemptId, {
-        misconduct: resultPayload.misconduct,
+        misconduct:
+          resultPayload.misconduct === null
+            ? null
+            : {
+                flaggedAt: new Date(resultPayload.misconduct.flaggedAt),
+                flaggedBy: resultPayload.misconduct.flaggedBy,
+                notes: resultPayload.misconduct.notes,
+                severity: resultPayload.misconduct.severity,
+              },
       });
       if (!updated) {
         throw new NotFoundError("Attempt not found after misconduct update");

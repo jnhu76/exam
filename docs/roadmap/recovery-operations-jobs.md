@@ -1199,7 +1199,8 @@ PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
           J5-I1B CLOSED — Recovery Center UI, PR #254; J5-I1C0 audit CLOSED
           (PR #255); J5-I1C Slice 1 CLOSED (PR #261); J5-I1C Slice 2 CLOSED
           (PR #262 merged); J5-I1C Slice 3 (misconduct backend) CLOSED;
-          J5-I1C1 (operations UI) + J5-I1D (E2E) NOT STARTED)
+          J5-I1C1 (operations UI) CLOSED (2026-08-08) + J5-I1D (E2E) CLOSED
+          (2026-08-08))
 PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
 PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
@@ -1228,7 +1229,9 @@ durable command backend) CLOSED**: misconduct is now an operationId-keyed
 durable command (the §5.2/§8 PostgreSQL experiment adjudicated the
 `exam_attempts FOR UPDATE` projection mechanism; misconduct concurrency
 matrices A-E + failure atomicity green). J5-I1C1 (Admin operations UI) and
-J5-I1D (browser E2E + accessibility/responsive closeout) are NOT STARTED.
+J5-I1D (browser E2E + accessibility/responsive closeout) are CLOSED
+(2026-08-08) — **J5 is CLOSED** (see
+`docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`).
 J5 consumes the already-shipped authorities of J1 (Admin time-grant path),
 J3 (Incident aggregate + commands + API), and J4-I1 (Proctor→Exam assignment
 persistence, API, resource-scope resolution, minimum Proctor incident

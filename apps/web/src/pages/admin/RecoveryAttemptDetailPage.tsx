@@ -269,9 +269,13 @@ export function RecoveryAttemptDetailPage() {
   }, [user, data, misconduct, t]);
 
   const openGrantDialog = useCallback(() => {
-    setGrantMinutes(10);
-    setGrantReasonCode("technical_incident");
-    setGrantReasonText("");
+    // Reset the draft ONLY when no command session is active — a frozen
+    // command (retry) must never have its payload replaced by a reset.
+    if (grant.phase === "idle" && grant.operationId === null) {
+      setGrantMinutes(10);
+      setGrantReasonCode("technical_incident");
+      setGrantReasonText("");
+    }
     setGrantDialogOpen(true);
     grant.begin();
   }, [grant]);
@@ -754,6 +758,7 @@ export function RecoveryAttemptDetailPage() {
         })}
         confirmLabel={t("admin.recoveryOps.actions.timeGrant")}
         confirmDisabled={
+          !Number.isFinite(grantMinutes) ||
           grantMinutes < 1 ||
           grantReasonText.trim().length === 0 ||
           grantReasonText.trim().length > 1000
@@ -773,7 +778,7 @@ export function RecoveryAttemptDetailPage() {
             value={grantMinutes}
             onChange={(e) => setGrantMinutes(Number(e.target.value))}
           />
-          {grantMinutes < 1 && (
+          {(!Number.isFinite(grantMinutes) || grantMinutes < 1) && (
             <FieldError>{t("admin.recoveryOps.minutesInvalid")}</FieldError>
           )}
         </div>

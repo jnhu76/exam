@@ -141,6 +141,9 @@ describe("RecoveryExamDetailPage", () => {
       { operationId: string; proctorUserId: string },
     ];
     expect(url).toBe("/api/admin/exams/exam-1/proctors");
+    expect(body.operationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
     expect(body.proctorUserId).toBe("proctor-2");
     // Confirmed success reloads the authoritative aggregate.
     expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);

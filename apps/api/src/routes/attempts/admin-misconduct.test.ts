@@ -12,6 +12,10 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
 import { buildExamPayload } from "./attempts.testHelpers.js";
+import {
+  countMisconductAudits as countMisconductAuditsFor,
+  listReceipts as listReceiptsFor,
+} from "./attempts.testHelpers.js";
 
 const MISCONDUCT_TEST_PREFIX = "misconduct-op-test-";
 
@@ -270,22 +274,11 @@ describe("attempt routes", () => {
       });
     }
 
-    async function listReceipts(attemptId: string) {
-      return ctx.db
-        .select()
-        .from(schema.attemptCommandReceipts)
-        .where(eq(schema.attemptCommandReceipts.attemptId, attemptId))
-        .orderBy(schema.attemptCommandReceipts.createdAt);
-    }
-
-    async function countMisconductAudits(attemptId: string) {
-      await ctx.drainAuditWrites();
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      return auditRows.filter((r) => r.action === "attempt.misconductFlagged");
-    }
+    // Shared helpers (SQL-filtered action, oldest-first receipts) bound to
+    // the suite's ctx so call sites stay unchanged.
+    const listReceipts = (attemptId: string) => listReceiptsFor(ctx, attemptId);
+    const countMisconductAudits = (attemptId: string) =>
+      countMisconductAuditsFor(ctx, attemptId);
 
     beforeEach(async () => {
       await ctx.drainAuditWritesStrict();

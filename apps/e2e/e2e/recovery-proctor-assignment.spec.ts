@@ -97,8 +97,11 @@ test.describe("Recovery exam proctor assignment (J5-I1D)", () => {
     expect(assigned).toBeTruthy();
     expect(assigned!.displayName).toBe(`E2E Recovery Proctor ${stamp}`);
 
-    // The reloaded page lists the proctor.
-    await expect(page.getByText(`E2E Recovery Proctor ${stamp}`)).toBeVisible({
+    // The reloaded page lists the proctor (`.first()`: the display name may
+    // also appear in the assign dialog or elsewhere on the page).
+    await expect(
+      page.getByText(`E2E Recovery Proctor ${stamp}`).first(),
+    ).toBeVisible({
       timeout: 15_000,
     });
 

@@ -117,8 +117,9 @@ const UUID_RE =
  * Strict full-record validation. The record's organizationId/actorId must equal
  * the lookup key. `notes` must be canonical (already trimmed, non-empty, <=
  * 1000). `severity` must be a valid literal. The target identity (attemptId,
- * examId, candidateName) must be present so a recovery surface can identify the
- * command instead of showing a generic destructive retry.
+ * examId) must be present and `candidateName` must contain 1–200 characters so
+ * a recovery surface can identify the command instead of showing a generic
+ * destructive retry.
  */
 function isValidAuthority(
   parsed: unknown,

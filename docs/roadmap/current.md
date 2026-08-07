@@ -232,7 +232,9 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
     **J5-I1A CLOSED**; **J5-I1B CLOSED** — Recovery Center UI (queue,
     incident detail, attempt operations, exam recovery detail + Exam
     Recovery Context aggregate `GET /admin/recovery/exams/:examId` §6.5);
-    J5-I1C–I1D NOT STARTED);
+    **J5-I1C–I1D CLOSED** — operations UI + browser E2E/accessibility
+    closeout (2026-08-08; see
+    `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`); **J5 CLOSED**);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;

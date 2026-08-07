@@ -6,11 +6,23 @@ import {
 } from "./useRecoveryOperation";
 import { createContextSafeUuid } from "@/lib/uuid";
 
+// Resettable UUID counter: each test starts from the same value so the exact
+// minted-UUID assertion stays stable regardless of test order.
+const uuidMock = vi.hoisted(() => {
+  let uuidCounter = 0;
+  return {
+    createContextSafeUuid: vi.fn(() => {
+      uuidCounter += 1;
+      return `00000000-0000-4000-8000-${String(uuidCounter).padStart(12, "0")}`;
+    }),
+    resetUuidCounter: () => {
+      uuidCounter = 0;
+    },
+  };
+});
+
 vi.mock("@/lib/uuid", () => ({
-  createContextSafeUuid: vi.fn(() => {
-    let n = 0;
-    return () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
-  })(),
+  createContextSafeUuid: uuidMock.createContextSafeUuid,
 }));
 
 describe("classifyOperationFailure", () => {
@@ -58,6 +70,7 @@ describe("useRecoveryOperation", () => {
     onConfirmedRejection.mockReset();
     onIndeterminate.mockReset();
     submit.mockResolvedValue({ outcome: "applied" });
+    uuidMock.resetUuidCounter();
   });
 
   function setup(options: { beforeSubmit?: (id: string) => boolean } = {}) {

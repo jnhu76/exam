@@ -1571,6 +1571,14 @@ const zhCN = {
         confirm: "确认标记",
         done: "已标记违规",
         defaultNotes: "监考标记",
+        indeterminate: "未确认违规标记是否成功，可重试（将复用同一命令）。",
+        persistenceFailed:
+          "无法安全保存违规标记命令，请检查浏览器存储权限后重试。",
+        corruptCleared:
+          "检测到损坏的未确认违规标记记录，已清除。请重新发起操作。",
+        blockedPending: "存在未确认的违规标记命令，请先解决后再操作。",
+        cleanupFailed:
+          "违规标记结果已确认，但本地记录清理失败。该记录不会导致重复执行，但可能阻止新的违规标记操作。请刷新页面后清理该记录。",
       },
     },
     proctorWorkspace: {
@@ -2110,6 +2118,7 @@ const zhCN = {
       blockedByPending: "存在其他待处理命令，请先完成或放弃它。",
       dismissFailed: "无法清除待处理命令，请稍后重试。",
       versionConflict: "事件已被其他操作更新（版本冲突），请刷新页面后重试。",
+      rejectionFailed: "操作被拒绝，请刷新页面后重试。",
       minutesLabel: "延长时间（分钟）",
       minutesInvalid: "请输入正整数分钟数",
       reasonCodeLabel: "原因类型",

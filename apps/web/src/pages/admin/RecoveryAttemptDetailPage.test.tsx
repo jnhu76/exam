@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -332,10 +332,25 @@ describe("RecoveryAttemptDetailPage", () => {
 
   it("force-submits with an operationId + canonical reason and reloads (J5-I1C1)", async () => {
     const user = userEvent.setup();
+    // Keep the POST in flight so the durable pending authority (written BEFORE
+    // the request) is observable while the outcome is still unknown.
+    let resolvePost: (v: unknown) => void = () => {};
+    postMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+    );
     renderPage();
     await user.click(await screen.findByRole("button", { name: "强制交卷" }));
     await user.type(screen.getByLabelText("原因说明（必填）"), "考生无法继续");
     await user.click(screen.getByRole("button", { name: "强制交卷" }));
+
+    // The pending authority was persisted BEFORE the POST — visible in flight.
+    expect(window.sessionStorage.length).toBe(1);
+    await act(async () => {
+      resolvePost({ outcome: "applied" });
+    });
 
     expect(postMock).toHaveBeenCalledTimes(1);
     const [url, body] = postMock.mock.calls[0]! as unknown as [
@@ -344,7 +359,7 @@ describe("RecoveryAttemptDetailPage", () => {
     ];
     expect(url).toBe("/api/admin/attempts/attempt-1/force-submit");
     expect(body.reason).toBe("考生无法继续");
-    // The durable pending authority was written before the POST.
+    // Confirmed success cleared the pending authority (session cleanup).
     expect(window.sessionStorage.length).toBe(0);
   });
 
@@ -373,10 +388,11 @@ describe("RecoveryAttemptDetailPage", () => {
     await user.type(screen.getByLabelText("原因说明（必填）"), "考生无法继续");
     await user.click(screen.getByRole("button", { name: "强制交卷" }));
 
-    // Indeterminate — dialog stays open with a retry affordance.
-    expect(await screen.findByText("重试")).toBeInTheDocument();
+    // Indeterminate — dialog stays open with a retry affordance (the retry
+    // button name keeps the operation: "重试 · 强制交卷").
+    expect(await screen.findByText("重试 · 强制交卷")).toBeInTheDocument();
     const firstBody = postMock.mock.calls[0]![1] as { operationId: string };
-    await user.click(screen.getByRole("button", { name: "重试" }));
+    await user.click(screen.getByRole("button", { name: "重试 · 强制交卷" }));
 
     expect(postMock).toHaveBeenCalledTimes(2);
     const secondBody = postMock.mock.calls[1]![1] as { operationId: string };

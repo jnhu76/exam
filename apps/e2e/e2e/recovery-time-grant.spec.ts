@@ -86,6 +86,8 @@ test.describe("Recovery attempt time grant (J5-I1D)", () => {
     await expect(
       dialog.getByText(/为 .+ 的第 1 次答题延长 10 分钟/),
     ).toBeVisible();
+    // Explicitly fill the minutes field (do not rely on the page default).
+    await dialog.getByLabel("延长时间（分钟）").fill("10");
     await dialog.getByLabel("原因说明").fill("网络中断补偿");
     await dialog.getByRole("button", { name: "延长答题时间" }).click();
 

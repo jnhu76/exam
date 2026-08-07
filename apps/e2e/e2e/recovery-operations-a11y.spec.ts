@@ -98,7 +98,16 @@ test.describe("Recovery operations a11y + responsive (J5-I1D)", () => {
       await grantButton.click();
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible();
-      await expect(dialog.locator(":focus")).toHaveCount(1);
+      // Focus moved inside the dialog: document.activeElement is the dialog
+      // itself or a descendant (content node), not a stray outside element.
+      await expect
+        .poll(() =>
+          dialog.evaluate((el) => {
+            const active = el.ownerDocument.activeElement;
+            return active === el || el.contains(active);
+          }),
+        )
+        .toBe(true);
       await expect(
         dialog.getByRole("button", { name: "延长答题时间" }),
       ).toBeVisible();

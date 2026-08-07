@@ -159,6 +159,51 @@ describe("pendingMisconductAuthority", () => {
       getItemSpy.mockRestore();
     });
 
+    it("returns write_failed when setItem throws (quota-style exception)", () => {
+      const setItemSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {
+          throw new DOMException("QuotaExceededError", "QuotaExceededError");
+        });
+      const result = savePendingMisconduct(validAuthority());
+      expect(result).toEqual({ ok: false, error: "write_failed" });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      setItemSpy.mockRestore();
+    });
+
+    it("returns write_failed when the read-back returns null (write did not stick)", () => {
+      // The write never sticks: setItem is a no-op, so the read-back finds
+      // nothing and no pending record remains stored.
+      const setItemSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {});
+      const getItemSpy = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockReturnValueOnce(null);
+      const result = savePendingMisconduct(validAuthority());
+      expect(result).toEqual({ ok: false, error: "write_failed" });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      setItemSpy.mockRestore();
+      getItemSpy.mockRestore();
+    });
+
+    it("returns write_failed when the read-back getItem throws", () => {
+      // The write never sticks: setItem is a no-op, so nothing is stored.
+      const setItemSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {});
+      const getItemSpy = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockImplementationOnce(() => {
+          throw new Error("storage blocked");
+        });
+      const result = savePendingMisconduct(validAuthority());
+      expect(result).toEqual({ ok: false, error: "write_failed" });
+      getItemSpy.mockRestore();
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      setItemSpy.mockRestore();
+    });
+
     it("returns storage_unavailable when sessionStorage is absent", () => {
       vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
         throw new Error("blocked");
