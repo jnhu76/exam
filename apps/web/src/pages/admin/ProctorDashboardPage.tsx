@@ -238,6 +238,17 @@ export function ProctorDashboardPage() {
    *   indeterminate — the POST failed without a confirmed outcome (network
    *                   drop / 5xx); the frozen command is RETAINED and reused
    *                   verbatim on retry so the same operationId replays.
+   *   cleanup_failed — the POST outcome was CONFIRMED (applied / rejected)
+   *                   in this session but the sessionStorage clear failed; a
+   *                   stale record remains and the banner offers only dismiss
+   *                   (storage cleanup) — retrying the POST is pointless.
+   *
+   * Only the in-session execution path may ENTER cleanup_failed (it holds the
+   * confirmed fact). A record reconstructed purely from sessionStorage can be
+   * a lost response OR a confirmed + cleanup failure — the bytes cannot
+   * distinguish them — so the blocked dialog branch and the mount hydration
+   * both reconstruct `indeterminate` (fail-safe: retry is always an
+   * idempotent-safe replay of the same operationId).
    *
    * Page-level recovery (re-review P1-1): the frozen command is hydrated from
    * sessionStorage on mount and whenever `user` changes, and surfaced via a
@@ -377,19 +388,32 @@ export function ProctorDashboardPage() {
       result.kind === "authority" &&
       result.authority.command.attemptId !== attemptId
     ) {
-      // Block THIS dialog and always restore from durable authority. The React
-      // state may have drifted to idle via cleanup failure, page reload, or
+      // Block THIS dialog and restore the recovery banner from durable
+      // authority. The React state may have drifted to idle via page reload or
       // other UI state bugs — as long as the durable authority exists the
-      // recovery banner must be visible (P2 fix: confirmed + cleanup failure
-      // produced a hidden stale authority that blocked later operations with
-      // no visible recovery path).
+      // banner must be visible (P2 fix: a confirmed + cleanup-failure record
+      // that was hidden blocked later operations with no recovery path).
+      //
+      // Phase reconstruction is fail-safe (re-review P1): the durable record
+      // does NOT carry the server outcome. The same bytes can mean a
+      // lost-response (indeterminate — retry REQUIRED) or a confirmed outcome
+      // whose cleanup failed (cleanup_failed — dismiss only). Only the
+      // in-session React state knows "confirmed": keep cleanup_failed when it
+      // already holds that fact for the SAME operationId, otherwise
+      // reconstruct as indeterminate so the banner keeps the retry entry
+      // (replaying the same operationId is always idempotent-safe).
       setForceSubmitBlockedReason(
         t("admin.proctorDashboard.forceSubmit.blockedPending"),
       );
-      setForceSubmitState({
-        phase: "cleanup_failed",
-        command: result.authority.command,
-      });
+      const knownConfirmed =
+        forceSubmitState.phase === "cleanup_failed" &&
+        forceSubmitState.command.operationId ===
+          result.authority.command.operationId;
+      setForceSubmitState(
+        knownConfirmed
+          ? { phase: "cleanup_failed", command: result.authority.command }
+          : { phase: "indeterminate", command: result.authority.command },
+      );
       return;
     }
     if (
@@ -1072,10 +1096,11 @@ export function ProctorDashboardPage() {
         Two phases render the banner:
         - `indeterminate`: outcome unknown (network drop / 5xx). Offers retry
           (resend the frozen command) + dismiss.
-        - `cleanup_failed`: outcome confirmed (server applied / rejected), but
-          sessionStorage cleanup failed leaving a stale record. Shows only
-          dismiss (storage cleanup) — retrying the POST is pointless since the
-          server already committed.
+        - `cleanup_failed`: outcome confirmed (server applied / rejected) in
+          THIS session, but sessionStorage cleanup failed leaving a stale
+          record. Shows only dismiss (storage cleanup) — retrying the POST is
+          pointless since the server already committed. A record reconstructed
+          from storage alone is always `indeterminate`, never this phase.
       */}
       {(forceSubmitState.phase === "indeterminate" ||
         forceSubmitState.phase === "cleanup_failed") && (
