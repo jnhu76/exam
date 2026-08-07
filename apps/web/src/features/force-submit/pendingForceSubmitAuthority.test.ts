@@ -145,6 +145,65 @@ describe("pendingForceSubmitAuthority", () => {
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error).toBe("readback_mismatch");
     });
+
+    // ── Re-review P1: the save path runs the SAME full validator the loader
+    //    uses BEFORE writing. The byte read-back only proves the write stuck —
+    //    it cannot catch a semantically invalid record (e.g. an empty
+    //    candidateName snapshot), which the loader would treat as corrupt and
+    //    DELETE on the next load, destroying the operation identity this save
+    //    was meant to protect. "Writer can write" and "reader can read" can
+    //    never diverge: invalid records fail closed with NOTHING written.
+
+    it("returns invalid_authority (nothing written) when candidateName is empty", () => {
+      const auth = validAuthority();
+      auth.command.candidateName = "";
+      const result = savePendingForceSubmit(auth);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("invalid_authority");
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+
+    it("returns invalid_authority when examId is missing", () => {
+      const auth = validAuthority() as unknown as {
+        command: Record<string, unknown>;
+      };
+      delete auth.command.examId;
+      const result = savePendingForceSubmit(
+        auth as unknown as PendingForceSubmitAuthority,
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("invalid_authority");
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+
+    it("returns invalid_authority when schemaVersion is not 2", () => {
+      const auth = validAuthority() as unknown as Record<string, unknown>;
+      auth.schemaVersion = 1;
+      const result = savePendingForceSubmit(
+        auth as unknown as PendingForceSubmitAuthority,
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("invalid_authority");
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+
+    it("returns invalid_authority when operationId is not a UUID", () => {
+      const auth = validAuthority();
+      auth.command.operationId = "not-a-uuid";
+      const result = savePendingForceSubmit(auth);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("invalid_authority");
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+
+    it("returns invalid_authority when reason is not canonical", () => {
+      const auth = validAuthority();
+      auth.command.reason = " 管理员强制交卷";
+      const result = savePendingForceSubmit(auth);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("invalid_authority");
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
   });
 
   // ── Load ──────────────────────────────────────────────────────────────

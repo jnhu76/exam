@@ -9,6 +9,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import i18n from "@/i18n";
 import { AuthProvider } from "@/contexts/AuthContext";
 import type { MeResponse, TimeGrantRequest } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
@@ -1558,6 +1559,92 @@ describe("ProctorDashboardPage", () => {
         ).toBeNull();
       });
       expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
+    });
+
+    // ── Re-review P2: hydrate must never downgrade a stronger in-session
+    //    fact. Storage alone reconstructs `indeterminate`, but when the
+    //    session ALREADY knows the outcome was confirmed (cleanup_failed) for
+    //    the SAME operationId, a re-run of the hydrate effect (user/t
+    //    identity change) must keep it — the record cannot prove the outcome.
+    //    Without the guard, the banner would gain a retry button and lose the
+    //    confirmed fact. This test fails if the hydrate guard is removed.
+    it("keeps the in-session cleanup_failed fact when the hydrate effect re-runs", async () => {
+      const pendingOpId = "00000000-0000-4000-8000-00000000aaac";
+      // Seed the same pending record the in-session flow will confirm +
+      // fail to clear.
+      sessionStorage.setItem(
+        "exam.pendingForceSubmit:org-1:admin-1",
+        JSON.stringify({
+          schemaVersion: 2,
+          organizationId: "org-1",
+          actorId: "admin-1",
+          command: {
+            attemptId: "att-1",
+            operationId: pendingOpId,
+            reason: "管理员强制交卷",
+            examId: "exam-1",
+            candidateName: "张三",
+          },
+          createdAt: Date.now(),
+        }),
+      );
+      // The server confirms (idempotent replay) but the clear fails → the
+      // session transitions to cleanup_failed, which KNOWS the outcome.
+      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
+      const removerSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {
+          throw new DOMException("blocked", "SecurityError");
+        });
+
+      try {
+        apiGet.mockResolvedValue({
+          candidates: [makeCandidate({ status: "graded", attemptId: "att-1" })],
+          total: 1,
+        });
+        renderPage();
+        await pendingBanner();
+        await act(async () => {
+          fireEvent.click(
+            screen.getByRole("button", { name: "重试未确认强制交卷" }),
+          );
+        });
+        await waitFor(() => {
+          expect(toast.warning).toHaveBeenCalledWith(
+            expect.stringContaining("清理失败"),
+          );
+        });
+
+        // Session now holds cleanup_failed (confirmed + cleanup failure).
+        expect(
+          screen.getByTestId("pending-force-submit-banner"),
+        ).toHaveTextContent("清理失败");
+        expect(
+          screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+        ).toBeNull();
+
+        // Language round-trip changes the `t` identity (react-i18next
+        // getFixedT per language) → the hydrate effect re-runs. The guard
+        // must keep the stronger cleanup_failed state (dismiss-only).
+        await act(async () => {
+          await i18n.changeLanguage("en");
+          await i18n.changeLanguage("zh-CN");
+        });
+        expect(
+          screen.getByTestId("pending-force-submit-banner"),
+        ).toHaveTextContent("清理失败");
+        expect(
+          screen.queryByRole("button", { name: "重试未确认强制交卷" }),
+        ).toBeNull();
+        // The retry from earlier is the ONLY POST — the downgraded path must
+        // not have sent anything.
+        expect(apiPost).toHaveBeenCalledTimes(1);
+      } finally {
+        // Restore even on failure so a broken guard cannot poison the rest
+        // of the suite (spy + global i18n language).
+        removerSpy.mockRestore();
+        await i18n.changeLanguage("zh-CN");
+      }
     });
 
     //    the server confirmed the command — the same bytes may be a lost
