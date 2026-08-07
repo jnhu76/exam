@@ -14847,6 +14847,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "severity": {
                     "type": "string",
                     "enum": ["warning", "serious"]
@@ -14857,7 +14861,7 @@
                     "maxLength": 1000
                   }
                 },
-                "required": ["severity", "notes"],
+                "required": ["operationId", "severity", "notes"],
                 "additionalProperties": false
               }
             }
@@ -14886,15 +14890,440 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [true]
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "operationId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "commandType": {
+                          "type": "string",
+                          "enum": ["force_submit", "misconduct_mark"]
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": ["applied"]
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["applied"]
+                        },
+                        "resultPayload": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "commandType": {
+                                  "type": "string",
+                                  "enum": ["force_submit"]
+                                },
+                                "beforeStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_started",
+                                    "queued",
+                                    "in_progress",
+                                    "disrupted",
+                                    "submitted",
+                                    "grading",
+                                    "graded",
+                                    "voided"
+                                  ]
+                                },
+                                "afterStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_started",
+                                    "queued",
+                                    "in_progress",
+                                    "disrupted",
+                                    "submitted",
+                                    "grading",
+                                    "graded",
+                                    "voided"
+                                  ]
+                                },
+                                "submittedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "gradedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "appliedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "commandType",
+                                "beforeStatus",
+                                "afterStatus",
+                                "submittedAt",
+                                "gradedAt",
+                                "appliedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "commandType": {
+                                  "type": "string",
+                                  "enum": ["misconduct_mark"]
+                                },
+                                "misconduct": {
+                                  "type": "object",
+                                  "properties": {
+                                    "flaggedAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "flaggedBy": {
+                                      "type": "string"
+                                    },
+                                    "notes": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 1000
+                                    },
+                                    "severity": {
+                                      "type": "string",
+                                      "enum": ["warning", "serious"]
+                                    }
+                                  },
+                                  "required": [
+                                    "flaggedAt",
+                                    "flaggedBy",
+                                    "notes",
+                                    "severity"
+                                  ],
+                                  "additionalProperties": false,
+                                  "nullable": true
+                                },
+                                "appliedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "commandType",
+                                "misconduct",
+                                "appliedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "commandType",
+                        "disposition",
+                        "outcome",
+                        "resultPayload",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "operationId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "commandType": {
+                          "type": "string",
+                          "enum": ["force_submit", "misconduct_mark"]
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": ["no_change"]
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["no_change"]
+                        },
+                        "resultPayload": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "commandType": {
+                                  "type": "string",
+                                  "enum": ["force_submit"]
+                                },
+                                "beforeStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_started",
+                                    "queued",
+                                    "in_progress",
+                                    "disrupted",
+                                    "submitted",
+                                    "grading",
+                                    "graded",
+                                    "voided"
+                                  ]
+                                },
+                                "afterStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_started",
+                                    "queued",
+                                    "in_progress",
+                                    "disrupted",
+                                    "submitted",
+                                    "grading",
+                                    "graded",
+                                    "voided"
+                                  ]
+                                },
+                                "submittedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "gradedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "appliedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "commandType",
+                                "beforeStatus",
+                                "afterStatus",
+                                "submittedAt",
+                                "gradedAt",
+                                "appliedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "commandType": {
+                                  "type": "string",
+                                  "enum": ["misconduct_mark"]
+                                },
+                                "misconduct": {
+                                  "type": "object",
+                                  "properties": {
+                                    "flaggedAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "flaggedBy": {
+                                      "type": "string"
+                                    },
+                                    "notes": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 1000
+                                    },
+                                    "severity": {
+                                      "type": "string",
+                                      "enum": ["warning", "serious"]
+                                    }
+                                  },
+                                  "required": [
+                                    "flaggedAt",
+                                    "flaggedBy",
+                                    "notes",
+                                    "severity"
+                                  ],
+                                  "additionalProperties": false,
+                                  "nullable": true
+                                },
+                                "appliedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "commandType",
+                                "misconduct",
+                                "appliedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "commandType",
+                        "disposition",
+                        "outcome",
+                        "resultPayload",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "operationId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "commandType": {
+                          "type": "string",
+                          "enum": ["force_submit", "misconduct_mark"]
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": ["idempotent_replay"]
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["applied", "no_change"]
+                        },
+                        "resultPayload": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "commandType": {
+                                  "type": "string",
+                                  "enum": ["force_submit"]
+                                },
+                                "beforeStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_started",
+                                    "queued",
+                                    "in_progress",
+                                    "disrupted",
+                                    "submitted",
+                                    "grading",
+                                    "graded",
+                                    "voided"
+                                  ]
+                                },
+                                "afterStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_started",
+                                    "queued",
+                                    "in_progress",
+                                    "disrupted",
+                                    "submitted",
+                                    "grading",
+                                    "graded",
+                                    "voided"
+                                  ]
+                                },
+                                "submittedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "gradedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "appliedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "commandType",
+                                "beforeStatus",
+                                "afterStatus",
+                                "submittedAt",
+                                "gradedAt",
+                                "appliedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "commandType": {
+                                  "type": "string",
+                                  "enum": ["misconduct_mark"]
+                                },
+                                "misconduct": {
+                                  "type": "object",
+                                  "properties": {
+                                    "flaggedAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "flaggedBy": {
+                                      "type": "string"
+                                    },
+                                    "notes": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 1000
+                                    },
+                                    "severity": {
+                                      "type": "string",
+                                      "enum": ["warning", "serious"]
+                                    }
+                                  },
+                                  "required": [
+                                    "flaggedAt",
+                                    "flaggedBy",
+                                    "notes",
+                                    "severity"
+                                  ],
+                                  "additionalProperties": false,
+                                  "nullable": true
+                                },
+                                "appliedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "commandType",
+                                "misconduct",
+                                "appliedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "commandType",
+                        "disposition",
+                        "outcome",
+                        "resultPayload",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": ["ok"],
-                  "additionalProperties": false
+                  ]
                 }
               }
             }
@@ -14958,15 +15387,12 @@
             }
           },
           "403": {
-            "description": "Forbidden — insufficient role or capability",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "requestId": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "object",
                       "properties": {
@@ -14975,10 +15401,19 @@
                         },
                         "message": {
                           "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
                         }
-                      }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }
