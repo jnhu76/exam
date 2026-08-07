@@ -466,7 +466,13 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         method: "POST",
         url: `/api/admin/attempts/${examA.attemptId}/misconduct`,
         cookies: { "auth-token": p1Token },
-        payload: { severity: "warning", notes: "nope" },
+        // J5-I1C Slice 3: misconduct now requires operationId; a valid body
+        // reaches the capability gate instead of failing schema validation.
+        payload: {
+          operationId: "00000000-0000-4000-8000-000000000000",
+          severity: "warning",
+          notes: "nope",
+        },
       });
       expect(res.statusCode).toBe(403);
     });

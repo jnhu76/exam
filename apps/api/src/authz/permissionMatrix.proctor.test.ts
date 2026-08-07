@@ -103,13 +103,20 @@ describe("RBAC permission matrix — proctor routes", () => {
   });
 
   // J4-I1B (ADR-015 §13): AttemptMisconductMark is REMOVED from the Proctor
-  // preset — misconduct marking is Admin-only while staying scoped.
+  // preset — misconduct marking is Admin-only while staying scoped. The body
+  // carries the J5-I1C Slice 3 operationId so the request passes schema
+  // validation and reaches the capability gate (a 400 would otherwise mask
+  // the denied verdict).
   it("Proctor is denied misconduct marking after J4-I1B (grant removed)", async () => {
     const verdict = await fixture.verdict(
       "Proctor",
       "POST",
       `/api/admin/attempts/${ATTEMPT_ID}/misconduct`,
-      { severity: "warning", notes: "test misconduct note" },
+      {
+        operationId: "00000000-0000-4000-8000-000000000000",
+        severity: "warning",
+        notes: "test misconduct note",
+      },
     );
     expect(verdict).toBe("denied");
   });

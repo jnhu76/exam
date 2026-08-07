@@ -1,8 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
-  FlagMisconductRequestSchema,
-  FlagMisconductResponseSchema,
+  MisconductMarkWithOperationRequestSchema,
   ForceSubmitWithOperationRequestSchema,
   AttemptCommandReceiptResponseSchema,
   TimeGrantRequestSchema,
@@ -17,24 +16,19 @@ import {
 import type { RequestContext } from "@exam/domain";
 import { generateCSV } from "@exam/import-export";
 import { NotFoundError } from "@exam/domain";
-import { flagMisconduct } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import { executeInTransaction } from "@exam/db/src/types.js";
-import { createAttemptRepoAdapter } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
   formatZodError,
   getRequestContext,
 } from "./helpers.js";
 import { cookieAuth } from "./attempts.shared.js";
-import {
-  recordAtomicHttpAudit,
-  recordSensitiveReadAudit,
-} from "../audit/auditWriter.js";
+import { recordSensitiveReadAudit } from "../audit/auditWriter.js";
 import { grantWithOperationRaceRecovery } from "../orchestrators/operatorGrantExecution.js";
 import { forceSubmitWithOperationRaceRecovery } from "../orchestrators/forceSubmitExecution.js";
+import { misconductMarkWithOperationRaceRecovery } from "../orchestrators/misconductMarkExecution.js";
 
 /**
  * Registers all admin-facing attempt routes: misconduct flag, force-submit,
@@ -42,10 +36,29 @@ import { forceSubmitWithOperationRaceRecovery } from "../orchestrators/forceSubm
  */
 export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   /**
-   * POST /admin/attempts/:attemptId/misconduct — Admin records a
-   * misconduct flag on an attempt (informational; does not change status).
-   * Allowed on any attempt status (§16). Idempotent (re-flag overwrites).
-   * Audit: attempt.misconductFlagged. Response: { ok: true }.
+   * POST /admin/attempts/:attemptId/misconduct — Admin records a misconduct
+   * flag on an attempt (informational; does not change status). Allowed on
+   * any attempt status (ADR-014 §16).
+   *
+   * J5-I1C Slice 3: the request carries an operationId (client-generated
+   * command identity, J5-R0 §8.2). The execution is a durable,
+   * operationId-keyed command arbitrated by the shared
+   * `attempt_command_receipts` table (the same single
+   * `(organization_id, operation_id)` arbiter as force-submit): the first
+   * execution atomically commits receipt + projection + audit; a replay of
+   * the same operationId + canonical payload returns the STORED immutable
+   * result_payload (no projection churn, no new audit); any drift (different
+   * payload / command / attempt) is a 409 IDEMPOTENCY_CONFLICT. The response
+   * is the operation receipt — NOT `{ ok: true }`.
+   *
+   * Misconduct concurrency (frozen by the J5-I1C0 §8 experiment,
+   * 2026-08-07): the orchestrator takes `exam_attempts FOR UPDATE` inside the
+   * receipt transaction so concurrent marks on the same attempt serialize
+   * deterministically (the recorded §17 exception to the old overwrite-only
+   * no-row-lock property). The append-only receipt table is the authoritative
+   * history; `exam_attempts.misconduct` is the projection of the latest
+   * applied receipt. Audit event: attempt.misconductFlagged (metadata carries
+   * operationId + severity + notes).
    */
   fastify.post(
     "/admin/attempts/:attemptId/misconduct",
@@ -64,12 +77,13 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       ],
       schema: {
         params: AttemptIdParamsSchema,
-        body: FlagMisconductRequestSchema,
+        body: MisconductMarkWithOperationRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
         response: {
-          200: FlagMisconductResponseSchema,
+          200: AttemptCommandReceiptResponseSchema,
           400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           409: ErrorResponseSchema,
         },
@@ -80,34 +94,30 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const body = FlagMisconductRequestSchema.safeParse(request.body ?? {});
+      const body = MisconductMarkWithOperationRequestSchema.safeParse(
+        request.body ?? {},
+      );
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
-      const { severity, notes } = body.data;
+      const { operationId, severity, notes } = body.data;
+      // ADR-006: capture ONE operation `now` and thread it through the
+      // orchestrator so receipt + projection + audit agree within this request.
+      const now = fastify.now();
 
-      // The attempt mutation and privileged-action evidence share one
-      // transaction so neither can commit without the other.
-      await executeInTransaction(fastify.db, async (tx) => {
-        await flagMisconduct(
-          createAttemptRepoAdapter(createAttemptRepo(tx), ctx),
-          attemptId,
-          ctx.actorId,
-          severity,
-          notes,
-          fastify.now(),
-        );
-        await recordAtomicHttpAudit(tx, request, ctx, {
-          action: "attempt.misconductFlagged",
-          targetType: "attempt",
-          targetId: attemptId,
-          metadata: { severity, notes },
-        });
-      });
+      // The orchestrator owns the transaction: pre-read replay/conflict,
+      // attempt FOR UPDATE, receipt-first insert, projection update, fact
+      // verification, audit, and the exact-23505 fresh-transaction recovery.
+      const result = await misconductMarkWithOperationRaceRecovery(
+        fastify.db,
+        ctx,
+        { attemptId, operationId, severity, notes, now },
+        { audit: { request } },
+      );
 
-      return reply.send({ ok: true } as const);
+      return reply.send(AttemptCommandReceiptResponseSchema.parse(result));
     },
   );
 
