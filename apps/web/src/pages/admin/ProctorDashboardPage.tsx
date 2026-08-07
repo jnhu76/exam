@@ -444,7 +444,7 @@ export function ProctorDashboardPage() {
   ): Promise<void> {
     if (!user) return;
     const authority: PendingForceSubmitAuthority = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       organizationId: user.organizationId,
       actorId: user.id,
       command,
@@ -522,7 +522,7 @@ export function ProctorDashboardPage() {
    * frozen command is reused verbatim — no new operationId is minted.
    */
   async function handleForceSubmitConfirm(attemptId: string) {
-    if (!user) return;
+    if (!user || !examId) return;
     const result = loadPendingForceSubmit(user.organizationId, user.id);
     const command: PendingForceSubmitCommand =
       result.kind === "authority" &&
@@ -532,6 +532,14 @@ export function ProctorDashboardPage() {
             attemptId,
             operationId: createContextSafeUuid(),
             reason: t("admin.proctorDashboard.forceSubmit.reason"),
+            // Target identity frozen at mint time (review P1-2): the pending
+            // authority must know which exam/candidate it belongs to, so a
+            // recovery surface on a DIFFERENT exam page can identify the
+            // command instead of offering a contextless destructive retry.
+            examId,
+            candidateName:
+              data?.candidates.find((c) => c.attemptId === attemptId)?.name ??
+              "",
           };
     await sendForceSubmitCommand(command, { fromDialog: true });
   }
@@ -1101,6 +1109,14 @@ export function ProctorDashboardPage() {
           record. Shows only dismiss (storage cleanup) — retrying the POST is
           pointless since the server already committed. A record reconstructed
           from storage alone is always `indeterminate`, never this phase.
+
+        Exam-scope guard (review P1-2): the pending command targets the exam
+        stored in its identity. When that is NOT the current page's exam, the
+        banner must identify the target (exam + candidate) and must NOT offer
+        the destructive retry — retrying here would force-submit the OTHER
+        exam's candidate from a page that gives no context. Instead: identify,
+        navigate back to the owning exam, or dismiss (clearing the global
+        slot is always safe).
       */}
       {(forceSubmitState.phase === "indeterminate" ||
         forceSubmitState.phase === "cleanup_failed") && (
@@ -1116,29 +1132,56 @@ export function ProctorDashboardPage() {
                   ? t(
                       "admin.proctorDashboard.forceSubmit.cleanupFailedBannerTitle",
                     )
-                  : t("admin.proctorDashboard.forceSubmit.bannerTitle")}
+                  : forceSubmitState.command.examId !== examId
+                    ? t(
+                        "admin.proctorDashboard.forceSubmit.bannerOtherExamTitle",
+                      )
+                    : t("admin.proctorDashboard.forceSubmit.bannerTitle")}
               </span>
               <span className="text-xs">
                 {forceSubmitState.phase === "cleanup_failed"
                   ? t(
                       "admin.proctorDashboard.forceSubmit.cleanupFailedBannerBody",
                     )
-                  : t("admin.proctorDashboard.forceSubmit.bannerBody")}
+                  : forceSubmitState.command.examId !== examId
+                    ? t(
+                        "admin.proctorDashboard.forceSubmit.bannerOtherExamBody",
+                        {
+                          examId: forceSubmitState.command.examId,
+                          candidateName: forceSubmitState.command.candidateName,
+                        },
+                      )
+                    : t("admin.proctorDashboard.forceSubmit.bannerBody")}
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {forceSubmitState.phase === "indeterminate" && (
+              {forceSubmitState.phase === "indeterminate" &&
+                forceSubmitState.command.examId === examId && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={forceSubmitting}
+                    onClick={() => {
+                      void sendForceSubmitCommand(forceSubmitState.command, {
+                        fromDialog: false,
+                      });
+                    }}
+                  >
+                    {t("admin.proctorDashboard.forceSubmit.bannerRetry")}
+                  </Button>
+                )}
+              {forceSubmitState.command.examId !== examId && (
                 <Button
                   size="sm"
-                  variant="destructive"
+                  variant="outline"
                   disabled={forceSubmitting}
-                  onClick={() => {
-                    void sendForceSubmitCommand(forceSubmitState.command, {
-                      fromDialog: false,
-                    });
-                  }}
+                  onClick={() =>
+                    navigate(
+                      `/admin/exams/${forceSubmitState.command.examId}/proctor`,
+                    )
+                  }
                 >
-                  {t("admin.proctorDashboard.forceSubmit.bannerRetry")}
+                  {t("admin.proctorDashboard.forceSubmit.bannerGoToExam")}
                 </Button>
               )}
               <Button

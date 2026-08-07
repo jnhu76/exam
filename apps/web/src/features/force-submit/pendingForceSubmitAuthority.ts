@@ -29,24 +29,38 @@
  * Strict authority validation (re-review P2-2): `loadPendingForceSubmit`
  * validates the FULL record — schema version, query-key match (the record's
  * organizationId/actorId must equal the lookup key), finite createdAt,
- * non-empty attemptId, RFC-4122 operationId, and a canonical (already-trimmed,
- * 1..500) reason, mirroring the wire schema (`z.string().uuid()` +
- * `z.string().trim().min(1).max(500)` in `@exam/contracts`). A damaged record
- * is cleared AND surfaced via `{ kind: "corrupt" }` — never silently treated
- * as "no pending" (a hidden corrupt command could block every other
- * force-submit for the admin without any way to reach it).
+ * non-empty attemptId, RFC-4122 operationId, a canonical (already-trimmed,
+ * 1..500) reason mirroring the wire schema (`z.string().uuid()` +
+ * `z.string().trim().min(1).max(500)` in `@exam/contracts`), and the command's
+ * exam scope + candidate label (P1-2: a pending command without its target
+ * exam identity cannot be safely surfaced). A damaged record is cleared AND
+ * surfaced via `{ kind: "corrupt" }` — never silently treated as "no pending"
+ * (a hidden corrupt command could block every other force-submit for the
+ * admin without any way to reach it).
  */
 
-/** A frozen force-submit command — the exact bytes to (re)send on retry. */
+/**
+ * A frozen force-submit command — the exact identity to (re)send on retry.
+ * The wire payload is `{ operationId, reason }` with `attemptId` in the URL;
+ * `examId` / `candidateName` are NOT sent — they are stored context that lets
+ * a recovery surface identify the command's target. A pending command for a
+ * DIFFERENT exam must never be retried from the current exam's page (review
+ * P1: a contextless destructive retry on the wrong exam would force-submit
+ * the other exam's candidate).
+ */
 export interface PendingForceSubmitCommand {
   attemptId: string;
   operationId: string;
   reason: string;
+  /** The exam the target attempt belongs to (page scope of the retry surface). */
+  examId: string;
+  /** Presentation snapshot of the target candidate (recovery surface label). */
+  candidateName: string;
 }
 
 /** The durable authority record stored in sessionStorage. */
 export interface PendingForceSubmitAuthority {
-  schemaVersion: 1;
+  schemaVersion: 2;
   organizationId: string;
   actorId: string;
   command: PendingForceSubmitCommand;
@@ -122,7 +136,7 @@ function isValidAuthority(
 ): parsed is PendingForceSubmitAuthority {
   if (!parsed || typeof parsed !== "object") return false;
   const a = parsed as Record<string, unknown>;
-  if (a.schemaVersion !== 1) return false;
+  if (a.schemaVersion !== 2) return false;
   if (a.organizationId !== organizationId || a.actorId !== actorId)
     return false;
   if (typeof a.createdAt !== "number" || !Number.isFinite(a.createdAt)) {
@@ -140,11 +154,26 @@ function isValidAuthority(
     return false;
   }
   const reason = command.reason;
+  if (
+    typeof reason !== "string" ||
+    reason.length < 1 ||
+    reason.length > 500 ||
+    reason.trim() !== reason
+  ) {
+    return false;
+  }
+  // Target identity: a command without its exam scope cannot be safely
+  // surfaced (a contextless retry could target the wrong exam), and a
+  // candidate label is required for the recovery banner to identify the
+  // command instead of showing a generic destructive retry.
+  if (typeof command.examId !== "string" || command.examId.length === 0) {
+    return false;
+  }
+  const candidateName = command.candidateName;
   return (
-    typeof reason === "string" &&
-    reason.length >= 1 &&
-    reason.length <= 500 &&
-    reason.trim() === reason
+    typeof candidateName === "string" &&
+    candidateName.length >= 1 &&
+    candidateName.length <= 200
   );
 }
 

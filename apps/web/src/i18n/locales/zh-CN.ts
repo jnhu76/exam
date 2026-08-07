@@ -1511,6 +1511,10 @@ const zhCN = {
         bannerTitle: "存在未确认的强制交卷命令",
         bannerBody:
           "上一次强制交卷的提交状态未确认（可能已成功，也可能未到达服务器）。下方按钮会以完全相同的命令标识重试，服务器会幂等重放而不会重复执行。",
+        bannerOtherExamTitle: "存在未确认的强制交卷命令（属于其他考试）",
+        bannerOtherExamBody:
+          "该命令针对「{{examId}}」考试的考生「{{candidateName}}」。为避免在错误的考试页面执行强制交卷，请返回原考试页面处理，或清除该记录。",
+        bannerGoToExam: "返回原考试页面",
         bannerRetry: "重试未确认强制交卷",
         bannerDismiss: "清除未确认命令",
         dismissFailed:
