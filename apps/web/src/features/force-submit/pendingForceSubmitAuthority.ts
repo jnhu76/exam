@@ -16,12 +16,15 @@
  * matches the reviewer's "minimum" bar.
  *
  * Fail-closed persistence (re-review P1-2): `savePendingForceSubmit` returns
- * an explicit result and VERIFIES the write by reading it back and comparing
- * every field of the record (organizationId, actorId, attemptId, operationId,
- * reason). A command that cannot be durably persisted must NOT be sent — the
- * retry-identity contract includes refresh recovery, so an unpersisted
- * operationId would be lost on reload and a later retry would mint a
- * duplicate identity. Callers must not POST when the save result is not ok.
+ * an explicit result and VERIFIES the write by reading it back and requiring
+ * byte-for-byte equality with the exact string written (re-review P2: a
+ * hand-picked field comparison would silently accept damage to fields the
+ * loader treats as mandatory — schemaVersion, createdAt — so the strongest
+ * fail-closed check is full-string equality, which covers every field). A
+ * command that cannot be durably persisted must NOT be sent — the retry-
+ * identity contract includes refresh recovery, so an unpersisted operationId
+ * would be lost on reload and a later retry would mint a duplicate identity.
+ * Callers must not POST when the save result is not ok.
  *
  * Strict authority validation (re-review P2-2): `loadPendingForceSubmit`
  * validates the FULL record — schema version, query-key match (the record's
@@ -70,6 +73,17 @@ export type SavePendingForceSubmitError =
 export type SavePendingForceSubmitResult =
   | { ok: true }
   | { ok: false; error: SavePendingForceSubmitError };
+
+/**
+ * Explicit result of {@link clearPendingForceSubmit} (re-review P2). The UI
+ * must never assume a clear succeeded silently — a record that is still
+ * present must keep its recovery surface (banner / indeterminate state), or
+ * the admin would believe the slot is free while a stale command reappears
+ * on the next load and blocks every later force-submit.
+ */
+export type ClearPendingForceSubmitResult =
+  | { ok: true }
+  | { ok: false; error: "storage_unavailable" | "remove_failed" };
 
 const STORAGE_KEY_PREFIX = "exam.pendingForceSubmit";
 
@@ -175,16 +189,21 @@ export function loadPendingForceSubmit(
 
 /**
  * Persists a pending force-submit command BEFORE the POST is sent, then
- * read-backs and VERIFIES the write field-by-field (re-review P1-2):
- * organizationId, actorId, attemptId, operationId, reason must all match the
- * written record exactly.
+ * read-backs and VERIFIES the write by requiring byte-for-byte equality with
+ * the exact serialized string that was written (re-review P1-2 + P2). A
+ * string-level comparison is strictly stronger than comparing individual
+ * fields: it also covers `schemaVersion` and `createdAt`, which the loader
+ * treats as mandatory authority fields (`isValidAuthority`), and any future
+ * field — no field can be damaged without breaking equality.
  *
  * Returns `{ ok: true }` only when the verified record is durably stored.
  * Returns `{ ok: false, error }` when:
  *   - storage is unavailable / blocked         → `storage_unavailable`;
  *   - `setItem` threw (quota, blocked, ...)    → `write_failed`;
- *   - the read-back is missing, unparseable, or differs from the written
- *     record                                  → `readback_mismatch` (the bad
+ *   - the read-back is missing                 → `write_failed` (the write
+ *     did not stick);
+ *   - the read-back differs from the written
+ *     bytes                                    → `readback_mismatch` (the bad
  *     bytes are removed so the next save starts clean).
  *
  * Callers MUST NOT send the POST when the result is not ok — the retry-
@@ -206,24 +225,9 @@ export function savePendingForceSubmit(
   }
   try {
     const readBack = storage.getItem(key);
-    if (!readBack) return { ok: false, error: "write_failed" };
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(readBack) as unknown;
-    } catch {
+    if (readBack === null) return { ok: false, error: "write_failed" };
+    if (readBack !== serialized) {
       // The storage layer returned bytes we did not write — remove them.
-      storage.removeItem(key);
-      return { ok: false, error: "readback_mismatch" };
-    }
-    const a = parsed as Record<string, unknown>;
-    const command = a?.command as Record<string, unknown> | null | undefined;
-    const matches =
-      a?.organizationId === authority.organizationId &&
-      a?.actorId === authority.actorId &&
-      command?.attemptId === authority.command.attemptId &&
-      command?.operationId === authority.command.operationId &&
-      command?.reason === authority.command.reason;
-    if (!matches) {
       storage.removeItem(key);
       return { ok: false, error: "readback_mismatch" };
     }
@@ -236,19 +240,34 @@ export function savePendingForceSubmit(
 
 /**
  * Clears the pending force-submit authority for (organizationId, actorId).
- * Called on a confirmed outcome (success or definitive rejection). Best
- * effort — a failed clear leaves a stale pending command that the page-level
- * banner can still retry or dismiss. Never throws.
+ * Called on a confirmed outcome (success or definitive rejection) or on an
+ * explicit user dismissal. Returns an explicit result (re-review P2): the
+ * caller must NOT switch the UI to "cleared" when the removal failed — a
+ * stale record that is still present would otherwise resurface on the next
+ * load and block every later force-submit. Never throws.
  */
 export function clearPendingForceSubmit(
   organizationId: string,
   actorId: string,
-): void {
+): ClearPendingForceSubmitResult {
   const storage = getStorage();
-  if (!storage) return;
+  if (!storage) return { ok: false, error: "storage_unavailable" };
+  const key = storageKey(organizationId, actorId);
   try {
-    storage.removeItem(storageKey(organizationId, actorId));
+    storage.removeItem(key);
   } catch {
-    // best-effort
+    return { ok: false, error: "remove_failed" };
+  }
+  // Re-review P2: verify the record is actually gone — a removeItem that
+  // reports success but silently fails (storage eviction, quota rollback,
+  // or restrictive sandbox) would leave a stale record that resurfaces on
+  // the next load and blocks every later force-submit.
+  try {
+    if (storage.getItem(key) !== null) {
+      return { ok: false, error: "remove_failed" };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "storage_unavailable" };
   }
 }
