@@ -10,9 +10,14 @@
  * docs/SPEC.md, README.md, AGENTS.md, CONTEXT.md). docs/archive/** is excluded
  * (archived history; the ant-removal audit separately confirms archive mentions
  * frame Ant as forbidden/purged).
+ *
+ * STALE_UI_DOCS_TARGETS_OVERRIDE (comma-separated paths) replaces the default
+ * target list — test-only escape hatch used by check-stale-ui-docs.test.mjs
+ * (same pattern as MIGRATIONS_DIR_OVERRIDE in the migration-journal checker).
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const MISLEADING = [
   // Ant as current/recommended (not forbidden).
@@ -37,7 +42,34 @@ const MISLEADING = [
   },
 ];
 
-const violations = [];
+const DEFAULT_TARGETS = [
+  "docs/architecture/frontend.md",
+  "docs/standards/ui-system.md",
+  "docs/SPEC.md",
+  "README.md",
+  "AGENTS.md",
+  "CONTEXT.md",
+];
+
+/**
+ * Pure scan of one document's content. Returns violations as
+ * [{ line, reason, snippet }] — exported for the regression test.
+ */
+export function findViolations(content) {
+  const violations = [];
+  content.split("\n").forEach((line, i) => {
+    for (const { re, msg } of MISLEADING) {
+      if (re.test(line)) {
+        violations.push({
+          line: i + 1,
+          reason: msg,
+          snippet: line.trim().slice(0, 80),
+        });
+      }
+    }
+  });
+  return violations;
+}
 
 async function walk(path, out = []) {
   let entries;
@@ -55,58 +87,63 @@ async function walk(path, out = []) {
   return out;
 }
 
-const targets = [
-  "docs/architecture/frontend.md",
-  "docs/standards/ui-system.md",
-  "docs/SPEC.md",
-  "README.md",
-  "AGENTS.md",
-  "CONTEXT.md",
-];
-
-async function scan(path) {
-  let st;
+async function scanFile(path, violations) {
+  let content;
   try {
-    st = await readFile(path, "utf8");
+    content = await readFile(path, "utf8");
   } catch {
     return;
   }
-  st.split("\n").forEach((line, i) => {
-    for (const { re, msg } of MISLEADING) {
-      if (re.test(line)) {
-        violations.push(
-          `${relative(".", path)}:${i + 1}: ${msg} — ${line.trim().slice(0, 80)}`,
-        );
-      }
+  for (const v of findViolations(content)) {
+    violations.push(
+      `${relative(".", path)}:${v.line}: ${v.reason} — ${v.snippet}`,
+    );
+  }
+}
+
+async function scanTargets(targets) {
+  const violations = [];
+  for (const t of targets) {
+    let st;
+    try {
+      st = await stat(t);
+    } catch {
+      continue; // missing — skip
     }
-  });
+    if (st.isFile()) {
+      await scanFile(t, violations);
+      continue;
+    }
+    if (st.isDirectory()) {
+      const files = (await walk(t)).filter(
+        (f) => f.endsWith(".md") && !f.includes("docs/archive/"),
+      );
+      for (const f of files) await scanFile(f, violations);
+    }
+  }
+  return violations;
 }
 
-for (const t of targets) {
-  let s;
-  try {
-    s = await readFile(t);
-  } catch {
-    // not a file or missing — skip
-  }
-  if (s !== undefined && typeof s === "string") {
-    await scan(t);
-    continue;
-  }
-  // directory
-  const files = (await walk(t)).filter((f) => f.endsWith(".md"));
-  for (const f of files) {
-    if (f.includes("docs/archive/")) continue;
-    await scan(f);
-  }
-}
+const isMain =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
 
-if (violations.length > 0) {
-  process.stderr.write(
-    `Stale/misleading doc violations (${violations.length}):\n${violations.join("\n")}\n`,
+if (isMain) {
+  const override = process.env.STALE_UI_DOCS_TARGETS_OVERRIDE;
+  const targets = override
+    ? override
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : DEFAULT_TARGETS;
+  const violations = await scanTargets(targets);
+  if (violations.length > 0) {
+    process.stderr.write(
+      `Stale/misleading doc violations (${violations.length}):\n${violations.join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+  process.stdout.write(
+    "✅ No misleading UI architecture framing in active docs.\n",
   );
-  process.exit(1);
 }
-process.stdout.write(
-  "✅ No misleading UI architecture framing in active docs.\n",
-);
