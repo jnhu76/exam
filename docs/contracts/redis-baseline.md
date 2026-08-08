@@ -180,7 +180,8 @@ allowlist carve-out.
 Redis service added to all compose files (`redis:7-alpine`):
 
 - `docker-compose.yml` (production): AOF persistence, internal to `exam-net`
-  only (no host port) — the app reaches it as `redis://redis:6379`.
+  only (no host port) — the app reaches Redis over the internal network
+  using the authenticated `REDIS_URL`.
   **Production Redis MUST be authenticated (P7 review P1-1):** Redis stays
   optional at Compose parse time — a bare `docker compose up` needs no
   Redis configuration (P7 review P1) — but when the profile is enabled the

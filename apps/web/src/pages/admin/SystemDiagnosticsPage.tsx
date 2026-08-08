@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import type {
   SystemHealthResponse,
   DiagnosticsResponse,
@@ -19,6 +18,7 @@ import {
   getStatusMeta,
   getToneTextColor,
   infraStatusKey,
+  redisInfraStatusKey,
 } from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -54,64 +54,10 @@ function getDbStatusLevel(ms: number): HealthStatus {
   return "ok";
 }
 
-/** Minimal Redis status presentation (P7): distinguishes disabled, ready,
- * connecting, and degraded (with reason) instead of a flat connected
- * boolean — a degraded optional-mode instance must not read as merely
- * "disconnected" nor as healthy. */
-function redisStatusText(
-  rs: DiagnosticsResponse["redisStatus"],
-  t: TFunction,
-): string {
-  if (rs.mode === "off") {
-    return t("diagnostics.labels.redisDisabled");
-  }
-  if (rs.state === "ready") {
-    return t("diagnostics.labels.redisConnected", {
-      latencyMs: rs.latencyMs ?? 0,
-    });
-  }
-  if (rs.state === "connecting") {
-    return t("diagnostics.labels.redisConnecting");
-  }
-  if (rs.state === "degraded") {
-    const reasonLabels: Record<string, string> = {
-      startup_timeout: t(
-        "diagnostics.labels.redisDegradedReason.startupTimeout",
-      ),
-      connection_lost: t(
-        "diagnostics.labels.redisDegradedReason.connectionLost",
-      ),
-      command_failure: t(
-        "diagnostics.labels.redisDegradedReason.commandFailure",
-      ),
-      retry_exhausted: t(
-        "diagnostics.labels.redisDegradedReason.retryExhausted",
-      ),
-    };
-    const reason = rs.degradedReason
-      ? reasonLabels[rs.degradedReason]
-      : undefined;
-    if (reason) {
-      return t("diagnostics.labels.redisDegraded", { reason });
-    }
-    return t("diagnostics.labels.redisDegradedGeneric");
-  }
-  return t("diagnostics.labels.redisDisconnected");
-}
-
-function InfoRow({
-  label,
-  value,
-  emphasis = "default",
-}: {
-  label: string;
-  value: string;
-  emphasis?: "default" | "timestamp" | "signal";
-}) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div
       data-slot="diagnostic-data-row"
-      data-emphasis={emphasis}
       className="flex items-baseline justify-between gap-2 py-1.5"
     >
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -355,10 +301,18 @@ export function SystemDiagnosticsPage() {
                 label={t("diagnostics.labels.latency")}
                 value={`${diag.dbLatency}ms`}
               />
-              <InfoRow
-                label={t("diagnostics.labels.redis")}
-                value={redisStatusText(diag.redisStatus, t)}
-              />
+              <div className="flex items-center justify-between gap-2 py-1.5">
+                <span className="text-sm text-muted-foreground">
+                  {t("diagnostics.labels.redis")}
+                </span>
+                {diag.redisStatus.mode === "off" ? (
+                  <StatusBadge status="infraDisabled" />
+                ) : (
+                  <StatusBadge
+                    status={redisInfraStatusKey(diag.redisStatus.state)}
+                  />
+                )}
+              </div>
             </DiagCard>
 
             <DiagCard
@@ -397,7 +351,6 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.lastScan")}
-                emphasis="timestamp"
                 value={
                   diag.heartbeatStatus.lastScanAt
                     ? formatDateTime(diag.heartbeatStatus.lastScanAt)
@@ -406,7 +359,6 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.disruptedCount")}
-                emphasis="signal"
                 value={`${diag.heartbeatStatus.disruptedCount}`}
               />
             </DiagCard>
@@ -422,7 +374,6 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.lastScan")}
-                emphasis="timestamp"
                 value={
                   diag.deadlineScannerStatus.lastScanAt
                     ? formatDateTime(diag.deadlineScannerStatus.lastScanAt)
@@ -431,7 +382,6 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.autoSubmitCount")}
-                emphasis="signal"
                 value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
               />
             </DiagCard>

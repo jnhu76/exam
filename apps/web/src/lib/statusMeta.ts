@@ -199,6 +199,12 @@ export const statusMeta = {
     tone: "success",
     icon: CheckCircle2,
   },
+  infraConnecting: {
+    labelKey: "status.infra.connecting",
+    tone: "info",
+    icon: LoaderCircle,
+    iconPolicy: "show",
+  },
   infraDegraded: {
     labelKey: "status.infra.degraded",
     tone: "warning",
@@ -289,6 +295,7 @@ export function infraStatusKey(
   status: string,
 ):
   | "infraAvailable"
+  | "infraConnecting"
   | "infraDegraded"
   | "infraUnavailable"
   | "infraDisabled"
@@ -296,10 +303,41 @@ export function infraStatusKey(
   switch (status) {
     case "available":
       return "infraAvailable";
+    case "connecting":
+      return "infraConnecting";
     case "degraded":
       return "infraDegraded";
     case "unavailable":
       return "infraUnavailable";
+    case "disabled":
+      return "infraDisabled";
+    default:
+      return "infraUnknown";
+  }
+}
+
+/**
+ * Maps a Redis runtime state (`disabled | connecting | ready | degraded |
+ * closing`) to the matching infra statusMeta key for StatusBadge rendering.
+ * The `mode` field (off/optional/required) is not mapped here — the
+ * diagnostics page already renders mode-specific text when mode is off.
+ */
+export function redisInfraStatusKey(
+  state: string,
+):
+  | "infraAvailable"
+  | "infraConnecting"
+  | "infraDegraded"
+  | "infraDisabled"
+  | "infraUnknown" {
+  switch (state) {
+    case "ready":
+      return "infraAvailable";
+    case "connecting":
+      return "infraConnecting";
+    case "degraded":
+    case "closing":
+      return "infraDegraded";
     case "disabled":
       return "infraDisabled";
     default:

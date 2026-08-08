@@ -161,10 +161,12 @@ describe("SystemDiagnosticsPage", () => {
     renderPage();
     expect(await screen.findByText("数据库状态")).toBeInTheDocument();
     expect(screen.getByText("5ms")).toBeInTheDocument();
-    expect(screen.getByText("已连接 (1ms)")).toBeInTheDocument();
+    // Redis ready state renders infra-available badge; email also renders
+    // "可用" so assert count >= 2 (one Redis + at least one email).
+    expect(screen.getAllByText("可用").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("shows Redis as disconnected when redisStatus.connected is false", async () => {
+  it("shows Redis as degraded when state is degraded", async () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce({
       ...diag(),
@@ -178,7 +180,7 @@ describe("SystemDiagnosticsPage", () => {
     });
     renderPage();
     expect(await screen.findByText("数据库状态")).toBeInTheDocument();
-    expect(screen.getByText("已降级 (连接丢失)")).toBeInTheDocument();
+    expect(screen.getByText("降级")).toBeInTheDocument();
   });
 
   it("shows Redis as disabled when mode is off", async () => {
@@ -195,6 +197,7 @@ describe("SystemDiagnosticsPage", () => {
     });
     renderPage();
     expect(await screen.findByText("数据库状态")).toBeInTheDocument();
+    // StatusBadge renders the infra-disabled label
     expect(screen.getByText("已禁用")).toBeInTheDocument();
     expect(screen.queryByText("未连接")).not.toBeInTheDocument();
   });
@@ -213,7 +216,7 @@ describe("SystemDiagnosticsPage", () => {
     });
     renderPage();
     expect(await screen.findByText("数据库状态")).toBeInTheDocument();
-    expect(screen.getByText("连接中...")).toBeInTheDocument();
+    expect(screen.getByText("连接中")).toBeInTheDocument();
   });
 
   it("renders heartbeat scanner and deadline scanner status cards", async () => {
@@ -228,16 +231,11 @@ describe("SystemDiagnosticsPage", () => {
     expect(
       document.querySelectorAll('[data-diagnostic-role="scanner"]'),
     ).toHaveLength(2);
-    expect(
-      document.querySelectorAll(
-        '[data-diagnostic-role="scanner"] [data-emphasis="timestamp"]',
-      ),
-    ).toHaveLength(2);
-    expect(
-      document.querySelectorAll(
-        '[data-diagnostic-role="scanner"] [data-emphasis="signal"]',
-      ),
-    ).toHaveLength(2);
+    // Timestamp rows: each scanner card has a "上次扫描" row
+    expect(screen.getAllByText("上次扫描")).toHaveLength(2);
+    // Signal rows: heartbeat has "已中断", deadline has "自动提交"
+    expect(screen.getByText("已中断")).toBeInTheDocument();
+    expect(screen.getByText("自动提交")).toBeInTheDocument();
   });
 
   it("emits distinct information, scanner, disabled, and raised metric roles", async () => {

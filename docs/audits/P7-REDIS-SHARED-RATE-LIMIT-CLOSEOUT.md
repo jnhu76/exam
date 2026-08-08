@@ -52,9 +52,10 @@ default 2000, `REDIS_COMMAND_TIMEOUT_MS` default 1000,
   credential-bearing URLs are never logged.
 - Graceful shutdown: bounded `quit()` (2s race) then `disconnect()`, safe
   from every lifecycle state.
-- A single command failure on a healthy connection falls back for that
-  request without flipping the whole runtime (no stuck-degraded state); on an
-  unhealthy connection it degrades (`command_failure`).
+- Any Redis command failure degrades the logical runtime to `degraded`
+  (reason `command_failure`), regardless of `client.status` — transport
+  ready ≠ operational health. The degraded state makes store selection
+  consistent instead of hitting broken Redis per request.
 - Recovery is automatic: the client reconnects with bounded backoff; the
   `ready` event returns the runtime (and the shared store) to service.
 

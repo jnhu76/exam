@@ -18,7 +18,7 @@
 #     P1-1).
 #   - db healthy → app migrates + becomes healthy → email-worker starts
 #     after app health (P6-009 migration serialization).
-#   - 21 migrations applied exactly once.
+#   - migrations applied exactly once (count varies; see journal).
 #   - worker heartbeat appears in worker_heartbeats.
 #   - bootstrap-admin creates exactly one explicit Admin (P6-008).
 #   - login succeeds.
