@@ -58,6 +58,12 @@ const ENV_KEYS = [
   "SMTP_GREETING_TIMEOUT_MS",
   "SMTP_SOCKET_TIMEOUT_MS",
   "PUBLIC_WEB_ORIGIN",
+  "REDIS_URL",
+  "REDIS_MODE",
+  "REDIS_KEY_PREFIX",
+  "REDIS_CONNECT_TIMEOUT_MS",
+  "REDIS_COMMAND_TIMEOUT_MS",
+  "REDIS_STARTUP_TIMEOUT_MS",
 ] as const;
 
 describe("runtimeConfig", () => {
@@ -1069,6 +1075,111 @@ describe("runtimeConfig", () => {
       expect(config.email.transport).toBe("fake");
       // SMTP config is not assembled under fake transport.
       expect(config.email.smtp).toBeNull();
+    });
+  });
+
+  describe("redis config (P7 modes)", () => {
+    /** Minimal valid env so loadRuntimeConfig can resolve a database URL. */
+    function redisEnv(
+      overrides: Record<string, string> = {},
+    ): NodeJS.ProcessEnv {
+      return {
+        DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam",
+        ...overrides,
+      };
+    }
+
+    it("defaults to off when REDIS_URL is unset", () => {
+      const config = loadRuntimeConfig(redisEnv());
+      expect(config.redis.mode).toBe("off");
+      expect(config.redis.enabled).toBe(false);
+      expect(config.redis.url).toBeNull();
+    });
+
+    it("defaults to optional when REDIS_URL is set (post-P7 semantics)", () => {
+      const config = loadRuntimeConfig(
+        redisEnv({ REDIS_URL: "redis://localhost:6379" }),
+      );
+      expect(config.redis.mode).toBe("optional");
+      expect(config.redis.enabled).toBe(true);
+      expect(config.redis.url).toBe("redis://localhost:6379");
+    });
+
+    it("REDIS_MODE=off disables Redis even when REDIS_URL is set (rollback lever)", () => {
+      const config = loadRuntimeConfig(
+        redisEnv({ REDIS_MODE: "off", REDIS_URL: "redis://localhost:6379" }),
+      );
+      expect(config.redis.mode).toBe("off");
+      expect(config.redis.enabled).toBe(false);
+    });
+
+    it("REDIS_MODE=optional requires REDIS_URL", () => {
+      expect(() =>
+        loadRuntimeConfig(redisEnv({ REDIS_MODE: "optional" })),
+      ).toThrow(/REDIS_MODE=optional requires REDIS_URL/);
+    });
+
+    it("REDIS_MODE=required requires REDIS_URL", () => {
+      expect(() =>
+        loadRuntimeConfig(redisEnv({ REDIS_MODE: "required" })),
+      ).toThrow(/REDIS_MODE=required requires REDIS_URL/);
+    });
+
+    it("REDIS_MODE=required with REDIS_URL resolves as required", () => {
+      const config = loadRuntimeConfig(
+        redisEnv({
+          REDIS_MODE: "required",
+          REDIS_URL: "redis://localhost:6379",
+        }),
+      );
+      expect(config.redis.mode).toBe("required");
+      expect(config.redis.enabled).toBe(true);
+    });
+
+    it("rejects an unknown REDIS_MODE value", () => {
+      expect(() =>
+        loadRuntimeConfig(
+          redisEnv({ REDIS_MODE: "sometimes", REDIS_URL: "redis://x:6379" }),
+        ),
+      ).toThrow(/REDIS_MODE must be "off", "optional" or "required"/);
+    });
+
+    it("keeps REDIS_KEY_PREFIX and defaults the bounded timeouts", () => {
+      const config = loadRuntimeConfig(
+        redisEnv({
+          REDIS_URL: "redis://localhost:6379",
+          REDIS_KEY_PREFIX: "exam:prod:",
+        }),
+      );
+      expect(config.redis.keyPrefix).toBe("exam:prod:");
+      expect(config.redis.connectTimeoutMs).toBe(2000);
+      expect(config.redis.commandTimeoutMs).toBe(1000);
+      expect(config.redis.startupTimeoutMs).toBe(8000);
+    });
+
+    it("honors explicit timeout overrides", () => {
+      const config = loadRuntimeConfig(
+        redisEnv({
+          REDIS_URL: "redis://localhost:6379",
+          REDIS_CONNECT_TIMEOUT_MS: "300",
+          REDIS_COMMAND_TIMEOUT_MS: "200",
+          REDIS_STARTUP_TIMEOUT_MS: "1500",
+        }),
+      );
+      expect(config.redis.connectTimeoutMs).toBe(300);
+      expect(config.redis.commandTimeoutMs).toBe(200);
+      expect(config.redis.startupTimeoutMs).toBe(1500);
+    });
+
+    it("fails fast on a non-numeric timeout", () => {
+      expect(() =>
+        loadRuntimeConfig(
+          redisEnv({
+            REDIS_URL: "redis://x:6379",
+            REDIS_COMMAND_TIMEOUT_MS: "abc",
+          }),
+        ),
+      ).toThrow(/REDIS_COMMAND_TIMEOUT_MS must be a positive integer/);
     });
   });
 });

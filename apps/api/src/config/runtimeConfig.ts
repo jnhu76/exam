@@ -78,10 +78,34 @@ export interface DatabaseConfig {
   url: string;
 }
 
+/**
+ * Redis runtime mode (P7 — Redis first real adoption).
+ *
+ * - `off`: Redis client is never created; the rate limiter uses the local
+ *   in-memory store; diagnostics report `disabled`. Preserves pre-P7
+ *   behavior for deployments without Redis.
+ * - `optional`: Redis is used when healthy (shared rate limiting); when
+ *   unavailable the app keeps running and rate limiting degrades to the
+ *   local store. Startup never hangs and never crashes on Redis loss.
+ * - `required`: Redis must be reachable within the bounded startup window;
+ *   otherwise startup fails deterministically. At runtime, Redis loss makes
+ *   affected requests fail closed (503 RATE_LIMIT_UNAVAILABLE) — never a
+ *   silent switch to local counters.
+ */
+export type RedisMode = "off" | "optional" | "required";
+
 export interface RedisConfig {
+  mode: RedisMode;
   url: string | null;
+  /** `mode !== "off" && url !== null` — kept for backward compatibility. */
   enabled: boolean;
   keyPrefix: string;
+  /** Bounded TCP connect timeout (ms). */
+  connectTimeoutMs: number;
+  /** Bounded per-command timeout (ms) — a slow Redis must not hang requests. */
+  commandTimeoutMs: number;
+  /** Bounded startup window (ms) for optional/required readiness. */
+  startupTimeoutMs: number;
 }
 
 export interface AuthSecretConfig {
@@ -475,6 +499,88 @@ function resolveRedisUrl(env: NodeJS.ProcessEnv): string | null {
 }
 
 /**
+ * Resolve the Redis runtime mode from `REDIS_MODE`.
+ *
+ * - unset: `"optional"` when `REDIS_URL` is set (post-P7 default: use Redis
+ *   when healthy, degrade safely when not), else `"off"`.
+ * - explicit `"off"`: Redis is never created, even when a URL is set.
+ * - explicit `"optional"` / `"required"`: must be accompanied by `REDIS_URL`
+ *   (fail fast otherwise — an operator that explicitly asked for Redis but
+ *   forgot the URL is a misconfiguration, not a silent off).
+ *
+ * @param env - Process environment to read from.
+ * @returns The resolved {@link RedisMode}.
+ */
+function resolveRedisMode(env: NodeJS.ProcessEnv): RedisMode {
+  const raw = (env.REDIS_MODE ?? "").trim();
+  if (raw === "") {
+    return resolveRedisUrl(env) !== null ? "optional" : "off";
+  }
+  if (raw === "off" || raw === "optional" || raw === "required") {
+    return raw;
+  }
+  throw new RuntimeConfigError(
+    `REDIS_MODE must be "off", "optional" or "required" (got: ${raw})`,
+  );
+}
+
+/**
+ * Parse a positive integer timeout env value with fail-fast validation.
+ * Empty/whitespace falls back to the default; non-numeric or non-positive
+ * values throw a {@link RuntimeConfigError} so a misconfigured timeout is
+ * never silently coerced.
+ */
+function resolveTimeoutMs(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  fallback: number,
+): number {
+  const raw = env[key]?.trim();
+  if (!raw) return fallback;
+  if (!/^\d+$/.test(raw)) {
+    throw new RuntimeConfigError(
+      `${key} must be a positive integer (got: ${raw})`,
+    );
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new RuntimeConfigError(
+      `${key} must be a positive integer (got: ${raw})`,
+    );
+  }
+  return n;
+}
+
+/**
+ * Resolve and validate the full Redis runtime config (P7).
+ *
+ * Validation rules:
+ * - `REDIS_MODE=optional|required` without `REDIS_URL` fails fast.
+ * - Timeouts are positive integers with documented LAN-friendly defaults.
+ *
+ * @param env - Process environment to read from.
+ * @returns The resolved {@link RedisConfig}.
+ */
+function resolveRedisConfig(env: NodeJS.ProcessEnv): RedisConfig {
+  const mode = resolveRedisMode(env);
+  const url = resolveRedisUrl(env);
+  if (mode !== "off" && url === null) {
+    throw new RuntimeConfigError(
+      `REDIS_MODE=${mode} requires REDIS_URL to be set`,
+    );
+  }
+  return {
+    mode: mode === "off" || url === null ? "off" : mode,
+    url,
+    enabled: mode !== "off" && url !== null,
+    keyPrefix: env.REDIS_KEY_PREFIX ?? "",
+    connectTimeoutMs: resolveTimeoutMs(env, "REDIS_CONNECT_TIMEOUT_MS", 2000),
+    commandTimeoutMs: resolveTimeoutMs(env, "REDIS_COMMAND_TIMEOUT_MS", 1000),
+    startupTimeoutMs: resolveTimeoutMs(env, "REDIS_STARTUP_TIMEOUT_MS", 8000),
+  };
+}
+
+/**
  * Parse a boolean env value strictly: only `"true"` and `"false"` (case-
  * sensitive) are accepted. Anything else throws, so a misconfigured boolean
  * fails fast rather than silently coercing.
@@ -660,9 +766,7 @@ export function loadRuntimeConfig(
   }
   const heartbeatTimeoutSeconds = Math.floor(timeoutMs / 1000);
 
-  const redisUrl = resolveRedisUrl(env);
-  const redisEnabled = redisUrl !== null;
-  const redisKeyPrefix = env.REDIS_KEY_PREFIX ?? "";
+  const redis = resolveRedisConfig(env);
 
   const email = resolveEmailConfig(env, { isTestLike });
 
@@ -673,7 +777,7 @@ export function loadRuntimeConfig(
     port: Number(env.APP_PORT) || 3000,
     host: env.HOST || "0.0.0.0",
     database: { url: resolveDatabaseUrl(env, mode) },
-    redis: { url: redisUrl, enabled: redisEnabled, keyPrefix: redisKeyPrefix },
+    redis,
     authSecret: {
       jwtSecret: resolveJwtSecret(env, mode),
       cookieSecure: isProduction || isTruthy(env.COOKIE_SECURE),

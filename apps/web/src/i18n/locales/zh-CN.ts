@@ -62,6 +62,7 @@ const zhCN = {
     },
     infra: {
       available: "可用",
+      connecting: "连接中",
       degraded: "降级",
       unavailable: "不可用",
       disabled: "已禁用",
@@ -338,8 +339,6 @@ const zhCN = {
       uptime: "运行时间",
       latency: "延迟",
       redis: "Redis",
-      redisConnected: "已连接 ({{latencyMs}}ms)",
-      redisDisconnected: "未连接",
       heartbeatInterval: "心跳间隔",
       heartbeatTimeout: "心跳超时",
       deadlineScanInterval: "截止扫描间隔",

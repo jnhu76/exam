@@ -114,6 +114,35 @@ export type EmailDiagnosticsStatus = z.infer<
 >;
 
 /**
+ * Redis diagnostics status (P7 — Redis first real adoption).
+ *
+ * Exposes mode/state/degraded reason truthfully instead of a boolean: an
+ * `optional`-mode instance whose Redis is down reports state `degraded` with
+ * a reason, never a misleading `connected: true`. No secrets (URL/password)
+ * are ever included.
+ */
+export const RedisDiagnosticsStatusSchema = z.object({
+  mode: z.enum(["off", "optional", "required"]),
+  state: z.enum(["disabled", "connecting", "ready", "degraded", "closing"]),
+  /** Backward-compatible: `state === "ready"`. */
+  connected: z.boolean(),
+  latencyMs: z.number().nullable(),
+  degradedReason: z
+    .enum([
+      "startup_timeout",
+      "connection_lost",
+      "command_failure",
+      "retry_exhausted",
+    ])
+    .nullable(),
+});
+
+/** Type for the Redis diagnostics status block. */
+export type RedisDiagnosticsStatus = z.infer<
+  typeof RedisDiagnosticsStatusSchema
+>;
+
+/**
  * Schema for the system diagnostics response, providing server version,
  * uptime, database latency, Redis status, heartbeat/deadline scanner status,
  * email infrastructure status, and non-sensitive runtime configuration.
@@ -122,10 +151,7 @@ export const DiagnosticsResponseSchema = z.object({
   version: z.string(),
   uptime: z.number(),
   dbLatency: z.number().min(0),
-  redisStatus: z.object({
-    connected: z.boolean(),
-    latencyMs: z.number().nullable(),
-  }),
+  redisStatus: RedisDiagnosticsStatusSchema,
   heartbeatStatus: z.object({
     interval: z.number().int().min(0),
     timeout: z.number().int().min(0),

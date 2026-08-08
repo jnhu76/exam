@@ -18956,15 +18956,45 @@
                     "redisStatus": {
                       "type": "object",
                       "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["off", "optional", "required"]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "disabled",
+                            "connecting",
+                            "ready",
+                            "degraded",
+                            "closing"
+                          ]
+                        },
                         "connected": {
                           "type": "boolean"
                         },
                         "latencyMs": {
                           "type": "number",
                           "nullable": true
+                        },
+                        "degradedReason": {
+                          "type": "string",
+                          "enum": [
+                            "startup_timeout",
+                            "connection_lost",
+                            "command_failure",
+                            "retry_exhausted"
+                          ],
+                          "nullable": true
                         }
                       },
-                      "required": ["connected", "latencyMs"],
+                      "required": [
+                        "mode",
+                        "state",
+                        "connected",
+                        "latencyMs",
+                        "degradedReason"
+                      ],
                       "additionalProperties": false
                     },
                     "heartbeatStatus": {

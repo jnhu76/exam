@@ -43,10 +43,12 @@ Postgres:  provided by the 'db' service (postgres:18.4-bookworm). The
            supported MVP path. External Postgres is NOT a supported MVP
            deployment — the worker's DATABASE_URL is composed, not read
            from an external DATABASE_URL. Do NOT remove the 'db' service.
-Redis:     OPTIONAL. The 'redis' service ships for forward-compatibility
-           with the Phase 2 baseline and is gated behind the 'redis'
-           profile (P6-010) — a bare 'docker compose up' does NOT start
-           it. No MVP business code reads/writes Redis. See §10.
+Redis:     OPTIONAL — a bare 'docker compose up' starts no Redis and needs
+           no Redis configuration (P7 review P1). When enabled (the 'redis'
+           profile, P6-010), Redis owns the shared rate-limit state (P7):
+           production requires REDIS_PASSWORD — the redis container refuses
+           to start without it — plus an authenticated REDIS_URL (P7 review
+           P1-1). See §10.
 SMTP:      OPTIONAL. Leave EMAIL_ENABLED=false to drain the outbox to 'sent'
            status without external delivery. Set EMAIL_ENABLED=true +
            EMAIL_TRANSPORT=smtp + SMTP_* to enable real Email delivery.
@@ -85,7 +87,8 @@ if any is unset. There is NO default database password in production
 | `DEPLOYMENT_MODE` | singleTenant | `multiTenant` is rejected at boot (Phase 4 only) |
 | `COOKIE_SECURE` | false (auto-true in production) | cookie Secure flag |
 | `APP_TIMEZONE` / `TZ` | Asia/Shanghai | display/log/diagnostics only; does not change business-time comparison semantics |
-| `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`) |
+| `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`; authenticated URL required) |
+| `REDIS_PASSWORD` | unset (redis profile disabled) | optional at Compose parse time — a bare `docker compose up` needs no Redis config (P7 review P1); REQUIRED when the `redis` profile is enabled: the redis container refuses to start without it and runs with `requirepass` (P7 review P1-1) |
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed in-memory rate limiter |
@@ -479,13 +482,18 @@ Scanner tuning env vars: `HEARTBEAT_SCAN_INTERVAL_MS`,
 
 ## 10. Redis (optional profile)
 
-**Redis is OPTIONAL** in the implemented MVP (`UNUSED_RESIDUE` classification
-per the P6 audit and ADR-001). No MVP business code reads from or writes to
-Redis:
+**Redis is OPTIONAL** in the implemented MVP (ADR-001). When enabled it owns
+ONE production responsibility: the **shared rate-limit state** (P7 — first
+real business adoption). PostgreSQL remains the exam fact authority; Redis
+holds only ephemeral coordination state:
 
 - Email delivery queue = PostgreSQL `email_outbox` (frozen by ADR-011).
 - Inbox persistence = PostgreSQL `notifications` (frozen by ADR-011).
-- Admission queue / rate limiter = in-process / DB-backed (ADR-001).
+- Admission queue = in-process / DB-backed (ADR-001).
+- Shared rate limiter = Redis when `REDIS_MODE=optional|required` and the
+  runtime is `ready`; local in-memory store when Redis is off or
+  optional-degraded (per-process best-effort — no strict global N while
+  degraded); fail closed (503 `RATE_LIMIT_UNAVAILABLE`) in `required` mode.
 - Session/JWT = stateless cookie + JWT (no Redis session store).
 
 The default topology is `app + db + email-worker`. The `redis` Compose
@@ -497,9 +505,18 @@ unconfigured — this is expected and does not degrade the MVP path.
 
 ### Enabling the optional Redis profile
 
+Production Redis MUST be authenticated (P7 review P1-1): the redis
+container refuses to start without a non-empty `REDIS_PASSWORD` (startup
+guard) and the server runs with `requirepass`. The check lives at
+container startup, not Compose expansion, so a bare `docker compose up`
+without the profile needs no Redis configuration (P7 review P1). Set both
+the password and the authenticated URL:
+
 ```bash
-# 1. Set REDIS_URL on the app service (in .env):
-#    REDIS_URL=redis://redis:6379
+# 1. In .env (production):
+#    REDIS_PASSWORD=<secret>
+#    REDIS_URL=redis://:<same-secret>@redis:6379
+#    (URL-encode the password if it contains reserved characters)
 
 # 2. Start the stack with the redis profile:
 docker compose --profile redis up -d --build
@@ -509,14 +526,17 @@ docker compose ps
 # Expected: app (healthy), db (healthy), redis (healthy), email-worker (up)
 ```
 
-The `redis` service exists for forward-compatibility with the Phase 2
-baseline (ADR-001). Enabling it does NOT move Inbox or Email queues to
-Redis — those remain PostgreSQL-backed (frozen by ADR-011).
+The `redis` service exists for the optional shared rate limiter and
+forward-compatibility with the Phase 2 baseline (ADR-001). Enabling it does
+NOT move Inbox or Email queues to Redis — those remain PostgreSQL-backed
+(frozen by ADR-011).
 
-Redis becomes `REQUIRED` only when a documented, measured trigger is met
-(multi-instance, shared rate limit, distributed presence, cross-process
-scanner coordination, persistent admission queue). **None of these triggers
-is met by the implemented MVP subset.**
+Redis becomes `REQUIRED` (`REDIS_MODE=required`) only when a documented,
+measured trigger is met (multi-instance, strict global rate limit,
+distributed presence, cross-process scanner coordination, persistent
+admission queue). **None of these triggers is met by the implemented MVP
+subset; `REDIS_MODE=required` is an explicit operator choice for
+deployments that need strict shared limits.**
 
 ---
 

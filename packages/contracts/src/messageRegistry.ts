@@ -66,6 +66,7 @@ export const errorMessages = {
   AUTH_REGISTER_DISABLED: "Phase 1 不支持公开注册",
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",
   AUTHZ_UNAVAILABLE: "授权服务暂不可用，请稍后重试",
+  RATE_LIMIT_UNAVAILABLE: "限流服务暂不可用，请稍后重试",
 } as const;
 
 /** Union type of all valid error message codes. */

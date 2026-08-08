@@ -14,8 +14,15 @@
 #     and become healthy. The drizzle migration journal tracks state; it is
 #     NOT a concurrency lock (P6-009).
 #   - Redis is an OPTIONAL profile (`--profile redis` /
-#     COMPOSE_PROFILES=redis). The MVP has no Redis business code; the API
-#     defaults REDIS_URL to empty (disabled). See P6-010 / ADR-001.
+#     COMPOSE_PROFILES=redis) and stays OPTIONAL at Compose parse time: a
+#     bare `docker compose up` needs no Redis configuration. When the
+#     profile IS enabled it MUST be authenticated: the redis container
+#     refuses to start without REDIS_PASSWORD (startup guard) and the
+#     server runs with `requirepass` (P7 review P1-1 — Redis now owns the
+#     shared rate-limit state, so an open instance is not acceptable). The
+#     API reads REDIS_URL; when the profile is enabled the operator must set
+#     it to the authenticated URL, e.g. redis://:<REDIS_PASSWORD>@redis:6379.
+#     See docs/deployment/mvp-deployment-runbook.md §10.
 services:
   app:
     build: .
@@ -23,10 +30,15 @@ services:
       - "${APP_PORT:-3000}:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}@db:5432/${POSTGRES_DB:-exam}
-      # Redis is optional in the implemented MVP (ADR-001). The default
-      # empty value disables Redis; set REDIS_URL when the optional
-      # `redis` profile is enabled.
+      # Redis is optional in the implemented MVP (ADR-001), but it owns the
+      # shared rate-limit state when enabled (P7). The default empty value
+      # disables Redis; when the optional `redis` profile is enabled, set
+      # REDIS_URL to the AUTHENTICATED URL (the redis service requires
+      # REDIS_PASSWORD; use redis://:<REDIS_PASSWORD>@redis:6379).
+      # REDIS_MODE (off|optional|required) defaults to "optional" when
+      # REDIS_URL is set (P7).
       REDIS_URL: ${REDIS_URL:-}
+      REDIS_MODE: ${REDIS_MODE:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
       NODE_ENV: production
       APP_MODE: production
@@ -93,22 +105,50 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Redis is OPTIONAL in the implemented MVP (ADR-001 / P6-010). No MVP
-  # business code reads or writes Redis. The service is gated behind the
-  # `redis` profile: it is NOT started by a bare `docker compose up`. Enable
-  # it explicitly with `docker compose --profile redis up` (or set
-  # COMPOSE_PROFILES=redis) AND set REDIS_URL on the `app` service to
-  # `redis://redis:6379`. See docs/deployment/mvp-deployment-runbook.md §10.
+  # Redis is OPTIONAL in the implemented MVP (ADR-001 / P6-010), but it owns
+  # the shared rate-limit state when enabled (P7) — so an ENABLED production
+  # Redis MUST be authenticated (P7 review P1-1; ADR-001 security
+  # considerations). The service is gated behind the `redis` profile: it is
+  # NOT started by a bare `docker compose up`. The password check lives at
+  # CONTAINER STARTUP (not Compose expansion), so the profile stays truly
+  # optional: a bare `docker compose up` with REDIS_PASSWORD unset still
+  # parses and runs. Only when the profile is enabled does the redis
+  # container refuse to start without a password — never an open instance.
+  # Enable it explicitly with `docker compose --profile redis up` (or set
+  # COMPOSE_PROFILES=redis) AND set REDIS_URL on the `app` service to the
+  # authenticated URL, `redis://:<REDIS_PASSWORD>@redis:6379`. Compose
+  # config/inspect does not interpolate the secret into the stored command
+  # definition — the command references `$REDIS_PASSWORD` and the container
+  # shell expands it at startup (the redis-server argv then receives the
+  # password via `--requirepass`, which is how requirepass is configured).
+  # See docs/deployment/mvp-deployment-runbook.md §10.
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    # `$$` is the Compose escape: the container sees `$REDIS_PASSWORD`, not
+    # the interpolated secret. The first line is the startup guard — the
+    # shell fails the container when REDIS_PASSWORD is unset or empty, so
+    # an unauthenticated server can never start. The second line runs the
+    # server with requirepass read from the container environment.
+    command:
+      - sh
+      - -ec
+      - |
+        : "$${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+        exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     profiles: ["redis"]
     environment:
+      # P7 review P1: the empty default keeps Redis optional at Compose
+      # parse time (a bare `docker compose up` needs no Redis
+      # configuration); the startup guard above enforces the password when
+      # the redis profile actually runs.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # An unauthenticated ping must fail (NOAUTH) — the healthcheck itself
+      # proves the server enforces the password.
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 10s
       timeout: 5s
       retries: 5
