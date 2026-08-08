@@ -415,6 +415,7 @@ describe("candidate field routes", () => {
         },
       });
     } finally {
+      await ctx.drainAuditWrites();
       await cleanupOrganizationTestData(ctx.db, localOrgId);
     }
   });
