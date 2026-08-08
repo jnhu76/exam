@@ -59,7 +59,7 @@ When documents conflict, higher precedence wins:
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-014-exam-incident-authority.md`](adr/ADR-014-exam-incident-authority.md) | 14 formal ADRs (ADR-014 ACCEPTED, runtime NOT STARTED) |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-015-proctor-exam-scope-authority.md`](adr/ADR-015-proctor-exam-scope-authority.md) | 15 formal ADRs (ADR-001 … ADR-015) |
 
 Recovery authority:
 
@@ -69,9 +69,9 @@ Recovery authority:
   freezes interruption evidence, compensation policy, deadline ordering, and
   the future PostgreSQL episode/ledger model.
 - [`adr/ADR-014-exam-incident-authority.md`](adr/ADR-014-exam-incident-authority.md)
-  proposes the exam incident authority (identity, lifecycle, permissions,
-  action links); runtime implementation NOT STARTED, pending human
-  acceptance.
+  freezes the exam incident authority (identity, lifecycle, permissions,
+  action links); ACCEPTED 2026-08-01, runtime implemented (J3, PR #242) and
+  the Admin recovery center (J5) is closed.
 - [`audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md`](audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md)
   records the source-proven runtime reality at the REC-I4-R0 baseline.
 

@@ -1,5 +1,13 @@
 # P7 Redis Capability and Adoption Study
 
+> **SUPERSEDED FOR CURRENT IMPLEMENTATION (2026-08-09, post-MVP repository
+> hygiene):** the P7-D1 decision is **accepted** (2026-08-08) — Redis is
+> adopted for ONE bounded responsibility, the **shared/global rate limiter**
+> (ADR-001 "Post-MVP Decision (P7)"; PR #265 shipped P7-D2/D3; decision
+> record: `docs/roadmap/P7-system-readiness-and-exam-modes.md` Workstream B).
+> The study below is retained as historical evidence — read it as the
+> fact-base that informed the decision, not as current product truth.
+
 > Status: Fact-base study (research, not an accepted ADR)
 > Date: 2026-07-31
 > Scope: LAN/on-premise, single-organization Exam deployment; future

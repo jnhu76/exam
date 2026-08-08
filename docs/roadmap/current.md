@@ -12,7 +12,7 @@
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
 | Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
 | Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
-| P7 — System Readiness and Exam Modes | 🟣 PLANNING | Redis adoption, state authority, backup/restore, outage recovery, settings control plane, policy profiles, UI closeout. |
+| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted (2026-08-08); shared rate limit shipped (PR #265, P7-D2/D3). State/backup/config-control-plane/exam-modes/UI workstreams remain open. |
 | Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
@@ -49,69 +49,25 @@ REC-I6-R0 froze the exam incident authority in
 commands, API, audit, and optional time-grant linkage paths are implemented on
 `master`; see
 [`docs/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md`](../audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md).
-Remaining recovery work — all explicitly NOT IMPLEMENTED: dedicated recovery
-centers (J5/J6), system-generated incidents, and wider startup reconciliation.
 The J4 design contract (`M11-R0-PROCTOR-EXAM-SCOPE-CONTRACT`) is **CLOSED**
 as ADR-015 (**Accepted** 2026-08-02, PR #245) with its reality audit
 ([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)).
-**J4-I1 (`M11-PROCTOR-EXAM-ASSIGNMENTS`) is CLOSED** (2026-08-02): the
+**J4-I1 (`M11-PROCTOR-EXAM-ASSIGNMENTS`) is CLOSED** (2026-08-02, PR #250): the
 Proctor-to-Exam assignment persistence, commands, Admin assignment API,
 resource-scope enforcement, and the minimum Proctor incident authority are
 implemented per ADR-015 §23 (A → B → C → D); see
 [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is the next recovery job; its reality-audit
-and product/API/read-model contract is **CLOSED / ACCEPTED**
-([`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md),
-PR #251 merged 2026-08-02; amended 2026-08-04 by J5-I1A2 / PR #253). J5-I1A1
-(Recovery Incident Queue, `GET /admin/recovery/incidents`) is **CLOSED** (PR
-#252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
-`GET /admin/recovery/incidents/:incidentId`) is **CLOSED** (PR #253 merged).
-J5-I1A3 (Attempt Operations Context,
-`GET /admin/recovery/attempts/:attemptId`) is **CLOSED** (delivered by PR #254).
-**J5-I1A is CLOSED.** **J5-I1B (Recovery Center UI) is CLOSED** — queue,
-incident detail, attempt operations, and exam recovery detail pages plus the
-Exam Recovery Context aggregate (`GET /admin/recovery/exams/:examId`, §6.5).
-**J5-I1C0 audit CLOSED** (PR #255). **J5-I1C Slice 1 CLOSED** (PR #261) —
-durable `attempt_command_receipts` foundation (shared table + contracts +
-domain canonicalization + repository + rollback guard + migration/repository
-tests; no behavior activation). **J5-I1C Slice 2 CLOSED (PR #262 merged)** —
-force-submit is an operationId-keyed durable command (receipt-first
-transaction, replay/conflict arbitration, exact-23505 fresh-transaction
-recovery, deterministic concurrency matrices with TRUE transaction overlap
-(EA-lock wait + uncommitted unique-index wait + 40001 auto-retry evidence),
-audit carries operationId, mandatory audit on applied, ctx.actorId as the
-single receipt actor authority, corrupt-receipt → 500, and the same-tab
-pending force-submit retry identity in the proctor dashboard). **J5-I1C
-Slice 3 (misconduct-mark durable command) CLOSED (backend)** — the
-misconduct route is now an operationId-keyed durable command arbitrated by
-the same shared `attempt_command_receipts` table; the §5.2 / §8 PostgreSQL
-concurrency experiment was run (2026-08-07) and adjudicated the projection
-mechanism: `exam_attempts FOR UPDATE` inside the receipt transaction
-serializes concurrent marks (the recorded §17 exception to the old
-overwrite-only no-row-lock property); deterministic misconduct concurrency
-matrices A-E + failure atomicity are green. The audit policy schema for
-`attempt.misconductFlagged` now carries `operationId`. **J5-I1C1 (Admin
-operations UI) CLOSED (2026-08-08)** — the Recovery Attempt / Incident /
-Exam detail pages render a server-`allowedActions`-gated Operations surface:
-time grant, force-submit (required canonical reason + pending-authority
-retry identity), misconduct mark (severity + notes + pending-authority retry
-identity), incident investigate / add-note / change-severity / resolve /
-dismiss (all with `operationId` + `expectedVersion`; 409
-`INCIDENT_VERSION_CONFLICT` surfaces reload-and-retry), and proctor
-assign/revoke; every confirmed outcome reloads the authoritative projection;
-the shared `useRecoveryOperation` controller freezes ONE operationId per
-dialog session (retry-safe, J5-R0 §8.2) with fail-closed pending-authority
-persistence and focus-return on dialog close.
-**J5-I1D (browser E2E + accessibility/responsive closeout) CLOSED
-(2026-08-08)** — six new E2E specs (incident workflow incl. version
-conflict, time-grant deadline delta, force-submit + misconduct with
-commit-then-masked-500 lost-response retry proving same operationId + parsed
-`idempotent_replay` + same receipt `createdAt` + one audit, proctor
-assignment, and a11y/responsive) ran green via `bash scripts/e2e/run-wsl.sh`
-(2 shards). J5 closeout:
-`docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`. Issue #263 (cross-tab
-force-submit authority) remains a recorded P2 follow-up — deliberately NOT
-built per the mission scope.
+**J5 (`REC-OPS-ADMIN-RECOVERY-CENTER`) is CLOSED** (2026-08-08) — Admin
+Recovery Center (contract R0 + queue/incident/attempt/exam pages, Operations
+surfaces for time-grant/force-submit/misconduct/incident actions/proctor
+assign, durable `attempt_command_receipts`, browser E2E + a11y closeout);
+closeout: [`docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`](../audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md).
+The job-by-job closure history is tracked in
+[`recovery-operations-jobs.md`](recovery-operations-jobs.md).
+Remaining recovery work — all explicitly NOT IMPLEMENTED: Proctor recovery
+center (J6), system-generated incidents, and wider startup reconciliation.
+Issue #263 (cross-tab force-submit authority) is a recorded P2 follow-up —
+deliberately NOT built per the J5 mission scope.
 
 ### Plain-text subjective question loop
 
@@ -124,14 +80,18 @@ final-answer submit barrier; both remain open for all supported answer types.
 ## Current planning focus — P7
 
 The project is moving from isolated feature completion to system-level
-readiness. P7 is accepted for planning as the next program and does not
-redefine M11. M11 remains resource-relationship authorization. Acceptance of
-the P7 plan does not authorize Redis adoption; every Redis item is conditional
-on the P7-D1 decision gate and an ADR-001 update.
+readiness. P7 is partially implemented: the **P7-D1 decision gate is
+ACCEPTED** (2026-08-08) and the first adopted responsibility — **Redis-backed
+shared rate limiting** (P7-D2/D3) — shipped on `master` via PR #265
+(ADR-001 "Post-MVP Decision (P7)"). The remaining P7 workstreams
+(state-machine/authority closeout, backup/restore, outage recovery,
+configuration control plane, exam policy profiles, UI/ops closeout) are open.
+P7 does not redefine M11; M11 remains resource-relationship authorization.
 
 ### P7 workstreams
 
-1. **Reality and document reconciliation**
+1. **Reality and document reconciliation** ✅ CLOSED (post-MVP repository
+   hygiene, 2026-08-09)
    - reconcile current/phase/status/open-items documents with current master;
    - update stale state-and-authority documentation;
    - remove completed `text_response` work from open lists.
@@ -143,15 +103,12 @@ on the P7-D1 decision gate and an ADR-001 update.
 
 3. **Redis capability and adoption (decision-gated)**
    - recognize Redis capability beyond caching;
-   - P7-D1 measures current single-instance limits and checks ADR-001 triggers
-     before any adoption;
-   - harden lifecycle and `off | optional | required` modes only for approved
-     responsibilities;
-   - if a trigger is met, adopt one real shared capability, beginning with
-     global rate limiting; if not, record evidence and re-evaluation
-     conditions in ADR-001;
-   - design admission queue, presence, Pub/Sub/Streams, and worker use from
-     explicit durability/failure contracts.
+   - P7-D1 measured current single-instance limits and checked ADR-001 triggers
+     — decision ACCEPTED (2026-08-08);
+   - lifecycle hardening and `off | optional | required` modes for the adopted
+     responsibility (shared rate limiting) are shipped (P7-D2/D3, PR #265);
+   - further Redis responsibilities (admission queue, presence, Pub/Sub/Streams,
+     worker use) remain decision-gated on explicit durability/failure contracts.
 
 4. **Backup and restore**
    - define supported RPO/RTO profiles;
@@ -193,11 +150,11 @@ Redis research:
 ```text
 P7-R0  reality + documentation reconciliation
   ├─ P7-S1  state-machine and authority audit
-  └─ P7-D1  Redis adoption decision gate (measure → triggers → ADR-001 update)
+  └─ P7-D1  Redis adoption decision gate ✅ ACCEPTED (2026-08-08)
 
 P7-S1 → crash recovery / startup reconciliation
-P7-D1 (accepted decision only; declined ⇒ Redis items not scheduled)
-  → Redis lifecycle hardening → shared rate limit
+P7-D1 (accepted: shared rate limit only)
+  → Redis lifecycle hardening → shared rate limit ✅ SHIPPED (PR #265, P7-D2/D3)
 
 backup design → backup/restore CLI → PITR/verification → Admin surface
 configuration schema → versioned service → Admin settings UI
@@ -205,9 +162,12 @@ configuration schema → versioned service → Admin settings UI
 UI pilot → controlled family-by-family UI closeout
 ```
 
-Redis adoption is conditional on an accepted P7-D1 / ADR-001 decision.
-Redis-backed admission implementation must wait for an accepted admission state
-machine. Settings UI must wait for configuration layering and snapshot semantics.
+Redis adoption is conditional on an accepted P7-D1 / ADR-001 decision — the
+decision is recorded (2026-08-08) and the one approved responsibility
+(shared rate limiting) is shipped; any further responsibility needs its own
+recorded decision. Redis-backed admission implementation must wait for an
+accepted admission state machine. Settings UI must wait for configuration
+layering and snapshot semantics.
 
 ## Existing open work not erased by P7
 
@@ -216,29 +176,17 @@ machine. Settings UI must wait for configuration layering and snapshot semantics
 - `timed_sync`, `deadline`, and `untimed` timing modes;
 - operational queue admission;
 - REC-I6 incident persistence and commands (J3 — **CLOSED on master** via
-  PR #242); Admin/Proctor recovery-center workflows remain open:
+  PR #242); recovery-center workflows:
   - J4 — Proctor-to-Exam resource scope (**CLOSED** 2026-08-02; J4-I1
     implemented per ADR-015 §23 — persistence, commands, Admin assignment
     API, resolver enforcement, minimum Proctor incident activation; see
     `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`);
-  - J5 — Admin Recovery Center (R0 contract CLOSED/ACCEPTED, PR #251,
-    amended 2026-08-04 by J5-I1A2 / PR #253;
-    `docs/roadmap/j5-r0-admin-recovery-center-contract.md`; J5-I1A1 CLOSED —
-    Recovery Incident Queue `GET /admin/recovery/incidents` (PR #252 merged);
-    J5-I1A2 CLOSED — Recovery Incident Aggregate Detail
-    `GET /admin/recovery/incidents/:incidentId` (PR #253 merged);
-    J5-I1A3 CLOSED — Attempt Operations Context
-    `GET /admin/recovery/attempts/:attemptId` (delivered by PR #254);
-    **J5-I1A CLOSED**; **J5-I1B CLOSED** — Recovery Center UI (queue,
-    incident detail, attempt operations, exam recovery detail + Exam
-    Recovery Context aggregate `GET /admin/recovery/exams/:examId` §6.5);
-    **J5-I1C–I1D CLOSED** — operations UI + browser E2E/accessibility
-    closeout (2026-08-08; see
-    `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`); **J5 CLOSED**);
+  - J5 — Admin Recovery Center (**CLOSED** 2026-08-08 — see
+    `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`; closure history:
+    `recovery-operations-jobs.md`);
   - J6 — Proctor Recovery Center (NOT IMPLEMENTED);
   - system-generated incidents (NOT IMPLEMENTED);
 - M11 Proctor-to-Exam resource scope before any Proctor time-grant activation;
-- fill-blank runtime/E2E reality re-audit;
 - rich-text/WYSIWYG answering;
 - generic ADR-008 final-answer submit barrier (all supported answer types).
 
@@ -262,8 +210,9 @@ metadata/read-only-long-answer components, responsive/accessibility migration.
 
 - Gate 0.5 remains PASS; runtime route/capability inventory is reconciled.
 - P6 MVP closeout is CLOSED for the supported deployment subset.
-- P7 has not started implementation; Gate P7-0 is the truthful-plan and
-  documentation-reconciliation gate.
+- P7 is partially implemented (P7-D1 decision accepted 2026-08-08; shared
+  rate limit shipped via PR #265). The documentation-reconciliation
+  workstream (P7-R0) is closed by the post-MVP repository hygiene cleanup.
 
 ## Out of scope until Phase 4
 

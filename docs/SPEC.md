@@ -35,9 +35,8 @@ Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是
 >
 > 上述原则是系统**长期不变契约**。但需要明确当前接线深度：
 >
-> - "答卷可恢复"仅保证**服务端层面**的能力——答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
-> - **前端恢复入口与监考裁决仍未产品化**：候考人没有自助 restore 按钮，监考也没有恢复 disrupted attempt 的操作面板；attempt 一旦 `disrupted`，前端只跳到结果页提示"答题中断"。
-> - 因此在 disrupted 状态被生产场景大规模触发之前，需要完成前端恢复 UI、心跳调参与超时阈值评估、以及监考介入 / 恢复裁决流程等产品化工作。
+> - "答卷可恢复"已**产品化**：答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由、以及候考人端**自助恢复入口**（`TakeExamPage` REC-I3 restore 流程，ADR-012）均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
+> - Admin 侧恢复工作台（J5 Recovery Center：事件队列、事件详情、attempt/exam 恢复上下文与操作面板）已交付（2026-08-08，见 `docs/roadmap/recovery-operations-jobs.md`）。**尚未产品化**的是 Proctor 恢复工作台（J6）、系统级 incident 的自动生成、以及心跳调参与超时阈值的生产评估。
 
 ---
 
@@ -136,7 +135,7 @@ not_started → queued → in_progress → submitted → grading → graded
 | `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
 | `queued` | 排队中（requireQueue 时） | **Phase 2 / planned**：`requireQueue` 入口属于 timed_sync 计时模式（§2.5），仅在内存路径上短暂出现，不持久化 |
 | `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
-| `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**前端恢复入口与监考裁决仍未产品化**，详见 §3.5 |
+| `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Proctor 恢复工作台（J6）未实现 |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
 | `grading` | 正在批改 | 保留，**当前无写入路径**：`submitAttempt` 内联调用批改后直接落 `graded`；该状态保留以便 Phase 2 异步批改/AI 批改场景启用 |
 | `graded` | 批改完成 | **已接线** |
@@ -590,7 +589,7 @@ SaveAnswerResponse {
 > **实现边界**：上表是恢复能力的**目标合约**。当前实现：
 >
 > - "客户端崩溃 / 网络中断"在 attempt 仍处于 `in_progress` 时可正常恢复（前端在加载 attempt 时拉取服务端答案版本）。
-> - 一旦 attempt 被心跳扫描器置为 `disrupted`，**前端没有自助 restore 入口**——会直接跳到结果页提示"答题中断，请联系监考或重新进入"。这条恢复路径需要前端 restore UI + 监考介入共同收口。
+> - 一旦 attempt 被心跳扫描器置为 `disrupted`，候考人可通过**自助 restore 入口**（`TakeExamPage` REC-I3 流程）恢复答案与剩余时间；Admin 恢复工作台（J5）提供队列、事件详情与操作面板。Proctor 恢复工作台（J6）仍未实现。
 > - "服务端重启"路径不依赖前端 UI，已具备能力。
 
 ### 3.6 Question Snapshot：题目快照底座

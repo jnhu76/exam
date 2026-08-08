@@ -32,7 +32,8 @@ AppRuntimeConfig.email  ──►  createEmailSender(config)
         routes use  fastify.emailSender.send()   (never nodemailer directly)
 ```
 
-**Key invariants (enforced by code, see `docs/archive/phase3/email-outbox-foundation.md`):**
+**Key invariants (enforced by code; design authority
+`docs/adr/ADR-011-notification-and-email-delivery.md`):**
 
 - Business code never imports nodemailer. It goes through the `EmailSender`
   abstraction (`@exam/domain` interface).
@@ -112,7 +113,9 @@ EMAIL_FAKE_MODE=success   # flip to "failure" to exercise retry/error paths
 ```
 
 Tests **never** touch real SMTP, never need a secret. `.env.test.example` ships
-this exact block. See `docs/archive/phase3/email-outbox-foundation.md` for the full test contract.
+this exact block. The full test contract is enforced by the API email tests
+(`apps/api/src/routes/email.test.ts`, `apps/api/src/email/*.test.ts`) under
+`docs/adr/ADR-011-notification-and-email-delivery.md`.
 
 ### 3.3 Production with real SMTP
 
@@ -331,9 +334,13 @@ pnpm verify
 
 ## 10. Cross-references
 
-- **Design spec (authority):** `docs/archive/phase3/email-outbox-foundation.md` — including
-  `§Status` (delivered capabilities + open gaps: no business integration, no
-  worker daemon, no `users.email` column).
+- **Design spec (authority):**
+  `docs/adr/ADR-011-notification-and-email-delivery.md` (P5-0/P5-N1 closed:
+  resident worker daemon, Email delivery, first business caller
+  `result_published`). The earlier
+  `docs/archive/phase3/email-outbox-foundation.md` is historical — its
+  recorded gaps (no business integration, no worker daemon, no `users.email`
+  column) predate P5-0/P5-N1 and are no longer current truth.
 - **Config loader:** `apps/api/src/config/runtimeConfig.ts` →
   `resolveEmailConfig`.
 - **Senders:** `apps/api/src/email/senders.ts` (Disabled / Fake / Smtp +

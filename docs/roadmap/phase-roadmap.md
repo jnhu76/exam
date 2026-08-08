@@ -244,7 +244,7 @@ Identity lifecycle remains separate future work.
 | P3 | P4 closed | ✅ CLOSED |
 | P5-N1 | P4 + P5-0 + P3 closed | ✅ CLOSED |
 | P6 | Preceding MVP blockers closed | ✅ CLOSED |
-| P7 | P6 closed; current-tree reality audit | 🟣 PLANNING |
+| P7 | P6 closed; current-tree reality audit | 🟡 IN PROGRESS — P7-D1 decision accepted (2026-08-08); shared rate limit shipped (PR #265); state/backup/config/UI workstreams open |
 
 ### Out of scope
 
@@ -295,9 +295,15 @@ Redis capability study:
 
 ### Status
 
-**PLANNING.** No P7 implementation capability may be marked complete merely
-because an environment variable, Redis connection, CLI note, or API stub exists.
-The runtime and real Admin/operator surfaces must consume the capability.
+**PARTIALLY IMPLEMENTED.** The P7-D1 Redis adoption decision gate is ACCEPTED
+(2026-08-08) and the first adopted responsibility — Redis-backed shared rate
+limiting — shipped on `master` (PR #265, P7-D2/D3; ADR-001 "Post-MVP Decision
+(P7)"). The remaining workstreams (state-machine/authority closeout,
+backup/restore, outage recovery, configuration control plane, exam policy
+profiles, UI/ops closeout) are open. No P7 implementation capability may be
+marked complete merely because an environment variable, Redis connection, CLI
+note, or API stub exists — the runtime and real Admin/operator surfaces must
+consume the capability.
 
 ### In scope
 
