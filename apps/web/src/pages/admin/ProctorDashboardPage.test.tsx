@@ -1852,4 +1852,172 @@ describe("ProctorDashboardPage", () => {
       expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
     });
   });
+
+  // ── Misconduct retry identity (review P1). Mirrors the force-submit retry
+  //    identity block: the FULL command — operationId + severity + notes — is
+  //    frozen on first submit and replayed verbatim on every retry. A retry
+  //    must NOT rebuild severity/notes from editable state (that would reuse
+  //    the same operationId with a drifted payload → IDEMPOTENCY_CONFLICT).
+  //    After an indeterminate failure the severity/notes inputs are LOCKED so
+  //    the payload cannot drift. A confirmed rejection resets to a fresh draft
+  //    with a NEW operationId. A failed durable-authority clear transitions to
+  //    cleanup_failed and keeps the page-level banner instead of closing
+  //    silently.
+  describe("misconduct retry identity (review P1)", () => {
+    /** Opens the misconduct dialog for the first candidate's flag button. */
+    async function openMisconductDialog() {
+      const flagBtn = await screen.findByRole("button", { name: "标记违规" });
+      fireEvent.click(flagBtn);
+      await screen.findByText("为考生 张三 标记违规行为");
+    }
+
+    /** Fills the notes textarea and clicks the confirm button. */
+    async function submitMisconduct(notes: string) {
+      const notesInput = await screen.findByPlaceholderText("请填写违规说明");
+      fireEvent.change(notesInput, { target: { value: notes } });
+      const confirm = await screen.findByRole("button", { name: "确认标记" });
+      await act(async () => {
+        fireEvent.click(confirm);
+      });
+    }
+
+    it("reuses the SAME operationId + severity + notes on retry after an indeterminate failure (mutation-proof)", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // First attempt: network failure (status 0) → indeterminate.
+      apiPost.mockRejectedValueOnce(new Error("Network request failed"));
+      // Retry: succeeds (any 200).
+      apiPost.mockResolvedValueOnce({});
+
+      renderPage();
+      await openMisconductDialog();
+      await submitMisconduct("原始说明");
+
+      // First POST captured.
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstBody = apiPost.mock.calls[0]![1] as Record<string, unknown>;
+      const firstOpId = firstBody.operationId as string;
+      expect(firstBody.severity).toBe("warning");
+      expect(firstBody.notes).toBe("原始说明");
+
+      // After the indeterminate failure, the severity/notes inputs are LOCKED
+      // so the payload cannot drift on retry. The confirm button relabels to
+      // "重试违规标记".
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("未确认违规标记"),
+        );
+      });
+      const retryBtn = await screen.findByRole("button", {
+        name: "重试违规标记",
+      });
+      // The notes textarea is now read-only (disabled).
+      const notesInput = screen.getByPlaceholderText("请填写违规说明");
+      expect(notesInput).toBeDisabled();
+
+      await act(async () => {
+        fireEvent.click(retryBtn);
+      });
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const retryBody = apiPost.mock.calls[1]![1] as Record<string, unknown>;
+      // The retry replays the SAME operationId + SAME severity + SAME notes —
+      // the payload cannot have drifted even though it is the same session.
+      expect(retryBody.operationId).toBe(firstOpId);
+      expect(retryBody.severity).toBe(firstBody.severity);
+      expect(retryBody.notes).toBe(firstBody.notes);
+
+      // Confirmed success clears the pending command.
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining("已标记违规"),
+        );
+      });
+      expect(
+        sessionStorage.getItem("exam.pendingMisconduct:org-1:admin-1"),
+      ).toBeNull();
+    });
+
+    it("resets to a fresh draft with a NEW operationId after a confirmed rejection", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      // 409 IDEMPOTENCY_CONFLICT → idempotency_conflict (confirmed rejection,
+      // clears the frozen command).
+      const conflict = Object.assign(new Error("conflict"), {
+        status: 409,
+        code: "IDEMPOTENCY_CONFLICT",
+      });
+      apiPost.mockRejectedValueOnce(conflict);
+
+      renderPage();
+      await openMisconductDialog();
+      await submitMisconduct("首次说明");
+
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+      const firstOpId = (apiPost.mock.calls[0]![1] as { operationId: string })
+        .operationId;
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalled();
+      });
+      // Confirmed rejection clears the pending command.
+      expect(
+        sessionStorage.getItem("exam.pendingMisconduct:org-1:admin-1"),
+      ).toBeNull();
+
+      // Reopen — the draft must mint a NEW operationId, not reuse the
+      // rejected one.
+      await openMisconductDialog();
+      await submitMisconduct("重新说明");
+      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+      const secondOpId = (apiPost.mock.calls[1]![1] as { operationId: string })
+        .operationId;
+      expect(secondOpId).not.toBe(firstOpId);
+    });
+
+    it("shows the cleanup-failed banner when a confirmed success cannot clear the record", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      apiPost.mockResolvedValueOnce({});
+      // Poison removeItem so the durable-authority clear fails (the only
+      // removeItem path in this flow is the misconduct cleanup).
+      const removerSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {
+          throw new DOMException("blocked", "SecurityError");
+        });
+
+      renderPage();
+      await openMisconductDialog();
+      await submitMisconduct("清理失败场景");
+
+      // Confirmed success: success toast suppressed (cleanup-failed warning
+      // surfaced instead) and the cleanup_failed banner is visible.
+      await waitFor(() => {
+        expect(toast.warning).toHaveBeenCalledWith(
+          expect.stringContaining("本地记录清理失败"),
+        );
+      });
+      const banner = screen.getByTestId("pending-misconduct-banner");
+      expect(banner).toBeInTheDocument();
+      expect(banner).toHaveTextContent("本地记录清理失败");
+      // The stale durable record is still present.
+      expect(
+        sessionStorage.getItem("exam.pendingMisconduct:org-1:admin-1"),
+      ).not.toBeNull();
+      // cleanup_failed is dismiss-only — no retry button (POST is pointless on
+      // a confirmed outcome).
+      expect(
+        screen.queryByRole("button", { name: "重试未确认违规标记" }),
+      ).toBeNull();
+
+      removerSpy.mockRestore();
+    });
+  });
 });

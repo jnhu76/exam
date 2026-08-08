@@ -254,7 +254,19 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "atomic",
     "privileged_mutation",
     "low",
-    z.object({ severity: shortText, notes: freeText.optional() }).strict(),
+    // J5-I1C Slice 3: metadata now carries the operationId the receipt was
+    // committed under (audit links to operation identity — J5-I1C0 §2.1
+    // "operationId in audit evidence", mirroring the force-submit Slice 2
+    // upgrade). `severity` + `notes` are the canonical misconduct payload
+    // (notes trimmed 1..1000 by the contract/domain canonicalizer); both are
+    // REQUIRED — every applied mark writes them atomically with the receipt.
+    z
+      .object({
+        operationId: z.string().uuid(),
+        severity: z.enum(["warning", "serious"]),
+        notes: z.string().trim().min(1).max(1000),
+      })
+      .strict(),
   ),
   [AuditAction.AttemptExported]: definition(
     "active",

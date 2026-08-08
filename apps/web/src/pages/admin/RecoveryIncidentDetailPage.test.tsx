@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -9,17 +10,23 @@ import { ApiError, api } from "@/lib/api";
 import type { RecoveryAggregateResponse as RecoveryIncidentAggregateResponse } from "@exam/contracts";
 import { RecoveryIncidentDetailPage } from "./RecoveryIncidentDetailPage";
 
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}));
+
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
     api: {
       get: vi.fn(),
+      post: vi.fn(),
     },
   };
 });
 
 const getMock = vi.mocked(api.get);
+const postMock = vi.mocked(api.post);
 
 const mockAggregate: RecoveryIncidentAggregateResponse = {
   incident: {
@@ -170,6 +177,11 @@ describe("RecoveryIncidentDetailPage", () => {
   beforeEach(() => {
     getMock.mockReset();
     getMock.mockResolvedValue(mockAggregate);
+    postMock.mockReset();
+    postMock.mockResolvedValue({ outcome: "applied" });
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    window.sessionStorage.clear();
   });
 
   it("renders the incident overview header", async () => {
@@ -197,7 +209,11 @@ describe("RecoveryIncidentDetailPage", () => {
 
   it("renders events, notes, actions, memberships and interruption links", async () => {
     renderPage();
-    expect(await screen.findByText("开始调查")).toBeInTheDocument();
+    // "开始调查" appears both as an event-type label and the Operations
+    // command button (J5-I1C1) — assert presence, not uniqueness.
+    expect(
+      (await screen.findAllByText("开始调查")).length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("已联系考生")).toBeInTheDocument();
     expect(screen.getAllByText("时间补偿").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("受影响")).toBeInTheDocument();
@@ -235,16 +251,103 @@ describe("RecoveryIncidentDetailPage", () => {
     expect(links.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("renders NO command action buttons in the read-only phase (allowedActions is never rendered)", async () => {
+  it("renders the Operations section with allowedActions-gated command buttons (J5-I1C1)", async () => {
     renderPage();
     await screen.findByText("detail page test incident");
-    // The action COMMAND area is not rendered (read-only phase). Toolbar
-    // affordances (refresh / back) are not commands. allowedActions must not
-    // produce command buttons.
-    expect(screen.queryByText(/allowedActions/)).not.toBeInTheDocument();
+    // Server-computed allowedActions from the mock: investigate + resolve.
+    expect(screen.getByText("操作")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /investigate|resolve|dismiss/i }),
+      screen.getByRole("button", { name: "开始调查" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "解决事件" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "添加备注" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "驳回事件" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the page read-only when allowedActions is empty (§6.2/§6.3 computed result)", async () => {
+    getMock.mockResolvedValue({ ...mockAggregate, allowedActions: [] });
+    renderPage();
+    await screen.findByText("detail page test incident");
+    expect(screen.queryByText("操作")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /开始调查|添加备注|修改严重程度|解决事件|驳回事件/,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("investigates with operationId + expectedVersion and reloads (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "开始调查" }));
+    await user.click(screen.getByRole("button", { name: "开始调查" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      { operationId: string; expectedVersion: number },
+    ];
+    expect(url).toBe("/api/admin/incidents/incident-1/investigate");
+    expect(body.expectedVersion).toBe(2);
+    // Confirmed success reloads the authoritative aggregate.
+    expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("requires a resolution summary before resolving (terminal judgment)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "解决事件" }));
+    const confirm = screen.getByRole("button", { name: "解决事件" });
+    await user.click(confirm);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(screen.getByText("请输入解决说明")).toBeInTheDocument();
+  });
+
+  it("resolves with the resolution summary + expectedVersion", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "解决事件" }));
+    await user.type(
+      screen.getByLabelText("解决说明"),
+      "考生已恢复，网络已修复",
+    );
+    await user.click(screen.getByRole("button", { name: "解决事件" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      {
+        operationId: string;
+        expectedVersion: number;
+        resolutionSummary: string;
+      },
+    ];
+    expect(url).toBe("/api/admin/incidents/incident-1/resolve");
+    expect(body.expectedVersion).toBe(2);
+    expect(body.resolutionSummary).toBe("考生已恢复，网络已修复");
+  });
+
+  it("surfaces a version conflict with a reload-and-retry message (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    postMock.mockRejectedValueOnce(
+      new ApiError(409, "version conflict", "INCIDENT_VERSION_CONFLICT"),
+    );
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "开始调查" }));
+    await user.click(screen.getByRole("button", { name: "开始调查" }));
+
+    // Confirmed rejection — dialog closes; the dedicated version-conflict
+    // toast is surfaced (reload and retry).
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringContaining("版本冲突"),
+    );
+    expect(screen.queryByText("重试")).not.toBeInTheDocument();
   });
 
   it("shows the snapshot timestamp and a stale warning for old snapshots", async () => {

@@ -45,6 +45,13 @@ import {
   type PendingForceSubmitCommand,
 } from "@/features/force-submit/pendingForceSubmitAuthority";
 import {
+  loadPendingMisconduct,
+  savePendingMisconduct,
+  clearPendingMisconduct,
+  type PendingMisconductAuthority,
+  type PendingMisconductCommand,
+} from "@/features/misconduct/pendingMisconductAuthority";
+import {
   CoordinationUnavailableError,
   AlreadyPendingError,
   LeaseConflictError,
@@ -99,6 +106,42 @@ type GrantDialogState =
       claim: PendingGrantSendClaim;
     }
   | { phase: "indeterminate"; command: PendingTimeGrant };
+
+/**
+ * State machine for the misconduct-mark dialog. Mirrors the force-submit
+ * {@link ForceSubmitPhase} model: `draft` holds editable fields; the moment the
+ * user submits, a {@link PendingMisconductCommand} is FROZEN and reused verbatim
+ * on every retry so the SAME operationId cannot drift into an
+ * IDEMPOTENCY_CONFLICT (a frozen operationId + an edited severity/notes is a
+ * different payload under the same identity — the server would correctly reject
+ * the retry, but the admin would lose the ability to confirm the original mark).
+ *
+ *   draft          — dialog open, operationId minted, severity/notes editable.
+ *                    Submitting freezes the command and moves to `submitting`.
+ *   submitting     — the frozen command is in flight; inputs are read-only.
+ *   indeterminate  — the request failed without a confirmed outcome (network /
+ *                    5xx). The frozen command is RETAINED and replayed verbatim
+ *                    on retry — never rebuilt from editable state. It is also
+ *                    persisted in sessionStorage (pendingMisconductAuthority) so
+ *                    a refresh / navigation cannot lose the pending identity.
+ *   cleanup_failed — the POST outcome was CONFIRMED (applied / rejected) in
+ *                    this session but the sessionStorage clear failed; a stale
+ *                    record remains and the banner offers only dismiss (storage
+ *                    cleanup) — retrying the POST is pointless.
+ *
+ * A confirmed outcome (success) or a confirmed rejection (4xx /
+ * idempotency_conflict) clears the frozen command via {@link resetMisconductDialog}.
+ */
+type MisconductDialogState =
+  | {
+      phase: "draft";
+      operationId: string;
+      severity: "warning" | "serious";
+      notes: string;
+    }
+  | { phase: "submitting"; command: PendingMisconductCommand }
+  | { phase: "indeterminate"; command: PendingMisconductCommand }
+  | { phase: "cleanup_failed"; command: PendingMisconductCommand };
 
 /** Failure classification for a grant request outcome. */
 type GrantFailureKind =
@@ -216,13 +259,25 @@ export function ProctorDashboardPage() {
   }));
 
   const [misconductDialogOpen, setMisconductDialogOpen] = useState(false);
-  const [misconductSeverity, setMisconductSeverity] = useState<
-    "warning" | "serious"
-  >("warning");
-  const [misconductNotes, setMisconductNotes] = useState("");
   const [flagging, setFlagging] = useState(false);
   const [misconductTarget, setMisconductTarget] =
     useState<CandidateStatusItem | null>(null);
+  // J5-I1C Slice 3 (review P1): misconduct is an operationId-keyed durable
+  // command (J5-R0 §8.2). The FULL command — operationId + severity + notes —
+  // is frozen on first submit and replayed verbatim on every retry. Rebuilding
+  // severity/notes from editable state on a retry would reuse the same
+  // operationId with a drifted payload, which the server correctly rejects as
+  // IDEMPOTENCY_CONFLICT (or worse, silently mutates the mark). The frozen
+  // command is also persisted in sessionStorage so a refresh / navigation
+  // cannot lose the pending identity. See {@link MisconductDialogState}.
+  const [misconductState, setMisconductState] = useState<MisconductDialogState>(
+    () => ({
+      phase: "draft",
+      operationId: createContextSafeUuid(),
+      severity: "warning",
+      notes: "",
+    }),
+  );
 
   const [forceSubmitting, setForceSubmitting] = useState(false);
 
@@ -1020,25 +1075,113 @@ export function ProctorDashboardPage() {
     );
   }
 
-  /** Handles misconduct flag for a candidate. */
+  /**
+   * Handles misconduct flag for a candidate. Fail-closed durable command
+   * (J5-I1C Slice 3, review P1): the FULL frozen command — operationId +
+   * severity + notes — is persisted BEFORE the first POST and the write
+   * VERIFIED; if persistence fails the POST is SUPPRESSED (an unpersisted
+   * identity would be lost on reload and a later retry would mint a duplicate).
+   *
+   * On a retry (`indeterminate`) the frozen command is replayed VERBATIM — it
+   * is never rebuilt from editable state, so the same operationId cannot drift
+   * into a different payload (which the server would correctly reject as
+   * IDEMPOTENCY_CONFLICT). A confirmed outcome (success or definitive
+   * rejection) clears the durable authority; if that clear FAILS the session
+   * transitions to `cleanup_failed` (the durable authority is still present
+   * and would block later misconduct marks) instead of closing silently — the
+   * page-level banner keeps the recovery surface reachable.
+   */
   async function handleFlagMisconduct() {
-    if (!misconductTarget?.attemptId || flagging) return;
+    if (!user || !examId || !misconductTarget?.attemptId || flagging) return;
+    const attemptId = misconductTarget.attemptId;
+    // Resolve the frozen command from the state machine. From `draft` we freeze
+    // a fresh command from the editable fields; from `indeterminate` /
+    // `cleanup_failed` we replay the frozen command VERBATIM so the retry is an
+    // idempotent replay of the SAME identity + payload (J5-R0 §8.2).
+    let command: PendingMisconductCommand;
+    if (misconductState.phase === "draft") {
+      const notes =
+        misconductState.notes.trim() ||
+        t("admin.proctorDashboard.misconductDialog.defaultNotes");
+      command = {
+        attemptId,
+        operationId: misconductState.operationId,
+        severity: misconductState.severity,
+        notes,
+        examId,
+        candidateName: misconductTarget.name,
+      };
+    } else {
+      // submitting / indeterminate / cleanup_failed — the frozen command is
+      // the authority; a retry must never mutate it.
+      command = misconductState.command;
+    }
+    const authority: PendingMisconductAuthority = {
+      schemaVersion: 2,
+      organizationId: user.organizationId,
+      actorId: user.id,
+      command,
+      createdAt: Date.now(),
+    };
+    // Fail-closed persistence: persist BEFORE the POST and verify the write.
+    // A retry reuses the already-persisted authority (the save is idempotent —
+    // it rewrites the same record with the same identity).
+    const saved = savePendingMisconduct(authority);
+    if (!saved.ok) {
+      toast.error(
+        t("admin.proctorDashboard.misconductDialog.persistenceFailed"),
+      );
+      // Nothing was sent — keep the dialog open; a corrected retry reuses the
+      // same identity.
+      return;
+    }
+    setMisconductState({ phase: "submitting", command });
     setFlagging(true);
     try {
-      await api.post(
-        `/api/admin/attempts/${misconductTarget.attemptId}/misconduct`,
-        {
-          severity: misconductSeverity,
-          notes:
-            misconductNotes ||
-            t("admin.proctorDashboard.misconductDialog.defaultNotes"),
-        },
-      );
+      await api.post(`/api/admin/attempts/${attemptId}/misconduct`, {
+        operationId: command.operationId,
+        severity: command.severity,
+        notes: command.notes,
+      });
+      // Confirmed success — clear the durable authority. If the clear FAILS
+      // the stale record would block later misconduct marks; keep it visible
+      // via the cleanup_failed banner instead of closing silently.
+      const cleared = clearPendingMisconduct(user.organizationId, user.id);
+      if (!cleared.ok) {
+        toast.warning(
+          t("admin.proctorDashboard.misconductDialog.cleanupFailed"),
+        );
+        setMisconductState({ phase: "cleanup_failed", command });
+        setMisconductDialogOpen(false);
+        await loadStatus();
+        return;
+      }
       toast.success(t("admin.proctorDashboard.misconductDialog.done"));
-      setMisconductDialogOpen(false);
-      setMisconductNotes("");
+      resetMisconductDialog();
       await loadStatus();
     } catch (err) {
+      const failure = classifyGrantFailure(err);
+      if (failure === "indeterminate") {
+        // Unconfirmed — keep the frozen command; the retry replays the SAME
+        // operationId + payload (idempotent replay).
+        setMisconductState({ phase: "indeterminate", command });
+        toast.error(t("admin.proctorDashboard.misconductDialog.indeterminate"));
+        return;
+      }
+      // Confirmed rejection — the command with this identity is dead. Clear
+      // the durable authority; if the clear FAILS keep the recovery surface
+      // (cleanup_failed) so the stale record cannot silently block later marks.
+      const cleared = clearPendingMisconduct(user.organizationId, user.id);
+      if (!cleared.ok) {
+        toast.warning(
+          t("admin.proctorDashboard.misconductDialog.cleanupFailed"),
+        );
+        setMisconductState({ phase: "cleanup_failed", command });
+        setMisconductDialogOpen(false);
+        await loadStatus();
+        return;
+      }
+      resetMisconductDialog();
       toast.error(
         err instanceof Error
           ? err.message
@@ -1047,6 +1190,40 @@ export function ProctorDashboardPage() {
     } finally {
       setFlagging(false);
     }
+  }
+
+  /**
+   * Resets the misconduct dialog to a fresh editable draft (new operationId,
+   * default fields) and closes the dialog. Used on confirmed outcomes whose
+   * durable-authority clear SUCCEEDED. The durable authority is cleared
+   * separately via {@link clearPendingMisconduct} before this is called.
+   */
+  function resetMisconductDialog() {
+    setMisconductState({
+      phase: "draft",
+      operationId: createContextSafeUuid(),
+      severity: "warning",
+      notes: "",
+    });
+    setMisconductDialogOpen(false);
+    setMisconductTarget(null);
+  }
+
+  /**
+   * Clears a retained indeterminate or cleanup_failed misconduct command (user
+   * dismissal from the page-level banner). When the durable record could NOT be
+   * removed, the banner + current state are KEPT and an error is surfaced, so
+   * the admin never believes the slot was cleared while a stale record still
+   * blocks later misconduct marks.
+   */
+  function dismissMisconductPending() {
+    if (!user) return;
+    const cleared = clearPendingMisconduct(user.organizationId, user.id);
+    if (!cleared.ok) {
+      toast.error(t("admin.proctorDashboard.misconductDialog.dismissFailed"));
+      return;
+    }
+    resetMisconductDialog();
   }
 
   // Project the grant dialog fields from the state machine. In `draft` the
@@ -1071,6 +1248,19 @@ export function ProctorDashboardPage() {
   const canSubmitGrant =
     grantState.phase !== "draft" ||
     (grantState.minutes > 0 && grantState.reasonText.trim().length > 0);
+
+  // Project the misconduct dialog fields from its state machine. In `draft` the
+  // fields are live-editable; once a command is frozen (submitting /
+  // indeterminate / cleanup_failed) the inputs render the frozen command
+  // read-only so a retry cannot drift severity/notes under the same operationId.
+  const misconductSeverity =
+    misconductState.phase === "draft"
+      ? misconductState.severity
+      : misconductState.command.severity;
+  const misconductNotes =
+    misconductState.phase === "draft"
+      ? misconductState.notes
+      : misconductState.command.notes;
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadStatus} />;
@@ -1213,6 +1403,81 @@ export function ProctorDashboardPage() {
                 onClick={() => dismissForceSubmitIndeterminate()}
               >
                 {t("admin.proctorDashboard.forceSubmit.bannerDismiss")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Misconduct page-level recovery banner (review P1). Mirrors the
+          force-submit banner: a pending misconduct command (indeterminate) or a
+          confirmed-but-uncleaned record (cleanup_failed) stays reachable even
+          after the target candidate card disappears from the live projection.
+          Without this banner a lost response whose target graded before the next
+          poll would leave the pending command unreachable (the global per-admin
+          pending slot would block every later misconduct mark). cleanup_failed
+          is dismiss-only (the POST is pointless on a confirmed outcome). */}
+      {(misconductState.phase === "indeterminate" ||
+        misconductState.phase === "cleanup_failed") && (
+        <div
+          role="alert"
+          data-testid="pending-misconduct-banner"
+          className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm text-warning"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">
+                {misconductState.phase === "cleanup_failed"
+                  ? t(
+                      "admin.proctorDashboard.misconductDialog.cleanupFailedBannerTitle",
+                    )
+                  : t("admin.proctorDashboard.misconductDialog.bannerTitle")}
+              </span>
+              <span className="text-xs">
+                {misconductState.phase === "cleanup_failed"
+                  ? t(
+                      "admin.proctorDashboard.misconductDialog.cleanupFailedBannerBody",
+                    )
+                  : t("admin.proctorDashboard.misconductDialog.bannerBody", {
+                      candidateName: misconductState.command.candidateName,
+                    })}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {misconductState.phase === "indeterminate" &&
+                misconductState.command.examId === examId && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={flagging}
+                    onClick={() => {
+                      setMisconductTarget(
+                        data?.candidates.find(
+                          (c) =>
+                            c.attemptId === misconductState.command.attemptId,
+                        ) ?? {
+                          candidateId: "",
+                          name: misconductState.command.candidateName,
+                          attemptId: misconductState.command.attemptId,
+                          status: "in_progress",
+                          deadlineAt: null,
+                          lastActivityAt: null,
+                          misconduct: null,
+                        },
+                      );
+                      setMisconductDialogOpen(true);
+                    }}
+                  >
+                    {t("admin.proctorDashboard.misconductDialog.bannerRetry")}
+                  </Button>
+                )}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={flagging}
+                onClick={() => dismissMisconductPending()}
+              >
+                {t("admin.proctorDashboard.misconductDialog.bannerDismiss")}
               </Button>
             </div>
           </div>
@@ -1391,10 +1656,17 @@ export function ProctorDashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Misconduct dialog */}
+      {/* Misconduct dialog (J5-I1C Slice 3, review P1). Controlled Dialog so the
+          retry state is rendered inside; inputs are frozen read-only once a
+          command is frozen (submitting / indeterminate / cleanup_failed) so a
+          retry cannot drift the payload under the same operationId. */}
       <Dialog
         open={misconductDialogOpen}
-        onOpenChange={setMisconductDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && misconductState.phase !== "submitting") {
+            setMisconductDialogOpen(false);
+          }
+        }}
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -1402,9 +1674,11 @@ export function ProctorDashboardPage() {
               {t("admin.proctorDashboard.misconductDialog.title")}
             </DialogTitle>
             <DialogDescription>
-              {t("admin.proctorDashboard.misconductDialog.description", {
-                name: misconductTarget?.name ?? "",
-              })}
+              {misconductState.phase === "indeterminate"
+                ? t("admin.proctorDashboard.misconductDialog.retryDescription")
+                : t("admin.proctorDashboard.misconductDialog.description", {
+                    name: misconductTarget?.name ?? "",
+                  })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
@@ -1414,8 +1688,11 @@ export function ProctorDashboardPage() {
             <Select
               value={misconductSeverity}
               onValueChange={(v: "warning" | "serious") =>
-                setMisconductSeverity(v)
+                setMisconductState((prev) =>
+                  prev.phase === "draft" ? { ...prev, severity: v } : prev,
+                )
               }
+              disabled={misconductState.phase !== "draft"}
             >
               <SelectTrigger id="misconduct-severity">
                 <SelectValue />
@@ -1435,15 +1712,23 @@ export function ProctorDashboardPage() {
             <Textarea
               id="misconduct-notes"
               value={misconductNotes}
-              onChange={(e) => setMisconductNotes(e.target.value)}
+              onChange={(e) =>
+                setMisconductState((prev) =>
+                  prev.phase === "draft"
+                    ? { ...prev, notes: e.target.value }
+                    : prev,
+                )
+              }
               placeholder={t(
                 "admin.proctorDashboard.misconductDialog.notesPlaceholder",
               )}
+              disabled={misconductState.phase !== "draft"}
             />
           </div>
           <DialogFooter>
             <Button
               variant="outline"
+              disabled={flagging}
               onClick={() => setMisconductDialogOpen(false)}
             >
               {t("admin.proctorDashboard.misconductDialog.cancel")}
@@ -1455,7 +1740,9 @@ export function ProctorDashboardPage() {
             >
               {flagging
                 ? t("admin.proctorDashboard.misconductDialog.flagging")
-                : t("admin.proctorDashboard.misconductDialog.confirm")}
+                : misconductState.phase === "indeterminate"
+                  ? t("admin.proctorDashboard.misconductDialog.retry")
+                  : t("admin.proctorDashboard.misconductDialog.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1633,9 +1920,53 @@ export function ProctorDashboardPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
+                          if (!user) return;
+                          // Honor the pending authority (J5-I1C Slice 3): an
+                          // unresolved command for THIS attempt is restored so
+                          // the retry replays the same operationId; one for a
+                          // DIFFERENT attempt blocks the dialog.
+                          const pending = loadPendingMisconduct(
+                            user.organizationId,
+                            user.id,
+                          );
+                          if (pending.kind === "corrupt") {
+                            toast.error(
+                              t(
+                                "admin.proctorDashboard.misconductDialog.corruptCleared",
+                              ),
+                            );
+                          }
+                          if (
+                            pending.kind === "authority" &&
+                            pending.authority.command.attemptId !==
+                              candidate.attemptId
+                          ) {
+                            toast.error(
+                              t(
+                                "admin.proctorDashboard.misconductDialog.blockedPending",
+                              ),
+                            );
+                            return;
+                          }
                           setMisconductTarget(candidate);
-                          setMisconductSeverity("warning");
-                          setMisconductNotes("");
+                          if (pending.kind === "authority") {
+                            // Restore the frozen command VERBATIM into the
+                            // indeterminate phase — its outcome was never
+                            // confirmed, so a retry must replay the same
+                            // operationId + severity + notes without drift.
+                            setMisconductState({
+                              phase: "indeterminate",
+                              command: pending.authority.command,
+                            });
+                          } else {
+                            // No shared pending command — create a fresh draft.
+                            setMisconductState({
+                              phase: "draft",
+                              operationId: createContextSafeUuid(),
+                              severity: "warning",
+                              notes: "",
+                            });
+                          }
                           setMisconductDialogOpen(true);
                         }}
                       >

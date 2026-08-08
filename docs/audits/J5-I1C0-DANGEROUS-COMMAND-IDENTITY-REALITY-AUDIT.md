@@ -2,6 +2,37 @@
 
 > **Status:** PRE-IMPLEMENTATION AUDIT — source-evidence report only.
 >
+> **Implementation disposition (added 2026-08-08, J5-I1C Slice 2 + Slice 3).**
+> This pre-implementation audit is preserved verbatim below as the frozen
+> pre-implementation authority. The implementation has since landed:
+>
+> - **Slice 2 (force-submit) CLOSED — PR #262 merged.** force-submit is an
+>   operationId-keyed durable command arbitrated by the shared
+>   `attempt_command_receipts` table, with all the §5.1 frozen execution order,
+>   exact-23505 fresh-transaction recovery, and deterministic concurrency
+>   matrices the audit contracted.
+> - **Slice 3 (misconduct-mark) — backend CLOSED.** misconduct-mark is now an
+>   operationId-keyed durable command on the same shared table. The §5.2
+>   step-5 projection mechanism — left UNFROZEN by this audit pending the §8
+>   experiment — was adjudicated by the experiment on 2026-08-07 (PostgreSQL 18,
+>   REPEATABLE READ, two physical connections, true overlap): a concurrent
+>   `UPDATE exam_attempts.misconduct` on the same row under RR produces SQLSTATE
+>   40001 for the loser and rolls back its whole transaction (receipt +
+>   projection + audit). **Chosen mechanism: candidate (b) `exam_attempts FOR
+>   UPDATE` inside the receipt transaction** — the simplest deterministic
+>   mechanism; the loser blocks on the row lock, 40001-retries under
+>   `executeInTransaction`, re-reads the committed projection, and overwrites
+>   on its own success. This is the explicit, recorded exception to the P2C-J4
+>   §17 "no row lock" property — that property was specifically for the OLD
+>   overwrite-only `flagMisconduct` (a single best-effort jsonb update); making
+>   misconduct a durable command REQUIRES the row lock. Candidate (a) plain
+>   UPDATE was REJECTED (non-deterministic 40001); candidate (d) read-derived
+>   projection was REJECTED as a larger read-model change than this slice needs.
+>   The misconduct concurrency matrices A-E + failure atomicity are green
+>   (`admin-misconduct.concurrency.test.ts`), encoding the recorded experiment
+>   outcome as Matrix A's frozen behavior. The `attempt.misconductFlagged`
+>   audit policy schema now carries `operationId` (mirroring force-submit).
+>
 > Scope: audit the two Admin Recovery **dangerous commands** — force-submit
 > Attempt and misconduct-mark Attempt — and produce a gap analysis + J5-I1C0
 > contract proposal that can be frozen before implementation begins.

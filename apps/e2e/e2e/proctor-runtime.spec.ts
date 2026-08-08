@@ -171,14 +171,23 @@ test.describe("Proctor Runtime E2E", () => {
       exam3.examId,
     );
 
+    // J5-I1C Slice 3: misconduct-mark is an operationId-keyed durable
+    // command; the response is the operation receipt, not `{ ok: true }`.
+    const misOperationId = crypto.randomUUID();
     const res = await adminPost(
       request,
       adminToken,
       `/api/admin/attempts/${misAttemptId}/misconduct`,
-      { severity: "serious", notes: "E2E misconduct flag test" },
+      {
+        operationId: misOperationId,
+        severity: "serious",
+        notes: "E2E misconduct flag test",
+      },
     );
     expect(res.status()).toBe(200);
-    expect((await res.json()).ok).toBe(true);
+    const misBody = await res.json();
+    expect(misBody.disposition).toBe("applied");
+    expect(misBody.operationId).toBe(misOperationId);
 
     const statusRes = await adminGet(
       request,

@@ -15,11 +15,13 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       get: vi.fn(),
+      post: vi.fn(),
     },
   };
 });
 
 const getMock = vi.mocked(api.get);
+const postMock = vi.mocked(api.post);
 
 const mockExamContext: RecoveryExamContextResponse = {
   examSummary: {
@@ -86,6 +88,9 @@ describe("RecoveryExamDetailPage", () => {
   beforeEach(() => {
     getMock.mockReset();
     getMock.mockResolvedValue(mockExamContext);
+    postMock.mockReset();
+    postMock.mockResolvedValue({ outcome: "applied" });
+    window.sessionStorage.clear();
   });
 
   it("renders the exam summary with timing mode and closeAt", async () => {
@@ -121,6 +126,59 @@ describe("RecoveryExamDetailPage", () => {
   it("renders active proctors", async () => {
     renderPage();
     expect(await screen.findByText("监考李四")).toBeInTheDocument();
+  });
+
+  it("assigns a proctor with operationId + userId and reloads (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "指派监考" }));
+    await user.type(screen.getByLabelText("监考用户 ID"), "proctor-2");
+    await user.click(screen.getByRole("button", { name: "指派监考" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      { operationId: string; proctorUserId: string },
+    ];
+    expect(url).toBe("/api/admin/exams/exam-1/proctors");
+    expect(body.operationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(body.proctorUserId).toBe("proctor-2");
+    // Confirmed success reloads the authoritative aggregate.
+    expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("blocks proctor assign until a userId is entered", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "指派监考" }));
+    await user.click(screen.getByRole("button", { name: "指派监考" }));
+    expect(postMock).not.toHaveBeenCalled();
+    expect(screen.getByText("请输入监考用户 ID")).toBeInTheDocument();
+  });
+
+  it("revokes a proctor with operationId after destructive confirmation (J5-I1C1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("监考李四");
+    await user.click(screen.getByRole("button", { name: "撤销监考" }));
+
+    // Destructive confirmation names the proctor + exam.
+    expect(
+      screen.getByText(/撤销 监考李四 对考试「网络恢复考试」的监考权限/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认撤销" }));
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    const [url, body] = postMock.mock.calls[0]! as unknown as [
+      string,
+      { operationId: string },
+    ];
+    expect(url).toBe("/api/admin/exams/exam-1/proctors/proctor-1/revoke");
+    expect(body.operationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
   });
 
   it("renders the attempt status distribution", async () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { TestContext } from "../testHelpers.js";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
@@ -233,6 +233,39 @@ export async function buildSharedAttemptFixture(): Promise<SharedAttemptFixture>
     fillBlankQuestionId,
     candidateProfileId,
   };
+}
+
+/**
+ * Lists the attempt-command receipts for an attempt, oldest first. Shared by
+ * the force-submit / misconduct durable-command test files.
+ */
+export async function listReceipts(ctx: TestContext, attemptId: string) {
+  return ctx.db
+    .select()
+    .from(schema.attemptCommandReceipts)
+    .where(eq(schema.attemptCommandReceipts.attemptId, attemptId))
+    .orderBy(schema.attemptCommandReceipts.createdAt);
+}
+
+/**
+ * Counts the `attempt.misconductFlagged` audit rows for an attempt, filtering
+ * the action IN SQL (no JavaScript-side filtering). Drains pending audit
+ * writes first so the count is stable.
+ */
+export async function countMisconductAudits(
+  ctx: TestContext,
+  attemptId: string,
+) {
+  await ctx.drainAuditWrites();
+  return ctx.db
+    .select()
+    .from(schema.auditLogs)
+    .where(
+      and(
+        eq(schema.auditLogs.targetId, attemptId),
+        eq(schema.auditLogs.action, "attempt.misconductFlagged"),
+      ),
+    );
 }
 
 /**
