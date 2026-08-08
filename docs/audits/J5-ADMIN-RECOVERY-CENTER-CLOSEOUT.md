@@ -90,38 +90,51 @@ were closed earlier (PRs #252/#253/#254).
 
 ### E2E — J5-I1D (browser workflows + a11y/responsive)
 
-New specs under `apps/e2e/e2e/` (all run through `bash scripts/e2e/run-wsl.sh`
-against the `exam_e2e*` databases — the real API + web servers, real admin
-API assertions):
+Eight new specs under `apps/e2e/e2e/` (all run through
+`bash scripts/e2e/run-wsl.sh` against the `exam_e2e*` databases — the real
+API + web servers, real admin API assertions):
 
 - `recovery-incident-workflow.spec.ts` — Workflow A (open → investigate →
   add note → change severity, each confirmed by the recovery aggregate API),
   Workflow B (investigating → resolve with required summary → terminal status
   → reload hides terminal actions), dismiss with required reason, and a stale
-  `expectedVersion` → 409 `INCIDENT_VERSION_CONFLICT` → "reload and retry".
+  `expectedVersion` → 409 `INCIDENT_VERSION_CONFLICT` → "reload and retry"
+  (4 tests).
 - `recovery-time-grant.spec.ts` — Workflow C: `operator_incident` exam, grant
   10 minutes from the operations UI; the aggregate shows exactly one new
   operator adjustment (+600s) and the effective deadline shifts by exactly
-  600s (server-side computation is the authority).
+  600s (server-side computation is the authority). Reload regression:
+  `PendingGrantCoordinator` recovers same `operationId` across reload,
+  browser regression proves exactly-one grant (2 tests).
 - `recovery-force-submit.spec.ts` — Workflow D: happy path (disposition
   `applied`, one audit, attempt graded) + lost-response retry: server commits,
   response masked as 500 via `page.route` → indeterminate → SAME operationId
   retry → parsed `idempotent_replay` with the SAME receipt `createdAt`
-  (exactly one receipt) and one audit.
+  (exactly one receipt) and one audit (2 tests).
 - `recovery-misconduct.spec.ts` — Workflow E (closes I1C0+I1C1 vertically):
   mark with severity + notes → projection shows the flag, one
   `attempt.misconductFlagged` audit, attempt stays live; lost-response retry
   with the SAME operationId → `idempotent_replay`, same receipt `createdAt`,
-  no duplicate audit.
+  no duplicate audit (2 tests).
 - `recovery-proctor-assignment.spec.ts` — Workflow F: assign proctor (real
   `/api/users` Proctor role) → aggregate reload shows the assignment →
-  revoke with destructive confirmation → aggregate reload shows it gone.
+  revoke with destructive confirmation → aggregate reload shows it gone
+  (1 test).
 - `recovery-operations-a11y.spec.ts` — keyboard operability (focus into the
   dialog, Escape close, focus return to the trigger), operation-name confirm
   buttons (never a bare "确认"), required-field errors via `role="alert"`
   (FieldError), indeterminate ambiguity via `role="alert"` (InlineErrorBanner,
   asserted in the force-submit retry spec), operations + dialogs usable at
-  390×844 (mobile) and 1440×1000 (desktop).
+  390×844 (mobile) and 1440×1000 (desktop) (3 tests).
+- `recovery-visual-inspection.spec.ts` — multi-modal AI + Playwright visual
+  inspection across all four recovery pages at multiple viewports; screenshots
+  re-run on this branch, cross-page navigation smoke (10 tests).
+- `proctor-dashboard-misconduct-retry.spec.ts` — ProctorDashboard frozen-full-
+  command browser regression (review P1): after server commit the first
+  response is masked as 500; DOM verification confirms severity + notes are
+  frozen; second POST carries same `operationId`/`severity`/`notes`; verifies
+  `idempotent_replay`, same receipt `createdAt`, one audit, misconduct
+  projection (1 test).
 
 ## 2. Dangerous-command guarantees (frozen, all tested)
 
@@ -154,10 +167,14 @@ API assertions):
 - Web: `useRecoveryOperation` (11), `pendingMisconductAuthority` (24),
   RecoveryAttemptDetailPage (21), RecoveryIncidentDetailPage (18),
   RecoveryExamDetailPage (13).
-- E2E: the six new recovery specs (13 tests) ran green via
+- E2E: eight new specs (25 tests) ran green via
   `bash scripts/e2e/run-wsl.sh` (2 shards, `exam_e2e_w0/w1`), including the
   lost-response retry evidence (same operationId, parsed `idempotent_replay`,
-  same receipt `createdAt`).
+  same receipt `createdAt`), the time-grant reload regression (same operationId
+  across reload, exactly-one grant via `PendingGrantCoordinator`), and the
+  ProctorDashboard frozen-full-command browser regression (severity + notes
+  frozen, `idempotent_replay`, one audit). `recovery-visual-inspection.spec.ts`
+  screenshots were re-run on this branch.
 - `apps/api/openapi.json` regenerated (`api:openapi`) and the
   `api:openapi:check` gate passes.
 
@@ -168,19 +185,15 @@ API assertions):
   `navigator.locks` / `BroadcastChannel` was added for force-submit or
   misconduct retry identity. Same-tab identity + reload recovery via
   sessionStorage is the implemented bar (matches the force-submit review's
-  stated minimum). The time-grant command on the Recovery attempt page uses
-  the in-hook same-tab identity (the cross-tab `pendingGrantCoordinator`
-  remains the proctor dashboard's job).
-- The Recovery pages have no page-level pending-command banner (the proctor
-  dashboard's banner is not replicated); the dialog itself is the recovery
-  surface (retry + explicit abandon) and the durable authority survives
-  reloads.
+  stated minimum). The time-grant command on the Recovery attempt page now
+  shares the `PendingGrantCoordinator` (same authority as the Proctor
+  dashboard); `cleanup-failed` recovery banners surface stale records on both
+  RecoveryAttemptDetailPage and ProctorDashboardPage.
 - Proctor assignment on the Recovery Exam page takes a raw userId (no
   user-search endpoint exists in the current API surface; the server resolves
   the user and fail-closes 404/403/409).
 - The `recovery-visual-inspection.spec.ts` screenshots (all four pages, four
-  viewports) were NOT re-run on this branch; the a11y/responsive spec covers
-  the operations dialogs at mobile + desktop instead.
+  viewports) were re-run on this branch via multi-modal AI + Playwright.
 - J6 (Proctor Recovery Center), J7, Redis, system-generated incidents,
   generic durable-command rewrite, and the misconduct incident action-link
   (ADR-014 amendment) remain future work, as scoped.
