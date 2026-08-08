@@ -30,7 +30,11 @@
  *     lock concurrent runners) — P6-009;
  *   - the worker has no restart policy;
  *   - the `redis` service is NOT behind a profile (it must be optional) —
- *     P6-010.
+ *     P6-010;
+ *   - the `redis` service accepts an unauthenticated production instance
+ *     (REDIS_PASSWORD must use `${...:?...}` required-expansion, the server
+ *     command must run with `--requirepass`, and the healthcheck must
+ *     authenticate) — P7 review P1-1 / ADR-001 security considerations.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -110,6 +114,11 @@ if (!servicesBlock) {
             "optional in the implemented MVP).",
         );
       }
+      // P7 review P1-1: production Redis owns the shared rate-limit state,
+      // so it must never run open. The bundled production Compose must
+      // require REDIS_PASSWORD (no functional fallback) and run the server
+      // with `requirepass`; the healthcheck must authenticate too.
+      assertRedisAuth(redisBlock);
     }
   }
 
@@ -496,6 +505,53 @@ function assertNoRedisDependency(block, serviceName) {
     errors.push(
       `'${serviceName}' service must NOT depend on 'redis: service_healthy' ` +
         "(P6-010: Redis is optional in the implemented MVP).",
+    );
+  }
+}
+
+/**
+ * P7 review P1-1: production Redis must be authenticated. The redis service
+ * (optional profile) must:
+ *   - define REDIS_PASSWORD via Compose required-expansion
+ *     (`${REDIS_PASSWORD:?...}`), never a `:-` fallback — mirror of the
+ *     P6-007 POSTGRES_PASSWORD contract;
+ *   - run the server with `--requirepass` (the password comes from the
+ *     container environment, never interpolated into the command line);
+ *   - authenticate in its healthcheck (`$$REDIS_PASSWORD`), so an open
+ *     instance would fail its own health probe.
+ */
+function assertRedisAuth(redisBlock) {
+  const noComments = redisBlock
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+
+  if (!/\$\{REDIS_PASSWORD:\?[^}]*\}/.test(noComments)) {
+    errors.push(
+      "'redis' service must reference REDIS_PASSWORD via Compose " +
+        "required-expansion '${REDIS_PASSWORD:?...}' (P7 review P1-1: the " +
+        "production Redis credential must have no functional fallback).",
+    );
+  }
+  if (/\$\{REDIS_PASSWORD:-[^}]*\}/.test(noComments)) {
+    errors.push(
+      "'redis' service must NOT use '${REDIS_PASSWORD:-...}' (P7 review " +
+        "P1-1: a functional fallback default is forbidden for the " +
+        "production Redis credential; use '${REDIS_PASSWORD:?...}').",
+    );
+  }
+  if (!/--requirepass/.test(noComments)) {
+    errors.push(
+      "'redis' service command must run redis-server with '--requirepass' " +
+        "(P7 review P1-1: an open production Redis instance is not " +
+        "acceptable now that Redis owns the shared rate-limit state).",
+    );
+  }
+  if (!/\$\$REDIS_PASSWORD/.test(noComments)) {
+    errors.push(
+      "'redis' service healthcheck must authenticate via '$$REDIS_PASSWORD' " +
+        "(P7 review P1-1: the health probe must prove the server enforces " +
+        "the password).",
     );
   }
 }

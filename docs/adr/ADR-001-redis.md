@@ -23,6 +23,18 @@ Full Redis adoption: **Deferred** (per trigger conditions below)
 > queue, Pub/Sub, Streams, cache, sessions, scanner leases) still require
 > separate decisions; none are implemented.
 >
+> **Division of authority:** Redis is the **rate-limit coordination
+> authority** (ephemeral shared counters only); PostgreSQL remains the
+> **exam fact authority** (answer / attempt / grading / result / incident /
+> audit / receipts). Nothing in the adopted responsibility moves durable
+> facts into Redis.
+>
+> **Authentication is now enforced, not just recommended:** the bundled
+> production Compose requires `REDIS_PASSWORD` (required-expansion, no
+> fallback) and runs the redis server with `requirepass` (P7 review P1-1).
+> The pre-adoption "requirepass or ACL is mandatory" security note below is
+> now a deployment-invariant enforced at Compose expansion time.
+>
 > This is a **new post-MVP architecture decision**, not the old
 > single-instance MVP suddenly requiring Redis: single-instance deployments
 > keep working unchanged with `REDIS_MODE=off` (the default when `REDIS_URL`

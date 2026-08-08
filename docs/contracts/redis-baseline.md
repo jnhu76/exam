@@ -56,6 +56,18 @@ disabled → connecting → ready ⇄ degraded → closing
   handled; an emitted `error` can never crash the process. Transitions are
   logged once via structured logs (`redis.ready`, `redis.recovered`,
   `redis.unavailable`, `redis.closing`) — no log storms on every retry.
+- **Truthful degradation (P7 review P1-3)**: ANY Redis command failure
+  degrades the logical runtime to `degraded` (reason `command_failure`),
+  REGARDLESS of `client.status`. ioredis `commandTimeout` rejects the
+  command without closing the connection, so a transport-`ready` client can
+  be operationally broken (overload, half-open socket, hung server);
+  transport ready ≠ operational health. Degraded state makes store selection
+  consistent instead of hitting broken Redis per request.
+- **Probe-based recovery (P7 review P1-3)**: while degraded, a bounded
+  background PING probe (default 1s interval) restores `ready` only after
+  the probe succeeds on a transport-ready connection. `pingLatency()` (the
+  diagnostics probe) doubles as an explicit probe. A random business command
+  succeeding NEVER silently flips the state back.
 - Shutdown is bounded: `quit()` races a 2s grace, then `disconnect()` — safe
   from every state (disconnected / connecting / ready / reconnecting / end).
 - `required` mode at runtime: Redis loss fails closed (503
@@ -78,6 +90,17 @@ disabled → connecting → ready ⇄ degraded → closing
   `exam-ratelimit-ip-v1` (stable across instances sharing the secret).
 - Rate-limit counters are ephemeral by design; a Redis restart may reset
   windows. PostgreSQL state is unaffected.
+
+### Degradation contract truth (P7 review P2)
+
+While Redis is `ready`, the shared limiter guarantees the **strict global
+window** across instances. In `optional` mode with a degraded Redis, the
+degradation is **availability-oriented**: each process falls back to its own
+local best-effort counter, which does NOT guarantee a strict global N — a
+fresh local allowance per process can briefly over-admit during the outage
+window. Deployments that need strict shared limits under Redis loss must
+use `REDIS_MODE=required` (fail closed, 503 `RATE_LIMIT_UNAVAILABLE`) —
+never a silent local fallback.
 
 ### Diagnostics
 
@@ -158,6 +181,15 @@ Redis service added to all compose files (`redis:7-alpine`):
 
 - `docker-compose.yml` (production): AOF persistence, internal to `exam-net`
   only (no host port) — the app reaches it as `redis://redis:6379`.
+  **Production Redis MUST be authenticated (P7 review P1-1):** the redis
+  service requires `REDIS_PASSWORD` via Compose required-expansion (no
+  functional fallback, mirroring P6-007 POSTGRES_PASSWORD) and runs the
+  server with `requirepass`; the healthcheck authenticates too. The API
+  must be given the authenticated URL
+  (`REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379`). Redis errors never
+  echo the raw URL — only `host:port` — so credentials cannot leak into
+  startup exceptions or logs (P7 review P1-2). dev/test compose files keep
+  an unauthenticated instance as an explicit local exception.
 - `docker-compose.dev.yml` (local dev): host port `6379:6379` published so
   local-run tests (which connect to `redis://localhost:6379`) work.
 - `docker-compose.test.yml` (E2E): host port configurable via `REDIS_HOST_PORT`.

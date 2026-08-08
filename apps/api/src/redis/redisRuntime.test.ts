@@ -55,6 +55,20 @@ function makeLogger(): RuntimeLogger & { messages: string[] } {
   };
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 2000,
+  intervalMs = 10,
+): Promise<void> {
+  const start = Date.now();
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error("waitFor timed out");
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
 function config(overrides: Partial<RedisConfig> = {}): RedisConfig {
   return {
     mode: "optional",
@@ -157,6 +171,36 @@ describe("RedisRuntime lifecycle (P7)", () => {
     // alive after the failed startup.
     expect(client.disconnectCalls).toBe(1);
     expect(runtime.state).toBe("degraded");
+    await runtime.close();
+  });
+
+  it("required startup error never leaks the Redis URL or its credentials (P7 review P1-2)", async () => {
+    const client = new FakeClient();
+    client.connectImpl = () => new Promise<never>(() => {});
+    const runtime = new RedisRuntime({
+      config: config({
+        mode: "required",
+        url: "redis://:supersecret@redis:6379",
+        startupTimeoutMs: 30,
+      }),
+      logger: makeLogger(),
+      clientFactory: () => client,
+    });
+    let thrown: unknown;
+    try {
+      await runtime.start();
+    } catch (err) {
+      thrown = err;
+    }
+    const message = (thrown as Error).message;
+    expect(thrown).toBeInstanceOf(RuntimeConfigError);
+    expect(message).toMatch(/required/);
+    // The operator-usable endpoint (host:port) is fine; credentials and the
+    // raw URL are not — the URL may carry a password (P7 review P1-2).
+    expect(message).toContain("redis:6379");
+    expect(message).not.toContain("supersecret");
+    expect(message).not.toContain("redis://");
+    await runtime.close();
   });
 
   it("connection loss after ready degrades once and only once (close+reconnecting+error storm)", async () => {
@@ -216,7 +260,7 @@ describe("RedisRuntime lifecycle (P7)", () => {
     expect(runtime.degradedReason).toBe("retry_exhausted");
   });
 
-  it("noteRedisCommandError degrades only when the connection is unhealthy", async () => {
+  it("noteRedisCommandError degrades on ANY command failure, even when the transport reports ready", async () => {
     const client = new FakeClient();
     const runtime = new RedisRuntime({
       config: config({ startupTimeoutMs: 500 }),
@@ -226,17 +270,105 @@ describe("RedisRuntime lifecycle (P7)", () => {
     await runtime.start();
     client.emit("ready");
 
-    // Healthy connection + transient command error: stay ready (per-request
-    // fallback; the next command retries Redis — no stuck-degraded state).
+    // Command timeout with the connection still reporting "ready": ioredis
+    // commandTimeout rejects the command WITHOUT closing the connection, so
+    // transport-ready does NOT mean operationally healthy (P7 review P1-3).
     client.status = "ready";
     runtime.noteRedisCommandError();
-    expect(runtime.state).toBe("ready");
+    expect(runtime.state).toBe("degraded");
+    expect(runtime.degradedReason).toBe("command_failure");
+    expect(runtime.shouldUseRedis()).toBe(false);
 
-    // Unhealthy connection + command error: degrade.
+    // Already degraded: further failures are no-ops (no state churn, no
+    // repeated transition logs).
     client.status = "close";
     runtime.noteRedisCommandError();
     expect(runtime.state).toBe("degraded");
     expect(runtime.degradedReason).toBe("command_failure");
+    await runtime.close();
+  });
+
+  it("command failure degrades; a successful bounded probe restores ready", async () => {
+    const client = new FakeClient();
+    const logger = makeLogger();
+    const runtime = new RedisRuntime({
+      config: config({ startupTimeoutMs: 500 }),
+      logger,
+      clientFactory: () => client,
+      probeIntervalMs: 10,
+    });
+    await runtime.start();
+    client.emit("ready");
+    expect(runtime.state).toBe("ready");
+
+    // Command failure while the transport stays "ready" → logical degraded.
+    client.status = "ready";
+    runtime.noteRedisCommandError();
+    expect(runtime.state).toBe("degraded");
+    expect(runtime.degradedReason).toBe("command_failure");
+    expect(logger.messages).toContain("redis.unavailable");
+
+    // The background PING probe succeeds → explicit recovery.
+    await waitFor(() => runtime.state === "ready");
+    expect(logger.messages).toContain("redis.recovered");
+    expect(runtime.shouldUseRedis()).toBe(true);
+    await runtime.close();
+  });
+
+  it("degraded runtime stays degraded while probes keep failing", async () => {
+    const client = new FakeClient();
+    client.pingError = new Error("ECONNREFUSED");
+    const logger = makeLogger();
+    const runtime = new RedisRuntime({
+      config: config({ startupTimeoutMs: 500 }),
+      logger,
+      clientFactory: () => client,
+      probeIntervalMs: 10,
+    });
+    await runtime.start();
+    client.emit("ready");
+    runtime.noteRedisCommandError();
+    expect(runtime.state).toBe("degraded");
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(runtime.state).toBe("degraded");
+    expect(runtime.degradedReason).toBe("command_failure");
+    expect(logger.messages).not.toContain("redis.recovered");
+    await runtime.close();
+  });
+
+  it("pingLatency doubles as an explicit probe: success while degraded restores ready", async () => {
+    const client = new FakeClient();
+    const runtime = new RedisRuntime({
+      config: config({ startupTimeoutMs: 500 }),
+      logger: makeLogger(),
+      clientFactory: () => client,
+    });
+    await runtime.start();
+    client.emit("ready");
+    runtime.noteRedisCommandError();
+    expect(runtime.state).toBe("degraded");
+
+    await expect(runtime.pingLatency()).resolves.toBeGreaterThanOrEqual(0);
+    expect(runtime.state).toBe("ready");
+    expect(runtime.shouldUseRedis()).toBe(true);
+    await runtime.close();
+  });
+
+  it("pingLatency failure while degraded stays degraded and returns null", async () => {
+    const client = new FakeClient();
+    client.pingError = new Error("Command timed out");
+    const runtime = new RedisRuntime({
+      config: config({ startupTimeoutMs: 500 }),
+      logger: makeLogger(),
+      clientFactory: () => client,
+    });
+    await runtime.start();
+    client.emit("ready");
+    runtime.noteRedisCommandError();
+    await expect(runtime.pingLatency()).resolves.toBeNull();
+    expect(runtime.state).toBe("degraded");
+    await runtime.close();
   });
 
   it("pingLatency measures latency when ready and returns null otherwise", async () => {
@@ -259,7 +391,7 @@ describe("RedisRuntime lifecycle (P7)", () => {
     expect(runtime.snapshot().latencyMs).toBe(7);
   });
 
-  it("ping failure on an unhealthy connection degrades and returns null", async () => {
+  it("ping failure degrades the runtime and returns null (status-independent)", async () => {
     const client = new FakeClient();
     client.pingError = new Error("ECONNREFUSED");
     const runtime = new RedisRuntime({
@@ -269,9 +401,10 @@ describe("RedisRuntime lifecycle (P7)", () => {
     });
     await runtime.start();
     client.emit("ready");
-    client.status = "close";
+    client.status = "ready";
     await expect(runtime.pingLatency()).resolves.toBeNull();
     expect(runtime.state).toBe("degraded");
+    expect(runtime.degradedReason).toBe("command_failure");
   });
 
   it("close() is graceful and bounded: quit called, disconnect called, state closing", async () => {

@@ -10,6 +10,8 @@
 # Proves:
 #   - POSTGRES_PASSWORD is required (no default) — Compose fails to expand
 #     if unset (P6-007).
+#   - REDIS_PASSWORD is required (no default) — the optional redis profile
+#     runs with requirepass and rejects unauthenticated clients (P7 P1-1).
 #   - db healthy → app migrates + becomes healthy → email-worker starts
 #     after app health (P6-009 migration serialization).
 #   - 21 migrations applied exactly once.
@@ -46,11 +48,16 @@ ADMIN_PASS="P6-Smoke-Admin-${RUN_NUM}-$(openssl rand -hex 8)"
 ADMIN_NAME="P6 Smoke Admin ${RUN_NUM}"
 ORG_NAME="P6 Smoke Org ${RUN_NUM}"
 ORIGIN="http://localhost:3000"
+# P7 review P1-1: REDIS_PASSWORD is required at Compose expansion for
+# production (the optional redis profile runs with requirepass). Test-only
+# throwaway value, same spirit as PG_PASSWORD.
+REDIS_PASSWORD="p6-smoke-redis-${RUN_NUM}-$(openssl rand -hex 8)"
 
 export POSTGRES_PASSWORD="${PG_PASSWORD}"
 export JWT_SECRET="${JWT_SECRET}"
 export CORS_ORIGIN="${ORIGIN}"
 export PUBLIC_WEB_ORIGIN="${ORIGIN}"
+export REDIS_PASSWORD="${REDIS_PASSWORD}"
 
 echo "=== P6-CORR1 clean-volume smoke run #${RUN_NUM} (project: ${PROJECT}) ==="
 
@@ -100,10 +107,10 @@ echo "--- TEST 1: empty POSTGRES_PASSWORD fails Compose expansion (P6-007) ---"
 # value in all shells). Compose `${VAR:?...}` treats an unset OR empty
 # value as a failure. Capture output to a variable so `set -o pipefail`
 # does not turn the (expected) non-zero Compose exit into a script abort.
-T1_OUT=$(env -u POSTGRES_PASSWORD \
+T1_OUT=$(env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
      JWT_SECRET="${JWT_SECRET}" \
      CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
-     POSTGRES_PASSWORD="" \
+     POSTGRES_PASSWORD="" REDIS_PASSWORD="" \
      docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up --no-start 2>&1 \
      || true)
 if echo "${T1_OUT}" | grep -q "POSTGRES_PASSWORD is required"; then
@@ -111,6 +118,23 @@ if echo "${T1_OUT}" | grep -q "POSTGRES_PASSWORD is required"; then
 else
   echo "  FAIL: empty POSTGRES_PASSWORD did not fail expansion."
   echo "  output: ${T1_OUT}"
+  exit 1
+fi
+
+# ── Test 1b: empty REDIS_PASSWORD must fail Compose expansion (P7 P1-1) ──
+echo "--- TEST 1b: empty REDIS_PASSWORD fails Compose expansion (P7 P1-1) ---"
+T1B_OUT=$(env -u REDIS_PASSWORD \
+     POSTGRES_PASSWORD="${PG_PASSWORD}" \
+     JWT_SECRET="${JWT_SECRET}" \
+     CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
+     REDIS_PASSWORD="" \
+     docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up --no-start 2>&1 \
+     || true)
+if echo "${T1B_OUT}" | grep -q "REDIS_PASSWORD is required"; then
+  echo "  PASS: empty/unset REDIS_PASSWORD fails expansion."
+else
+  echo "  FAIL: empty REDIS_PASSWORD did not fail expansion."
+  echo "  output: ${T1B_OUT}"
   exit 1
 fi
 
@@ -444,6 +468,66 @@ if ! docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=20 email-wo
   exit 1
 fi
 echo "  PASS: worker logs contain shutdown complete."
+
+# ── Test 16: optional redis profile enforces requirepass (P7 P1-1) ───────
+echo "--- TEST 16: optional redis profile enforces requirepass (P7 P1-1) ---"
+REDIS_PROJECT="p6corr1-redis-${RUN_NUM}"
+docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
+  up -d redis --quiet-pull 2>&1 | tail -3
+REDIS_AUTH_FAILED=0
+for i in $(seq 1 30); do
+  NOAUTH=$(docker exec "${REDIS_PROJECT}-redis-1" redis-cli ping 2>&1 || true)
+  if echo "${NOAUTH}" | grep -qi "NOAUTH"; then
+    REDIS_AUTH_FAILED=0
+    break
+  fi
+  if echo "${NOAUTH}" | grep -q "PONG"; then
+    REDIS_AUTH_FAILED=1
+    break
+  fi
+  sleep 1
+done
+if [ "${REDIS_AUTH_FAILED}" = "1" ]; then
+  echo "  FAIL: unauthenticated redis-cli ping was ACCEPTED (open Redis): ${NOAUTH}"
+  exit 1
+fi
+if echo "${NOAUTH}" | grep -qi "NOAUTH"; then
+  echo "  PASS: unauthenticated ping rejected with NOAUTH."
+else
+  echo "  FAIL: redis did not answer NOAUTH within 30s: ${NOAUTH}"
+  exit 1
+fi
+
+AUTH_PONG=$(docker exec -e REDIS_PASSWORD="${REDIS_PASSWORD}" \
+  "${REDIS_PROJECT}-redis-1" sh -lc \
+  'redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null' 2>&1 || true)
+if echo "${AUTH_PONG}" | grep -q "PONG"; then
+  echo "  PASS: authenticated ping returns PONG."
+else
+  echo "  FAIL: authenticated ping did not return PONG: ${AUTH_PONG}"
+  exit 1
+fi
+
+# The container healthcheck authenticates too: redis must become healthy.
+REDIS_HEALTH=""
+for i in $(seq 1 30); do
+  REDIS_HEALTH=$(docker inspect "${REDIS_PROJECT}-redis-1" \
+    --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  if [ "${REDIS_HEALTH}" = "healthy" ]; then
+    break
+  fi
+  sleep 1
+done
+if [ "${REDIS_HEALTH}" = "healthy" ]; then
+  echo "  PASS: redis container healthcheck (authenticated) is healthy."
+else
+  echo "  FAIL: redis container health is ${REDIS_HEALTH} (expected healthy)."
+  exit 1
+fi
+
+docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
+  down -v --remove-orphans > /dev/null 2>&1 || true
+echo "  PASS: authenticated redis profile started, probed, and was torn down."
 
 echo ""
 echo "=== RUN #${RUN_NUM}: ALL CHECKS PASSED ==="

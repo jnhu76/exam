@@ -18,11 +18,19 @@ import type { RedisConfig, RedisMode } from "../config/runtimeConfig.js";
  *   `redis.unavailable`, `redis.closing`) only on state changes — no log
  *   storms on every retry;
  * - bounded graceful shutdown that never hangs on `quit()`.
+ * - truthful degradation: any Redis command failure degrades the logical
+ *   runtime (reason `command_failure`) regardless of the transport status —
+ *   ioredis `commandTimeout` rejects the command without closing the
+ *   connection, so `client.status === "ready"` does NOT mean operational
+ *   health (P7 review P1-3);
+ * - probe-based recovery: while degraded, a bounded background PING probe
+ *   restores `ready` only after the probe succeeds (never a random business
+ *   command silently flipping state back).
  *
  * Mode semantics (from runtime config):
  * - `off`: client never created; state stays `disabled`.
  * - `optional`: unhealthy Redis degrades to local rate limiting; startup
- *   never hangs and never crashes; recovery is automatic via reconnect.
+ *   never hangs and never crashes; recovery is automatic via probe/reconnect.
  * - `required`: startup fails deterministically inside the bounded startup
  *   window; at runtime the store fails closed (no silent local fallback).
  */
@@ -75,10 +83,15 @@ export interface RedisRuntimeOptions {
   clientFactory?: (config: RedisConfig) => RedisClientLike;
   /** Bounded shutdown grace for `quit()` (default 2000ms). */
   closeTimeoutMs?: number;
+  /** Bounded interval between degraded-state health probes (default 1000ms). */
+  probeIntervalMs?: number;
 }
 
 /** Default shutdown grace for `quit()` (bounded; never hangs). */
 const DEFAULT_CLOSE_TIMEOUT_MS = 2000;
+
+/** Default bounded interval between degraded-state health probes. */
+const DEFAULT_PROBE_INTERVAL_MS = 1000;
 
 /**
  * Bounded reconnect backoff (ms): 200ms → 2s, never giving up while the
@@ -101,11 +114,13 @@ export class RedisRuntime {
   private readonly now: () => Date;
   private readonly clientFactory: (config: RedisConfig) => RedisClientLike;
   private readonly closeTimeoutMs: number;
+  private readonly probeIntervalMs: number;
 
   private clientInternal: RedisClientLike | null = null;
   private stateInternal: RedisLifecycleState = "disabled";
   private degradedReasonInternal: RedisDegradedReason = null;
   private lastLatencyMsInternal: number | null = null;
+  private probeTimer: NodeJS.Timeout | null = null;
 
   constructor(options: RedisRuntimeOptions) {
     this.config = options.config;
@@ -116,6 +131,7 @@ export class RedisRuntime {
     this.now = options.now ?? (() => new Date());
     this.clientFactory = options.clientFactory ?? createIoredisClient;
     this.closeTimeoutMs = options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
+    this.probeIntervalMs = options.probeIntervalMs ?? DEFAULT_PROBE_INTERVAL_MS;
     if (this.mode === "off") {
       this.stateInternal = "disabled";
     }
@@ -207,8 +223,12 @@ export class RedisRuntime {
           "degraded",
           isStartupTimeout ? "startup_timeout" : "connection_lost",
         );
+        // Never echo the raw REDIS_URL here: it may carry a password
+        // (P7 review P1-2). Only the host:port is operator-usable.
         throw new RuntimeConfigError(
-          `REDIS_MODE=required: Redis did not become ready within ${this.config.startupTimeoutMs}ms (${this.url})`,
+          `REDIS_MODE=required: Redis did not become ready within ` +
+            `${this.config.startupTimeoutMs}ms ` +
+            `(${describeRedisEndpoint(this.url)})`,
         );
       }
       this.setState(
@@ -228,30 +248,41 @@ export class RedisRuntime {
   }
 
   /**
-   * Called by the rate-limit store when a Redis command failed. Only
-   * degrades when the connection itself is unhealthy — a transient command
-   * timeout on a healthy connection falls back for that request but keeps
-   * trying Redis next time (no stuck-degraded state).
+   * Called by the rate-limit store when a Redis command failed. Any command
+   * failure degrades the logical runtime (reason `command_failure`),
+   * REGARDLESS of `client.status`: ioredis `commandTimeout` rejects the
+   * command without closing the connection, so a transport-`ready` client
+   * can be operationally broken (overload, half-open socket, hung server).
+   * Degrading makes store selection consistent (optional → local,
+   * required → fail closed) instead of hitting broken Redis per request
+   * (P7 review P1-3).
    */
   noteRedisCommandError(): void {
     if (this.stateInternal !== "ready") return;
-    const healthy = this.clientInternal?.status === "ready";
-    if (!healthy) {
-      this.setState("degraded", "command_failure");
-    }
+    this.setState("degraded", "command_failure");
   }
 
   /**
    * Measure ping latency (ADR-006 time authority). Returns null when Redis
-   * is not ready or the ping fails; a failed ping on an unhealthy connection
-   * degrades the runtime.
+   * is not ready or the ping fails; a failed ping degrades the runtime.
+   * While degraded this doubles as an explicit probe: a successful ping on
+   * a transport-ready connection restores `ready` (bounded, explicit —
+   * never a random business command silently recovering).
    */
   async pingLatency(): Promise<number | null> {
-    if (this.stateInternal !== "ready" || !this.clientInternal) return null;
+    const client = this.clientInternal;
+    if (!client) return null;
+    if (this.stateInternal !== "ready" && this.stateInternal !== "degraded") {
+      return null;
+    }
     const start = this.now().getTime();
     try {
-      await this.clientInternal.ping();
+      await client.ping();
       this.lastLatencyMsInternal = this.now().getTime() - start;
+      if (this.stateInternal === "degraded" && client.status === "ready") {
+        this.setState("ready", null);
+        this.logger.info({ redis: { mode: this.mode } }, "redis.recovered");
+      }
       return this.lastLatencyMsInternal;
     } catch {
       this.noteRedisCommandError();
@@ -280,6 +311,10 @@ export class RedisRuntime {
       return;
     }
     this.setState("closing");
+    if (this.probeTimer) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = null;
+    }
     const client = this.clientInternal;
     if (!client) return;
     try {
@@ -330,6 +365,40 @@ export class RedisRuntime {
     });
   }
 
+  /**
+   * Bounded background health probe: while degraded, ping the client on a
+   * fixed interval. A successful ping on a transport-ready connection
+   * restores `ready` (recovery is explicit and bounded, never a random
+   * business command). A failed probe re-arms the timer.
+   */
+  private scheduleProbe(): void {
+    if (this.probeTimer || this.stateInternal !== "degraded") return;
+    const client = this.clientInternal;
+    // An ended client never recovers (manual close / failed required
+    // startup); probing it would just loop on rejected pings.
+    if (!client || client.status === "end") return;
+    this.probeTimer = setTimeout(() => {
+      this.probeTimer = null;
+      void this.runProbe();
+    }, this.probeIntervalMs);
+  }
+
+  private async runProbe(): Promise<void> {
+    if (this.stateInternal !== "degraded") return;
+    const client = this.clientInternal;
+    if (!client) return;
+    try {
+      await client.ping();
+    } catch {
+      this.scheduleProbe();
+      return;
+    }
+    if (this.stateInternal === "degraded" && client.status === "ready") {
+      this.setState("ready", null);
+      this.logger.info({ redis: { mode: this.mode } }, "redis.recovered");
+    }
+  }
+
   private setState(
     state: RedisLifecycleState,
     reason: RedisDegradedReason = null,
@@ -345,7 +414,25 @@ export class RedisRuntime {
         { redis: { mode: this.mode, degradedReason: reason } },
         "redis.unavailable",
       );
+      this.scheduleProbe();
     }
+  }
+}
+
+/**
+ * Describe a Redis endpoint for error messages WITHOUT credentials or the
+ * raw URL: `host:port` only (or "configured Redis endpoint" when the URL is
+ * unset/unparsable). The raw REDIS_URL must never be echoed — it may carry
+ * a password (P7 review P1-2).
+ */
+export function describeRedisEndpoint(url: string | null): string {
+  if (!url) return "configured Redis endpoint";
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname || "unknown";
+    return parsed.port ? `${host}:${parsed.port}` : host;
+  } catch {
+    return "configured Redis endpoint";
   }
 }
 
