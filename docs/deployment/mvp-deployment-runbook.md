@@ -43,11 +43,12 @@ Postgres:  provided by the 'db' service (postgres:18.4-bookworm). The
            supported MVP path. External Postgres is NOT a supported MVP
            deployment — the worker's DATABASE_URL is composed, not read
            from an external DATABASE_URL. Do NOT remove the 'db' service.
-Redis:     OPTIONAL. When enabled, Redis owns the shared rate-limit state
-           (P7) and is gated behind the 'redis' profile (P6-010) — a bare
-           'docker compose up' does NOT start it. Production requires
-           REDIS_PASSWORD + an authenticated REDIS_URL (P7 review P1-1).
-           See §10.
+Redis:     OPTIONAL — a bare 'docker compose up' starts no Redis and needs
+           no Redis configuration (P7 review P1). When enabled (the 'redis'
+           profile, P6-010), Redis owns the shared rate-limit state (P7):
+           production requires REDIS_PASSWORD — the redis container refuses
+           to start without it — plus an authenticated REDIS_URL (P7 review
+           P1-1). See §10.
 SMTP:      OPTIONAL. Leave EMAIL_ENABLED=false to drain the outbox to 'sent'
            status without external delivery. Set EMAIL_ENABLED=true +
            EMAIL_TRANSPORT=smtp + SMTP_* to enable real Email delivery.
@@ -87,7 +88,7 @@ if any is unset. There is NO default database password in production
 | `COOKIE_SECURE` | false (auto-true in production) | cookie Secure flag |
 | `APP_TIMEZONE` / `TZ` | Asia/Shanghai | display/log/diagnostics only; does not change business-time comparison semantics |
 | `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`; authenticated URL required) |
-| `REDIS_PASSWORD` | unset (Compose fails to expand) | required at Compose level for production (P7 review P1-1); redis runs with `requirepass` |
+| `REDIS_PASSWORD` | unset (redis profile disabled) | optional at Compose parse time — a bare `docker compose up` needs no Redis config (P7 review P1); REQUIRED when the `redis` profile is enabled: the redis container refuses to start without it and runs with `requirepass` (P7 review P1-1) |
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed in-memory rate limiter |
@@ -504,9 +505,12 @@ unconfigured — this is expected and does not degrade the MVP path.
 
 ### Enabling the optional Redis profile
 
-Production Redis MUST be authenticated (P7 review P1-1): `REDIS_PASSWORD`
-is required at Compose expansion (no default) and the redis server runs
-with `requirepass`. Set both the password and the authenticated URL:
+Production Redis MUST be authenticated (P7 review P1-1): the redis
+container refuses to start without a non-empty `REDIS_PASSWORD` (startup
+guard) and the server runs with `requirepass`. The check lives at
+container startup, not Compose expansion, so a bare `docker compose up`
+without the profile needs no Redis configuration (P7 review P1). Set both
+the password and the authenticated URL:
 
 ```bash
 # 1. In .env (production):

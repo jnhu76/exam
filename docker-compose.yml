@@ -14,8 +14,10 @@
 #     and become healthy. The drizzle migration journal tracks state; it is
 #     NOT a concurrency lock (P6-009).
 #   - Redis is an OPTIONAL profile (`--profile redis` /
-#     COMPOSE_PROFILES=redis). When enabled it MUST be authenticated:
-#     REDIS_PASSWORD is REQUIRED (no functional fallback) and the redis
+#     COMPOSE_PROFILES=redis) and stays OPTIONAL at Compose parse time: a
+#     bare `docker compose up` needs no Redis configuration. When the
+#     profile IS enabled it MUST be authenticated: the redis container
+#     refuses to start without REDIS_PASSWORD (startup guard) and the
 #     server runs with `requirepass` (P7 review P1-1 — Redis now owns the
 #     shared rate-limit state, so an open instance is not acceptable). The
 #     API reads REDIS_URL; when the profile is enabled the operator must set
@@ -104,32 +106,42 @@ services:
     restart: unless-stopped
 
   # Redis is OPTIONAL in the implemented MVP (ADR-001 / P6-010), but it owns
-  # the shared rate-limit state when enabled (P7) — so production Redis MUST
-  # be authenticated: REDIS_PASSWORD is REQUIRED (no functional fallback)
-  # and the server runs with `requirepass` (P7 review P1-1; ADR-001 security
+  # the shared rate-limit state when enabled (P7) — so an ENABLED production
+  # Redis MUST be authenticated (P7 review P1-1; ADR-001 security
   # considerations). The service is gated behind the `redis` profile: it is
-  # NOT started by a bare `docker compose up`. Enable it explicitly with
-  # `docker compose --profile redis up` (or set COMPOSE_PROFILES=redis) AND
-  # set REDIS_URL on the `app` service to the authenticated URL,
-  # `redis://:<REDIS_PASSWORD>@redis:6379`. The password stays in the
-  # container environment (never in the command line / inspect output).
+  # NOT started by a bare `docker compose up`. The password check lives at
+  # CONTAINER STARTUP (not Compose expansion), so the profile stays truly
+  # optional: a bare `docker compose up` with REDIS_PASSWORD unset still
+  # parses and runs. Only when the profile is enabled does the redis
+  # container refuse to start without a password — never an open instance.
+  # Enable it explicitly with `docker compose --profile redis up` (or set
+  # COMPOSE_PROFILES=redis) AND set REDIS_URL on the `app` service to the
+  # authenticated URL, `redis://:<REDIS_PASSWORD>@redis:6379`. Compose
+  # config/inspect does not interpolate the secret into the stored command
+  # definition — the command references `$REDIS_PASSWORD` and the container
+  # shell expands it at startup (the redis-server argv then receives the
+  # password via `--requirepass`, which is how requirepass is configured).
   # See docs/deployment/mvp-deployment-runbook.md §10.
   redis:
     image: redis:7-alpine
-    # requirepass reads the container env; `$$` is the Compose escape so the
-    # container sees `$REDIS_PASSWORD`, not the interpolated secret.
+    # `$$` is the Compose escape: the container sees `$REDIS_PASSWORD`, not
+    # the interpolated secret. The first line is the startup guard — the
+    # shell fails the container when REDIS_PASSWORD is unset or empty, so
+    # an unauthenticated server can never start. The second line runs the
+    # server with requirepass read from the container environment.
     command:
-      [
-        "sh",
-        "-c",
-        'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"',
-      ]
+      - sh
+      - -ec
+      - |
+        : "$${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+        exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     profiles: ["redis"]
     environment:
-      # P7 review P1-1: the production Redis credential has no functional
-      # fallback — Compose fails at expansion when REDIS_PASSWORD is unset,
-      # exactly like POSTGRES_PASSWORD (P6-007).
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required for production}
+      # P7 review P1: the empty default keeps Redis optional at Compose
+      # parse time (a bare `docker compose up` needs no Redis
+      # configuration); the startup guard above enforces the password when
+      # the redis profile actually runs.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - redisdata:/data

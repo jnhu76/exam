@@ -181,10 +181,12 @@ Redis service added to all compose files (`redis:7-alpine`):
 
 - `docker-compose.yml` (production): AOF persistence, internal to `exam-net`
   only (no host port) — the app reaches it as `redis://redis:6379`.
-  **Production Redis MUST be authenticated (P7 review P1-1):** the redis
-  service requires `REDIS_PASSWORD` via Compose required-expansion (no
-  functional fallback, mirroring P6-007 POSTGRES_PASSWORD) and runs the
-  server with `requirepass`; the healthcheck authenticates too. The API
+  **Production Redis MUST be authenticated (P7 review P1-1):** Redis stays
+  optional at Compose parse time — a bare `docker compose up` needs no
+  Redis configuration (P7 review P1) — but when the profile is enabled the
+  redis container refuses to start without a non-empty `REDIS_PASSWORD`
+  (startup guard in the service command, not Compose expansion) and runs
+  the server with `requirepass`; the healthcheck authenticates too. The API
   must be given the authenticated URL
   (`REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379`). Redis errors never
   echo the raw URL — only `host:port` — so credentials cannot leak into

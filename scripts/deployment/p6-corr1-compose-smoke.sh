@@ -10,8 +10,12 @@
 # Proves:
 #   - POSTGRES_PASSWORD is required (no default) — Compose fails to expand
 #     if unset (P6-007).
-#   - REDIS_PASSWORD is required (no default) — the optional redis profile
-#     runs with requirepass and rejects unauthenticated clients (P7 P1-1).
+#   - Redis stays OPTIONAL at Compose parse time — the default stack parses
+#     with REDIS_PASSWORD unset (P7 review P1).
+#   - When the redis profile IS enabled, REDIS_PASSWORD is mandatory: the
+#     redis container refuses to start without it (startup guard) and runs
+#     with requirepass — unauthenticated clients are rejected (P7 review
+#     P1-1).
 #   - db healthy → app migrates + becomes healthy → email-worker starts
 #     after app health (P6-009 migration serialization).
 #   - 21 migrations applied exactly once.
@@ -48,9 +52,9 @@ ADMIN_PASS="P6-Smoke-Admin-${RUN_NUM}-$(openssl rand -hex 8)"
 ADMIN_NAME="P6 Smoke Admin ${RUN_NUM}"
 ORG_NAME="P6 Smoke Org ${RUN_NUM}"
 ORIGIN="http://localhost:3000"
-# P7 review P1-1: REDIS_PASSWORD is required at Compose expansion for
-# production (the optional redis profile runs with requirepass). Test-only
-# throwaway value, same spirit as PG_PASSWORD.
+# P7 review P1-1: the optional redis profile runs with requirepass, so the
+# smoke stack sets a throwaway REDIS_PASSWORD (same spirit as PG_PASSWORD).
+# The password is NOT required at Compose parse time (see Test 1b / 16a).
 REDIS_PASSWORD="p6-smoke-redis-${RUN_NUM}-$(openssl rand -hex 8)"
 
 export POSTGRES_PASSWORD="${PG_PASSWORD}"
@@ -121,19 +125,22 @@ else
   exit 1
 fi
 
-# ── Test 1b: empty REDIS_PASSWORD must fail Compose expansion (P7 P1-1) ──
-echo "--- TEST 1b: empty REDIS_PASSWORD fails Compose expansion (P7 P1-1) ---"
+# ── Test 1b: default stack parses with REDIS_PASSWORD unset (P7 review P1) ─
+echo "--- TEST 1b: default stack parses without REDIS_PASSWORD (P7 review P1) ---"
+# Redis is an optional profile: a bare `docker compose up` (redis profile
+# inactive) must NOT require a Redis secret at Compose expansion. `config
+# --quiet` validates the full model (interpolation + structure) without
+# pulling images or creating containers.
 T1B_OUT=$(env -u REDIS_PASSWORD \
      POSTGRES_PASSWORD="${PG_PASSWORD}" \
      JWT_SECRET="${JWT_SECRET}" \
      CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
-     REDIS_PASSWORD="" \
-     docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up --no-start 2>&1 \
+     docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" config --quiet 2>&1 \
      || true)
-if echo "${T1B_OUT}" | grep -q "REDIS_PASSWORD is required"; then
-  echo "  PASS: empty/unset REDIS_PASSWORD fails expansion."
+if [ -z "${T1B_OUT}" ]; then
+  echo "  PASS: default stack parses without REDIS_PASSWORD (redis profile inactive)."
 else
-  echo "  FAIL: empty REDIS_PASSWORD did not fail expansion."
+  echo "  FAIL: default stack failed to parse without REDIS_PASSWORD."
   echo "  output: ${T1B_OUT}"
   exit 1
 fi
@@ -253,8 +260,12 @@ if echo "${WORKER_LOGS_PENDING}" | grep -q "starting poll loop"; then
 fi
 echo "  PASS: worker is waiting and has not started sender/poll loop."
 
-# ── Test 6: 21 migrations applied exactly once ───────────────────────────
-echo "--- TEST 6: 21 migrations applied exactly once (P6-009 ordering proof) ---"
+# ── Test 6: all repo migrations applied exactly once ─────────────────────
+echo "--- TEST 6: migrations applied exactly once (P6-009 ordering proof) ---"
+# Expected count is derived from the repository migration set (not a magic
+# number) so the assertion cannot drift when migrations are added.
+EXPECTED_MIG_COUNT=$(find "${REPO_ROOT}/packages/db/migrations/postgres" \
+  -name "*.sql" -type f | wc -l | tr -d " ")
 if run_psql_query "SELECT count(*) FROM drizzle.__drizzle_migrations;"; then
   MIG_COUNT="${PSQL_QUERY_OUTPUT}"
 else
@@ -262,11 +273,11 @@ else
   echo "  query error: ${PSQL_QUERY_ERROR}"
   exit 1
 fi
-echo "  drizzle journal entries: ${MIG_COUNT}"
-if [ "${MIG_COUNT}" = "21" ]; then
-  echo "  PASS: 21 migrations applied exactly once."
+echo "  drizzle journal entries: ${MIG_COUNT} (repo migration files: ${EXPECTED_MIG_COUNT})"
+if [ "${MIG_COUNT}" = "${EXPECTED_MIG_COUNT}" ]; then
+  echo "  PASS: ${MIG_COUNT} migrations applied exactly once."
 else
-  echo "  FAIL: expected 21 migrations, got ${MIG_COUNT}."
+  echo "  FAIL: expected ${EXPECTED_MIG_COUNT} migrations, got ${MIG_COUNT}."
   exit 1
 fi
 
@@ -469,8 +480,44 @@ if ! docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=20 email-wo
 fi
 echo "  PASS: worker logs contain shutdown complete."
 
-# ── Test 16: optional redis profile enforces requirepass (P7 P1-1) ───────
-echo "--- TEST 16: optional redis profile enforces requirepass (P7 P1-1) ---"
+# ── Test 16a: redis profile without REDIS_PASSWORD refuses to start (P7) ──
+echo "--- TEST 16a: redis profile without REDIS_PASSWORD refuses to start (P7 review P1) ---"
+REDIS_PROJECT_NOAUTH="p6corr1-redis-noauth-${RUN_NUM}"
+# The password guard lives at container startup (not Compose expansion), so
+# the model still loads; the redis container itself must fail the guard and
+# never run an open server.
+env -u REDIS_PASSWORD \
+  docker compose -p "${REDIS_PROJECT_NOAUTH}" -f "${COMPOSE_FILE}" \
+  --profile redis up -d redis --quiet-pull 2>&1 | tail -3 || true
+GUARD_FIRED=0
+for i in $(seq 1 30); do
+  REDIS16A_HEALTH=$(docker inspect "${REDIS_PROJECT_NOAUTH}-redis-1" \
+    --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  REDIS16A_LOGS=$(docker compose -p "${REDIS_PROJECT_NOAUTH}" \
+    -f "${COMPOSE_FILE}" --profile redis logs --tail=5 redis 2>&1 || true)
+  if echo "${REDIS16A_LOGS}" | grep -q "REDIS_PASSWORD is required"; then
+    GUARD_FIRED=1
+    break
+  fi
+  if [ "${REDIS16A_HEALTH}" = "healthy" ]; then
+    echo "  FAIL: redis became healthy without REDIS_PASSWORD (open Redis)."
+    exit 1
+  fi
+  sleep 1
+done
+if [ "${GUARD_FIRED}" = "1" ]; then
+  echo "  PASS: redis container refused to start; startup guard fired."
+else
+  echo "  FAIL: redis did not hit the password guard within 30s."
+  echo "  health=${REDIS16A_HEALTH:-unknown}"
+  echo "  logs: ${REDIS16A_LOGS:-<none>}"
+  exit 1
+fi
+docker compose -p "${REDIS_PROJECT_NOAUTH}" -f "${COMPOSE_FILE}" \
+  --profile redis down -v --remove-orphans > /dev/null 2>&1 || true
+
+# ── Test 16b: redis profile with REDIS_PASSWORD enforces requirepass ──────
+echo "--- TEST 16b: redis profile with REDIS_PASSWORD enforces requirepass (P7 review P1-1) ---"
 REDIS_PROJECT="p6corr1-redis-${RUN_NUM}"
 docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
   up -d redis --quiet-pull 2>&1 | tail -3

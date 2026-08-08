@@ -30,10 +30,13 @@ Full Redis adoption: **Deferred** (per trigger conditions below)
 > facts into Redis.
 >
 > **Authentication is now enforced, not just recommended:** the bundled
-> production Compose requires `REDIS_PASSWORD` (required-expansion, no
-> fallback) and runs the redis server with `requirepass` (P7 review P1-1).
-> The pre-adoption "requirepass or ACL is mandatory" security note below is
-> now a deployment-invariant enforced at Compose expansion time.
+> production Compose keeps Redis optional at parse time — a bare
+> `docker compose up` needs no Redis configuration (P7 review P1) — but an
+> ENABLED redis profile must be authenticated: the redis container refuses
+> to start without `REDIS_PASSWORD` (startup guard) and runs the server
+> with `requirepass` (P7 review P1-1). The pre-adoption "requirepass or ACL
+> is mandatory" security note below is now a deployment-invariant enforced
+> at redis container startup.
 >
 > This is a **new post-MVP architecture decision**, not the old
 > single-instance MVP suddenly requiring Redis: single-instance deployments

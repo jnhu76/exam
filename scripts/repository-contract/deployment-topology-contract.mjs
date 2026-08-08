@@ -32,9 +32,13 @@
  *   - the `redis` service is NOT behind a profile (it must be optional) —
  *     P6-010;
  *   - the `redis` service accepts an unauthenticated production instance
- *     (REDIS_PASSWORD must use `${...:?...}` required-expansion, the server
- *     command must run with `--requirepass`, and the healthcheck must
- *     authenticate) — P7 review P1-1 / ADR-001 security considerations.
+ *     when the profile IS enabled: REDIS_PASSWORD must stay OPTIONAL at
+ *     Compose expansion (empty default — a bare `docker compose up` needs
+ *     no Redis configuration), the redis command must carry a
+ *     container-startup guard that fails the container without a non-empty
+ *     REDIS_PASSWORD, the server must run with `--requirepass`, and the
+ *     healthcheck must authenticate — P7 review P1-1 / ADR-001 security
+ *     considerations.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -114,10 +118,10 @@ if (!servicesBlock) {
             "optional in the implemented MVP).",
         );
       }
-      // P7 review P1-1: production Redis owns the shared rate-limit state,
-      // so it must never run open. The bundled production Compose must
-      // require REDIS_PASSWORD (no functional fallback) and run the server
-      // with `requirepass`; the healthcheck must authenticate too.
+      // P7 review P1-1: when the profile IS enabled, production Redis owns
+      // the shared rate-limit state, so it must never run open — but the
+      // password guard lives at container startup, keeping Redis optional
+      // at Compose parse time (P7 review P1).
       assertRedisAuth(redisBlock);
     }
   }
@@ -510,13 +514,19 @@ function assertNoRedisDependency(block, serviceName) {
 }
 
 /**
- * P7 review P1-1: production Redis must be authenticated. The redis service
- * (optional profile) must:
- *   - define REDIS_PASSWORD via Compose required-expansion
- *     (`${REDIS_PASSWORD:?...}`), never a `:-` fallback — mirror of the
- *     P6-007 POSTGRES_PASSWORD contract;
+ * P7 review P1-1: an ENABLED production Redis must be authenticated. Redis
+ * stays optional at Compose parse time — the password is checked at
+ * CONTAINER STARTUP, not expansion, so a bare `docker compose up` (redis
+ * profile inactive) needs no Redis configuration (P7 review P1). The redis
+ * service must:
+ *   - keep REDIS_PASSWORD OPTIONAL at Compose expansion (`${REDIS_PASSWORD:-}`
+ *     empty default; `${REDIS_PASSWORD:?...}` required-expansion is
+ *     forbidden — it would make the secret mandatory for the whole stack);
+ *   - fail the redis container at startup when REDIS_PASSWORD is unset or
+ *     empty (a shell guard `: "${REDIS_PASSWORD:?...}"` in the command);
  *   - run the server with `--requirepass` (the password comes from the
- *     container environment, never interpolated into the command line);
+ *     container environment, never interpolated into the stored command
+ *     definition);
  *   - authenticate in its healthcheck (`$$REDIS_PASSWORD`), so an open
  *     instance would fail its own health probe.
  */
@@ -526,18 +536,31 @@ function assertRedisAuth(redisBlock) {
     .filter((l) => !/^\s*#/.test(l))
     .join("\n");
 
-  if (!/\$\{REDIS_PASSWORD:\?[^}]*\}/.test(noComments)) {
+  // The environment must keep the secret optional at Compose expansion.
+  // `(?<!\$)` excludes the `$$`-escaped shell guard in the command (the
+  // container sees `$`, Compose never does) — only the single-`$` Compose
+  // interpolation form is a parse-time requirement.
+  if (/(?<!\$)\$\{REDIS_PASSWORD:\?/.test(noComments)) {
     errors.push(
-      "'redis' service must reference REDIS_PASSWORD via Compose " +
-        "required-expansion '${REDIS_PASSWORD:?...}' (P7 review P1-1: the " +
-        "production Redis credential must have no functional fallback).",
+      "'redis' service must NOT use Compose required-expansion " +
+        "'${REDIS_PASSWORD:?...}' (P7 review P1: Redis is an optional " +
+        "profile — a bare 'docker compose up' must not require the " +
+        "secret; the guard belongs at container startup).",
     );
   }
-  if (/\$\{REDIS_PASSWORD:-[^}]*\}/.test(noComments)) {
+  if (!/(?<!\$)\$\{REDIS_PASSWORD:-[^}]*\}/.test(noComments)) {
     errors.push(
-      "'redis' service must NOT use '${REDIS_PASSWORD:-...}' (P7 review " +
-        "P1-1: a functional fallback default is forbidden for the " +
-        "production Redis credential; use '${REDIS_PASSWORD:?...}').",
+      "'redis' service REDIS_PASSWORD must use the empty-default form " +
+        "'${REDIS_PASSWORD:-}' (P7 review P1: Redis stays optional at " +
+        "Compose parse time).",
+    );
+  }
+  // The command must fail the container at startup without the password.
+  if (!/\$\$\{REDIS_PASSWORD:\?[^}]*\}/.test(noComments)) {
+    errors.push(
+      "'redis' service command must carry a startup guard that fails the " +
+        "container when REDIS_PASSWORD is unset or empty (P7 review P1-1: " +
+        "an enabled production Redis must never run open).",
     );
   }
   if (!/--requirepass/.test(noComments)) {
