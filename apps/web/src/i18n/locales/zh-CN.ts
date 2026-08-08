@@ -1572,6 +1572,9 @@ const zhCN = {
         done: "已标记违规",
         defaultNotes: "监考标记",
         indeterminate: "未确认违规标记是否成功，可重试（将复用同一命令）。",
+        retry: "重试违规标记",
+        retryDescription:
+          "上一次违规标记的提交状态未确认（可能已成功）。重试将使用与上次完全相同的命令标识、严重程度与说明，服务器会幂等重放而不会重复执行。",
         persistenceFailed:
           "无法安全保存违规标记命令，请检查浏览器存储权限后重试。",
         corruptCleared:
@@ -1579,6 +1582,16 @@ const zhCN = {
         blockedPending: "存在未确认的违规标记命令，请先解决后再操作。",
         cleanupFailed:
           "违规标记结果已确认，但本地记录清理失败。该记录不会导致重复执行，但可能阻止新的违规标记操作。请刷新页面后清理该记录。",
+        dismissFailed:
+          "无法清除未确认的违规标记命令，请检查浏览器存储权限后重试。",
+        bannerTitle: "存在未确认的违规标记命令",
+        bannerBody:
+          "上一次违规标记的提交状态未确认（可能已成功，也可能未到达服务器），针对考生「{{candidateName}}」。下方按钮会以完全相同的命令标识重试，服务器会幂等重放而不会重复执行。",
+        bannerRetry: "重试未确认违规标记",
+        bannerDismiss: "清除未确认命令",
+        cleanupFailedBannerTitle: "违规标记结果已确认，但本地记录清理失败",
+        cleanupFailedBannerBody:
+          "该记录不会导致重复执行，但可能阻止新的违规标记操作。请点击「清除」清理该记录，或刷新页面。",
       },
     },
     proctorWorkspace: {
@@ -1938,6 +1951,7 @@ const zhCN = {
         referenced: "被引用",
       },
       eventType: {
+        incident_created: "事件创建",
         created: "创建",
         investigated: "开始调查",
         note_added: "添加备注",
@@ -2089,6 +2103,7 @@ const zhCN = {
       actions: {
         timeGrant: "延长答题时间",
         timeGrantDone: "已延长答题时间",
+        timeGrantFailed: "延长答题时间失败，请稍后重试。",
         forceSubmit: "强制交卷",
         forceSubmitDone: "已提交强制交卷",
         markMisconduct: "标记违规",
@@ -2117,6 +2132,19 @@ const zhCN = {
       corruptCleared: "检测到损坏的待处理命令记录，已清除。",
       blockedByPending: "存在其他待处理命令，请先完成或放弃它。",
       dismissFailed: "无法清除待处理命令，请稍后重试。",
+      coordinationUnavailable:
+        "无法安全协调待处理的加时命令，请关闭其他考试管理标签页或恢复浏览器存储后重试。",
+      leaseConflict: "另一个标签页正在处理该加时，请稍后重试。",
+      clearStaleWarning:
+        "加时结果已确认，但跨标签页待处理状态未能清除。请刷新页面或关闭其他考试管理标签页。",
+      resolvedInAnotherTab: "该加时已在其他标签页处理完成",
+      cleanupFailed:
+        "操作结果已确认，但本地待处理记录清理失败。该记录不会导致重复执行，但可能阻止新的同类操作。请点击「清除」清理该记录，或刷新页面。",
+      cleanupFailedBody:
+        "该记录不会导致重复执行，但可能阻止新的同类操作。请点击「清除」清理该记录，或刷新页面。",
+      forceSubmitCleanupFailedTitle: "强制交卷结果已确认，但本地记录清理失败",
+      misconductCleanupFailedTitle: "违规标记结果已确认，但本地记录清理失败",
+      clearStaleCommand: "清除未确认命令",
       versionConflict: "事件已被其他操作更新（版本冲突），请刷新页面后重试。",
       rejectionFailed: "操作被拒绝，请刷新页面后重试。",
       minutesLabel: "延长时间（分钟）",
