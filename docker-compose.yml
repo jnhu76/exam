@@ -25,8 +25,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}@db:5432/${POSTGRES_DB:-exam}
       # Redis is optional in the implemented MVP (ADR-001). The default
       # empty value disables Redis; set REDIS_URL when the optional
-      # `redis` profile is enabled.
+      # `redis` profile is enabled. REDIS_MODE (off|optional|required)
+      # defaults to "optional" when REDIS_URL is set (P7).
       REDIS_URL: ${REDIS_URL:-}
+      REDIS_MODE: ${REDIS_MODE:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
       NODE_ENV: production
       APP_MODE: production

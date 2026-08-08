@@ -27,3 +27,4 @@ mutation-campaign-results/
 .code-review-graph/
 # Unattended task execution evidence (baseline/test logs, morning reports)
 .artifacts/
+/mvp/

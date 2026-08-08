@@ -36,7 +36,13 @@ function diag() {
     version: "1.0.0",
     uptime: 100,
     dbLatency: 5,
-    redisStatus: { connected: true, latencyMs: 1 },
+    redisStatus: {
+      mode: "optional",
+      state: "ready",
+      connected: true,
+      latencyMs: 1,
+      degradedReason: null,
+    },
     config: {
       heartbeatInterval: 1000,
       heartbeatTimeout: 5000,
@@ -162,11 +168,52 @@ describe("SystemDiagnosticsPage", () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce({
       ...diag(),
-      redisStatus: { connected: false, latencyMs: 0 },
+      redisStatus: {
+        mode: "optional",
+        state: "degraded",
+        connected: false,
+        latencyMs: 0,
+        degradedReason: "connection_lost",
+      },
     });
     renderPage();
     expect(await screen.findByText("数据库状态")).toBeInTheDocument();
-    expect(screen.getByText("未连接")).toBeInTheDocument();
+    expect(screen.getByText("已降级 (连接丢失)")).toBeInTheDocument();
+  });
+
+  it("shows Redis as disabled when mode is off", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      redisStatus: {
+        mode: "off",
+        state: "disabled",
+        connected: false,
+        latencyMs: null,
+        degradedReason: null,
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("数据库状态")).toBeInTheDocument();
+    expect(screen.getByText("已禁用")).toBeInTheDocument();
+    expect(screen.queryByText("未连接")).not.toBeInTheDocument();
+  });
+
+  it("shows Redis as connecting while the client is connecting", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      redisStatus: {
+        mode: "optional",
+        state: "connecting",
+        connected: false,
+        latencyMs: null,
+        degradedReason: null,
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("数据库状态")).toBeInTheDocument();
+    expect(screen.getByText("连接中...")).toBeInTheDocument();
   });
 
   it("renders heartbeat scanner and deadline scanner status cards", async () => {

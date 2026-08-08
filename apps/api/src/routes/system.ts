@@ -355,22 +355,45 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       const statsRepo = createSystemStatsRepo(anyDb);
       const dbLatency = await statsRepo.pingDb();
 
-      let redisStatus: { connected: boolean; latencyMs: number | null } = {
+      let redisStatus: {
+        mode: "off" | "optional" | "required";
+        state: "disabled" | "connecting" | "ready" | "degraded" | "closing";
+        connected: boolean;
+        latencyMs: number | null;
+        degradedReason: string | null;
+      } = {
+        mode: "off",
+        state: "disabled",
         connected: false,
         latencyMs: null,
+        degradedReason: null,
       };
-      if (fastify.redis) {
+
+      if (fastify.redisRuntime) {
+        // P7: diagnostics reflect the runtime lifecycle truthfully (mode,
+        // state, degraded reason) instead of a boolean. Latency is measured
+        // only when the runtime is ready.
+        redisStatus = { ...fastify.redisRuntime.snapshot() };
+        if (fastify.redisRuntime.shouldUseRedis()) {
+          const latencyMs = await fastify.redisRuntime.pingLatency();
+          redisStatus.latencyMs = latencyMs;
+        }
+      } else if (fastify.redis) {
+        // Legacy path (plugin absent, e.g. test apps that inject a fake):
+        // keep the ping-based contract so diagnostics never breaks.
         try {
           // ADR-006: use fastify.now() (the exam time authority) rather than a
           // raw wall-clock read, even though this is diagnostics-only latency.
           const start = fastify.now().getTime();
           await fastify.redis.ping();
           redisStatus = {
+            mode: "off",
+            state: "ready",
             connected: true,
             latencyMs: fastify.now().getTime() - start,
+            degradedReason: null,
           };
         } catch {
-          redisStatus = { connected: false, latencyMs: null };
           request.log.warn(
             { route: "system.diagnostics" },
             "redis.unavailable",

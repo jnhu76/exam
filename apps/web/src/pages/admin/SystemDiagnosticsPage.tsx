@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type {
   SystemHealthResponse,
   DiagnosticsResponse,
@@ -51,6 +52,51 @@ function getDbStatusLevel(ms: number): HealthStatus {
   if (ms > 1000) return "critical";
   if (ms > 500) return "degraded";
   return "ok";
+}
+
+/** Minimal Redis status presentation (P7): distinguishes disabled, ready,
+ * connecting, and degraded (with reason) instead of a flat connected
+ * boolean — a degraded optional-mode instance must not read as merely
+ * "disconnected" nor as healthy. */
+function redisStatusText(
+  rs: DiagnosticsResponse["redisStatus"],
+  t: TFunction,
+): string {
+  if (rs.mode === "off") {
+    return t("diagnostics.labels.redisDisabled");
+  }
+  if (rs.state === "ready") {
+    return t("diagnostics.labels.redisConnected", {
+      latencyMs: rs.latencyMs ?? 0,
+    });
+  }
+  if (rs.state === "connecting") {
+    return t("diagnostics.labels.redisConnecting");
+  }
+  if (rs.state === "degraded") {
+    const reasonLabels: Record<string, string> = {
+      startup_timeout: t(
+        "diagnostics.labels.redisDegradedReason.startupTimeout",
+      ),
+      connection_lost: t(
+        "diagnostics.labels.redisDegradedReason.connectionLost",
+      ),
+      command_failure: t(
+        "diagnostics.labels.redisDegradedReason.commandFailure",
+      ),
+      retry_exhausted: t(
+        "diagnostics.labels.redisDegradedReason.retryExhausted",
+      ),
+    };
+    const reason = rs.degradedReason
+      ? reasonLabels[rs.degradedReason]
+      : undefined;
+    if (reason) {
+      return t("diagnostics.labels.redisDegraded", { reason });
+    }
+    return t("diagnostics.labels.redisDegradedGeneric");
+  }
+  return t("diagnostics.labels.redisDisconnected");
 }
 
 function InfoRow({
@@ -311,13 +357,7 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.redis")}
-                value={
-                  diag.redisStatus.connected
-                    ? t("diagnostics.labels.redisConnected", {
-                        latencyMs: diag.redisStatus.latencyMs ?? 0,
-                      })
-                    : t("diagnostics.labels.redisDisconnected")
-                }
+                value={redisStatusText(diag.redisStatus, t)}
               />
             </DiagCard>
 

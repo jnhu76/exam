@@ -3,7 +3,36 @@
 ## Status
 
 Redis Baseline: **Accepted** (Phase 2 收口)
+Shared rate limiting adoption: **Accepted (post-MVP, bounded)** — see
+"Post-MVP Decision (P7)" below.
 Full Redis adoption: **Deferred** (per trigger conditions below)
+
+## Post-MVP Decision (P7)
+
+> **Decision (2026-08-08, post-MVP infrastructure job P7):** adopt Redis for
+> **one bounded shared responsibility: global/shared rate limiting**.
+>
+> **Reason:** establish and validate the optional shared-coordination
+> substrate before later multi-instance capabilities. The MVP product loop
+> is accepted for real-pilot use; the next job is deliberately post-MVP
+> infrastructure: make Redis a real, optional production coordination
+> dependency for exactly this one responsibility.
+>
+> This does **NOT** make Redis mandatory for the MVP deployment. PostgreSQL
+> remains authoritative. Other Redis responsibilities (presence, admission
+> queue, Pub/Sub, Streams, cache, sessions, scanner leases) still require
+> separate decisions; none are implemented.
+>
+> This is a **new post-MVP architecture decision**, not the old
+> single-instance MVP suddenly requiring Redis: single-instance deployments
+> keep working unchanged with `REDIS_MODE=off` (the default when `REDIS_URL`
+> is unset), and the pre-P7 boolean-ish "URL set → connect or crash" semantics
+> are replaced by an explicit `off | optional | required` lifecycle contract
+> (see `docs/contracts/redis-baseline.md`).
+
+The pre-adoption decision text below (no Redis *runtime dependency* for
+single-instance business behavior) remains the baseline posture for every
+responsibility that is NOT the adopted shared rate limiter.
 
 ## Context
 
@@ -124,18 +153,42 @@ The Redis baseline provides infrastructure for future ADR-007 isolation audit an
 
 ### What's NOT included
 
-- No Redis-backed rate limiting (stays in-memory).
 - No Redis-backed heartbeat/presence (stays in-process).
 - No queue/BullMQ integration.
 - No Redis lock replacing PostgreSQL `FOR UPDATE`.
 - No changes to exam/attempt/enrollment canonical state.
+- No other Redis responsibilities beyond the adopted shared rate limiter
+  (see "P7 — Shared rate limiting" below).
 
 ### Environment variables
 
 ```
 REDIS_URL=redis://localhost:6379     # optional, leave unset to disable
 REDIS_KEY_PREFIX=""                  # optional, for namespace separation
+REDIS_MODE=off|optional|required     # P7: unset → optional (URL set) / off
+REDIS_CONNECT_TIMEOUT_MS=2000        # P7: bounded TCP connect (ms)
+REDIS_COMMAND_TIMEOUT_MS=1000        # P7: bounded per-command (ms)
+REDIS_STARTUP_TIMEOUT_MS=8000        # P7: bounded startup window (ms)
 ```
+
+### P7 — Shared rate limiting (adopted responsibility)
+
+See `docs/contracts/redis-baseline.md` (P7 sections) and
+`docs/audits/P7-REDIS-SHARED-RATE-LIMIT-CLOSEOUT.md` for the full closeout.
+In short:
+
+- The rate limiter uses an atomic Lua fixed-window counter in Redis while the
+  runtime is `ready`; `optional` mode degrades to the local in-memory store
+  on Redis loss; `required` mode fails closed (503 `RATE_LIMIT_UNAVAILABLE`);
+  `off` mode never creates a client.
+- All counters carry a mandatory TTL (the time window); nothing accumulates.
+- Keys live under `<REDIS_KEY_PREFIX>ratelimit:v1:<ip-digest>...` — raw IPs
+  never enter the keyspace (HMAC-SHA256 digest with the deployment
+  JWT_SECRET, domain-separated context `exam-ratelimit-ip-v1`).
+- Two API instances sharing one Redis demonstrably share ONE limit (the
+  acceptance experiment in the closeout).
+- Rate-limit counters are ephemeral; a Redis restart may reset windows.
+  PostgreSQL state is unaffected.
 
 ### Next steps
 
