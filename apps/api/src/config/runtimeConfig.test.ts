@@ -64,6 +64,11 @@ const ENV_KEYS = [
   "REDIS_CONNECT_TIMEOUT_MS",
   "REDIS_COMMAND_TIMEOUT_MS",
   "REDIS_STARTUP_TIMEOUT_MS",
+  "EMAIL_WORKER_POLL_INTERVAL_MS",
+  "EMAIL_WORKER_BATCH_SIZE",
+  "EMAIL_WORKER_LOCK_TIMEOUT_MS",
+  "EMAIL_WORKER_HEARTBEAT_STALE_MS",
+  "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
 ] as const;
 
 describe("runtimeConfig", () => {
@@ -1075,6 +1080,66 @@ describe("runtimeConfig", () => {
       expect(config.email.transport).toBe("fake");
       // SMTP config is not assembled under fake transport.
       expect(config.email.smtp).toBeNull();
+    });
+
+    // P7-S2-D — Email lease safety invariant (fail-fast).
+    //
+    // EMAIL_WORKER_LOCK_TIMEOUT_MS must be strictly greater than the sum of
+    // the SMTP phase timeouts (connection + greeting + socket), otherwise an
+    // alive worker can legally be reclaimed while still sending. This is a
+    // NECESSARY minimum margin, not a proof — nodemailer's socketTimeout is
+    // an inactivity timeout, so the residual window is the documented
+    // at-least-once delivery boundary, not a config error.
+    describe("email worker lease invariant", () => {
+      function smtpEnv(overrides: Record<string, string> = {}) {
+        return {
+          DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam",
+          EMAIL_ENABLED: "true",
+          EMAIL_TRANSPORT: "smtp",
+          SMTP_HOST: "smtp.example.com",
+          SMTP_USER: "u",
+          SMTP_PASSWORD: "p",
+          SMTP_CONNECTION_TIMEOUT_MS: "10000",
+          SMTP_GREETING_TIMEOUT_MS: "10000",
+          SMTP_SOCKET_TIMEOUT_MS: "10000",
+          ...overrides,
+        };
+      }
+
+      it("accepts lock timeout greater than the SMTP timeout sum (default 300s > 30s)", () => {
+        const config = loadRuntimeConfig(smtpEnv());
+        expect(config.emailWorker.lockTimeoutMs).toBe(300000);
+      });
+
+      it("rejects lock timeout equal to the SMTP timeout sum (30000 <= 30000)", () => {
+        expect(() =>
+          loadRuntimeConfig(smtpEnv({ EMAIL_WORKER_LOCK_TIMEOUT_MS: "30000" })),
+        ).toThrow(/EMAIL_WORKER_LOCK_TIMEOUT_MS/);
+      });
+
+      it("rejects lock timeout below the SMTP timeout sum", () => {
+        expect(() =>
+          loadRuntimeConfig(smtpEnv({ EMAIL_WORKER_LOCK_TIMEOUT_MS: "15000" })),
+        ).toThrow(/EMAIL_WORKER_LOCK_TIMEOUT_MS/);
+      });
+
+      it("accepts a configured safe lock timeout", () => {
+        const config = loadRuntimeConfig(
+          smtpEnv({ EMAIL_WORKER_LOCK_TIMEOUT_MS: "60000" }),
+        );
+        expect(config.emailWorker.lockTimeoutMs).toBe(60000);
+      });
+
+      it("does not enforce the invariant for non-SMTP (fake) transport", () => {
+        const config = loadRuntimeConfig(
+          smtpEnv({
+            EMAIL_TRANSPORT: "fake",
+            EMAIL_WORKER_LOCK_TIMEOUT_MS: "15000",
+          }),
+        );
+        expect(config.email.transport).toBe("fake");
+        expect(config.emailWorker.lockTimeoutMs).toBe(15000);
+      });
     });
   });
 

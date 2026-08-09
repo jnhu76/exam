@@ -708,7 +708,10 @@ function resolveEmailConfig(
  * All parameters have safe defaults for local development. Production
  * deployments should tune these via environment variables.
  */
-function resolveEmailWorkerConfig(env: NodeJS.ProcessEnv): EmailWorkerConfig {
+function resolveEmailWorkerConfig(
+  env: NodeJS.ProcessEnv,
+  email: ReturnType<typeof resolveEmailConfig>,
+): EmailWorkerConfig {
   const pollIntervalMs = positiveIntSchema.parse(
     env.EMAIL_WORKER_POLL_INTERVAL_MS ?? "5000",
   );
@@ -727,6 +730,44 @@ function resolveEmailWorkerConfig(env: NodeJS.ProcessEnv): EmailWorkerConfig {
   // Concurrency is fixed at 1 for Phase 1 (single worker instance).
   // The config field exists for forward compatibility.
   const concurrency = 1;
+
+  // P7-S2-D lease safety invariant (fail-fast, SMTP transport only):
+  //
+  //   EMAIL_WORKER_LOCK_TIMEOUT_MS
+  //     > SMTP_CONNECTION_TIMEOUT_MS + SMTP_GREETING_TIMEOUT_MS
+  //       + SMTP_SOCKET_TIMEOUT_MS
+  //
+  // The SMTP connection and greeting phases execute serially before the mail
+  // conversation, and nodemailer's socketTimeout bounds the longest IDLE
+  // period within the conversation — so the sum is the minimum plausible
+  // worst-case single-send duration. The worker lease must comfortably exceed
+  // it, otherwise an alive worker can be reclaimed (recoverAbandoned / a
+  // second instance) while it is still sending, producing a duplicate send.
+  //
+  // This is a NECESSARY minimum safety margin, not a proof: nodemailer's
+  // socketTimeout is an inactivity timeout, so a slow-but-active SMTP server
+  // can in principle keep a send alive beyond the sum. That residual window is
+  // the documented at-least-once delivery boundary (duplicate mail possible,
+  // bounded by retry/maxAttempts policy), not a config error.
+  if (
+    email.transport === "smtp" &&
+    email.smtp &&
+    lockTimeoutMs <=
+      email.smtp.connectionTimeoutMs +
+        email.smtp.greetingTimeoutMs +
+        email.smtp.socketTimeoutMs
+  ) {
+    throw new RuntimeConfigError(
+      `EMAIL_WORKER_LOCK_TIMEOUT_MS (${lockTimeoutMs}) must be greater than ` +
+        `SMTP_CONNECTION_TIMEOUT_MS + SMTP_GREETING_TIMEOUT_MS + ` +
+        `SMTP_SOCKET_TIMEOUT_MS (` +
+        `${email.smtp.connectionTimeoutMs} + ${email.smtp.greetingTimeoutMs} + ` +
+        `${email.smtp.socketTimeoutMs} = ` +
+        `${email.smtp.connectionTimeoutMs + email.smtp.greetingTimeoutMs + email.smtp.socketTimeoutMs}` +
+        `): an alive email worker could otherwise be reclaimed while still ` +
+        `sending (duplicate at-least-once delivery).`,
+    );
+  }
 
   return {
     pollIntervalMs,
@@ -818,7 +859,7 @@ export function loadRuntimeConfig(
     },
     timezone: { timezone: resolveTimezone(env) },
     email,
-    emailWorker: resolveEmailWorkerConfig(env),
+    emailWorker: resolveEmailWorkerConfig(env, email),
     publicWebOrigin: { origin: resolvePublicWebOrigin(env, mode) },
   };
 }
