@@ -210,6 +210,42 @@ describe("launchpad routes", () => {
       .where(eq(schema.organizations.name, "Should Not Be Created"));
     expect(secondOrgs).toHaveLength(0);
   });
+
+  it("an org with ZERO users stays COMPLETED — deleting the last Admin never reopens the launchpad (no privilege takeover)", async () => {
+    // Isolated schema: delete every user, leaving an organization behind
+    // (the "last Admin was removed" state). The launchpad must remain
+    // permanently COMPLETED — freshness is defined as "NO org AND NO user
+    // has EVER existed".
+    await ctx.db.delete(schema.users);
+    process.env.LAUNCHPAD_SETUP_TOKEN = "still-set-but-irrelevant";
+    const statusResponse = await ctx.app.inject({
+      method: "GET",
+      url: "/api/launchpad/status",
+    });
+    expect(statusResponse.statusCode).toBe(200);
+    expect(statusResponse.json()).toEqual({ state: "COMPLETED" });
+
+    const bootstrapResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/launchpad/bootstrap",
+      payload: {
+        setupToken: "still-set-but-irrelevant",
+        organizationName: "Takeover Attempt",
+        username: "takeover-admin",
+        name: "Takeover Admin",
+        password: "password123",
+      },
+    });
+    expect(bootstrapResponse.statusCode).toBe(409);
+    expect(bootstrapResponse.json().error.code).toBe(
+      "LAUNCHPAD_ALREADY_COMPLETED",
+    );
+    const takeoverOrgs = await ctx.db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.name, "Takeover Attempt"));
+    expect(takeoverOrgs).toHaveLength(0);
+  });
 });
 
 /**
