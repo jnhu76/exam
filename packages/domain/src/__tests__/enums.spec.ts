@@ -57,8 +57,8 @@ describe("domain enums expose stable string values", () => {
   });
 
   it("角色与考试模式枚举定义稳定值", () => {
-    expect(Role.Admin).toBeDefined();
-    expect(Role.Candidate).toBeDefined();
+    expect(Role.Admin).toBe("Admin");
+    expect(Role.Candidate).toBe("Candidate");
     expect(TimingMode.TimedWindow).toBe("timed_window");
     expect(RetakePolicy.MaxAttempts).toBe("max_attempts");
     expect(ScoreStrategy.Highest).toBe("highest");

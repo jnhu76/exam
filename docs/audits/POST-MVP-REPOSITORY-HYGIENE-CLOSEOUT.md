@@ -12,7 +12,7 @@
 | Item | Value |
 | --- | --- |
 | Baseline SHA | `e3f19d8b2774574b6969b5058ce4b0cb28599bbd` (master, merge PR #265) |
-| Head SHA | `HEAD` of branch `chore/post-mvp-repository-hygiene` (see PR) |
+| Head SHA | Immutable final SHA to be recorded at commit time (branch `chore/post-mvp-repository-hygiene`, see PR #267). The mutable `HEAD` reference is intentionally not used: audit evidence must freeze the exact commit verified, not a moving pointer. |
 | PR | PR #267 (links Issue #266) |
 
 ## Deleted fossils (4)
@@ -213,6 +213,6 @@ host/DB-state bound and NOT a code regression:
 
 ## Final verdict
 
-```
+```text
 POST-MVP REPOSITORY HYGIENE READY FOR HUMAN REVIEW
 ```

@@ -163,7 +163,9 @@ docker compose down -v          # DANGEROUS: removes database data volumes
 # (Optional) enable the Redis profile — the shared rate limiter reads/writes
 # Redis when the runtime is ready:
 docker compose --profile redis up -d --build
-# and set REDIS_URL=redis://redis:6379 (+ REDIS_PASSWORD, REDIS_MODE) in .env
+# and set REDIS_PASSWORD=<secret>, REDIS_URL=redis://:<secret>@redis:6379
+#   (REDIS_MODE=optional|required) in .env — production Redis runs with
+#   requirepass, so an authenticated URL is required (see runbook §10)
 ```
 
 - App: <http://localhost:3000>

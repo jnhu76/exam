@@ -79,7 +79,7 @@
 > §11). Redis is no longer "not the current blocker" as a decision topic; it
 > is an adopted, bounded dependency.
 
-Redis is not the current blocker.
+Historically, Redis was not the blocker.
 
 The immediate architectural gaps are:
 

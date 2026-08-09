@@ -106,16 +106,31 @@ resolves successfully), so pending rows never pile up forever.
 
 ### 3.2 Test environment
 
+Default test environment (no retry path):
+
 ```env
 EMAIL_ENABLED=false
 EMAIL_TRANSPORT=fake
-EMAIL_FAKE_MODE=success   # flip to "failure" to exercise retry/error paths
+EMAIL_FAKE_MODE=success
+```
+
+Fake failure / retry tests use a **separate override** that flips
+`EMAIL_ENABLED=true` — with `EMAIL_ENABLED=false` the factory resolves to
+`DisabledEmailSender` (a no-op that resolves successfully), so it never reaches
+`FakeEmailSender` and cannot exercise its retry/error path regardless of
+`EMAIL_FAKE_MODE`:
+
+```env
+EMAIL_ENABLED=true
+EMAIL_TRANSPORT=fake
+EMAIL_FAKE_MODE=failure   # exercises FakeEmailSender retry/error paths
 ```
 
 Tests **never** touch real SMTP, never need a secret. `.env.test.example` ships
-this exact block. The full test contract is enforced by the API email tests
-(`apps/api/src/routes/email.test.ts`, `apps/api/src/email/*.test.ts`) under
-`docs/adr/ADR-011-notification-and-email-delivery.md`.
+the default block; the fake-failure override is applied by the individual
+retry/error test cases. The full test contract is enforced by the API email
+tests (`apps/api/src/routes/email.test.ts`, `apps/api/src/email/*.test.ts`)
+under `docs/adr/ADR-011-notification-and-email-delivery.md`.
 
 ### 3.3 Production with real SMTP
 

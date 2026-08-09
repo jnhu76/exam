@@ -232,8 +232,8 @@ a documented decision before any Redis business responsibility is introduced:
 
 **P7-D1 is ACCEPTED (2026-08-08):** Redis is adopted for ONE bounded
 responsibility — the **shared/global rate limiter** — with lifecycle
-hardening and `off | optional | required` operating modes (P7-D2/D3, PR
-#265). ADR-001 carries the decision record. Until a further decision is
+hardening and `off | optional | required` operating modes (P7-D2/D3,
+PR #265). ADR-001 carries the decision record. Until a further decision is
 recorded, Redis stays limited to that responsibility; the baseline plugin,
 Compose service, diagnostics PING, and test-prefix isolation are not
 adoption.
