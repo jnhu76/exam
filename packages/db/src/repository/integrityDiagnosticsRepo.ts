@@ -110,7 +110,10 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
       ]);
 
       // Anomaly SAMPLE: only rows matching at least one predicate, in stable
-      // attempt-id order, bounded by `limit`. One row can carry both kinds.
+      // attempt-id order, bounded by `limit`. The SQL `.limit(limit)` bounds
+      // ROWS fetched (DB workload); a single row can carry BOTH anomaly kinds,
+      // so the sample array is capped PER PUSH — never `limit+1` from a
+      // boundary row emitting two anomalies before the post-row check.
       const rows = await db
         .select({
           attemptId: examAttempts.id,
@@ -133,10 +136,13 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
 
       const anomalies: AttemptIntegrityAnomaly[] = [];
       for (const row of rows) {
+        if (anomalies.length >= limit) break;
         const gradingEntries = Number(row.gradingEntries);
         const snapshotQuestions = Number(row.snapshotQuestions);
 
-        if (row.gradingStatus === "auto_graded") {
+        // `length < limit` guards each push so the returned array can never
+        // exceed `limit` even when a single row qualifies for both kinds.
+        if (row.gradingStatus === "auto_graded" && anomalies.length < limit) {
           anomalies.push({
             kind: "submitted_not_terminalized",
             attemptId: row.attemptId,
@@ -151,7 +157,7 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
             snapshotQuestions,
           });
         }
-        if (gradingEntries !== snapshotQuestions) {
+        if (gradingEntries !== snapshotQuestions && anomalies.length < limit) {
           anomalies.push({
             kind: "submitted_workset_mismatch",
             attemptId: row.attemptId,
@@ -165,10 +171,6 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
             gradingEntries,
             snapshotQuestions,
           });
-        }
-        // Cap the sample itself (a row can produce up to two anomalies).
-        if (anomalies.length >= limit) {
-          break;
         }
       }
 

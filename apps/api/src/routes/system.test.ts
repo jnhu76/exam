@@ -960,7 +960,10 @@ describe("system routes", () => {
       expect(after.submittedWorksetMismatch).toBe(
         before.submittedWorksetMismatch + 120,
       );
-      // The SAMPLE stays bounded at 100 even when totals exceed it.
+      // The SAMPLE stays bounded at 100 even when totals exceed it AND every
+      // fetched row qualifies for BOTH anomaly kinds (the boundary row that
+      // pushes 99→100→101 under a naive post-row cap). This is the per-push
+      // cap contract: the returned array length can never exceed `limit`.
       expect(after.anomalies.length).toBeLessThanOrEqual(100);
     });
 
