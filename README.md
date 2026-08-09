@@ -157,8 +157,12 @@ cp .env.example .env
 docker compose up -d --build    # build + start app, db, email-worker
 docker compose logs -f app
 docker compose ps               # verify app, db, email-worker are up
-docker compose down
-docker compose down -v          # DANGEROUS: removes database data volumes
+docker compose down             # stops + removes containers (keeps ./data)
+# NOTE (P7-C1): authoritative state lives in the operator-visible host bind
+# mount ./data/postgres (EXAM_DATA_ROOT, default ./data). `docker compose down`
+# retains it; `docker compose down -v` is a no-op for bind mounts. To destroy
+# authoritative data you must explicitly delete ./data/postgres. See
+# docs/deployment/backup-and-recovery.md.
 
 # (Optional) enable the Redis profile — the shared rate limiter reads/writes
 # Redis when the runtime is ready:
@@ -206,6 +210,23 @@ The bootstrap: (1) locates or creates the internal default organization
 (3) creates the primary Admin role assignment in the same transaction;
 (4) writes an `admin.bootstrap` audit row. It refuses a second active
 Admin unless `--force` is supplied. It does NOT create Candidate accounts.
+
+Alternatively, on a fresh installation you can use the **Launchpad**
+first-install page: set `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` in
+`.env`, start the stack, and navigate to `/launchpad` to complete the
+first-Admin setup in the browser. The Launchpad and the CLI share one
+canonical atomic mutation body; once the installation is initialized,
+`/launchpad` redirects to `/login` (it never reopens). See
+[`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md) §8.
+
+#### Backup and recovery
+
+Authoritative state is the PostgreSQL data directory under
+`./data/postgres`. **Host persistence is not backup** — see
+[`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md)
+for the cold-filesystem backup/restore procedures, the relocation guide,
+Redis-loss behavior, and the (forthcoming) C2 logical `pg_dump` / C3
+physical `pg_basebackup` + PITR procedures.
 
 ## Docker Files Reference
 

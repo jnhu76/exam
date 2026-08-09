@@ -168,10 +168,19 @@ docker compose ps
 
 # 7. Bootstrap the first Admin (production path — see §5). This also
 #    creates the internal default organization, which unblocks the worker.
+#    Two equivalent paths share one canonical atomic mutation body:
+#
+#    (a) CLI fallback (operator path):
 docker compose exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
+#
+#    (b) Launchpad first-install page (browser path): set
+#        LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32> in .env BEFORE step 4,
+#        then navigate to http://<host>:<APP_PORT>/launchpad and complete
+#        the first-Admin setup form. Once initialized, /launchpad redirects
+#        to /login and never reopens. See backup-and-recovery.md §8.
 
 # 8. The same worker container detects the new organization, resolves it,
 #    and enters its poll loop without restarting. Verify:
@@ -775,18 +784,51 @@ and §24 (deferred capabilities). Highlights:
 
 ## 17. Backup / export (operator-supplied)
 
-The currently documented backup procedure is `pg_dump` against the `pgdata` volume.
+> **Canonical backup & recovery authority:** see
+> [`docs/deployment/backup-and-recovery.md`](./backup-and-recovery.md). That
+> guide documents the supported C1 cold-filesystem backup/restore and
+> relocation procedures in full. The summary below is retained for
+> runbook-local context.
 
-> **CURRENT PROCEDURE UNVALIDATED — do not treat as a proven exact historical
-> restore until P7-C restore drills close this gap.** The P7-C0 durability
-> audit (`docs/audits/P7-C0-DURABILITY-PERSISTENCE-REALITY-AUDIT.md` §16/§16.1)
-> classified this path as **documented-only, UNVALIDATED**: the P6 audit
-> verified the migrate-from-zero path but never executed a live
-> pg_dump/restore cycle, and exact historical state replacement is NOT proven
-> (restoring an older dump into an already-newer database may leave objects
-> absent from the dump unless the target is recreated/cleaned under an
-> explicit restore contract). Validate on first production deploy before
-> relying on it.
+Authoritative state is the PostgreSQL data directory under
+`${EXAM_DATA_ROOT:-./data}/postgres` (a host bind mount since P7-C1; the
+former `pgdata` named volume is gone). **Host persistence is not backup** —
+a copy on the same failing disk is a weak local copy, not disaster recovery.
+
+### C1 cold-filesystem backup (validated)
+
+The simplest full backup: stop Exam cleanly, copy the COMPLETE postgres
+directory to an off-host destination, restart. Use the helper scripts,
+which preserve ownership/mode/symlinks and refuse unsafe paths:
+
+```bash
+# Stop Exam first (PostgreSQL must be STOPPED — a live copy is corrupt-prone):
+docker compose down
+scripts/backup/cold-filesystem-backup.sh ./data /mnt/nas/exam-backups/$(date +%Y%m%d)
+docker compose up -d
+```
+
+Restore into a fresh data root, then start Exam with the same PostgreSQL
+major version and the same DB credentials:
+
+```bash
+scripts/backup/cold-filesystem-restore.sh /mnt/nas/exam-backups/<date> /opt/exam/data-fresh
+EXAM_DATA_ROOT=/opt/exam/data-fresh POSTGRES_PASSWORD=<same> docker compose up -d
+```
+
+Both procedures were validated by an automated drill
+(`scripts/deployment/p7-c1-cold-backup-restore-drill.sh`) that proves a
+fresh working Exam deployment with identical authoritative state is
+produced from the backup. See backup-and-recovery.md §6.
+
+### pg_dump logical backup (documented; C2 will validate)
+
+The `pg_dump` path below is **documented-only and UNVALIDATED** until the
+P7-C2 logical-backup/restore drill ships. The P7-C0 durability audit
+classified this path as documented-only; exact historical replacement is
+NOT proven (restoring an older dump into an already-newer database may
+leave objects absent from the dump unless the target is recreated/cleaned
+under an explicit restore contract — C2 will close this).
 
 ```bash
 # Backup (online, consistent). $POSTGRES_USER / $POSTGRES_DB are expanded
@@ -805,7 +847,7 @@ tail -5 backup_*.sql   # should contain 'PostgreSQL database dump complete'
 # NOTE: --clean --if-exists drops objects present in the dump, but does NOT
 # remove objects that exist in the target DB yet are absent from an older
 # dump. For an EXACT historical replacement, recreate/clean the target
-# database under an explicit restore contract (P7-C restore drills).
+# database under an explicit restore contract (C2 restore drill).
 docker compose stop app email-worker
 docker compose exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
@@ -818,8 +860,4 @@ continuous WAL archiving. Schedule backups via cron on the Docker host — the
 MVP does not ship a backup scheduler. Note that `wal_level=replica` is already
 sufficient for continuous archiving / PITR; the actual missing pieces for PITR
 are `archive_mode=on`, an `archive_command`, a WAL archive destination/retention
-contract, a base-backup/recovery procedure, and a recovery drill (P7-C0 §7).
-
-> **Note:** the P6 audit verified the migrate-from-zero path (§9 of the
-> audit) but did not execute a live pg_dump/restore cycle. Validate the
-> backup/restore procedure on first production deploy before relying on it.
+contract, a base-backup/recovery procedure, and a recovery drill (P7-C3).

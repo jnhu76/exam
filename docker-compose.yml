@@ -23,6 +23,16 @@
 #     API reads REDIS_URL; when the profile is enabled the operator must set
 #     it to the authenticated URL, e.g. redis://:<REDIS_PASSWORD>@redis:6379.
 #     See docs/deployment/mvp-deployment-runbook.md §10.
+#
+# Portable persistence (P7-C1): authoritative state lives in operator-visible
+# host bind mounts under ${EXAM_DATA_ROOT:-./data}. Containers are disposable;
+# the declared host data directory is not. See
+# docs/deployment/backup-and-recovery.md. The official PostgreSQL image owns
+# its internal PGDATA layout (/var/lib/postgresql/18/docker); the host
+# abstraction is simply ${EXAM_DATA_ROOT}/postgres — operators do not need to
+# understand the internal subdirectories. Scripts that launch this topology
+# for tests/smoke MUST set EXAM_DATA_ROOT to an isolated temp directory so they
+# never share the repo-root ./data/ (P7-C1 C1.3 isolation rule).
 services:
   app:
     build: .
@@ -87,7 +97,10 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
-      - pgdata:/var/lib/postgresql
+      # P7-C1: authoritative state is an operator-visible host bind mount.
+      # Containers are disposable; this host directory is not. The official
+      # postgres image owns its internal PGDATA layout under this path.
+      - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
     healthcheck:
       test:
         [
@@ -144,7 +157,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
-      - redisdata:/data
+      # P7-C1: Redis persistence is OPTIONAL for correctness. It holds only
+      # rate-limit counters; losing it resets operational history but never
+      # affects PostgreSQL authority. Restoring Redis is NOT a condition for
+      # restoring Exam authority (C1.2).
+      - ${EXAM_DATA_ROOT:-./data}/redis:/data
     healthcheck:
       # An unauthenticated ping must fail (NOAUTH) — the healthcheck itself
       # proves the server enforces the password.
@@ -235,9 +252,9 @@ services:
       - exam-net
     restart: unless-stopped
 
-volumes:
-  pgdata:
-  redisdata:
+# P7-C1: no top-level named volumes. Authoritative state lives in
+# operator-visible host bind mounts under ${EXAM_DATA_ROOT:-./data}
+# (see the db and redis service volumes above).
 
 networks:
   exam-net:

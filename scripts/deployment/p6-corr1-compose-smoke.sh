@@ -2,10 +2,14 @@
 # P6-CORR1 clean-volume Compose smoke test.
 #
 # Runs the bundled production docker-compose.yml (from the repo root)
-# against an ISOLATED Compose project (via `-p <unique-name>`). The
-# `pgdata` / `redisdata` named volumes are project-namespaced, so each run
-# gets a fresh volume set without touching the dev `exam` DB or any other
-# stack. Volumes are destroyed on exit.
+# against an ISOLATED Compose project (via `-p <unique-name>`) AND an
+# isolated temp data root (EXAM_DATA_ROOT). P7-C1 switched the production
+# topology from Docker named volumes to operator-visible host bind mounts
+# under ${EXAM_DATA_ROOT:-./data}; this script therefore points
+# EXAM_DATA_ROOT at a per-run mktemp(1) directory so the smoke run never
+# shares the repo-root ./data/ and never touches the dev `exam` DB or any
+# other stack. The temp directory is removed on exit (after guarding
+# against an empty/unsafe path).
 #
 # Proves:
 #   - POSTGRES_PASSWORD is required (no default) — Compose fails to expand
@@ -43,6 +47,13 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   echo "FAIL: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
   exit 1
 fi
+
+# P7-C1: the production topology now uses host bind mounts under
+# EXAM_DATA_ROOT. Point it at a per-run temp directory so the smoke run
+# gets a fresh, isolated data root without touching the repo-root ./data/
+# or any other stack. The directory is removed on exit (see cleanup).
+EXAM_DATA_ROOT="$(mktemp -d -t p6corr1-smoke-data-XXXXXX)"
+export EXAM_DATA_ROOT
 
 # Strong per-run credentials (test-only, isolated throwaway stack).
 PG_PASSWORD="p6-smoke-pass-${RUN_NUM}-$(date +%s)"
@@ -99,8 +110,18 @@ run_psql_query() {
 
 cleanup() {
   echo "--- cleanup: tearing down isolated project ${PROJECT} ---"
-  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" down -v --remove-orphans \
+  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" down --remove-orphans \
     > /dev/null 2>&1 || true
+  # P7-C1: remove the per-run temp data root created by this script. Guard
+  # against an empty or unsafe path: only delete the mktemp(1) directory the
+  # script itself created, and only if it still looks like ours. Never run a
+  # broad `rm -rf` on a path that could be empty, the repo root, or a path we
+  # did not create.
+  if [ -n "${EXAM_DATA_ROOT:-}" ] \
+    && [ -d "${EXAM_DATA_ROOT}" ] \
+    && printf '%s\n' "${EXAM_DATA_ROOT}" | grep -q '^/tmp/p6corr1-smoke-data-'; then
+    rm -rf "${EXAM_DATA_ROOT}" > /dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 

@@ -196,6 +196,27 @@ export interface EmailWorkerConfig {
   concurrency: number;
 }
 
+/**
+ * Launchpad first-install configuration (P7-C1).
+ *
+ * The setup token is a deployment bootstrap secret: high entropy, body-only
+ * (never in a URL), never audit-logged in plaintext, and required for the
+ * initial first-Admin setup via `/api/launchpad/bootstrap`. An unset/empty
+ * value means launchpad is refused (no token-validation oracle). The token
+ * is read from the `LAUNCHPAD_SETUP_TOKEN` env var and is intentionally
+ * NOT fail-fast at boot: an unset token simply disables launchpad, so a
+ * bare `docker compose up` without launchpad configured starts normally.
+ */
+export interface LaunchpadConfig {
+  /**
+   * The configured setup token, or an empty string when not configured.
+   * Comparison against a request token MUST be constant-time and MUST be
+   * preceded by the installation-initialized check so a completed
+   * installation cannot become a token-validity oracle.
+   */
+  setupToken: string;
+}
+
 export interface AppRuntimeConfig {
   app: {
     mode: AppMode;
@@ -221,6 +242,7 @@ export interface AppRuntimeConfig {
   email: EmailConfig;
   emailWorker: EmailWorkerConfig;
   publicWebOrigin: PublicWebOriginConfig;
+  launchpad: LaunchpadConfig;
 }
 
 const DEFAULT_JWT_SECRET = "development-only-change-me";
@@ -872,6 +894,13 @@ export function loadRuntimeConfig(
     email,
     emailWorker: resolveEmailWorkerConfig(env, email),
     publicWebOrigin: { origin: resolvePublicWebOrigin(env, mode) },
+    launchpad: {
+      // P7-C1: unset/empty LAUNCHPAD_SETUP_TOKEN disables launchpad (the
+      // bootstrap endpoint refuses). NOT fail-fast — a bare `docker compose
+      // up` without launchpad configured must start normally. Trimmed to
+      // treat a whitespace-only value as unset.
+      setupToken: (env.LAUNCHPAD_SETUP_TOKEN ?? "").trim(),
+    },
   };
 }
 

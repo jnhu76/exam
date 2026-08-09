@@ -28,3 +28,6 @@ mutation-campaign-results/
 # Unattended task execution evidence (baseline/test logs, morning reports)
 .artifacts/
 /mvp/
+# P7-C1: operator-visible host persistence root for the production Compose
+# topology (bind-mounted postgres/redis state). Never commit runtime data.
+/data/
