@@ -10,6 +10,7 @@ import {
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createWorkerHeartbeatRepo } from "@exam/db/src/repository/workerHeartbeatRepo.js";
+import { createIntegrityDiagnosticsRepo } from "@exam/db/src/repository/integrityDiagnosticsRepo.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -423,6 +424,18 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           getRequestContext(request),
           fastify.now(),
         ),
+        // P7-S2 Phase 7 — read-only integrity anomalies (detect, never repair).
+        integrity: await createIntegrityDiagnosticsRepo(anyDb)
+          .findAttemptAnomalies(getRequestContext(request), { limit: 100 })
+          .then((report) => ({
+            submittedNotTerminalized: report.submittedNotTerminalized,
+            submittedWorksetMismatch: report.submittedWorksetMismatch,
+            anomalies: report.anomalies.map((a) => ({
+              ...a,
+              submittedAt: a.submittedAt?.toISOString() ?? null,
+              gradedAt: a.gradedAt?.toISOString() ?? null,
+            })),
+          })),
         config: {
           heartbeatInterval: config.heartbeat.scanIntervalMs ?? 30_000,
           heartbeatTimeout: config.heartbeat.timeoutMs ?? 60_000,

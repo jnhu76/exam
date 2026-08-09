@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import type { QuestionSnapshot } from "@exam/domain";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp } from "./testHelpers.js";
 import systemRoutes from "./system.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
-import { emailOutbox, workerHeartbeats } from "@exam/db/src/schema/pg.js";
+import {
+  emailOutbox,
+  workerHeartbeats,
+  schema,
+} from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
 
@@ -341,7 +347,7 @@ describe("system routes", () => {
       const orgId = ctx.org.id;
       const seeded: (typeof emailOutbox.$inferInsert)[] = [
         {
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           organizationId: orgId,
           type: "test_email",
           recipientEmail: "a@x.com",
@@ -353,7 +359,7 @@ describe("system routes", () => {
           lastError: "boom",
         },
         {
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           organizationId: orgId,
           type: "test_email",
           recipientEmail: "b@x.com",
@@ -397,7 +403,7 @@ describe("system routes", () => {
 
       try {
         await ctx.db.insert(workerHeartbeats).values({
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           workerName: "email-delivery",
           workerInstanceId: "bootstrap-pending-test",
           lastPollAt: new Date(),
@@ -434,7 +440,7 @@ describe("system routes", () => {
       try {
         const now = new Date();
         await ctx.db.insert(workerHeartbeats).values({
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           workerName: "email-delivery",
           workerInstanceId: "available-test",
           lastPollAt: now,
@@ -475,6 +481,263 @@ describe("system routes", () => {
         process.env.EMAIL_ENABLED = original;
       }
       resetRuntimeConfigForTest();
+    });
+  });
+
+  // P7-S2 Phase 7 — read-only attempt-integrity anomalies.
+  describe("GET /system/diagnostics integrity block", () => {
+    const questionSnapshot: QuestionSnapshot[] = [
+      {
+        originalQuestionId: "q-legacy-1",
+        type: "single_choice",
+        content: "Q",
+        attachments: [],
+        options: [],
+        standardAnswer: "a",
+        score: 10,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        order: 0,
+        rubric: null,
+      },
+    ];
+
+    async function seedLegacyAttempt(
+      overrides: {
+        status?: string;
+        gradingStatus?: "auto_graded" | "pending_manual" | "fully_graded";
+        withEntry?: boolean;
+        snapshot?: QuestionSnapshot[];
+      } = {},
+    ): Promise<string> {
+      const now = new Date();
+      const orgId = ctx.org.id;
+      const courseId = randomUUID();
+      const examId = randomUUID();
+      const candidateProfileId = randomUUID();
+      const userId = randomUUID();
+      const snapshot = overrides.snapshot ?? questionSnapshot;
+
+      await ctx.db.insert(schema.courses).values({
+        id: courseId,
+        organizationId: orgId,
+        name: "Legacy",
+        code: `LG-${randomUUID().slice(0, 6)}`,
+        description: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.exams).values({
+        id: examId,
+        organizationId: orgId,
+        title: "Legacy exam",
+        description: "",
+        courseId,
+        status: "closed",
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: now,
+        closeAt: new Date(now.getTime() + 86400_000),
+        passingScore: 60,
+        totalScore: 100,
+        questionSelectionMode: "manual",
+        questionIds: snapshot.map(
+          (q) => (q as { originalQuestionId: string }).originalQuestionId,
+        ),
+        questionSnapshot: snapshot,
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 1,
+        interruptionTimePolicy: "operator_incident",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.users).values({
+        id: userId,
+        organizationId: orgId,
+        username: `lg-cand-${randomUUID().slice(0, 6)}`,
+        passwordHash: "hash",
+        name: "Legacy Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id: candidateProfileId,
+        organizationId: orgId,
+        userId,
+        fields: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+      const enrollmentId = randomUUID();
+      await ctx.db.insert(schema.examEnrollments).values({
+        id: enrollmentId,
+        organizationId: orgId,
+        examId,
+        candidateId: candidateProfileId,
+        status: "completed",
+        attemptCount: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const attemptId = randomUUID();
+      await ctx.db.insert(schema.examAttempts).values({
+        id: attemptId,
+        organizationId: orgId,
+        examId,
+        enrollmentId,
+        candidateId: candidateProfileId,
+        attemptNo: 1,
+        status: overrides.status ?? "submitted",
+        gradingStatus: overrides.gradingStatus ?? "auto_graded",
+        questionSnapshot: snapshot,
+        answers: [],
+        submittedAnswers: {
+          schemaVersion: 1,
+          answers: [],
+        },
+        submittedAt: now,
+        gradedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (overrides.withEntry) {
+        await ctx.db.insert(schema.attemptGradingEntries).values({
+          id: randomUUID(),
+          organizationId: orgId,
+          attemptId,
+          questionId: (snapshot[0] as { originalQuestionId: string })
+            .originalQuestionId,
+          gradingMode: "auto",
+          status: "completed_auto",
+          maxScore: 10,
+          earnedScore: 10,
+          candidateAnswer: "a",
+          standardAnswer: "a",
+          correct: true,
+          comment: "",
+          gradedBy: null,
+          gradedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      return attemptId;
+    }
+
+    it("reports zero anomalies on a clean tenant", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.integrity.submittedNotTerminalized).toBe(0);
+      expect(body.integrity.submittedWorksetMismatch).toBe(0);
+      expect(body.integrity.anomalies).toEqual([]);
+    });
+
+    it("detects legacy submitted+auto_graded attempts with identity evidence", async () => {
+      const attemptId = await seedLegacyAttempt();
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.integrity.submittedNotTerminalized).toBeGreaterThanOrEqual(1);
+      const anomaly = body.integrity.anomalies.find(
+        (a: { attemptId: string }) => a.attemptId === attemptId,
+      );
+      expect(anomaly).toBeDefined();
+      expect(anomaly.kind).toBe("submitted_not_terminalized");
+      expect(anomaly.submittedAt).toBeTruthy();
+      expect(anomaly.snapshotQuestions).toBe(1);
+      expect(anomaly.gradingEntries).toBe(0);
+    });
+
+    it("detects submitted attempts with a missing workset (count mismatch)", async () => {
+      const attemptId = await seedLegacyAttempt({
+        gradingStatus: "pending_manual",
+        withEntry: false,
+      });
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.integrity.submittedWorksetMismatch).toBeGreaterThanOrEqual(1);
+      const anomaly = body.integrity.anomalies.find(
+        (a: { attemptId: string }) => a.attemptId === attemptId,
+      );
+      expect(anomaly).toBeDefined();
+      expect(anomaly.kind).toBe("submitted_workset_mismatch");
+      expect(anomaly.gradingEntries).toBe(0);
+      expect(anomaly.snapshotQuestions).toBe(1);
+    });
+
+    it("does not flag a consistent workset (entry count == snapshot count)", async () => {
+      const attemptId = await seedLegacyAttempt({
+        gradingStatus: "pending_manual",
+        withEntry: true,
+      });
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      const anomalies = body.integrity.anomalies.filter(
+        (a: { attemptId: string }) => a.attemptId === attemptId,
+      );
+      // With a matching workset the attempt must NOT be flagged as
+      // workset-mismatch; a pending_manual submitted row is not a
+      // submitted_not_terminalized anomaly either.
+      expect(anomalies).toEqual([]);
+    });
+
+    it("does not flag current-runtime graded attempts", async () => {
+      const attemptId = await seedLegacyAttempt({
+        status: "graded",
+        gradingStatus: "auto_graded",
+        withEntry: true,
+      });
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      const anomalies = body.integrity.anomalies.filter(
+        (a: { attemptId: string }) => a.attemptId === attemptId,
+      );
+      expect(anomalies).toEqual([]);
     });
   });
 });

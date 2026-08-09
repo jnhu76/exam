@@ -143,9 +143,33 @@ export type RedisDiagnosticsStatus = z.infer<
 >;
 
 /**
+ * P7-S2 Phase 7 — read-only attempt-integrity anomaly block.
+ *
+ * Counts durable attempt shapes the CURRENT runtime cannot produce (submit
+ * freeze, workset materialization, and terminal grading commit in one
+ * transaction) but which may exist from legacy versions / manual SQL. The
+ * `anomalies` array is a bounded sample carrying enough identity for a human
+ * or a later canonical repair command. Detection only — never repairs.
+ */
+export const AttemptIntegrityAnomalySchema = z.object({
+  kind: z.enum(["submitted_not_terminalized", "submitted_workset_mismatch"]),
+  attemptId: z.string(),
+  examId: z.string(),
+  enrollmentId: z.string(),
+  candidateId: z.string(),
+  status: z.string(),
+  gradingStatus: z.string(),
+  submittedAt: z.string().datetime().nullable(),
+  gradedAt: z.string().datetime().nullable(),
+  gradingEntries: z.number().int().min(0),
+  snapshotQuestions: z.number().int().min(0),
+});
+
+/**
  * Schema for the system diagnostics response, providing server version,
  * uptime, database latency, Redis status, heartbeat/deadline scanner status,
- * email infrastructure status, and non-sensitive runtime configuration.
+ * email infrastructure status, read-only integrity anomalies, and
+ * non-sensitive runtime configuration.
  */
 export const DiagnosticsResponseSchema = z.object({
   version: z.string(),
@@ -164,6 +188,11 @@ export const DiagnosticsResponseSchema = z.object({
     autoSubmitCount: z.number().int().min(0),
   }),
   emailStatus: EmailDiagnosticsStatusSchema,
+  integrity: z.object({
+    submittedNotTerminalized: z.number().int().min(0),
+    submittedWorksetMismatch: z.number().int().min(0),
+    anomalies: z.array(AttemptIntegrityAnomalySchema),
+  }),
   config: z.object({
     heartbeatInterval: z.number().int().min(0),
     heartbeatTimeout: z.number().int().min(0),
