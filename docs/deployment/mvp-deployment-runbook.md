@@ -775,7 +775,7 @@ and §24 (deferred capabilities). Highlights:
 
 ## 17. Backup / export (operator-supplied)
 
-The supported backup procedure is `pg_dump` against the `pgdata` volume.
+The currently documented backup procedure is `pg_dump` against the `pgdata` volume.
 
 > **CURRENT PROCEDURE UNVALIDATED — do not treat as a proven exact historical
 > restore until P7-C restore drills close this gap.** The P7-C0 durability

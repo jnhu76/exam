@@ -214,7 +214,7 @@ authority with an older known-good backup.
 | Browser `localStorage`/`sessionStorage` (`exam.pendingGrantAuthority:*`, `clientSessionId`, force-submit/misconduct pending authority) | web client | user agent | client-only recovery UX state | browser storage | n/a | n/a | n/a | yes (server-confirmed state unaffected) | yes | no | no | SOURCE FACT (§9.12) | **E. RECOVERABLE_OPERATIONAL** | Client-side; server truth in PostgreSQL |
 | `.env` / deployment config | operator | host file next to compose | deployment identity + runtime policy | file | yes (config) | yes (config) | yes (config) | no (recreate) | no | partly | no | SOURCE FACT | **C. DEPLOYMENT_IDENTITY + D. SECRET** | See §10/§11 |
 | `JWT_SECRET` | `app` | env | signs `auth-token` cookie JWT; HMAC domain-separation for rate-limit keys | env | yes | yes | yes | no — loss = forced re-login | rotatable (re-login only) | **YES** | no | SOURCE FACT (§10) | **D. SECRET + C. DEPLOYMENT_IDENTITY** | Loss changes logical deployment identity (all sessions die), NOT data authority |
-| `POSTGRES_PASSWORD` / DB credentials | `db`, `app`, `worker` | env (compose) | DB access | env | yes | yes | yes | no | rotatable only by volume recreation (runbook note) | **YES** | no | SOURCE FACT (compose comment) | **D. SECRET** | Composed into `DATABASE_URL` |
+| `POSTGRES_PASSWORD` / DB credentials | `db`, `app`, `worker` | env (compose) | DB access | env | yes | yes | yes | no | rotation requires coordinated database credential change + deployment secret update; changing `POSTGRES_PASSWORD` env alone does not rotate an initialized DB (runbook note) | **YES** | no | SOURCE FACT (compose comment) | **D. SECRET** | Composed into `DATABASE_URL` |
 | SMTP credentials / sender config | worker | env | outbound Email | env | yes | yes | yes | no (Email stops) | rotatable | **YES** | no | SOURCE FACT | **D. SECRET** | External side-effect boundary below |
 | SMTP-accepted email deliveries | external SMTP server | outside deployment | accepted delivery | external | n/a | n/a | n/a | cannot un-send | no | — | — | SOURCE FACT (ADR-011 / P7-S2-D) | **H. EXTERNAL_SIDE_EFFECT** | At-least-once; retry may duplicate; cannot be restored by restoring Exam |
 | `PUBLIC_WEB_ORIGIN` / `CORS_ORIGIN` | app, worker | env | absolute Email links + browser allowlist | env | yes | yes | yes | no (misconfig) | change = links point elsewhere | no (not secret) | no | SOURCE FACT (compose requires) | **C. DEPLOYMENT_IDENTITY** | Origin assumptions must survive relocation |
@@ -584,8 +584,16 @@ Could the deployment accidentally pull incompatible future images?            Re
                                                                             App: rebuild-from-source can drift
 What exact local resources must be retained?                                  pgdata volume bytes + .env + the
                                                                             source tree to rebuild the image
-Can those resources be copied without Docker-specific volume tooling?         YES — plain cp -a of the volume
-                                                                            tree (PROVEN §13 F–H)
+Can those resources be copied without Docker-specific volume tooling?         At byte level:
+                                                                                YES — PGDATA is an ordinary
+                                                                                directory tree once exposed (cp -a,
+                                                                                proven §13 F–H).
+                                                                              At current operator/product level:
+                                                                                NO — the named volume is under Docker's
+                                                                                managed directory; accessing it still
+                                                                                requires Docker volume/daemon knowledge
+                                                                                or a helper container (§13.3). This is
+                                                                                the gap P7-C1 is meant to close.
 Does startup require source checkout?                                         NO (image contains built dist)
 Does startup require pnpm/npm/bun?                                            NO
 Does startup require Internet access?                                         NO (runtime); build does
@@ -1051,7 +1059,8 @@ P3-6  Best-effort audit observations are in-memory queued (10s graceful drain);
 ```text
 UNKNOWN-1  Live pg_dump/restore cycle has never been run (P6 audit admission).
            The §16 "documented-only" classification is the honest state; a
-           restore drill is required by P7-C1 to close this.
+           restore drill is required to close this — but it belongs to the
+           Backup / Historical Restore track, NOT to P7-C1 (§22 scope note).
 UNKNOWN-2  Whether a postgres-17-era raw PGDATA would be mutated by
            postgres:18.4 startup before refusing (major mismatch handling).
            Not tested — refused to test destructively against a real older
@@ -1103,18 +1112,40 @@ What P7-C1 must prove (recommendation only — NOT implemented here):
    documented named-volume procedure) so relocation does not depend on
    Docker-internal archaeology.
 
-4. A VALIDATED backup/restore drill (pg_dump → recreate/clean target → restore
-   → post-restore invariant suite) that the P6 audit admits was never run;
-   the drill must also prove exact historical replacement semantics (§16.1),
-   including an explicit target-recreate/clean step.
-
-5. An image version contract: pin app image by tag/digest and redis by patch
+4. An image version contract: pin app image by tag/digest and redis by patch
    (or record the accepted drift), so "same images" is decidable.
 
-6. Document raw-PGDATA major-version coupling next to the relocation procedure.
+5. Document raw-PGDATA major-version coupling next to the relocation procedure.
 
-7. Confirm the §13 building-block invariants remain true after any of the above.
+6. Confirm the §13 building-block invariants remain true after any of the above.
 ```
+
+**Scope discipline — what P7-C1 is NOT.** P7-C1 is **portable single-node
+deployment** only (canonical data root, compatible/pinned image, machine A →
+clean machine B, ordinary `docker compose up`). It does **not** include a
+backup/restore drill. The C0 boundary (§17) deliberately separates these:
+
+```text
+P7-C1  Portable Single-Node Deployment (relocation, same authoritative history)
+    → canonical data root
+    → compatible/pinned image
+    → machine A → clean machine B
+    → ordinary docker compose up
+
+Later  Backup / Historical Restore (C2/C3, history-changing)
+    → backup artifact
+    → clean-target restore
+    → restore verification
+
+Later  PITR (history-changing)
+```
+
+A validated `pg_dump → recreate/clean target → restore → post-restore invariant`
+drill, including the exact historical replacement semantics of §16.1, belongs
+to the **Backup / Historical Restore** track — it is recorded as P2-2/P2-3 and
+left out of P7-C1's acceptance on purpose. Folding it into C1 would re-couple
+relocation and backup, which C0 just separated. Do **not** re-add it to C1's
+acceptance list.
 
 Candidate invariant for P7-C1 (refined to match the corrected evidence):
 
@@ -1334,8 +1365,9 @@ Unknown persistence surfaces:
 P7-C1 blockers:
   [ clean-host/machine-B relocation proof NOT yet done (P2-4);
     pre-migration compatibility gate required (P2-1) — must refuse DB-ahead /
-    divergent histories WITHOUT blocking legitimate forward upgrade;
-    validated backup/restore drill required for Gate P7-3 (P2-2);
+    divergent histories WITHOUT blocking legitimate forward upgrade ]
+Backup / Historical Restore blockers (NOT P7-C1 — see §22 scope note):
+  [ validated backup/restore drill required for Gate P7-3 (P2-2);
     exact historical replacement contract required (P2-3) ]
 
 P7-E0 decision inputs:
