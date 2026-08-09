@@ -39,8 +39,10 @@ export interface ExamRepository {
   /**
    * Loads an exam under the caller's row lock (FOR UPDATE). Required by
    * interruption restore/bounded-grace evaluation to serialize the
-   * authoritative `closeAt` read against exam-window changes. Lock order
-   * Enrollment → Attempt → Exam must be preserved; no Exam → Attempt path.
+   * authoritative `closeAt` read against exam-window changes, and by
+   * `publishResults` to serialize the write-once `resultsPublishedAt`
+   * decision (P7-S2-A). Lock order Enrollment → Attempt → Exam must be
+   * preserved; no Exam → Attempt path.
    */
   findByIdForUpdate(examId: string): Promise<Exam | null> | Exam | null;
   update(
@@ -391,6 +393,13 @@ export async function archiveExam(
  * detect the no-op case via the `alreadyPublished` return flag and suppress
  * duplicate audit/metadata accordingly.
  *
+ * P7-S2-A (RESULT_PUBLISH_IS_SINGLE_WINNER): the `resultsPublishedAt`
+ * transition NULL → timestamp happens exactly once per exam. The exam row is
+ * locked (FOR UPDATE) and the timestamp re-read under the lock, so two
+ * concurrent publishers cannot both observe NULL; the loser returns
+ * alreadyPublished=true with the committed truth. The caller MUST invoke this
+ * inside a transaction so the row lock and the update commit together.
+ *
  * NOTE: publish does NOT itself advance grading. If attempts still have
  * `gradingStatus=pending_manual`, their results stay hidden behind the
  * `not_graded` hiddenReason even after this call. Visibility is the AND of
@@ -401,7 +410,11 @@ export async function publishResults(
   examId: string,
   now: Date,
 ): Promise<{ exam: Exam; alreadyPublished: boolean }> {
-  const exam = await repo.findById(examId);
+  // P7-S2-A: read the exam under the row lock and re-check
+  // `resultsPublishedAt` under the lock. Without this serialization two
+  // concurrent publishers can both observe NULL and both claim the first
+  // publication (double audit, timestamp overwrite).
+  const exam = await repo.findByIdForUpdate(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
