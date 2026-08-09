@@ -44,10 +44,11 @@ Every ADR carries this metadata (in its Status section or header):
 | [ADR-013](ADR-013-interruption-time-compensation-policy.md) | Interruption Detection and Time-Compensation Policy | ACCEPTED | Current | ADR-012's incomplete time-policy direction | none |
 | [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED (runtime implemented — J3, PR #242; Admin recovery center J5 closed) | Current | none | none |
 | [ADR-015](ADR-015-proctor-exam-scope-authority.md) | Proctor-to-Exam Resource Scope Authority | ACCEPTED (runtime implemented — J4-I1, PR #250) | Current | none | none |
+| [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future Offline-Resilient Client Data and Recovery Model | DEFERRED | Current | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-016**.
+ADR numbers are stable and never reused. The next free number is **ADR-017**.
 Two files previously in `docs/adr/` used the `ADR-007` prefix
 (`ADR-007-flake-and-speed-audit.md`, `ADR-007-phase6-evidence-gap-audit.md`)
 but were **audit reports about** ADR-007, not ADRs themselves — they have been
