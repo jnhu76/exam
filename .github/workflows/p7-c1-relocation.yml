@@ -117,8 +117,12 @@ jobs:
           [ "${PRE}" = '"preflight":"FRESH_INSTALL"' ]
           # P6-008 guard stays intact — the drill seeds via the test-only
           # APP_MODE=e2e override and never weakens production refusal.
-          docker exec -e APP_MODE=production p7c1-ci-a-app-1 node dist/seed.js 2>&1 \
-            | grep -q "Refusing to run the baseline seed in production"
+          # The guard THROWS (exit 1) by design, so a bare pipefail pipeline
+          # would fail on the expected non-zero exit even when the message is
+          # printed. Capture the output (mirroring the local drill) and
+          # assert the message instead.
+          SEED_ERR=$(docker exec -e APP_MODE=production p7c1-ci-a-app-1 node dist/seed.js 2>&1 || true)
+          echo "${SEED_ERR}" | grep -q "Refusing to run the baseline seed in production"
 
       - name: Record invariants (A)
         run: |
