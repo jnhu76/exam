@@ -75,12 +75,15 @@ if any is unset. There is NO default database password in production
 | `CORS_ORIGIN` | Browser origin allowlist (credentials:true) | comma-separated → array |
 | `PUBLIC_WEB_ORIGIN` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path) | HTTPS recommended in production; never derived from `request.headers.host` |
 | `DATABASE_URL` | PostgreSQL connection for API + worker | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
+| `EXAM_IMAGE` | The app/worker image reference (tag or digest) consumed by the IMAGE-ONLY production Compose (P7-C1 C1.2) | required; a digest reference (`registry/exam@sha256:...`) is the immutable identity for relocation |
 
 ### Optional (with safe defaults)
 
 | Variable | Default | Notes |
 |---|---|---|
 | `APP_PORT` | 3000 | API listen port |
+| `EXAM_DATA_ROOT` | `./data` | canonical persistent data root (P7-C1 C1.1): PostgreSQL at `${EXAM_DATA_ROOT}/postgres` (authoritative), optional Redis at `${EXAM_DATA_ROOT}/redis` (non-authoritative). Relocate by copying `${EXAM_DATA_ROOT}/postgres` (see §18) |
+| `LAUNCHPAD_SETUP_TOKEN` | unset (launchpad disabled) | deployment secret enabling the /launchpad first-install page (P7-C1 C1.6); remove after first Admin is created; never placed in URL/query; see §5 |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookie, fail-fast required env |
 | `NODE_ENV` | development | maps to production/test/development |
@@ -142,8 +145,13 @@ cp .env.example .env
 #   JWT_SECRET=<GENERATE_A_LONG_RANDOM_SECRET>      # REQUIRED
 #   CORS_ORIGIN=https://exam.your-org.internal      # REQUIRED
 #   PUBLIC_WEB_ORIGIN=https://exam.your-org.internal # REQUIRED
+#   EXAM_IMAGE=<image reference>            # REQUIRED (P7-C1 C1.2; image-only
+#                                           #  compose; digest-pinned for
+#                                           #  relocation)
 #   (the bundled Compose composes DATABASE_URL from POSTGRES_*)
 #   (REDIS_URL is optional — leave unset to disable Redis; see §10)
+#   (LAUNCHPAD_SETUP_TOKEN is optional — enables the /launchpad first-install
+#    page, see §5)
 
 # 3. (Optional) Enable real Email delivery
 # EMAIL_ENABLED=true
@@ -152,32 +160,65 @@ cp .env.example .env
 # SMTP_USER=...
 # SMTP_PASSWORD=...
 
-# 4. Build and start the default stack (app + db + email-worker).
+# 4. Build the production image and start the default stack (app + db +
+#    email-worker). P7-C1 C1.2: docker-compose.yml is IMAGE-ONLY (it consumes
+#    ${EXAM_IMAGE} and has no source-build path — a bare `docker compose up`
+#    never silently rebuilds). Local source builds use the build override:
+#      EXAM_VERSION=$(node -p "require('./package.json').version") \
+#      EXAM_REVISION=$(git rev-parse HEAD) \
+#      docker compose -f docker-compose.yml -f docker-compose.build.yml \
+#        up -d --build
+#    For an already-built/tagged image (e.g. a release artifact or a
+#    relocated deployment), reference it by tag or digest:
+#      EXAM_IMAGE=registry.example/exam@sha256:... docker compose up -d
 #    Redis is NOT started by default (P6-010); see §10 to enable it.
-docker compose up -d --build
 
-# 5. Watch the API come up (migration runs inside the container entrypoint).
-#    Use the native --tail flag instead of a pipe so failure context is kept.
+# 5. Watch the API come up (schema/image preflight + migration run inside
+#    the container entrypoint). Use the native --tail flag instead of a pipe
+#    so failure context is kept.
 docker compose logs --tail=50 -f app
-# Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
+# Look for: 'Running schema/image compatibility preflight...',
+#           'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
+# On a fresh data root the preflight classifies FRESH_INSTALL and proceeds
+# (P7-C1 C1.3). An incompatible DB/image combination refuses to start
+# instead of being silently mutated (STALE_IMAGE_DB_AHEAD / DIVERGENT).
 
 # 6. Verify app + db are healthy. The email-worker starts after app health
 #    and waits for the first organization to be bootstrapped (step 7).
 docker compose ps
 # Expected: app (healthy), db (healthy), email-worker (up)
 
-# 7. Bootstrap the first Admin (production path — see §5). This also
-#    creates the internal default organization, which unblocks the worker.
-docker compose exec app \
-  node dist/scripts/bootstrap-admin.js \
-  --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
-  --name 'System Admin' --organization-name 'My Organization'
+# 7. Create the first Admin. RECOMMENDED: the launchpad web page (P7-C1
+#    C1.6) — the operator sets LAUNCHPAD_SETUP_TOKEN in .env, the business
+#    administrator opens http://<host>:<port>/launchpad and creates the
+#    first Admin (org + credentials + setup code). This also creates the
+#    internal default organization, which unblocks the worker.
+#    Alternative: the production bootstrap CLI (§5):
+#    docker compose exec app \
+#      node dist/scripts/bootstrap-admin.js \
+#      --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
+#      --name 'System Admin' --organization-name 'My Organization'
+#    After the launchpad succeeds, the operator SHOULD remove
+#    LAUNCHPAD_SETUP_TOKEN from .env. An initialized installation is
+#    permanently COMPLETED — the launchpad never reopens, even if the token
+#    is still set.
 
 # 8. The same worker container detects the new organization, resolves it,
 #    and enters its poll loop without restarting. Verify:
 docker compose logs --tail=20 email-worker
 # Look for: 'resolved default organization', 'starting poll loop'
 ```
+
+> **Where the data lives (P7-C1 C1.1):** PostgreSQL authoritative state is
+> bind-mounted at `${EXAM_DATA_ROOT:-./data}/postgres` (operator-visible;
+> `docker compose down` preserves it; `down -v` removes only named volumes
+> — of which there are none — so it does NOT delete `./data`; `rm -rf
+> ./data` is the destructive action). The postgres server inside the
+> container runs as uid 999, so files under `./data/postgres` are owned by
+> uid 999 — `sudo chown -R 999:999 ./data/postgres` fixes permission errors
+> after an operator copied a data root from elsewhere. The optional Redis
+> data lives at `${EXAM_DATA_ROOT:-./data}/redis` and is NEVER authoritative
+> (see §17/§18).
 
 > **First-boot worker bootstrap-pending state (expected):** on a fresh
 > migrated database the `email-worker` cannot resolve the internal default
@@ -249,12 +290,23 @@ restore from the latest `pg_dump` backup (§11) and re-run migrate.
 
 ## 5. Bootstrap admin (production)
 
-The first admin account is created by the **production bootstrap CLI**
-(`dist/scripts/bootstrap-admin.js`), NOT the baseline dev/test seed. The
-baseline seed (`packages/db/src/seed.ts`) ships known default credentials
-(admin/admin123, candidate/candidate123) and refuses to run when
-`APP_MODE=production` (P6-008). It must not be used as the production
-bootstrap path.
+There are TWO adapters over ONE canonical first-Admin command (P7-C1
+C1.6). Both refuse a second active Admin unless forced, both run the same
+single transaction (org → Admin → primary assignment → `admin.bootstrap`
+audit, source `launchpad_http` or `local_script`), and both are disabled
+once the installation has ever been initialized.
+
+1. **Launchpad (recommended operator → business-admin handoff)** — the
+   operator sets `LAUNCHPAD_SETUP_TOKEN` (high-entropy, deployment secret)
+   in `.env`; the business administrator opens `http://<host>:<port>/launchpad`
+   and enters the setup code + organization name + first-Admin credentials.
+   Token comparison is constant-time, the route is rate-limited, and the
+   token is never written to audit/log. The first user is ALWAYS an Admin —
+   the caller cannot request roles or organization ids. After success the
+   operator SHOULD remove the token; an initialized installation is
+   permanently COMPLETED and never reopens (no privilege takeover, even if
+   all Admins are later deleted). `/register` stays 403 forever.
+2. **Bootstrap CLI (operator fallback)** — `dist/scripts/bootstrap-admin.js`:
 
 ```bash
 # Production first-Admin bootstrap (P6-008). Run once against a fresh
@@ -268,7 +320,7 @@ docker compose exec app \
   --organization-name 'My Organization'
 ```
 
-The bootstrap:
+The canonical bootstrap (`bootstrapInitialAdmin`):
 
 1. locates the internal organization with slug `default`; if it does not
    exist, creates it (using `--organization-name` or the documented
@@ -278,10 +330,11 @@ The bootstrap:
 3. creates the primary Admin role assignment;
 4. writes an `admin.bootstrap` audit row (actor `system`).
 
-Steps 1–4 run in **one transaction** (`bootstrapAdminOnFreshDb`): they
-commit atomically, so a failure in any step leaves no orphan org, user,
-assignment, or audit row. The bootstrap also refuses a second active Admin
-unless `--force` is supplied.
+Steps 1–4 run in **one transaction**: they commit atomically, so a failure
+in any step leaves no orphan org, user, assignment, or audit row. The
+launchpad HTTP path additionally takes a transaction-scoped
+`pg_advisory_xact_lock` so concurrent first-Admin requests yield exactly one
+winner (P7-C1 C1.6 / P2-5).
 
 It does **not** create Candidate accounts. Candidates are created later by
 the Admin via `POST /api/admin/candidates`.
@@ -590,10 +643,15 @@ production database.
 # Graceful shutdown: SIGTERM is propagated to each container.
 docker compose stop    # stops containers without removing them
 # or
-docker compose down    # stops and removes containers (keeps volumes)
+docker compose down    # stops and removes containers (data preserved)
 # or
-docker compose down -v # DANGEROUS: also removes pgdata + redisdata volumes
-                       # (destroys all data — only for clean reinstall)
+docker compose down -v # NO LONGER destroys data: the P7-C1 topology has NO
+                       # Docker named volumes — all durable state is the
+                       # bind-mounted ${EXAM_DATA_ROOT:-./data}. `down -v`
+                       # removes only named volumes (none), so it is a
+                       # data-level no-op. THE destructive action is:
+#   rm -rf ./data      # DANGEROUS: deletes authoritative PostgreSQL state
+                       # (+ optional Redis counters) — only for clean reinstall.
 ```
 
 Graceful shutdown behavior:
@@ -668,6 +726,30 @@ docker compose exec app node dist/scripts/reset-admin-password.js
 
 # Log / requestId investigation
 docker compose logs app | jq 'select(.reqId == "<REQ_ID>")'
+```
+
+### Portable relocation (P7-C1 C1.4)
+
+Moving the whole deployment to a compatible clean Docker host is the
+**Relocation** operation — distinct from Historical restore and PITR (§17).
+See `docs/deployment/portable-deployment.md` for the full guide; the drill
+is `pnpm drill:p7-c1-relocation` (local clean-root proof) and the CI
+workflow `.github/workflows/p7-c1-relocation.yml` (clean-host proof). The
+three-step operator procedure (PG stopped or fully flushed):
+
+```bash
+# 1. Stop the stack (data preserved).
+docker compose down
+# 2. Copy ONLY the authoritative data + deployment config to the new host
+#    (metadata-preserving; the PGDATA tree is uid 999 — copy as uid 999 or
+#    chown after copying: sudo chown -R 999:999 ./data/postgres).
+cp -a ./data/postgres <target>/data/postgres
+cp docker-compose.yml .env <target>/
+# 3. On the new host: same EXAM_IMAGE (digest-pinned for identity), same
+#    .env, then the ORDINARY path (no seed, no rebuild):
+docker compose up -d
+# Preflight classifies the relocated DB NORMAL and proceeds.
+# ./data/redis is NOT copied — Redis is non-authoritative (§17).
 ```
 
 ---
@@ -775,7 +857,22 @@ and §24 (deferred capabilities). Highlights:
 
 ## 17. Backup / export (operator-supplied)
 
-The currently documented backup procedure is `pg_dump` against the `pgdata` volume.
+> **P7-C tri-map (the three operations are DIFFERENT — do not conflate):**
+>
+> | Operation | What it is | Status |
+> |---|---|---|
+> | **Relocation** | Copy the running deployment (compose + `.env` + `./data/postgres` + the same image) to a compatible clean host; boot via the ordinary path | **P7-C1 — implemented + drilled** (see §13 "Portable relocation", `docs/deployment/portable-deployment.md`) |
+> | **Historical restore** | Put the database back to an exact earlier point in time from a dump/backup | **P7-C2/C3 — NOT IMPLEMENTED** (see below; unvalidated) |
+> | **Off-host backup** | Periodically copy backup artifacts off the deployment host (retention, automation) | **P7-C4 — NOT IMPLEMENTED** |
+> | **PITR** | Point-in-time recovery via WAL archiving | **P7-C5 — NOT IMPLEMENTED** (wal_level=replica is ready; archive_mode/archive_command/retention/recovery are not) |
+>
+> Redis (`./data/redis`) is NEVER part of any of these: it holds only
+> non-authoritative rate-limit counters (C0 §8 / ADR-001) — dropping it is
+> always safe for Exam truth (proven with Redis ENABLED by
+> `pnpm proof:p7-c1-redis-nonauthority`, P7-C1 C1.5).
+
+The currently documented backup procedure is `pg_dump` against the
+bind-mounted `${EXAM_DATA_ROOT:-./data}/postgres` data root.
 
 > **CURRENT PROCEDURE UNVALIDATED — do not treat as a proven exact historical
 > restore until P7-C restore drills close this gap.** The P7-C0 durability

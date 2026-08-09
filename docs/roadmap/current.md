@@ -110,10 +110,22 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    - further Redis responsibilities (admission queue, presence, Pub/Sub/Streams,
      worker use) remain decision-gated on explicit durability/failure contracts.
 
-4. **Backup and restore**
-   - define supported RPO/RTO profiles;
-   - automate PostgreSQL/files/settings backup and retention;
-   - add validation, clean-host restore, and restore drills;
+4. **Backup and restore (C-series)**
+   - **P7-C0 persistence reality audit — CLOSED (PR #270)**;
+   - **P7-C1 portable single-node deployment (relocation) — IMPLEMENTED
+     (P7-C1)**: canonical bind-mounted data root (`${EXAM_DATA_ROOT:-./data}`),
+     image-only Compose + `EXAM_IMAGE` identity, schema/image compatibility
+     preflight (C0 P2-1), first-install launchpad (advisory-lock
+     single-winner), Redis non-authority proof, clean-root + clean-host
+     relocation drills (`pnpm drill:p7-c1-relocation` +
+     `.github/workflows/p7-c1-relocation.yml`), operator guide
+     `docs/deployment/portable-deployment.md`;
+   - define supported RPO/RTO profiles (P7-C2/C3: logical backup +
+     historical restore — NOT implemented);
+   - automate PostgreSQL/files/settings backup and retention (P7-C4 —
+     NOT implemented);
+   - PITR via WAL archiving (P7-C5 — NOT implemented);
+   - add validation, clean-host restore, and DR drills (P7-C6/C7);
    - provide CLI and Admin visibility.
 
 5. **Crash and outage recovery**
@@ -121,7 +133,10 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    - make committed operations safely repeatable;
    - reconcile stuck grading, notifications, workers, interruptions, and jobs.
 
-6. **Configuration control plane**
+6. **Configuration control plane (P7-E series — the old P7-C1/C2/C3
+   configuration-taxonomy IDs were reconciled to P7-E1/E2/E3 when the C
+   series was re-assigned to durability/backup/recovery, so the repo has
+   ONE "P7-C1")**
    - keep bootstrap endpoints and secrets in deployment/secret configuration;
    - move safe business and operational settings into versioned audited storage;
    - expose effective values, source layer, validation, restart requirement,
@@ -156,8 +171,11 @@ P7-S1 → crash recovery / startup reconciliation
 P7-D1 (accepted: shared rate limit only)
   → Redis lifecycle hardening → shared rate limit ✅ SHIPPED (PR #265, P7-D2/D3)
 
+P7-C0 → P7-C1  persistence reality audit ✅ → portable single-node deployment ✅
+  → P7-C2/C3 logical backup + historical restore → P7-C4 off-host/retention
+  → P7-C5 PITR → P7-C6 DR drills → P7-C7 closeout
 backup design → backup/restore CLI → PITR/verification → Admin surface
-configuration schema → versioned service → Admin settings UI
+configuration schema (P7-E1) → versioned service (P7-E2) → Admin settings UI (P7-E3)
                      → exam policy schema → profiles → creation wizard
 UI pilot → controlled family-by-family UI closeout
 ```

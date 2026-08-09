@@ -149,16 +149,24 @@ first install, recovery, upgrade checklist, known limitations).
 ```bash
 # Configure production-required env (copy template, edit):
 cp .env.example .env
-#   POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN, PUBLIC_WEB_ORIGIN are
-#   REQUIRED in the bundled docker-compose.yml (it uses ${VAR:?...}
-#   required-expansion — Compose fails to start if any is unset). There
-#   is NO default database password in production (P6-007).
+#   POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN, PUBLIC_WEB_ORIGIN,
+#   EXAM_IMAGE are REQUIRED in the bundled docker-compose.yml (it uses
+#   ${VAR:?...} required-expansion — Compose fails to start if any is
+#   unset). There is NO default database password in production (P6-007).
+#   docker-compose.yml is IMAGE-ONLY (P7-C1): it consumes ${EXAM_IMAGE}
+#   and never rebuilds source. Local source builds use the override:
 
-docker compose up -d --build    # build + start app, db, email-worker
+EXAM_VERSION=$(node -p "require('./package.json').version") \
+EXAM_REVISION=$(git rev-parse HEAD) \
+docker compose -f docker-compose.yml -f docker-compose.build.yml \
+  up -d --build        # build + start app, db, email-worker
 docker compose logs -f app
 docker compose ps               # verify app, db, email-worker are up
 docker compose down
-docker compose down -v          # DANGEROUS: removes database data volumes
+# NOTE: `down -v` does NOT delete ./data — the P7-C1 topology has no named
+# volumes; authoritative PostgreSQL state is the bind mount
+# ${EXAM_DATA_ROOT:-./data}/postgres. `rm -rf ./data` is the destructive
+# action. See "Data & disaster recovery" below.
 
 # (Optional) enable the Redis profile — the shared rate limiter reads/writes
 # Redis when the runtime is ready:
@@ -186,11 +194,17 @@ container — there is no separate scanner service.
 
 #### Production first-Admin bootstrap
 
-The first Admin is created via the `bootstrap-admin` CLI against a fresh
-migrated database (P6-008). The baseline dev/test seed
-(`packages/db/src/seed.ts`) ships known default credentials and refuses to
-run when `APP_MODE=production`. Do NOT use the baseline seed as the
-production bootstrap path.
+The first Admin is created via the **launchpad** (recommended) or the
+`bootstrap-admin` CLI against a fresh migrated database (P6-008/P7-C1
+C1.6). Set `LAUNCHPAD_SETUP_TOKEN=<high-entropy secret>` in `.env`, start
+the stack, then open `http://<host>:<port>/launchpad` — the business
+administrator enters the setup code + organization name + first-Admin
+credentials. The first user is ALWAYS an Admin; an initialized installation
+is permanently COMPLETED (the launchpad never reopens, and `/register`
+stays 403 forever). Remove the token from `.env` after handoff. The
+baseline dev/test seed (`packages/db/src/seed.ts`) ships known default
+credentials and refuses to run when `APP_MODE=production`. Do NOT use the
+baseline seed as the production bootstrap path.
 
 ```bash
 docker compose exec app \
@@ -206,6 +220,31 @@ The bootstrap: (1) locates or creates the internal default organization
 (3) creates the primary Admin role assignment in the same transaction;
 (4) writes an `admin.bootstrap` audit row. It refuses a second active
 Admin unless `--force` is supplied. It does NOT create Candidate accounts.
+
+## Data & disaster recovery
+
+| Store | Location | Authority |
+|---|---|---|
+| PostgreSQL (authoritative) | `${EXAM_DATA_ROOT:-./data}/postgres` bind mount | Exam truth — DO NOT DELETE |
+| Redis (optional profile) | `${EXAM_DATA_ROOT:-./data}/redis` | non-authoritative rate-limit counters only — dropping is always safe |
+
+- `docker compose down` preserves `./data`; `down -v` removes only named
+  volumes (the production topology has none) — `rm -rf ./data` is the
+  destructive action.
+- **Relocation (P7-C1, implemented + drilled):** copy `docker-compose.yml`
+  + `.env` + `./data/postgres` (metadata-preserving, uid 999) + the same
+  `EXAM_IMAGE` (digest-pinned) to a compatible clean Docker host, then the
+  ordinary `docker compose up -d` — the schema/image preflight classifies
+  the relocated DB NORMAL and the deployment comes up identical. Full guide:
+  [`docs/deployment/portable-deployment.md`](docs/deployment/portable-deployment.md).
+  Local proof: `pnpm drill:p7-c1-relocation`; clean-host proof: the
+  `.github/workflows/p7-c1-relocation.yml` workflow.
+- **Historical restore (P7-C2/C3): NOT implemented** — see runbook §17
+  (the current `pg_dump` path is documented-only and unvalidated).
+- **Off-host backup (P7-C4) and PITR (P7-C5): NOT implemented.**
+- First-install from a fresh data root goes FRESH_INSTALL → migrate →
+  launchpad/CLI first-Admin. Redis persistence is optional even when the
+  redis profile is enabled (proof: `pnpm proof:p7-c1-redis-nonauthority`).
 
 ## Docker Files Reference
 

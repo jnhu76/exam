@@ -564,9 +564,18 @@ P7-B1  Backup/RPO/RTO design
   → P7-B3  PITR/retention/verification
   → P7-B4  Admin backup surface + restore drill evidence
 
-P7-C1  Configuration taxonomy + schema
-  → P7-C2  Settings service/version/audit
-  → P7-C3  Admin settings UI
+P7-C0  Persistence reality audit                                  ✅ CLOSED (PR #270)
+P7-C1  Portable single-node deployment (relocation)               ✅ IMPLEMENTED (P7-C1)
+  → P7-C2  Logical backup (dump + restore contract)
+  → P7-C3  Historical restore (exact point-in-time replacement)
+  → P7-C4  Automation / retention / off-host copy
+  → P7-C5  PITR (WAL archiving + recovery)
+  → P7-C6  DR drills
+  → P7-C7  Closeout
+
+P7-E1  Configuration taxonomy + schema         (was old P7-C1)
+  → P7-E2  Settings service/version/audit      (was old P7-C2)
+  → P7-E3  Admin settings UI                   (was old P7-C3)
   → P7-M1  Exam policy schema + conflict validator
   → P7-M2  Profile templates + snapshot resolution
   → P7-M3  Exam creation wizard
