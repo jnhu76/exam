@@ -136,6 +136,7 @@ export const candidateFieldValidationMessages = {
  */
 export const saveAnswerMessages: Record<SaveAnswerRejectReason, string> = {
   STALE_VERSION: "服务器上存在更新的答案版本",
+  FUTURE_VERSION: "答案版本超前，请刷新页面后重试",
   ATTEMPT_ALREADY_SUBMITTED: "考试已提交，不能继续保存答案",
   ATTEMPT_CLOSED: "考试已结束",
   DEADLINE_EXCEEDED: "考试时间已到",

@@ -805,6 +805,65 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
     });
   });
 
+  // ─── Scenario #15: future baseVersion rejected (P7-S2-B) ───
+  // ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION: a save claiming a
+  // baseVersion the server has not issued yet is impossible client state and
+  // must be rejected on the wire, not silently accepted as `currentVersion+1`.
+  describe("#15 future baseVersion rejected on the wire (FUTURE_VERSION)", () => {
+    it("save with baseVersion=999 against fresh attempt returns FUTURE_VERSION", async () => {
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Proto1-#15 Future Base",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const futureExamId = examRes.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${futureExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, futureExamId);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${futureExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+
+      const saveRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "a",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 999,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(saveRes.statusCode).toBe(200);
+      expect(saveRes.json().accepted).toBe(false);
+      expect(saveRes.json().reason).toBe("FUTURE_VERSION");
+      expect(saveRes.json().serverVersion).toBe(0);
+      // No draft is persisted for the future-version save.
+      const attempt = (await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      )) as { answers?: unknown } | null;
+      expect(attempt?.answers).toEqual([]);
+    });
+  });
+
   // ─── Scenario #13: text_response grading reads submitted_answers ───
   // P3-L0-2: proves the submit freeze barrier end-to-end at the engine/DB
   // level. The candidate saves a draft text answer, submits (freezing

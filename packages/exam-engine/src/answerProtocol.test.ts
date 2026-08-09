@@ -81,6 +81,112 @@ describe("answerProtocol", () => {
       expect(result.conflict?.latestAnswer).toBe("a");
     });
 
+    // P7-S2-B (ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION): a new,
+    // non-idempotent save requires baseVersion === currentVersion. Future
+    // baseVersions are impossible client state and must be rejected, not
+    // silently accepted as a legitimate update.
+    it("accepts save when baseVersion equals current version (2 vs 2)", () => {
+      const existing = makeAnswerRecord({ version: 2 });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:1", existing]]),
+      });
+      const request = makeRequest({ clientSeq: 3, baseVersion: 2 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(true);
+      expect(result.serverVersion).toBe(3);
+      expect(result.conflict).toBeUndefined();
+    });
+
+    it("rejects future baseVersion with FUTURE_VERSION (2 vs 3)", () => {
+      const existing = makeAnswerRecord({ version: 2 });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:1", existing]]),
+      });
+      const request = makeRequest({ clientSeq: 3, baseVersion: 3 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("FUTURE_VERSION");
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("rejects far-future baseVersion with FUTURE_VERSION (2 vs 999)", () => {
+      const existing = makeAnswerRecord({ version: 2 });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:1", existing]]),
+      });
+      const request = makeRequest({ clientSeq: 3, baseVersion: 999 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("FUTURE_VERSION");
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("rejects future baseVersion when no answer exists yet (0 vs 999)", () => {
+      const state = makeState({ answers: [] });
+      const request = makeRequest({ clientSeq: 1, baseVersion: 999 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("FUTURE_VERSION");
+      expect(result.serverVersion).toBe(0);
+    });
+
+    it("future baseVersion does not break safe same-clientSeq replay", () => {
+      const existing = makeAnswerRecord({
+        answer: "b",
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      // Replay carries the same clientSeq AND the same payload — the
+      // idempotency-key path wins regardless of baseVersion, INCLUDING a
+      // baseVersion that is FUTURE relative to the existing version (2). A
+      // future baseVersion must not weaken the safe-same-clientSeq replay path.
+      const request = makeRequest({ clientSeq: 2, baseVersion: 999 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(true);
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("future baseVersion does not weaken conflicting-payload detection", () => {
+      const existing = makeAnswerRecord({
+        answer: "a",
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      // Same clientSeq but a DIFFERENT payload is a client-key misuse and
+      // stays a conflict even with a future baseVersion.
+      const request = makeRequest({
+        clientSeq: 2,
+        answer: "z",
+        baseVersion: 999,
+      });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
+    });
+
     it("returns idempotent result for same clientSeq replay", () => {
       const existing = makeAnswerRecord({
         answer: "b",

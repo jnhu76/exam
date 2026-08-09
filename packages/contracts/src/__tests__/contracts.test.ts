@@ -1050,10 +1050,11 @@ describe("SaveAnswerResponseSchema (A01 discriminated union)", () => {
 });
 
 describe("SaveAnswerRejectReasonEnum", () => {
-  it("has exactly 5 values", () => {
+  it("has exactly 6 values", () => {
     const values = SaveAnswerRejectReasonEnum.options;
     expect(values).toEqual([
       "STALE_VERSION",
+      "FUTURE_VERSION",
       "ATTEMPT_ALREADY_SUBMITTED",
       "ATTEMPT_CLOSED",
       "DEADLINE_EXCEEDED",

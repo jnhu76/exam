@@ -13786,6 +13786,7 @@
                           "type": "string",
                           "enum": [
                             "STALE_VERSION",
+                            "FUTURE_VERSION",
                             "ATTEMPT_ALREADY_SUBMITTED",
                             "ATTEMPT_CLOSED",
                             "DEADLINE_EXCEEDED",
@@ -19151,6 +19152,91 @@
                       ],
                       "additionalProperties": false
                     },
+                    "integrity": {
+                      "type": "object",
+                      "properties": {
+                        "submittedNotTerminalized": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "submittedWorksetMismatch": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "anomalies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "submitted_not_terminalized",
+                                  "submitted_workset_mismatch"
+                                ]
+                              },
+                              "attemptId": {
+                                "type": "string"
+                              },
+                              "examId": {
+                                "type": "string"
+                              },
+                              "enrollmentId": {
+                                "type": "string"
+                              },
+                              "candidateId": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "gradingStatus": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "submittedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "gradedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "gradingEntries": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "snapshotQuestions": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "attemptId",
+                              "examId",
+                              "enrollmentId",
+                              "candidateId",
+                              "status",
+                              "gradingStatus",
+                              "submittedAt",
+                              "gradedAt",
+                              "gradingEntries",
+                              "snapshotQuestions"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "submittedNotTerminalized",
+                        "submittedWorksetMismatch",
+                        "anomalies"
+                      ],
+                      "additionalProperties": false
+                    },
                     "config": {
                       "type": "object",
                       "properties": {
@@ -19183,6 +19269,7 @@
                     "heartbeatStatus",
                     "deadlineScannerStatus",
                     "emailStatus",
+                    "integrity",
                     "config"
                   ],
                   "additionalProperties": false

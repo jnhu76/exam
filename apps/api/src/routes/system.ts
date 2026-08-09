@@ -10,6 +10,7 @@ import {
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createWorkerHeartbeatRepo } from "@exam/db/src/repository/workerHeartbeatRepo.js";
+import { createIntegrityDiagnosticsRepo } from "@exam/db/src/repository/integrityDiagnosticsRepo.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -401,6 +402,53 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
+      // P7-S2 Phase 7 — read-only integrity anomalies (detect, never repair).
+      // Isolated from the main response: if the detector throws (e.g. a corrupt
+      // legacy row that defeats even the defensive jsonb guard), diagnostics
+      // degrades the `integrity` block to zeroed evidence instead of 500-ing
+      // the whole response — exactly when an admin most needs the OTHER status
+      // (redis/email/heartbeat). Mirrors buildEmailStatus's degrade-not-fail.
+      let integrity: {
+        submittedNotTerminalized: number;
+        submittedWorksetMismatch: number;
+        anomalies: Array<{
+          kind: "submitted_not_terminalized" | "submitted_workset_mismatch";
+          attemptId: string;
+          examId: string;
+          enrollmentId: string;
+          candidateId: string;
+          status: string;
+          gradingStatus: string | null;
+          submittedAt: string | null;
+          gradedAt: string | null;
+          gradingEntries: number;
+          snapshotQuestions: number;
+        }>;
+      } = {
+        submittedNotTerminalized: 0,
+        submittedWorksetMismatch: 0,
+        anomalies: [],
+      };
+      try {
+        const report = await createIntegrityDiagnosticsRepo(
+          anyDb,
+        ).findAttemptAnomalies(getRequestContext(request), { limit: 100 });
+        integrity = {
+          submittedNotTerminalized: report.submittedNotTerminalized,
+          submittedWorksetMismatch: report.submittedWorksetMismatch,
+          anomalies: report.anomalies.map((a) => ({
+            ...a,
+            submittedAt: a.submittedAt?.toISOString() ?? null,
+            gradedAt: a.gradedAt?.toISOString() ?? null,
+          })),
+        };
+      } catch (err) {
+        request.log.warn(
+          { route: "system.diagnostics", err },
+          "integrity.diagnostics_failed",
+        );
+      }
+
       return {
         version: process.env.npm_package_version ?? "0.0.0",
         uptime: process.uptime(),
@@ -423,6 +471,9 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           getRequestContext(request),
           fastify.now(),
         ),
+        // P7-S2 Phase 7 — read-only integrity anomalies (detect, never repair).
+        // Pre-computed above; degrades to a zeroed block if the detector threw.
+        integrity,
         config: {
           heartbeatInterval: config.heartbeat.scanIntervalMs ?? 30_000,
           heartbeatTimeout: config.heartbeat.timeoutMs ?? 60_000,
