@@ -1,5 +1,11 @@
 services:
   db:
+    # P7-C1 C1.1: this is the DEV topology only. It intentionally does NOT use
+    # the production bind-mount layout (${EXAM_DATA_ROOT:-./data}/postgres):
+    # the human's dev DB lives in an anonymous volume and the three-DB split
+    # (exam / exam_test / exam_e2e) is disposable dev/test state (AGENTS.md
+    # "Local Database Discipline"). The portable bind-mount + EXAM_DATA_ROOT
+    # contract lives in docker-compose.yml (production) only.
     image: postgres:18.4-bookworm
     ports:
       - "15432:5432"
@@ -23,7 +29,9 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    # P7-C1 C1.2: redis patch pin parity with docker-compose.yml. Redis is
+    # non-authoritative (C0 §8); the pin is hygiene, not correctness.
+    image: redis:7.4.10-alpine
     ports:
       - "6379:6379"
     environment:

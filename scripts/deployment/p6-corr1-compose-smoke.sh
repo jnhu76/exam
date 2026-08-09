@@ -2,10 +2,16 @@
 # P6-CORR1 clean-volume Compose smoke test.
 #
 # Runs the bundled production docker-compose.yml (from the repo root)
-# against an ISOLATED Compose project (via `-p <unique-name>`). The
-# `pgdata` / `redisdata` named volumes are project-namespaced, so each run
-# gets a fresh volume set without touching the dev `exam` DB or any other
-# stack. Volumes are destroyed on exit.
+# against an ISOLATED Compose project (via `-p <unique-name>`). Under the
+# P7-C1 contract the production topology is IMAGE-ONLY (consumes a prebuilt
+# ${EXAM_IMAGE}) and bind-mounts its canonical data root
+# ${EXAM_DATA_ROOT:-./data} for both PostgreSQL and Redis. The Compose
+# project name NO LONGER isolates data (no named volumes exist), so this
+# smoke points EXAM_DATA_ROOT at a unique throwaway dir per run
+# (${REPO_ROOT}/.tmp-p6-smoke-data-<RUN_NUM>-<PID>) and removes it on exit.
+# The production image is built ONCE up front with `docker build` and
+# referenced via EXAM_IMAGE; --build is never passed to `docker compose up`
+# (docker-compose.yml is image-only and cannot build).
 #
 # Proves:
 #   - POSTGRES_PASSWORD is required (no default) — Compose fails to expand
@@ -43,6 +49,24 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   echo "FAIL: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
   exit 1
 fi
+
+# P7-C1 isolation: the production topology bind-mounts
+# ${EXAM_DATA_ROOT:-./data} for PostgreSQL and Redis (no Docker named
+# volumes). The Compose project name (`-p`) no longer isolates data, so
+# this smoke points EXAM_DATA_ROOT at a unique throwaway dir per run.
+# `${REPO_ROOT}/.tmp-p6-smoke-data-` prefix is the safety guard for cleanup.
+EXAM_DATA_ROOT="${REPO_ROOT}/.tmp-p6-smoke-data-${RUN_NUM}-$$"
+mkdir -p "${EXAM_DATA_ROOT}"
+export EXAM_DATA_ROOT
+
+# P7-C1 image contract: docker-compose.yml is image-only (consumes
+# ${EXAM_IMAGE}). Build the production image ONCE with a known tag and
+# reference it via EXAM_IMAGE so every subsequent `docker compose ... up`
+# (which must NOT pass --build) consumes the same artifact. The Dockerfile
+# has no real build ARGs, so EXAM_VERSION/EXAM_REVISION are omitted.
+EXAM_IMAGE_TAG="p6-smoke-app:${RUN_NUM}-$$"
+docker build -t "${EXAM_IMAGE_TAG}" "${REPO_ROOT}" 2>&1 | tail -5
+export EXAM_IMAGE="${EXAM_IMAGE_TAG}"
 
 # Strong per-run credentials (test-only, isolated throwaway stack).
 PG_PASSWORD="p6-smoke-pass-${RUN_NUM}-$(date +%s)"
@@ -99,8 +123,19 @@ run_psql_query() {
 
 cleanup() {
   echo "--- cleanup: tearing down isolated project ${PROJECT} ---"
+  # `down -v` is now a data-level no-op (the bind-mounted EXAM_DATA_ROOT is
+  # the data, not a named volume), but it still tears down containers,
+  # networks, and any pulled images. The bind-mounted data root is removed
+  # explicitly below under a strict safety prefix guard.
   docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" down -v --remove-orphans \
     > /dev/null 2>&1 || true
+  # Only ever remove the per-run temp data root created above. Never rm an
+  # arbitrary path: require the exact ${REPO_ROOT}/.tmp-p6-smoke-data- prefix.
+  if [ -n "${EXAM_DATA_ROOT:-}" ] \
+     && [ -n "${REPO_ROOT:-}" ] \
+     && [[ "${EXAM_DATA_ROOT}" == "${REPO_ROOT}/.tmp-p6-smoke-data-"* ]]; then
+    rm -rf "${EXAM_DATA_ROOT}" || true
+  fi
 }
 trap cleanup EXIT
 
@@ -109,11 +144,15 @@ echo "--- TEST 1: empty POSTGRES_PASSWORD fails Compose expansion (P6-007) ---"
 # Use `env -u` to truly unset POSTGRES_PASSWORD for the subprocess (a bare
 # inline `POSTGRES_PASSWORD=""` does NOT override an inherited exported
 # value in all shells). Compose `${VAR:?...}` treats an unset OR empty
-# value as a failure. Capture output to a variable so `set -o pipefail`
-# does not turn the (expected) non-zero Compose exit into a script abort.
+# value as a failure. EXAM_IMAGE is explicitly passed so the ONLY missing
+# required var is POSTGRES_PASSWORD (EXAM_IMAGE is also required-expansion
+# under the P7-C1 image-only contract). Capture output to a variable so
+# `set -o pipefail` does not turn the (expected) non-zero Compose exit into
+# a script abort.
 T1_OUT=$(env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
      JWT_SECRET="${JWT_SECRET}" \
      CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
+     EXAM_IMAGE="${EXAM_IMAGE_TAG}" \
      POSTGRES_PASSWORD="" REDIS_PASSWORD="" \
      docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up --no-start 2>&1 \
      || true)
@@ -130,11 +169,14 @@ echo "--- TEST 1b: default stack parses without REDIS_PASSWORD (P7 review P1) --
 # Redis is an optional profile: a bare `docker compose up` (redis profile
 # inactive) must NOT require a Redis secret at Compose expansion. `config
 # --quiet` validates the full model (interpolation + structure) without
-# pulling images or creating containers.
+# pulling images or creating containers. EXAM_IMAGE is passed explicitly
+# (required-expansion under the P7-C1 image-only contract) so the parse
+# failure surface is ONLY REDIS_PASSWORD.
 T1B_OUT=$(env -u REDIS_PASSWORD \
      POSTGRES_PASSWORD="${PG_PASSWORD}" \
      JWT_SECRET="${JWT_SECRET}" \
      CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
+     EXAM_IMAGE="${EXAM_IMAGE_TAG}" \
      docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" config --quiet 2>&1 \
      || true)
 if [ -z "${T1B_OUT}" ]; then
@@ -145,9 +187,11 @@ else
   exit 1
 fi
 
-# ── Test 2: build + start the default stack (no redis profile; P6-010) ───
+# ── Test 2: start the default stack (no redis profile; P6-010) ───────────
+# The image was built once up front (see EXAM_IMAGE setup); the image-only
+# docker-compose.yml cannot `--build`, so plain `up -d` consumes EXAM_IMAGE.
 echo "--- TEST 2: start default stack (no redis profile; P6-010) ---"
-docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up -d --build \
+docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up -d \
   --quiet-pull 2>&1 | tail -5
 echo "  stack started."
 
@@ -483,10 +527,19 @@ echo "  PASS: worker logs contain shutdown complete."
 # ── Test 16a: redis profile without REDIS_PASSWORD refuses to start (P7) ──
 echo "--- TEST 16a: redis profile without REDIS_PASSWORD refuses to start (P7 review P1) ---"
 REDIS_PROJECT_NOAUTH="p6corr1-redis-noauth-${RUN_NUM}"
+# P7-C1: redis binds ${EXAM_DATA_ROOT}/redis. This is a separate `-p`
+# project, so it gets its own EXAM_DATA_ROOT subdir to avoid colliding on
+# the redis data dir with the main run / Test 16b. Set INLINE (not
+# exported): the script-level EXAM_DATA_ROOT stays the temp-root parent so
+# the cleanup trap removes it (and these subdirs) wholesale.
+EXAM_DATA_ROOT_REDIS_NOAUTH="${EXAM_DATA_ROOT}/redis-noauth"
+mkdir -p "${EXAM_DATA_ROOT_REDIS_NOAUTH}"
 # The password guard lives at container startup (not Compose expansion), so
 # the model still loads; the redis container itself must fail the guard and
 # never run an open server.
 env -u REDIS_PASSWORD \
+  EXAM_DATA_ROOT="${EXAM_DATA_ROOT_REDIS_NOAUTH}" \
+  EXAM_IMAGE="${EXAM_IMAGE_TAG}" \
   docker compose -p "${REDIS_PROJECT_NOAUTH}" -f "${COMPOSE_FILE}" \
   --profile redis up -d redis --quiet-pull 2>&1 | tail -3 || true
 GUARD_FIRED=0
@@ -519,7 +572,13 @@ docker compose -p "${REDIS_PROJECT_NOAUTH}" -f "${COMPOSE_FILE}" \
 # ── Test 16b: redis profile with REDIS_PASSWORD enforces requirepass ──────
 echo "--- TEST 16b: redis profile with REDIS_PASSWORD enforces requirepass (P7 review P1-1) ---"
 REDIS_PROJECT="p6corr1-redis-${RUN_NUM}"
-docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
+# P7-C1: separate `-p` project gets its own EXAM_DATA_ROOT subdir to avoid
+# colliding on the redis data dir with Test 16a / the main run. Inline env
+# only; the script-level EXAM_DATA_ROOT remains the temp-root parent.
+EXAM_DATA_ROOT_REDIS="${EXAM_DATA_ROOT}/redis"
+mkdir -p "${EXAM_DATA_ROOT_REDIS}"
+EXAM_DATA_ROOT="${EXAM_DATA_ROOT_REDIS}" \
+  docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
   up -d redis --quiet-pull 2>&1 | tail -3
 REDIS_AUTH_FAILED=0
 for i in $(seq 1 30); do

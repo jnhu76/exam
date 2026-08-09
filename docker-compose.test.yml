@@ -66,6 +66,10 @@ services:
     restart: unless-stopped
 
   db:
+    # P7-C1 C1.1: this is the E2E topology only. It intentionally keeps a
+    # named volume `pgdata` (disposable E2E state, reseeded every run — see
+    # AGENTS.md "Local Database Discipline"). The portable bind-mount +
+    # EXAM_DATA_ROOT contract lives in docker-compose.yml (production) only.
     image: postgres:18.4-bookworm
     ports:
       - "${DB_HOST_PORT:-5432}:5432"
@@ -98,7 +102,9 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    # P7-C1 C1.2: redis patch pin parity with docker-compose.yml. Redis is
+    # non-authoritative (C0 §8); the pin is hygiene, not correctness.
+    image: redis:7.4.10-alpine
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
     environment:

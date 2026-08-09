@@ -28,3 +28,9 @@ mutation-campaign-results/
 # Unattended task execution evidence (baseline/test logs, morning reports)
 .artifacts/
 /mvp/
+
+# P7-C1 C1.1: canonical persistent data root (production bind mount).
+# ${EXAM_DATA_ROOT:-./data} holds authoritative PostgreSQL state and optional
+# Redis state. NEVER commit it. Deleting ./data/postgres deletes authoritative
+# Exam state.
+/data/

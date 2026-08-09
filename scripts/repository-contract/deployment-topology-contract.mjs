@@ -123,6 +123,28 @@ if (!servicesBlock) {
       // password guard lives at container startup, keeping Redis optional
       // at Compose parse time (P7 review P1).
       assertRedisAuth(redisBlock);
+      // P7-C1 C1.1: optional Redis persistence uses the canonical data root
+      // bind mount (${EXAM_DATA_ROOT:-./data}/redis), NOT a named volume.
+      assertCanonicalDataBindMount(redisBlock, "redis", "redis", "/data");
+    }
+  }
+
+  // P7-C1 C1.1: the production topology defines NO Docker named volumes.
+  // All durable state is bind-mounted under ${EXAM_DATA_ROOT:-./data}, so
+  // `docker compose down -v` cannot destroy Exam data. A stray top-level
+  // named volume (e.g. a reintroduced `pgdata`/`redisdata`) breaks this
+  // contract and must be refused.
+  const volumesBlock = extractTopLevelBlock(composeText, "volumes");
+  if (volumesBlock) {
+    // The volumes block has child keys (named volume defs) only when it is
+    // a mapping. An empty `volumes:` line (scalar) is fine.
+    const childKeys = topLevelKeys(volumesBlock);
+    if (childKeys.length > 0) {
+      errors.push(
+        "docker-compose.yml must NOT define top-level named volumes (P7-C1 C1.1: " +
+          "all durable state is bind-mounted under ${EXAM_DATA_ROOT:-./data}; found " +
+          `named volume(s): ${childKeys.join(", ")}).`,
+      );
     }
   }
 
@@ -143,6 +165,44 @@ if (!servicesBlock) {
     const dbBlock = extractServiceBlock(servicesBlock, "db");
     if (dbBlock) {
       assertRequiredPostgresPasswordDb(dbBlock);
+      // P7-C1 C1.1: the production db service MUST bind-mount the canonical
+      // persistent data root (${EXAM_DATA_ROOT:-./data}/postgres) instead of a
+      // Docker named volume. The bind mount is the exact-history relocation
+      // root and is operator-visible (no Docker-volume archaeology). PGDATA is
+      // intentionally NOT overridden by compose.
+      assertCanonicalDataBindMount(
+        dbBlock,
+        "db",
+        "postgres",
+        "/var/lib/postgresql",
+      );
+    }
+  }
+
+  // P7-C1 C1.2: the production app + email-worker services are IMAGE-ONLY
+  // (they consume ${EXAM_IMAGE}). There is NO source-build path in the
+  // production compose — local source builds use docker-compose.build.yml so a
+  // portable relocation never rebuilds "whatever source is checked out today".
+  for (const serviceName of ["app", "email-worker"]) {
+    if (!serviceNames.includes(serviceName)) continue;
+    const block = extractServiceBlock(servicesBlock, serviceName);
+    if (!block) continue;
+    const noComments = block
+      .split(/\r?\n/)
+      .filter((l) => !/^\s*#/.test(l))
+      .join("\n");
+    if (/^\s*build:/m.test(noComments)) {
+      errors.push(
+        `'${serviceName}' service must NOT declare 'build:' in docker-compose.yml ` +
+          "(P7-C1 C1.2: the production topology is image-only — set EXAM_IMAGE and " +
+          "use docker-compose.build.yml for local source builds).",
+      );
+    }
+    if (!/^\s*image:\s*\$\{EXAM_IMAGE:\?/m.test(noComments)) {
+      errors.push(
+        `'${serviceName}' service must use 'image: \${EXAM_IMAGE:?...}' (P7-C1 C1.2: ` +
+          "the production topology consumes a prebuilt image referenced by EXAM_IMAGE).",
+      );
     }
   }
 
@@ -460,6 +520,53 @@ function assertRequiredPostgresPassword(block, serviceName) {
       `'${serviceName}' service must NOT use '\${POSTGRES_PASSWORD:-...}' ` +
         "(P6-007: a functional fallback default is forbidden for the " +
         "production database credential; use '${POSTGRES_PASSWORD:?...}').",
+    );
+  }
+}
+
+/**
+ * P7-C1 C1.1: assert that a service bind-mounts the canonical persistent
+ * data root. The volume source must be `${EXAM_DATA_ROOT:-./data}/<subdir>`
+ * and the target must match `expectedTarget`. A Docker named volume (a bare
+ * short name with no `/`) is refused — the production topology is bind-only.
+ *
+ * Acceptable:
+ *   - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
+ *   - ${EXAM_DATA_ROOT:-./data}/redis:/data
+ *
+ * Rejected:
+ *   - pgdata:/var/lib/postgresql          (named volume)
+ *   - ./some-other-path/postgres:...      (non-canonical root)
+ */
+function assertCanonicalDataBindMount(
+  block,
+  serviceName,
+  subdir,
+  expectedTarget,
+) {
+  const noComments = block
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+  // Match: - ${EXAM_DATA_ROOT:-./data}/<subdir>:<expectedTarget>
+  const pattern =
+    "^\\s*-\\s*\\$\\{EXAM_DATA_ROOT:-\\./data\\}/" +
+    escapeRegExp(subdir) +
+    ":" +
+    escapeRegExp(expectedTarget) +
+    "\\s*$";
+  const bindRe = new RegExp(pattern, "m");
+  if (!bindRe.test(noComments)) {
+    errors.push(
+      "'" +
+        serviceName +
+        "' service must bind-mount the canonical data root " +
+        "'${EXAM_DATA_ROOT:-./data}/" +
+        subdir +
+        ":" +
+        expectedTarget +
+        "' (P7-C1 C1.1: " +
+        "operator-visible persistent root, not a Docker named volume).",
     );
   }
 }

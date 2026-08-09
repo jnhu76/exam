@@ -1,0 +1,33 @@
+# Local source-build override for docker-compose.yml (P7-C1 C1.2).
+#
+# The production docker-compose.yml is IMAGE-ONLY: app + email-worker consume
+# a prebuilt image referenced by ${EXAM_IMAGE}, and there is NO source-build
+# path in a bare `docker compose up -d`. This override reintroduces
+# `build: { context: . }` for local source builds and development:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Portable / production / relocation deployments do NOT use this file: they
+# set EXAM_IMAGE to a prebuilt image (an immutable registry reference or an
+# immutable release tag) and run only docker-compose.yml. A relocation must
+# never rebuild "whatever source is checked out today".
+#
+# Image identity (3-layer, P7-C1 C1.2): the OCI labels below are EVIDENCE
+# (release version + source revision). The actual image identity is the
+# EXAM_IMAGE reference (tag/digest), which is what relocation records. Pass
+# EXAM_VERSION and EXAM_REVISION explicitly at build time, e.g.:
+#   EXAM_VERSION=0.1.0 EXAM_REVISION=$(git rev-parse HEAD) \
+#     docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  app:
+    build:
+      context: .
+      args:
+        EXAM_VERSION: ${EXAM_VERSION:-dev}
+        EXAM_REVISION: ${EXAM_REVISION:-unknown}
+  email-worker:
+    build:
+      context: .
+      args:
+        EXAM_VERSION: ${EXAM_VERSION:-dev}
+        EXAM_REVISION: ${EXAM_REVISION:-unknown}

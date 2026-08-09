@@ -59,10 +59,26 @@ RUN pnpm --reporter=append-only --filter @exam/api --prod deploy --legacy /out
 
 FROM base AS runner
 
+# P7-C1 C1.2: image identity labels (EVIDENCE, not authority).
+#   EXAM_VERSION  — human release version (e.g. from package.json or a release tag)
+#   EXAM_REVISION — source revision (git SHA)
+# These are descriptive labels only. The ACTUAL image identity is the EXAM_IMAGE
+# reference (tag/digest) consumed by docker-compose.yml — that is what a
+# portable relocation records as the authoritative identity. Passed at build
+# time via docker-compose.build.yml:
+#   EXAM_VERSION=0.1.0 EXAM_REVISION=$(git rev-parse HEAD) \
+#     docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+ARG EXAM_VERSION=dev
+ARG EXAM_REVISION=unknown
+
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup appuser
 
 RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+
+LABEL org.opencontainers.image.title="exam-platform" \
+      org.opencontainers.image.version="${EXAM_VERSION}" \
+      org.opencontainers.image.revision="${EXAM_REVISION}"
 
 WORKDIR /app
 

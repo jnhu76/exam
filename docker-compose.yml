@@ -1,7 +1,28 @@
-# Production Compose contract.
+# Production Compose contract (P7-C1: portable single-node deployment).
 #
-# Security invariants enforced here and by the
-# scripts/repository-contract/deployment-topology-contract.mjs guard:
+# Portable-deployment invariants enforced here and by the
+# scripts/repository-contract/* guards:
+#
+#   - IMAGE-ONLY runtime. The app + email-worker services consume a prebuilt
+#     image referenced by ${EXAM_IMAGE} (required). There is NO source-build
+#     path in this file: a bare `docker compose up -d` never rebuilds "whatever
+#     source is checked out today". Local source builds use the
+#     docker-compose.build.yml override:
+#         docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#     (P7-C1 C1.2: reproducible application/image contract.)
+#
+#   - CANONICAL PERSISTENT DATA ROOT. PostgreSQL durable state lives at an
+#     operator-visible bind mount `${EXAM_DATA_ROOT:-./data}/postgres`, NOT a
+#     Docker named volume. This is the exact-history relocation root:
+#     `./data/` + this compose + a compatible image + `.env` = the same Exam
+#     deployment on any clean host via the ordinary `docker compose up -d`
+#     path (P7-C1 C1.1). Deleting `${EXAM_DATA_ROOT}/postgres` deletes
+#     authoritative Exam state. `docker compose down` preserves it; `down -v`
+#     does NOT remove bind-mounted host directories (it only removes named
+#     volumes, of which there are none here) — `rm -rf ${EXAM_DATA_ROOT}` is
+#     the destructive action.
+#
+# Security invariants (unchanged from P6):
 #
 #   - POSTGRES_PASSWORD is REQUIRED (no functional fallback). The bundled
 #     production Compose must never accept a default database credential.
@@ -25,7 +46,7 @@
 #     See docs/deployment/mvp-deployment-runbook.md §10.
 services:
   app:
-    build: .
+    image: ${EXAM_IMAGE:?EXAM_IMAGE is required — build/tag a production image and set EXAM_IMAGE (see docker-compose.build.yml for local source builds)}
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
@@ -87,7 +108,15 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
-      - pgdata:/var/lib/postgresql
+      # P7-C1 C1.1: canonical persistent data root. PostgreSQL durable state
+      # is an operator-visible bind mount, NOT a Docker named volume. PGDATA
+      # is intentionally NOT overridden: postgres:18.4-bookworm owns its
+      # canonical PGDATA (/var/lib/postgresql/18/docker, per C0 §7). The host
+      # layout ${EXAM_DATA_ROOT:-./data}/postgres/18/docker/... stays stable
+      # across PG patch releases and is the exact-history relocation root.
+      # EXAM_DATA_ROOT is a deployment physical binding (operator/env layer);
+      # smoke/drills override it to a unique temp dir for isolation.
+      - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
     healthcheck:
       test:
         [
@@ -123,7 +152,7 @@ services:
   # password via `--requirepass`, which is how requirepass is configured).
   # See docs/deployment/mvp-deployment-runbook.md §10.
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.10-alpine
     # `$$` is the Compose escape: the container sees `$REDIS_PASSWORD`, not
     # the interpolated secret. The first line is the startup guard — the
     # shell fails the container when REDIS_PASSWORD is unset or empty, so
@@ -144,7 +173,10 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
-      - redisdata:/data
+      # P7-C1 C1.1: optional Redis persistence via the canonical data root.
+      # Redis holds only non-authoritative rate-limit counters (C0 §8 / ADR-001);
+      # deleting ${EXAM_DATA_ROOT:-./data}/redis is always safe for Exam truth.
+      - ${EXAM_DATA_ROOT:-./data}/redis:/data
     healthcheck:
       # An unauthenticated ping must fail (NOAUTH) — the healthcheck itself
       # proves the server enforces the password.
@@ -183,7 +215,7 @@ services:
   # `exec node dist/server.js`. To run the worker instead, override the
   # entrypoint to `node` and pass the worker entrypoint as the command.
   email-worker:
-    build: .
+    image: ${EXAM_IMAGE:?EXAM_IMAGE is required — build/tag a production image and set EXAM_IMAGE (see docker-compose.build.yml for local source builds)}
     entrypoint: ["node"]
     command: ["dist/workers/emailDeliveryWorker.js"]
     environment:
@@ -235,9 +267,11 @@ services:
       - exam-net
     restart: unless-stopped
 
-volumes:
-  pgdata:
-  redisdata:
+# NOTE (P7-C1 C1.1): there are no Docker named volumes in the production
+# topology. All durable state is bind-mounted under ${EXAM_DATA_ROOT:-./data}.
+# `docker compose down -v` therefore does NOT remove Exam data — it only
+# removes named volumes (none defined). Use `rm -rf ${EXAM_DATA_ROOT}` to
+# destroy authoritative state.
 
 networks:
   exam-net:
