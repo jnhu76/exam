@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router";
 import { BrandHeader } from "@/components/layout/BrandHeader";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useBranding } from "@/components/layout/BrandProvider";
@@ -19,10 +20,14 @@ import { PageContainer } from "@/components/shared/PageContainer";
 export function LoginPage() {
   const { t } = useTranslation();
   const branding = useBranding();
+  const location = useLocation();
   const { login, isSubmittingLogin, error } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // The launchpad (P7-C1 C1.6) redirects here with location.state after the
+  // first Admin is created — bootstrap does not auto-login.
+  const launchpadComplete = location.state?.launchpadComplete === true;
 
   const validate = () => {
     const errors: Record<string, string> = {};
@@ -51,6 +56,14 @@ export function LoginPage() {
           <CardContent>
             {branding.productSubtitle && (
               <p className="type-secondary mb-6">{branding.productSubtitle}</p>
+            )}
+            {launchpadComplete && (
+              <p
+                role="status"
+                className="mb-6 rounded-md border border-border bg-success/10 px-3 py-2 text-sm text-success"
+              >
+                {t("launchpad.loginNotice")}
+              </p>
             )}
             <form onSubmit={handleSubmit}>
               <FieldGroup data-testid="login-field-group" className="gap-4">

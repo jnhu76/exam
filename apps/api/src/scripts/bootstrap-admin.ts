@@ -271,89 +271,20 @@ async function resolveOrCreateDefaultOrganizationInTx(
  *
  * This is the canonical production bootstrap path (P6-008). The baseline
  * dev/test seed (`packages/db/src/seed.ts`) is NOT the production path.
+ *
+ * P7-C1 C1.6: the canonical state-change body now lives in
+ * `apps/api/src/services/initialSetupService.ts` (`bootstrapInitialAdmin`) so
+ * the CLI and the HTTP launchpad route share ONE command owner. This function
+ * is a thin CLI adapter that delegates with source="local_script".
  */
 export async function bootstrapAdminOnFreshDb(
   db: Database,
   params: BootstrapAdminParams,
   options: BootstrapAdminOrganizationOptions = {},
 ): Promise<BootstrapAdminResult> {
-  const passwordHash = await hashPassword(params.password);
-
-  const result = await executeInTransaction(db, async (tx) => {
-    // 1. Resolve/create the default org INSIDE this transaction so the
-    //    org, Admin, assignment, and audit commit atomically.
-    const organization = await resolveOrCreateDefaultOrganizationInTx(
-      tx,
-      options,
-    );
-
-    const systemCtx = {
-      organizationId: organization.id,
-      actorId: "system",
-      role: "Admin" as const,
-      permissions: [],
-    };
-
-    const txUserRepo = createUserRepo(tx);
-    // RBAC-M10-E: "already has an active admin" is an assignment-backed
-    // question. P0-7.
-    const activeAdminCount = await txUserRepo.countEffectiveActiveUsersWithRole(
-      systemCtx,
-      "Admin",
-    );
-    if (activeAdminCount > 0 && !params.force) {
-      throw new Error(
-        `An active Admin already exists in this organization. ` +
-          `Use --force to create an additional Admin.`,
-      );
-    }
-    // 2. Create the first Admin with the explicit (hashed) password.
-    const user = await txUserRepo.createUnique(systemCtx, {
-      username: params.username,
-      passwordHash,
-      name: params.name,
-      role: "Admin",
-      isActive: true,
-    });
-    // 3. Create the primary Admin assignment in the SAME transaction.
-    await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
-      tx,
-      systemCtx,
-      {
-        userId: user.id,
-        role: "Admin",
-        isPrimary: true,
-        isActive: true,
-      },
-    );
-    // 4. Write admin.bootstrap audit evidence in the SAME transaction.
-    await recordAtomicSystemAudit(
-      tx,
-      { tenant: systemCtx },
-      {
-        action: "admin.bootstrap",
-        targetType: "user",
-        targetId: user.id,
-        metadata: {
-          username: user.username,
-          name: user.name,
-          source: "local_script",
-        },
-      },
-    );
-    return { organization, user };
-  });
-
-  return {
-    organization: result.organization,
-    user: {
-      id: result.user.id,
-      username: result.user.username,
-      name: result.user.name,
-      role: result.user.role,
-      isActive: result.user.isActive,
-    },
-  };
+  const { bootstrapInitialAdmin } =
+    await import("../services/initialSetupService.js");
+  return bootstrapInitialAdmin(db, params, options, "local_script");
 }
 
 // ── CLI entry point ──────────────────────────────────────────────

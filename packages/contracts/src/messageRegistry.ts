@@ -67,6 +67,9 @@ export const errorMessages = {
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",
   AUTHZ_UNAVAILABLE: "授权服务暂不可用，请稍后重试",
   RATE_LIMIT_UNAVAILABLE: "限流服务暂不可用，请稍后重试",
+  LAUNCHPAD_SETUP_REQUIRED: "首次安装需要运维配置的设置口令",
+  LAUNCHPAD_SETUP_TOKEN_INVALID: "设置口令无效",
+  LAUNCHPAD_ALREADY_COMPLETED: "此安装已完成初始化",
 } as const;
 
 /** Union type of all valid error message codes. */

@@ -126,7 +126,11 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .object({
         username: z.string().max(50),
         name: z.string().max(100),
-        source: z.literal("local_script"),
+        // Both first-Admin adapters share one canonical command (P7-C1 C1.6):
+        // the operator CLI ("local_script") and the launchpad HTTP handoff
+        // ("launchpad_http"). Provenance is recorded so the two paths are
+        // distinguishable in the audit trail.
+        source: z.enum(["local_script", "launchpad_http"]),
       })
       .strict(),
   ),

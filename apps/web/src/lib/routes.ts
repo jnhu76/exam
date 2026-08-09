@@ -1,6 +1,7 @@
 /** Centralized route path constants and path-builder functions. */
 export const routes = {
   login: "/login",
+  launchpad: "/launchpad",
   admin: {
     root: "/admin",
     dashboard: "/admin/dashboard",

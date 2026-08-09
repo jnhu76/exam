@@ -2205,6 +2205,37 @@ const zhCN = {
     },
   },
 
+  /** LaunchpadPage (P7-C1 first-install bootstrap) copy. */
+  launchpad: {
+    statusLoading: "正在检查安装状态…",
+    statusFailed: "无法获取安装状态，请稍后重试",
+    operatorActivationRequiredBody:
+      "首次安装尚未配置设置口令。请运维人员在部署配置中设置 LAUNCHPAD_SETUP_TOKEN 后刷新本页面。",
+    completedBody: "此安装已完成初始化，请直接登录。",
+    goToLogin: "前往登录",
+    organizationNameLabel: "组织名称",
+    organizationNamePlaceholder: "请输入组织名称",
+    organizationNameRequired: "请输入组织名称",
+    organizationDisplayNameLabel: "组织显示名称（可选）",
+    organizationDisplayNamePlaceholder: "请输入组织显示名称",
+    usernameLabel: "管理员用户名",
+    usernamePlaceholder: "请输入管理员用户名",
+    usernameMinLength: "用户名至少 3 个字符",
+    nameLabel: "姓名",
+    namePlaceholder: "请输入姓名",
+    nameRequired: "请输入姓名",
+    passwordLabel: "密码",
+    passwordPlaceholder: "请输入密码",
+    passwordMinLength: "密码至少 8 个字符",
+    setupTokenLabel: "设置口令",
+    setupTokenPlaceholder: "请输入运维提供的设置口令",
+    setupTokenRequired: "请输入设置口令",
+    submit: "完成设置",
+    submitting: "提交中...",
+    submitFailed: "初始化失败，请检查设置口令后重试",
+    loginNotice: "设置完成，请使用新创建的管理员账号登录。",
+  },
+
   /** StartExamPage (candidate pre-exam page) copy. */
   startExam: {
     errors: {
@@ -2281,6 +2312,7 @@ const zhCN = {
     fallbackPageTitle: "页面",
     static: {
       login: "登录",
+      launchpad: "首次设置",
       dashboard: "仪表盘",
       users: "用户管理",
       candidates: "考生管理",

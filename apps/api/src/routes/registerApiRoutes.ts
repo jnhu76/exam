@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import authRoutes from "./auth.js";
+import launchpadRoutes from "./launchpad.js";
 import settingsRoutes from "./settings.js";
 import candidateFieldRoutes from "./candidateField.js";
 import userRoutes from "./user.js";
@@ -39,6 +40,7 @@ export async function registerApiRoutes(
   const prefix = opts.prefix ?? "/api";
 
   await app.register(authRoutes, { prefix: `${prefix}/auth` });
+  await app.register(launchpadRoutes, { prefix: `${prefix}/launchpad` });
   await app.register(settingsRoutes, { prefix });
   await app.register(candidateFieldRoutes, { prefix });
   await app.register(userRoutes, { prefix });

@@ -16,6 +16,7 @@ import { DateTimeProvider } from "@/contexts/DateTimeContext";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { getDocumentTitle } from "@/lib/pageMeta";
 import { LoginPage } from "@/pages/LoginPage";
+import { LaunchpadPage } from "@/pages/LaunchpadPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
 import { CandidateFieldsPage } from "@/pages/admin/CandidateFieldsPage";
@@ -68,6 +69,9 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* First-install launchpad: top-level sibling of /login, outside
+          AdminLayout/ExamShell (P7-C1 C1.6). */}
+      <Route path="/launchpad" element={<LaunchpadPage />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminIndexRoute />} />
         <Route path="dashboard" element={<DashboardPage />} />
