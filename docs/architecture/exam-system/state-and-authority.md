@@ -4,20 +4,35 @@
 > Recovery semantics are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md). Interruption detection and time compensation are governed by [ADR-013](../../adr/ADR-013-interruption-time-compensation-policy.md). Both are described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
-Last runtime verified against: 53ac3524 (master, post-PR #238)
-Recovery contract authority: PR #218 / ADR-012
+Last runtime verified against: 1d3a0bd8 + P7-S2 branch (fix/p7-s2-runtime-authority-hardening)
+Recovery contract authority: PR #218 / ADR-012 (amended by P7-S2-B)
 Interruption-policy freeze: ADR-013 / REC-I4-R0
 
-Verification scope:
-Runtime behavior verified after merged PRs #218, #219, #221, and REC-I4-I3B2
-closeout evidence.
-ADR-013 is implemented at REC-I4-I1/I2/I3A/I3B1/I3B2: policy snapshot + caps on
-Exam/Attempt, interruption episode + time-adjustment ledger + append-only
-events in PostgreSQL, `restoreInterruptedAttempt()` as the composed restore
-command, the canonical `grantAttemptTime()` operator-grant engine, and the
-Admin-only Attempt-scoped time-grant route/product path. Proctor time grants
-remain inactive until M11 resource scope exists.
+Verification scope (P7-S2 closeout, see docs/audits/P7-S2-RUNTIME-AUTHORITY-HARDENING-CLOSEOUT.md):
+- Result publication is SINGLE-WINNER (P7-S2-A): `publishResults()` locks the
+  exam row (FOR UPDATE) and re-reads `resultsPublishedAt` under the lock;
+  concurrent publishers cannot both observe NULL. Deterministic two-connection
+  race tests prove one applied + one alreadyPublished under both READ COMMITTED
+  and REPEATABLE READ.
+- Answer version protocol (P7-S2-B): `baseVersion === currentVersion` is
+  required for a new save; future base versions are rejected with
+  `FUTURE_VERSION` (ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION).
+- Email delivery is classified AT-LEAST-ONCE (P7-S2-D): the PostgreSQL outbox
+  state machine is durable, SMTP delivery is an external side effect, and a
+  fail-fast config invariant requires EMAIL_WORKER_LOCK_TIMEOUT_MS to exceed
+  the SMTP phase timeouts. Worker liveness is observable via
+  `GET /api/system` (emailStatus.worker heartbeat).
+- No general startup reconciler exists (P7-S2 Phase 5 negative result):
+  crash-atomicity tests prove all cross-domain mutations commit in ONE
+  PostgreSQL transaction. Read-only integrity diagnostics for legacy-only
+  attempt shapes are exposed at `GET /api/system/diagnostics` → `integrity`.
 ```
+
+Historical note: the previous verification entry (53ac3524, post-PR #238,
+Proctor time grants "inactive until M11") described the runtime before J3/J4
+(incidents + proctor scope) landed; the M11 milestone wording is stale — the
+current fact is that Proctor presets do not include time grants (J4-I1B), so
+`grantAttemptTime()` remains Admin-only today.
 
 ## Why these must not be collapsed
 
@@ -268,6 +283,37 @@ stateDiagram-v2
 implemented for result publication (P5-N1, PR #213): `notificationService`
 inserts Inbox + Email outbox rows atomically with the publication transaction,
 and the outbox insert is required when a normalized recipient email exists.
+
+### Delivery semantics (P7-S2-D)
+
+```text
+DB outbox processing = durable (PostgreSQL state machine, ownership-fenced)
+SMTP delivery        = external side effect (no transaction boundary)
+delivery semantics   = AT LEAST ONCE
+```
+
+Exactly-once is NOT claimed. The canonical ambiguity: SMTP accepts the mail →
+the process/network fails before the app records `markSent` → the outbox row
+remains recoverable → a retry may send a duplicate. This is acceptable because
+it is documented, bounded (retry policy + `maxAttempts` → `dead`), and each
+outbox row's claim/mark cycle is ownership-fenced so only one worker owns a
+row at a time.
+
+Lease safety (fail-fast config invariant in `runtimeConfig.ts`): the worker
+lock timeout must be strictly greater than the sum of the SMTP phase timeouts
+(connection + greeting + socket), otherwise an alive worker could be reclaimed
+while still sending. Because nodemailer's `socketTimeout` is an *inactivity*
+timeout (not a total-operation cap), a slow-but-active SMTP server can in
+principle extend a send beyond that sum — the residual window is the
+at-least-once boundary above, not a config error.
+
+Worker liveness is observable: `GET /api/system` reports
+`emailStatus.worker.status` (`available`/`degraded`/`unknown`) from the
+`worker_heartbeats` row vs `EMAIL_WORKER_HEARTBEAT_STALE_MS`. Abandoned
+`processing` rows are recovered by `recoverAbandoned()` inside the worker poll
+loop (worker-owned by design — the API does not duplicate recovery ownership;
+the operational question is answered by the heartbeat observability, not by
+moving lifecycle into the API).
 Additional operational notification types remain P5-N2+ scope.
 
 ---
@@ -283,6 +329,17 @@ Additional operational notification types remain P5-N2+ scope.
 - `immediate`: visible as soon as grading is computable.
 - `after_grading`: visible only when `gradingStatus = fully_graded`.
 - `manual`: hidden until `publishResults()` sets `resultsPublishedAt`.
+
+**Single-winner invariant (P7-S2-A, RESULT_PUBLISH_IS_SINGLE_WINNER)**:
+for one exam, `resultsPublishedAt` transitions `NULL → timestamp` exactly once.
+`publishResults()` reads the exam under `FOR UPDATE` and re-checks
+`resultsPublishedAt` under the lock, so two concurrent publishers cannot both
+observe `NULL`: exactly one caller owns the applied publication, every loser
+observes `alreadyPublished=true`, the stored timestamp never changes after the
+first publication, and exactly one `exam.publish_results` audit + one logical
+fan-out event exist (audit + Inbox/outbox fan-out commit in the same
+transaction as the timestamp). Proof: `apps/api/src/routes/publishResults.concurrency.test.ts`
+(deterministic two-connection barrier, READ COMMITTED + REPEATABLE READ).
 
 ### 6.2 Retake Policy
 
@@ -302,7 +359,7 @@ Additional operational notification types remain P5-N2+ scope.
 
 | Field | Meaning | Set by | Writable? |
 |-------|---------|--------|-----------|
-| `exam.resultsPublishedAt` | First publish-results instant | `publishResults()` | Write-once |
+| `exam.resultsPublishedAt` | First publish-results instant | `publishResults()` (row-lock serialized, P7-S2-A) | Write-once |
 | `attempt.startedAt` | When the attempt began | `startOrRestoreAttempt()` | Write-once |
 | `attempt.submittedAt` | When the attempt was submitted | `submitAttempt()` / deadline reconciliation | Write-once |
 | `attempt.gradedAt` | When grading finalized | `finalizeTerminalGrading()` | Write-once |
@@ -378,3 +435,48 @@ deadline or irreversible attempt transition.
 | Interruption episode (implemented) | active/resolved evidence | Yes — identity and evidence, not lifecycle entitlement |
 | Time adjustment (implemented) | append-only positive facts | Yes — deadline provenance, not attempt status |
 | Incident (ADR-014) | 4 | Yes — operational case orthogonal to Attempt; Admin runtime IMPLEMENTED by J3 (CLOSED — PR #242 merged); Proctor scope and recovery UI NOT IMPLEMENTED |
+
+---
+
+## 10. P7-S2 Authority Amendments (current implementation status)
+
+### Answer version protocol (P7-S2-B)
+
+`ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION`: for a new, non-idempotent
+answer save, `baseVersion === currentVersion` is required. Classification:
+
+```text
+baseVersion < currentVersion  → STALE_VERSION     (conflict)
+baseVersion == currentVersion → eligible           (accepted, version+1)
+baseVersion > currentVersion  → FUTURE_VERSION     (conflict, new in P7-S2-B)
+```
+
+Same-`clientSeq` idempotent replay is evaluated BEFORE the version check and
+is unaffected (same payload → replay, different payload → CONFLICTING_PAYLOAD).
+The wire enum `SaveAnswerRejectReason` gained `FUTURE_VERSION`
+(`packages/contracts/src/attempt.ts`); the frontend treats it as a generic
+save rejection (only `STALE_VERSION` triggers server-answer reconciliation).
+Previously (ADR-012 KNOWN_DEFECT REC-I2a) a future `baseVersion` was silently
+accepted as `currentVersion + 1`; ADR-012 is amended below.
+
+### Crash/rollback evidence (P7-S2 Phase 4)
+
+`apps/api/src/routes/crashAtomicity.test.ts` injects a deterministic
+throw-after-mutation inside the same uncommitted transaction shape the routes
+use, for: submit freeze, manual-grading terminalization, result publication,
+interruption detection, interruption restore, and operator time grant. Every
+flow rolls back fully (zero committed partial state) and a fresh retry
+succeeds. Receipt-backed commands (force-submit, misconduct, incident,
+proctor assignment) have replay evidence in their dedicated concurrency
+suites. Conclusion: **no general startup reconciler is implemented** — no
+committed incomplete state is reachable from current supported runtime
+behavior. Legacy-only anomalies are DETECTED read-only at
+`GET /api/system/diagnostics` → `integrity` (submitted+auto_graded not
+terminalized; submitted workset mismatch) and are never auto-repaired.
+
+### Redis boundary (unchanged)
+
+Redis remains limited to shared rate-limit ephemeral state and read-only
+system-health diagnostics. It owns no exam fact, and no TTL can trigger an
+irreversible transition (ADR-013 §11 freeze). P7-S2 adds no Redis
+responsibility.

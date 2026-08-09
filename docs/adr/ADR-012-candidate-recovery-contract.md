@@ -38,11 +38,12 @@ Current gaps identified by audit:
   permanent default.
 - No multi-tab or multi-device conflict detection exists beyond the
   server-side version protocol.
-- The version protocol does NOT reject `baseVersion > currentVersion`
+- The version protocol historically did NOT reject `baseVersion > currentVersion`
   (future version). A client sending `baseVersion=999` against
-  `currentVersion=2` is accepted. This is a known defect, not a design
+  `currentVersion=2` was accepted. This was a known defect, not a design
   choice. The TARGET_INVARIANT (strict equality) is frozen here; the
-  runtime fix is owned by REC-I2a.
+  runtime fix is owned by REC-I2a — **IMPLEMENTED by P7-S2-B**
+  (`FUTURE_VERSION` rejection; see the amendment below).
 
 This ADR freezes the recovery contract, authority model, failure taxonomy,
 save-operation semantics, local journal abstraction, time-compensation policy
@@ -306,10 +307,21 @@ semantic payload → reject as conflicting payload. Implemented via
 `currentVersion=2` is accepted. The request schema only validates
 `baseVersion >= 0`. This is a gap, not a designed behavior.
 
+> **P7-S2-B amendment (REC-I2a CLOSED)**: the runtime fix is implemented.
+> `processSaveAnswer` now classifies `baseVersion > currentVersion` as
+> `FUTURE_VERSION` (a distinct wire reason in `SaveAnswerRejectReasonEnum`;
+> message `答案版本超前，请刷新页面后重试`). Same-`clientSeq` idempotent
+> replay is evaluated before the version check and is unchanged. Evidence:
+> `packages/exam-engine/src/answerProtocol.test.ts` (current=2 base=1/2/3/999
+> matrix + replay + conflicting-payload) and
+> `apps/api/src/routes/attempts/protocol-consistency.test.ts` scenario #15
+> (wire-level FUTURE_VERSION, no draft persisted).
+
 **TARGET_INVARIANT (REC-I2a)**: `baseVersion` must strictly equal
 `currentVersion`. Future `baseVersion` (greater than current) must be
-rejected with an explicit error code. Runtime fix is owned by REC-I2a and
-must NOT be included in this documentation PR.
+rejected with an explicit error code. — **NOW IMPLEMENTED (P7-S2-B)**; the
+statements above are the historical acceptance-time record, preserved
+verbatim.
 
 **Server time authority (CURRENT_INVARIANT)**: The server controls `savedAt`,
 deadline checks, lease expiry, submission validity, time compensation. Client
