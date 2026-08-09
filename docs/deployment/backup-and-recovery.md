@@ -86,7 +86,7 @@ docker compose exec db sh -c \
 
 ---
 
-## 4. Decision tree (C1 + future C2/C3)
+## 4. Decision tree (C1 + C2; C3 forthcoming)
 
 ```text
 I am moving the server to a new host
@@ -96,7 +96,7 @@ I want the simplest full backup
     → §6  cold-filesystem backup (C1)
 
 I want routine backups without shutting Exam down (online)
-    → C2  pg_dump logical backup (forthcoming)
+    → §7  pg_dump logical backup (C2)
 
 I need exact PostgreSQL physical backup / faster full-cluster recovery
     → C3  pg_basebackup (forthcoming)
@@ -105,9 +105,9 @@ I deleted something at 14:32 and need 14:31
     → C3  PITR (forthcoming)
 ```
 
-C2 (logical `pg_dump` backup) and C3 (physical `pg_basebackup` + WAL/PITR)
-are separate phases of the P7-C program. Until they ship, the supported
-backup/restore paths are the C1 cold-filesystem procedures below.
+C3 (physical `pg_basebackup` + WAL/PITR) is a separate phase of the P7-C
+program. Until it ships, the supported backup/restore paths are the C1
+cold-filesystem procedures (§5–§6) and the C2 logical procedures (§7).
 
 ---
 
@@ -213,7 +213,80 @@ start, so a fresh empty bind mount is also initialized correctly.
 
 ---
 
-## 7. What Redis loss means
+## 7. Logical online backup and clean restore (C2)
+
+Takes an internally consistent PostgreSQL backup while Exam is running, using
+`pg_dump` custom format (`-Fc`), and restores it into a CLEAN target
+database. This is the routine backup users are most likely to want:
+PostgreSQL stays online and the dump is internally consistent. Prefer this
+path for routine backups unless cold-copy simplicity is preferred.
+
+### 7.1 Backup (online)
+
+```bash
+# PostgreSQL stays ONLINE. The API may be down; only PostgreSQL must be up.
+# <COMPOSE_PROJECT> is the Compose project name (for the default production
+# stack started from the repo root it's the directory name, usually "exam").
+scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
+```
+
+The helper: connects via the `db` container; produces a timestamped
+custom-format dump (`-Fc`, `--no-owner`); fails non-zero on error; never
+puts the DB password on the argv (uses `PGPASSWORD` env); refuses to claim
+success for an empty/partial artifact (non-empty + `PGDMP` magic +
+`pg_restore --list` OK). Store the artifact on an **independent failure
+domain**.
+
+### 7.2 Clean restore (exact historical replacement)
+
+```bash
+# 1. Stop the API + worker (avoid writes during restore):
+docker compose stop app email-worker
+
+# 2. Restore into a CLEAN target (DROP + recreate from template0, then
+#    pg_restore). The result is an EXACT match of the dump — NOT a merge.
+#    The script requires you to type the target DB name to confirm.
+scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
+
+# 3. Restart the API + worker to use the restored database:
+docker compose up -d app email-worker
+
+# 4. Run your Exam business-invariant checks after restart.
+```
+
+The clean-target contract fixes the exact-historical-replacement gap: the
+runbook's older `pg_dump --clean --if-exists | psql` path does **not** remove
+objects that exist in the target DB yet are absent from an older dump. The
+C2 restore script enforces `DROP DATABASE` + `CREATE DATABASE ... TEMPLATE
+template0` (a truly empty database) before `pg_restore`, so the restored
+database is byte-for-byte the dump's state. This was validated by an
+automated drill
+(`scripts/deployment/p7-c2-logical-restore-drill.sh`) that proves a fresh
+working Exam with State A is produced from a State-A dump, and State-B-only
+data is correctly absent. Restore is **operator-only** (no browser restore
+button; the Phase 1 rule).
+
+### 7.3 Cluster globals (not required for the bundled path)
+
+Exam does **not** require `pg_dumpall --globals-only` for the bundled
+single-node Compose path:
+
+- The `db` service creates the application role and database at image init
+  from `POSTGRES_USER` / `POSTGRES_DB` / `POSTGRES_PASSWORD`. Restoring the
+  dump into a database created by the same Compose stack therefore finds the
+  role/database already present — they are **recreated by Docker/bootstrap
+  configuration, not required in the dump**.
+- No PostgreSQL cluster-level roles, tablespaces, or other globals are
+  application-defined. The application owns only objects inside its database.
+
+`pg_dumpall --globals-only` is therefore **not** included in the default
+backup. If you run against an external PostgreSQL cluster where the role is
+not created by Docker init, recreate the role/database manually before
+restore (this is already the runbook's external-Postgres stance).
+
+---
+
+## 8. What Redis loss means
 
 Redis holds only shared rate-limit counters with mandatory TTL. Losing
 `data/redis/` (or the whole Redis instance):
@@ -228,7 +301,7 @@ under-limit an irreversible fact.
 
 ---
 
-## 8. First Admin (Launchpad) and Admin recovery
+## 9. First Admin (Launchpad) and Admin recovery
 
 ### 8.1 Launchpad (initial installation only)
 

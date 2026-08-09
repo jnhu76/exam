@@ -821,14 +821,31 @@ Both procedures were validated by an automated drill
 fresh working Exam deployment with identical authoritative state is
 produced from the backup. See backup-and-recovery.md §6.
 
-### pg_dump logical backup (documented; C2 will validate)
+### pg_dump logical backup and clean restore (validated by C2)
 
-The `pg_dump` path below is **documented-only and UNVALIDATED** until the
-P7-C2 logical-backup/restore drill ships. The P7-C0 durability audit
-classified this path as documented-only; exact historical replacement is
-NOT proven (restoring an older dump into an already-newer database may
-leave objects absent from the dump unless the target is recreated/cleaned
-under an explicit restore contract — C2 will close this).
+The C2 logical path is the recommended routine backup (PostgreSQL stays
+online). It was validated by an automated drill
+(`scripts/deployment/p7-c2-logical-restore-drill.sh`) that proves a fresh
+working Exam with State A is produced from a State-A dump, with State-B-only
+data correctly absent — closing the P7-C0 P2-2/P2-3 gaps. The clean-restore
+contract (DROP + recreate from template0, then `pg_restore`) is enforced by
+`scripts/backup/postgres-logical-restore.sh`. See
+`docs/deployment/backup-and-recovery.md` §7.
+
+```bash
+# Online logical backup (PostgreSQL stays ONLINE; API may be down):
+scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
+
+# Clean restore (STOP API + worker first; script requires typing target DB name):
+docker compose stop app email-worker
+scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
+docker compose up -d app email-worker
+```
+
+The older `pg_dump --clean --if-exists | psql` one-liner is retained below
+for reference, but the clean-target contract above is the supported path
+(`--clean --if-exists` into a dirty target does NOT remove dump-absent
+objects):
 
 ```bash
 # Backup (online, consistent). $POSTGRES_USER / $POSTGRES_DB are expanded
