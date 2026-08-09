@@ -58,7 +58,10 @@
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
 > completing the interruption-recovery and operator-response system before
-> starting Redis adoption work.
+> starting Redis adoption work. That work order is now substantially complete
+> (J4-I1 and J5 closed; see the Job Index), and the P7-D1 Redis decision has
+> been recorded — accepted 2026-08-08 for the shared rate limiter (ADR-001
+> "Post-MVP Decision (P7)").
 >
 > Scope: single deployment, single organization, LAN/on-premise.
 >
@@ -70,7 +73,13 @@
 
 ## 1. Why these Jobs come before Redis
 
-Redis is not the current blocker.
+> Status: the ordering rationale below is historical — the J-sequence it
+> ordered is complete through J5, and the P7-D1 Redis decision was accepted
+> (2026-08-08) for ONE responsibility, the shared rate limiter (J8 note in
+> §11). Redis is no longer "not the current blocker" as a decision topic; it
+> is an adopted, bounded dependency.
+
+Historically, Redis was not the blocker.
 
 The immediate architectural gaps are:
 
@@ -110,7 +119,7 @@ REC-I6-R0 Incident Authority Contract
 | J3 | `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` | **CLOSED — PR #242 merged** — Admin incident model, event history, commands, action links, and API are live on master | J2 |
 | J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **CLOSED** — Proctor-to-Exam scope authority design contract accepted in ADR-015 (ACCEPTED 2026-08-02, PR #245) | J2; existing RBAC baseline |
 | J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **CLOSED** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Closeout: `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`. | J4-R0 accepted |
-| J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | Admin can inspect and operate the live recovery workflow through UI | J1, J3, J4-I1 |
+| J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | **CLOSED (2026-08-08)** — Admin can inspect and operate the live recovery workflow through UI. Closeout: `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md` | J1, J3, J4-I1 |
 | J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
 | J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | Real incident scenarios, crash recovery, audit, and E2E are closed | J1–J6 |
 | Gate | `RECOVERY-AUTHORITY-GATE` | Recovery authority and operator workflows are safe enough to build shared infrastructure around | J1–J7 |
@@ -146,7 +155,11 @@ Remaining dependencies handed forward (status as of the J4-I1 merge):
   has no grant path.
 - Non-null `incidentId`: J2 (ADR-014) and J3 (PR #242) are CLOSED; the optional
   `incidentId` operator path is live.
-- Admin/Proctor Recovery Center UI (J5/J6) and Redis (J8) remain out of scope.
+- Admin/Proctor Recovery Center UI (J5/J6) and Redis (J8) remain out of scope
+  — as of the J4-I1 merge this was true; J5 (Admin Recovery Center) shipped
+  later (J5-I1B/I1C1/I1D, 2026-08-08) and the P7-D1 Redis decision was
+  accepted (2026-08-08). J6 and further Redis responsibilities remain out of
+  scope.
 
 The full contract, request/response examples, invariants, acceptance, and test
 inventory are owned by the closeout audit, OpenAPI, and
@@ -548,8 +561,10 @@ Every command records:
 > **J4-I1 (runtime) is CLOSED** — implemented per the
 > ADR-015 §23 decomposition (A → B → C → D, 2026-08-02); closeout:
 > [`M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-> **J5 (Admin Recovery Center) is NEXT.** Where the planning sketch
-> below differs from ADR-015, the ADR wins.
+> **J5 (Admin Recovery Center) is CLOSED** (2026-08-08; closeout:
+> [`J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`](../audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md);
+> see §7 below). **J6 (Proctor Recovery Center) is NEXT.** Where the
+> planning sketch below differs from ADR-015, the ADR wins.
 
 ## Purpose
 
@@ -1107,6 +1122,13 @@ business authority is stable enough to evaluate Redis safely.
 ---
 
 ## 11. J8 — P7-D1 Redis Adoption Decision
+
+> **Decision record (2026-08-08):** P7-D1 is **ACCEPTED** — Redis is adopted
+> for ONE bounded responsibility, the **shared/global rate limiter**
+> (ADR-001 "Post-MVP Decision (P7)"; PR #265 shipped P7-D2/D3). The
+> measurement and decision inputs below informed that decision. Any further
+> Redis responsibility requires its own recorded decision; the "Possible
+> outcomes" section is retained as the decision framework.
 
 ## Purpose
 

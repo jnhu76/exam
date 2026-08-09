@@ -29,7 +29,7 @@ Every ADR carries this metadata (in its Status section or header):
 
 | ID | Title | Status | Current / Historical | Supersedes | Superseded by |
 | --- | --- | --- | --- | --- | --- |
-| [ADR-001](ADR-001-redis.md) | Redis as Optional Infrastructure | ACCEPTED (baseline) / DEFERRED (full adoption) | Current | none | none |
+| [ADR-001](ADR-001-redis.md) | Redis as Optional Infrastructure | ACCEPTED (baseline; shared rate-limiting adoption amended 2026-08-08) / DEFERRED (full adoption) | Current | none | none |
 | [ADR-002](ADR-002-websocket-sse.md) | WebSocket / SSE for Real-Time Updates | DEFERRED | Current | none | none |
 | [ADR-003](ADR-003-job-queue.md) | Job Queue for Async / Long-Running Workloads | DEFERRED | Current | none | none |
 | [ADR-004](ADR-004-desktop-electron.md) | Desktop / Electron Exam Runtime | DEFERRED | Current | none | none |
@@ -39,11 +39,11 @@ Every ADR carries this metadata (in its Status section or header):
 | [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | ACCEPTED (Phase 2 conservative) | Current | none | none |
 | [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend State Machine Adoption | PROPOSED (pending human audit) | Current | none | none |
 | [ADR-010](ADR-010-scoped-rbac-architecture.md) | Phase 3 Scoped RBAC Architecture | ACCEPTED (infrastructure implemented) | Current | none | none |
-| [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | PROPOSED | Current | none | none |
+| [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | ACCEPTED (2026-07-25, P5-N1-R0) | Current | none | none |
 | [ADR-012](ADR-012-candidate-recovery-contract.md) | Candidate Recovery Contract and Threat Model | ACCEPTED | Current | none | none |
 | [ADR-013](ADR-013-interruption-time-compensation-policy.md) | Interruption Detection and Time-Compensation Policy | ACCEPTED | Current | ADR-012's incomplete time-policy direction | none |
-| [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED (runtime NOT STARTED) | Current | none | none |
-| [ADR-015](ADR-015-proctor-exam-scope-authority.md) | Proctor-to-Exam Resource Scope Authority | ACCEPTED (runtime NOT STARTED) | Current | none | none |
+| [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED (runtime implemented — J3, PR #242; Admin recovery center J5 closed) | Current | none | none |
+| [ADR-015](ADR-015-proctor-exam-scope-authority.md) | Proctor-to-Exam Resource Scope Authority | ACCEPTED (runtime implemented — J4-I1, PR #250) | Current | none | none |
 
 ## Numbering
 

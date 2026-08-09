@@ -1,14 +1,17 @@
 # P7 — System Readiness and Configurable Exam Modes
 
 > Status: ACCEPTED FOR PLANNING (2026-07-31, docs-only PR)
-> Implementation status: NOT STARTED
+> Implementation status: PARTIALLY IMPLEMENTED (P7-D1 decision gate ACCEPTED
+> 2026-08-08; P7-D2/D3 — Redis lifecycle hardening + shared rate limit —
+> shipped on master via PR #265; see ADR-001 "Post-MVP Decision (P7)")
 > Phase: Phase 3 hardening, after P6 MVP closeout
 > Scope: single-deployment, single-organization, LAN/on-premise
 > Does not redefine M11; M11 remains resource-relationship authorization
 >
-> Acceptance of this plan does not authorize any Redis adoption. Every Redis
-> adoption item below is conditional on the P7-D1 decision gate, which updates
-> or supersedes ADR-001 before any Redis business responsibility is introduced.
+> The P7-D1 decision gate (Workstream B) is the authority for Redis adoption:
+> it is ACCEPTED (2026-08-08) for ONE bounded responsibility (shared rate
+> limiting). Any further Redis business responsibility requires its own
+> recorded decision updating or superseding ADR-001.
 
 ## 1. Why P7 exists
 
@@ -19,7 +22,9 @@ recoverable, configurable system.
 
 P7 groups eight concerns that otherwise risk being implemented independently:
 
-1. Redis has a baseline but is not adopted by business paths.
+1. Redis has a baseline; the **shared rate limiter is its first adopted
+   business path** (P7-D2/D3, PR #265); further responsibilities remain
+   decision-gated.
 2. State-machine and authority documentation needs a current whole-system audit.
 3. Backup exists only as an operator-supplied procedure, not a complete
    recovery product.
@@ -58,31 +63,28 @@ P7 groups eight concerns that otherwise risk being implemented independently:
 
 ### 2.2 Open or partial work already recorded
 
-- `timed_sync`, `deadline`, and `untimed` timing modes are not operationally
-  complete.
-- queue admission is not operationally wired.
-- M11 resource-relationship authorization is not implemented.
-- staff invitation, password reset, activation/deactivation, and account
-  recovery are not implemented.
-- P5-N2 additional operational notification types are deferred.
-- backend Email templates/i18n are not implemented.
-- rich-text/WYSIWYG answering is not implemented.
-- the generic final-answer submit barrier (ADR-008 Option D — submit carries a
-  final-answer payload or version/hash barrier) is not implemented; it applies
-  to all supported answer types, not only rich text.
-- fill-blank full runtime/E2E status remains an open roadmap item and must be
-  re-audited.
-- the Admin operator time-grant route, permission, atomic audit path, and
-  Dashboard workflow are closed (REC-I4-I3B2); the exam incident authority
-  Admin runtime is implemented (ADR-014 ACCEPTED; J3
-  `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` CLOSED on master via PR #242);
-  M11 Proctor resource scope, Proctor incident grants, recovery-center UI, and
-  system-generated incidents remain deferred.
-- broad UI component-authority migration remains incomplete.
-- automated backup, PITR, restore verification, and recovery drills are not
-  productized.
-- Redis is not used by rate limit, queue, presence, scanner coordination,
-  cache, stream, Pub/Sub, or sessions.
+The open-work inventory is owned by the canonical current-state documents,
+not re-enumerated here (they drift independently):
+
+- **Implemented now:** [`docs/status/implementation-status.md`](../status/implementation-status.md)
+  — the single "status = what exists" authority (Phase 3 partial
+  implementation, P4 role switch, P5-0/P5-N1, J3/J4-I1/J5 recovery runtime,
+  Redis shared rate limiting).
+- **Open Phase 3 product work:** [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md)
+  (staff invitation, SMTP reset, account lifecycle, scoped role bundles,
+  custom roles, WYSIWYG submit, generic submit barrier, i18n page copy).
+- **Recovery/operations job tracker:** [`docs/roadmap/recovery-operations-jobs.md`](../roadmap/recovery-operations-jobs.md)
+  (J6 Proctor Recovery Center, system-generated incidents, startup
+  reconciliation — the J1–J5 closures are recorded there).
+- **P7 workstreams:** the remaining open items in this program are the
+  state-machine/authority closeout, backup/restore, outage recovery,
+  configuration control plane, exam policy profiles, and UI/ops closeout
+  (Workstreams A and C–H below).
+
+Redis status as of the P7-D1 decision: the shared rate limiter uses Redis
+when the runtime is `ready` (P7-D2/D3, PR #265); admission queue, presence,
+scanner coordination, cache, stream, Pub/Sub, and sessions remain
+decision-gated.
 
 ### 2.3 Documentation drift discovered
 
@@ -228,9 +230,13 @@ a documented decision before any Redis business responsibility is introduced:
 4. update or supersede ADR-001 with the decision (adopt a concern, or decline
    and record re-evaluation conditions).
 
-Until P7-D1 is accepted and ADR-001 is updated, Redis stays diagnostics-only
-infrastructure. The baseline plugin, Compose service, diagnostics PING, and
-test-prefix isolation are not Redis adoption.
+**P7-D1 is ACCEPTED (2026-08-08):** Redis is adopted for ONE bounded
+responsibility — the **shared/global rate limiter** — with lifecycle
+hardening and `off | optional | required` operating modes (P7-D2/D3,
+PR #265). ADR-001 carries the decision record. Until a further decision is
+recorded, Redis stays limited to that responsibility; the baseline plugin,
+Compose service, diagnostics PING, and test-prefix isolation are not
+adoption.
 
 ### Adoption sequence (conditional on accepted P7-D1 / ADR decision)
 
@@ -238,14 +244,16 @@ Only approved responsibilities are sequenced. The tentative order for a
 multi-instance trigger is:
 
 1. Redis lifecycle hardening and `off | optional | required` operating modes.
-2. global rate limit shared across API instances.
+   ✅ SHIPPED (P7-D2, PR #265)
+2. global rate limit shared across API instances. ✅ SHIPPED (P7-D3, PR #265)
 3. admission queue state-machine design.
 4. Redis-backed admission queue with persistence and observability.
 5. presence and live dashboard projection.
 6. evaluate Streams/generic job queue/cache only from measured need.
 
-If P7-D1 concludes no adoption is warranted, items 2–6 are not scheduled and
-Gate P7-2 is satisfied by the recorded decision.
+If a later P7-D1 re-evaluation concludes no further adoption is warranted,
+items 3–6 are not scheduled and Gate P7-2 is satisfied by the recorded
+decision.
 
 ### Non-dogmatic authority rule
 

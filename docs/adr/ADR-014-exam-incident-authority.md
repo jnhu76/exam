@@ -21,6 +21,16 @@ The following boundaries remain unchanged by this acceptance:
 - The existing `proctor.incident_marked` route remains unchanged.
 - Proctor receives no Incident permission until J4/M11 lands scoped authority.
 
+> **Current implementation status (amended 2026-08-09, post-MVP repository
+> hygiene):** J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) is **CLOSED on
+> master** (PR #242, merge commit `5b653c13`, 2026-08-01): the Admin incident
+> persistence, commands, API, audit, and optional time-grant linkage are
+> implemented; the Admin Recovery Center (J5) is **CLOSED** (2026-08-08) —
+> see `docs/roadmap/recovery-operations-jobs.md` and
+> `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`. The statements above
+> describe the state at acceptance time (2026-08-01) and are retained as
+> history.
+
 ## Metadata
 
 | Field | Value |

@@ -21,17 +21,20 @@ P4 (RBAC MVP role switch) ✅ CLOSED
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
   → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
-  → P7 (system readiness + configurable exam modes) 🟣 PLANNING
+  → P7 (system readiness + configurable exam modes) 🟡 IN PROGRESS (P7-D1
+    decision accepted 2026-08-08; shared rate limit shipped via PR #265;
+    state/backup/config/UI workstreams open)
 ```
 
 The former P2-1 Exam Authoring UI Flow was removed from the active Phase 3 plan
 by scope decision; the plain-text `text_response` authoring loop was later
 implemented and closed (PRs #237/#238, 2026-07-31).
 
-P7 is the next planning program — system readiness, Redis adoption,
-backup/recovery, outage recovery, configuration control plane, exam modes, and
-UI closeout. See
-[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
+P7 is partially implemented — system readiness, Redis adoption (decision
+accepted; shared rate limit shipped), backup/recovery, outage recovery,
+configuration control plane, exam modes, and UI closeout. See
+[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md)
+and [`docs/status/implementation-status.md`](../status/implementation-status.md).
 P7 does not redefine M11. Identity lifecycle remains separate future work.
 
 ---
@@ -60,27 +63,27 @@ The archived job plans under `docs/archive/roadmap/` are reference-only.
 - **NOT AUTHORIZED ASSUMPTIONS**: bulk organization announcements; generic fan-out; notification preferences; identity lifecycle migration.
 - **ACCEPTANCE BOUNDARY**: Each migrated event has one authoritative old/new path, explicit NotificationType→EmailType mapping, recipient-scoped dedupe, transaction tests, and no double-send.
 
-## M11: Resource-relationship authorization (Proctor→Exam slice CONTRACT ACCEPTED; rest NOT STARTED)
+## M11: Resource-relationship authorization (Proctor→Exam slice CLOSED; rest NOT STARTED)
 
 - **CAPABILITY**: Scoped resource assignment — Teacher→course, Proctor→exam, Grader→work.
-- **CURRENT STATE**: The **Proctor→Exam slice** design contract (J4-R0) is
-  **CLOSED** — ADR-015 is **Accepted** (2026-08-02, PR #245)
-  ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
-  with reality audit
-  ([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
-  it is documentation-only and changes no runtime code. J4-I1 (runtime) is
-  **NEXT**, unblocked by acceptance, to implement per ADR-015 §23 (A → B → C
-  → D). The Teacher→Course, Teacher→Exam, and Grader→Work slices remain
-  DEFERRED — explicitly out of J4 scope. **Verified unimplemented**: no
-  junction tables (`teacher_course`, `exam_proctor`,
-  `grading_assignment`, `course_staff`), no `scope_type`/
-  `scope_resource_id` columns on `user_role_assignments`, no
-  Incident→Exam resolver, no Proctor-assignment resolver.
-- **WHAT EXISTS**: ADR-015 (Accepted, Proctor→Exam slice); design note
-  (`docs/archive/phase3/RBAC-M11-RESOURCE-RELATIONSHIP-AUTHORIZATION-DESIGN-1.md`).
-- **WHAT IS MISSING**: Everything runtime (schema, resolvers, assignment UI,
-  scope enforcement) — owned by J4-I1 after ADR-015 acceptance.
-- **DEPENDENCIES**: P4 closed; ADR-015 acceptance for the Proctor→Exam slice.
+- **CURRENT STATE**: The **Proctor→Exam slice** is **CLOSED**:
+  - J4-R0 design contract **CLOSED** — ADR-015 is **Accepted** (2026-08-02,
+    PR #245)
+    ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
+    with reality audit
+    ([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
+  - J4-I1 (runtime) **CLOSED** (2026-08-02, PR #250) — implemented per
+    ADR-015 §23 (A → B → C → D): `exam_proctor_assignments` junction,
+    assignment commands/repository, Admin assignment API, resolver
+    enforcement, and the minimum Proctor incident activation. Closeout:
+    [`M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+  - The Teacher→Course, Teacher→Exam, and Grader→Work slices remain
+    DEFERRED — explicitly out of J4 scope.
+- **WHAT EXISTS**: ADR-015 (Accepted, Proctor→Exam slice); Proctor-to-Exam
+  assignment runtime (`exam_proctor_assignments` + resolver + Admin API).
+- **WHAT IS MISSING**: Teacher→Course/Exam and Grader→Work scope runtime
+  (schema, resolvers, assignment UI, scope enforcement).
+- **DEPENDENCIES**: P4 closed; ADR-015 acceptance (✅ recorded).
 - **ACCEPTANCE BOUNDARY**: Scoped staff can be assigned to resources and see only their assigned scope.
 
 ## Staff invitation + SMTP password reset + account lifecycle (NOT STARTED)

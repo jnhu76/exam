@@ -2,10 +2,14 @@
 
 LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, supports open-book quizzes and strict proctored exams.
 
-> **Current scope (Phase 1 + Phase 2)**: single-tenant, Admin + Candidate only.
-> Phase 2 adds exam lifecycle operations (publish/open/close/cancel/archive/extend),
-> candidate attempt flow with answer save protocol, deadline auto-submit, manual
-> grading, result publishing, monitoring/diagnostics, and export/audit.
+> **Current scope**: single-tenant. The Phase 1/2 exam loop is complete
+> (publish/open/close/cancel/archive/extend, candidate attempt flow with
+> answer save protocol, deadline auto-submit, manual grading, result
+> publishing, monitoring/diagnostics, export/audit) with `timed_window` the
+> only timing mode. Phase 3 authorization infrastructure and the
+> Admin/Teacher/Candidate MVP role switch (P4) are closed; Phase 3 product
+> work (scoped Teacher/Proctor/Grader role bundles, staff invitation, SMTP
+> reset, account lifecycle UI, WYSIWYG submit) remains open.
 > Tenant schema, role enums, and `organizationId` boundaries are retained for
 > forward compatibility. MultiTenant product paths, SuperAdmin UI, tenant
 > switcher, organizationSlug login, API keys, service tokens, webhooks, and
@@ -33,8 +37,8 @@ The web dev server proxies `/api/*` requests to the API server automatically.
 
 ### Test Users (basic seed)
 
-By default, `pnpm db:seed` creates the following test users (Phase 1 = Admin +
-Candidate only):
+By default, `pnpm db:seed` creates the following test users (basic seed =
+Admin + Candidate accounts):
 
 | Username     | Password       | Role       |
 | ------------ | -------------- | ---------- |
@@ -42,11 +46,11 @@ Candidate only):
 | `candidate`  | `candidate123` | Candidate  |
 | `candidate2` | `candidate123` | Candidate  |
 
-> **Phase 1 scope**: only `Admin` and `Candidate` are runnable roles. Other
-> roles (`SuperAdmin`, `Teacher`, `Proctor`, `Grader`) exist in the schema/DB
-> layer but are **not active in Phase 1** — their product paths, login, and UI
-> are deferred to later phases. Demo-seed rows for those roles are kept for
-> forward compatibility but cannot log in.
+> **Phase 1 scope**: only `Admin` and `Candidate` are Phase 1 product roles.
+> `Teacher` is an active MVP product role since the P4 role switch. `Proctor`
+> and `Grader` exist in the schema/DB layer but are **not active product
+> roles** — their product paths, login, and UI are deferred to Phase 3+
+> (scoped role bundles).
 
 You can customize these users by setting environment variables in your `.env` file (copy from `.env.example`):
 
@@ -96,10 +100,11 @@ pnpm db:seed:demo:verify
 | `candidate3` | `candidate123` | Candidate | Resumable / resume |
 | `candidate4` | `candidate123` | Candidate | Graded / view result |
 
-> **Phase 1 scope**: demo seed creates Admin + Candidate accounts only.
-> `SuperAdmin` / `Teacher` / `Proctor` / `Grader` roles are **not seeded and
-> not active in Phase 1** (deferred to later phases). Schema/DB columns for
-> those roles are retained for forward compatibility.
+> **Phase 1 scope**: demo seed creates Admin + Candidate accounts.
+> `Teacher` is an active MVP product role since the P4 role switch;
+> `SuperAdmin` / `Proctor` / `Grader` roles are **not seeded and not active
+> in Phase 1** (deferred to later phases). Schema/DB columns for those roles
+> are retained for forward compatibility.
 
 #### Demo Data
 
@@ -132,10 +137,11 @@ pnpm dev         # Start API + Web with hot reload
 
 Production-like deployment. Builds the app image and starts the default MVP
 topology in containers: API + PostgreSQL + Email delivery worker. Redis is
-**optional** (gated behind the `redis` profile — no MVP business code uses
-it; see ADR-001). The Email worker is required to drain the PostgreSQL
-`email_outbox` table that `result_published` notifications write into
-(ADR-011). See
+**optional** (gated behind the `redis` profile); when enabled it owns ONE
+production responsibility — the **shared rate-limit state** (P7 decision
+2026-08-08, ADR-001 "Post-MVP Decision (P7)"). The Email worker is required
+to drain the PostgreSQL `email_outbox` table that `result_published`
+notifications write into (ADR-011). See
 [`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md)
 for the canonical deployment & operations runbook (prerequisites, env vars,
 first install, recovery, upgrade checklist, known limitations).
@@ -154,9 +160,12 @@ docker compose ps               # verify app, db, email-worker are up
 docker compose down
 docker compose down -v          # DANGEROUS: removes database data volumes
 
-# (Optional) enable the Redis profile for forward-compatibility testing:
+# (Optional) enable the Redis profile — the shared rate limiter reads/writes
+# Redis when the runtime is ready:
 docker compose --profile redis up -d --build
-# and set REDIS_URL=redis://redis:6379 in .env
+# and set REDIS_PASSWORD=<secret>, REDIS_URL=redis://:<secret>@redis:6379
+#   (REDIS_MODE=optional|required) in .env — production Redis runs with
+#   requirepass, so an authenticated URL is required (see runbook §10)
 ```
 
 - App: <http://localhost:3000>
@@ -168,8 +177,9 @@ docker compose --profile redis up -d --build
   self-migrate call is serialized strictly AFTER the app's migrate call
   (the drizzle journal tracks state; it is NOT a concurrency lock — P6-009).
 - Redis: **optional** profile (`--profile redis`); not started by a bare
-  `docker compose up` (P6-010 / ADR-001). No MVP business code reads or
-  writes Redis.
+  `docker compose up` (P6-010 / ADR-001). When running, the API's shared
+  rate limiter reads/writes Redis (ADR-001 "Post-MVP Decision (P7)");
+  PostgreSQL remains the exam fact authority.
 
 The scanner (heartbeat + deadline) runs **in-process** inside the `app`
 container — there is no separate scanner service.
@@ -271,7 +281,7 @@ packages/
 | Frontend | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4 |
 | Backend | Node.js 24.15.x + Fastify + TypeScript + Zod validation |
 | Database | PostgreSQL 18.4 via Drizzle ORM |
-| Cache | Redis 7 (optional, for rate limiting/presence) |
+| Cache | Redis 7 (optional, shared rate limiting; PostgreSQL remains the fact authority) |
 | Monorepo | pnpm 11 + Turborepo 2.9.16 |
 
 See `docs/standards/testing.md` for CI infrastructure details and local testing setup.
@@ -307,7 +317,7 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | `APP_PORT`          | `3000`                          | API server port                                               |
 | `HOST`              | `0.0.0.0`                       | API server listen address                                     |
 | `DATABASE_URL`      | `postgresql://...`              | Database connection URL (**required in production**)           |
-| `REDIS_URL`         | (empty = disabled)              | Redis connection URL (optional, enables caching/presence)     |
+| `REDIS_URL`         | (empty = disabled)              | Redis connection URL (optional; enables the shared rate limiter when the runtime is ready)     |
 | `REDIS_KEY_PREFIX`  | `""`                            | Redis key prefix for namespace separation                     |
 | `JWT_SECRET`        | auto-generated in dev           | JWT signing secret (**required in production**; fail-fast)    |
 | `NODE_ENV`          | `development`                   | Node environment (build/fallback signal)                      |
