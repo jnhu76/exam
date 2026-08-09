@@ -1,5 +1,8 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { quoteIdent } from "./testIsolation.js";
@@ -101,4 +104,101 @@ function isDuplicateTableDuringMigration(err: unknown): boolean {
     cause?: { code?: string };
   };
   return e.code === "42P07" || e.cause?.code === "42P07";
+}
+
+/**
+ * The default PostgreSQL migrations folder, resolved relative to this compiled
+ * module exactly as {@link migratePostgres} resolves it. Used by
+ * {@link readImageMigrationSet} and any caller (e.g. the C1.3 preflight) that
+ * must inspect the image's bundled migration journal at runtime.
+ */
+const DEFAULT_MIGRATIONS_FOLDER = fileURLToPath(
+  new URL("../migrations/postgres", import.meta.url),
+);
+
+/**
+ * One migration as known to the image (the bundled journal + its .sql file).
+ *
+ * The authority key for DB/image comparison is `(when, hash)` (P7-C1 C1.3):
+ * drizzle persists only `id, hash, created_at(=when)` in
+ * `drizzle.__drizzle_migrations`; `tag` is source-side display metadata used
+ * to print divergent entries. `hash` is `sha256(sqlFileContent)` matching
+ * drizzle's own algorithm (`drizzle-orm` `migrator.cjs`).
+ */
+export interface ImageMigration {
+  /** Journal index (0-based, contiguous). Display metadata only. */
+  idx: number;
+  /** Journal tag, e.g. `0022_engine_policy_seam`. Display metadata only. */
+  tag: string;
+  /** Journal `when` (epoch millis) — equals the DB `created_at` column. */
+  when: number;
+  /** sha256 of the .sql file content — equals the DB `hash` column. */
+  hash: string;
+}
+
+/**
+ * The image-side migration set: the entries from `meta/_journal.json` plus the
+ * sha256 hash of each `.sql` file, and the maximum `when` (the frontier the
+ * image expects a fully-migrated DB to have reached).
+ */
+export interface ImageMigrationSet {
+  entries: ImageMigration[];
+  /** max(entries.when), or -Infinity when entries is empty. */
+  maxWhen: number;
+}
+
+/**
+ * Read the image-side migration set from the bundled migrations folder.
+ *
+ * Resolves the folder the same way {@link migratePostgres} does (relative to
+ * this compiled module via `import.meta.url`), so the preflight and the
+ * migrator read the SAME journal. The hash is `sha256(sqlFileContent)`
+ * matching drizzle's algorithm so DB/image comparison is apples-to-apples.
+ *
+ * @param migrationsFolder - Optional explicit folder (mainly for tests).
+ *   Defaults to the bundled `../migrations/postgres` relative to this module.
+ */
+export function readImageMigrationSet(
+  migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
+): ImageMigrationSet {
+  const journalPath = join(migrationsFolder, "meta", "_journal.json");
+  const journalRaw = readFileSync(journalPath, "utf8");
+  const journal = JSON.parse(journalRaw) as {
+    version?: string;
+    dialect?: string;
+    entries: Array<{ idx: number; tag: string; when: number }>;
+  };
+  if (!Array.isArray(journal.entries)) {
+    throw new Error(
+      `readImageMigrationSet: journal.entries is not an array (${journalPath})`,
+    );
+  }
+  const entries: ImageMigration[] = journal.entries.map((e) => {
+    const sqlPath = join(migrationsFolder, `${e.tag}.sql`);
+    const sql = readFileSync(sqlPath, "utf8");
+    return {
+      idx: e.idx,
+      tag: e.tag,
+      when: e.when,
+      hash: createHash("sha256").update(sql).digest("hex"),
+    };
+  });
+  const maxWhen = entries.reduce(
+    (max, e) => (e.when > max ? e.when : max),
+    -Infinity,
+  );
+  return { entries, maxWhen };
+}
+
+/**
+ * List the numbered `.sql` files in a migrations folder (for orphan checks).
+ * Returns tags like `["0000_cultured_fantastic_four", ...]`.
+ */
+export function listMigrationSqlTags(
+  migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
+): string[] {
+  return readdirSync(migrationsFolder)
+    .filter((f) => /^\d{4}_.+\.sql$/.test(f))
+    .map((f) => f.replace(/\.sql$/, ""))
+    .sort();
 }

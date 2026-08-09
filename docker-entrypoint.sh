@@ -19,6 +19,20 @@ if [ -z "$JWT_SECRET" ]; then
   exit 1
 fi
 
+# P7-C1 C1.3: schema/image compatibility preflight (closes C0 P2-1).
+# Runs BEFORE migrate.js so an incompatible DB/image combination refuses to
+# start instead of being silently mutated by drizzle's forward-only migrator.
+# Classifies into FRESH_INSTALL / NORMAL / FORWARD_UPGRADE (proceed) vs
+# STALE_IMAGE_DB_AHEAD / DIVERGENT (refuse). `set -e` aborts the entrypoint on
+# a non-zero exit. Break-glass: EXAM_UNSAFE_SKIP_SCHEMA_PREFLIGHT=1 (documented
+# in the operator-emergency runbook section only; disallowed in drills).
+if [ "$EXAM_UNSAFE_SKIP_SCHEMA_PREFLIGHT" = "1" ]; then
+  echo "WARN: EXAM_UNSAFE_SKIP_SCHEMA_PREFLIGHT=1 — schema/image compatibility gate bypassed"
+else
+  echo "Running schema/image compatibility preflight..."
+  node dist/scripts/preflight.js
+fi
+
 echo "Running database migrations..."
 node dist/scripts/migrate.js
 
