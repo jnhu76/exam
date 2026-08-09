@@ -37,6 +37,7 @@ export type AttemptStatusValue = z.infer<typeof AttemptStatusEnum>;
  */
 export const SaveAnswerRejectReasonEnum = z.enum([
   "STALE_VERSION",
+  "FUTURE_VERSION",
   "ATTEMPT_ALREADY_SUBMITTED",
   "ATTEMPT_CLOSED",
   "DEADLINE_EXCEEDED",

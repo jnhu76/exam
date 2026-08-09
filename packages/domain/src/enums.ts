@@ -247,6 +247,7 @@ export type FillBlankMatchMode =
  */
 export const ConflictReason = {
   StaleVersion: "STALE_VERSION",
+  FutureVersion: "FUTURE_VERSION",
   AttemptAlreadySubmitted: "ATTEMPT_ALREADY_SUBMITTED",
   AttemptClosed: "ATTEMPT_CLOSED",
   DeadlineExceeded: "DEADLINE_EXCEEDED",

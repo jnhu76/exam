@@ -170,6 +170,24 @@ export function processSaveAnswer(
     };
   }
 
+  // P7-S2-B (ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION): a future
+  // baseVersion is impossible client state and must not be accepted as a
+  // legitimate update based on `currentVersion`. The idempotency-key replay
+  // above already handled same-`clientSeq` replays, so any request reaching
+  // here with `baseVersion > currentVersion` claims a version that does not
+  // exist yet — reject it instead of silently advancing to `currentVersion+1`.
+  if (request.baseVersion > currentVersion) {
+    return {
+      accepted: false,
+      serverVersion: currentVersion,
+      savedAt: savedAtIso,
+      conflict: {
+        reason: "FUTURE_VERSION",
+        latestAnswer: existingAnswer?.answer,
+      },
+    };
+  }
+
   const newVersion = currentVersion + 1;
   const newAnswer: AnswerRecord = {
     questionId: request.questionId,
