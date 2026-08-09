@@ -41,8 +41,14 @@ import {
   grantAttemptTime,
   gradeQuestion,
   lockEnrollmentAndAttempt,
+  publishResults,
 } from "@exam/exam-engine";
-import type { QuestionSnapshot, AnswerRecord } from "@exam/domain";
+import type {
+  AttemptStatus,
+  GradingStatus,
+  QuestionSnapshot,
+  AnswerRecord,
+} from "@exam/domain";
 import { buildTestApp, type TestContext } from "./testHelpers.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import {
@@ -126,8 +132,8 @@ async function seedExamWithAttempt(
   ctx: TestContext,
   opts: {
     questions: QuestionSnapshot[];
-    attemptStatus: string;
-    gradingStatus?: string;
+    attemptStatus: AttemptStatus;
+    gradingStatus?: GradingStatus;
     answers?: AnswerRecord[];
     staleLastActivityAt?: Date;
     deadlineAt?: Date;
@@ -220,7 +226,7 @@ async function seedExamWithAttempt(
     candidateId: candidateProfileId,
     attemptNo: 1,
     status: opts.attemptStatus,
-    gradingStatus: (opts.gradingStatus ?? "auto_graded") as never,
+    gradingStatus: opts.gradingStatus ?? "auto_graded",
     questionSnapshot: opts.questions,
     answers: opts.answers ?? [],
     submittedAnswers: null,
@@ -500,9 +506,7 @@ describe("P7-S2 Phase 4: crash/rollback atomicity", () => {
       await expect(
         executeInTransaction(ctx.db, async (tx) => {
           const repo = createExamRepoAdapter(createExamRepo(tx), adminCtx(ctx));
-          await import("@exam/exam-engine").then((m) =>
-            m.publishResults(repo, seeded.examId, new Date()),
-          );
+          await publishResults(repo, seeded.examId, new Date());
           throw new Error("SIMULATED_CRASH_AFTER_MUTATION");
         }),
       ).rejects.toThrow("SIMULATED_CRASH_AFTER_MUTATION");
@@ -514,11 +518,7 @@ describe("P7-S2 Phase 4: crash/rollback atomicity", () => {
 
       const retry = await executeInTransaction(ctx.db, async (tx) => {
         const repo = createExamRepoAdapter(createExamRepo(tx), adminCtx(ctx));
-        return (await import("@exam/exam-engine")).publishResults(
-          repo,
-          seeded.examId,
-          new Date(),
-        );
+        return publishResults(repo, seeded.examId, new Date());
       });
       expect(retry.alreadyPublished).toBe(false);
     });

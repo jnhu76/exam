@@ -4,16 +4,24 @@
  * For one Exam, `resultsPublishedAt` transitions NULL → timestamp exactly
  * once. Two concurrent publishers (two physical connections, two
  * transactions) are interleaved with a deferred barrier so the overlap that
- * previously produced two winners is forced:
+ * previously produced two winners is forced as far as the coordination
+ * allows:
  *
  *   T1 acquires the exam row lock (FOR UPDATE) via `findByIdForUpdate` and
  *     signals t1LockHeld, then waits on allowT1Commit.
  *   T2 starts while T1 still holds the lock; its `findByIdForUpdate` blocks
- *     on the row lock (it signals t2LockAttempted immediately before).
+ *     on the row lock (it signals t2LockAttempted immediately before the
+ *     blocking SELECT).
  *   The controller releases T1 → T1 re-checks under lock, commits.
  *   T2 wakes with the committed truth and returns alreadyPublished=true
  *     (under REPEATABLE READ this is via the 40001 retry path; under READ
  *     COMMITTED the blocked SELECT simply re-reads the committed row).
+ *
+ * Overlap precision: T2 signals t2LockAttempted immediately BEFORE issuing its
+ * blocking FOR UPDATE, so the row-lock blocking overlap is HIGHLY LIKELY (T1
+ * still holds the lock) but not deterministically proven by this coordination
+ * alone. The single-winner invariant does not depend on the overlap being
+ * forced: T2 reads the committed row regardless.
  *
  * Proven invariants (run under both isolation levels):
  *   - exactly one caller owns the applied publication (alreadyPublished=false)
@@ -269,59 +277,69 @@ describe("P7-S2-A: result publication is single-winner", () => {
         isolation,
       );
 
-      // Wait until T1 provably holds the exam row lock.
-      await barrier.t1LockHeld.promise;
+      try {
+        // Wait until T1 provably holds the exam row lock.
+        await barrier.t1LockHeld.promise;
 
-      // T2: the loser. Signals immediately before its (blocking) FOR UPDATE.
-      const t2Promise = executeInTransaction(
-        db2,
-        async (tx) => {
-          await captureObservation(tx);
-          const repo = createBarrierExamRepoProxy(tx, ctx, {
-            beforeFindByIdForUpdate: async () => {
-              barrier.t2LockAttempted.resolve();
-            },
-          });
-          return publishResults(repo, examId, loserNow);
-        },
-        isolation,
-      );
+        // T2: the loser. Signals immediately before its (blocking) FOR UPDATE.
+        const t2Promise = executeInTransaction(
+          db2,
+          async (tx) => {
+            await captureObservation(tx);
+            const repo = createBarrierExamRepoProxy(tx, ctx, {
+              beforeFindByIdForUpdate: async () => {
+                barrier.t2LockAttempted.resolve();
+              },
+            });
+            return publishResults(repo, examId, loserNow);
+          },
+          isolation,
+        );
 
-      // T2 is about to block on T1's row lock; release T1 to commit.
-      await barrier.t2LockAttempted.promise;
-      barrier.allowT1Commit.resolve();
+        // T2 has signalled it is about to issue its (blocking) FOR UPDATE;
+        // release T1 to commit. NB: T2 signals immediately BEFORE the blocking
+        // SELECT, so blocking overlap is HIGHLY LIKELY (T1 still holds the lock
+        // when T2 reaches FOR UPDATE) but not deterministically guaranteed by
+        // this coordination alone. The single-winner invariant holds either way
+        // (T2 reads the committed row, via blocked re-read under READ COMMITTED
+        // or the 40001-retry path under REPEATABLE READ).
+        await barrier.t2LockAttempted.promise;
+        barrier.allowT1Commit.resolve();
 
-      const [winner, loser] = await Promise.all([t1Promise, t2Promise]);
+        const [winner, loser] = await Promise.all([t1Promise, t2Promise]);
 
-      // Exactly one caller owns the applied publication.
-      expect(winner.alreadyPublished).toBe(false);
-      expect(loser.alreadyPublished).toBe(true);
+        // Exactly one caller owns the applied publication.
+        expect(winner.alreadyPublished).toBe(false);
+        expect(loser.alreadyPublished).toBe(true);
 
-      // The loser observes the winner's committed truth — never its own now.
-      expect((loser.exam.resultsPublishedAt as Date).toISOString()).toBe(
-        winnerNow.toISOString(),
-      );
-      expect(winner.exam.resultsPublishedAt).not.toBeNull();
+        // The loser observes the winner's committed truth — never its own now.
+        expect((loser.exam.resultsPublishedAt as Date).toISOString()).toBe(
+          winnerNow.toISOString(),
+        );
+        expect(winner.exam.resultsPublishedAt).not.toBeNull();
 
-      // The stored timestamp is the winner's and is immutable.
-      const stored = (await createExamRepo(db1).findById(ctx, examId)) as {
-        resultsPublishedAt: Date | null;
-      } | null;
-      expect(stored?.resultsPublishedAt?.toISOString()).toBe(
-        winnerNow.toISOString(),
-      );
+        // The stored timestamp is the winner's and is immutable.
+        const stored = (await createExamRepo(db1).findById(ctx, examId)) as {
+          resultsPublishedAt: Date | null;
+        } | null;
+        expect(stored?.resultsPublishedAt?.toISOString()).toBe(
+          winnerNow.toISOString(),
+        );
 
-      // The two callers ran on distinct physical connections; under REPEATABLE
-      // READ the loser's 40001-retry adds extra observations, so assert
-      // distinctness (>= 2) rather than an exact count.
-      expect(
-        new Set(observations.map((o) => o.pid)).size,
-      ).toBeGreaterThanOrEqual(2);
-      expect(
-        new Set(observations.map((o) => o.txid)).size,
-      ).toBeGreaterThanOrEqual(2);
-
-      barrier.dispose();
+        // The two callers ran on distinct physical connections; under REPEATABLE
+        // READ the loser's 40001-retry adds extra observations, so assert
+        // distinctness (>= 2) rather than an exact count.
+        expect(
+          new Set(observations.map((o) => o.pid)).size,
+        ).toBeGreaterThanOrEqual(2);
+        expect(
+          new Set(observations.map((o) => o.txid)).size,
+        ).toBeGreaterThanOrEqual(2);
+      } finally {
+        // Always dispose the barrier so an assertion failure does not leak a
+        // pending deferred-promise that would hang the worker on teardown.
+        barrier.dispose();
+      }
     });
   }
 });

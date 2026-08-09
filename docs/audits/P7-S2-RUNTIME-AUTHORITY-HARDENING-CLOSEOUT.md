@@ -253,7 +253,7 @@ All commands below ran against the branch:
 | `pnpm --filter @exam/db coverage` (isolated) | **PASS — 559/559** |
 | `pnpm verify:static` | **PASS** (format, lint, lint:copy, lint:arch, db-config, db-journal, env-contract, repo-contract, ui-gates, eslint, typecheck, api:openapi:check, e2e-runner, test:db-journal, test:stale-ui-docs) |
 | `pnpm build` | **PASS — 9/9** |
-| `pnpm verify` (full gate) | **BLOCKED ONLY by the documented pre-existing `@exam/db` parallel-resource flake (Issue #268 P3-5)** — 5/5 attempts failed solely in `@exam/db#coverage` under 4-worker parallelism (0027-convergence 5s timeouts; once a worker-DB setup failure in repository.test.ts). Every failing test passes in isolation; all other verify stages pass on every attempt. No failure involves any file changed by P7-S2. CI (#756, sharded) previously ran green on this branch head. |
+| `pnpm verify` (full gate) | **PASS (exit 0) after re-run.** The first run hit the documented pre-existing `@exam/db` parallel-resource flake (Issue #268 P3-5): `@exam/db#coverage` failed under 4-worker parallelism (0027-convergence 5s timeouts; once a worker-DB setup failure in repository.test.ts). Every failing test passes in isolation, and an isolated `@exam/db coverage` re-run is 559/559; a second full `pnpm verify` is clean. No failure involves any file changed by P7-S2. (Reconciled with the PR description, which reports the same authoritative release-gate result: `pnpm verify` PASS.) |
 | `pnpm lint:md` (touched markdown) | 0 violations on the three touched files (repo-wide findings are pre-existing in untouched files) |
 
 ## 12. Final authority model (what is now guaranteed)

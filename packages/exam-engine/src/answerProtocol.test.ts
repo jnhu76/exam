@@ -152,8 +152,10 @@ describe("answerProtocol", () => {
         clientSeqMap: new Map([["q1:2", existing]]),
       });
       // Replay carries the same clientSeq AND the same payload — the
-      // idempotency-key path wins regardless of the stale baseVersion.
-      const request = makeRequest({ clientSeq: 2, baseVersion: 1 });
+      // idempotency-key path wins regardless of baseVersion, INCLUDING a
+      // baseVersion that is FUTURE relative to the existing version (2). A
+      // future baseVersion must not weaken the safe-same-clientSeq replay path.
+      const request = makeRequest({ clientSeq: 2, baseVersion: 999 });
 
       const result = processSaveAnswer(state, request);
 

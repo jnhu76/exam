@@ -299,13 +299,20 @@ it is documented, bounded (retry policy + `maxAttempts` → `dead`), and each
 outbox row's claim/mark cycle is ownership-fenced so only one worker owns a
 row at a time.
 
-Lease safety (fail-fast config invariant in `runtimeConfig.ts`): the worker
-lock timeout must be strictly greater than the sum of the SMTP phase timeouts
-(connection + greeting + socket), otherwise an alive worker could be reclaimed
-while still sending. Because nodemailer's `socketTimeout` is an *inactivity*
-timeout (not a total-operation cap), a slow-but-active SMTP server can in
-principle extend a send beyond that sum — the residual window is the
-at-least-once boundary above, not a config error.
+Lease safety (best-effort sanity guard in `runtimeConfig.ts`): the worker
+lock timeout must be strictly greater than the sum of the modeled SMTP phase
+timeouts (connection + greeting + socket), otherwise a lease that cannot even
+cover those phases makes mid-send reclaim all but certain. This is a
+**best-effort sanity guard, NOT a strict lease-safety invariant** — no finite
+timeout sum guarantees an alive worker cannot be reclaimed:
+
+- nodemailer resolves DNS in a **serial `dnsTimeout` phase (default 30000 ms)
+  that runs *before* `connectionTimeout`** and is NOT modeled by the check.
+- `socketTimeout` is an *inactivity* timeout (not a total-operation cap), so a
+  slow-but-active SMTP server can extend a send beyond the modeled sum.
+
+Both residual windows are the at-least-once delivery boundary above (duplicate
+mail possible, bounded by retry/`maxAttempts` policy), not a config error.
 
 Worker liveness is observable: `GET /api/system` reports
 `emailStatus.worker.status` (`available`/`degraded`/`unknown`) from the

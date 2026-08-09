@@ -1095,7 +1095,9 @@ describe("runtimeConfig", () => {
     describe("email worker lease guard", () => {
       function smtpEnv(overrides: Record<string, string> = {}) {
         return {
-          DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam",
+          // loadRuntimeConfig only PARSES the URL (never connects); point it
+          // at the test DB to keep the fixture from ever naming the dev DB.
+          DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam_test",
           EMAIL_ENABLED: "true",
           EMAIL_TRANSPORT: "smtp",
           SMTP_HOST: "smtp.example.com",

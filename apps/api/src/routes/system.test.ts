@@ -10,8 +10,23 @@ import {
   workerHeartbeats,
   schema,
 } from "@exam/db/src/schema/pg.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
+
+// P7-S2 integrity-block test fixtures accumulate submitted-attempt rows that
+// change the tenant-wide anomaly totals. Tracked IDs let an inner afterAll
+// delete them in FK-safe order (entries → attempts → enrollments → profiles →
+// exams → users → courses) so each test sees a clean baseline and the
+// bounded-sample cap assertions are not perturbed by leftover state.
+const seeded = {
+  gradingEntryIds: [] as string[],
+  attemptIds: [] as string[],
+  enrollmentIds: [] as string[],
+  candidateProfileIds: [] as string[],
+  examIds: [] as string[],
+  userIds: [] as string[],
+  courseIds: [] as string[],
+};
 
 async function cleanupWorkerHeartbeats(db: TestContext["db"]) {
   await db
@@ -486,6 +501,64 @@ describe("system routes", () => {
 
   // P7-S2 Phase 7 — read-only attempt-integrity anomalies.
   describe("GET /system/diagnostics integrity block", () => {
+    // FK-ordered teardown of every row the two seed helpers created, so the
+    // shared test tenant's anomaly totals return to a clean baseline between
+    // tests and the bounded-sample assertions are not perturbed by leftovers.
+    afterAll(async () => {
+      const db = ctx.db;
+      // Guard each delete: drizzle treats `.where(undefined)` as "no WHERE"
+      // (DELETE ALL), which would wipe the shared tenant. Only delete when the
+      // tracker is non-empty. FK-safe order: entries → attempts → enrollments
+      // → profiles → exams → users → courses. Errors are swallowed because the
+      // outer ctx.cleanup still drops the schema.
+      if (seeded.gradingEntryIds.length > 0) {
+        await db
+          .delete(schema.attemptGradingEntries)
+          .where(
+            inArray(schema.attemptGradingEntries.id, seeded.gradingEntryIds),
+          )
+          .catch(() => {});
+      }
+      if (seeded.attemptIds.length > 0) {
+        await db
+          .delete(schema.examAttempts)
+          .where(inArray(schema.examAttempts.id, seeded.attemptIds))
+          .catch(() => {});
+      }
+      if (seeded.enrollmentIds.length > 0) {
+        await db
+          .delete(schema.examEnrollments)
+          .where(inArray(schema.examEnrollments.id, seeded.enrollmentIds))
+          .catch(() => {});
+      }
+      if (seeded.candidateProfileIds.length > 0) {
+        await db
+          .delete(schema.candidateProfiles)
+          .where(
+            inArray(schema.candidateProfiles.id, seeded.candidateProfileIds),
+          )
+          .catch(() => {});
+      }
+      if (seeded.examIds.length > 0) {
+        await db
+          .delete(schema.exams)
+          .where(inArray(schema.exams.id, seeded.examIds))
+          .catch(() => {});
+      }
+      if (seeded.userIds.length > 0) {
+        await db
+          .delete(schema.users)
+          .where(inArray(schema.users.id, seeded.userIds))
+          .catch(() => {});
+      }
+      if (seeded.courseIds.length > 0) {
+        await db
+          .delete(schema.courses)
+          .where(inArray(schema.courses.id, seeded.courseIds))
+          .catch(() => {});
+      }
+    });
+
     const questionSnapshot: QuestionSnapshot[] = [
       {
         originalQuestionId: "q-legacy-1",
@@ -524,6 +597,10 @@ describe("system routes", () => {
       const candidateProfileId = randomUUID();
       const userId = randomUUID();
       const snapshot = overrides.snapshot ?? questionSnapshot;
+      seeded.courseIds.push(courseId);
+      seeded.examIds.push(examId);
+      seeded.candidateProfileIds.push(candidateProfileId);
+      seeded.userIds.push(userId);
 
       await ctx.db.insert(schema.courses).values({
         id: courseId,
@@ -591,6 +668,7 @@ describe("system routes", () => {
         updatedAt: now,
       });
       const enrollmentId = randomUUID();
+      seeded.enrollmentIds.push(enrollmentId);
       await ctx.db.insert(schema.examEnrollments).values({
         id: enrollmentId,
         organizationId: orgId,
@@ -602,6 +680,7 @@ describe("system routes", () => {
         updatedAt: now,
       });
       const attemptId = overrides.attemptId ?? randomUUID();
+      seeded.attemptIds.push(attemptId);
       await ctx.db.insert(schema.examAttempts).values({
         id: attemptId,
         organizationId: orgId,
@@ -628,8 +707,10 @@ describe("system routes", () => {
         updatedAt: now,
       });
       if (overrides.withEntry) {
+        const entryId = randomUUID();
+        seeded.gradingEntryIds.push(entryId);
         await ctx.db.insert(schema.attemptGradingEntries).values({
-          id: randomUUID(),
+          id: entryId,
           organizationId: orgId,
           attemptId,
           questionId: (snapshot[0] as { originalQuestionId: string })
@@ -791,6 +872,10 @@ describe("system routes", () => {
       const examId = randomUUID();
       const candidateProfileId = randomUUID();
       const userId = randomUUID();
+      seeded.courseIds.push(courseId);
+      seeded.examIds.push(examId);
+      seeded.candidateProfileIds.push(candidateProfileId);
+      seeded.userIds.push(userId);
 
       await ctx.db.insert(schema.courses).values({
         id: courseId,
@@ -856,6 +941,7 @@ describe("system routes", () => {
         updatedAt: now,
       });
       const enrollmentId = randomUUID();
+      seeded.enrollmentIds.push(enrollmentId);
       await ctx.db.insert(schema.examEnrollments).values({
         id: enrollmentId,
         organizationId: orgId,
@@ -867,11 +953,17 @@ describe("system routes", () => {
         updatedAt: now,
       });
 
+      // Build all attempt + grading-entry rows first, then insert in two bulk
+      // statements (N rows each) instead of N round-trips. Every generated ID
+      // is tracked for the FK-ordered afterAll cleanup.
+      const attemptRows: (typeof schema.examAttempts.$inferInsert)[] = [];
+      const entryRows: (typeof schema.attemptGradingEntries.$inferInsert)[] =
+        [];
       const attemptIds: string[] = [];
       for (let i = 0; i < count; i++) {
         const attemptId = randomUUID();
         attemptIds.push(attemptId);
-        await ctx.db.insert(schema.examAttempts).values({
+        attemptRows.push({
           id: attemptId,
           organizationId: orgId,
           examId,
@@ -889,8 +981,9 @@ describe("system routes", () => {
           updatedAt: now,
         });
         if (opts.withEntry) {
-          await ctx.db.insert(schema.attemptGradingEntries).values({
-            id: randomUUID(),
+          const entryId = randomUUID();
+          entryRows.push({
+            id: entryId,
             organizationId: orgId,
             attemptId,
             questionId: questionSnapshot[0]!.originalQuestionId,
@@ -908,6 +1001,14 @@ describe("system routes", () => {
             updatedAt: now,
           });
         }
+      }
+      if (attemptRows.length > 0) {
+        await ctx.db.insert(schema.examAttempts).values(attemptRows);
+        seeded.attemptIds.push(...attemptIds);
+      }
+      if (entryRows.length > 0) {
+        await ctx.db.insert(schema.attemptGradingEntries).values(entryRows);
+        seeded.gradingEntryIds.push(...entryRows.map((r) => r.id!));
       }
       return attemptIds;
     }
