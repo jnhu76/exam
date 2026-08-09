@@ -40,6 +40,8 @@
     "test:e2e": "turbo test:e2e",
     "e2e:docker": "bash scripts/e2e/run.sh",
     "smoke": "turbo smoke",
+    "drill:p7-c1-relocation": "bash scripts/deployment/p7-c1-relocation-drill.sh",
+    "proof:p7-c1-redis-nonauthority": "bash scripts/deployment/p7-c1-redis-nonauthority-proof.sh",
     "verify": "pnpm verify:static && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build",
     "test:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test",
     "test:db": "pnpm --filter @exam/db test",

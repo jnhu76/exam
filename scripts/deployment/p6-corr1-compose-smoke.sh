@@ -131,9 +131,16 @@ cleanup() {
     > /dev/null 2>&1 || true
   # Only ever remove the per-run temp data root created above. Never rm an
   # arbitrary path: require the exact ${REPO_ROOT}/.tmp-p6-smoke-data- prefix.
+  # The postgres bind-mount tree is owned by container uid 999 (and
+  # root-owned parents); the smoke image runs as USER appuser, so root is
+  # forced explicitly with --user 0:0 and --entrypoint chmod (the default
+  # ENTRYPOINT aborts without JWT_SECRET) before the host rm.
   if [ -n "${EXAM_DATA_ROOT:-}" ] \
      && [ -n "${REPO_ROOT:-}" ] \
      && [[ "${EXAM_DATA_ROOT}" == "${REPO_ROOT}/.tmp-p6-smoke-data-"* ]]; then
+    docker run --rm --user 0:0 --entrypoint chmod \
+      -v "${EXAM_DATA_ROOT}:/cleanup" "${EXAM_IMAGE_TAG}" \
+      -R 777 /cleanup > /dev/null 2>&1 || true
     rm -rf "${EXAM_DATA_ROOT}" || true
   fi
 }

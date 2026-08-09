@@ -1,0 +1,262 @@
+name: P7-C1 relocation drill (clean-host)
+
+# P7-C1 C1.4 — Level 2: CLEAN-HOST relocation proof.
+#
+# Two jobs on TWO SEPARATE runners prove the portable-deployment invariant:
+#   compatible clean Docker host + deployment config (compose + .env)
+#   + canonical persistent data (./data/postgres) + a prebuilt image
+#   = the SAME Exam deployment via the ORDINARY `docker compose up -d` path.
+#
+#   Job A (seed-and-pack): fresh runner; builds the image once, boots a fresh
+#     deployment with the TEST-ONLY seed override (RUN_SEED=e2e,
+#     FORCE_APP_MODE=e2e — the production seed refusal is asserted intact),
+#     records invariant counts/md5, clean-shutdowns (data preserved), then
+#     packs ONE transport artifact: data/postgres + compose + .env +
+#     expected invariants + `docker save`d image. The tar is CI-TRANSPORT-ONLY
+#     (a handoff between two runners); it is NOT documented as a product
+#     backup format (C1 does not invent a 4th "backup").
+#   Job B (verify-relocated): a SECOND fresh runner; consumes ONLY the
+#     artifact (docker load + extract + docker compose up -d — no rebuild,
+#     no seed), and verifies byte-identical invariants + seeded admin login.
+#
+# Runs on workflow_dispatch and on the C1 branch only — deliberately NOT a
+# per-PR gate (slow; the local drill `pnpm drill:p7-c1-relocation` covers
+# fast iteration).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/p7-c1-portable-single-node-deployment
+
+concurrency:
+  group: p7-c1-relocation
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # actions: write lets artifact upload/cleanup work like the main CI workflow.
+  actions: write
+
+env:
+  IMAGE_TAG: exam-p7c1-probe:latest
+
+jobs:
+  seed-and-pack:
+    name: A — build + seed + pack (clean runner 1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build probe image (once)
+        run: docker build -t "${IMAGE_TAG}" .
+
+      - name: Boot fresh deployment A with test-only seed override
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-a"
+          mkdir -p "${RUN_DIR}"
+          cp docker-compose.yml "${RUN_DIR}/"
+          PG_PASSWORD="p7c1-ci-pass-$(openssl rand -hex 12)"
+          JWT_SECRET="p7c1-ci-jwt-$(openssl rand -hex 24)"
+          ORIGIN="http://localhost:3000"
+          # Test-named database: the drill boots in APP_MODE=e2e and the
+          # test-name safety guard refuses a TEST_DATABASE_URL whose DB name
+          # lacks "test"/"e2e"/"ci".
+          DB_NAME="p7c1_ci_e2e"
+          cat > "${RUN_DIR}/.env" <<EOF
+          POSTGRES_PASSWORD=${PG_PASSWORD}
+          POSTGRES_DB=${DB_NAME}
+          JWT_SECRET=${JWT_SECRET}
+          CORS_ORIGIN=${ORIGIN}
+          PUBLIC_WEB_ORIGIN=${ORIGIN}
+          EXAM_IMAGE=${IMAGE_TAG}
+          APP_PORT=3000
+          EOF
+          cat > "${RUN_DIR}/p7-c1-seed.override.yml" <<EOF
+          services:
+            app:
+              environment:
+                RUN_SEED: "e2e"
+                FORCE_APP_MODE: "e2e"
+                # The demo seed guard keys on NODE_ENV (demo-seed.ts); lift
+                # it off production for the test-only seed run.
+                NODE_ENV: "development"
+                TEST_DATABASE_URL: postgresql://exam:${PG_PASSWORD}@db:5432/${DB_NAME}
+          EOF
+          cd "${RUN_DIR}"
+          docker compose -p p7c1-ci-a -f docker-compose.yml \
+            -f p7-c1-seed.override.yml up -d --quiet-pull
+
+      - name: Wait for app + db healthy (preflight FRESH_INSTALL)
+        run: |
+          set -euxo pipefail
+          for i in $(seq 1 120); do
+            APP=$(docker inspect p7c1-ci-a-app-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
+            DB=$(docker inspect p7c1-ci-a-db-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
+            if [ "${APP}" = "healthy" ] && [ "${DB}" = "healthy" ]; then
+              echo "A healthy (app=${APP}, db=${DB}) after ~$((i*2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -p p7c1-ci-a -f docker-compose.yml logs --tail=40 app
+          echo "FAIL: A did not become healthy" >&2
+          exit 1
+
+      - name: Assert preflight FRESH_INSTALL + production seed refusal
+        run: |
+          set -euxo pipefail
+          PRE=$(docker logs p7c1-ci-a-app-1 2>&1 \
+            | grep -o '"preflight":"[A-Z_]*"' | tail -1)
+          [ "${PRE}" = '"preflight":"FRESH_INSTALL"' ]
+          # P6-008 guard stays intact — the drill seeds via the test-only
+          # APP_MODE=e2e override and never weakens production refusal.
+          docker exec -e APP_MODE=production p7c1-ci-a-app-1 node dist/seed.js 2>&1 \
+            | grep -q "Refusing to run the baseline seed in production"
+
+      - name: Record invariants (A)
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-a"
+          record() { # $1=table; $2=outfile
+            {
+              echo "migration_count=$(docker exec p7c1-ci-a-db-1 psql -v ON_ERROR_STOP=1 -U exam -d p7c1_ci_e2e -tAc 'SELECT count(*) FROM drizzle.__drizzle_migrations;')"
+              for table in organizations users questions exams exam_enrollments exam_attempts; do
+                echo "${table}_count=$(docker exec p7c1-ci-a-db-1 psql -v ON_ERROR_STOP=1 -U exam -d p7c1_ci_e2e -tAc "SELECT count(*) FROM ${table};")"
+                echo "${table}_md5=$(docker exec p7c1-ci-a-db-1 psql -v ON_ERROR_STOP=1 -U exam -d p7c1_ci_e2e -tAc "SELECT COALESCE(md5(string_agg(t::text, E'\\n' ORDER BY id)), 'EMPTY') FROM ${table} t;")"
+              done
+            } > "$2"
+          }
+          record all "${RUN_DIR}/invariants.txt"
+          cat "${RUN_DIR}/invariants.txt"
+
+      - name: Clean shutdown (data preserved) + pack transport artifact
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-a"
+          cd "${RUN_DIR}"
+          [ -d data/postgres ] || { echo "FAIL: data/postgres missing after down" >&2; exit 1; }
+          docker compose -p p7c1-ci-a -f docker-compose.yml down
+          [ -d data/postgres ] || { echo "FAIL: data/postgres missing after down" >&2; exit 1; }
+          # One transport artifact: data + compose + .env + expected invariants
+          # + the saved image. CI-transport-only, NOT a product backup format.
+          docker save "${IMAGE_TAG}" -o image.tar
+          tar -czf "${RUNNER_TEMP}/p7c1-bundle.tar.gz" \
+            data docker-compose.yml .env invariants.txt image.tar
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: p7c1-bundle
+          path: ${{ runner.temp }}/p7c1-bundle.tar.gz
+          retention-days: 1
+
+  verify-relocated:
+    name: B — consume bundle + verify (clean runner 2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: seed-and-pack
+
+    steps:
+      - name: Checkout (verification tooling only; the deployment consumes ONLY the bundle)
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Download bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: p7c1-bundle
+          path: ${{ runner.temp }}/bundle
+
+      - name: Extract bundle + docker load (no rebuild)
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-b"
+          mkdir -p "${RUN_DIR}"
+          tar -xzf "${RUNNER_TEMP}/bundle/p7c1-bundle.tar.gz" -C "${RUN_DIR}"
+          docker load -i "${RUN_DIR}/image.tar"
+          cd "${RUN_DIR}"
+          # Pin parity: the ordinary path pulls the exact postgres tag the
+          # compose contract pins (a fresh runner has no image cache).
+          docker compose -f docker-compose.yml pull db
+
+      - name: Boot relocated deployment B (ordinary path, RUN_SEED unset)
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-b"
+          cd "${RUN_DIR}"
+          docker compose -p p7c1-ci-b -f docker-compose.yml up -d --quiet-pull
+
+      - name: Wait for app + db healthy (preflight NORMAL, no seed)
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-b"
+          for i in $(seq 1 120); do
+            APP=$(docker inspect p7c1-ci-b-app-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
+            DB=$(docker inspect p7c1-ci-b-db-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
+            if [ "${APP}" = "healthy" ] && [ "${DB}" = "healthy" ]; then
+              echo "B healthy (app=${APP}, db=${DB}) after ~$((i*2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -p p7c1-ci-b -f docker-compose.yml logs --tail=40 app
+          echo "FAIL: B did not become healthy" >&2
+          exit 1
+
+      - name: Assert preflight NORMAL + no seed ran in B
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-b"
+          cd "${RUN_DIR}"
+          PRE=$(docker logs p7c1-ci-b-app-1 2>&1 \
+            | grep -o '"preflight":"[A-Z_]*"' | tail -1)
+          [ "${PRE}" = '"preflight":"NORMAL"' ]
+          if docker logs p7c1-ci-b-app-1 2>&1 \
+             | grep -q "Running canonical E2E seed"; then
+            echo "FAIL: B ran a seed — RUN_SEED must stay unset" >&2
+            exit 1
+          fi
+
+      - name: Verify invariants identical to A
+        run: |
+          set -euxo pipefail
+          RUN_DIR="${RUNNER_TEMP}/drill-b"
+          {
+            echo "migration_count=$(docker exec p7c1-ci-b-db-1 psql -v ON_ERROR_STOP=1 -U exam -d p7c1_ci_e2e -tAc 'SELECT count(*) FROM drizzle.__drizzle_migrations;')"
+            for table in organizations users questions exams exam_enrollments exam_attempts; do
+              echo "${table}_count=$(docker exec p7c1-ci-b-db-1 psql -v ON_ERROR_STOP=1 -U exam -d p7c1_ci_e2e -tAc "SELECT count(*) FROM ${table};")"
+              echo "${table}_md5=$(docker exec p7c1-ci-b-db-1 psql -v ON_ERROR_STOP=1 -U exam -d p7c1_ci_e2e -tAc "SELECT COALESCE(md5(string_agg(t::text, E'\\n' ORDER BY id)), 'EMPTY') FROM ${table} t;")"
+            done
+          } > "${RUNNER_TEMP}/invariants-b.txt"
+          diff -u "${RUN_DIR}/invariants.txt" "${RUNNER_TEMP}/invariants-b.txt"
+          echo "PASS: migration count + per-table counts and md5 identical across clean hosts."
+
+      - name: Seeded admin login works in B
+        run: |
+          set -euxo pipefail
+          ORIGIN=$(grep '^CORS_ORIGIN=' "${RUNNER_TEMP}/drill-b/.env" | cut -d= -f2-)
+          LOGIN=$(docker exec p7c1-ci-b-app-1 node -e "
+            fetch('http://127.0.0.1:3000/api/auth/login', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', 'Origin': '${ORIGIN}'},
+              body: JSON.stringify({username: 'admin', password: 'admin123'})
+            }).then(r => ({status: r.status, ok: r.ok})).then(o => console.log(JSON.stringify(o)))
+              .catch(e => console.error('ERR', e.message))
+          ")
+          echo "login: ${LOGIN}"
+          echo "${LOGIN}" | grep -q '"ok":true'
+
+      - name: Teardown B
+        if: always()
+        run: |
+          set +e
+          RUN_DIR="${RUNNER_TEMP}/drill-b"
+          cd "${RUN_DIR}" 2>/dev/null && docker compose -p p7c1-ci-b -f docker-compose.yml down -v --remove-orphans > /dev/null 2>&1

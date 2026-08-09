@@ -34,3 +34,7 @@ mutation-campaign-results/
 # Redis state. NEVER commit it. Deleting ./data/postgres deletes authoritative
 # Exam state.
 /data/
+
+# Drill/smoke temp roots (self-cleaned by their traps; ignore hard-kill leftovers).
+/.tmp-p7c1-drill-*/
+/.tmp-p6-smoke-data-*/
