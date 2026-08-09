@@ -777,6 +777,17 @@ and §24 (deferred capabilities). Highlights:
 
 The supported backup procedure is `pg_dump` against the `pgdata` volume.
 
+> **CURRENT PROCEDURE UNVALIDATED — do not treat as a proven exact historical
+> restore until P7-C restore drills close this gap.** The P7-C0 durability
+> audit (`docs/audits/P7-C0-DURABILITY-PERSISTENCE-REALITY-AUDIT.md` §16/§16.1)
+> classified this path as **documented-only, UNVALIDATED**: the P6 audit
+> verified the migrate-from-zero path but never executed a live
+> pg_dump/restore cycle, and exact historical state replacement is NOT proven
+> (restoring an older dump into an already-newer database may leave objects
+> absent from the dump unless the target is recreated/cleaned under an
+> explicit restore contract). Validate on first production deploy before
+> relying on it.
+
 ```bash
 # Backup (online, consistent). $POSTGRES_USER / $POSTGRES_DB are expanded
 # INSIDE the db container (postgres image env), not by the host shell —
@@ -791,6 +802,10 @@ tail -5 backup_*.sql   # should contain 'PostgreSQL database dump complete'
 
 # Restore (offline — stop API + worker first to avoid writes during restore).
 # Feed the host-side dump file into the db container's psql.
+# NOTE: --clean --if-exists drops objects present in the dump, but does NOT
+# remove objects that exist in the target DB yet are absent from an older
+# dump. For an EXACT historical replacement, recreate/clean the target
+# database under an explicit restore contract (P7-C restore drills).
 docker compose stop app email-worker
 docker compose exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
@@ -800,7 +815,10 @@ docker compose up -d app email-worker
 
 For larger deployments, consider `pg_basebackup` for physical backups or
 continuous WAL archiving. Schedule backups via cron on the Docker host — the
-MVP does not ship a backup scheduler.
+MVP does not ship a backup scheduler. Note that `wal_level=replica` is already
+sufficient for continuous archiving / PITR; the actual missing pieces for PITR
+are `archive_mode=on`, an `archive_command`, a WAL archive destination/retention
+contract, a base-backup/recovery procedure, and a recovery drill (P7-C0 §7).
 
 > **Note:** the P6 audit verified the migrate-from-zero path (§9 of the
 > audit) but did not execute a live pg_dump/restore cycle. Validate the

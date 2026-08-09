@@ -48,6 +48,14 @@ Repository guidance read before audit: `AGENTS.md`,
 ADR-013, ADR-014, ADR-015, ADR-016 (boundary context only), and
 `docs/deployment/mvp-deployment-runbook.md`.
 
+> **ADR-016 review-cycle disclosure.** ADR-016 was authored before/during this
+> C0 branch (`fix/p7-c0-durability-persistence-reality-audit`) and was **not**
+> part of `origin/master` at the audit baseline (`4d0c052b`). ADR-016 and this
+> P7-C0 audit are reviewed in the **same PR/review cycle** and MUST NOT be
+> treated as independent baseline evidence for one another. The audit's
+> reference to ADR-016 above is "boundary context only" precisely for this
+> reason.
+
 Evidence-tag legend used throughout:
 
 ```text
@@ -102,30 +110,47 @@ was **recorded, not fixed** (§20).
   time adjustments, incidents, receipts, notifications, email outbox, audit —
   lives in PostgreSQL and nowhere else.
 - **Redis owns no authority.** It holds only shared rate-limit counters with
-  mandatory TTL. Loss of Redis changes nothing about Exam truth (RUNTIME
-  PROOF, §8).
+  mandatory TTL. Loss of Redis changes nothing about Exam truth
+  (SOURCE FACT + RUNTIME PROOF, §8).
 - **No durable application state hides in a disposable container writable
-  layer.** No application code path writes files at runtime; the Dockerfile's
-  `/app/data` directory is created but never used by any code (RUNTIME PROOF,
-  §9).
-- **Cold relocation is PROVEN end-to-end** (§13): exact durable-state
-  relocation = copy of **one** PostgreSQL data-directory tree with a plain
-  `cp -a` + same compatible image + same deployment config. No
-  application-specific restore procedure is required today.
-- **Backup reality is thin**: the only supported procedure is an
-  operator-supplied `pg_dump` documented in the runbook (§17), which the P6
-  audit explicitly never executed/validated. There is no automated backup,
-  no retention, no off-host copy, no restore drill, no Admin visibility, no
-  PITR.
-- **No P0/P1 findings.** Four P2 findings (all P7 readiness blockers, none a
-  supported-runtime data-loss defect), eight P3 findings.
+  layer.** Repository-wide runtime-call-path/source inspection found no
+  application durable file write path; isolated runtime observations were
+  consistent with that result (STRONG SOURCE FACT + supporting runtime
+  observation, §9).
+- **Exact-history relocation has partial/proven building blocks, NOT a proven
+  product-level clean-host relocation.** The §13 experiment proves container
+  recreation and a same-PostgreSQL-major exact-byte PGDATA copy/transplant
+  (isolated project, isolated host). It does **not** prove the full
+  product-level property of taking only canonical deployment resources to a
+  clean machine B and getting the same Exam deployment. Portable clean-host
+  relocation is **PARTIAL / NOT_YET_PRODUCTIZED** and belongs to P7-C1 (§13).
+- **Historical backup/restore is UNVALIDATED.** The only supported procedure
+  is an operator-supplied `pg_dump` documented in the runbook (§17), which the
+  P6 audit explicitly never executed/validated. There is no automated backup,
+  no retention, no off-host copy, no restore drill, no Admin visibility.
+- **PITR is NOT IMPLEMENTED.** The blocker is the missing WAL archive
+  configuration (`archive_mode=off`, no `archive_command`, no WAL archive
+  destination/retention, no base-backup/recovery procedure, no recovery drill),
+  **not** `wal_level=replica` (which is already sufficient for continuous
+  archiving/PITR) (§7, §16).
+- **No P0/P1 findings.** P2 findings (P7 readiness blockers, none a
+  supported-runtime data-loss defect), P3 findings (non-blocking debt).
+
+> **Do not conflate these three operations** (kept distinct throughout this
+> report): **relocation** (same authoritative history, same logical
+> deployment, new container/host — partial/proven building blocks, §13),
+> **historical restore** (replace current authority with an older known-good
+> backup — UNVALIDATED, §16), and **PITR** (replace authority with history
+> reconstructed to target time T — NOT IMPLEMENTED, §7). Relocation evidence
+> must not be read as a proven recovery guarantee.
 
 The desired future property (`compatible immutable images + deployment
 configuration + canonical persistent local state = same Exam deployment`) is
-**already true for the authoritative store**, with the caveat that the
-canonical persistent state is a Docker *named volume* whose bytes live inside
-Docker's managed directory and whose raw PGDATA is postgres-major version
-coupled (§15).
+**already true for the authoritative store at the building-block level**, with
+two caveats: (a) the canonical persistent state is a Docker *named volume*
+whose bytes live inside Docker's managed directory and whose raw PGDATA is
+postgres-major version coupled (§15); and (b) the clean-host relocation proof
+to a second machine is **not** part of this audit's evidence (§13, §22).
 
 ---
 
@@ -230,7 +255,7 @@ remain in this matrix.
 | Proctor assignments | `exam_proctor_assignments`, `exam_proctor_assignment_events` | assignment episodes + append-only command receipts | **authoritative + receipt** (ADR-015) |
 | Durable operation receipts | `attempt_command_receipts` | force_submit / misconduct_mark receipts | **receipt** (append-only; replay evidence; NOT a business authority — the committed fact is the attempt row) |
 | Audit logs | `audit_logs` | atomic compliance evidence | **append-only evidence**; explicitly NOT an event store or idempotency arbiter (ADR-006/014/015). Atomic actions commit audit in the same transaction; best-effort observations are in-memory queued with a 10s drain on graceful shutdown (ADR-006) |
-| Client events | `client_events` | best-effort browser telemetry | **append-only, non-authoritative** observational |
+| Client events | `client_events` | best-effort browser telemetry | **append-only, non-authoritative** observational; **non-reconstructable** once lost (acceptable to lose for correctness, but destroys historical observational evidence that cannot be recovered from another authoritative source) |
 | Import job logs | `import_job_logs` | import run summaries | **append-only, operational** |
 | Migration state | `drizzle.__drizzle_migrations` | applied-migration journal | **authoritative** (forward-only, no down migrations) |
 
@@ -250,8 +275,23 @@ projections                : exam_attempts.grading_result (derived from
                              (frozen at publish), exam_enrollments.final_score
                              (selected by scoreStrategy), users.role (role-assignment cache)
 external-side-effect companion: email_outbox → SMTP (at-least-once)
-reconstructable            : worker_heartbeats, client_events (observability only)
+regenerable liveness       : worker_heartbeats (rewritten by the worker each poll;
+                             stale rows harmless; workerInstanceId is per-process random)
+non-authoritative,
+non-reconstructable
+telemetry                  : client_events (best-effort browser telemetry;
+                             append-only and observational; once lost it cannot
+                             generally be rebuilt from another authoritative
+                             source — losing it destroys historical observational
+                             evidence, but does not affect Exam correctness)
 ```
+
+> **Do not group `client_events` with `worker_heartbeats` as "reconstructable".**
+> `worker_heartbeats` is regenerable operational liveness state (the worker
+> rewrites it each poll). `client_events` is non-authoritative but
+> **non-reconstructable** historical telemetry: it is acceptable to lose for
+> Exam correctness, but its loss destroys observational evidence that cannot be
+> recovered from any other authoritative source.
 
 **No current-runtime committed-partial state requires startup reconciliation**
 (no general startup reconciler — P7-S2 Phase 5, re-verified in the closeout
@@ -280,10 +320,15 @@ doc; crash-atomicity proven for all irreversible mutations).
 
 ```text
 container recreation              → same volume bytes, same process; PROVEN safe
-host relocation (exact PGDATA)    → copy one directory tree; PROVEN safe (§13)
-logical backup restore            → pg_dump → psql; documented-only, NOT validated (§16)
+host relocation (exact PGDATA)    → copy one directory tree; PROVEN safe at the
+                                     same PostgreSQL major (§13). The full
+                                     clean-host (machine B) product-level
+                                     relocation is NOT proven here (§22).
+logical backup restore            → pg_dump → psql; documented-only, NOT validated
+                                     (§16); exact historical replacement NOT proven
 physical backup restore           → raw PGDATA copy; version-coupled to postgres 18
-PITR                              → NOT POSSIBLE today (archive_mode=off, no WAL archiving)
+PITR                              → NOT IMPLEMENTED today — missing WAL archiving
+                                     config (see below); wal_level is NOT the blocker
 ```
 
 RUNTIME PROOF of the no-archiving baseline:
@@ -296,6 +341,23 @@ SHOW max_wal_senders;   → 10
 SHOW fsync;             → on
 SHOW full_page_writes;  → on
 ```
+
+**PITR correctness clarification.** `wal_level=replica` is **already
+sufficient** for continuous archiving / PITR (PostgreSQL requires `replica` or
+higher; only `minimal` blocks it). The current PITR blockers are therefore
+**not** `wal_level`; they are:
+
+```text
+archive_mode=off
+archive_command not configured
+no WAL archive destination / retention contract
+no base-backup / PITR recovery procedure
+no recovery drill
+```
+
+A future P7-C PITR design MUST NOT be recommended to raise `wal_level` to
+`logical` merely to "enable" PITR — that would add WAL overhead without
+addressing the real (missing archiving) blocker.
 
 ---
 
@@ -336,11 +398,27 @@ Answers to the mission questions:
 | Does loss merely reset rate-limit history? | **YES** |
 | Persistence settings? | Prod compose: AOF on; dev: RDB defaults, AOF off |
 | Does Compose persist Redis today? | Named volume `redisdata` (prod/test); anonymous (dev) |
-| Would restoring stale Redis create correctness problems? | **NO** — stale counters are window-bounded (TTL) and only ever cause brief over-limiting; never under-limiting an irreversible fact |
+| Would restoring stale Redis create correctness problems? | **NO** — stale counters are window-bounded (TTL) and only ever cause brief over-limiting; never under-limiting an irreversible fact. **Evidence level for this specific claim = INFERENCE** from the current TTL-bounded rate-limit-only responsibility (see label note below). |
+
+**Evidence-level note for the Redis claims.** Distinguish the two claims:
+
+```text
+Loss of Redis does not remove PostgreSQL Exam authority
+    → SOURCE FACT + RUNTIME PROOF
+       (DBSIZE=0 baseline observed; isolated discard experiment in §24-1
+        confirmed a discarded probe key does not return; PostgreSQL was
+        untouched)
+
+Restoring stale Redis cannot create durable Exam corruption
+    → INFERENCE from the current TTL-bounded rate-limit-only responsibility
+       (stale counters are window-bounded by TTL and only ever cause brief
+        over-limiting; the audit did NOT execute a stale-restore-then-trigger
+        rate-limit path, so this correctness claim is not RUNTIME PROOF)
+```
 
 **Redis loss breaking authoritative Exam behavior would be a major finding —
-it is disproven by source and experiment.** Redis is classified **F.
-EPHEMERAL**.
+it is disproven by source and experiment for the "loss removes authority"
+claim.** Redis is classified **F. EPHEMERAL**.
 
 ---
 
@@ -387,9 +465,23 @@ runtime call graph**:
 > **No durable application state remains hidden inside a disposable container
 > writable layer.**
 
-Confirmed. The Dockerfile creates `/app/data` (`Dockerfile:65`) but **no code
-writes to it**; it is dead directory scaffolding. The `app` and `email-worker`
-services mount no volumes. **No P7-C1 blocker of this class exists.**
+Repository-wide runtime-call-path/source inspection found no application
+durable file write path: the Dockerfile creates `/app/data` (`Dockerfile:65`)
+but **no code writes to it**, and the `app` and `email-worker` services mount
+no volumes. Isolated runtime observations (§13/§24) were consistent with that
+source result — no durable file surfaced across the relocation experiments.
+
+**Evidence level = STRONG SOURCE FACT + supporting runtime observation**, not
+exhaustive runtime proof. The source scan covered `apps/`, `packages/`,
+`scripts/`, root files for the durable-write API surface
+(`fs.writeFile*`, `appendFile`, `createWriteStream`, `mkdir`, `rename`,
+`copyFile`, `unlink`, `rm`, `os.tmpdir`, `data/`, `upload`, `attachment`,
+`export`, `storage`, SQLite, and disk-persisting libraries) and found only
+dev/CI-tooling writes (§9.1). This does not mathematically prove that no
+latent transitive-dependency code path can ever write a file at runtime; it
+proves that no application durable file write path exists in the audited
+source, and the runtime observations were consistent with that. **No P7-C1
+blocker of this class exists.**
 
 ---
 
@@ -510,6 +602,18 @@ Per mission discipline: temporary directory, unique Compose project names,
 test-only DB/ports/credentials, explicit cleanup, no shared dev volume touched,
 no `docker system prune`.
 
+> **Scope of what this experiment proves.** It proves three building blocks:
+> (a) **container recreation** (same volume bytes, same project); (b) a
+> **same-host / isolated-project exact PGDATA copy** via a plain `cp -a`; and
+> (c) **same-PostgreSQL-major raw-PGDATA cold transplantability**. It does
+> **not** prove the full product-level clean-host relocation property of
+> taking only canonical deployment resources to a **clean machine B** and
+> getting the same Exam deployment (no source-build surprise, no Docker-volume
+> archaeology, `docker compose up` → same deployment). That clean-host/machine-B
+> proof belongs to **P7-C1** and was **not** rerun here. The final
+> classification is therefore PARTIAL / NOT_YET_PRODUCTIZED for portable
+> clean-host relocation (§17, §22).
+
 ### 13.1 Phase 1 — PostgreSQL data-dir portability (no app image needed)
 
 ```text
@@ -520,18 +624,20 @@ D. stop services cleanly         docker compose down  → containers removed, vo
 E. identify ONLY the required state  → one named volume (46.3 MB)
 F. remove/recreate disposable containers
 G. start again (same project)
-H. verify                         rows present; md5 identical → CONTAINER RECREATION SAFE
+H. verify                         rows present; md5 identical → CONTAINER RECREATION: PROVEN
 ```
 
-Then the stronger host-relocation simulation **without changing repository
-code**:
+Then the stronger same-host exact-PGDATA copy simulation **without changing
+repository code**:
 
 ```text
 old project (p7c0reloc1)  →  down
 copy ONLY identified state →  docker run -v p7c0reloc_pgdata:/from -v pgcopy:/to alpine
                                cp -a /from/. /to/   (plain file copy, no volume tooling)
 new project (p7c0reloc2)  →  bind mount ./pgcopy:/var/lib/postgresql, NEW project name
-start                     →  rows present; md5 identical → HOST RELOCATION SAFE
+start                     →  rows present; md5 identical
+                               → SAME-HOST/SAME-MAJOR EXACT-PGDATA COPY: PROVEN
+                               (NOT the same as a clean-machine-B product-level relocation)
 ```
 
 ### 13.2 Phase 2 — full-stack relocation with the real application image
@@ -557,19 +663,24 @@ H. verify                        app healthy; invariants identical (exams|4 atte
                                  GET /api/system/health → {"status":"ok"}
 ```
 
-**Verdict: exact durable-state relocation requires no application-specific
-restore procedure today.** One directory tree + same compatible image +
-same configuration = the same Exam deployment (proven with the real image and
-real authority families).
+**Verdict (corrected evidence strength).** The experiment proves: (a) container
+recreation; (b) a same-host/isolated-project exact PGDATA copy with a plain
+`cp -a`; and (c) same-PostgreSQL-major raw-PGDATA cold transplantability — all
+with the real image and real authority families. It does **not** prove the full
+product-level portable clean-host (machine A → clean machine B) relocation;
+that is PARTIAL / NOT_YET_PRODUCTIZED and is the job of P7-C1 (§22). "Exact
+durable-state relocation requires no application-specific restore procedure
+today" holds **for the proven building blocks at the same PostgreSQL major**,
+not as a clean-machine-B recovery guarantee.
 
 ### 13.3 Named-volume caveat (recorded, not redesigned)
 
 The current topology keeps `pgdata` in a Docker named volume. Its bytes are
-portable (proven), but an operator relocating must either know the volume's
-location (`/var/lib/docker/volumes/<name>/_data` on Linux) or use
-`cp -a` via a helper container. There is no bind-mount / operator-chosen host
-path today. This is a P3 portability ergonomics finding (P7-C1 may evaluate a
-bind mount — **not implemented here**).
+portable (proven at the same major), but an operator relocating must either
+know the volume's location (`/var/lib/docker/volumes/<name>/_data` on Linux)
+or use `cp -a` via a helper container. There is no bind-mount / operator-chosen
+host path today. This is a P3 portability ergonomics finding (P7-C1 may
+evaluate a bind mount — **not implemented here**).
 
 ---
 
@@ -585,13 +696,13 @@ Using isolated test state only (§13). Classification per the mission.
 | email-worker container writable layer lost | outbox in PostgreSQL; worker re-recovers abandoned rows | **SAFE_RECREATE** | SOURCE FACT (ADR-011) |
 | Redis state lost | rate-limit counters reset; no Exam truth change | **LOSS_OF_EPHEMERAL_STATE** | RUNTIME PROOF (§8) |
 | PostgreSQL state lost | **nothing left to restore from** (only documented path is operator pg_dump) | **LOSS_OF_AUTHORITY** | SOURCE FACT (§16) |
-| application durable-file directory lost | N/A — no such directory exists | **SAFE_RECREATE** | RUNTIME PROOF (§9) |
+| application durable-file directory lost | N/A — no such directory exists | **SAFE_RECREATE** | STRONG SOURCE FACT + supporting runtime observation (§9) |
 | deployment `.env` missing | Compose fails at `${VAR:?...}`; data intact; reconfigure → recovers | **SAFE_WITH_RECONFIGURATION** | SOURCE FACT (compose guards) |
 | `JWT_SECRET` rotated/missing | all sessions invalid → re-login; data intact | **LOSS_OF_SERVICE_ONLY** (identity break for sessions, not data) | SOURCE FACT (§10) |
 | `POSTGRES_PASSWORD` changed | Compose/container cannot authenticate; volume-initialized password caveat (runbook) | **SAFE_WITH_RECONFIGURATION** (or volume recreation) | SOURCE FACT (runbook) |
 | `PUBLIC_WEB_ORIGIN` changed | Email links point elsewhere; no data loss | **SAFE_WITH_RECONFIGURATION** | SOURCE FACT |
 | image tag/version changed | Postgres: pinned; Redis: minor-floating; app: rebuild drift + forward migrations on next boot | **VERSION_INCOMPATIBLE risk (bounded)** | §15 |
-| host path changes | bind mounts are operator-defined; named-volume path is Docker-managed | **SAFE_WITH_RECONFIGURATION** (relocation proven) | §13.3 |
+| host path changes | bind mounts are operator-defined; named-volume path is Docker-managed | **SAFE_WITH_RECONFIGURATION** (same-major relocation proven; clean-host not yet productized) | §13.3 |
 | named volume unavailable (deleted/evicted) | data inaccessible → same as LOSS_OF_AUTHORITY | **LOSS_OF_AUTHORITY** | INFERENCE (no other store) |
 
 **No destructive experiment touched normal development data.** Dev volumes
@@ -619,25 +730,61 @@ Using isolated test state only (§13). Classification per the mission.
 > portable across majors; a raw-PGDATA copy is not. The repo documents the
 > former procedure (runbook §17) but never states the latter coupling (§7).
 
+Two independent compatibility layers must be distinguished:
+
+```text
+PostgreSQL major-version compatibility
+    Can postgres:18.4 even open the raw PGDATA? (A 17- or 19-era data dir
+    will not start cleanly under 18.4.) If PostgreSQL cannot open the raw
+    PGDATA due to a major mismatch, the app migration phase is NOT the first
+    authority acting on that state.
+
+Exam application migration-history compatibility
+    Does the drizzle journal in the DB match the image's migration set
+    (prefix / exact / ahead / divergent)? See §15.3.
+```
+
 ### 15.3 Startup migration risk
 
 `docker-entrypoint.sh` runs `node dist/scripts/migrate.js` **unconditionally
 at every app boot**, and the email worker re-runs `migratePostgres` at startup.
 Drizzle migrations are **forward-only** (no down migrations; rollback is
-"restore the DB"). Consequences:
+"restore the DB").
 
-- Relocating an **older** raw PGDATA into a **newer** image applies pending
-  forward migrations immediately, **before** any compatibility gate — an
-  irreversible (though data-preserving) schema mutation. If the operator meant
-  to boot the old deployment, the DB is silently advanced.
-- There is no pre-migration version check (e.g. compare app's expected
-  migration set vs the volume's applied set and refuse on mismatch).
+There is no pre-migration compatibility check today: the entrypoint does not
+compare the image's expected migration set against the DB journal's applied
+set before running. The desired future compatibility contract (NOT implemented
+here — see P2-1 in §20) should be described conceptually as:
 
-Severity: **P2** (see §20) — a realistic incompatible-restart risk that can
-mutate the authority before compatibility is known. Not a P1: the bundled
-postgres image is patch-pinned and forward migrations are the documented
-upgrade path, so under documented operation the risk is bounded to
-"operator boots new app against older volume".
+```text
+DB migration history == image history
+    → normal start
+
+DB migration history is a valid prefix of image history
+    → legitimate forward upgrade path
+    → may run pending migrations under the documented upgrade contract
+    (ordinary documented forward migration itself is NOT a defect)
+
+DB contains migrations ahead of the image
+    → downgrade / stale-image condition
+    → should refuse before unsafe app startup
+
+DB/image migration histories diverge
+    → incompatible history
+    → refuse / require operator intervention
+
+different logical deployment with the same migration history
+    → the migration journal alone cannot detect this
+    → requires deployment identity / manifest design (P7-E0)
+```
+
+Severity: **P2** — the gap is the **absent schema/image compatibility
+contract**, not ordinary forward migrations. No evidence shows that an ordinary
+documented forward upgrade (DB history is a valid prefix of image history)
+corrupts authoritative state; under documented operation the bundled postgres
+image is patch-pinned and forward migrations are the intended upgrade path. A
+future gate should refuse the *unsafe* conditions (DB ahead of image;
+divergence) without blocking the legitimate forward-upgrade condition.
 
 ### 15.4 Floating tag severity
 
@@ -657,7 +804,7 @@ WAL | PITR | backup | retention`:
 | --- | --- |
 | Logical backup (`pg_dump`) | **documented-only** — runbook §17 documents the command; the P6 audit explicitly states it was **never executed/validated** ("Validate the backup/restore procedure on first production deploy before relying on it") |
 | Physical backup (`pg_basebackup`) | **mentioned only** as a runbook suggestion ("For larger deployments, consider…") |
-| PITR / WAL archiving | **not present** — `archive_mode=off`, `archive_command=disabled`, `wal_level=replica` (RUNTIME PROOF, §7) |
+| PITR / WAL archiving | **not present** — blockers are `archive_mode=off`, `archive_command` not configured, no WAL archive destination/retention, no base-backup/PITR recovery procedure, no recovery drill. **`wal_level=replica` is already sufficient** for continuous archiving and is NOT a blocker (RUNTIME PROOF, §7) |
 | Off-host copy | not present |
 | Retention | not present |
 | Verification | not present |
@@ -666,9 +813,30 @@ WAL | PITR | backup | retention`:
 | Scheduler | not present ("Schedule backups via cron on the Docker host — the MVP does not ship a backup scheduler") |
 | Any implementation in code | **NONE** — the only `pg_dump`/`backup` hits in code are an unrelated frontend comment |
 
-Backup reality = **operator-supplied, documented-only, unvalidated**. This is
-the single largest P7 gap; it does not affect the *relocation* answer (§13),
-only the *historical-restore* answer.
+Backup reality = **operator-supplied, documented-only, UNVALIDATED**. The
+catastrophic recovery path is unvalidated and MUST NOT be represented as a
+proven recovery guarantee. This is the single largest P7 disaster-readiness
+gap; it does not affect the *relocation* answer (§13), only the
+*historical-restore* answer.
+
+### 16.1 Exact historical replacement is NOT proven (additional limitation)
+
+The runbook's documented restore path approximately performs:
+
+```text
+pg_dump --clean --if-exists
+    ↓
+psql into the existing target database
+```
+
+**Exact historical state replacement is not proven.** Restoring an older dump
+into an already-newer database may leave database objects that do not exist in
+the historical dump unless the target database is recreated/cleaned under an
+explicit restore contract. `--clean --if-exists` drops objects present in the
+dump, but objects that exist in the target DB yet are absent from the older
+dump are not removed by it. A future exact-restore contract therefore needs an
+explicit target-recreate/clean step; this is NOT implemented here and belongs
+to P7-C restore drills.
 
 ---
 
@@ -676,40 +844,52 @@ only the *historical-restore* answer.
 
 | Operation | Meaning | Supported today? | Evidence |
 | --- | --- | --- | --- |
-| **RELOCATION** | same authoritative history, same logical deployment, new container/host | **YES — PROVEN** (§13) | exact-durable-state move, no restore procedure |
-| **HISTORICAL RESTORE** | replace current authority with an older known-good backup | **DOCUMENTED-ONLY, UNVALIDATED** (§16) | operator `pg_dump` + `psql`; live cycle never run |
-| **PITR** | replace authority with history reconstructed to target time T | **NOT POSSIBLE** — no WAL archiving | `archive_mode=off` (RUNTIME PROOF) |
+| **CONTAINER RECREATION** | same volume bytes, same project, down → up | **PROVEN** (§13.1 H) | same named volume, no restore procedure |
+| **SAME-MAJOR RAW PGDATA TRANSPLANT** | exact-byte copy of the PGDATA tree to a new isolated project/host at the same PostgreSQL major | **PROVEN** (§13.1, §13.2) | plain `cp -a`, same compatible image; NOT a clean-machine-B product-level proof |
+| **PORTABLE CLEAN-HOST RELOCATION** | machine A → retain only canonical deployment resources → clean machine B → `docker compose up` → same Exam deployment | **PARTIAL / NOT_YET_PRODUCTIZED** | building blocks proven (§13), but the full clean-host/machine-B proof is the job of P7-C1 (§22); not rerun here |
+| **HISTORICAL RESTORE** | replace current authority with an older known-good backup | **DOCUMENTED-ONLY, UNVALIDATED** (§16) | operator `pg_dump` + `psql`; live cycle never run; exact historical replacement NOT proven (§16.1) |
+| **PITR** | replace authority with history reconstructed to target time T | **NOT IMPLEMENTED** — missing WAL archiving config | `archive_mode=off`, no `archive_command`, no WAL archive destination/retention, no base-backup/recovery procedure (RUNTIME PROOF, §7); `wal_level=replica` is NOT the blocker |
 
 These have different correctness and future client-reconciliation semantics.
-This report never uses "restore" where only relocation is proven. For a future
-recovery-epoch protocol (ADR-016 §5), relocation is epoch-stable; historical
-restore/PITR are epoch-changing.
+This report never uses "restore" where only relocation building blocks are
+proven, and never uses "end-to-end recovery" wording for raw-PGDATA copying.
+For a future authoritative history-generation / incarnation protocol
+(ADR-016 binding requirement; non-binding illustration in the companion
+architecture note), container recreation / same-history relocation are
+history-stable; historical restore / PITR are history-changing.
 
 ---
 
-## 18. Recovery-epoch discovery
+## 18. Authoritative history generation / incarnation discovery
 
-**Discovery only — nothing implemented.**
+**Discovery only — nothing implemented. No concrete representation is frozen.**
 
-Audit result: **no stable identifier currently lets a future client
-distinguish normal restart from authoritative history rollback/replacement.**
+Audit result: **no stable server-history generation / incarnation identifier
+currently exists** that would let a future client distinguish ordinary server
+restart / history continuation from authoritative history replacement
+(historical restore or PITR).
 
 ```text
 RUNTIME PROOF of absence:
   workerInstanceId = `${hostname()}-${process.pid}-${randomUUID()}`   → per-process random,
     apps/api/src/workers/emailDeliveryWorker.ts:162                    never stable across restarts
-  no deployment/instance/epoch table or env value exists (grep for
-    instanceId/deploymentId/recoveryEpoch across apps/api + packages/db)
+  no deployment/instance/history-generation table or env value exists
+    (grep for instanceId/deploymentId/recoveryEpoch/historyGeneration
+     across apps/api + packages/db)
   PostgreSQL exposes no app-reachable deployment identifier
 ```
 
-Recorded input for P7-C1/ADR-016 future protocol design:
+Recorded input for P7-C1 / future client protocol design:
 
 ```text
-RECOVERY_EPOCH_REQUIRED_FOR_FUTURE_CLIENT_PROTOCOL
+AUTHORITATIVE_HISTORY_GENERATION_REQUIRED_FOR_FUTURE_CLIENT_PROTOCOL
+  (binding requirement recorded in ADR-016; exact representation deferred;
+   non-binding illustration, including the placeholder name recoveryEpoch,
+   lives in docs/architecture/future-offline-resilient-client.md)
 ```
 
-This is discovery only and must not become Desktop/offline scope creep.
+This is discovery only and must not become Desktop/offline scope creep, and
+must not freeze a concrete schema/protocol representation in this PR.
 
 ---
 
@@ -728,13 +908,52 @@ Surfaces P7-E0 must decide (inventory only; no roles/capabilities created):
 | Trigger a backup | safe as **Admin-triggered command** (gated) |
 | Verify/prune | safe as **service/worker execution** + operator oversight |
 | Historical restore / PITR | **requires operator-only execution** (never Admin UI in Phase 1) |
-| Operate while API/PostgreSQL is unavailable | CLI must remain (bootstrap-style scripts already ship in the image) |
+| Operate while the API is unavailable | depends on PostgreSQL availability — see the three-condition split below |
 
 Do **not** create roles/capabilities here — this list is the P7-E0 input.
+
+### 19.1 Operations under partial unavailability — three distinct conditions
+
+> Correction: a prior draft of this handoff stated "backup CLI already ships in
+> the image". That is **false**. Exam ships **no dedicated backup CLI**;
+> operators can invoke PostgreSQL tooling such as `pg_dump` through the DB
+> container / PostgreSQL toolchain. `bootstrap-admin` and `reset-admin-password`
+> are DB-dependent application CLIs, **not** DB-unavailable recovery tools.
+> Which operations can work while the API or PostgreSQL is unavailable splits
+> into three distinct conditions:
+
+```text
+A. API unavailable, PostgreSQL available
+   → operator PostgreSQL tooling (pg_dump etc.) may still run via the DB
+     container / PostgreSQL toolchain
+   → backup / export may be possible
+   → DB-dependent application CLIs (bootstrap-admin, reset-admin-password)
+     may still work because the DB is available
+
+B. PostgreSQL service unavailable, PGDATA still exists
+   → application DB-dependent CLIs do NOT work
+   → host / storage / PostgreSQL recovery tooling is required to restore the
+     service before any application CLI can run
+
+C. PostgreSQL authoritative data is lost or replaced (historical restore / PITR)
+   → historical restore / PITR tooling must operate INDEPENDENTLY of the
+     running application API
+   → recovery cannot depend solely on configuration stored inside the DB
+     being recovered
+```
+
+This three-way split is a direct input to P7-E0's future authority distinction
+between Admin authority, service/executor authority, and deployment/operator
+authority — but those roles are NOT designed here.
 
 ---
 
 ## 20. Findings by severity
+
+> One primary severity per finding. Severity is not escalated to P1: no evidence
+> shows that an ordinary supported runtime corrupts authoritative state. These
+> are P7 readiness / disaster-readiness blockers, not supported-runtime
+> data-loss defects.
 
 ### P0
 
@@ -748,36 +967,51 @@ None.
 None.
 ```
 
-### P2 (P7 readiness blockers)
+### P2 (P7 readiness / disaster-readiness blockers)
 
 ```text
-P2-1  Startup migrations run unconditionally before any compatibility check
-      against the mounted raw PGDATA (docker-entrypoint.sh → migrate.js;
-      worker migratePostgres). Forward-only schema mutation can be applied
-      against an older volume before the operator knows it is the wrong
-      deployment. Exact consequence: booting a newer app against an older
-      data dir irreversibly advances the schema with no gate, no down path.
-      Evidence: docker-entrypoint.sh:22-24; runbook §4/§15 (forward-only).
-      Suggested P7-C1 requirement: pre-migration version/journal-compat check.
+P2-1  Schema / image compatibility contract is ABSENT. docker-entrypoint.sh
+      runs node dist/scripts/migrate.js unconditionally at every app boot
+      (worker re-runs migratePostgres) with NO pre-migration journal/version
+      check against the mounted raw PGDATA. The desired future contract is
+      described in §15.3 (DB history == image → normal; DB history is a valid
+      prefix of image → legitimate forward upgrade; DB ahead of image → refuse;
+      histories diverge → refuse; same history but different logical deployment
+      → migration journal alone cannot detect). Ordinary documented forward
+      migration is NOT itself the defect; the defect is the absent gate for the
+      unsafe conditions (DB ahead / divergence). Evidence: docker-entrypoint.sh,
+      packages/db/src/postgres.ts. PostgreSQL-major compatibility (§15.2) is a
+      separate, lower layer. Suggested P7-C1: a compatibility gate, NOT a blanket
+      refusal of prefix==forward. This is NOT a backup implementation.
 
-P2-2  No automated, validated backup/restore exists for the supported runtime.
-      The ONLY recovery path after authoritative loss is an operator-supplied
-      pg_dump that the P6 audit never executed or validated (§16). "Documented
-      persistence guarantee" (runbook §17) is contradicted by "never run".
-      This blocks Gate P7-3 (restore proven).
+P2-2  Historical backup / restore path is UNVALIDATED. The only recovery path
+      after authoritative loss is an operator-supplied pg_dump that the P6 audit
+      never executed or validated (§16). The catastrophic recovery path is
+      unvalidated and MUST NOT be represented as a proven recovery guarantee.
+      This is a serious disaster-readiness blocker, NOT evidence that ordinary
+      supported runtime corrupts authority — hence P2, not P1. Blocks Gate P7-3.
 
-P2-3  Host relocation today depends on the operator knowing that the canonical
-      state is exactly ONE named volume and how to copy it; the bytes are
-      portable (PROVEN) but live inside Docker's managed directory, and raw
-      PGDATA major-version coupling is not documented anywhere in the repo.
-      This makes "host relocation cannot be defined safely" partially true:
-      relocation works when the exact bytes + same major are preserved, but
-      nothing in the repo says so. Evidence: §7, §12.2, §15.2.
+P2-3  Exact historical replacement semantics are UNPROVEN. The runbook's
+      pg_dump --clean --if-exists → psql-into-existing-DB path does not prove
+      exact historical state replacement: restoring an older dump into an
+      already-newer database may leave objects absent from the dump unless the
+      target is recreated/cleaned under an explicit restore contract (§16.1).
+      A future exact-restore contract needs an explicit target-recreate/clean
+      step. Belongs to P7-C restore drills; NOT implemented here.
 
-P2-4  Image version contract is incomplete: app image has no tag/digest pinning
-      (compose `build: .`) and redis:7-alpine is minor-floating. Combined with
-      P2-1, a rebuilt/different image set is a realistic incompatible-restart
-      vector. Postgres + node bases are fully pinned (bounded, but recorded).
+P2-4  Portable clean-host relocation is NOT YET PRODUCTIZED/PROVEN. The §13
+      experiment proves container recreation and same-PostgreSQL-major
+      exact-byte PGDATA transplant (isolated project/host), but does NOT prove
+      the full machine-A → clean-machine-B product-level relocation. Raw PGDATA
+      major-version coupling is also undocumented in the repo. Relocation works
+      when exact bytes + same major are preserved, but nothing in the repo says
+      so, and the clean-host proof is P7-C1's job. Evidence: §7, §13, §15.2.
+
+P2-5  Image / deployment version identity contract is INCOMPLETE. App image has
+      no tag/digest pinning (compose `build: .`); redis:7-alpine is
+      minor-floating. Combined with P2-1, a rebuilt/different image set is a
+      realistic incompatible-restart vector. Postgres + node bases are fully
+      pinned (bounded, but recorded). "Same images" is not decidable today.
 ```
 
 ### P3 (non-blocking debt / drift / ergonomics / hardening)
@@ -796,16 +1030,19 @@ P3-3  Runtime image ships compiled test artifacts (`dist/**/*.test.js`,
       invocation risk. Not a durability defect.
 P3-4  `docker-compose.dev.yml` redis runs without auth and with AOF off — dev-only
       divergence from the production (requirepass + appendonly) contract.
-P3-5  No documented postgres-major coupling for raw PGDATA (§7, §15.2).
-P3-6  Named-volume topology requires a helper container or Docker daemon
-      knowledge to copy; a bind mount would be operator-transparent (P7-C1 may
-      evaluate — not implemented here).
-P3-7  Re-running the E2E seed (`RUN_SEED=e2e`) against a non-fresh DB is
+P3-5  Re-running the E2E seed (`RUN_SEED=e2e`) against a non-fresh DB is
       undefined/non-idempotent (entrypoint runs it whenever RUN_SEED=e2e);
       production is protected by APP_MODE refusal, dev/e2e only. Recorded.
-P3-8  Best-effort audit observations are in-memory queued (10s graceful drain);
+P3-6  Best-effort audit observations are in-memory queued (10s graceful drain);
       SIGKILL drops un-drained observations (ADR-006 documented behavior).
 ```
+
+> Note on consolidation: the prior draft double-counted the raw-PGDATA
+> version-coupling and named-volume-ergonomics facts as both P2-3 and P3-5/P3-6.
+> They are consolidated under P2-4 above (the version-coupling fact feeds the
+> clean-host relocation gap; the named-volume ergonomics is the same
+> relocation-readiness concern). P3 now lists only genuinely non-blocking
+> debt.
 
 ---
 
@@ -829,7 +1066,9 @@ UNKNOWN-4  Whether `docker compose down -v` on the DEV project would be the only
 
 No `UNKNOWN` hides authoritative state loss: the authoritative store is
 exhaustively enumerated (§5/§6), its physical form verified (§7), and its
-relocation proven (§13).
+container-recreation + same-major exact-PGDATA-transplant building blocks
+proven (§13). The clean-host/machine-B relocation, historical restore, and
+PITR are explicitly NOT in the proven set (§17).
 
 ---
 
@@ -838,29 +1077,57 @@ relocation proven (§13).
 What P7-C1 must prove (recommendation only — NOT implemented here):
 
 ```text
-1. A pre-migration compatibility gate: refuse to boot the app/worker against a
-   raw PGDATA whose applied migration set does not match the image's expected
-   set (or whose postgres major differs), instead of silently forward-migrating.
-2. A clean, operator-transparent canonical state location (evaluate bind mount
-   or documented named-volume procedure) so relocation does not depend on
+1. A pre-migration COMPATIBILITY GATE (not a blanket refuse-on-mismatch):
+   - DB history == image history                          → normal start
+   - DB history is a valid PREFIX of image history        → legitimate forward
+                                                            upgrade; may run pending
+                                                            migrations under the
+                                                            documented upgrade contract
+   - DB contains migrations AHEAD of the image            → stale-image/downgrade;
+                                                            refuse before unsafe startup
+   - DB/image histories DIVERGE                           → incompatible; refuse /
+                                                            require operator intervention
+   - same history but different logical deployment        → migration journal alone
+                                                            cannot detect; requires
+                                                            deployment identity/manifest
+   AND refuse if the postgres major differs from the raw PGDATA's major.
+   Ordinary documented forward migration must NOT be blocked (§15.3).
+
+2. A CLEAN-HOST RELOCATION proof (machine A → clean machine B), retaining only
+   canonical deployment resources, with no source-build surprise and no
+   Docker-volume archaeology. The §13 experiment proved the building blocks
+   (container recreation, same-major exact PGDATA transplant) on an isolated
+   host; the clean-machine-B proof is P7-C1's job and was NOT rerun here.
+
+3. An operator-transparent canonical state location (evaluate bind mount or
+   documented named-volume procedure) so relocation does not depend on
    Docker-internal archaeology.
-3. A validated backup/restore drill (pg_dump → clean volume → restore →
-   post-restore invariant suite) that the P6 audit admits was never run.
-4. An image version contract: pin app image by tag/digest and redis by patch
+
+4. A VALIDATED backup/restore drill (pg_dump → recreate/clean target → restore
+   → post-restore invariant suite) that the P6 audit admits was never run;
+   the drill must also prove exact historical replacement semantics (§16.1),
+   including an explicit target-recreate/clean step.
+
+5. An image version contract: pin app image by tag/digest and redis by patch
    (or record the accepted drift), so "same images" is decidable.
-5. Document raw-PGDATA major-version coupling next to the relocation procedure.
-6. Confirm the §13 relocation invariant remains true after any of the above.
+
+6. Document raw-PGDATA major-version coupling next to the relocation procedure.
+
+7. Confirm the §13 building-block invariants remain true after any of the above.
 ```
 
-Candidate invariant for P7-C1 (unchanged by this audit's evidence):
+Candidate invariant for P7-C1 (refined to match the corrected evidence):
 
 > For the supported single-node deployment, exact durable-state relocation
 > should require no application-specific restore procedure: compatible images
 > plus deployment configuration plus canonical persistent state should be
-> sufficient to recreate the same Exam deployment.
+> sufficient to recreate the same Exam deployment — **proven so far for
+> container recreation and same-PostgreSQL-major exact-byte PGDATA transplant
+> on an isolated host; the clean-machine-B product-level proof is P7-C1's
+> remaining work.**
 
-**Feasible today** — the §13 experiment proves the invariant already holds for
-the authoritative store with the current named-volume topology.
+Not "feasible today" as a clean-host claim — feasible today only at the
+building-block level proven in §13.
 
 ---
 
@@ -890,9 +1157,22 @@ not answered beyond current evidence):
 10. Who may inspect backup history?                     → Admin (read-only status)
 11. Who can perform historical restore?                 → operator-only (never Admin UI in Phase 1)
 12. Who can perform PITR?                               → operator-only (requires superuser/replication)
-13. Which operations must still work when API/PostgreSQL is unavailable?
-                                                        → backup CLI (already ships in image), bootstrap
-    admin, reset-admin-password
+13. Which operations must still work when the API or PostgreSQL is unavailable?
+                                                        → split into three conditions (§19.1):
+                                                          A. API down, PostgreSQL up → operator
+                                                             PostgreSQL tooling (pg_dump etc.) and
+                                                             DB-dependent app CLIs (bootstrap-admin,
+                                                             reset-admin-password) may work
+                                                          B. PostgreSQL service down, PGDATA exists →
+                                                             app CLIs do NOT work; host/storage/PG
+                                                             recovery tooling required
+                                                          C. PostgreSQL authority lost/replaced →
+                                                             historical restore/PITR tooling must run
+                                                             INDEPENDENTLY of the running API
+                                                        → NOTE: Exam ships NO dedicated backup CLI; the
+                                                          only PG-side tooling is operator-invoked
+                                                          pg_dump via the DB container. P7-E0 must
+                                                          decide whether a backup CLI is in scope.
 ```
 
 ---
@@ -912,16 +1192,24 @@ docker exec p7c0-redis-probe redis-cli GET probe:key   # → '' (empty)
 docker rm -f p7c0-redis-probe
 ```
 
-### 24-2. PostgreSQL container-recreation + host-relocation probe
+### 24-2. PostgreSQL container-recreation + same-host exact-PGDATA-copy probe
 
 ```bash
 # isolated compose (temp dir, unique project, ports 15440/15441/15442)
-docker compose -p p7c0reloc1 up -d            # create table + 2 rows
+docker compose -p p7c0reloc1 up -d            # create table reloc_probe + 2 rows
 docker compose -p p7c0reloc1 down             # containers removed, volume kept
-docker compose -p p7c0reloc1 up -d            # rows + md5 unchanged   → SAFE_RECREATE
+docker compose -p p7c0reloc1 up -d            # rows + md5 unchanged   → CONTAINER RECREATION: PROVEN
 docker run --rm -v p7c0reloc_pgdata:/from -v ./pgcopy:/to alpine \
   sh -c 'cp -a /from/. /to/'                  # plain file copy, no volume tooling
 docker compose -p p7c0reloc2 up -d            # bind mount ./pgcopy → rows + md5 unchanged
+
+# Observed invariant (recorded, not rerun for this corrective pass):
+#   md5(string_agg(id|label)) = f4c2b2ef48df6c0419ae4cd06679c7d3
+#   identical before down, after recreate (p7c0reloc1 up), and after
+#   same-host exact copy into new project (p7c0reloc2 up).
+#   named volume size: 46.3 MB
+# Classification: CONTAINER RECREATION PROVEN; SAME-HOST/SAME-MAJOR EXACT-PGDATA
+#   COPY PROVEN. This is NOT a clean-machine-B product-level relocation proof.
 ```
 
 ### 24-3. Full-stack cold relocation with the real image (current master)
@@ -980,9 +1268,12 @@ Everything else — Redis, container writable layers, /app/data, logs,
 worker heartbeats, browser storage, generated files — is disposable.
 ```
 
-The §13 experiments prove that bytes (1) alone, moved with a plain `cp -a`
-and restarted with (2)+(3), reproduce the same Exam deployment with all
-authoritative invariants intact.
+The §13 experiments prove — **at the building-block level** — that bytes (1)
+alone, moved with a plain `cp -a` and restarted with (2)+(3), reproduce the
+same Exam deployment with all authoritative invariants intact, for container
+recreation and same-PostgreSQL-major exact-byte PGDATA transplant on an
+isolated host. They do **not** prove the clean-machine-B product-level
+relocation (§17, §22).
 
 ---
 
@@ -995,22 +1286,30 @@ P7-C0 DURABILITY REALITY AUDIT READY FOR HUMAN REVIEW
 ```text
 P0: none
 P1: none
-P2: 4 (P2-1 startup migration before compat check; P2-2 no validated
-       backup/restore; P2-3 relocation/version-coupling not documented;
-       P2-4 incomplete image version contract)
-P3: 8 (dev anonymous volume; workerHeartbeats schema-aggregate omission;
+P2: 5 (P2-1 schema/image compatibility contract absent; P2-2 historical
+       backup/restore path UNVALIDATED; P2-3 exact historical replacement
+       semantics UNPROVEN; P2-4 portable clean-host relocation NOT YET
+       PRODUCTIZED/PROVEN; P2-5 image/deployment version identity contract
+       incomplete)
+P3: 6 (dev anonymous volume; workerHeartbeats schema-aggregate omission;
        test artifacts + rollback scripts in image; dev redis divergence;
-       raw-PGDATA coupling undocumented; named-volume ergonomics; E2E seed
-       non-idempotency; best-effort audit drain window)
+       E2E seed non-idempotency; best-effort audit drain window)
 
-Portable relocation today:
-  PROVEN  (full-stack, exact-durable-state, plain `cp -a`, real image)
+Container recreation:                        PROVEN
+Same-major raw PGDATA cold transplant:       PROVEN  (isolated host)
+Portable clean-host relocation:              PARTIAL / NOT_YET_PRODUCTIZED
+Historical backup/restore:                   DOCUMENTED-ONLY, UNVALIDATED
+Exact historical replacement semantics:      UNPROVEN (§16.1)
+PITR:                                        NOT IMPLEMENTED (missing WAL
+                                             archiving config; wal_level=replica
+                                             is NOT the blocker)
 
 Authoritative durable stores:
   [ PostgreSQL (pgdata named volume; 29 tables; drizzle journal in-DB) ]
 
 Durable non-DB artifacts:
-  [ none — /app/data unused; logs stdout-only; CSV export in-memory;
+  [ none — /app/data unused (STRONG SOURCE FACT + supporting runtime
+    observation); logs stdout-only; CSV export in-memory;
     no uploads/attachments/files on disk ]
 
 Ephemeral stores:
@@ -1018,24 +1317,33 @@ Ephemeral stores:
     container writable layers, in-process maps (admission queue, preset
     cache, best-effort audit queue), browser localStorage/sessionStorage ]
 
+Non-authoritative, non-reconstructable telemetry:
+  [ client_events — acceptable to lose for Exam correctness, but its loss
+    destroys historical observational evidence that cannot be recovered from
+    another authoritative source ]
+
 Deployment-identity dependencies:
   [ JWT_SECRET (sessions), PUBLIC_WEB_ORIGIN, CORS_ORIGIN, DEPLOYMENT_MODE,
-    POSTGRES_USER/DB naming; no stable deployment/epoch ID exists ]
+    POSTGRES_USER/DB naming; no stable server-history generation/incarnation
+    ID exists ]
 
 Unknown persistence surfaces:
   [ none for authoritative state; UNKNOWN-1..4 are documented non-authority
     or untested-drill gaps (§21) ]
 
 P7-C1 blockers:
-  [ none blocking the relocation invariant (PROVEN);
-    pre-migration compatibility gate required before startup migrations can
-    be considered safe against older raw PGDATA (P2-1);
-    validated backup/restore drill required for Gate P7-3 (P2-2) ]
+  [ clean-host/machine-B relocation proof NOT yet done (P2-4);
+    pre-migration compatibility gate required (P2-1) — must refuse DB-ahead /
+    divergent histories WITHOUT blocking legitimate forward upgrade;
+    validated backup/restore drill required for Gate P7-3 (P2-2);
+    exact historical replacement contract required (P2-3) ]
 
 P7-E0 decision inputs:
   [ §11 configuration-source inventory (19 settings classified),
-    §19 authority-surface inventory, §23 question list ]
+    §19 authority-surface inventory + three-condition unavailability split
+    (§19.1), §23 question list ]
 ```
 
 **STOP. Audit complete — no P7-C1 or P7-E0 implementation was started, and no
-finding was fixed.**
+finding was fixed. No production/runtime source, Compose topology, migration,
+or backup implementation was changed in this corrective pass.**
