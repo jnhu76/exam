@@ -150,8 +150,12 @@ jobs:
           [ -d data/postgres ] || { echo "FAIL: data/postgres missing after down" >&2; exit 1; }
           # One transport artifact: data + compose + .env + expected invariants
           # + the saved image. CI-transport-only, NOT a product backup format.
+          # Bind-mounted PGDATA is 700/uid-999 (postgres image user); the
+          # runner (uid 1000) cannot read it, so pack as root via sudo — the
+          # same metadata-preserving semantics as the local drill's uid-999
+          # container copy.
           docker save "${IMAGE_TAG}" -o image.tar
-          tar -czf "${RUNNER_TEMP}/p7c1-bundle.tar.gz" \
+          sudo tar -czf "${RUNNER_TEMP}/p7c1-bundle.tar.gz" \
             data docker-compose.yml .env invariants.txt image.tar
 
       - name: Upload bundle
@@ -184,7 +188,10 @@ jobs:
           set -euxo pipefail
           RUN_DIR="${RUNNER_TEMP}/drill-b"
           mkdir -p "${RUN_DIR}"
-          tar -xzf "${RUNNER_TEMP}/bundle/p7c1-bundle.tar.gz" -C "${RUN_DIR}"
+          # Root extraction preserves the tar's uid-999 ownership on PGDATA —
+          # a non-root tar would re-own the data as the runner (uid 1000) and
+          # the relocated postgres (uid 999) could not read it.
+          sudo tar -xzf "${RUNNER_TEMP}/bundle/p7c1-bundle.tar.gz" -C "${RUN_DIR}"
           docker load -i "${RUN_DIR}/image.tar"
           cd "${RUN_DIR}"
           # Pin parity: the ordinary path pulls the exact postgres tag the
