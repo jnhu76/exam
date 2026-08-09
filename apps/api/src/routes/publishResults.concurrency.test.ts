@@ -118,6 +118,7 @@ describe("P7-S2-A: result publication is single-winner", () => {
   let db2: Database;
   let sql1: { end(): Promise<void> };
   let sql2: { end(): Promise<void> };
+  let sharedSql: { end(): Promise<void> } | undefined;
   let courseId: string;
 
   /** Inserts a fresh unpublished exam; each test gets its own row. */
@@ -177,6 +178,7 @@ describe("P7-S2-A: result publication is single-winner", () => {
       iso.databaseUrl,
       iso.schemaName,
     );
+    sharedSql = shared.sql;
     await withTestInfraLifecycleLock(iso.databaseUrl, () =>
       migratePostgres(shared.db, { migrationsSchema: iso.schemaName }),
     );
@@ -224,6 +226,7 @@ describe("P7-S2-A: result publication is single-winner", () => {
     await Promise.allSettled([
       sql2?.end() ?? Promise.resolve(),
       sql1?.end() ?? Promise.resolve(),
+      sharedSql?.end() ?? Promise.resolve(),
     ]);
     await iso?.cleanup().catch(() => {});
   });

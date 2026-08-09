@@ -1082,15 +1082,17 @@ describe("runtimeConfig", () => {
       expect(config.email.smtp).toBeNull();
     });
 
-    // P7-S2-D — Email lease safety invariant (fail-fast).
+    // P7-S2-D — Email lease sanity guard (fail-fast).
     //
     // EMAIL_WORKER_LOCK_TIMEOUT_MS must be strictly greater than the sum of
-    // the SMTP phase timeouts (connection + greeting + socket), otherwise an
-    // alive worker can legally be reclaimed while still sending. This is a
-    // NECESSARY minimum margin, not a proof — nodemailer's socketTimeout is
-    // an inactivity timeout, so the residual window is the documented
-    // at-least-once delivery boundary, not a config error.
-    describe("email worker lease invariant", () => {
+    // the modeled SMTP phase timeouts (connection + greeting + socket),
+    // otherwise a lease that cannot even cover those phases makes mid-send
+    // reclaim all but certain. This is a BEST-EFFORT sanity guard, NOT a
+    // reclaim-safety proof: nodemailer's DNS phase (dnsTimeout, default
+    // 30000ms) is not modeled and socketTimeout is inactivity-only, so an
+    // alive worker can still be reclaimed via either residual window — that
+    // is the documented at-least-once delivery boundary, not a config error.
+    describe("email worker lease guard", () => {
       function smtpEnv(overrides: Record<string, string> = {}) {
         return {
           DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam",
@@ -1123,14 +1125,14 @@ describe("runtimeConfig", () => {
         ).toThrow(/EMAIL_WORKER_LOCK_TIMEOUT_MS/);
       });
 
-      it("accepts a configured safe lock timeout", () => {
+      it("accepts a lock timeout above the modeled SMTP sum (guard passes; not a reclaim-safety proof)", () => {
         const config = loadRuntimeConfig(
           smtpEnv({ EMAIL_WORKER_LOCK_TIMEOUT_MS: "60000" }),
         );
         expect(config.emailWorker.lockTimeoutMs).toBe(60000);
       });
 
-      it("does not enforce the invariant for non-SMTP (fake) transport", () => {
+      it("does not enforce the guard for non-SMTP (fake) transport", () => {
         const config = loadRuntimeConfig(
           smtpEnv({
             EMAIL_TRANSPORT: "fake",

@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, or, sql } from "drizzle-orm";
 import { examAttempts, attemptGradingEntries } from "../schema/pg.js";
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { Database, TenantContext } from "../types.js";
@@ -26,7 +26,15 @@ import type { Database, TenantContext } from "../types.js";
  * Strictly READ-ONLY: this repo never mutates rows and never repairs.
  * Detection output carries enough identity (attempt/exam/enrollment ids,
  * timestamps, expected vs actual counts) for a human or a later canonical
- * repair command. Bounded to the first `limit` anomalies (default 100).
+ * repair command.
+ *
+ * Counting model (P7-S2 merge-review fix): the anomaly PREDICATES run inside
+ * SQL over the FULL candidate set (`status='submitted'` for the tenant), so
+ * the reported counts are exact totals no matter how many anomalies exist.
+ * The `limit` (default 100) bounds only the returned anomaly SAMPLE, which is
+ * ordered by attempt id (stable) so the sample is deterministic. The workset
+ * entry count is a scalar subquery evaluated per candidate attempt — the DB
+ * never aggregates the tenant's whole grading-entry history into Node.
  */
 export interface AttemptIntegrityAnomaly {
   kind: "submitted_not_terminalized" | "submitted_workset_mismatch";
@@ -62,22 +70,48 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
       const orgId = resolveOrganizationId(ctx);
       const limit = Math.min(Math.max(opts.limit ?? 100, 1), 1000);
 
-      // Workset entry counts per attempt (one row per attempt with entries).
-      const entryCounts = await db
-        .select({
-          attemptId: attemptGradingEntries.attemptId,
-          entryCount: count(),
-        })
-        .from(attemptGradingEntries)
-        .where(eq(attemptGradingEntries.organizationId, orgId))
-        .groupBy(attemptGradingEntries.attemptId);
+      // Workset entry count per candidate attempt — a scalar subquery so the
+      // DB aggregates only rows for attempts the anomaly predicates already
+      // consider, never the tenant's whole grading-entry history. `::int`
+      // keeps the value a JS number under the postgres driver (int8 decodes
+      // as string by default).
+      const entryCount = sql<number>`(
+        SELECT count(*)::int FROM ${attemptGradingEntries}
+        WHERE ${attemptGradingEntries.attemptId} = ${examAttempts.id}
+          AND ${attemptGradingEntries.organizationId} = ${orgId}
+      )`;
+      // Frozen snapshot length. Defensive against non-array legacy JSONB:
+      // jsonb_array_length would raise, turning corrupt data into a
+      // diagnostics 500 ("healthy system → diagnostics works; corrupt system
+      // → diagnostics crashes") instead of a detectable anomaly.
+      const snapshotCount = sql<number>`CASE
+        WHEN jsonb_typeof(${examAttempts.questionSnapshot}) = 'array'
+        THEN jsonb_array_length(${examAttempts.questionSnapshot})
+        ELSE 0
+      END`;
 
-      const countByAttempt = new Map(
-        entryCounts.map((r) => [r.attemptId, Number(r.entryCount)]),
-      );
+      const tenantScoped = eq(examAttempts.organizationId, orgId);
+      const submitted = eq(examAttempts.status, "submitted");
+      const notTerminalized = eq(examAttempts.gradingStatus, "auto_graded");
+      const worksetMismatch = sql`${entryCount} <> ${snapshotCount}`;
 
-      // All submitted attempts (the only status both anomalies can carry).
-      const submitted = await db
+      // Exact totals over the FULL candidate set — SQL-side aggregates. The
+      // counts are never derived from the bounded sample below, so an anomaly
+      // beyond the first `limit` rows can never be missed.
+      const [notTerminalizedTotal, worksetMismatchTotal] = await Promise.all([
+        db
+          .select({ n: count() })
+          .from(examAttempts)
+          .where(and(tenantScoped, submitted, notTerminalized)),
+        db
+          .select({ n: count() })
+          .from(examAttempts)
+          .where(and(tenantScoped, submitted, worksetMismatch)),
+      ]);
+
+      // Anomaly SAMPLE: only rows matching at least one predicate, in stable
+      // attempt-id order, bounded by `limit`. One row can carry both kinds.
+      const rows = await db
         .select({
           attemptId: examAttempts.id,
           examId: examAttempts.examId,
@@ -87,29 +121,22 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
           gradingStatus: examAttempts.gradingStatus,
           submittedAt: examAttempts.submittedAt,
           gradedAt: examAttempts.gradedAt,
-          questionSnapshot: examAttempts.questionSnapshot,
+          gradingEntries: entryCount,
+          snapshotQuestions: snapshotCount,
         })
         .from(examAttempts)
         .where(
-          and(
-            eq(examAttempts.organizationId, orgId),
-            eq(examAttempts.status, "submitted"),
-          ),
+          and(tenantScoped, submitted, or(notTerminalized, worksetMismatch)),
         )
+        .orderBy(examAttempts.id)
         .limit(limit);
 
       const anomalies: AttemptIntegrityAnomaly[] = [];
-      let submittedNotTerminalized = 0;
-      let submittedWorksetMismatch = 0;
-
-      for (const row of submitted) {
-        const snapshotCount = Array.isArray(row.questionSnapshot)
-          ? row.questionSnapshot.length
-          : 0;
-        const entryCount = countByAttempt.get(row.attemptId) ?? 0;
+      for (const row of rows) {
+        const gradingEntries = Number(row.gradingEntries);
+        const snapshotQuestions = Number(row.snapshotQuestions);
 
         if (row.gradingStatus === "auto_graded") {
-          submittedNotTerminalized += 1;
           anomalies.push({
             kind: "submitted_not_terminalized",
             attemptId: row.attemptId,
@@ -120,12 +147,11 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
             gradingStatus: row.gradingStatus,
             submittedAt: row.submittedAt,
             gradedAt: row.gradedAt,
-            gradingEntries: entryCount,
-            snapshotQuestions: snapshotCount,
+            gradingEntries,
+            snapshotQuestions,
           });
         }
-        if (entryCount !== snapshotCount) {
-          submittedWorksetMismatch += 1;
+        if (gradingEntries !== snapshotQuestions) {
           anomalies.push({
             kind: "submitted_workset_mismatch",
             attemptId: row.attemptId,
@@ -136,13 +162,21 @@ export function createIntegrityDiagnosticsRepo(db: Database) {
             gradingStatus: row.gradingStatus,
             submittedAt: row.submittedAt,
             gradedAt: row.gradedAt,
-            gradingEntries: entryCount,
-            snapshotQuestions: snapshotCount,
+            gradingEntries,
+            snapshotQuestions,
           });
+        }
+        // Cap the sample itself (a row can produce up to two anomalies).
+        if (anomalies.length >= limit) {
+          break;
         }
       }
 
-      return { submittedNotTerminalized, submittedWorksetMismatch, anomalies };
+      return {
+        submittedNotTerminalized: Number(notTerminalizedTotal[0]?.n ?? 0),
+        submittedWorksetMismatch: Number(worksetMismatchTotal[0]?.n ?? 0),
+        anomalies,
+      };
     },
   };
 }

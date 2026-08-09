@@ -507,9 +507,14 @@ describe("system routes", () => {
     async function seedLegacyAttempt(
       overrides: {
         status?: string;
-        gradingStatus?: "auto_graded" | "pending_manual" | "fully_graded";
+        gradingStatus?:
+          | "auto_graded"
+          | "pending_manual"
+          | "fully_graded"
+          | null;
         withEntry?: boolean;
         snapshot?: QuestionSnapshot[];
+        attemptId?: string;
       } = {},
     ): Promise<string> {
       const now = new Date();
@@ -596,7 +601,7 @@ describe("system routes", () => {
         createdAt: now,
         updatedAt: now,
       });
-      const attemptId = randomUUID();
+      const attemptId = overrides.attemptId ?? randomUUID();
       await ctx.db.insert(schema.examAttempts).values({
         id: attemptId,
         organizationId: orgId,
@@ -605,7 +610,12 @@ describe("system routes", () => {
         candidateId: candidateProfileId,
         attemptNo: 1,
         status: overrides.status ?? "submitted",
-        gradingStatus: overrides.gradingStatus ?? "auto_graded",
+        // Explicit `null` must survive (legacy rows carry NULL grading_status);
+        // only an ABSENT override falls back to the schema default.
+        gradingStatus:
+          overrides.gradingStatus === undefined
+            ? "auto_graded"
+            : overrides.gradingStatus,
         questionSnapshot: snapshot,
         answers: [],
         submittedAnswers: {
@@ -738,6 +748,245 @@ describe("system routes", () => {
         (a: { attemptId: string }) => a.attemptId === attemptId,
       );
       expect(anomalies).toEqual([]);
+    });
+
+    // ── P7-S2 merge-review regressions ────────────────────────────────
+    // The detector's anomaly predicates must run over the FULL candidate set
+    // (counts are SQL totals, never derived from the bounded sample), and the
+    // returned sample must be deterministic and capped at `limit`.
+
+    /** GET diagnostics and return the integrity block (asserts HTTP 200). */
+    async function fetchIntegrity(): Promise<{
+      submittedNotTerminalized: number;
+      submittedWorksetMismatch: number;
+      anomalies: Array<{
+        attemptId: string;
+        kind: string;
+        gradingStatus: string | null;
+      }>;
+    }> {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json().integrity;
+    }
+
+    /**
+     * Bulk-seeds `count` submitted attempts sharing one exam/enrollment
+     * (attemptNo 1..count satisfies the org+enrollment+attempt unique index).
+     */
+    async function seedSubmittedAttemptsBulk(
+      count: number,
+      opts: {
+        gradingStatus: "auto_graded" | "pending_manual" | null;
+        withEntry: boolean;
+      },
+    ): Promise<string[]> {
+      const now = new Date();
+      const orgId = ctx.org.id;
+      const courseId = randomUUID();
+      const examId = randomUUID();
+      const candidateProfileId = randomUUID();
+      const userId = randomUUID();
+
+      await ctx.db.insert(schema.courses).values({
+        id: courseId,
+        organizationId: orgId,
+        name: "Bulk",
+        code: `BK-${randomUUID().slice(0, 6)}`,
+        description: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.exams).values({
+        id: examId,
+        organizationId: orgId,
+        title: "Bulk exam",
+        description: "",
+        courseId,
+        status: "closed",
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: now,
+        closeAt: new Date(now.getTime() + 86400_000),
+        passingScore: 60,
+        totalScore: 100,
+        questionSelectionMode: "manual",
+        questionIds: [questionSnapshot[0]!.originalQuestionId],
+        questionSnapshot,
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 1,
+        interruptionTimePolicy: "operator_incident",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.users).values({
+        id: userId,
+        organizationId: orgId,
+        username: `bk-cand-${randomUUID().slice(0, 6)}`,
+        passwordHash: "hash",
+        name: "Bulk Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id: candidateProfileId,
+        organizationId: orgId,
+        userId,
+        fields: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+      const enrollmentId = randomUUID();
+      await ctx.db.insert(schema.examEnrollments).values({
+        id: enrollmentId,
+        organizationId: orgId,
+        examId,
+        candidateId: candidateProfileId,
+        status: "completed",
+        attemptCount: count,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const attemptIds: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const attemptId = randomUUID();
+        attemptIds.push(attemptId);
+        await ctx.db.insert(schema.examAttempts).values({
+          id: attemptId,
+          organizationId: orgId,
+          examId,
+          enrollmentId,
+          candidateId: candidateProfileId,
+          attemptNo: i + 1,
+          status: "submitted",
+          gradingStatus: opts.gradingStatus,
+          questionSnapshot,
+          answers: [],
+          submittedAnswers: { schemaVersion: 1, answers: [] },
+          submittedAt: now,
+          gradedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        if (opts.withEntry) {
+          await ctx.db.insert(schema.attemptGradingEntries).values({
+            id: randomUUID(),
+            organizationId: orgId,
+            attemptId,
+            questionId: questionSnapshot[0]!.originalQuestionId,
+            gradingMode: "auto",
+            status: "completed_auto",
+            maxScore: 10,
+            earnedScore: 10,
+            candidateAnswer: "a",
+            standardAnswer: "a",
+            correct: true,
+            comment: "",
+            gradedBy: null,
+            gradedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+      return attemptIds;
+    }
+
+    it("counts an anomaly beyond the first 100 submitted attempts (no sample false-negative)", async () => {
+      const before = await fetchIntegrity();
+
+      // 120 CLEAN submitted attempts (consistent workset) push the candidate
+      // set past any naive 100-row sample; the anomaly is the 121st row. A
+      // detector that samples candidate rows BEFORE applying the anomaly
+      // predicate would report zero — the count must come from SQL totals.
+      await seedSubmittedAttemptsBulk(120, {
+        gradingStatus: "pending_manual",
+        withEntry: true,
+      });
+      const [anomalyId] = await seedSubmittedAttemptsBulk(1, {
+        gradingStatus: "pending_manual",
+        withEntry: false,
+      });
+
+      const after = await fetchIntegrity();
+      expect(after.submittedWorksetMismatch).toBe(
+        before.submittedWorksetMismatch + 1,
+      );
+      // The 120 clean rows belong to neither anomaly family.
+      expect(after.submittedNotTerminalized).toBe(
+        before.submittedNotTerminalized,
+      );
+      // The 121st-row anomaly must appear in the returned sample.
+      const anomaly = after.anomalies.find((a) => a.attemptId === anomalyId);
+      expect(anomaly).toBeDefined();
+      expect(anomaly?.kind).toBe("submitted_workset_mismatch");
+      expect(anomaly?.gradingStatus).toBe("pending_manual");
+    });
+
+    it("reports exact totals above the sample cap (counts never derived from the sample)", async () => {
+      const before = await fetchIntegrity();
+
+      // 120 rows each carrying BOTH anomaly families: 120 not-terminalized +
+      // 120 workset-mismatch, far above the 100-row sample budget.
+      await seedSubmittedAttemptsBulk(120, {
+        gradingStatus: "auto_graded",
+        withEntry: false,
+      });
+
+      const after = await fetchIntegrity();
+      expect(after.submittedNotTerminalized).toBe(
+        before.submittedNotTerminalized + 120,
+      );
+      expect(after.submittedWorksetMismatch).toBe(
+        before.submittedWorksetMismatch + 120,
+      );
+      // The SAMPLE stays bounded at 100 even when totals exceed it.
+      expect(after.anomalies.length).toBeLessThanOrEqual(100);
+    });
+
+    it("reports legacy grading_status=NULL anomalies without failing response serialization", async () => {
+      // `grading_status` has no NOT NULL constraint; a legacy submitted row
+      // can carry NULL. The wire contract must accept it — otherwise the
+      // diagnostics response 500s exactly when the most corrupt rows appear.
+      // A deterministic lowest-sorting attempt id guarantees the row is in
+      // the bounded 100-row sample even though the bulk tests above have
+      // filled the tenant's anomaly set past the sample cap.
+      const LOWEST_SORTING_ATTEMPT_ID = "00000000-0000-0000-0000-000000000000";
+      const attemptId = await seedLegacyAttempt({
+        gradingStatus: null,
+        withEntry: false,
+        attemptId: LOWEST_SORTING_ATTEMPT_ID,
+      });
+
+      const integrity = await fetchIntegrity();
+      expect(integrity.submittedWorksetMismatch).toBeGreaterThanOrEqual(1);
+      const anomaly = integrity.anomalies.find(
+        (a) => a.attemptId === attemptId,
+      );
+      expect(anomaly).toBeDefined();
+      expect(anomaly?.kind).toBe("submitted_workset_mismatch");
+      // Faithful evidence, not a fabricated value.
+      expect(anomaly?.gradingStatus).toBeNull();
     });
   });
 });

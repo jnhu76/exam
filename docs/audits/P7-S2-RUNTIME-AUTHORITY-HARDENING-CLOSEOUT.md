@@ -19,7 +19,7 @@ and, where the defect class permits, against a deterministic runtime test.
 | --- | --- | --- | --- | --- |
 | `publishResults` concurrent TOCTOU | P2 | yes — unconditional `update` after unlocked `findById`; race proven under READ COMMITTED (two winners, evidence overwrite) | CAS-equivalent row-lock serialization (`findByIdForUpdate` + re-read under lock) + deterministic 2-connection race test (RC + RR) | **CLOSED** |
 | FUTURE_BASEVERSION acceptance | P2 | yes — only `baseVersion < currentVersion` rejected; `baseVersion=999` accepted as `currentVersion+1` | `FUTURE_VERSION` rejection (strict equality), domain/contracts/message-registry enum + wire test | **CLOSED** |
-| Email claim→send→mark duplicate window | P2 | yes — lease 300s vs SMTP phase timeouts 30s; nodemailer `socketTimeout` is an inactivity (not total) timeout (Context7-verified) | at-least-once classification documented; fail-fast config invariant `lockTimeout > connection+greeting+socket` | **BOUNDED** |
+| Email claim→send→mark duplicate window | P2 | yes — lease 300s vs SMTP phase timeouts 30s; nodemailer `socketTimeout` is an inactivity (not total) timeout and `dnsTimeout` (default 30s) is an unmodeled serial phase (verified against installed v9.0.1 source) | at-least-once classification documented; fail-fast lease SANITY GUARD `lockTimeout > connection+greeting+socket` (best-effort, not a reclaim-safety proof) | **BOUNDED** |
 | `recoverAbandoned` only runs inside worker | P2 | yes (worker poll loop 5a) | human amendment: NO API ownership duplication — worker-death is observable via `GET /api/system` heartbeat (`emailStatus.worker.status`), which already exists | **NO ACTION (observability confirmed)** |
 | No startup reconciliation / detectors | P2 | yes — no detector existed | read-only integrity diagnostics in `GET /api/system/diagnostics` → `integrity` (two legacy-only anomaly families) | **CLOSED (detect-only)** |
 | `Attempt.grading` unreachable | P3 | yes — no production writer; state-machine table only | documented; NOT deleted (Phase 9: `UNREACHABLE_FOSSIL`) | **DOCUMENTED** |
@@ -71,13 +71,25 @@ existing conflict because the enum/message churn is tiny and the semantic
 distinction is real; the frontend needs no change (only `STALE_VERSION` has
 special handling).
 
-### 3.3 Email at-least-once lease invariant (P7-S2-D)
+### 3.3 Email at-least-once lease sanity guard (P7-S2-D)
 
-Fail-fast config invariant in `resolveEmailWorkerConfig`:
+Fail-fast config guard in `resolveEmailWorkerConfig`:
 `EMAIL_WORKER_LOCK_TIMEOUT_MS > SMTP_CONNECTION_TIMEOUT_MS +
-SMTP_GREETING_TIMEOUT_MS + SMTP_SOCKET_TIMEOUT_MS` when transport is `smtp`
-(necessary minimum margin, not a proof — nodemailer `socketTimeout` is an
-inactivity timeout; residual window = documented at-least-once boundary).
+SMTP_GREETING_TIMEOUT_MS + SMTP_SOCKET_TIMEOUT_MS` when transport is `smtp`.
+
+Scope correction (merge review): this is a **best-effort lease sanity guard, not
+a reclaim-safety proof**. Nodemailer v9.0.1 timer model verified against the
+installed `smtp-connection` implementation (`apps/api/node_modules/nodemailer`):
+DNS resolution (`dnsTimeout`, default 30000ms) runs SERIAL before any
+connection attempt and is NOT modeled by the check; `connectionTimeout` /
+`greetingTimeout` bound the serial connect/greeting phases; `socketTimeout` is
+an inactivity-only timer (reset on traffic), so a slow-but-active conversation
+can exceed any sum. An alive worker can therefore still be legally reclaimed
+mid-send via the unmodeled DNS phase or a slow-but-active conversation — that
+residual window is the documented at-least-once delivery boundary (duplicate
+mail possible, bounded by `EMAIL_MAX_ATTEMPTS`), not a config error. The guard
+still catches gross misconfiguration (a lease that cannot even cover the
+modeled serial phases).
 
 ## 4. Concurrency evidence
 
@@ -156,15 +168,17 @@ delivery semantics   = AT LEAST ONCE
 - Canonical ambiguity accepted and bounded: SMTP accepts → process dies before
   `markSent` → row recoverable → retry may duplicate. Bounded by
   `EMAIL_MAX_ATTEMPTS` (default 3) → `dead`.
-- Lease guarantee: fail-fast config invariant (see §3.3) plus ownership fences
+- Lease guard: fail-fast config guard (see §3.3) plus ownership fences
   (`markSent`/`markRetryWait`/`markDead` require `status='processing' AND
   locked_by=worker`; `recoverAbandoned` reclaims only rows older than
-  `EMAIL_WORKER_LOCK_TIMEOUT_MS`).
-- Nodemailer semantics (verified via Context7 against official docs):
-  `connectionTimeout` = max wait for TCP connect; `greetingTimeout` = max wait
-  for server greeting; `socketTimeout` = max IDLE period before close — NOT a
-  total-operation cap. Hence the invariant is necessary-not-sufficient and the
-  residual is the at-least-once boundary.
+  `EMAIL_WORKER_LOCK_TIMEOUT_MS`). The guard is best-effort, not a
+  reclaim-safety proof (see §3.3).
+- Nodemailer semantics (verified against the installed v9.0.1 source):
+  `dnsTimeout` (default 30s) is a serial phase before connect — NOT covered by
+  the guard; `connectionTimeout` = max wait for TCP connect; `greetingTimeout`
+  = max wait for server greeting; `socketTimeout` = max IDLE period before
+  close — NOT a total-operation cap. Hence the residual (unmodeled DNS +
+  slow-but-active conversation) is the at-least-once boundary.
 - Worker-death observability: `GET /api/system` → `emailStatus.worker.status`
   (`available`/`degraded`/`unknown`) from `worker_heartbeats` vs
   `EMAIL_WORKER_HEARTBEAT_STALE_MS`; outbox counts surfaced. Per the P7-S1
@@ -189,13 +203,19 @@ identity for later canonical repair) — no auto-repair, no startup repair.
 
 ## 9. New discoveries
 
+Found during the P7-S2 merge review (PR #269 review round 2) and fixed on this
+branch:
+
 | Severity | Finding | Disposition |
 | --- | --- | --- |
 | P0 | none | — |
 | P1 | none | — |
-| P2 | none new (the two #268 P2s were confirmed and fixed) | — |
+| P2 | Integrity detector false-negative oracle: anomaly predicates ran over only the first 100 submitted attempts (no ORDER BY), so the 101st+ anomaly was silently invisible while `counts` were presented as totals; simultaneously the org-wide grading-entry GROUP BY was pulled unbounded into Node | **FIXED** — predicates now run inside SQL over the full candidate set (`status='submitted'`); counts are exact SQL aggregates; `limit` bounds only the anomaly SAMPLE (stable attempt-id order, array capped at `limit`); workset counts are a per-attempt scalar subquery (never a whole-tenant GROUP BY). Regressions: 120 clean submitted + 121st anomaly → count exact + anomaly present; 120 dual-family anomalies → totals exact + sample ≤ 100 |
+| P2 | Integrity wire contract said `gradingStatus: z.string()` while the DB column is nullable — a legacy `grading_status=NULL` anomaly would 500 the diagnostics response at serialization time (healthy → works, corrupt → crashes) | **FIXED** — contract now `z.string().nullable()` (faithful evidence, no fabricated value) + regression: NULL legacy row → GET 200, `anomaly.gradingStatus === null` |
+| P2 | Email lease "safe lower bound" claim incomplete: nodemailer `dnsTimeout` (default 30000ms) is an unmodeled serial phase; `socketTimeout` is inactivity-only, so no finite sum proves an alive worker cannot be reclaimed | **CLAIM LOWERED (option B per review)** — verified v9.0.1 source timer model (DNS serial before connect; connect/greeting serial bounded; socket inactivity-only); check reframed as best-effort lease sanity guard in code comments, error message, and tests; at-least-once boundary documented as the honest claim |
+| P3 | `publishResults.concurrency.test.ts` leaked the shared migrate/seed DB client (`shared.sql` never ended) | **FIXED** — `sharedSql` tracked and closed in `afterAll` |
 | P3 | `DiagnosticsResponseSchema` grew an `integrity` block — no wire-contract break (additive, admin-only route) | recorded |
-| P3 | legacy detection queries are bounded at 100 rows (do not scan unbounded history) | recorded |
+| P3 | legacy detection queries are bounded at 100 rows (do not scan unbounded history) | recorded — revised: totals are exact SQL aggregates over the full submitted-attempt candidate set; only the returned anomaly sample is bounded (100) |
 
 ## 10. Deferred items
 
@@ -227,8 +247,13 @@ All commands below ran against the branch:
 | `pnpm --filter api exec vitest run src/routes/attempts/protocol-consistency.test.ts src/routes/attempts/candidate-take.test.ts src/routes/submitFreezeBarrier.test.ts` | 20/20 pass |
 | `pnpm --filter api exec vitest run src/routes/crashAtomicity.test.ts` | 6/6 pass |
 | `pnpm --filter api exec vitest run src/config/runtimeConfig.test.ts` | 111/111 pass |
-| `pnpm --filter api exec vitest run src/routes/system.test.ts` | 25/25 pass |
-| `pnpm verify` (full gate) | **PASS (exit 0)** — verify:static + full coverage + build. Note: the first run hit the known `0027-convergence.test.ts` parallel-resource flake (documented in Issue #268 P3-5: 5s timeout under parallel workers); isolated re-run 28/28 and full `@exam/db` coverage re-run 559/559 pass, and the second full `pnpm verify` was clean. |
+| `pnpm --filter api exec vitest run src/routes/system.test.ts` | 28/28 pass (incl. 3 merge-review regressions: 121st-row anomaly visibility, totals above the 100-sample cap, `grading_status=NULL` serialization) |
+| `pnpm --filter api exec vitest run src/routes/publishResults.concurrency.test.ts` | 2/2 pass (shared DB client now closed in afterAll) |
+| `pnpm --filter @exam/api coverage` (full suite) | **PASS — 152/152 files, 2013 tests** (incl. all merge-review regressions) |
+| `pnpm --filter @exam/db coverage` (isolated) | **PASS — 559/559** |
+| `pnpm verify:static` | **PASS** (format, lint, lint:copy, lint:arch, db-config, db-journal, env-contract, repo-contract, ui-gates, eslint, typecheck, api:openapi:check, e2e-runner, test:db-journal, test:stale-ui-docs) |
+| `pnpm build` | **PASS — 9/9** |
+| `pnpm verify` (full gate) | **BLOCKED ONLY by the documented pre-existing `@exam/db` parallel-resource flake (Issue #268 P3-5)** — 5/5 attempts failed solely in `@exam/db#coverage` under 4-worker parallelism (0027-convergence 5s timeouts; once a worker-DB setup failure in repository.test.ts). Every failing test passes in isolation; all other verify stages pass on every attempt. No failure involves any file changed by P7-S2. CI (#756, sharded) previously ran green on this branch head. |
 | `pnpm lint:md` (touched markdown) | 0 violations on the three touched files (repo-wide findings are pre-existing in untouched files) |
 
 ## 12. Final authority model (what is now guaranteed)
@@ -244,10 +269,11 @@ All commands below ran against the branch:
   receipt-backed commands) commit atomically in one PostgreSQL transaction;
   retry after rollback succeeds; lost responses replay committed evidence.
 - **Email**: outbox processing durable + ownership-fenced; delivery
-  at-least-once with a fail-fast lease-config invariant and observable worker
-  liveness.
-- **Integrity**: legacy-only attempt anomalies are detectable read-only
-  (admin diagnostics) and never auto-repaired.
+  at-least-once with a fail-fast lease sanity guard (best-effort, not a
+  reclaim-safety proof) and observable worker liveness.
+- **Integrity**: legacy-only attempt anomalies are detected read-only with
+  EXACT SQL totals over the full submitted-attempt set and a deterministic,
+  bounded anomaly sample (admin diagnostics); never auto-repaired.
 - **Redis**: no exam authority added (rate-limit ephemeral + read-only
   diagnostics only).
 
@@ -259,7 +285,7 @@ All commands below ran against the branch:
 - If a response disappears after commit, what does retry return? **Committed truth** — idempotent re-grade / receipt replay (existing suites + orchestrator retry in crash test 1).
 - Can manual grading leave a committed half-finalized attempt? **No** — entry completion and terminalization are one transaction (crash test 2).
 - Can interruption restore commit compensation without restoring state? **No** — rollback leaves no adjustment/event/deadline change (crash test 5).
-- Can Email be delivered twice? **Yes, bounded** — accepted at-least-once boundary, lease invariant + maxAttempts bound it.
+- Can Email be delivered twice? **Yes, bounded** — accepted at-least-once boundary, lease sanity guard + maxAttempts bound it.
 - Can an abandoned Email claim recover after the worker returns? **Yes** — `recoverAbandoned` on the worker poll loop; liveness observable via system status.
 - Any CURRENT-runtime committed partial states requiring startup reconciliation? **No** — NO GENERAL STARTUP RECONCILER (Phase 5).
 - Has Redis acquired accidental Exam authority? **No**.

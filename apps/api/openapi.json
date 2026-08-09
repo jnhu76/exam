@@ -19191,7 +19191,8 @@
                                 "type": "string"
                               },
                               "gradingStatus": {
-                                "type": "string"
+                                "type": "string",
+                                "nullable": true
                               },
                               "submittedAt": {
                                 "type": "string",

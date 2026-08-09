@@ -158,7 +158,12 @@ export const AttemptIntegrityAnomalySchema = z.object({
   enrollmentId: z.string(),
   candidateId: z.string(),
   status: z.string(),
-  gradingStatus: z.string(),
+  // Nullable: `grading_status` has no NOT NULL constraint, and legacy rows can
+  // legitimately carry NULL. The diagnostics surface must faithfully report
+  // the DB reality (anomaly evidence), not normalize it into a fake value —
+  // and a NULL here must never fail response serialization exactly when the
+  // most corrupt legacy rows are being reported.
+  gradingStatus: z.string().nullable(),
   submittedAt: z.string().datetime().nullable(),
   gradedAt: z.string().datetime().nullable(),
   gradingEntries: z.number().int().min(0),

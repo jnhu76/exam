@@ -731,23 +731,31 @@ function resolveEmailWorkerConfig(
   // The config field exists for forward compatibility.
   const concurrency = 1;
 
-  // P7-S2-D lease safety invariant (fail-fast, SMTP transport only):
+  // P7-S2-D lease sanity guard (fail-fast, SMTP transport only):
   //
   //   EMAIL_WORKER_LOCK_TIMEOUT_MS
   //     > SMTP_CONNECTION_TIMEOUT_MS + SMTP_GREETING_TIMEOUT_MS
   //       + SMTP_SOCKET_TIMEOUT_MS
   //
-  // The SMTP connection and greeting phases execute serially before the mail
-  // conversation, and nodemailer's socketTimeout bounds the longest IDLE
-  // period within the conversation — so the sum is the minimum plausible
-  // worst-case single-send duration. The worker lease must comfortably exceed
-  // it, otherwise an alive worker can be reclaimed (recoverAbandoned / a
-  // second instance) while it is still sending, producing a duplicate send.
+  // Nodemailer v9.0.1 timer model (verified against the installed
+  // smtp-connection implementation, `apps/api/node_modules/nodemailer`):
   //
-  // This is a NECESSARY minimum safety margin, not a proof: nodemailer's
-  // socketTimeout is an inactivity timeout, so a slow-but-active SMTP server
-  // can in principle keep a send alive beyond the sum. That residual window is
-  // the documented at-least-once delivery boundary (duplicate mail possible,
+  //   DNS resolution      dnsTimeout, default 30000ms — SERIAL, runs before
+  //                       any connection attempt (`connect()` → shared
+  //                       resolveHostname with `timeout: dnsTimeout`), NOT
+  //                       modeled by this check
+  //   TCP/TLS connect     connectionTimeout — SERIAL, bounded
+  //   SMTP greeting       greetingTimeout — SERIAL, bounded
+  //   mail conversation   socketTimeout — INACTIVITY only; reset on traffic,
+  //                       so a slow-but-active session can last arbitrarily
+  //                       longer than the sum
+  //
+  // The check is therefore a BEST-EFFORT lease sanity guard, not a proof:
+  // it catches gross misconfiguration (a lease that cannot even cover the
+  // modeled serial phases), but an alive worker can still be reclaimed
+  // (recoverAbandoned / a second instance) mid-send via the unmodeled DNS
+  // phase or a slow-but-active conversation. That residual window is the
+  // documented at-least-once delivery boundary (duplicate mail possible,
   // bounded by retry/maxAttempts policy), not a config error.
   if (
     email.transport === "smtp" &&
@@ -764,8 +772,11 @@ function resolveEmailWorkerConfig(
         `${email.smtp.connectionTimeoutMs} + ${email.smtp.greetingTimeoutMs} + ` +
         `${email.smtp.socketTimeoutMs} = ` +
         `${email.smtp.connectionTimeoutMs + email.smtp.greetingTimeoutMs + email.smtp.socketTimeoutMs}` +
-        `): an alive email worker could otherwise be reclaimed while still ` +
-        `sending (duplicate at-least-once delivery).`,
+        `): best-effort lease sanity guard — a lease below the modeled SMTP ` +
+        `phase sum makes mid-send reclaim (duplicate at-least-once delivery) ` +
+        `all but certain. Note the guard is not a reclaim-safety proof: ` +
+        `nodemailer's DNS phase (dnsTimeout, default 30000ms) is not modeled ` +
+        `and socketTimeout is inactivity-only.`,
     );
   }
 
