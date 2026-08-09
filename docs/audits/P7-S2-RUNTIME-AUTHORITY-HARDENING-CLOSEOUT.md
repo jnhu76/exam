@@ -228,8 +228,8 @@ All commands below ran against the branch:
 | `pnpm --filter api exec vitest run src/routes/crashAtomicity.test.ts` | 6/6 pass |
 | `pnpm --filter api exec vitest run src/config/runtimeConfig.test.ts` | 111/111 pass |
 | `pnpm --filter api exec vitest run src/routes/system.test.ts` | 25/25 pass |
-| `pnpm verify` (full gate) | see Phase 13 |
-| `pnpm lint:md` (touched markdown) | see Phase 13 |
+| `pnpm verify` (full gate) | **PASS (exit 0)** — verify:static + full coverage + build. Note: the first run hit the known `0027-convergence.test.ts` parallel-resource flake (documented in Issue #268 P3-5: 5s timeout under parallel workers); isolated re-run 28/28 and full `@exam/db` coverage re-run 559/559 pass, and the second full `pnpm verify` was clean. |
+| `pnpm lint:md` (touched markdown) | 0 violations on the three touched files (repo-wide findings are pre-existing in untouched files) |
 
 ## 12. Final authority model (what is now guaranteed)
 
