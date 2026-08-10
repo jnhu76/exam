@@ -384,6 +384,19 @@ SQL status updates.
 
 ## 8. Workstream E — Configuration control plane
 
+> **P7-E0 status (2026-08-10):** the configuration reality audit is CLOSED
+> (docs-only) — see
+> [`docs/audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md`](../audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md).
+> It inventories every configuration item from current `master`, classifies
+> each into the five authority classes (deployment/secret, system operational,
+> organization, exam policy, code invariant), and records the precedence,
+> bypass, secrets, snapshot-hazard, and non-configurable-invariant maps. Key
+> verdict: **no generic settings subsystem is justified by current evidence**;
+> the minimum E1 is at most a narrow typed Email worker/retry-policy store plus
+> a read-only backup-status surface — and a valid outcome is to build no
+> settings control plane yet and proceed to P7-M1. P7-E itself is NOT complete;
+> P7-E1 is NOT started.
+
 ### Configuration classification
 
 #### Deployment-only / secret-backed
