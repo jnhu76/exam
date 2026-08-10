@@ -188,8 +188,10 @@ P7-C  portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
 
 P7-E0  configuration reality audit  →  verdict: no settings control plane
        justified now; no P7-E1 currently justified.
-P7-M1  exam policy resolution / freeze model   ← next (real config pressure)
-P7-M2  profile templates
+P7-M1  exam policy authority + canonical conflict validator   ← IN PROGRESS
+       (one typed policy value + one validator; create/update/publish share it;
+       publish revalidates whole policy; NO profile persistence, NO new DB cols)
+P7-M2  profile templates + resolution (next, after M1 freezes the seam)
 P7-M3  exam creation wizard
 Future P7-E1  (only if a confirmed Admin-editable operational-settings
        requirement emerges): identify ONE coherent first vertical slice.

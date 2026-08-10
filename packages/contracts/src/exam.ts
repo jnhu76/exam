@@ -1,12 +1,11 @@
 import { z } from "zod";
 import {
   InterruptionTimePolicySchema,
+  POSTGRES_INTEGER_MAX,
   normalizeInterruptionPolicyConfiguration,
 } from "./interruption.js";
 
 // ── Exam ──────────────────────────────────────────────────────────
-
-export const PASSING_SCORE_EXCEEDS_TOTAL_MSG = "及格分不能超过总分";
 
 export const ExamStatusEnum = z.enum([
   "draft",
@@ -150,71 +149,26 @@ export const CreateExamRequestBaseSchema = z.object({
   // ADR-013 cross-field rules (strict/operator_incident ⇒ null caps;
   // bounded_grace ⇒ both caps present, positive, perIncident ≤ perAttempt).
   interruptionTimePolicy: InterruptionTimePolicySchema.optional(),
-  interruptionGracePerIncidentSeconds: z.number().int().positive().nullish(),
-  interruptionGracePerAttemptSeconds: z.number().int().positive().nullish(),
+  // Per-field shape bounds only (design §10): `.positive()` + PostgreSQL int
+  // max. Cross-field caps rules (strict/op_incident ⇒ null caps; bounded_grace
+  // ⇒ both caps, perIncident ≤ perAttempt) are enforced by the route's
+  // `normalizeInterruptionPolicyConfiguration` + the canonical engine
+  // validator, not by this schema.
+  interruptionGracePerIncidentSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(POSTGRES_INTEGER_MAX)
+    .nullish(),
+  interruptionGracePerAttemptSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(POSTGRES_INTEGER_MAX)
+    .nullish(),
 });
 
-export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
-  (data, ctx) => {
-    if (data.passingScore > data.totalScore) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["passingScore"],
-        message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
-      });
-    }
-    // ADR-013 §3: interruption policy cross-field validation on create.
-    // When any interruption field is present, use the canonical normalizer
-    // (which enforces all cross-field rules, PostgreSQL integer max, and
-    // default strict) to reject invalid combinations deterministically.
-    const hasInterruptionInput =
-      data.interruptionTimePolicy !== undefined ||
-      data.interruptionGracePerIncidentSeconds !== undefined ||
-      data.interruptionGracePerAttemptSeconds !== undefined;
-    if (hasInterruptionInput) {
-      try {
-        normalizeInterruptionPolicyConfiguration({
-          policy: data.interruptionTimePolicy,
-          perIncidentCapSeconds: data.interruptionGracePerIncidentSeconds,
-          perAttemptAggregateCapSeconds:
-            data.interruptionGracePerAttemptSeconds,
-        });
-      } catch (err) {
-        // Forward the normalizer's structured issues onto the corresponding API
-        // field so an authoring UI can highlight the offending cap. The
-        // normalizer validates with internal names (policy /
-        // perIncidentCapSeconds / perAttemptAggregateCapSeconds) and an empty
-        // path for cross-field rules, so map each back to its API field.
-        const issues =
-          err instanceof z.ZodError
-            ? err.issues
-            : ([
-                {
-                  code: z.ZodIssueCode.custom,
-                  path: [],
-                  message: "Invalid interruption policy configuration",
-                },
-              ] as z.ZodIssue[]);
-        const apiFieldByNormalizerKey: Record<string, string> = {
-          policy: "interruptionTimePolicy",
-          perIncidentCapSeconds: "interruptionGracePerIncidentSeconds",
-          perAttemptAggregateCapSeconds: "interruptionGracePerAttemptSeconds",
-        };
-        for (const issue of issues) {
-          const normalizerKey = String(issue.path[0] ?? "");
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [
-              apiFieldByNormalizerKey[normalizerKey] ??
-                "interruptionTimePolicy",
-            ],
-            message: issue.message,
-          });
-        }
-      }
-    }
-  },
-);
+export const CreateExamRequestSchema = CreateExamRequestBaseSchema;
 
 /** Type for a create-exam request. */
 export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
@@ -249,25 +203,21 @@ export const UpdateExamRequestBaseSchema = z.object({
   // These fields are substantive authoring fields and may only be mutated
   // while the exam is `draft` (enforced by the route's draft-only guard).
   interruptionTimePolicy: InterruptionTimePolicySchema.optional(),
-  interruptionGracePerIncidentSeconds: z.number().int().positive().nullish(),
-  interruptionGracePerAttemptSeconds: z.number().int().positive().nullish(),
+  interruptionGracePerIncidentSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(POSTGRES_INTEGER_MAX)
+    .nullish(),
+  interruptionGracePerAttemptSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(POSTGRES_INTEGER_MAX)
+    .nullish(),
 });
 
-export const UpdateExamRequestSchema = UpdateExamRequestBaseSchema.superRefine(
-  (data, ctx) => {
-    if (
-      data.passingScore !== undefined &&
-      data.totalScore !== undefined &&
-      data.passingScore > data.totalScore
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["passingScore"],
-        message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
-      });
-    }
-  },
-);
+export const UpdateExamRequestSchema = UpdateExamRequestBaseSchema;
 
 /** Type for an update-exam request. */
 export type UpdateExamRequest = z.infer<typeof UpdateExamRequestSchema>;

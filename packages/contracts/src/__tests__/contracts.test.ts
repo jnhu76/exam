@@ -264,19 +264,16 @@ describe("exam contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  it("CreateExamRequestSchema rejects passingScore > totalScore", () => {
+  // P7-M1 (design §10): Zod owns per-field shape only; the passingScore <=
+  // totalScore cross-field rule moved to the canonical engine validator
+  // (enforced by the API route, not this schema).
+  it("CreateExamRequestSchema accepts passingScore > totalScore (shape-only; API rejects)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       passingScore: 101,
       totalScore: 100,
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const issue = result.error.issues.find(
-        (i) => i.path.includes("passingScore") && i.code === "custom",
-      );
-      expect(issue).toBeDefined();
-    }
+    expect(result.success).toBe(true);
   });
 
   it("CreateExamRequestSchema accepts passingScore = totalScore", () => {
@@ -306,18 +303,14 @@ describe("exam contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  it("UpdateExamRequestSchema rejects both fields with passingScore > totalScore", () => {
+  // P7-M1 (design §10): cross-field passingScore check moved to the canonical
+  // engine validator (API-level), so the schema is shape-only.
+  it("UpdateExamRequestSchema accepts both fields with passingScore > totalScore (shape-only; API rejects)", () => {
     const result = UpdateExamRequestSchema.safeParse({
       passingScore: 80,
       totalScore: 50,
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const issue = result.error.issues.find(
-        (i) => i.path.includes("passingScore") && i.code === "custom",
-      );
-      expect(issue).toBeDefined();
-    }
+    expect(result.success).toBe(true);
   });
 
   it("UpdateExamRequestSchema accepts single field (final-state validation is API-level)", () => {
@@ -454,52 +447,56 @@ describe("exam contracts", () => {
     expect(exam.interruptionGracePerAttemptSeconds).toBe(300);
   });
 
-  // ADR-013 cross-field validation on CreateExamRequestSchema itself
-  it("CreateExamRequestSchema rejects bounded_grace without caps", () => {
+  // P7-M1 (design §10): ADR-013 caps cross-field rules are enforced by the
+  // route's `normalizeInterruptionPolicyConfiguration` + the canonical engine
+  // validator (also re-checked at publish). The request schemas are shape-only:
+  // per-field positive/int/max bounds, no cross-field refinements.
+
+  it("CreateExamRequestSchema accepts bounded_grace without caps (shape-only; normalizer rejects)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       interruptionTimePolicy: "bounded_grace",
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("CreateExamRequestSchema rejects bounded_grace perIncident > perAttempt", () => {
+  it("CreateExamRequestSchema accepts bounded_grace perIncident > perAttempt (shape-only; normalizer rejects)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       interruptionTimePolicy: "bounded_grace",
       interruptionGracePerIncidentSeconds: 600,
       interruptionGracePerAttemptSeconds: 300,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("CreateExamRequestSchema rejects strict with caps", () => {
+  it("CreateExamRequestSchema accepts strict with caps (shape-only; normalizer rejects)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       interruptionTimePolicy: "strict",
       interruptionGracePerIncidentSeconds: 120,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("CreateExamRequestSchema rejects operator_incident with caps", () => {
+  it("CreateExamRequestSchema accepts operator_incident with caps (shape-only; normalizer rejects)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       interruptionTimePolicy: "operator_incident",
       interruptionGracePerAttemptSeconds: 300,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("CreateExamRequestSchema rejects caps without policy (omitted defaults to strict)", () => {
+  it("CreateExamRequestSchema accepts caps without policy (shape-only; normalizer rejects)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       interruptionGracePerIncidentSeconds: 120,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("CreateExamRequestSchema rejects cap exceeding PostgreSQL integer max", () => {
+  it("CreateExamRequestSchema rejects cap exceeding PostgreSQL integer max (per-field shape)", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       interruptionTimePolicy: "bounded_grace",

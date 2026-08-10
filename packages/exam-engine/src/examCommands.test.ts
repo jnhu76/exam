@@ -183,17 +183,65 @@ describe("examCommands", () => {
       expect(result.passingScore).toBe(0);
     });
 
-    it("throws when passingScore is negative", async () => {
-      const repo = makeRepo(makeExam({ passingScore: -1 }));
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        ValidationError,
-      );
-    });
+    // P7-M1: passingScore >= 0 is a shape invariant owned by the Zod
+    // contract + DB CHECK, not the engine. publishExam no longer re-checks the
+    // lower bound; it validates the cross-field relationship (passing <= total)
+    // via the canonical validator. A negative passingScore that somehow reached
+    // the engine would still satisfy passing<=total, so publish trusts the
+    // upstream shape boundary. See docs/audits/P7-M1-... §9/§10.
 
     it("throws when passingScore exceeds effective question total", async () => {
       const repo = makeRepo(makeExam({ passingScore: 101, totalScore: 100 }));
       await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
         /passing score cannot exceed total score/i,
+      );
+    });
+
+    // ── P7-M1: publish revalidation of stale/invalid drafts ─────────
+    // Publish is the freeze/acceptance gate: it must reject a draft whose
+    // policy is invalid even when the bad combination could only have reached
+    // the row via historical/stale data (create/update reject it earlier).
+
+    it("rejects publish of a stale inverted-window draft", async () => {
+      const repo = makeRepo(
+        makeExam({
+          openAt: new Date("2025-01-02T00:00:00Z"),
+          closeAt: new Date("2025-01-01T00:00:00Z"),
+        }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /openAt must be before closeAt/i,
+      );
+    });
+
+    it("rejects publish when durationMinutes <= 0 (no DB CHECK backs it)", async () => {
+      for (const durationMinutes of [0, -30]) {
+        const repo = makeRepo(makeExam({ durationMinutes }));
+        await expect(
+          publishExam(repo, "exam-1", testQuestions),
+        ).rejects.toThrow(/duration must be positive/i);
+      }
+    });
+
+    it("rejects publish of a stale strict policy carrying caps", async () => {
+      const repo = makeRepo(
+        makeExam({
+          interruptionTimePolicy: "strict",
+          interruptionGracePerIncidentSeconds: 120,
+          interruptionGracePerAttemptSeconds: 300,
+        }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /require null caps/i,
+      );
+    });
+
+    it("rejects publish when retakePolicy max_attempts carries maxAttempts < 1", async () => {
+      const repo = makeRepo(
+        makeExam({ retakePolicy: "max_attempts", maxAttempts: 0 }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /max_attempts.*requires maxAttempts/i,
       );
     });
 

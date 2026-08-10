@@ -14,7 +14,6 @@ import {
   ExamSchema,
   CandidateStatusResponseSchema,
   ErrorResponseSchema,
-  PASSING_SCORE_EXCEEDS_TOTAL_MSG,
   normalizeInterruptionPolicyConfiguration,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -34,9 +33,15 @@ import {
   extendExam,
   publishExam,
   publishResults,
+  assertExamPolicyInputValid,
 } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
-import type { RequestContext, Exam, Question } from "@exam/domain";
+import type {
+  ControlFlags,
+  RequestContext,
+  Exam,
+  Question,
+} from "@exam/domain";
 import {
   InvalidStateTransitionError,
   ExamAlreadyPublishedError,
@@ -508,10 +513,77 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       // authoring input. Normalization enforces the cross-field rules
       // (strict/operator_incident ⇒ null caps; bounded_grace ⇒ both caps
       // present, positive, perIncident ≤ perAttempt) and fails closed.
-      const interruptionPolicy = normalizeInterruptionPolicyConfiguration({
-        policy: data.interruptionTimePolicy,
-        perIncidentCapSeconds: data.interruptionGracePerIncidentSeconds,
-        perAttemptAggregateCapSeconds: data.interruptionGracePerAttemptSeconds,
+      let interruptionPolicy: ReturnType<
+        typeof normalizeInterruptionPolicyConfiguration
+      >;
+      try {
+        interruptionPolicy = normalizeInterruptionPolicyConfiguration({
+          policy: data.interruptionTimePolicy,
+          perIncidentCapSeconds: data.interruptionGracePerIncidentSeconds,
+          perAttemptAggregateCapSeconds:
+            data.interruptionGracePerAttemptSeconds,
+        });
+      } catch (err) {
+        // Normalize the normalizer's ZodError into the route's
+        // VALIDATION_ERROR contract (details.fields), matching the update
+        // path. The normalizer validates with internal names, so map each
+        // issue back to its API field so the response never leaks
+        // perIncidentCapSeconds.
+        const issues =
+          err instanceof ZodError
+            ? err.issues
+            : [
+                {
+                  code: "custom" as const,
+                  path: [] as (string | number)[],
+                  message: "Invalid interruption policy configuration",
+                },
+              ];
+        const apiFieldByNormalizerKey: Record<string, string> = {
+          policy: "interruptionTimePolicy",
+          perIncidentCapSeconds: "interruptionGracePerIncidentSeconds",
+          perAttemptAggregateCapSeconds: "interruptionGracePerAttemptSeconds",
+        };
+        throw new ValidationError("Invalid interruption policy configuration", {
+          fields: issues.map((issue) => ({
+            field:
+              apiFieldByNormalizerKey[String(issue.path[0] ?? "")] ??
+              "interruptionTimePolicy",
+            code: "INVALID_INTERRUPTION_POLICY",
+            message: issue.message,
+          })),
+        });
+      }
+      const resolvedResultPublicationMode = resolveResultPublicationMode(
+        request.body,
+        data.resultPublicationMode ?? "immediate",
+      );
+
+      // P7-M1: canonical cross-field policy validation on create (design §21).
+      // Runs on the exact merged policy that will be persisted, so authoring
+      // rejects invalid combinations early. Publish revalidates the whole
+      // policy again as the freeze/acceptance gate.
+      assertExamPolicyInputValid({
+        timingMode: data.timingMode,
+        durationMinutes: data.durationMinutes,
+        openAt: new Date(data.openAt),
+        closeAt: new Date(data.closeAt),
+        latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
+        minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
+        questionSelectionMode: data.questionSelectionMode,
+        questionIds: data.questionIds,
+        retakePolicy: data.retakePolicy,
+        maxAttempts: data.maxAttempts,
+        scoreStrategy: data.scoreStrategy,
+        passingScore: data.passingScore,
+        totalScore: data.totalScore,
+        resultPublicationMode: resolvedResultPublicationMode,
+        interruptionTimePolicy: interruptionPolicy.policy,
+        interruptionGracePerIncidentSeconds:
+          interruptionPolicy.perIncidentCapSeconds,
+        interruptionGracePerAttemptSeconds:
+          interruptionPolicy.perAttemptAggregateCapSeconds,
+        controlFlags: data.controlFlags,
       });
 
       const exam = await createExamRepo(fastify.db).create(ctx, {
@@ -534,10 +606,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         maxAttempts: data.maxAttempts,
         latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
         minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
-        resultPublicationMode: resolveResultPublicationMode(
-          request.body,
-          data.resultPublicationMode ?? "immediate",
-        ),
+        resultPublicationMode: resolvedResultPublicationMode,
         interruptionTimePolicy: interruptionPolicy.policy,
         interruptionGracePerIncidentSeconds:
           interruptionPolicy.perIncidentCapSeconds,
@@ -664,26 +733,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             }
           }
 
-          if (exam.status === "draft") {
-            const nextPassingScore = data.passingScore ?? exam.passingScore;
-            const nextTotalScore = data.totalScore ?? exam.totalScore;
-            if (nextPassingScore > nextTotalScore) {
-              throw new ValidationError(PASSING_SCORE_EXCEEDS_TOTAL_MSG, {
-                fields: [
-                  {
-                    field: "passingScore",
-                    code: "PASSING_SCORE_EXCEEDS_TOTAL",
-                    message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
-                  },
-                ],
-              });
-            }
-          }
-
           // 4. Mutate.
           const updateData: Record<string, unknown> = { ...data };
           if (data.openAt) updateData.openAt = new Date(data.openAt);
           if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
+
           // P2D-J5a: coerce resultPublicationMode from the legacy flag when
           // the caller set controlFlags.showResultImmediately but not the
           // mode. Mirrors the create-handler shim.
@@ -729,10 +783,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                 });
               } catch (err) {
                 // Normalize the normalizer's ZodError into the route's
-                // VALIDATION_ERROR contract (details.fields), matching the
-                // neighbouring passingScore guard. The normalizer validates
-                // with internal names, so map each issue back to its API
-                // field so the response never leaks perIncidentCapSeconds.
+                // VALIDATION_ERROR contract (details.fields). The normalizer
+                // validates with internal names, so map each issue back to
+                // its API field so the response never leaks
+                // perIncidentCapSeconds.
                 const issues =
                   err instanceof ZodError
                     ? err.issues
@@ -768,6 +822,89 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               updateData.interruptionGracePerAttemptSeconds =
                 resolved.perAttemptAggregateCapSeconds;
             }
+          }
+
+          // P7-M1: canonical cross-field policy validation on draft update
+          // (design §21). Published updates are schedule-only (guarded above)
+          // and excluded. For draft, validate the FULL merged policy that will
+          // result from this patch, so an invalid combination is rejected at
+          // authoring time, not only at publish. This is the ONE semantic
+          // owner for passingScore<=totalScore / openAt<closeAt / interruption
+          // caps / max_attempts on the update path (no separate inline guard).
+          if (exam.status === "draft") {
+            assertExamPolicyInputValid({
+              timingMode:
+                (updateData.timingMode as Exam["timingMode"] | undefined) ??
+                exam.timingMode,
+              durationMinutes:
+                (updateData.durationMinutes as number | undefined) ??
+                exam.durationMinutes,
+              openAt: (updateData.openAt as Date | undefined) ?? exam.openAt,
+              closeAt: (updateData.closeAt as Date | undefined) ?? exam.closeAt,
+              // Nullable fields: `null` is business semantics (e.g. clearing
+              // interruption caps when switching bounded_grace → strict), so
+              // merge with `!== undefined` — never `??`, which would resurrect
+              // the old value over an explicit null.
+              latestStartOffsetMinutes:
+                updateData.latestStartOffsetMinutes !== undefined
+                  ? (updateData.latestStartOffsetMinutes as number | null)
+                  : exam.latestStartOffsetMinutes,
+              minSubmitAfterStartMinutes:
+                updateData.minSubmitAfterStartMinutes !== undefined
+                  ? (updateData.minSubmitAfterStartMinutes as number | null)
+                  : exam.minSubmitAfterStartMinutes,
+              questionSelectionMode:
+                (updateData.questionSelectionMode as
+                  | Exam["questionSelectionMode"]
+                  | undefined) ?? exam.questionSelectionMode,
+              questionIds:
+                (updateData.questionIds as string[] | undefined) ??
+                exam.questionIds,
+              retakePolicy:
+                (updateData.retakePolicy as Exam["retakePolicy"] | undefined) ??
+                exam.retakePolicy,
+              maxAttempts:
+                (updateData.maxAttempts as number | undefined) ??
+                exam.maxAttempts,
+              scoreStrategy:
+                (updateData.scoreStrategy as
+                  | Exam["scoreStrategy"]
+                  | undefined) ?? exam.scoreStrategy,
+              passingScore:
+                (updateData.passingScore as number | undefined) ??
+                exam.passingScore,
+              totalScore:
+                (updateData.totalScore as number | undefined) ??
+                exam.totalScore,
+              resultPublicationMode:
+                (updateData.resultPublicationMode as
+                  | Exam["resultPublicationMode"]
+                  | undefined) ?? exam.resultPublicationMode,
+              interruptionTimePolicy:
+                (updateData.interruptionTimePolicy as
+                  | Exam["interruptionTimePolicy"]
+                  | undefined) ??
+                exam.interruptionTimePolicy ??
+                "strict",
+              interruptionGracePerIncidentSeconds:
+                updateData.interruptionGracePerIncidentSeconds !== undefined
+                  ? (updateData.interruptionGracePerIncidentSeconds as
+                      | number
+                      | null)
+                  : (exam.interruptionGracePerIncidentSeconds ?? null),
+              interruptionGracePerAttemptSeconds:
+                updateData.interruptionGracePerAttemptSeconds !== undefined
+                  ? (updateData.interruptionGracePerAttemptSeconds as
+                      | number
+                      | null)
+                  : (exam.interruptionGracePerAttemptSeconds ?? null),
+              controlFlags: {
+                ...exam.controlFlags,
+                ...(updateData.controlFlags as
+                  | Partial<ControlFlags>
+                  | undefined),
+              },
+            });
           }
           const updated = (await repo.update(
             ctx,
