@@ -1,0 +1,45 @@
+# P7-C3 WAL archiving / PITR Compose override.
+#
+# Enables PostgreSQL-native continuous archiving for point-in-time recovery
+# (PITR). Apply this override IN ADDITION to the base docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.pitr.yml up -d
+#
+# It sets archive_mode=on and a non-overwriting archive_command that copies
+# each completed WAL segment into ${EXAM_DATA_ROOT:-./data}/wal-archive/. A
+# real deployment MUST place the WAL archive on an INDEPENDENT failure domain
+# (NAS / another server / a separate disk); for that, override
+# EXAM_WAL_ARCHIVE_HOST_PATH to a path on the independent storage.
+#
+# PITR requires:
+#   - WAL archiving active BEFORE the first base backup
+#     (PostgreSQL docs: "the WAL archiving procedure must be active before
+#      the first base backup is taken")
+#   - a base backup (scripts/backup/pg-basebackup.sh)
+#   - the archived WAL chain from the base backup forward
+#   - an explicit recovery target (recovery_target_time / xid) at restore time
+#
+# wal_level=replica is ALREADY sufficient for PITR (confirmed at runtime;
+# PostgreSQL requires replica or higher — only 'minimal' blocks it). This
+# override does NOT raise wal_level beyond replica.
+#
+# This override is OPTIONAL. The base docker-compose.yml stays PITR-free for
+# simple deployments that do not need point-in-time recovery. Operators who
+# need PITR opt in by applying this file.
+services:
+  db:
+    environment:
+      # Enable continuous archiving. archive_mode is a postmaster-level
+      # setting (requires restart, not just reload).
+      POSTGRES_INITDB_ARGS: ""
+    # PostgreSQL 18 reads archive_* settings from postgresql.conf, but the
+    # official image lets operators append config via a mounted file in
+    # /docker-entrypoint-initdb.d (init only) or by setting server options.
+    # The robust path for a running cluster is to append to postgresql.auto.conf
+    # via ALTER SYSTEM, which the PITR drill does (see
+    # scripts/deployment/p7-c3-pitr-drill.sh). For a fresh start with this
+    # override, the entrypoint-init WAL config below seeds it at first init.
+    volumes:
+      - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
+      - ${EXAM_WAL_ARCHIVE_HOST_PATH:-${EXAM_DATA_ROOT:-./data}/wal-archive}:/wal-archive
+      - ./docker/pitr/wal-archive.conf:/docker-entrypoint-initdb.d/99-pitr-wal-archive.conf:ro

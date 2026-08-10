@@ -325,8 +325,14 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       ["GET", "/api/settings/branding"],
       ["GET", "/api/system/info"],
       ["GET", "/api/system/public-config"],
+      // P7-C1 Launchpad: initial-installation-only public routes. GET status
+      // reveals only "is the default org initialized" (login UX already
+      // implies it); POST bootstrap refuses once initialized, so neither is
+      // a token oracle nor a completed-installation oracle.
+      ["GET", "/api/launchpad/status"],
+      ["POST", "/api/launchpad/bootstrap"],
     ];
-    return set.some(([m, u]) => m === method && url === u);
+    return set.some(([m, u]) => m === method && u === url);
   }
 
   it("the authenticate-only + public route set is exactly the documented closed set (no drift)", () => {
@@ -347,7 +353,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 113 primary routes (99 protected + 14 non-protected)", () => {
+  it("the full composition reconciles to 115 primary routes (99 protected + 16 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -362,7 +368,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // Admin Recovery Center read routes (queue + aggregate detail + attempt
     // operations context) → 112 primary = 98 protected + 14 non-protected.
     // J5-I1B4 adds the Exam Recovery Context read route → 113 primary = 99
-    // protected + 14 non-protected. This is a regression anchor, not a
+    // protected + 14 non-protected. P7-C1 adds 2 public Launchpad routes
+    // (status + bootstrap) → 115 primary = 99 protected + 16 non-protected.
+    // This is a regression anchor, not a
     // hard-coded PASS: if a route is added/removed the counts move and the
     // failure message names the delta so the regression is triaged, not
     // silently swallowed.
@@ -371,9 +379,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       "protected (capability/ownership-gated) routes",
     ).toBe(99);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
-      14,
+      16,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(113);
+    expect(capturedRoutes.length, "total primary routes").toBe(115);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

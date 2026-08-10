@@ -224,9 +224,9 @@ canonical atomic mutation body; once the installation is initialized,
 Authoritative state is the PostgreSQL data directory under
 `./data/postgres`. **Host persistence is not backup** — see
 [`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md)
-for the cold-filesystem backup/restore procedures, the relocation guide,
-Redis-loss behavior, and the (forthcoming) C2 logical `pg_dump` / C3
-physical `pg_basebackup` + PITR procedures.
+for the full decision tree: stopped-directory relocation (C1),
+cold-filesystem backup/restore (C1), C2 logical `pg_dump` online backup +
+clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 
 ## Docker Files Reference
 

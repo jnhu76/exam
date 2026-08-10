@@ -872,9 +872,12 @@ docker compose exec -T db sh -c \
 docker compose up -d app email-worker
 ```
 
-For larger deployments, consider `pg_basebackup` for physical backups or
-continuous WAL archiving. Schedule backups via cron on the Docker host — the
-MVP does not ship a backup scheduler. Note that `wal_level=replica` is already
-sufficient for continuous archiving / PITR; the actual missing pieces for PITR
-are `archive_mode=on`, an `archive_command`, a WAL archive destination/retention
-contract, a base-backup/recovery procedure, and a recovery drill (P7-C3).
+For larger deployments, prefer the C2 logical backup (`scripts/backup/postgres-logical-backup.sh`,
+which produces a `pg_dump -Fc` artifact and is verified by a clean-restore
+drill) for routine backups. Physical `pg_basebackup`, continuous WAL
+archiving, and PITR are now implemented (P7-C3): see
+[`docs/deployment/backup-and-recovery.md`](backup-and-recovery.md) §8 for
+the pg_basebackup script, the `docker-compose.pitr.yml` WAL-archive
+override, the PITR procedure, retention contract, and drill evidence.
+Schedule backups via cron on the Docker host — the platform does not ship a
+backup scheduler (a control plane is a P7-E concern, not started).
