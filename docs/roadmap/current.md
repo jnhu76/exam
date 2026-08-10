@@ -12,7 +12,7 @@
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
 | Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
 | Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
-| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted (2026-08-08); shared rate limit shipped (PR #265, P7-D2/D3). State/backup/config-control-plane/exam-modes/UI workstreams remain open. |
+| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). State-machine, config-control-plane (P7-E), exam-modes, and UI workstreams remain open. |
 | Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
@@ -116,6 +116,13 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    - add validation, clean-host restore, and restore drills;
    - provide CLI and Admin visibility.
 
+   > **P7-C rebuild status (2026-08-10):** the portable-persistence +
+   > backup + PostgreSQL DR core is shipped (C1 cold path + Launchpad,
+   > C2 logical, C3 physical + PITR), with deterministic drills. The
+   > remaining items here (RPO/RTO profile automation, Admin backup
+   > surface, settings/files backup beyond the PostgreSQL authority)
+   > are P7-E control-plane work, NOT started.
+
 5. **Crash and outage recovery**
    - define API/host/PostgreSQL/Redis/worker/scanner failure behavior;
    - make committed operations safely repeatable;
@@ -156,7 +163,13 @@ P7-S1 → crash recovery / startup reconciliation
 P7-D1 (accepted: shared rate limit only)
   → Redis lifecycle hardening → shared rate limit ✅ SHIPPED (PR #265, P7-D2/D3)
 
-backup design → backup/restore CLI → PITR/verification → Admin surface
+P7-C  portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
+  (C0 reality audit closed; C1 portable bind-mounts + cold backup +
+  Launchpad; C2 logical pg_dump + verified clean restore; C3 physical
+  pg_basebackup + WAL archive + PITR; all backed by deterministic Docker
+  drills). The Admin backup surface (formerly P7-B4) is explicitly OUT of
+  scope here — restore is operator-owned; no browser restore button.
+
 configuration schema → versioned service → Admin settings UI
                      → exam policy schema → profiles → creation wizard
 UI pilot → controlled family-by-family UI closeout

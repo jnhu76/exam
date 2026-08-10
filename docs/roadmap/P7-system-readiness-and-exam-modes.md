@@ -262,12 +262,48 @@ authority for attempts, answers, grading, audit, and business configuration.
 Moving one of those responsibilities is possible but requires a separate
 accepted ADR.
 
-## 6. Workstream C — Backup and restore
+## 6. Workstream C — Portable persistence, backup, and PostgreSQL DR
 
-### Current gap
+> **Rebuilt 2026-08-10 (P7-C).** This workstream was rebuilt from a
+> config-taxonomy framing to the as-shipped portable-persistence + backup +
+> PostgreSQL disaster-recovery program. The current authority is
+> `docs/deployment/backup-and-recovery.md` and the closeout
+> `docs/audits/P7-C-PORTABLE-BACKUP-RECOVERY-CLOSEOUT.md`. The phase shape
+> is:
+>
+> - **C0** reality audit (CLOSED) — PostgreSQL is the sole authoritative
+>   store; Redis is non-authoritative; app filesystem has no durable
+>   writes.
+> - **C1** portable persistence — bind-mount `${EXAM_DATA_ROOT}/postgres`
+>   (operator-visible, relocatable), cold-filesystem backup/restore, and
+>   the Launchpad first-install surface.
+> - **C2** logical backup — online `pg_dump -Fc` + verified clean restore
+>   (`DROP DATABASE` + `template0` + `pg_restore --no-owner
+>   --exit-on-error`), no `--clean --if-exists` into a dirty DB.
+> - **C3** physical backup + PITR — `pg_basebackup -X stream` +
+>   `pg_verifybackup` manifest, PostgreSQL-native WAL continuous
+>   archiving (`archive_mode=on`, non-overwriting `archive_command`), and
+>   PITR to an explicit `recovery_target_lsn`/`time`/`xid`.
+>
+> All four phases are backed by deterministic Docker suites under
+> `tests/deployment/` (`compose-smoke.sh`, `launchpad-bootstrap.sh`,
+> `persistence-and-cold-restore.sh`, `logical-backup-restore.sh`,
+> `pitr.sh`). Scope discipline:
+> NO Admin restore button, NO retention engine, NO Desktop recoveryEpoch,
+> NO schema change for history-replacement marking (see ADR-016). A
+> future P7-E control plane (RPO/RTO profiles, retention automation,
+> Admin backup visibility) is NOT started.
 
-The MVP runbook delegates backups to an operator-supplied `pg_dump` schedule.
-That is a minimum deployment note, not a complete backup/recovery capability.
+### Current gap (post-rebuild)
+
+The rebuilt C0–C3 covers the PostgreSQL authority end-to-end. Remaining
+work is explicitly P7-E control-plane territory:
+
+- RPO/RTO profile automation and scheduling (cron-only today);
+- Admin backup visibility surface (restore stays operator-owned);
+- backup of files/settings beyond the PostgreSQL authority (attachments,
+  exports, organization settings are in-DB today; a separate
+  files/settings backup is future).
 
 ### Recovery objectives
 
@@ -564,9 +600,14 @@ P7-B1  Backup/RPO/RTO design
   → P7-B3  PITR/retention/verification
   → P7-B4  Admin backup surface + restore drill evidence
 
-P7-C1  Configuration taxonomy + schema
-  → P7-C2  Settings service/version/audit
-  → P7-C3  Admin settings UI
+P7-C  Portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
+  (C0 reality audit closed → C1 portable + cold + Launchpad → C2 logical →
+  C3 physical + PITR; deterministic drills; ADR-016 boundary). The
+  pre-rebuild C1=config-taxonomy / C2=settings-service / C3=settings-UI
+  framing is superseded; those config-control-plane items now live under
+  Workstream E and are NOT started.
+  → P7-E  RPO/RTO profiles, retention automation, Admin backup surface
+         (control plane; not started)
   → P7-M1  Exam policy schema + conflict validator
   → P7-M2  Profile templates + snapshot resolution
   → P7-M3  Exam creation wizard

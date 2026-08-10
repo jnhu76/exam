@@ -1,61 +1,61 @@
 #!/usr/bin/env bash
-# P6-CORR1 clean-volume Compose smoke test.
+# Compose smoke suite: the production Compose parses, starts, and honors
+# the required environment contract end to end.
 #
-# Runs the bundled production docker-compose.yml (from the repo root)
-# against an ISOLATED Compose project (via `-p <unique-name>`). The
-# `pgdata` / `redisdata` named volumes are project-namespaced, so each run
-# gets a fresh volume set without touching the dev `exam` DB or any other
-# stack. Volumes are destroyed on exit.
+# Runs the bundled production docker-compose.yml against an ISOLATED
+# Compose project (`-p <unique-name>`) AND an isolated temp data root
+# (EXAM_DATA_ROOT), so the smoke run never shares the repo-root ./data/
+# or any other stack. The temp directory is removed on exit (path-guarded).
 #
 # Proves:
 #   - POSTGRES_PASSWORD is required (no default) — Compose fails to expand
-#     if unset (P6-007).
+#     if unset.
 #   - Redis stays OPTIONAL at Compose parse time — the default stack parses
-#     with REDIS_PASSWORD unset (P7 review P1).
+#     with REDIS_PASSWORD unset.
 #   - When the redis profile IS enabled, REDIS_PASSWORD is mandatory: the
 #     redis container refuses to start without it (startup guard) and runs
-#     with requirepass — unauthenticated clients are rejected (P7 review
-#     P1-1).
+#     with requirepass — unauthenticated clients are rejected.
+#   - Default topology = app + db + email-worker (no redis).
 #   - db healthy → app migrates + becomes healthy → email-worker starts
-#     after app health (P6-009 migration serialization).
-#   - migrations applied exactly once (count varies; see journal).
-#   - worker heartbeat appears in worker_heartbeats.
-#   - bootstrap-admin creates exactly one explicit Admin (P6-008).
-#   - login succeeds.
-#   - no default Candidate accounts exist (admin/candidate/candidate2 absent).
-#   - baseline seed refuses APP_MODE=production (P6-008).
-#   - Redis absence does not block startup (P6-010).
+#     after app health (migration serialization).
+#   - migrations applied exactly once.
+#   - worker heartbeat appears in worker_heartbeats, bootstrap_pending
+#     before bootstrap, success after.
+#   - bootstrap-admin creates exactly one explicit Admin.
+#   - login succeeds; no default Candidate accounts.
+#   - baseline seed refuses APP_MODE=production.
+#   - worker shuts down cleanly on SIGTERM.
 #
-# Usage: ./run-smoke.sh <run-number>
+# Usage: ./compose-smoke.sh <run-number>
 set -euo pipefail
-
-RUN_NUM="${1:-1}"
-PROJECT="p6corr1-smoke-${RUN_NUM}"
 
 SCRIPT_DIR="$(
   cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1
   pwd
 )"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
+RUN_NUM="${1:-1}"
+PROJECT="compose-smoke-${RUN_NUM}"
 
 if [ ! -f "${COMPOSE_FILE}" ]; then
   echo "FAIL: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
   exit 1
 fi
 
+safe_temp_root compose-smoke EXAM_DATA_ROOT
+export EXAM_DATA_ROOT
+
 # Strong per-run credentials (test-only, isolated throwaway stack).
-PG_PASSWORD="p6-smoke-pass-${RUN_NUM}-$(date +%s)"
-JWT_SECRET="p6-smoke-jwt-${RUN_NUM}-$(openssl rand -hex 16)"
-ADMIN_USER="p6admin${RUN_NUM}"
-ADMIN_PASS="P6-Smoke-Admin-${RUN_NUM}-$(openssl rand -hex 8)"
-ADMIN_NAME="P6 Smoke Admin ${RUN_NUM}"
-ORG_NAME="P6 Smoke Org ${RUN_NUM}"
+PG_PASSWORD="smoke-pass-${RUN_NUM}-$(date +%s)"
+JWT_SECRET="smoke-jwt-${RUN_NUM}-$(openssl rand -hex 16)"
+ADMIN_USER="smokeadmin${RUN_NUM}"
+ADMIN_PASS="Smoke-Admin-${RUN_NUM}-$(openssl rand -hex 8)"
+ADMIN_NAME="Smoke Admin ${RUN_NUM}"
+ORG_NAME="Smoke Org ${RUN_NUM}"
 ORIGIN="http://localhost:3000"
-# P7 review P1-1: the optional redis profile runs with requirepass, so the
-# smoke stack sets a throwaway REDIS_PASSWORD (same spirit as PG_PASSWORD).
-# The password is NOT required at Compose parse time (see Test 1b / 16a).
-REDIS_PASSWORD="p6-smoke-redis-${RUN_NUM}-$(openssl rand -hex 8)"
+REDIS_PASSWORD="smoke-redis-${RUN_NUM}-$(openssl rand -hex 8)"
 
 export POSTGRES_PASSWORD="${PG_PASSWORD}"
 export JWT_SECRET="${JWT_SECRET}"
@@ -63,7 +63,7 @@ export CORS_ORIGIN="${ORIGIN}"
 export PUBLIC_WEB_ORIGIN="${ORIGIN}"
 export REDIS_PASSWORD="${REDIS_PASSWORD}"
 
-echo "=== P6-CORR1 clean-volume smoke run #${RUN_NUM} (project: ${PROJECT}) ==="
+echo "=== Compose smoke run #${RUN_NUM} (project: ${PROJECT}) ==="
 
 PSQL_QUERY_OUTPUT=""
 PSQL_QUERY_ERROR=""
@@ -77,12 +77,11 @@ run_psql_query() {
   local query="$1"
   local output
   local status
+  local c
 
+  c="$(db_container "${PROJECT}")"
   set +e
-  output=$(
-    docker exec "${PROJECT}-db-1" \
-      psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${query}" 2>&1
-  )
+  output=$(docker exec "${c}" psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${query}" 2>&1)
   status=$?
   set -e
 
@@ -99,24 +98,30 @@ run_psql_query() {
 
 cleanup() {
   echo "--- cleanup: tearing down isolated project ${PROJECT} ---"
-  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" down -v --remove-orphans \
-    > /dev/null 2>&1 || true
+  compose_down_best_effort "${PROJECT}"
+  # The redis projects are profile-gated: down needs --profile redis or the
+  # redis containers are not part of the model and survive.
+  compose_down_best_effort "compose-smoke-redis-noauth-${RUN_NUM}" --profile redis
+  compose_down_best_effort "compose-smoke-redis-${RUN_NUM}" --profile redis
+  # Remove ONLY the temp data root this script created via safe_temp_root
+  # (registry-checked; container-assisted because PGDATA files are owned by
+  # the container postgres user).
+  cleanup_temp_root "${EXAM_DATA_ROOT}"
 }
 trap cleanup EXIT
 
-# ── Test 1: empty POSTGRES_PASSWORD must fail Compose expansion (P6-007) ─
-echo "--- TEST 1: empty POSTGRES_PASSWORD fails Compose expansion (P6-007) ---"
-# Use `env -u` to truly unset POSTGRES_PASSWORD for the subprocess (a bare
-# inline `POSTGRES_PASSWORD=""` does NOT override an inherited exported
-# value in all shells). Compose `${VAR:?...}` treats an unset OR empty
-# value as a failure. Capture output to a variable so `set -o pipefail`
-# does not turn the (expected) non-zero Compose exit into a script abort.
-T1_OUT=$(env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
-     JWT_SECRET="${JWT_SECRET}" \
-     CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
-     POSTGRES_PASSWORD="" REDIS_PASSWORD="" \
-     docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up --no-start 2>&1 \
-     || true)
+# ── Test 1: empty POSTGRES_PASSWORD must fail Compose expansion ──────────
+echo "--- TEST 1: empty POSTGRES_PASSWORD fails Compose expansion ---"
+# Unset the inherited values in a subshell (env -u cannot apply to shell
+# functions). Compose `${VAR:?...}` treats an unset OR empty value as a
+# failure. Capture output to a variable so `set -o pipefail` does not turn
+# the (expected) non-zero Compose exit into a script abort.
+T1_OUT="$(
+  unset POSTGRES_PASSWORD REDIS_PASSWORD
+  export JWT_SECRET="${JWT_SECRET}" CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}"
+  POSTGRES_PASSWORD="" REDIS_PASSWORD="" \
+  run_compose "${PROJECT}" up --no-start 2>&1 || true
+)"
 if echo "${T1_OUT}" | grep -q "POSTGRES_PASSWORD is required"; then
   echo "  PASS: empty/unset POSTGRES_PASSWORD fails expansion."
 else
@@ -125,18 +130,16 @@ else
   exit 1
 fi
 
-# ── Test 1b: default stack parses with REDIS_PASSWORD unset (P7 review P1) ─
-echo "--- TEST 1b: default stack parses without REDIS_PASSWORD (P7 review P1) ---"
-# Redis is an optional profile: a bare `docker compose up` (redis profile
-# inactive) must NOT require a Redis secret at Compose expansion. `config
-# --quiet` validates the full model (interpolation + structure) without
-# pulling images or creating containers.
-T1B_OUT=$(env -u REDIS_PASSWORD \
-     POSTGRES_PASSWORD="${PG_PASSWORD}" \
-     JWT_SECRET="${JWT_SECRET}" \
-     CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}" \
-     docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" config --quiet 2>&1 \
-     || true)
+# ── Test 1b: default stack parses with REDIS_PASSWORD unset ──────────────
+echo "--- TEST 1b: default stack parses without REDIS_PASSWORD ---"
+# `config --quiet` validates the full model (interpolation + structure)
+# without pulling images or creating containers.
+T1B_OUT="$(
+  unset REDIS_PASSWORD
+  export POSTGRES_PASSWORD="${PG_PASSWORD}" JWT_SECRET="${JWT_SECRET}" \
+    CORS_ORIGIN="${ORIGIN}" PUBLIC_WEB_ORIGIN="${ORIGIN}"
+  run_compose "${PROJECT}" config --quiet 2>&1 || true
+)"
 if [ -z "${T1B_OUT}" ]; then
   echo "  PASS: default stack parses without REDIS_PASSWORD (redis profile inactive)."
 else
@@ -145,18 +148,17 @@ else
   exit 1
 fi
 
-# ── Test 2: build + start the default stack (no redis profile; P6-010) ───
-echo "--- TEST 2: start default stack (no redis profile; P6-010) ---"
-docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up -d --build \
-  --quiet-pull 2>&1 | tail -5
+# ── Test 2: build + start the default stack (no redis profile) ───────────
+echo "--- TEST 2: start default stack (no redis profile) ---"
+run_compose "${PROJECT}" up -d --build --quiet-pull 2>&1 | tail -5
 echo "  stack started."
 
 # ── Test 3: verify only 3 services started (no redis) ────────────────────
 echo "--- TEST 3: default topology = app + db + email-worker (no redis) ---"
-SERVICES=$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" ps --services 2>/dev/null | sort | tr '\n' ' ')
+SERVICES=$(run_compose "${PROJECT}" ps --services 2>/dev/null | sort | tr '\n' ' ')
 echo "  services: ${SERVICES}"
 if echo "${SERVICES}" | grep -qw "redis"; then
-  echo "  FAIL: redis was started without the profile (P6-010 regression)."
+  echo "  FAIL: redis was started without the profile (regression)."
   exit 1
 fi
 for s in app db email-worker; do
@@ -170,8 +172,8 @@ echo "  PASS: default topology excludes redis; required services present."
 # ── Test 4: wait for app + db healthy ────────────────────────────────────
 echo "--- TEST 4: wait for app + db healthy (migrate runs first) ---"
 for i in $(seq 1 60); do
-  APP_STATUS=$(docker inspect "${PROJECT}-app-1" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
-  DB_STATUS=$(docker inspect "${PROJECT}-db-1" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  APP_STATUS=$(docker inspect "$(app_container "${PROJECT}")" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  DB_STATUS=$(docker inspect "$(db_container "${PROJECT}")" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
   if [ "${APP_STATUS}" = "healthy" ] && [ "${DB_STATUS}" = "healthy" ]; then
     echo "  PASS: app=${APP_STATUS}, db=${DB_STATUS} (after ~$((i*2))s)."
     break
@@ -179,26 +181,27 @@ for i in $(seq 1 60); do
   sleep 2
   if [ "${i}" = "60" ]; then
     echo "  FAIL: app/db did not become healthy in 120s (app=${APP_STATUS}, db=${DB_STATUS})."
-    docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 app
+    compose_logs "${PROJECT}" app
     exit 1
   fi
 done
 
-# ── Test 5: email-worker started AFTER app health (P6-009) ───────────────
-echo "--- TEST 5: email-worker running (started after app: service_healthy — P6-009) ---"
-WORKER_STATE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
+# ── Test 5: email-worker started AFTER app health ────────────────────────
+echo "--- TEST 5: email-worker running (started after app: service_healthy) ---"
+WORKER_STATE=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
 if [ "${WORKER_STATE}" = "running" ]; then
   echo "  PASS: email-worker is running."
 else
   echo "  FAIL: email-worker is ${WORKER_STATE} (expected running)."
-  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
+  compose_logs "${PROJECT}" email-worker
   exit 1
 fi
 
 # ── Test 5b: worker stays Up with bootstrap_pending before bootstrap ─────
 echo "--- TEST 5b: worker stays Up with bootstrap_pending heartbeat ---"
-WORKER_RESTARTS_BEFORE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
-WORKER_CONTAINER_ID_BEFORE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.Id}}' 2>/dev/null || echo "unknown")
+WORKER_CONTAINER="$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)"
+WORKER_RESTARTS_BEFORE=$(docker inspect "${WORKER_CONTAINER}" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
+WORKER_CONTAINER_ID_BEFORE=$(docker inspect "${WORKER_CONTAINER}" --format '{{.Id}}' 2>/dev/null || echo "unknown")
 if [ "${WORKER_RESTARTS_BEFORE}" != "0" ]; then
   echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_BEFORE} before bootstrap (expected 0)."
   exit 1
@@ -227,7 +230,7 @@ if [ "${PENDING_FOUND}" = "0" ]; then
   if [ -n "${LAST_PENDING_QUERY_ERROR}" ]; then
     echo "  last query error: ${LAST_PENDING_QUERY_ERROR}"
   fi
-  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
+  compose_logs "${PROJECT}" email-worker
   exit 1
 fi
 echo "  PASS: bootstrap_pending heartbeat from instance ${PENDING_INSTANCE_ID}."
@@ -245,7 +248,7 @@ if [ -n "${PENDING_SUCCESS_AT}" ]; then
 fi
 echo "  PASS: bootstrap_pending heartbeat has no last_success_at."
 
-WORKER_LOGS_PENDING=$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=60 email-worker 2>&1 || true)
+WORKER_LOGS_PENDING=$(compose_logs "${PROJECT}" email-worker 60)
 if ! echo "${WORKER_LOGS_PENDING}" | grep -q "waiting for initial organization bootstrap"; then
   echo "  FAIL: worker logs do not contain bootstrap wait message."
   exit 1
@@ -261,9 +264,7 @@ fi
 echo "  PASS: worker is waiting and has not started sender/poll loop."
 
 # ── Test 6: all repo migrations applied exactly once ─────────────────────
-echo "--- TEST 6: migrations applied exactly once (P6-009 ordering proof) ---"
-# Expected count is derived from the repository migration set (not a magic
-# number) so the assertion cannot drift when migrations are added.
+echo "--- TEST 6: migrations applied exactly once ---"
 EXPECTED_MIG_COUNT=$(find "${REPO_ROOT}/packages/db/migrations/postgres" \
   -name "*.sql" -type f | wc -l | tr -d " ")
 if run_psql_query "SELECT count(*) FROM drizzle.__drizzle_migrations;"; then
@@ -282,7 +283,6 @@ else
 fi
 
 # ── Test 7: bootstrap_pending heartbeat present before bootstrap ─────────
-# Covered by Test 5b; keep a lightweight post-condition here for readability.
 echo "--- TEST 7: worker heartbeat row shows bootstrap_pending ---"
 if run_psql_query "SELECT count(*) FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%';"; then
   HB="${PSQL_QUERY_OUTPUT}"
@@ -300,7 +300,7 @@ fi
 
 # ── Test 8: API health endpoint ───────────────────────────────────────────
 echo "--- TEST 8: API /api/health responds ---"
-HEALTH=$(docker exec "${PROJECT}-app-1" node -e \
+HEALTH=$(docker exec "$(app_container "${PROJECT}")" node -e \
   "fetch('http://127.0.0.1:3000/api/health').then(r=>r.json()).then(j=>console.log(JSON.stringify(j))).catch(e=>console.error('ERR',e.message))" 2>&1)
 echo "  health: ${HEALTH}"
 echo "${HEALTH}" | grep -q '"status":"ok"' && echo "  PASS: API liveness OK." || {
@@ -308,16 +308,16 @@ echo "${HEALTH}" | grep -q '"status":"ok"' && echo "  PASS: API liveness OK." ||
   exit 1
 }
 
-# ── Test 9: production bootstrap creates exactly one Admin (P6-008) ──────
-echo "--- TEST 9: bootstrap-admin creates one explicit Admin (P6-008) ---"
+# ── Test 9: production bootstrap creates exactly one Admin ──────────────
+echo "--- TEST 9: bootstrap-admin creates one explicit Admin ---"
 docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
   -e DATABASE_URL="postgresql://exam:${PG_PASSWORD}@db:5432/exam" \
   -e PUBLIC_WEB_ORIGIN="${ORIGIN}" -e CORS_ORIGIN="${ORIGIN}" \
-  "${PROJECT}-app-1" node dist/scripts/bootstrap-admin.js \
+  "$(app_container "${PROJECT}")" node dist/scripts/bootstrap-admin.js \
   --username "${ADMIN_USER}" --password "${ADMIN_PASS}" \
   --name "${ADMIN_NAME}" --organization-name "${ORG_NAME}" 2>&1 | head -15
 
-# ── Test 9b: same worker transitions to success AFTER bootstrap (org exists)
+# ── Test 9b: same worker transitions to success AFTER bootstrap ─────────
 echo "--- TEST 9b: same worker transitions heartbeat to success after bootstrap ---"
 SUCCESS_OK=0
 for i in $(seq 1 40); do
@@ -351,26 +351,26 @@ if [ "${SUCCESS_OK}" = "0" ]; then
   echo "  last SUCCESS_INFO query error: ${LAST_SUCCESS_INFO_ERROR:-<none>}"
   echo "  last SUCCESS_COUNT value: ${LAST_SUCCESS_COUNT_VALUE:-<empty>}"
   echo "  last SUCCESS_COUNT query error: ${LAST_SUCCESS_COUNT_ERROR:-<none>}"
-  docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=40 email-worker
+  compose_logs "${PROJECT}" email-worker
   exit 1
 fi
 echo "  PASS: heartbeat for instance ${PENDING_INSTANCE_ID} has last_success_at and no last_error."
 
-WORKER_CONTAINER_ID_AFTER=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.Id}}' 2>/dev/null || echo "unknown")
+WORKER_CONTAINER_ID_AFTER=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.Id}}' 2>/dev/null || echo "unknown")
 if [ "${WORKER_CONTAINER_ID_BEFORE}" != "${WORKER_CONTAINER_ID_AFTER}" ]; then
   echo "  FAIL: email-worker container changed across bootstrap (was ${WORKER_CONTAINER_ID_BEFORE}, now ${WORKER_CONTAINER_ID_AFTER})."
   exit 1
 fi
-echo "  PASS: same email-worker container (${WORKER_CONTAINER_ID_AFTER}) across bootstrap."
+echo "  PASS: same email-worker container across bootstrap."
 
-WORKER_RESTARTS_AFTER=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
+WORKER_RESTARTS_AFTER=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
 if [ "${WORKER_RESTARTS_AFTER}" != "0" ]; then
   echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_AFTER} after bootstrap (expected 0)."
   exit 1
 fi
 echo "  PASS: email-worker RestartCount remains 0 after bootstrap."
 
-WORKER_LOGS_RUNNING=$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=80 email-worker 2>&1 || true)
+WORKER_LOGS_RUNNING=$(compose_logs "${PROJECT}" email-worker 80)
 if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "resolved default organization"; then
   echo "  FAIL: worker logs do not show organization resolution."
   exit 1
@@ -385,8 +385,8 @@ if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "starting poll loop"; then
 fi
 echo "  PASS: worker logs show resolved organization, sender creation, and poll loop."
 
-# ── Test 10: no default Candidate accounts; exactly one Admin (P6-008) ───
-echo "--- TEST 10: no default Candidate accounts; exactly one Admin (P6-008) ---"
+# ── Test 10: no default Candidate accounts; exactly one Admin ───────────
+echo "--- TEST 10: no default Candidate accounts; exactly one Admin ---"
 if run_psql_query "SELECT count(*) FROM users WHERE role = 'Candidate';"; then
   CAND_COUNT="${PSQL_QUERY_OUTPUT}"
 else
@@ -414,8 +414,8 @@ echo "  users: total=${TOTAL_COUNT}, admin=${ADMIN_COUNT}, candidate=${CAND_COUN
 [ "${ADMIN_COUNT}" = "1" ] && echo "  PASS: exactly one Admin account." || {
   echo "  FAIL: ${ADMIN_COUNT} Admin accounts (expected 1)."; exit 1; }
 
-# ── Test 11: admin.bootstrap audit row exists (P6-008) ───────────────────
-echo "--- TEST 11: admin.bootstrap audit evidence (P6-008) ---"
+# ── Test 11: admin.bootstrap audit row exists ───────────────────────────
+echo "--- TEST 11: admin.bootstrap audit evidence ---"
 if run_psql_query "SELECT count(*) FROM audit_logs WHERE action = 'admin.bootstrap';"; then
   AUDIT_COUNT="${PSQL_QUERY_OUTPUT}"
 else
@@ -428,7 +428,7 @@ fi
 
 # ── Test 12: login as the bootstrapped Admin succeeds ────────────────────
 echo "--- TEST 12: login as bootstrapped Admin ---"
-LOGIN=$(docker exec "${PROJECT}-app-1" node -e "
+LOGIN=$(docker exec "$(app_container "${PROJECT}")" node -e "
   fetch('http://127.0.0.1:3000/api/auth/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'Origin': '${ORIGIN}'},
@@ -440,22 +440,22 @@ echo "  login: ${LOGIN}"
 echo "${LOGIN}" | grep -q '"ok":true' && echo "  PASS: admin login succeeded." || {
   echo "  FAIL: admin login failed."; exit 1; }
 
-# ── Test 13: baseline seed refuses APP_MODE=production (P6-008) ───────────
-echo "--- TEST 13: baseline seed refuses APP_MODE=production (P6-008) ---"
+# ── Test 13: baseline seed refuses APP_MODE=production ───────────────────
+echo "--- TEST 13: baseline seed refuses APP_MODE=production ---"
 SEED_ERR=$(docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
   -e DATABASE_URL="postgresql://exam:${PG_PASSWORD}@db:5432/exam" \
-  "${PROJECT}-app-1" node dist/seed.js 2>&1 || true)
+  "$(app_container "${PROJECT}")" node dist/seed.js 2>&1 || true)
 echo "${SEED_ERR}" | grep -q "Refusing to run the baseline seed in production" \
   && echo "  PASS: baseline seed refused in production." || {
     echo "  FAIL: baseline seed did not refuse in production.";
     echo "  output: ${SEED_ERR}"; exit 1; }
 
-# ── Test 14: --force refusal without flag (second Admin) ─────────────────
+# ── Test 14: second Admin refused without --force ────────────────────────
 echo "--- TEST 14: second Admin refused without --force ---"
 DUP_ERR=$(docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
   -e DATABASE_URL="postgresql://exam:${PG_PASSWORD}@db:5432/exam" \
   -e PUBLIC_WEB_ORIGIN="${ORIGIN}" -e CORS_ORIGIN="${ORIGIN}" \
-  "${PROJECT}-app-1" node dist/scripts/bootstrap-admin.js \
+  "$(app_container "${PROJECT}")" node dist/scripts/bootstrap-admin.js \
   --username "dup${RUN_NUM}" --password "${ADMIN_PASS}" \
   --name "Dup Admin" 2>&1 || true)
 echo "${DUP_ERR}" | grep -q "active.*Admin.*exists" \
@@ -465,36 +465,36 @@ echo "${DUP_ERR}" | grep -q "active.*Admin.*exists" \
 
 # ── Test 15: SIGTERM shuts worker down cleanly ───────────────────────────
 echo "--- TEST 15: SIGTERM shuts down email-worker cleanly ---"
-docker stop "${PROJECT}-email-worker-1" >/dev/null 2>&1 || true
+# Capture the container ID BEFORE stopping it (compose ps -q lists running
+# containers; the stopped container must be inspected by ID).
+WORKER_ID_BEFORE_STOP="$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)"
+docker stop "${WORKER_ID_BEFORE_STOP}" >/dev/null 2>&1 || true
 
-EXIT_CODE=$(docker inspect "${PROJECT}-email-worker-1" --format '{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
+EXIT_CODE=$(docker inspect "${WORKER_ID_BEFORE_STOP}" --format '{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
 if [ "${EXIT_CODE}" != "0" ]; then
   echo "  FAIL: email-worker exit code is ${EXIT_CODE} (expected 0)."
   exit 1
 fi
 echo "  PASS: email-worker exited with code 0."
 
-if ! docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail=20 email-worker 2>&1 | grep -q '"msg":"shutdown complete"'; then
+if ! run_compose "${PROJECT}" logs --tail=20 email-worker 2>&1 | grep -q '"msg":"shutdown complete"'; then
   echo "  FAIL: worker logs do not contain shutdown complete."
   exit 1
 fi
 echo "  PASS: worker logs contain shutdown complete."
 
-# ── Test 16a: redis profile without REDIS_PASSWORD refuses to start (P7) ──
-echo "--- TEST 16a: redis profile without REDIS_PASSWORD refuses to start (P7 review P1) ---"
-REDIS_PROJECT_NOAUTH="p6corr1-redis-noauth-${RUN_NUM}"
-# The password guard lives at container startup (not Compose expansion), so
-# the model still loads; the redis container itself must fail the guard and
-# never run an open server.
-env -u REDIS_PASSWORD \
-  docker compose -p "${REDIS_PROJECT_NOAUTH}" -f "${COMPOSE_FILE}" \
-  --profile redis up -d redis --quiet-pull 2>&1 | tail -3 || true
+# ── Test 16a: redis profile without REDIS_PASSWORD refuses to start ──────
+echo "--- TEST 16a: redis profile without REDIS_PASSWORD refuses to start ---"
+REDIS_PROJECT_NOAUTH="compose-smoke-redis-noauth-${RUN_NUM}"
+(
+  unset REDIS_PASSWORD
+  run_compose "${REDIS_PROJECT_NOAUTH}" --profile redis up -d redis --quiet-pull 2>&1 | tail -3 || true
+)
 GUARD_FIRED=0
 for i in $(seq 1 30); do
-  REDIS16A_HEALTH=$(docker inspect "${REDIS_PROJECT_NOAUTH}-redis-1" \
+  REDIS16A_HEALTH=$(docker inspect "$(run_compose "${REDIS_PROJECT_NOAUTH}" ps -q redis 2>/dev/null)" \
     --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
-  REDIS16A_LOGS=$(docker compose -p "${REDIS_PROJECT_NOAUTH}" \
-    -f "${COMPOSE_FILE}" --profile redis logs --tail=5 redis 2>&1 || true)
+  REDIS16A_LOGS=$(run_compose "${REDIS_PROJECT_NOAUTH}" --profile redis logs --tail=5 redis 2>&1 || true)
   if echo "${REDIS16A_LOGS}" | grep -q "REDIS_PASSWORD is required"; then
     GUARD_FIRED=1
     break
@@ -513,17 +513,15 @@ else
   echo "  logs: ${REDIS16A_LOGS:-<none>}"
   exit 1
 fi
-docker compose -p "${REDIS_PROJECT_NOAUTH}" -f "${COMPOSE_FILE}" \
-  --profile redis down -v --remove-orphans > /dev/null 2>&1 || true
+compose_down_best_effort "${REDIS_PROJECT_NOAUTH}" --profile redis
 
-# ── Test 16b: redis profile with REDIS_PASSWORD enforces requirepass ──────
-echo "--- TEST 16b: redis profile with REDIS_PASSWORD enforces requirepass (P7 review P1-1) ---"
-REDIS_PROJECT="p6corr1-redis-${RUN_NUM}"
-docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
-  up -d redis --quiet-pull 2>&1 | tail -3
+# ── Test 16b: redis profile with REDIS_PASSWORD enforces requirepass ─────
+echo "--- TEST 16b: redis profile with REDIS_PASSWORD enforces requirepass ---"
+REDIS_PROJECT="compose-smoke-redis-${RUN_NUM}"
+run_compose "${REDIS_PROJECT}" --profile redis up -d redis --quiet-pull 2>&1 | tail -3
 REDIS_AUTH_FAILED=0
 for i in $(seq 1 30); do
-  NOAUTH=$(docker exec "${REDIS_PROJECT}-redis-1" redis-cli ping 2>&1 || true)
+  NOAUTH=$(docker exec "$(run_compose "${REDIS_PROJECT}" ps -q redis 2>/dev/null)" redis-cli ping 2>&1 || true)
   if echo "${NOAUTH}" | grep -qi "NOAUTH"; then
     REDIS_AUTH_FAILED=0
     break
@@ -546,7 +544,7 @@ else
 fi
 
 AUTH_PONG=$(docker exec -e REDIS_PASSWORD="${REDIS_PASSWORD}" \
-  "${REDIS_PROJECT}-redis-1" sh -lc \
+  "$(run_compose "${REDIS_PROJECT}" ps -q redis 2>/dev/null)" sh -lc \
   'redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null' 2>&1 || true)
 if echo "${AUTH_PONG}" | grep -q "PONG"; then
   echo "  PASS: authenticated ping returns PONG."
@@ -555,10 +553,9 @@ else
   exit 1
 fi
 
-# The container healthcheck authenticates too: redis must become healthy.
 REDIS_HEALTH=""
 for i in $(seq 1 30); do
-  REDIS_HEALTH=$(docker inspect "${REDIS_PROJECT}-redis-1" \
+  REDIS_HEALTH=$(docker inspect "$(run_compose "${REDIS_PROJECT}" ps -q redis 2>/dev/null)" \
     --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
   if [ "${REDIS_HEALTH}" = "healthy" ]; then
     break
@@ -572,8 +569,7 @@ else
   exit 1
 fi
 
-docker compose -p "${REDIS_PROJECT}" -f "${COMPOSE_FILE}" --profile redis \
-  down -v --remove-orphans > /dev/null 2>&1 || true
+compose_down_best_effort "${REDIS_PROJECT}" --profile redis
 echo "  PASS: authenticated redis profile started, probed, and was torn down."
 
 echo ""

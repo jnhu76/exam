@@ -109,6 +109,21 @@ export class UserAlreadyExistsError extends AppError {
   }
 }
 
+/**
+ * A first-install bootstrap lost the "exactly one first Admin" race: an
+ * active Admin already exists in the organization (HTTP 409).
+ *
+ * Thrown by the canonical bootstrap mutation when the transaction-scoped
+ * advisory lock serialization reveals a winner already committed. The
+ * Launchpad HTTP adapter maps this expected loser to
+ * `LAUNCHPAD_ALREADY_INITIALIZED`; the CLI surfaces the message as-is.
+ */
+export class AdminAlreadyExistsError extends AppError {
+  constructor(message = "An active Admin already exists in this organization") {
+    super(message, "ADMIN_ALREADY_EXISTS", 409);
+  }
+}
+
 /** Candidate identity field value conflicts with an existing candidate (HTTP 409). */
 export class CandidateIdentityConflictError extends AppError {
   constructor(message = "Candidate identity already exists") {

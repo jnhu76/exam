@@ -126,7 +126,10 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .object({
         username: z.string().max(50),
         name: z.string().max(100),
-        source: z.literal("local_script"),
+        // The bootstrap adapter that invoked the canonical mutation: the
+        // operator CLI (local_script) or the HTTP Launchpad first-install
+        // adapter (launchpad).
+        source: z.enum(["local_script", "launchpad"]),
       })
       .strict(),
   ),

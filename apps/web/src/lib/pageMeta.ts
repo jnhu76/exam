@@ -19,6 +19,7 @@ interface RouteTitleRule {
 /** Static mapping from route paths to i18n keys. */
 const staticRouteTitleKeys = new Map<string, string>([
   [routes.login, "pageMeta.static.login"],
+  [routes.launchpad, "pageMeta.static.launchpad"],
   [routes.admin.dashboard, "pageMeta.static.dashboard"],
   [routes.admin.users, "pageMeta.static.users"],
   [routes.admin.candidates, "pageMeta.static.candidates"],

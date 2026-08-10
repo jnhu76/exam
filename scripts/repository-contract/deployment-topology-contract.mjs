@@ -39,6 +39,13 @@
  *     REDIS_PASSWORD, the server must run with `--requirepass`, and the
  *     healthcheck must authenticate — P7 review P1-1 / ADR-001 security
  *     considerations.
+ *   - there is exactly ONE production/operator Docker Compose entry point:
+ *     `docker-compose.yml`. No production PITR/backup/restore/production
+ *     variant Compose file may exist. Optional PostgreSQL capabilities such
+ *     as PITR are database configuration (postgres-enable-pitr.sh), not an
+ *     alternate Docker topology. Development/test Compose files
+ *     (docker-compose.dev.yml, docker-compose.test*.yml) are development
+ *     infrastructure and are explicitly ALLOWED.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -56,30 +63,85 @@ try {
   process.exit(1);
 }
 
-// P6-CORR2: deployment smoke scripts must not hard-code developer-specific
-// checkout paths. They must derive repo-root from the script location so the
-// smoke tests run from any clone directory (including relocated worktrees).
-const deploymentScriptsDir = join(ROOT, "scripts", "deployment");
+// ONE production/operator Compose entry point (docker-compose.yml). No
+// production PITR/backup/restore/production variant Compose file may exist.
+// dev/test Compose files are allowed (development infrastructure). The
+// stable rule: optional operational capabilities (PITR, backup, restore)
+// do NOT get another production topology — they are database
+// configuration (scripts/backup/postgres-enable-pitr.sh — ALTER SYSTEM),
+// not an alternate Compose topology. Development/test files match
+// docker-compose.dev.yml or docker-compose.test*.yml without allowlist
+// edits; anything else at repo root is flagged for explicit justification.
+const FORBIDDEN_PROD_VARIANT_RE =
+  /docker-compose\.(pitr|backup|restore|production)\.yml$/i;
+const ALLOWED_TEST_VARIANT_RE = /^docker-compose\.test[^/]*\.ya?ml$/i;
+const ALLOWED_DEV_VARIANT = "docker-compose.dev.yml";
 try {
-  const scriptFiles = readdirSync(deploymentScriptsDir).filter((f) =>
+  const repoFiles = readdirSync(ROOT);
+  for (const f of repoFiles) {
+    if (!/^docker-compose\b.*\.ya?ml$/i.test(f)) continue;
+    if (f === "docker-compose.yml" || f === ALLOWED_DEV_VARIANT) continue;
+    if (ALLOWED_TEST_VARIANT_RE.test(f)) continue;
+    if (FORBIDDEN_PROD_VARIANT_RE.test(f)) {
+      errors.push(
+        `'${f}' is a forbidden production Compose variant: there must be ` +
+          "exactly ONE production/operator Compose entry point " +
+          "(docker-compose.yml). Optional PostgreSQL capabilities such as " +
+          "PITR are database configuration (scripts/backup/" +
+          "postgres-enable-pitr.sh — ALTER SYSTEM), not an alternate Docker " +
+          "topology. Development/test Compose files are allowed.",
+      );
+    } else {
+      // An unknown docker-compose*.yml at repo root is suspicious — flag it
+      // so a new production variant cannot slip in under an unrecognized name.
+      errors.push(
+        `'${f}' is an unrecognized docker-compose variant at repo root. ` +
+          "If it is development/test infrastructure, name it " +
+          "docker-compose.dev.yml or docker-compose.test*.yml. Production " +
+          "capabilities must not introduce a second operator Compose " +
+          "entry point.",
+      );
+    }
+  }
+} catch {
+  // If the root cannot be read, the compose read above already failed.
+}
+
+// The deployment verification suite lives under tests/deployment/ and must
+// not hard-code developer-specific checkout paths. It must derive repo-root
+// from the script location so the tests run from any clone directory
+// (including relocated worktrees). A MISSING tests/deployment/ directory is
+// a contract error (the deployment recovery suite is a required surface);
+// unexpected filesystem failures propagate instead of being swallowed.
+const deploymentTestsDir = join(ROOT, "tests", "deployment");
+try {
+  const testFiles = readdirSync(deploymentTestsDir).filter((f) =>
     f.endsWith(".sh"),
   );
   const developerPathPatterns = [/\/home\/hoo\//, /\/Users\/\S+/];
-  for (const file of scriptFiles) {
-    const text = readFileSync(join(deploymentScriptsDir, file), "utf-8");
+  for (const file of testFiles) {
+    const text = readFileSync(join(deploymentTestsDir, file), "utf-8");
     for (const pattern of developerPathPatterns) {
       if (pattern.test(text)) {
         errors.push(
-          `'scripts/deployment/${file}' contains a developer-specific absolute ` +
-            `path matching ${pattern.toString()}. Smoke scripts must derive ` +
+          `'tests/deployment/${file}' contains a developer-specific absolute ` +
+            `path matching ${pattern.toString()}. Deployment tests must derive ` +
             "paths from their own location so they run from any checkout.",
         );
         break;
       }
     }
   }
-} catch {
-  // If the directory is missing, there are no smoke scripts to validate.
+} catch (err) {
+  if (err && err.code === "ENOENT") {
+    errors.push(
+      "tests/deployment/ is missing: the deployment verification suite " +
+        "(compose-smoke, launchpad-bootstrap, persistence-and-cold-restore, " +
+        "logical-backup-restore, pitr) is a required repository surface.",
+    );
+  } else {
+    throw err;
+  }
 }
 
 // Minimal structural parse — we only need top-level service presence and
@@ -135,6 +197,31 @@ if (!servicesBlock) {
       assertRequiredPostgresPassword(appBlock, "app");
       // The app must NOT depend on redis health (Redis is optional).
       assertNoRedisDependency(appBlock, "app");
+      // The Launchpad first-install setup token
+      // MUST be forwarded to the app container (Compose uses .env for
+      // interpolation only; without an environment: entry the token never
+      // reaches the container and the browser first-install UX is inert).
+      // The empty default keeps launchpad disabled for a bare
+      // `docker compose up` (not fail-fast at boot).
+      const appEnvBlock =
+        extractServiceBlock(appBlock, "environment") ?? appBlock;
+      const appEnvNoComments = appEnvBlock
+        .split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (
+        !/^\s*LAUNCHPAD_SETUP_TOKEN:\s*\$\{LAUNCHPAD_SETUP_TOKEN:-\}\s*$/m.test(
+          appEnvNoComments,
+        )
+      ) {
+        errors.push(
+          "'app' service must forward LAUNCHPAD_SETUP_TOKEN via " +
+            "'LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}' " +
+            "(Compose uses .env for interpolation " +
+            "only; without this entry the documented browser first-install " +
+            "UX is inert — the token never reaches the container).",
+        );
+      }
     }
   }
 

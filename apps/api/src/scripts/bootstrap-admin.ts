@@ -41,10 +41,31 @@ import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
+import { AdminAlreadyExistsError } from "@exam/domain";
 import { recordAtomicSystemAudit } from "../audit/auditWriter.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+
+/**
+ * Stable PostgreSQL advisory-lock key for first-install bootstrap
+ * serialization (P7-C corrective pass §6).
+ *
+ * `pg_advisory_xact_lock(bigint)` is transaction-scoped: acquired on BEGIN,
+ * auto-released on COMMIT/ROLLBACK. It serializes the "exactly one first
+ * installation may win" invariant across BOTH adapters (HTTP Launchpad and
+ * the bootstrap-admin CLI) so that ordinary RR-isolation + ON CONFLICT is
+ * not the only thing standing between two concurrent first-Admin writes.
+ *
+ * The value is an arbitrary fixed 64-bit integer (must be the same in every
+ * caller for the lock to coordinate). It is documented here as the single
+ * source of truth; do not derive it at runtime. Two concurrent bootstrap
+ * calls (HTTP-vs-HTTP, HTTP-vs-CLI, CLI-vs-CLI) enter the SAME serialization
+ * domain and are serviced strictly one at a time; the loser re-reads the
+ * initialized state / Admin authority inside its own (now-serialized) txn
+ * and refuses.
+ */
+export const BOOTSTRAP_ADVISORY_XACT_LOCK_KEY = -7095023170042848127n;
 
 /** Default slug for the internal organization (single-tenant Phase 1). */
 export const DEFAULT_ORG_SLUG = "default";
@@ -61,6 +82,15 @@ export interface BootstrapAdminParams {
   name: string;
   force?: boolean;
 }
+
+/**
+ * Which adapter invoked the canonical bootstrap mutation. Recorded in the
+ * `admin.bootstrap` audit metadata so the audit reflects the real entry
+ * point instead of a single hardcoded value:
+ *   - `local_script` — the bootstrap-admin CLI (operator shell);
+ *   - `launchpad`    — the HTTP Launchpad first-install adapter.
+ */
+export type BootstrapAdminSource = "local_script" | "launchpad";
 
 export interface BootstrapAdminOrganizationOptions {
   /**
@@ -104,6 +134,7 @@ export async function bootstrapAdmin(
   db: Database,
   organizationId: string,
   params: BootstrapAdminParams,
+  source: BootstrapAdminSource = "local_script",
 ): Promise<{
   user: BootstrapAdminResult["user"];
 }> {
@@ -126,7 +157,7 @@ export async function bootstrapAdmin(
       "Admin",
     );
     if (activeAdminCount > 0 && !params.force) {
-      throw new Error(
+      throw new AdminAlreadyExistsError(
         `An active Admin already exists in this organization. ` +
           `Use --force to create an additional Admin.`,
       );
@@ -160,7 +191,7 @@ export async function bootstrapAdmin(
         metadata: {
           username: user.username,
           name: user.name,
-          source: "local_script",
+          source,
         },
       },
     );
@@ -269,6 +300,14 @@ async function resolveOrCreateDefaultOrganizationInTx(
  * atomically. If any step fails, none of them land (no orphan org, no
  * orphan user, no orphan assignment, no orphan audit).
  *
+ * Concurrency (P7-C corrective pass §6): the transaction opens by taking a
+ * transaction-scoped PostgreSQL advisory lock
+ * ({@link BOOTSTRAP_ADVISORY_XACT_LOCK_KEY}) so HTTP Launchpad and the CLI
+ * enter the SAME serialization domain. Under a true first-install race
+ * (HTTP-vs-HTTP, HTTP-vs-CLI, CLI-vs-CLI) exactly one caller commits; the
+ * loser re-reads the initialized state / Admin authority inside its own
+ * (now-serialized) transaction and refuses.
+ *
  * This is the canonical production bootstrap path (P6-008). The baseline
  * dev/test seed (`packages/db/src/seed.ts`) is NOT the production path.
  */
@@ -276,10 +315,23 @@ export async function bootstrapAdminOnFreshDb(
   db: Database,
   params: BootstrapAdminParams,
   options: BootstrapAdminOrganizationOptions = {},
+  source: BootstrapAdminSource = "local_script",
 ): Promise<BootstrapAdminResult> {
   const passwordHash = await hashPassword(params.password);
 
   const result = await executeInTransaction(db, async (tx) => {
+    // Serialize the first-install "exactly one winner" invariant across BOTH
+    // adapters (HTTP Launchpad AND this CLI) via a transaction-scoped
+    // PostgreSQL advisory lock. RR-isolation + ON CONFLICT already protects
+    // correctness; this makes the domain explicit and removes reliance on
+    // retry semantics alone. The lock is auto-released at COMMIT/ROLLBACK.
+    // See BOOTSTRAP_ADVISORY_XACT_LOCK_KEY.
+    await tx.execute(
+      sql.raw(
+        `SELECT pg_advisory_xact_lock(${BOOTSTRAP_ADVISORY_XACT_LOCK_KEY.toString()})`,
+      ),
+    );
+
     // 1. Resolve/create the default org INSIDE this transaction so the
     //    org, Admin, assignment, and audit commit atomically.
     const organization = await resolveOrCreateDefaultOrganizationInTx(
@@ -302,7 +354,7 @@ export async function bootstrapAdminOnFreshDb(
       "Admin",
     );
     if (activeAdminCount > 0 && !params.force) {
-      throw new Error(
+      throw new AdminAlreadyExistsError(
         `An active Admin already exists in this organization. ` +
           `Use --force to create an additional Admin.`,
       );
@@ -337,7 +389,7 @@ export async function bootstrapAdminOnFreshDb(
         metadata: {
           username: user.username,
           name: user.name,
-          source: "local_script",
+          source,
         },
       },
     );
@@ -417,7 +469,12 @@ async function main() {
     if (params.organizationDisplayName) {
       orgOptions.organizationDisplayName = params.organizationDisplayName;
     }
-    const result = await bootstrapAdminOnFreshDb(conn.db, params, orgOptions);
+    const result = await bootstrapAdminOnFreshDb(
+      conn.db,
+      params,
+      orgOptions,
+      "local_script",
+    );
     const orgVerb = result.organization.created ? "Created" : "Resolved";
     process.stdout.write(
       `Organization ${orgVerb}.\n` +

@@ -2205,6 +2205,40 @@ const zhCN = {
     },
   },
 
+  /**
+   * Launchpad first-install page copy (P7-C1). Initial installation only —
+   * creates the first Admin and the internal default organization. NOT
+   * signup, NOT login, NOT Admin recovery. Once initialized the page
+   * redirects to /login.
+   */
+  launchpad: {
+    title: "系统初始化",
+    subtitle: "创建首个管理员账户以完成系统初始化",
+    organizationNameLabel: "组织名称",
+    organizationDisplayNameLabel: "组织显示名称（可选）",
+    adminNameLabel: "管理员姓名",
+    adminUsernameLabel: "管理员用户名",
+    adminPasswordLabel: "管理员密码",
+    setupTokenLabel: "初始化令牌",
+    organizationNamePlaceholder: "请输入组织名称",
+    organizationDisplayNamePlaceholder: "请输入组织显示名称（可选）",
+    adminNamePlaceholder: "请输入管理员姓名",
+    adminUsernamePlaceholder: "请输入管理员用户名",
+    adminPasswordPlaceholder: "请输入管理员密码",
+    setupTokenPlaceholder: "请输入初始化令牌",
+    organizationNameRequired: "请输入组织名称",
+    adminNameRequired: "请输入管理员姓名",
+    adminUsernameRequired: "请输入管理员用户名",
+    adminPasswordRequired: "请输入管理员密码",
+    setupTokenRequired: "请输入初始化令牌",
+    submit: "完成初始化",
+    submitting: "正在初始化...",
+    errors: {
+      loadStatusFailed: "无法检测初始化状态，请稍后重试",
+      bootstrapFailed: "初始化失败，请检查输入或初始化令牌后重试",
+    },
+  },
+
   /** StartExamPage (candidate pre-exam page) copy. */
   startExam: {
     errors: {
@@ -2281,6 +2315,7 @@ const zhCN = {
     fallbackPageTitle: "页面",
     static: {
       login: "登录",
+      launchpad: "系统初始化",
       dashboard: "仪表盘",
       users: "用户管理",
       candidates: "考生管理",
