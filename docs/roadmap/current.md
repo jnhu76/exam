@@ -135,6 +135,23 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
      preview, rollback, and import/export in Admin settings;
    - freeze resolved policies at publish/attempt creation.
 
+   > **P7-E0 status (2026-08-10):** the configuration reality audit is **READY
+   > FOR HUMAN REVIEW** (docs-only, on branch `feat/p7-e0-config-audit` / PR
+   > #276) — see
+   > [`docs/audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md`](../audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md).
+   > It inventories every configuration item, classifies it into the five
+   > authority classes (deployment/secret, system operational, organization,
+   > exam policy, code invariant), and records the snapshot/hazard map. Key
+   > verdict: **no generic settings subsystem is justified by current evidence,
+   > and no P7-E1 implementation is currently justified** — close E0 and proceed
+   > to P7-M1 (exam policy resolution / freeze model), which is where the real
+   > configuration pressure already exists (the profile-resolution freeze
+   > hazard). A future E1 is triggered only by a confirmed near-term requirement
+   > for Admin-editable operational settings; Email worker/retry is a candidate
+   > under that gate, not preselected; backup automation/status is a separate
+   > operational capability. P7-E itself is **NOT** complete; P7-E1 is **NOT**
+   > started. (Status flips to CLOSED when this PR merges.)
+
 7. **Configurable exam profiles**
    - model timing, admission, session/device, navigation, interruption,
      submission, randomization, result, monitoring, and audit as orthogonal
@@ -170,8 +187,14 @@ P7-C  portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
   drills). The Admin backup surface (formerly P7-B4) is explicitly OUT of
   scope here — restore is operator-owned; no browser restore button.
 
-configuration schema → versioned service → Admin settings UI
-                     → exam policy schema → profiles → creation wizard
+P7-E0  configuration reality audit  →  verdict: no settings control plane
+       justified now; no P7-E1 currently justified.
+P7-M1  exam policy resolution / freeze model   ← next (real config pressure)
+P7-M2  profile templates
+P7-M3  exam creation wizard
+Future P7-E1  (only if a confirmed Admin-editable operational-settings
+       requirement emerges): identify ONE coherent first vertical slice.
+       Backup automation/status is a separate operational capability, not E1.
 UI pilot → controlled family-by-family UI closeout
 ```
 
