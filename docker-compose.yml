@@ -1,5 +1,14 @@
 # Production Compose contract.
 #
+# ONE-COMPOSE MODEL (P7-C corrective pass): this file is the ONLY
+# production/operator Docker Compose entry point. There is no
+# docker-compose.pitr.yml / backup.yml / restore.yml / production.yml.
+# Optional PostgreSQL capabilities such as PITR are DATABASE configuration,
+# not an alternate Docker topology: enabling PITR is
+# `scripts/backup/postgres-enable-pitr.sh` (ALTER SYSTEM), not a second
+# Compose file. Development/test Compose files (docker-compose.dev.yml,
+# docker-compose.test.yml) are development infrastructure and may remain.
+#
 # Security invariants enforced here and by the
 # scripts/repository-contract/deployment-topology-contract.mjs guard:
 #
@@ -62,6 +71,13 @@ services:
       # change business-time comparison semantics).
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
+      # P7-C corrective pass: forward the Launchpad first-install setup
+      # token explicitly (NOT via a broad env_file, to keep explicit
+      # environment ownership). Unset/empty disables Launchpad (the
+      # bootstrap endpoint refuses) so a bare `docker compose up` still
+      # starts normally. Setting it in .env makes the browser first-Admin
+      # setup form usable. See backup-and-recovery.md §11.
+      LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy
@@ -101,6 +117,16 @@ services:
       # Containers are disposable; this host directory is not. The official
       # postgres image owns its internal PGDATA layout under this path.
       - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
+      # P7-C corrective pass: the WAL archive mount is ALWAYS present on the
+      # canonical db service, but it is inert by default (archive_mode stays
+      # off until an operator enables PITR via
+      # scripts/backup/postgres-enable-pitr.sh). The mount existing != PITR
+      # enabled. A normal operator never needs to understand WAL/PITR just
+      # to run Exam. For real disaster recovery, point
+      # EXAM_WAL_ARCHIVE_HOST_PATH at an INDEPENDENT failure domain (NAS /
+      # another server / a separate disk); the local default path is for
+      # development/drills only and is NOT host-loss protection.
+      - ${EXAM_WAL_ARCHIVE_HOST_PATH:-${EXAM_DATA_ROOT:-./data}/wal-archive}:/wal-archive
     healthcheck:
       test:
         [

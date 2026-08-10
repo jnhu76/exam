@@ -13,7 +13,11 @@
 #   unless the target is recreated/cleaned under an explicit restore contract.
 #   This script enforces that contract: it DROPs the target database and
 #   recreates it from template0 (a truly empty database with no local
-#   additions) BEFORE pg_restore, so the result is an EXACT match of the dump.
+#   additions) BEFORE pg_restore, so no target-only schema/data from the
+#   previous database survives (it is a clean logical reconstruction of the
+#   dumped state, NOT a merge). It is NOT a claim of physical byte identity —
+#   a logical dump reconstructs the dumped database's logical schema/data under
+#   the supported deployment contract.
 #
 # Safety (C2.6):
 #   - Restore is OPERATOR-ONLY. There is no browser restore button and there
@@ -38,8 +42,10 @@ Usage: postgres-logical-restore.sh <COMPOSE_PROJECT> <DUMP_PATH> <TARGET_DB>
   COMPOSE_PROJECT  the Compose project name (addresses <project>-db-1).
   DUMP_PATH        the custom-format .dump artifact to restore.
   TARGET_DB        the database name to restore INTO. This database is DROPped
-                   and recreated from template0 first (CLEAN target), so the
-                   result is an EXACT match of the dump — NOT a merge.
+                   and recreated from template0 first (CLEAN target), so no
+                   target-only schema/data from the previous database survives
+                   (clean logical reconstruction of the dumped state — NOT a
+                   merge).
 
 This is a DESTRUCTIVE operation. The target database is dropped first. Stop
 the API + worker before restoring (avoid writes during restore). The
@@ -90,8 +96,10 @@ echo "  source dump: ${DUMP}"
 echo "  target:      ${DB_CONTAINER} / database '${TARGET_DB}'"
 echo ""
 echo "  The target database '${TARGET_DB}' will be DROPped and recreated"
-echo "  from template0, then the dump is restored into it. The result is an"
-echo "  EXACT match of the dump — any data currently in '${TARGET_DB}' is lost."
+echo "  from template0, then the dump is restored into it. No target-only"
+echo "  schema/data from the previous database survives — this is a clean"
+echo "  logical reconstruction of the dumped state, NOT a merge. Any data"
+echo "  currently in '${TARGET_DB}' is lost."
 echo "  STOP the API + worker before continuing (avoid writes during restore)."
 echo ""
 echo "  Type the target database name to confirm: ${TARGET_DB}"

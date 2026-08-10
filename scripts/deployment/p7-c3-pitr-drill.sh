@@ -24,8 +24,9 @@ SCRIPT_DIR="$(
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 BASEBACKUP_SH="${REPO_ROOT}/scripts/backup/pg-basebackup.sh"
+ENABLE_PITR_SH="${REPO_ROOT}/scripts/backup/postgres-enable-pitr.sh"
 
-if [ ! -f "${COMPOSE_FILE}" ] || [ ! -x "${BASEBACKUP_SH}" ]; then
+if [ ! -f "${COMPOSE_FILE}" ] || [ ! -x "${BASEBACKUP_SH}" ] || [ ! -x "${ENABLE_PITR_SH}" ]; then
   echo "FAIL: required scripts not found." >&2
   exit 1
 fi
@@ -64,6 +65,12 @@ export JWT_SECRET="p7c3-src-jwt-$(openssl rand -hex 16)"
 ORIGIN="http://localhost:3000"
 export CORS_ORIGIN="${ORIGIN}"
 export PUBLIC_WEB_ORIGIN="${ORIGIN}"
+# The canonical docker-compose.yml mounts the WAL archive at
+# EXAM_WAL_ARCHIVE_HOST_PATH. Point it at an isolated subdir of the source
+# root so it survives container recreation and is portable to the recovery
+# cluster. This is the SAME mount operators get; no second compose file.
+export EXAM_WAL_ARCHIVE_HOST_PATH="${SRC_ROOT}/wal-archive"
+mkdir -p "${SRC_ROOT}/wal-archive"
 ADMIN_USER="p7c3admin"
 ADMIN_PASS="P7C3-Pitr-Admin-$(openssl rand -hex 4)"
 
@@ -90,44 +97,20 @@ echo "--- start SOURCE cluster (archiving OFF initially, like production) ---"
 docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" up -d --quiet-pull db >/dev/null
 wait_db "${PROJECT_SRC}"
 
-echo "--- enable WAL archiving via ALTER SYSTEM + restart ---"
-# wal_level is already 'replica' (sufficient for PITR). Enable archive_mode
-# and a non-overwriting archive_command. archive_mode is postmaster-level so
-# it needs a restart. The WAL archive dir is bind-mounted from the source
-# data root so it survives container recreation and is portable to the
-# recovery cluster.
-mkdir -p "${SRC_ROOT}/wal-archive"
-# Make the WAL archive writable by the container postgres user (uid 999).
-docker run --rm -v "${SRC_ROOT}/wal-archive:/w" alpine:latest chmod 777 /w
-psql_src -c "ALTER SYSTEM SET archive_mode = 'on';"
-psql_src -c "ALTER SYSTEM SET archive_command = 'test ! -f /wal-archive/%f && cp %p /wal-archive/%f';"
-psql_src -c "ALTER SYSTEM SET archive_timeout = '30s';"
-# Mount the WAL archive dir into the db container. Compose does not support
-# live volume mounts, so recreate the db container with the extra bind mount
-# via a one-shot override. We use a temporary override file.
-WAL_OVERRIDE="${SRC_ROOT}/wal-override.yml"
-cat > "${WAL_OVERRIDE}" <<YAML
-services:
-  db:
-    volumes:
-      - ${SRC_ROOT}/wal-archive:/wal-archive
-YAML
-docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" -f "${WAL_OVERRIDE}" up -d --force-recreate db >/dev/null
-wait_db "${PROJECT_SRC}"
-
-# Force a WAL switch so archiving activates and the current segment is
-# archived. Confirm archive_mode is on and archiving is working.
-psql_src -c "SELECT pg_switch_wal();"
-sleep 2
+echo "--- enable WAL archiving via the CANONICAL operator script ---"
+# P7-C corrective pass §25: the drill MUST use the SAME enable-PITR path as
+# operators (scripts/backup/postgres-enable-pitr.sh). No private second
+# method. This exercises ALTER SYSTEM + db restart + pg_stat_archiver proof.
+bash "${ENABLE_PITR_SH}" "${PROJECT_SRC}" "${COMPOSE_FILE}" 2>&1 | sed 's/^/    /'
 ARCHIVE_MODE_VAL="$(psql_src -tAc "SHOW archive_mode;" | tr -d '[:space:]')"
 if [ "${ARCHIVE_MODE_VAL}" != "on" ]; then
   echo "FAIL: archive_mode is '${ARCHIVE_MODE_VAL}', expected 'on'." >&2
   exit 1
 fi
-echo "  PASS: archive_mode=on, WAL archive mounted at ${SRC_ROOT}/wal-archive."
+echo "  PASS: archive_mode=on (via canonical postgres-enable-pitr.sh), WAL archive at ${SRC_ROOT}/wal-archive."
 
 echo "--- bootstrap first Admin + write State A (marker A) ---"
-docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" -f "${WAL_OVERRIDE}" up -d --quiet-pull app email-worker >/dev/null
+docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" up -d --quiet-pull app email-worker >/dev/null
 for i in $(seq 1 90); do
   docker exec "${PROJECT_SRC}-app-1" node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1 && break
   sleep 1
@@ -173,7 +156,7 @@ sleep 2
 echo "  State C written (destructive marker C, after recovery target LSN)."
 
 echo "--- stop SOURCE cluster; recover into a fresh cluster ---"
-docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" -f "${WAL_OVERRIDE}" down --remove-orphans >/dev/null 2>&1 || true
+docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" down --remove-orphans >/dev/null 2>&1 || true
 
 # Recovery cluster: the PG18 docker image expects PGDATA at
 # /var/lib/postgresql/18/docker (bind-mounted from ${REC_ROOT}/postgres).

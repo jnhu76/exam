@@ -19,6 +19,11 @@
 #     existing destination.
 #   - It validates the source looks like a PGDATA (presence of
 #     PG_VERSION/postgresql.conf under the postgres major-version subdir).
+#   - It refuses an obviously RUNNING source (P7-C corrective pass §7): if a
+#     Compose db container is running OR a live `postmaster.pid` is present
+#     in the actual PGDATA, it aborts before copying. Do not merely print
+#     "make sure PostgreSQL is stopped" and copy anyway. The operator MUST
+#     `docker compose down` first.
 #   - It does NOT start, stop, or restart the deployment for you. The
 #     operator must stop PostgreSQL cleanly BEFORE running this script and
 #     restart it AFTER. A live copy of an active PGDATA is corrupt-prone and
@@ -113,6 +118,26 @@ PGDATA_DIR="$(dirname "${PGDATA_SUBDIR}")"
 if ! docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
   sh -c "test -f '${PGDATA_DIR}/postgresql.conf'" 2>/dev/null; then
   echo "FAIL: postgresql.conf not found next to PG_VERSION at ${PGDATA_DIR}." >&2
+  exit 2
+fi
+
+# ── P7-C corrective pass §7: refuse an obviously RUNNING source. ──
+# A live copy of an active PGDATA is corrupt-prone and NOT supported. The
+# smallest SOURCE-SPECIFIC evidence is a live `postmaster.pid` present in the
+# actual PGDATA being backed up. (A broad `docker ps | grep db-1` check is
+# NOT used: it would false-positive against any unrelated db container
+# running on the same host from a different Compose project — the running
+# source is identified by its own PGDATA, not by a name pattern.) A clean
+# `docker compose down` removes postmaster.pid; its presence therefore means
+# a postmaster is (or believes it is) still owning THIS cluster. We do NOT
+# build a process detector framework. The supported flow is
+# `docker compose down` THEN this script.
+if docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
+  sh -c "test -f '${PGDATA_DIR}/postmaster.pid'" 2>/dev/null; then
+  echo "FAIL: postmaster.pid present at ${PGDATA_DIR}." >&2
+  echo "       A postmaster appears to still own this PGDATA. Run" >&2
+  echo "       'docker compose down' and ensure PostgreSQL is fully stopped" >&2
+  echo "       before a cold-filesystem copy." >&2
   exit 2
 fi
 

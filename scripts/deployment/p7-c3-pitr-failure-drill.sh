@@ -28,8 +28,9 @@ SCRIPT_DIR="$(
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 BASEBACKUP_SH="${REPO_ROOT}/scripts/backup/pg-basebackup.sh"
+ENABLE_PITR_SH="${REPO_ROOT}/scripts/backup/postgres-enable-pitr.sh"
 
-if [ ! -f "${COMPOSE_FILE}" ] || [ ! -x "${BASEBACKUP_SH}" ]; then
+if [ ! -f "${COMPOSE_FILE}" ] || [ ! -x "${BASEBACKUP_SH}" ] || [ ! -x "${ENABLE_PITR_SH}" ]; then
   echo "FAIL: required scripts not found." >&2
   exit 1
 fi
@@ -70,6 +71,9 @@ export JWT_SECRET="p7c3fail-jwt-$(openssl rand -hex 16)"
 ORIGIN="http://localhost:3000"
 export CORS_ORIGIN="${ORIGIN}"
 export PUBLIC_WEB_ORIGIN="${ORIGIN}"
+# Canonical WAL archive mount (no second compose file).
+export EXAM_WAL_ARCHIVE_HOST_PATH="${SRC_ROOT}/wal-archive"
+mkdir -p "${SRC_ROOT}/wal-archive"
 
 psql_src() {
   docker exec "${PROJECT_SRC}-db-1" psql -v ON_ERROR_STOP=1 -U exam -d exam "$@"
@@ -98,23 +102,12 @@ fail() {
 
 echo "=== P7-C3 PITR FAILURE-MODE drill (ts ${RUN_TS}) ==="
 
-echo "--- start SOURCE cluster (archiving ON) ---"
+echo "--- start SOURCE cluster; enable WAL archiving via canonical script ---"
 docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" up -d --quiet-pull db >/dev/null
 wait_db "${PROJECT_SRC}"
-
-mkdir -p "${SRC_ROOT}/wal-archive"
-docker run --rm -v "${SRC_ROOT}/wal-archive:/w" alpine:latest chmod 777 /w
-psql_src -c "ALTER SYSTEM SET archive_mode = 'on';"
-psql_src -c "ALTER SYSTEM SET archive_command = 'test ! -f /wal-archive/%f && cp %p /wal-archive/%f';"
-psql_src -c "ALTER SYSTEM SET archive_timeout = '30s';"
-WAL_OVERRIDE="${SRC_ROOT}/wal-override.yml"
-cat > "${WAL_OVERRIDE}" <<YAML
-services:
-  db:
-    volumes:
-      - ${SRC_ROOT}/wal-archive:/wal-archive
-YAML
-docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" -f "${WAL_OVERRIDE}" up -d --force-recreate db >/dev/null
+# P7-C corrective pass §25: use the SAME canonical enable-PITR path as
+# operators. No private second method.
+bash "${ENABLE_PITR_SH}" "${PROJECT_SRC}" "${COMPOSE_FILE}" >/dev/null 2>&1
 wait_db "${PROJECT_SRC}"
 psql_src -c "SELECT pg_switch_wal();" >/dev/null
 sleep 2
@@ -184,7 +177,7 @@ psql_src -c "SELECT pg_switch_wal();" >/dev/null
 sleep 3
 
 # Stop the source so we can hand the backup + WAL to a fresh recovery cluster.
-docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" -f "${WAL_OVERRIDE}" down --remove-orphans >/dev/null 2>&1 || true
+docker compose -p "${PROJECT_SRC}" -f "${COMPOSE_FILE}" down --remove-orphans >/dev/null 2>&1 || true
 
 mkdir -p "${REC_ROOT}/postgres/18/docker" "${REC_ROOT}/wal-archive"
 docker run --rm -v "${BASEBACKUP_DIR}:/from:ro" -v "${REC_ROOT}/postgres/18/docker:/to" \

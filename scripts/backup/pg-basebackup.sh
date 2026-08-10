@@ -13,20 +13,40 @@
 #   - required WAL included/streamed (-X stream)
 #   - backup target OUTSIDE the live PGDATA
 #   - no unsafe --no-sync in the production path
-#   - uses a narrowly scoped replication-capable role created by the operator
-#     (C3.3 — do NOT give the application API superuser/replication authority)
 #
-# This helper runs pg_basebackup via the db container's local connection
-# (peer/trust auth for the superuser) so the operator does NOT need to expose
-# a replication port or hand out a replication password for the bundled
-# single-node path. For an external cluster, set up a replication role per
-# PostgreSQL docs and adjust PGHOST/PGUSER/PGPASSWORD.
+# Authentication truth (P7-C corrective pass §17): pg_basebackup runs in a
+# sibling container that shares the db container's NETWORK namespace and
+# connects over loopback TCP (-h 127.0.0.1). The official postgres image
+# authenticates TCP connections with scram-sha-256 by default (trust applies
+# only to Unix-socket local connections), so a password IS required. This
+# script derives the actual deployment's POSTGRES_USER and POSTGRES_PASSWORD
+# from the RUNNING db container's environment and passes the password via
+# PGPASSWORD (never argv). PGUSER/PGPASSWORD defaults therefore follow the
+# deployment; an operator does not need to maintain a separate backup
+# credential namespace for the bundled single-node path.
+#
+# Replication privilege (P7-C corrective pass §19): pg_basebackup requires a
+# SUPERUSER or REPLICATION-capable role. For the bundled single-node
+# deployment, this script uses the bootstrap PostgreSQL superuser
+# (POSTGRES_USER), which satisfies that requirement. A narrowly scoped
+# replication-only role is NOT provisioned by this script; future hardening
+# (a dedicated REPLICATION role with no other authority) belongs in a later
+# operations / P7-E pass and is documented separately. The comment and the
+# implementation agree: the bundled path uses the superuser over loopback TCP
+# with the deployment password.
 #
 # Manifest verification (C3.4): after the base backup, run pg_verifybackup on
 # the manifest as an integrity check. NOTE the documented limitation: manifest
-# verification is backup-integrity evidence, NOT proof that Exam can
-# successfully start and satisfy business invariants after restore. A restore
-# drill is still required (see the PITR drill / physical-restore path).
+# verification is backup-integrity evidence (files match their SHA256 + the
+# manifest signature is valid), NOT proof that Exam can successfully start and
+# satisfy business invariants after restore. A restore drill is still required
+# (see the PITR drill / physical-restore path).
+#
+# PITR base-backup rule (§21): WAL archiving MUST be active BEFORE the base
+# backup that will anchor PITR. Run scripts/backup/postgres-enable-pitr.sh
+# FIRST, confirm the archiver is producing evidence, THEN take this base
+# backup. A base backup taken before WAL archiving was established is NOT a
+# valid anchor for later continuous PITR.
 #
 # Usage:
 #   ./pg-basebackup.sh <COMPOSE_PROJECT> <DEST_DIR>
@@ -46,6 +66,11 @@ Takes a physical online base backup of the running PostgreSQL server
 (complete cluster + streamed WAL via -X stream), then verifies the backup
 manifest with pg_verifybackup. PostgreSQL stays ONLINE. The backup target
 is OUTSIDE the live PGDATA. --no-sync is NOT used in this production path.
+
+The connection uses the deployment's POSTGRES_USER over loopback TCP with
+the deployment password (read from the db container's environment, passed
+via PGPASSWORD). For PITR, WAL archiving must already be active (run
+postgres-enable-pitr.sh first).
 EOF
 }
 
@@ -82,24 +107,51 @@ if ! docker inspect "${DB_CONTAINER}" >/dev/null 2>&1; then
   echo "FAIL: db container '${DB_CONTAINER}' not found (project '${PROJECT}')." >&2
   exit 2
 fi
-if ! docker exec "${DB_CONTAINER}" pg_isready -U exam -d exam >/dev/null 2>&1; then
+
+# Derive the actual deployment's POSTGRES_USER / POSTGRES_PASSWORD from the
+# RUNNING db container (NOT hardcoded). The bundled Compose seeds these; an
+# operator that customized POSTGRES_USER=appdb is honored automatically.
+DEPLOY_PG_USER="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_USER=//p' | head -1)"
+DEPLOY_PG_DB="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_DB=//p' | head -1)"
+DEPLOY_PG_PASSWORD="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_PASSWORD=//p' | head -1)"
+DEPLOY_PG_USER="${DEPLOY_PG_USER:-exam}"
+DEPLOY_PG_DB="${DEPLOY_PG_DB:-exam}"
+
+if ! docker exec "${DB_CONTAINER}" pg_isready -U "${DEPLOY_PG_USER}" -d "${DEPLOY_PG_DB}" >/dev/null 2>&1; then
   echo "FAIL: PostgreSQL is not ready in ${DB_CONTAINER}." >&2
   exit 2
 fi
 
+# PGUSER/PGPASSWORD precedence (§18): an explicit host export wins (operators
+# with a separate backup credential), otherwise fall back to the deployment's
+# POSTGRES_USER / POSTGRES_PASSWORD read from the container. Never hardcode
+# PGUSER=exam when POSTGRES_USER may vary.
+EFFECTIVE_PGUSER="${PGUSER:-${DEPLOY_PG_USER}}"
+EFFECTIVE_PGPASSWORD="${PGPASSWORD:-${DEPLOY_PG_PASSWORD}}"
+if [ -z "${EFFECTIVE_PGPASSWORD}" ]; then
+  echo "FAIL: no PostgreSQL password available." >&2
+  echo "       The connection is over loopback TCP (scram-sha-256), which" >&2
+  echo "       requires a password. Export PGPASSWORD=<POSTGRES_PASSWORD> or" >&2
+  echo "       ensure the db container exposes POSTGRES_PASSWORD." >&2
+  exit 2
+fi
+
 echo "Physical online base backup (pg_basebackup):"
-echo "  source: ${DB_CONTAINER}"
+echo "  source: ${DB_CONTAINER} (PG user: ${EFFECTIVE_PGUSER})"
 echo "  destination: ${DEST}"
 echo "  PostgreSQL stays ONLINE; required WAL streamed (-X stream)."
+echo "  auth: loopback TCP + scram-sha-256, password via PGPASSWORD (never argv)."
 
-# Run pg_basebackup INSIDE the db container against the local server. The
-# local connection uses peer/trust auth for the bootstrap superuser
-# (POSTGRES_USER), so no replication password is needed for the bundled
-# single-node path. -D points at a path INSIDE the container; we stream the
-# backup to the host via a mounted destination.
-#
-# Create the destination on the host first, then bind-mount it into the
-# container as the backup target.
+# Run pg_basebackup in a sibling container that shares the db container's
+# network namespace and connects over loopback TCP. -D points at a path
+# INSIDE the container; we bind-mount the host destination as the backup
+# target.
 mkdir -p "${DEST}"
 
 # pg_basebackup options:
@@ -113,13 +165,15 @@ mkdir -p "${DEST}"
 #                  backup_label / manifest is finalized, so a crash on the
 #                  backup host does not leave a half-written backup.
 LABEL="exam-basebackup-$(date -u +%Y%m%dT%H%M%SZ)"
-docker run --rm \
+# NOTE: PGPASSWORD is passed via -e (environment), NEVER on the argv, so it
+# does not leak via the process list or docker inspect of the basebackup cmd.
+PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
   -v "${DEST}:/backup:rw" \
   --network "container:${DB_CONTAINER}" \
-  -e PGPASSWORD="${PGPASSWORD:-}" \
+  -e PGPASSWORD="${EFFECTIVE_PGPASSWORD}" \
   postgres:18.4-bookworm \
   pg_basebackup \
-    -h 127.0.0.1 -U "${PGUSER:-exam}" \
+    -h 127.0.0.1 -U "${EFFECTIVE_PGUSER}" \
     -D /backup \
     -X stream \
     -c fast \

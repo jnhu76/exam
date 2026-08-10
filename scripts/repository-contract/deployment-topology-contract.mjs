@@ -39,6 +39,14 @@
  *     REDIS_PASSWORD, the server must run with `--requirepass`, and the
  *     healthcheck must authenticate — P7 review P1-1 / ADR-001 security
  *     considerations.
+ *   - there is exactly ONE production/operator Docker Compose entry point:
+ *     `docker-compose.yml`. No production PITR/backup/restore/production
+ *     variant Compose file may exist. Optional PostgreSQL capabilities such
+ *     as PITR are database configuration (postgres-enable-pitr.sh), not an
+ *     alternate Docker topology. Development/test Compose files
+ *     (docker-compose.dev.yml, docker-compose.test.yml,
+ *     docker-compose.test.override.yml) are development infrastructure and
+ *     are explicitly ALLOWED (P7-C corrective pass §26).
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -54,6 +62,53 @@ try {
 } catch {
   console.error("FAIL: docker-compose.yml is missing from repository root.");
   process.exit(1);
+}
+
+// P7-C corrective pass §26: exactly ONE production/operator Compose entry
+// point (docker-compose.yml). No production PITR/backup/restore/production
+// variant Compose file may exist. dev/test Compose files are allowed
+// (development infrastructure). The forbidden set is the human-facing
+// invariant: operators must not be told to combine Compose files for any
+// production capability; PITR is an optional cluster capability configured
+// via scripts/backup/postgres-enable-pitr.sh (ALTER SYSTEM), not a second
+// topology.
+const ALLOWED_COMPOSE_VARIANTS = new Set([
+  "docker-compose.yml",
+  "docker-compose.dev.yml",
+  "docker-compose.test.yml",
+  "docker-compose.test.override.yml",
+  "docker-compose.test.build.yml",
+]);
+const FORBIDDEN_PROD_VARIANT_RE =
+  /docker-compose\.(pitr|backup|restore|production)\.yml$/i;
+try {
+  const repoFiles = readdirSync(ROOT);
+  for (const f of repoFiles) {
+    if (!/^docker-compose\b.*\.ya?ml$/i.test(f)) continue;
+    if (ALLOWED_COMPOSE_VARIANTS.has(f)) continue;
+    if (FORBIDDEN_PROD_VARIANT_RE.test(f)) {
+      errors.push(
+        `'${f}' is a forbidden production Compose variant: there must be ` +
+          "exactly ONE production/operator Compose entry point " +
+          "(docker-compose.yml). Optional PostgreSQL capabilities such as " +
+          "PITR are database configuration (scripts/backup/" +
+          "postgres-enable-pitr.sh — ALTER SYSTEM), not an alternate Docker " +
+          "topology. Development/test Compose files are allowed.",
+      );
+    } else {
+      // An unknown docker-compose*.yml at repo root is suspicious — flag it
+      // so a new production variant cannot slip in under an unrecognized name.
+      errors.push(
+        `'${f}' is an unrecognized docker-compose variant at repo root. ` +
+          "If it is development/test infrastructure, add it to the " +
+          "ALLOWED_COMPOSE_VARIANTS allowlist in this guard with a " +
+          "justification. Production capabilities must not introduce a " +
+          "second operator Compose entry point.",
+      );
+    }
+  }
+} catch {
+  // If the root cannot be read, the compose read above already failed.
 }
 
 // P6-CORR2: deployment smoke scripts must not hard-code developer-specific
@@ -135,6 +190,31 @@ if (!servicesBlock) {
       assertRequiredPostgresPassword(appBlock, "app");
       // The app must NOT depend on redis health (Redis is optional).
       assertNoRedisDependency(appBlock, "app");
+      // P7-C corrective pass §4: the Launchpad first-install setup token
+      // MUST be forwarded to the app container (Compose uses .env for
+      // interpolation only; without an environment: entry the token never
+      // reaches the container and the browser first-install UX is inert).
+      // The empty default keeps launchpad disabled for a bare
+      // `docker compose up` (not fail-fast at boot).
+      const appEnvBlock =
+        extractServiceBlock(appBlock, "environment") ?? appBlock;
+      const appEnvNoComments = appEnvBlock
+        .split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (
+        !/^\s*LAUNCHPAD_SETUP_TOKEN:\s*\$\{LAUNCHPAD_SETUP_TOKEN:-\}\s*$/m.test(
+          appEnvNoComments,
+        )
+      ) {
+        errors.push(
+          "'app' service must forward LAUNCHPAD_SETUP_TOKEN via " +
+            "'LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}' " +
+            "(P7-C corrective pass: Compose uses .env for interpolation " +
+            "only; without this entry the documented browser first-install " +
+            "UX is inert — the token never reaches the container).",
+        );
+      }
     }
   }
 
