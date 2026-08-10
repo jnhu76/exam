@@ -34,6 +34,7 @@ import {
   extendExam,
   publishExam,
   publishResults,
+  assertExamPolicyInputValid,
 } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import type { RequestContext, Exam, Question } from "@exam/domain";
@@ -513,6 +514,35 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         perIncidentCapSeconds: data.interruptionGracePerIncidentSeconds,
         perAttemptAggregateCapSeconds: data.interruptionGracePerAttemptSeconds,
       });
+      const resolvedResultPublicationMode = resolveResultPublicationMode(
+        request.body,
+        data.resultPublicationMode ?? "immediate",
+      );
+
+      // P7-M1: canonical cross-field policy validation on create (design §21).
+      // Runs on the exact merged policy that will be persisted, so authoring
+      // rejects invalid combinations early. Publish revalidates the whole
+      // policy again as the freeze/acceptance gate.
+      assertExamPolicyInputValid({
+        timingMode: data.timingMode,
+        durationMinutes: data.durationMinutes,
+        openAt: new Date(data.openAt),
+        closeAt: new Date(data.closeAt),
+        latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
+        minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
+        questionSelectionMode: data.questionSelectionMode,
+        retakePolicy: data.retakePolicy,
+        maxAttempts: data.maxAttempts,
+        scoreStrategy: data.scoreStrategy,
+        passingScore: data.passingScore,
+        totalScore: data.totalScore,
+        resultPublicationMode: resolvedResultPublicationMode,
+        interruptionTimePolicy: interruptionPolicy.policy,
+        interruptionGracePerIncidentSeconds:
+          interruptionPolicy.perIncidentCapSeconds,
+        interruptionGracePerAttemptSeconds:
+          interruptionPolicy.perAttemptAggregateCapSeconds,
+      });
 
       const exam = await createExamRepo(fastify.db).create(ctx, {
         title: data.title,
@@ -534,10 +564,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         maxAttempts: data.maxAttempts,
         latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
         minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
-        resultPublicationMode: resolveResultPublicationMode(
-          request.body,
-          data.resultPublicationMode ?? "immediate",
-        ),
+        resultPublicationMode: resolvedResultPublicationMode,
         interruptionTimePolicy: interruptionPolicy.policy,
         interruptionGracePerIncidentSeconds:
           interruptionPolicy.perIncidentCapSeconds,
@@ -768,6 +795,80 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               updateData.interruptionGracePerAttemptSeconds =
                 resolved.perAttemptAggregateCapSeconds;
             }
+          }
+
+          // P7-M1: canonical cross-field policy validation on draft update
+          // (design §21). Published updates are schedule-only (guarded above)
+          // and excluded. For draft, validate the FULL merged policy that will
+          // result from this patch, so an invalid combination is rejected at
+          // authoring time, not only at publish. This subsumes the
+          // passingScore<=totalScore guard above for the merged shape and adds
+          // openAt<closeAt + interruption caps + max_attempts sanity.
+          if (exam.status === "draft") {
+            assertExamPolicyInputValid({
+              timingMode:
+                (updateData.timingMode as Exam["timingMode"]) ??
+                exam.timingMode,
+              durationMinutes:
+                (updateData.durationMinutes as number | undefined) ??
+                exam.durationMinutes,
+              openAt: (updateData.openAt as Date | undefined) ?? exam.openAt,
+              closeAt: (updateData.closeAt as Date | undefined) ?? exam.closeAt,
+              latestStartOffsetMinutes:
+                (updateData.latestStartOffsetMinutes as
+                  | number
+                  | null
+                  | undefined) ?? exam.latestStartOffsetMinutes,
+              minSubmitAfterStartMinutes:
+                (updateData.minSubmitAfterStartMinutes as
+                  | number
+                  | null
+                  | undefined) ?? exam.minSubmitAfterStartMinutes,
+              questionSelectionMode:
+                (updateData.questionSelectionMode as
+                  | Exam["questionSelectionMode"]
+                  | undefined) ?? exam.questionSelectionMode,
+              retakePolicy:
+                (updateData.retakePolicy as Exam["retakePolicy"] | undefined) ??
+                exam.retakePolicy,
+              maxAttempts:
+                (updateData.maxAttempts as number | undefined) ??
+                exam.maxAttempts,
+              scoreStrategy:
+                (updateData.scoreStrategy as
+                  | Exam["scoreStrategy"]
+                  | undefined) ?? exam.scoreStrategy,
+              passingScore:
+                (updateData.passingScore as number | undefined) ??
+                exam.passingScore,
+              totalScore:
+                (updateData.totalScore as number | undefined) ??
+                exam.totalScore,
+              resultPublicationMode:
+                (updateData.resultPublicationMode as
+                  | Exam["resultPublicationMode"]
+                  | undefined) ?? exam.resultPublicationMode,
+              interruptionTimePolicy:
+                (updateData.interruptionTimePolicy as
+                  | Exam["interruptionTimePolicy"]
+                  | undefined) ??
+                exam.interruptionTimePolicy ??
+                "strict",
+              interruptionGracePerIncidentSeconds:
+                (updateData.interruptionGracePerIncidentSeconds as
+                  | number
+                  | null
+                  | undefined) ??
+                exam.interruptionGracePerIncidentSeconds ??
+                null,
+              interruptionGracePerAttemptSeconds:
+                (updateData.interruptionGracePerAttemptSeconds as
+                  | number
+                  | null
+                  | undefined) ??
+                exam.interruptionGracePerAttemptSeconds ??
+                null,
+            });
           }
           const updated = (await repo.update(
             ctx,

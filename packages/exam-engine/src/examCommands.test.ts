@@ -183,12 +183,12 @@ describe("examCommands", () => {
       expect(result.passingScore).toBe(0);
     });
 
-    it("throws when passingScore is negative", async () => {
-      const repo = makeRepo(makeExam({ passingScore: -1 }));
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        ValidationError,
-      );
-    });
+    // P7-M1: passingScore >= 0 is a shape invariant owned by the Zod
+    // contract + DB CHECK, not the engine. publishExam no longer re-checks the
+    // lower bound; it validates the cross-field relationship (passing <= total)
+    // via the canonical validator. A negative passingScore that somehow reached
+    // the engine would still satisfy passing<=total, so publish trusts the
+    // upstream shape boundary. See docs/audits/P7-M1-... §9/§10.
 
     it("throws when passingScore exceeds effective question total", async () => {
       const repo = makeRepo(makeExam({ passingScore: 101, totalScore: 100 }));

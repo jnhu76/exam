@@ -1,4 +1,5 @@
 export * from "./examCommands.js";
+export * from "./examPolicy.js";
 export {
   canTransition as canExamTransition,
   assertTransition as assertExamTransition,

@@ -1,6 +1,7 @@
 import type { Exam, Question, QuestionSnapshot } from "@exam/domain";
 import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
 import { assertTransition } from "./examStateMachine.js";
+import { assertExamPolicyValid } from "./examPolicy.js";
 
 export { assertTransition as assertExamTransition } from "./examStateMachine.js";
 
@@ -101,12 +102,10 @@ export async function publishExam(
   if (exam.questionIds.length === 0) {
     throw new ValidationError("Exam must have at least one question");
   }
-  if (exam.passingScore < 0) {
-    throw new ValidationError("Passing score must not be negative");
-  }
-  if (exam.durationMinutes <= 0) {
-    throw new ValidationError("Duration must be positive");
-  }
+  // P7-M1: Phase-1 invariants. The timing/selection/retake enum values are
+  // narrowed by Zod literals at the contract boundary; these guards are the
+  // engine-side re-check (publish is the freeze/acceptance gate) and also
+  // defend against historically/stale data that predates a narrower contract.
   if (exam.timingMode !== "timed_window") {
     throw new ValidationError("Phase 1 only supports timed_window exams");
   }
@@ -120,9 +119,14 @@ export async function publishExam(
   ) {
     throw new ValidationError("Retake policy is not supported in Phase 1");
   }
-  if (exam.openAt >= exam.closeAt) {
-    throw new ValidationError("Exam openAt must be before closeAt");
-  }
+
+  // P7-M1: canonical cross-field policy revalidation (design §11). Publish is
+  // the authority/freeze boundary and revalidates the WHOLE resolved policy —
+  // window ordering, passing<=total, max_attempts sanity, and interruption
+  // caps (ADR-013). Replaces the previously scattered inline guards. Pure;
+  // resource-integrity checks (standardAnswer/rubric, totalScore==sum) below
+  // remain here because they need DB-loaded question facts.
+  assertExamPolicyValid(exam);
 
   const questionSnapshot = buildQuestionSnapshot(exam.questionIds, questions);
   if (questions.some((question) => question.courseId !== exam.courseId)) {

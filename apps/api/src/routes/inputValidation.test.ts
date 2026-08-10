@@ -116,17 +116,20 @@ describe("API input validation (Zod schema boundary)", () => {
   });
 
   it("exam creation rejects closeAt before openAt", async () => {
+    // P7-M1: the canonical policy validator now rejects an inverted window at
+    // create (previously it was only caught at publish). The test name was
+    // always correct; the assertion now matches it.
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
       payload: {
         ...baseExamPayload(),
-        openAt: "2026-06-02T00:00:00.000Z",
-        closeAt: "2026-06-01T00:00:00.000Z",
+        openAt: "2026-06-02T00:00:00Z",
+        closeAt: "2026-06-01T00:00:00Z",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(400);
   });
 
   it("exam creation rejects durationMinutes <= 0", async () => {
@@ -154,25 +157,21 @@ describe("API input validation (Zod schema boundary)", () => {
   });
 
   it("publish rejects closeAt before openAt", async () => {
+    // P7-M1: an inverted window is now rejected at create, so this case cannot
+    // reach publish through the route. Publish still revalidates the whole
+    // policy (engine unit test in examPolicy.test.ts proves the publish guard);
+    // here we assert the create-time rejection that prevents the bad draft.
     const examRes = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
       payload: {
         ...baseExamPayload(),
-        openAt: "2026-06-02T00:00:00.000Z",
-        closeAt: "2026-06-01T00:00:00.000Z",
+        openAt: "2026-06-02T00:00:00Z",
+        closeAt: "2026-06-01T00:00:00Z",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(examRes.statusCode).toBe(201);
-    const examId = examRes.json().id;
-
-    const publishRes = await ctx.app.inject({
-      method: "POST",
-      url: `/api/exams/${examId}/publish`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(publishRes.statusCode).toBe(400);
+    expect(examRes.statusCode).toBe(400);
   });
 
   it("question creation rejects empty content", async () => {
