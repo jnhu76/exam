@@ -26,27 +26,39 @@ Configuration is partitioned along authority lines that already work:
 | --- | --- | --- |
 | A — Deployment / secret / topology | env + Docker Compose + secret store | ~16 |
 | B — System operational policy | env (boot-validated, restart-required) | ~10 |
-| C — Organization settings | `organization_settings` table | ~6 |
+| C — Organization-owned configuration | `organization_settings` (5 cols) + `candidate_fields` table | ~6 concepts |
 | D — Exam policy | `exams` columns + `control_flags` jsonb + frozen snapshots | ~20 |
 | E — Code-owned invariants / engineering constants | source literals | ~25 |
 
-Exam policy (Class D) is the deepest and most hazard-sensitive layer, and it is
-**already substantially frozen** (question snapshot at publish; question
-snapshot + interruption policy snapshot + deadline + submitted answers frozen at
-attempt creation). That freeze discipline is the right model and must be
-preserved.
+Exam policy (Class D) is the deepest and most hazard-sensitive layer. Its freeze
+discipline is real, but it is **two different mechanisms that must not be
+conflated** (see §12):
 
-**The recommended minimum P7-E1 is narrow.** Only two genuinely high-value,
-low-risk system-operational candidates exist — **Email sender retry/worker
-policy** and **backup schedule/retention policy** — and even those are
-conditional on a product decision that an Admin needs to change them online
-without a restart. If that product need is not present, a valid E0 outcome is:
-**do not build a settings control plane yet; proceed to exam-policy profile work
-(P7-M1) instead.**
+1. **True snapshots** — copied immutable data: `question_snapshot` (built at
+   publish, copied to each attempt), interruption-policy snapshot + deadline +
+   submitted answers (frozen at attempt creation).
+2. **Published-row immutability** — `result_publication_mode`, `retake_policy`,
+   `score_strategy`, `passing_score`, `control_flags` are **not** copied into a
+   per-attempt snapshot; they are read live from the published exam row. They are
+   safe today **only** because the published-edit route guard
+   (`exam.ts:631`) makes those columns immutable post-publish. The runtime
+   live-reads an already-frozen authority; it does not snapshot it.
+
+Both mechanisms are correct today, but they are **not the same thing**. This
+distinction is the single most important input P7-M1 inherits (P2-M1, §12).
+
+**No P7-E1 implementation is currently justified.** The current evidence does not
+identify a confirmed, near-term product requirement for Admin-editable
+deployment-wide operational policy. Email worker/retry policy is a **candidate**,
+not a preselected E1 — and backup-status visibility is a separate future
+operational capability, not a settings slice (§21). A valid E0 outcome is:
+**close E0 with "no settings control plane justified now"; proceed to P7-M1**
+(exam policy resolution / freeze model), which is where the real configuration
+pressure already exists. A future E1 is triggered only by a concrete
+operator/product requirement, not by roadmap inertia.
 
 No P0 or P1 configuration authority defects were found. The findings are P2
-(duplication, undocumented tuning knobs, one live-read policy hazard) and P3
-(naming/docs).
+(four concept/boundary refinements) and P3 (naming/docs).
 
 ---
 
@@ -102,8 +114,10 @@ Status per layer (P7-E §2 taxonomy):
 | organization settings | PARTIAL | branding + `timezone` only (Class C). No defaults/locale/notification prefs. |
 | exam policy profile | NOT IMPLEMENTED | P7-M1 territory; explicitly out of E0 scope |
 | per-exam overrides | IMPLEMENTED | `exams.*` columns + `control_flags` jsonb |
-| publish snapshot | IMPLEMENTED | `exams.question_snapshot` |
-| attempt execution snapshot | PARTIAL | question snapshot + interruption-policy snapshot + deadline + submitted answers are frozen; **result visibility, retake, score strategy are read live** (§12) |
+| publish question snapshot | IMPLEMENTED | `exams.question_snapshot` (built & frozen at publish; true immutable copy) |
+| published policy freeze | IMPLEMENTED | published-edit route guard (`exam.ts:631`) makes `result_publication_mode` / `retake_policy` / `score_strategy` / `passing_score` / `control_flags` immutable post-publish — **row immutability, not a snapshot** (§12) |
+| full resolved policy snapshot | NOT IMPLEMENTED | no profile→exam resolution step yet; deferred to P7-M1 design (§12, P2-M1) |
+| attempt execution snapshot | PARTIAL | true snapshots at attempt start: question snapshot (copy), interruption-policy snapshot, deadline, submitted answers. Exam-level policy is **not** copied per-attempt — read live from the immutable published row (§12) |
 
 ---
 
@@ -302,8 +316,10 @@ secret boundary is sound:
   only to compose `DATABASE_URL`/`REDIS_URL` and to authenticate the db/redis
   containers. The runtime sees only the composed URL.
 - **`JWT_SECRET`** has a dev default `"development-only-change-me"` but is
-  **required in production** (throws at boot). Duplicate default exists in the
-  `@exam/auth` bypass (§11) — same value, same prod-required throw.
+  **required in production** (throws at boot). The `@exam/auth` package
+  independently re-resolves the same JWT config (same default, same prod-required
+  throw) — duplicated **resolution authority**, not just a duplicated literal
+  (P2-3, §11).
 - **`SMTP_PASSWORD`** is scrubbed from logs/errors by `sanitizeEmailError` and
   is never logged. See §13 / §15.
 - **`LAUNCHPAD_SETUP_TOKEN`** is a bootstrap secret: empty disables the
@@ -351,14 +367,26 @@ DB settings (defer or reject):
 | `APP_TIMEZONE` / `TZ` | Display only (ADR-006); changing it must never reinterpret stored instants. Keep env. |
 | Feature flags (`FEATURE_*`) | Server-side only; not in public config. Keep env until a real feature-flag need is measured. |
 
-**Verdict on Class B:** the smallest useful E1 is **at most** the Email
-worker/retry policy group, and only if an Admin product need for online editing
-is confirmed. If not, **Class B correctly stays env-only** and E1 should not
-build a settings store.
+**Verdict on Class B:** no Class-B item is a confirmed, near-term
+Admin-editable operational requirement today. **Class B correctly stays
+env-only.** A future E1 is triggered only by a concrete operator/product
+requirement (generic decision gate, §21) — Email worker/retry policy is a
+**candidate** under that gate, not a preselected first slice.
 
 ---
 
-## 7. Organization settings (Class C detail)
+## 7. Organization-owned configuration (Class C detail)
+
+Organization-owned configuration spans **two** tables, not one. `organization_settings`
+carries 5 setting columns (branding + timezone); `candidate_fields` is the
+configurable examinee-identity schema (org-owned). Together that is ~6
+organization-owned configuration concepts — but the headline "~6" must not be
+read as "`organization_settings` has 6 columns."
+
+| Table | Columns functioning as config |
+| --- | --- |
+| `organization_settings` | `product_name`, `product_subtitle`, `footer_text`, `organization_display_name`, `timezone` (5) |
+| `candidate_fields` | per-org candidate-identity field schema (`name`/`label`/`fieldType`/`required`/`unique`/`sortOrder`) |
 
 `organization_settings` is branding + timezone only. It is the right shape and
 the right scope for Phase 1 single-tenant. Findings:
@@ -437,7 +465,7 @@ stay code. See §18 (non-configurable invariants) and §22 (anti-goals).
 | Value | Current precedence (authoritative → fallback) | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | `TEST_DATABASE_URL` (test-like modes) → `DATABASE_URL` → dev fallback; **never** cross-fallback | `databaseUrl.ts`; name-safety guard refuses non-`test`/`e2e`/`ci` names |
-| `JWT_SECRET` | env (required prod) → dev default `development-only-change-me` | duplicate resolution in `@exam/auth` bypass (§11) |
+| `JWT_SECRET` | env (required prod) → dev default `development-only-change-me` | duplicated config-resolution authority in `@exam/auth` (§11, P2-3) |
 | `APP_MODE` | `APP_MODE` → `NODE_ENV` → `development` | `databaseUrl.ts:45` |
 | `APP_TIMEZONE` | env `APP_TIMEZONE` → `Asia/Shanghai` | display only (ADR-006) |
 | `REDIS_MODE` | explicit `REDIS_MODE` → (`optional` if `REDIS_URL` else `off`) | fail-fast if mode≠off without URL |
@@ -469,7 +497,7 @@ The canonical loader is `getRuntimeConfig()` (memoized) +
 | Bypass | Location | Verdict |
 | --- | --- | --- |
 | `DEADLINE_SCAN_INTERVAL_MS` | `plugins/deadlineScanner.ts:336` (own `readPositiveInteger`) | **DEBT** — should flow through loader; overlaps `HEARTBEAT_SCAN_INTERVAL_MS`. P2. |
-| `APP_MODE` / `NODE_ENV` / `JWT_SECRET` | `packages/auth/src/session.ts:12-30` | **JUSTIFIED** — `@exam/auth` is a leaf package and cannot import the API config layer. It re-implements the same resolution (same default, same prod-required throw). Not a bypass in spirit, but the duplication is P2 drift risk. |
+| `APP_MODE` / `NODE_ENV` / `JWT_SECRET` | `packages/auth/src/session.ts:12-30` | **P2 — duplicated config-resolution authority.** `@exam/auth` is a leaf package and cannot import the API config layer, so it re-implements the *whole* JWT config-resolution path (mode resolution + secret resolution + dev fallback + prod-required throw) independently of `runtimeConfig`. The duplicated default literal `"development-only-change-me"` is one *symptom*; the real issue is two independent resolution authorities whose semantics happen to coincide today. Track as P2-3; a future fix must reconcile the authority (e.g. pass the resolved secret in), not merely extract a shared constant. |
 | `NODE_ENV` | `packages/db/src/demo-seed.ts:103` (prod guard) | **JUSTIFIED** — seed guard. Canonical `seed.ts` uses `parseAppMode`. |
 | `SEED_*` | `packages/db/src/seed.ts`, `e2eSeedOrchestrator.ts` | **JUSTIFIED** — dev/test/install seed infra, not runtime config. |
 | `npm_package_version` | `routes/system.ts:254,453` | **JUSTIFIED** — informational version string, not config. |
@@ -502,42 +530,94 @@ published exam or an already started attempt?**
 
 ### What IS correctly frozen
 
-| Policy | Frozen at | Stored where | Source-of-truth later? |
+Freeze happens through **two mechanisms** (detailed in the next subsection) —
+true snapshots and published-row immutability. Both are correct today:
+
+| Mechanism | Examples | Frozen at | Source-of-truth later? |
 | --- | --- | --- | --- |
-| Questions + options (no `isCorrect`) + standardAnswer + score + `gradingRule` + rubric | **publish** | `exams.question_snapshot` | immutable; QuestionBank edits don't affect published exam |
-| Same question snapshot | **attempt start** | `exam_attempts.question_snapshot` | immutable for that attempt |
-| Deadline | **attempt start** | `exam_attempts.deadline_at` | updated only by canonical operator grant / restore |
-| Interruption policy (4 cols) | **attempt start** | `exam_attempts.interruption_*_snapshot` | immutable for that attempt; ADR-013 |
-| Submitted answers | **submit** | `exam_attempts.submitted_answers` | immutable after submit; ADR-008 |
-| Fact timestamps (`startedAt`, `submittedAt`, `gradedAt`, `resultsPublishedAt`) | transition | write-once columns | immutable |
+| True snapshot | `question_snapshot` (publish + attempt copy), interruption-policy snapshot, deadline, submitted answers | publish / attempt start / submit | immutable copies; source-row edits don't affect them |
+| Published-row immutability | `result_publication_mode`, `retake_policy`, `score_strategy`, `passing_score`, `control_flags` | publish (route guard) | runtime live-reads the immutable published row |
+
+Plus fact timestamps (`startedAt`, `submittedAt`, `gradedAt`,
+`resultsPublishedAt`) which are write-once columns at each transition.
 
 This freeze discipline is **correct and must be preserved** in any future
 control plane. "A future template edit must not change a published exam or
-active attempt" (P7 §9 important rule) is **already true** for the frozen set,
-enforced by the published-edit guard + snapshot columns.
+active attempt" (P7 §9 important rule) is **already true** — but it is enforced
+by **two** mechanisms, and conflating them risks misdesigning P7-M1 (see the
+next subsection).
 
-### The live-read policy hazard (P2-HAZARD-1)
+### Two distinct freeze mechanisms — do NOT conflate (P2-M1 framing)
 
-Three exam-policy fields are **read LIVE from the exam row** at runtime rather
-than frozen per-attempt:
+The current audit initially labeled the publish layer "IMPLEMENTED (`question_snapshot`)."
+That conflates two different mechanisms. The accurate picture:
 
-| Field | Read live at | Implication |
+**A. True snapshots** — copied immutable data, decoupled from the source row:
+
+| Snapshot | Built at | Stored where | Decoupled from later source edits? |
+| --- | --- | --- | --- |
+| `question_snapshot` (questions/options-no-isCorrect/standardAnswer/score/gradingRule/rubric) | publish | `exams.question_snapshot` | yes — QuestionBank edits don't affect published exam |
+| question snapshot (attempt copy) | attempt start | `exam_attempts.question_snapshot` | yes |
+| interruption-policy snapshot (4 cols) | attempt start | `exam_attempts.interruption_*_snapshot` | yes — ADR-013 |
+| deadline | attempt start | `exam_attempts.deadline_at` | yes (updated only by canonical grant/restore) |
+| submitted answers | submit | `exam_attempts.submitted_answers` | yes — ADR-008 |
+
+**B. Published-row immutability** — fields read live from the published exam
+row, safe because the row is immutable post-publish (route guard at
+`exam.ts:631`: published exams reject every field except `openAt`/`closeAt`):
+
+| Field (live-read from published row) | Read live at | Why safe today |
 | --- | --- | --- |
-| `result_publication_mode` | candidate result view (`scores.ts:216`, `attempts.shared.ts:60`) | If the exam row's mode changed after some attempts were graded, the visibility of those attempts' results could change retroactively. **Mitigated** by the published-edit guard (post-publish, only schedule is editable), so the mode cannot actually be changed once published — but it is NOT frozen per-attempt, so the protection is the *publish guard*, not a snapshot. |
-| `retake_policy` | attempt start eligibility (`attemptCommands.ts:219`), grading finalization (`grading.ts:68`), candidate summary | Same: publish guard prevents mutation post-publish, but no per-attempt snapshot. |
-| `score_strategy` | grading finalization (`grading.ts:324`) | Same: publish guard prevents mutation, but no per-attempt snapshot. |
+| `result_publication_mode` | candidate result view (`scores.ts:216`, `attempts.shared.ts:60`) | published-edit guard |
+| `retake_policy` | attempt eligibility (`attemptCommands.ts:219`), grading finalization (`grading.ts:68`), candidate summary | published-edit guard |
+| `score_strategy` | grading finalization (`grading.ts:324`) | published-edit guard |
+| `passing_score` / `control_flags` / timing mode | grading / runtime | published-edit guard |
 
-**Current safety relies entirely on the published-edit route guard**
-(`exam.ts:631`: published exams reject all fields except `openAt`/`closeAt`).
-This is sound **today** because there is no profile/template layer that could
-retroactively edit a published exam. **The hazard materializes the moment P7-M1
-introduces editable profiles** — a profile edit must not propagate into already
-published exams. P7-M1 must explicitly enforce "profile edit → does not touch
-published exams" and should consider per-attempt snapshotting of these three
-fields for defense-in-depth.
+These three Exam-level fields (`result_publication_mode`, `retake_policy`,
+`score_strategy`) are **Exam-/Enrollment-level semantics**: result mode is an
+Exam-level publication policy; `retake_policy` governs Exam/Enrollment attempts;
+`score_strategy` aggregates across multiple attempts into one Enrollment final
+score. They do **not** naturally belong on a single Attempt.
+
+### The future profile-resolution hazard (P2-M1)
+
+**Today there is no drift**, because there is no profile/template layer: the
+published exam row is the sole authority and it is immutable. The runtime
+live-reads an already-frozen authority.
+
+The hazard materializes the moment P7-M1 introduces **editable profiles /
+templates**. The correct resolution model is:
+
+```text
+Profile Template
+      ↓ publish-resolve (one-time copy into Exam-owned published policy)
+Published Exam Policy (immutable published row)
+      ↓ runtime live-read
+Enrollment / Attempt decisions
+```
+
+**NOT** this (anti-pattern):
+
+```text
+Profile
+  ↓
+Exam (live-references mutable template)
+  ↓
+Attempt copies everything again (snapshot of a snapshot)
+```
+
+So P7-M1 must:
+
+1. ensure future profile/template edits are **resolved/copied into Exam-owned
+   published policy at publish time**, not live-referenced from mutable
+   templates (a published exam must never silently follow a later template edit);
+2. decide, per field, the correct freeze locus — Exam-level fields stay on the
+   immutable published row; do **not** reflexively copy Exam-/Enrollment-level
+   policy into a per-Attempt snapshot just because "snapshot" sounds safer.
 
 This is a **P2 finding for P7-M1**, not a P7-E1 setting. It does not block E0
-or E1. It is recorded here so P7-M1 inherits the hazard map.
+or E1. It is recorded here so P7-M1 inherits the precise freeze map and does
+not mistake "published-row immutability" for "snapshot."
 
 ### Other mutability notes
 
@@ -551,7 +631,8 @@ or E1. It is recorded here so P7-M1 inherits the hazard map.
   unpublish, the exam is editable again, then re-publishable. This is a
   legitimate authoring flow; the question snapshot is rebuilt at re-publish.
 - **No dynamic setting today can mutate an active attempt.** The live-read
-  fields are guarded by publish; all other attempt-relevant policy is frozen.
+  Exam-level fields are guarded by published-row immutability; all attempt-local
+  policy is a true snapshot.
 
 ---
 
@@ -659,7 +740,7 @@ ADR.
 
 | Duplicate | Classification | Action |
 | --- | --- | --- |
-| JWT default `"development-only-change-me"` in `runtimeConfig.ts:248` AND `packages/auth/src/session.ts:29` | **STALE DUPLICATION (drift risk)** — same value today, but two resolution sites. P2. | Track; ideally `@exam/auth` should receive the secret rather than re-resolve. |
+| JWT default `"development-only-change-me"` in `runtimeConfig.ts:248` AND `packages/auth/src/session.ts:29` | **STALE DUPLICATION (drift risk)** — the duplicated literal is one symptom of the deeper issue: `@exam/auth` runs an independent JWT config-resolution authority (P2-3). | Track; a fix must reconcile the *authority* (e.g. `@exam/auth` receives the resolved secret), not just extract a shared constant. |
 | `DEFAULT_SCAN_INTERVAL_MS = 30_000` in both `heartbeat.ts:19` and `deadlineScanner.ts:29` | **STALE DUPLICATION** — same value, separate declarations; `DEADLINE_SCAN_INTERVAL_MS` shadows `HEARTBEAT_SCAN_INTERVAL_MS` semantics. P2/P3. | Track; consolidate through the loader. |
 | `APP_TIMEZONE` (env, consumed) vs `organization_settings.timezone` (DB, stored-but-unused) | **AMBIGUOUS AUTHORITY** — two timezone sources, one consumed. P3. | Track; either consume the org tz for display or drop the column. |
 | `PORT` (operators may set it) vs `APP_PORT` (the actual var) | **AMBIGUOUS** — `PORT` is silently ignored. P3. | Document or accept `PORT` as an alias. |
@@ -742,63 +823,103 @@ slice justifies it.
 
 ## 21. Minimum viable P7-E1 recommendation
 
-Applying the simplicity gate (P7-E §29) to every candidate:
+**There is no confirmed, near-term product requirement for Admin-editable
+deployment-wide operational policy.** Therefore **no P7-E1 implementation is
+currently justified.** The E0 recommendation is to close E0 with this finding
+and proceed to **P7-M1** (exam policy resolution / freeze model), which is where
+the real configuration pressure already exists (P2-M1).
+
+Applying the simplicity gate (P7-E §29) to the candidates surfaced by the
+inventory:
 
 | Candidate | Admin needs to change it online? | Needs versioning? | Affects exam/attempt? | Verdict |
 | --- | --- | --- | --- | --- |
-| Email retry/worker policy (`EMAIL_MAX_ATTEMPTS`, `EMAIL_RETRY_BASE_SECONDS`, `EMAIL_WORKER_*`) | **maybe** (avoids restart for an ops tuning knob) | nice-to-have | no | **E1 candidate (narrow)** |
-| Backup schedule/retention | only if a scheduler is built | yes (RPO/RTO) | no | defer until scheduler exists |
-| Backup status visibility (read-only) | yes (ops confidence) | no | no | E1 candidate (read-only UI, no restore) |
-| Scanner intervals | no (active-attempt hazard) | no | **yes** (disruption) | **reject — keep env/RESTART** |
+| Scanner intervals (`HEARTBEAT_*`, `DEADLINE_SCAN_*`) | no (active-attempt hazard) | no | **yes** (disruption) | **reject — keep env/RESTART** |
 | Rate-limit policy | no (topology-coupled) | no | no (but outage risk) | reject — keep env |
 | Redis mode/timeouts | no (topology) | no | no | reject — Class A |
 | Timezone | no (display only; ADR-006) | no | must not | reject — keep env |
+| Feature flags (`FEATURE_*`) | no (no measured need) | no | varies | reject — keep env |
 | Org branding | yes (already DB-backed) | optional | no | **already done** (Class C) |
 | Exam policy | n/a | n/a | yes | **P7-M1, not E1** |
-| Feature flags | no (no measured need) | no | varies | reject — keep env |
+| Email retry/worker policy | unconfirmed | nice-to-have | no | **candidate** under the gate below — not preselected |
+| Backup schedule/retention | only if a scheduler is built | yes (RPO/RTO) | no | **separate future ops capability** (§14), not an E1 settings slice |
+| Backup-status visibility | unconfirmed | no | no | **separate future ops capability** (no evidence source exists today) |
 
-**Recommended minimum E1 (two valid outcomes):**
+### The E1 decision gate (generic — do NOT preselect a domain)
 
-- **Outcome 1 (preferred if no confirmed Admin online-edit need):** Do NOT build
-  a settings control plane in E1. The current env+restart posture is safe and
-  correct for single-tenant LAN/on-premise. Proceed to **P7-M1** (exam policy
-  schema + conflict validator + profiles), which is where the real configuration
-  value and hazard live. Record this decision.
-- **Outcome 2 (if an Admin online-edit need is confirmed):** Build the
-  **smallest possible** versioned audited store for **only** the Email
-  worker/retry policy group, plus a **read-only** backup-status surface. ~3–5
-  typed settings. No generic key/value. No secrets. No exam/attempt semantics.
-  Restart-still-required settings (scanners, rate-limit, timezone, Redis) stay
-  env.
+```text
+Human decision gate:
 
-Either outcome is a valid E0 result. **Do not force a settings system into
+  Is there a confirmed, near-term product requirement for
+  Admin-editable SYSTEM OPERATIONAL SETTINGS (view or change,
+  deployment-wide, online without restart)?
+
+  NO
+    → no P7-E1 now
+    → close E0; proceed to P7-M1
+  YES
+    → identify exactly ONE coherent first vertical slice (one domain)
+    → design that slice as P7-E1 (typed, audited, no secrets, no
+      exam/attempt semantics)
+```
+
+Email worker/retry policy is a **candidate** under this gate. It is **not** the
+preselected E1 product — preselecting it would let roadmap inertia turn a
+candidate into a task without a confirmed requirement.
+
+### Why backup-status is NOT bundled into an E1 settings slice
+
+Backup-status visibility looks small but is a **different domain** from
+operational settings, and it has no evidence source today:
+
+- Email settings = **configuration authority** (typed values → effective
+  resolution → restart/dynamic semantics).
+- Backup status = **backup execution** (durable evidence → verification record →
+  history/status projection).
+
+P7-C shipped only **operator mechanisms** (`pg_dump`, `pg_basebackup`, PITR,
+drills). There is **no** `backup_run` / `backup_job` / `backup_evidence`
+authoritative runtime store. So "read-only backup-status" cannot be a thin slice
+— its first question is "status from where?", and answering it would force E1 to
+also build a backup execution model + history persistence + scheduler
+integration, i.e. scope creep into a separate workstream.
+
+**Recommendation:** keep backup automation/status as a **separate future
+operational capability** (`policy → execution → evidence → visibility`), not
+part of a settings E1.
+
+**E0 conclusion:** do not build a settings control plane now. A future E1 is
+triggered only by the concrete gate above. **Do not force a settings system into
 existence.**
 
 ---
 
 ## 22. Persistence-model options (recommendation only; NO implementation)
 
-If Outcome 2 is chosen, evaluate against the actual (tiny) E1 inventory:
+These options apply **only if** the §21 gate later returns YES and a specific
+E1 slice is chosen. They are recorded here so a future E1 does not start from a
+blank page, not to justify building one now.
 
-| Option | Fit for the E1 inventory | Over-engineering risk |
+Evaluate against the chosen slice's actual (small) inventory:
+
+| Option | Fit | Over-engineering risk |
 | --- | --- | --- |
-| **A — typed columns / one-row `system_settings` table** | Good: ~3–5 typed columns, clear schema, trivial migration. | Low for this size. |
+| **A — typed columns / one-row `system_settings` table** | Good: a few typed columns, clear schema, trivial migration. | Low for a small slice. |
 | **B — versioned typed document (`system_setting_versions`)** | Adds version/audit/rollback for free. | Medium — justified only if rollback is a real operator need. |
-| **C — domain-owned settings (no generic table)** | Best if each setting stays in its domain (email config in an email-config row, etc.). | Low; matches the existing `organization_settings` pattern. |
+| **C — domain-owned settings (no generic table)** | Best if the setting stays in its domain (e.g. email config in an email-config row). | Low; matches the existing `organization_settings` pattern. |
 | **D — hybrid (small system store + domain-owned)** | Reasonable if both system and domain settings coexist. | Medium. |
 
-**Recommendation:** for the narrow E1 inventory, **Option A or C** (typed, not
-generic JSON). Type safety, migration clarity, and human comprehensibility win;
-the AI-generated-code risk and over-engineering risk of a generic JSON
-key/value registry (Option B-with-arbitrary-payload) are unnecessary for 3–5
-settings. Versioning/rollback (Option B) is worth it **only** if an operator
-rollback workflow is a confirmed requirement — otherwise it is speculative
-machinery.
+**Recommendation:** prefer **Option A or C** (typed, not generic JSON). Type
+safety, migration clarity, and human comprehensibility win; the
+AI-generated-code risk and over-engineering risk of a generic JSON key/value
+registry are unnecessary for a small slice. Versioning/rollback (Option B) is
+worth it **only** if an operator rollback workflow is a confirmed requirement —
+otherwise it is speculative machinery.
 
-Regardless of option, the effective-value API for these few settings needs at
-most: **effective value + last-changed-by + last-changed-at**. Preview/diff,
-import/export, source-visualization, and pending-restart are **not** justified
-for 3–5 operational knobs — they must follow real use cases, not the full
+Regardless of option, the effective-value API needs at most: **effective value +
+last-changed-by + last-changed-at**. Preview/diff, import/export,
+source-visualization, and pending-restart are **not** justified for a handful of
+operational knobs — they must follow real use cases, not the full
 Workstream-E wishlist.
 
 ---
@@ -829,18 +950,21 @@ Explicit anti-goals for any P7-E1 implementation (adjust only with evidence):
 
 ---
 
-## 24. Risk matrix (for the recommended future settings only)
+## 24. Risk matrix (illustrative — applies only if a future E1 is triggered)
 
-| Setting | Wrong-value impact | Scope | Change timing | Snapshot? | Audit? | Restart? | Rollback safe? | Fail mode |
+No E1 is recommended now (§21). This matrix is a **template** for evaluating
+whatever single slice a future YES-gate identifies, not a preselected backlog.
+The rows are illustrative candidates, not commitments.
+
+| Setting (illustrative) | Wrong-value impact | Scope | Change timing | Snapshot? | Audit? | Restart? | Rollback safe? | Fail mode |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Email retry/worker policy | stuck/dead mail, slow delivery | system | any time | no | yes | configurable | yes (re-edit) | fail-open (mail dead-letters) |
-| Backup schedule (if scheduler built) | missed backups, RPO breach | system | any time | no | yes | no (if cron-driven) | yes | fail-silent → monitor |
-| Retention window (if engine built) | data loss (over-prune) or storage growth | system | any time | no | yes | no | conditional (chain invariant) | fail-closed (refuse to prune) |
-| Backup status visibility | (read-only; no wrong-value impact) | system | n/a | no | no | no | n/a | n/a |
+| Email retry/worker policy (candidate) | stuck/dead mail, slow delivery | system | any time | no | yes | configurable | yes (re-edit) | fail-open (mail dead-letters) |
+| Backup schedule (separate ops capability) | missed backups, RPO breach | system | any time | no | yes | no (if cron-driven) | yes | fail-silent → monitor |
+| Retention window (separate ops capability) | data loss (over-prune) or storage growth | system | any time | no | yes | no | conditional (chain invariant) | fail-closed (refuse to prune) |
 
 (The live-read exam-policy fields — `result_publication_mode`, `retake_policy`,
-`score_strategy` — are **not** in this matrix because they must **not** become
-E1 settings; their hazard is a P7-M1 concern, §12.)
+`score_strategy` — are deliberately **excluded**: they must **not** become E1
+settings; their freeze boundary is a P7-M1 design concern, §12/P2-M1.)
 
 ---
 
@@ -856,22 +980,37 @@ state.
 **P2 (maintainability, drift, unsafe future configurability, inconsistent
 defaults):**
 
-- **P2-1 (P7-M1 hazard):** `result_publication_mode`, `retake_policy`, and
-  `score_strategy` are read LIVE from the exam row, not per-attempt snapshot.
-  Safe today only because the published-edit guard freezes them at publish. The
-  moment P7-M1 introduces editable profiles, a profile edit must not propagate
-  to published exams. Recommend P7-M1 enforce "profile edit ≠ published-exam
-  mutation" and consider per-attempt snapshot of these three for
-  defense-in-depth. (Evidence: `scores.ts:216`, `grading.ts:324,68`,
-  `attemptCommands.ts:219`; guard at `exam.ts:631`.)
+- **P2-1 → P2-M1 (future profile-resolution hazard):** Three Exam-/Enrollment-
+  level fields — `result_publication_mode` (Exam publication policy),
+  `retake_policy` (Exam/Enrollment attempts), `score_strategy` (Enrollment
+  aggregation across attempts) — are read **live from the published exam row**,
+  not copied into a per-attempt snapshot. This is **not a bug today**: the
+  published-edit route guard (`exam.ts:631`) makes those columns immutable
+  post-publish, so the runtime live-reads an already-frozen authority
+  (published-row immutability, distinct from a true snapshot — §12). **No drift
+  is possible today** because there is no profile/template layer. The hazard
+  materializes when P7-M1 introduces editable profiles: a profile edit must be
+  **resolved/copied into Exam-owned published policy at publish time**, never
+  live-referenced from a mutable template. P7-M1 should decide the correct
+  freeze locus per field — do **not** reflexively copy these Exam-level fields
+  into a per-Attempt snapshot; several of them are Enrollment-level, not
+  Attempt-level. (Evidence: `scores.ts:216`, `grading.ts:324,68`,
+  `attemptCommands.ts:219`; guard at `exam.ts:631`.) This is a P7-M1 design
+  input, not an E0/E1 implementation bug — **do not fix it in E1.**
 - **P2-2 (bypass / drift):** `DEADLINE_SCAN_INTERVAL_MS` is read directly from
   env at plugin-registration (`deadlineScanner.ts:336`), bypassing the
   canonical loader, and overlaps `HEARTBEAT_SCAN_INTERVAL_MS`. Two independent
   `DEFAULT_SCAN_INTERVAL_MS = 30_000` constants. Consolidate through the loader.
-- **P2-3 (drift):** JWT default `"development-only-change-me"` is duplicated in
-  `runtimeConfig.ts:248` and `packages/auth/src/session.ts:29`. Same value
-  today; drift risk. (`@exam/auth` cannot import the API config layer — a leaf
-  package constraint. Consider passing the secret in rather than re-resolving.)
+  (Recorded for a small future config-hygiene PR; **not fixed in E0**.)
+- **P2-3 (duplicated config-resolution authority):** `@exam/auth/session.ts`
+  runs an **independent** JWT config-resolution path (mode + secret + dev
+  fallback + prod-required throw), separate from `runtimeConfig`. The duplicated
+  default literal `"development-only-change-me"` (`runtimeConfig.ts:248` vs
+  `session.ts:29`) is one symptom; the real issue is two resolution authorities
+  whose semantics happen to coincide today. A future fix must reconcile the
+  **authority** (e.g. `@exam/auth` receives the resolved secret rather than
+  re-resolving), not merely extract a shared constant. (`@exam/auth` is a leaf
+  package and cannot import the API config layer.) Recorded; **not fixed in E0.**
 
 **P3 (naming, documentation, minor cleanup):**
 
@@ -902,30 +1041,35 @@ defaults):**
 ```text
 P7-E0  Configuration Reality Audit                       ✅ THIS DOCUMENT (READY FOR REVIEW)
   │
-  ├─ Decision gate: is there a confirmed Admin online-edit need for Email/backup policy?
-  │
-  ├─ Outcome 1 (no confirmed need):
-  │     Record "no settings control plane yet"; proceed to P7-M1.
-  │
-  ├─ Outcome 2 (confirmed need):
-  │     P7-E1  Narrow versioned audited store: Email worker/retry policy (3–5 typed settings)
-  │            + read-only backup-status surface. Typed columns, no generic JSON, no secrets.
-  │     P7-E2  (only if scheduler built) Backup schedule/retention policy as system settings.
-  │     P7-E3  (only if real need) Effective-value API + Admin settings UI for the above.
-  │
-  └─ P7-M1  Exam policy schema + conflict validator (SEPARATE track; owns Class D + the
-            live-read hazard in P2-1). NOT blocked by E1, but E1 must not touch exam policy.
+  └─ E0 conclusion: no P7-E1 implementation currently justified.
+     No confirmed near-term requirement for Admin-editable operational settings.
+
+P7-M1  Exam policy resolution / freeze model  ← NEXT (real configuration pressure)
+        - profile/template → published-exam policy resolution (one-time copy)
+        - published-row immutability vs true snapshot, per field
+        - conflict validator; P2-M1 freeze-locus decisions
+P7-M2  Profile templates
+P7-M3  Exam creation wizard
+
+Future P7-E1  (triggered ONLY by the §21 gate returning YES):
+        identify ONE coherent first vertical slice; design it (typed, audited,
+        no secrets, no exam/attempt semantics). Email worker/retry is a
+        candidate, not preselected.
+
+Separate future capability (NOT a settings E1):
+        Backup automation / status — policy → execution → evidence → visibility.
 ```
 
 **Sequencing rules:**
 
-- P7-M1 must enforce "profile/template edits do not mutate published exams or
-  active attempts" and address P2-1 before editable profiles ship.
-- P7-E1 (if built) must not touch Class A (deployment/secrets), Class D (exam
-  policy), or the scanner/rate-limit/timezone/Redis env vars.
-- No settings UI begins before the persistence shape and snapshot semantics are
-  accepted (consistent with P7 §11 "Admin settings UI must wait for
-  configuration layering and snapshot semantics").
+- P7-M1 must enforce "profile/template edits resolve into Exam-owned published
+  policy at publish time; a published exam never follows a later template edit"
+  and resolve P2-M1 before editable profiles ship.
+- A future P7-E1 (if triggered) must not touch Class A (deployment/secrets),
+  Class D (exam policy), or the scanner/rate-limit/timezone/Redis env vars.
+- No settings UI begins before a concrete E1 slice is accepted (consistent with
+  P7 §11 "Admin settings UI must wait for configuration layering and snapshot
+  semantics").
 
 ---
 
@@ -944,45 +1088,57 @@ P7-E0  Configuration Reality Audit                       ✅ THIS DOCUMENT (READ
    (`EXAM_DATA_ROOT`, WAL path); `DATABASE_URL`/`POSTGRES_*`; `APP_TIMEZONE`
    business semantics (display-only). (§18, §22.)
 5. **Which should Admins genuinely change?** Today: org branding (already
-   DB-backed). Tomorrow (conditional): Email worker/retry policy, backup-status
-   visibility. (§21.)
+   DB-backed). No other system-operational setting has a confirmed near-term
+   Admin-edit requirement. Email worker/retry is a **candidate** under the §21
+   gate, not preselected; backup-status is a separate operational capability.
+   (§21.)
 6. **Which require restart?** Effectively all Class A + B (boot-validated,
    memoized loader). The only DYNAMIC setting today is `organization_settings`
    branding. (§3, §6.)
 7. **Which can safely hot-change?** Org branding only, today. (§7.)
 8. **Which must only affect future Exams?** All exam policy — enforced by
-   publish-freeze + per-attempt snapshots (the frozen set). (§8, §12.)
-9. **Frozen at publish?** Questions/options/standardAnswer/score/gradingRule/rubric
-   (`question_snapshot`); timing mode; control_flags; passing/total score;
-   retake/score-strategy/result-mode (via published-edit guard). (§8, §12.)
-10. **Frozen at attempt creation?** Question snapshot (copy), deadline,
-    interruption-policy snapshot (4 cols). **Not** frozen per-attempt:
-    result-publication-mode, retake-policy, score-strategy (P2-1). (§12.)
-11. **Already have snapshot semantics?** Yes — question + interruption +
-    deadline + submitted answers. (§4, §12.)
-12. **Duplicated authority?** JWT default; scanner interval defaults; timezone
-    (env vs DB). (§17.)
+   publish-freeze (true snapshots + published-row immutability). (§8, §12.)
+9. **Frozen at publish?** Two mechanisms: (a) true snapshot =
+   questions/options/standardAnswer/score/gradingRule/rubric
+   (`question_snapshot`); (b) published-row immutability = timing mode,
+   control_flags, passing/total score, retake/score-strategy/result-mode (route
+   guard). **Both are freeze; they are not the same mechanism.** (§8, §12.)
+10. **Frozen at attempt creation?** True snapshots at attempt start: question
+    snapshot (copy), deadline, interruption-policy snapshot (4 cols). Exam-level
+    policy (result mode/retake/score strategy) is **not** copied per-attempt —
+    read live from the **immutable published row** (safe via route guard, not via
+    snapshot). These are Exam-/Enrollment-level and should NOT be reflexively
+    copied into Attempt snapshots (P2-M1). (§12.)
+11. **Already have snapshot semantics?** Yes — true snapshots (question +
+    interruption + deadline + submitted answers) AND published-row immutability.
+    Distinguish them. (§4, §12.)
+12. **Duplicated authority?** JWT **config-resolution authority** (not just a
+    duplicated literal) across `runtimeConfig` and `@exam/auth`; scanner interval
+    defaults; timezone (env vs DB). (§17.)
 13. **Direct `process.env` bypasses?** `DEADLINE_SCAN_INTERVAL_MS` (debt);
-    `@exam/auth` JWT/mode (justified leaf-package); seed/E2E/test harness
-    (justified). (§11.)
+    `@exam/auth` JWT/mode (P2-3 duplicated authority, leaf-package constraint);
+    seed/E2E/test harness (justified). (§11.)
 14. **Defaults duplicated Compose/code/docs?** Intentional layering for env
     defaults; some drift (`EMAIL_WORKER_*` missing from `.env.example`). (§17.)
 15. **Need audit history?** Org branding (today: `branding.update` best-effort).
     Any future E1 setting should be audited. Exam policy changes already emit
     `exam.update` / `exam.published_schedule_updated`. (§8.)
-16. **Need rollback?** Exam policy: no (publish-freeze). Future E1 settings:
+16. **Need rollback?** Exam policy: no (publish-freeze). A future E1 setting:
     conditional on operator workflow. (§22, §24.)
 17. **Domain-owned vs generic settings?** Domain-owned wins for exam policy,
-    candidate fields, branding. Generic system-settings table only justified for
-    the narrow Email/backup ops slice. (§20, §22.)
-18. **Smallest useful E1?** Email worker/retry policy (3–5 typed settings) +
-    read-only backup-status — OR nothing (proceed to P7-M1). (§21.)
+    candidate fields, branding. A generic system-settings table is justified only
+    if the §21 gate returns YES, and even then for one small typed slice. (§20,
+    §22.)
+18. **Smallest useful E1?** **None currently justified.** Close E0; proceed to
+    P7-M1. A future E1 is triggered only by the §21 gate; if triggered, exactly
+    ONE coherent first slice (Email worker/retry is a candidate, not
+    preselected); backup-status is a separate workstream. (§21.)
 19. **What should NOT be built in E1?** Generic JSON registry, config event bus,
     hot-reload framework, feature-flag platform, exam-policy mutation, restore
-    button, Redis expansion, multiTenant. (§22, §23.)
+    button, Redis expansion, multiTenant — and Email+backup bundled as one E1.
+    (§22, §23.)
 20. **Is a generic settings subsystem justified by current evidence?** **No.**
-    The evidence supports at most a narrow typed Email/backup ops slice, and a
-    valid outcome is to build nothing and proceed to P7-M1. (§1, §21.)
+    No E1 is currently justified; close E0 and proceed to P7-M1. (§1, §21.)
 
 ---
 
@@ -996,36 +1152,43 @@ Deployment/secrets (Class A):
   remain operator-owned (env + Compose + secret store). Correct today.
 
 System operational setting candidates (Class B):
-  ~15 env-only items today; ~4 genuine E1 candidates (Email worker/retry)
-  conditional on a confirmed Admin online-edit need.
+  ~15 env-only items today; NONE is a confirmed near-term Admin-editable
+  requirement. Email worker/retry is a candidate under the §21 gate, not
+  preselected. Class B correctly stays env-only.
 
-Organization-setting candidates (Class C):
-  6 items, all already DB-backed (organization_settings). Correctly scoped.
+Organization-owned configuration (Class C):
+  ~6 concepts across organization_settings (5 cols) + candidate_fields;
+  already DB-backed and correctly scoped.
 
 Exam-policy candidates (Class D):
-  defer to P7-M1. ~20 fields; publish-freeze + partial attempt-snapshot already
-  correct; P2-1 live-read hazard must be addressed by P7-M1 before editable
-  profiles ship.
+  defer to P7-M1. ~20 fields. Freeze discipline is real but TWO mechanisms:
+    - true snapshots (question/interruption/deadline/submitted answers)
+    - published-row immutability (result mode/retake/score strategy/passing/
+      control_flags — live-read, safe via route guard)
+  These must not be conflated. P2-M1 (profile-resolution hazard) is the key
+  P7-M1 design input.
 
 Code-owned/non-configurable (Class E):
   ~25 items. Must stay code.
 
 Direct env/config authority issues:
-  DEADLINE_SCAN_INTERVAL_MS bypass (P2-2); JWT default duplication (P2-3);
-  several P3 doc/naming gaps.
+  DEADLINE_SCAN_INTERVAL_MS bypass (P2-2); JWT config-resolution authority
+  duplicated across runtimeConfig and @exam/auth (P2-3); several P3 doc/naming
+  gaps. None fixed in E0.
 
-Snapshot hazards:
-  result_publication_mode / retake_policy / score_strategy read live, not
-  per-attempt snapshot (P2-1, for P7-M1). Frozen set (questions, interruption,
-  deadline, submitted answers) is correct.
+Snapshot / freeze hazards:
+  Two distinct mechanisms (§12). No drift today. P2-M1 = future
+  profile-resolution hazard: profile edits must resolve into Exam-owned
+  published policy, not live-reference mutable templates. Do NOT reflexively
+  copy Exam-/Enrollment-level policy into per-Attempt snapshots.
 
 Secret-boundary findings:
   sound — all secrets env/Compose-owned; none in PostgreSQL; SMTP scrubbed.
 
 Backup/PITR findings:
   P7-C mechanism closed; no scheduler/retention/Admin-visibility today.
-  Only read-only backup-status is a defensible E1 slice; restore stays
-  operator-owned.
+  Backup automation/status is a SEPARATE future operational capability
+  (policy → execution → evidence → visibility), NOT a settings E1 slice.
 
 Email findings:
   cleanest boundary; secret-safe; EMAIL_WORKER_* undocumented in .env.example (P3).
@@ -1041,15 +1204,18 @@ Launchpad/bootstrap findings:
 
 P0: 0
 P1: 0
-P2: 3 (P2-1 P7-M1 live-read hazard; P2-2 scanner bypass; P2-3 JWT default dup)
+P2: 3 (P2-M1 profile-resolution hazard; P2-2 scanner bypass;
+       P2-3 JWT config-resolution authority duplication)
 P3: 8 (doc/naming/dead-declaration gaps)
 
 Minimum recommended P7-E1:
-  Outcome 1 (preferred): no settings control plane; proceed to P7-M1.
-  Outcome 2 (if confirmed need): narrow typed Email worker/retry store +
-  read-only backup-status. ~3–5 settings.
+  NONE currently justified. Close E0; proceed to P7-M1.
+  A future E1 is triggered ONLY by the §21 gate (a confirmed near-term
+  requirement for Admin-editable operational settings). When triggered,
+  identify exactly ONE coherent first slice; Email worker/retry is a candidate,
+  not preselected. Backup automation/status is a separate workstream.
 
-Persistence-model recommendation:
+Persistence-model recommendation (only if a future E1 is triggered):
   typed columns / domain-owned (Option A or C). No generic JSON registry.
   Versioning only if rollback is a confirmed operator need.
 
@@ -1057,25 +1223,27 @@ Explicit anti-goals:
   see §23.
 
 Explicitly deferred:
-  P7-M1 exam policy schema/profiles/snapshot-completeness (owns Class D + P2-1);
-  backup scheduler/retention engine (only if built); Redis expansion; Phase 4
-  multiTenant/SuperAdmin; feature-flag platform; generic hot-reload.
+  P7-M1 exam policy resolution/freeze model (owns Class D + P2-M1);
+  backup automation/status (separate future ops capability); Redis expansion;
+  Phase 4 multiTenant/SuperAdmin; feature-flag platform; generic hot-reload.
 
 Explicitly prohibited:
   plaintext secrets in DB; host paths / DB connection config in DB; restore
-  button; dynamic active-attempt semantics; Redis responsibility expansion
-  without ADR; Phase-4 modes in Phase 1.
+  button; bundling Email settings + backup-status into one E1; dynamic
+  active-attempt semantics; Redis responsibility expansion without ADR;
+  Phase-4 modes in Phase 1; reflexively copying Exam-level policy into
+  per-Attempt snapshots.
 ```
 
 **Recommended sequence:**
 
 ```text
-P7-E1  (conditional) narrow Email worker/retry typed settings + read-only
-       backup-status — OR record "no settings control plane yet"
-P7-E2  (only if scheduler built) backup schedule/retention as system settings
-P7-E3  (only if real need) effective-value API + Admin settings UI for the above
-P7-M1  exam policy schema + conflict validator + profiles (separate track;
-       owns Class D and the P2-1 live-read hazard)
+P7-E0  close (this audit)
+P7-M1  exam policy resolution / freeze model   ← NEXT
+P7-M2  profile templates
+P7-M3  exam creation wizard
+Future P7-E1  (only if §21 gate returns YES): one coherent first slice
+Separate:     backup automation/status workstream
 ```
 
 ---
