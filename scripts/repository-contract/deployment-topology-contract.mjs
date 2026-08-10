@@ -110,7 +110,9 @@ try {
 // The deployment verification suite lives under tests/deployment/ and must
 // not hard-code developer-specific checkout paths. It must derive repo-root
 // from the script location so the tests run from any clone directory
-// (including relocated worktrees).
+// (including relocated worktrees). A MISSING tests/deployment/ directory is
+// a contract error (the deployment recovery suite is a required surface);
+// unexpected filesystem failures propagate instead of being swallowed.
 const deploymentTestsDir = join(ROOT, "tests", "deployment");
 try {
   const testFiles = readdirSync(deploymentTestsDir).filter((f) =>
@@ -130,8 +132,16 @@ try {
       }
     }
   }
-} catch {
-  // If the directory is missing, there are no deployment tests to validate.
+} catch (err) {
+  if (err && err.code === "ENOENT") {
+    errors.push(
+      "tests/deployment/ is missing: the deployment verification suite " +
+        "(compose-smoke, launchpad-bootstrap, persistence-and-cold-restore, " +
+        "logical-backup-restore, pitr) is a required repository surface.",
+    );
+  } else {
+    throw err;
+  }
 }
 
 // Minimal structural parse — we only need top-level service presence and

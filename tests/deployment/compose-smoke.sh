@@ -103,10 +103,10 @@ cleanup() {
   # redis containers are not part of the model and survive.
   compose_down_best_effort "compose-smoke-redis-noauth-${RUN_NUM}" --profile redis
   compose_down_best_effort "compose-smoke-redis-${RUN_NUM}" --profile redis
-  if [ -n "${EXAM_DATA_ROOT:-}" ] && [ -d "${EXAM_DATA_ROOT}" ] \
-    && printf '%s\n' "${EXAM_DATA_ROOT}" | grep -q '^/tmp/compose-smoke-'; then
-    rm -rf "${EXAM_DATA_ROOT}" > /dev/null 2>&1 || true
-  fi
+  # Remove ONLY the temp data root this script created via safe_temp_root
+  # (registry-checked; container-assisted because PGDATA files are owned by
+  # the container postgres user).
+  cleanup_temp_root "${EXAM_DATA_ROOT}"
 }
 trap cleanup EXIT
 
@@ -188,7 +188,7 @@ done
 
 # ── Test 5: email-worker started AFTER app health ────────────────────────
 echo "--- TEST 5: email-worker running (started after app: service_healthy) ---"
-WORKER_STATE=$(docker inspect "$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" ps -q email-worker 2>/dev/null)" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
+WORKER_STATE=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
 if [ "${WORKER_STATE}" = "running" ]; then
   echo "  PASS: email-worker is running."
 else
@@ -199,7 +199,7 @@ fi
 
 # ── Test 5b: worker stays Up with bootstrap_pending before bootstrap ─────
 echo "--- TEST 5b: worker stays Up with bootstrap_pending heartbeat ---"
-WORKER_CONTAINER="$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" ps -q email-worker 2>/dev/null)"
+WORKER_CONTAINER="$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)"
 WORKER_RESTARTS_BEFORE=$(docker inspect "${WORKER_CONTAINER}" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
 WORKER_CONTAINER_ID_BEFORE=$(docker inspect "${WORKER_CONTAINER}" --format '{{.Id}}' 2>/dev/null || echo "unknown")
 if [ "${WORKER_RESTARTS_BEFORE}" != "0" ]; then
@@ -356,14 +356,14 @@ if [ "${SUCCESS_OK}" = "0" ]; then
 fi
 echo "  PASS: heartbeat for instance ${PENDING_INSTANCE_ID} has last_success_at and no last_error."
 
-WORKER_CONTAINER_ID_AFTER=$(docker inspect "$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" ps -q email-worker 2>/dev/null)" --format '{{.Id}}' 2>/dev/null || echo "unknown")
+WORKER_CONTAINER_ID_AFTER=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.Id}}' 2>/dev/null || echo "unknown")
 if [ "${WORKER_CONTAINER_ID_BEFORE}" != "${WORKER_CONTAINER_ID_AFTER}" ]; then
   echo "  FAIL: email-worker container changed across bootstrap (was ${WORKER_CONTAINER_ID_BEFORE}, now ${WORKER_CONTAINER_ID_AFTER})."
   exit 1
 fi
 echo "  PASS: same email-worker container across bootstrap."
 
-WORKER_RESTARTS_AFTER=$(docker inspect "$(docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" ps -q email-worker 2>/dev/null)" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
+WORKER_RESTARTS_AFTER=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
 if [ "${WORKER_RESTARTS_AFTER}" != "0" ]; then
   echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_AFTER} after bootstrap (expected 0)."
   exit 1

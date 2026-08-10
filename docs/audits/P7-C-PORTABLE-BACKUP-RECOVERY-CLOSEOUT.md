@@ -98,9 +98,16 @@ scripts/backup/
 └── postgres-enable-pitr.sh       # ALTER SYSTEM archive_* + archiver proof
 ```
 
-All scripts derive the deployment's `POSTGRES_USER` / `POSTGRES_DB` (and
-password where needed) from the RUNNING db container — no hardcoded
-credentials, no password on argv.
+The **online PostgreSQL scripts** (`postgres-logical-backup.sh`,
+`postgres-logical-restore.sh`, `pg-basebackup.sh`,
+`postgres-enable-pitr.sh`) derive the deployment's `POSTGRES_USER` /
+`POSTGRES_DB` (and password where needed) from the RUNNING db container —
+no hardcoded credentials, no password on argv. The **cold-filesystem
+scripts** (`cold-filesystem-backup.sh`, `cold-filesystem-restore.sh`)
+never touch a running database container: they validate source/destination
+paths, refuse a live `postmaster.pid` (backup) or a populated destination
+(restore), and copy via a throwaway helper container that preserves
+ownership/mode/symlinks.
 
 Verification lives separately under `tests/deployment/` (capability-named,
 phase-free):
@@ -162,9 +169,13 @@ presence), never arbitrary fixed sleeps.
    chain has been deliberately validated. (§8.5 of `backup-and-recovery.md`.)
 2. **Physical backups are PG-major-tied.** Cross-major migration requires
    the C2 logical path.
-3. **PITR target granularity is bounded by `archive_timeout` (60s).** A
-   low-write cluster still archives within 60s, but sub-minute PITR
-   targets in a quiet period may be coarser than wall-clock suggests.
+3. **`archive_timeout` (60s) bounds archival freshness for active
+   workloads.** The archiver switches and archives a segment at least every
+   60s, so at most 60s of WAL can await archival on a busy cluster.
+   Recovery precision is NOT bounded by `archive_timeout`: recovery
+   depends on the available archived WAL and the selected recovery target
+   (`recovery_target_time`, `recovery_target_lsn`,
+   `recovery_target_name`, or `recovery_target_xid`).
 4. **C3 replication uses the configured `POSTGRES_USER` superuser over the
    db container's loopback namespace.** A hardened deployment should create
    a narrowly scoped replication role (documented in `pg-basebackup.sh`);

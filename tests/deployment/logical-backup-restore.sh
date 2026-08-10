@@ -55,11 +55,11 @@ CREATED_DIRS=("${ROOT}" "${BACKUP_DIR_PARENT}")
 
 cleanup() {
   compose_down_best_effort "${PROJECT}"
+  # Remove ONLY the temp roots this script created (safe_temp_root
+  # registry-checked; container-assisted because PGDATA files are owned by
+  # the container postgres user).
   for d in "${CREATED_DIRS[@]}"; do
-    if [ -n "${d}" ] && [ -d "${d}" ] \
-      && printf '%s\n' "${d}" | grep -Eq '/tmp/logical-(data|bp)-[A-Za-z0-9_-]+$'; then
-      cleanup_temp_root "${d}"
-    fi
+    cleanup_temp_root "${d}"
   done
 }
 trap cleanup EXIT

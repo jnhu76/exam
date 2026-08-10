@@ -69,11 +69,11 @@ cleanup() {
   for proj in "${PROJECTS[@]}"; do
     compose_down_best_effort "${proj}"
   done
+  # Remove ONLY the temp roots this script created (safe_temp_root
+  # registry-checked; container-assisted because PGDATA files are owned by
+  # the container postgres user).
   for d in "${CREATED_DIRS[@]}"; do
-    if [ -n "${d}" ] && [ -d "${d}" ] \
-      && printf '%s\n' "${d}" | grep -Eq '/tmp/pitr-(src|rec|bb|miss|inv)-[A-Za-z0-9_-]+$'; then
-      cleanup_temp_root "${d}"
-    fi
+    cleanup_temp_root "${d}"
   done
 }
 trap cleanup EXIT
@@ -129,7 +129,7 @@ echo "  using real archived segment: ${WAL_NAME}"
 docker exec "$(db_container "${PROJECT_SRC}")" sh -c "cp '${WAL_FILE}' /tmp/idem-source"
 
 run_idem_case() {
-  local src="$1" tgt="$2" expect="$3"
+  local name="$1" src="$2" tgt="$3" expect="$4"
   local out
   out="$(docker exec "$(db_container "${PROJECT_SRC}")" sh -c "
     SRC='${src}'; TGT='${tgt}'
@@ -138,16 +138,16 @@ run_idem_case() {
     eval \"\$cmd\" >/dev/null 2>&1 && echo OK || echo FAIL
   ")"
   if [ "${out}" = "${expect}" ]; then
-    pass "archive idempotency ${3}: expected ${expect}, got ${out}"
+    pass "archive idempotency ${name}: expected ${expect}, got ${out}"
   else
-    fail "archive idempotency ${3}: expected ${expect}, got ${out}"
+    fail "archive idempotency ${name}: expected ${expect}, got ${out}"
   fi
 }
 docker exec "$(db_container "${PROJECT_SRC}")" sh -c "rm -f /wal-archive/IDEM-CASE1"
-run_idem_case "/tmp/idem-source" "IDEM-CASE1" "OK"    # absent target → success
-run_idem_case "/tmp/idem-source" "IDEM-CASE1" "OK"    # identical retry → success
+run_idem_case "absent-target" "/tmp/idem-source" "IDEM-CASE1" "OK"
+run_idem_case "identical-retry" "/tmp/idem-source" "IDEM-CASE1" "OK"
 docker exec "$(db_container "${PROJECT_SRC}")" sh -c "printf 'different-bytes-collision' > /tmp/idem-other"
-run_idem_case "/tmp/idem-other" "IDEM-CASE1" "FAIL"   # byte collision → failure
+run_idem_case "byte-collision" "/tmp/idem-other" "IDEM-CASE1" "FAIL"
 docker exec "$(db_container "${PROJECT_SRC}")" sh -c "rm -f /tmp/idem-source /tmp/idem-other /wal-archive/IDEM-CASE1" 2>/dev/null || true
 
 # ── 2. Bootstrap + base backup + deterministic state markers ─────────────
@@ -195,17 +195,17 @@ wait_for_archived_wal "${PROJECT_SRC}" "${SEG_C}"
 echo "  State C written; segment ${SEG_C} archived."
 
 # ── Recovery-run helpers ────────────────────────────────────────────────
-# Prepare a recovery PGDATA at ${rec_root}/postgres/18/docker from the
+# Prepare a recovery PGDATA at ${rec_root}/postgres/${PG_MAJOR}/docker from the
 # UNTOUCHED base backup; optionally copy the WAL archive (minus an optional
 # excluded segment); write recovery.signal + recovery conf. $1 = rec root,
 # $2 = archive dir to copy from ("" = skip archive), $3 = optional segment
 # to exclude from the copy, $4 = recovery_target_lsn value.
 prepare_recovery() {
   local rec_root="$1" archive_src="$2" exclude_seg="$3" target="$4"
-  mkdir -p "${rec_root}/postgres/18/docker" "${rec_root}/wal-archive"
+  mkdir -p "${rec_root}/postgres/${PG_MAJOR}/docker" "${rec_root}/wal-archive"
   docker run --rm \
     -v "${BASEBACKUP_DIR}:/from:ro" \
-    -v "${rec_root}/postgres/18/docker:/to" \
+    -v "${rec_root}/postgres/${PG_MAJOR}/docker:/to" \
     alpine:latest sh -c 'rm -rf /to/* 2>/dev/null; cp -a /from/. /to/'
   if [ -n "${archive_src}" ]; then
     if [ -n "${exclude_seg}" ]; then
@@ -220,8 +220,8 @@ prepare_recovery() {
         alpine:latest sh -c 'cp -a /from/. /to/ 2>/dev/null || true'
     fi
   fi
-  docker run --rm -v "${rec_root}/postgres/18/docker:/pg" alpine:latest sh -c 'touch /pg/recovery.signal'
-  docker run --rm -v "${rec_root}/postgres/18/docker:/pg" alpine:latest sh -c "
+  docker run --rm -v "${rec_root}/postgres/${PG_MAJOR}/docker:/pg" alpine:latest sh -c 'touch /pg/recovery.signal'
+  docker run --rm -v "${rec_root}/postgres/${PG_MAJOR}/docker:/pg" alpine:latest sh -c "
 cat >> /pg/postgresql.auto.conf <<CONF
 restore_command = 'cp /wal-archive/%f %p'
 recovery_target_lsn = '${target}'
@@ -314,9 +314,11 @@ for _ in $(seq 1 60); do
 done
 # Recovery must NOT complete: the ready-to-accept-connections message would
 # mean the target WAS reached (or recovery ended) — a hard failure of the
-# "required WAL missing" premise.
+# "required WAL missing" premise. The happy path promotes within seconds of
+# the recovery reaching the gap, so a 30s window comfortably exceeds any
+# incorrect-promotion time while keeping the passing path fast.
 PROMOTED_EARLY="no"
-for _ in $(seq 1 90); do
+for _ in $(seq 1 30); do
   MISS_LOGS="$(run_compose "${PROJECT_REC}-miss" logs --tail=200 db 2>&1 || true)"
   if printf '%s' "${MISS_LOGS}" | grep -q "database system is ready to accept connections"; then
     PROMOTED_EARLY="yes"
@@ -327,8 +329,8 @@ done
 # pg_controldata on the recovery PGDATA: the authoritative on-disk recovery
 # state. "in archive recovery" = still waiting for the target (unreachable);
 # "in production" would mean recovery ended (target reached).
-CTL_STATE="$(docker run --rm -v "${REC_MISS}/postgres/18/docker:/pg" \
-  postgres:18.4-bookworm pg_controldata /pg 2>/dev/null \
+CTL_STATE="$(docker run --rm -v "${REC_MISS}/postgres/${PG_MAJOR}/docker:/pg" \
+  "${PG_IMAGE}" pg_controldata /pg 2>/dev/null \
   | sed -n 's/^Database cluster state:[[:space:]]*//p' | tr -d '[:space:]' || true)"
 echo "  restore-failure evidence=${LOG_EVIDENCE} promoted-early=${PROMOTED_EARLY}"
 echo "  pg_controldata state: '${CTL_STATE}' (expected 'inarchiverecovery')"
@@ -347,7 +349,6 @@ compose_down_best_effort "${PROJECT_REC}-miss"
 echo ""
 echo "--- 6. F2: corrupt one base-backup file; pg_verifybackup MUST reject ---"
 CORRUPT_DIR="${BASEBACKUP_DIR_PARENT}/corrupt-${RUN_TS}"
-CREATED_DIRS+=("${CORRUPT_DIR}")
 docker run --rm \
   -v "${BASEBACKUP_DIR}:/from:ro" \
   -v "${CORRUPT_DIR}:/to" \
@@ -363,9 +364,9 @@ else
   docker run --rm -v "${CORRUPT_DIR}:/d" alpine:latest \
     sh -c "printf '\\x00' | dd of=/d${REL} bs=1 count=1 conv=notrunc seek=0 2>/dev/null || true"
   VRF_OUT="$(docker run --rm -v "${CORRUPT_DIR}:/d:ro" \
-    postgres:18.4-bookworm pg_verifybackup /d 2>&1 || true)"
+    "${PG_IMAGE}" pg_verifybackup /d 2>&1 || true)"
   if docker run --rm -v "${CORRUPT_DIR}:/d:ro" \
-      postgres:18.4-bookworm pg_verifybackup /d >/dev/null 2>&1; then
+      "${PG_IMAGE}" pg_verifybackup /d >/dev/null 2>&1; then
     fail "F2 corrupt base backup — pg_verifybackup accepted a tampered file"
   else
     if printf '%s' "${VRF_OUT}" | grep -Eqi 'verify|mismatch|checksum|does not match|invalid|failed|extra|missing'; then

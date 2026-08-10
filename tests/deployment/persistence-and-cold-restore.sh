@@ -64,11 +64,11 @@ cleanup() {
   for proj in "${PROJECTS[@]}"; do
     compose_down_best_effort "${proj}"
   done
+  # Remove ONLY the temp roots this script created (safe_temp_root
+  # registry-checked; container-assisted because PGDATA files are owned by
+  # the container postgres user).
   for d in "${CREATED_DIRS[@]}"; do
-    if [ -n "${d}" ] && [ -d "${d}" ] \
-      && printf '%s\n' "${d}" | grep -Eq '/tmp/persist-[abc]-[A-Za-z0-9_-]+$|/tmp/persist-bp-[A-Za-z0-9_-]+$'; then
-      cleanup_temp_root "${d}"
-    fi
+    cleanup_temp_root "${d}"
   done
 }
 trap cleanup EXIT
@@ -155,8 +155,8 @@ echo "  PASS: cold-filesystem backup/restore round-trip."
 # ── Bonus: PGDATA is operator-visible at ${EXAM_DATA_ROOT}/postgres ──────
 echo "--- bonus: PGDATA operator-visibility via helper container ---"
 if ! docker run --rm -v "${ROOT_C}/postgres:/pg:ro" alpine:latest \
-  sh -c 'test -f /pg/18/docker/PG_VERSION && cat /pg/18/docker/PG_VERSION'; then
-  echo "  FAIL: PG_VERSION not visible at \${EXAM_DATA_ROOT}/postgres/18/docker/PG_VERSION." >&2
+  sh -c "test -f /pg/${PG_MAJOR}/docker/PG_VERSION && cat /pg/${PG_MAJOR}/docker/PG_VERSION"; then
+  echo "  FAIL: PG_VERSION not visible at \${EXAM_DATA_ROOT}/postgres/${PG_MAJOR}/docker/PG_VERSION." >&2
   exit 1
 fi
 echo "  PASS: PGDATA is operator-visible at \${EXAM_DATA_ROOT}/postgres."

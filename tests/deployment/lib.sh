@@ -24,11 +24,15 @@ COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 # Usage: run_compose [PROJECT] [ARGS...]
 #   - when PROJECT is given (first arg, not starting with '-'), it is
 #     passed as -p PROJECT (isolated Compose project);
+#   - an explicit EMPTY first argument is consumed and dropped (helpers that
+#     pass "${project}" with project empty do not forward an empty arg);
 #   - otherwise COMPOSE_PROJECT_NAME is used if set (Compose native).
 run_compose() {
   local project=""
   if [ "${1:-}" != "" ] && [[ "${1}" != -* ]]; then
     project="$1"
+    shift
+  elif [ "${1:-}" = "" ]; then
     shift
   fi
   local -a args=(docker compose -f "${COMPOSE_FILE}")
@@ -68,13 +72,31 @@ compose_logs() {
 }
 
 # ── Readiness polling (bounded, deterministic — no arbitrary sleeps) ─────
-wait_for_postgres() {
+# Derive POSTGRES_USER / POSTGRES_DB from the RUNNING db container
+# (fallback exam/exam — the canonical compose defaults), so a deployment
+# with customized POSTGRES_USER/POSTGRES_DB is honored.
+pg_user_db() {
   local project="${1:-}"
   local c
+  c="$(db_container "${project}")"
+  local user db
+  user="$(docker inspect "${c}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+    | sed -n 's/^POSTGRES_USER=//p' | head -1)"
+  db="$(docker inspect "${c}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+    | sed -n 's/^POSTGRES_DB=//p' | head -1)"
+  printf '%s %s' "${user:-exam}" "${db:-exam}"
+}
+
+wait_for_postgres() {
+  local project="${1:-}"
+  local c pg_user pg_db
   for _ in $(seq 1 60); do
     c="$(db_container "${project}")"
-    if [ -n "${c}" ] && docker exec "${c}" pg_isready -U exam -d exam >/dev/null 2>&1; then
-      return 0
+    if [ -n "${c}" ]; then
+      read -r pg_user pg_db <<< "$(pg_user_db "${project}")"
+      if docker exec "${c}" pg_isready -U "${pg_user}" -d "${pg_db}" >/dev/null 2>&1; then
+        return 0
+      fi
     fi
     sleep 1
   done
@@ -115,17 +137,40 @@ wait_for_archived_wal() {
 }
 
 # ── Temp roots ───────────────────────────────────────────────────────────
-# Create a temp root with the given mktemp prefix.
+# Registry of every path safe_temp_root has created. cleanup_temp_root
+# removes ONLY a path recorded here (exact match), so the TMPDIR location
+# never matters and an arbitrary path can never be removed.
+SAFE_TEMP_ROOTS=()
+
+# Create a temp root with the given mktemp prefix and record it.
 safe_temp_root() {
-  mktemp -d -t "${1}-XXXXXX"
+  local d
+  d="$(mktemp -d -t "${1}-XXXXXX")"
+  SAFE_TEMP_ROOTS+=("${d}")
+  echo "${d}"
 }
 
-# Remove a temp root whose files may be owned by the container postgres
-# user (not host-readable). The path guard is the CALLER's job: pass only
-# a path this test created via safe_temp_root with its own prefix.
+# Remove a temp root created by safe_temp_root. Files inside may be owned
+# by the container postgres user (not host-readable), so removal is
+# container-assisted. Paths NOT recorded by safe_temp_root are never
+# touched.
 cleanup_temp_root() {
   local d="$1"
-  if [ -z "${d}" ] || [ ! -d "${d}" ]; then
+  local i
+  local remaining=()
+  local found="no"
+  for i in "${SAFE_TEMP_ROOTS[@]}"; do
+    if [ "${i}" = "${d}" ]; then
+      found="yes"
+    else
+      remaining+=("${i}")
+    fi
+  done
+  if [ "${found}" != "yes" ]; then
+    return 0
+  fi
+  SAFE_TEMP_ROOTS=("${remaining[@]}")
+  if [ ! -d "${d}" ]; then
     return 0
   fi
   docker run --rm -v "${d}:/d" alpine:latest \
@@ -134,14 +179,23 @@ cleanup_temp_root() {
   rmdir "${d}" 2>/dev/null || rm -rf "${d}" 2>/dev/null || true
 }
 
+# ── PostgreSQL version discovery ─────────────────────────────────────────
+# The PostgreSQL image + major version are derived from the canonical
+# compose file (single source of truth), so a version bump in
+# docker-compose.yml updates the tests automatically.
+PG_IMAGE="$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(postgres:[^[:space:]]*\).*/\1/p' \
+  "${COMPOSE_FILE}" | head -1)"
+PG_MAJOR="$(printf '%s' "${PG_IMAGE}" | sed -n 's/^postgres:\([0-9][0-9]*\).*/\1/p')"
+
 # ── Exam probe state ─────────────────────────────────────────────────────
-# psql -tAc against the project's db container (deployment defaults:
-# the canonical compose seeds POSTGRES_USER=exam / POSTGRES_DB=exam).
+# psql -tAc against the project's db container with the deployment's
+# POSTGRES_USER / POSTGRES_DB (derived from the container, exam fallback).
 psql_exec() {
   local project="${1:-}" sql="$2"
-  local c
+  local c pg_user pg_db
   c="$(db_container "${project}")"
-  docker exec "${c}" psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${sql}"
+  read -r pg_user pg_db <<< "$(pg_user_db "${project}")"
+  docker exec "${c}" psql -v ON_ERROR_STOP=1 -U "${pg_user}" -d "${pg_db}" -tAc "${sql}"
 }
 
 # Bootstrap the first Admin via the canonical CLI inside the app container.

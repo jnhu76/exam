@@ -31,8 +31,12 @@
 set -euo pipefail
 
 TS="$(date +%s)"
-PROJECT_A="launchpad-a-${TS}"
-PROJECT_B="launchpad-b-${TS}"
+# Per-run unique id: a seconds-only timestamp collides when two runs start
+# in the same second. Both Compose project names derive from it so cleanup
+# (compose_down_best_effort) always addresses the right isolated project.
+RUN_ID="${TS}-$(openssl rand -hex 3)"
+PROJECT_A="launchpad-a-${RUN_ID}"
+PROJECT_B="launchpad-b-${RUN_ID}"
 PORT_A=$((32000 + (TS % 1000)))
 PORT_B=$((34000 + (TS % 1000)))
 
@@ -105,9 +109,10 @@ wait_app_healthy() {
     fi
     sleep 2
   done
-  echo "  FAIL: stack did not become healthy in 180s (app=${app_status}, db=${db_status})."
+  # Keep log collection first, then fail() so the timeout updates FAIL_COUNT
+  # and goes through the standard failure summary.
   compose_logs "${project}" app
-  exit 1
+  fail "stack did not become healthy in 180s (app=${app_status}, db=${db_status})"
 }
 
 start_stack() {
@@ -251,6 +256,18 @@ compose_down_best_effort "${PROJECT_A}"
 echo "--- start stack B (token unset: launchpad disabled) ---"
 unset LAUNCHPAD_SETUP_TOKEN 2>/dev/null || true
 start_stack "${PROJECT_B}" "${EXAM_DATA_ROOT_B}" "${PORT_B}"
+
+echo "--- B1: the app container must NOT receive the token ---"
+# Defense against shell-env residue: prove the compose interpolation really
+# forwarded an unset/empty LAUNCHPAD_SETUP_TOKEN into the running container.
+B1_TOKEN_ENV="$(docker inspect "$(app_container "${PROJECT_B}")" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+  | sed -n 's/^LAUNCHPAD_SETUP_TOKEN=//p' | head -1)"
+if [ -z "${B1_TOKEN_ENV}" ]; then
+  ok "B1 app container environment has no LAUNCHPAD_SETUP_TOKEN"
+else
+  fail "B1 app container received a non-empty LAUNCHPAD_SETUP_TOKEN (launchpad must be disabled)" "${B1_TOKEN_ENV}"
+fi
 
 echo "--- B1: fresh status uninitialized; bootstrap refused (403, disabled) ---"
 B1_STATUS="$(status_get "${PORT_B}")"
