@@ -119,6 +119,13 @@ export async function publishExam(
   ) {
     throw new ValidationError("Retake policy is not supported in Phase 1");
   }
+  // `duration_minutes` has no DB CHECK (> 0), so publish is the last line for
+  // historical/stale rows that bypass the Zod `.positive()` shape boundary
+  // (P7-M1 design §9: duration is "Zod + publish"). Shape invariant, not
+  // cross-field — stays here rather than in the canonical validator.
+  if (exam.durationMinutes <= 0) {
+    throw new ValidationError("Duration must be positive");
+  }
 
   // P7-M1: canonical cross-field policy revalidation (design §11). Publish is
   // the authority/freeze boundary and revalidates the WHOLE resolved policy —

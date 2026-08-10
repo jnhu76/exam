@@ -248,16 +248,20 @@ describe("REC-I4-I3A contract + authoring structural guards", () => {
 
   it("Exam create/update contracts expose interruption policy authoring fields", () => {
     const src = readSource("packages/contracts/src/exam.ts");
-    // Create + update base schemas carry the authoring fields.
+    // Create + update base schemas carry the authoring fields. P7-M1 added the
+    // PostgreSQL-int-max shape bound (.max()) to the caps chain — the chain is
+    // prettier-broken across lines, so match each segment with tolerant
+    // whitespace and allow the .max(...) link between .positive() and
+    // .nullish().
+    const capFieldChain = (field: string) =>
+      new RegExp(
+        `${field}:\\s*z\\s*\\.number\\(\\)\\s*\\.int\\(\\)\\s*\\.positive\\(\\)[\\s\\S]{0,120}\\.nullish\\(\\)`,
+      );
     expect(src).toMatch(
       /interruptionTimePolicy:\s*InterruptionTimePolicySchema/,
     );
-    expect(src).toMatch(
-      /interruptionGracePerIncidentSeconds:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullish\(\)/,
-    );
-    expect(src).toMatch(
-      /interruptionGracePerAttemptSeconds:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullish\(\)/,
-    );
+    expect(src).toMatch(capFieldChain("interruptionGracePerIncidentSeconds"));
+    expect(src).toMatch(capFieldChain("interruptionGracePerAttemptSeconds"));
     // The ExamSchema DTO exposes the resolved policy + nullable caps.
     expect(src).toMatch(
       /interruptionGracePerIncidentSeconds:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullable\(\)/,

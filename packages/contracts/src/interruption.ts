@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { validateInterruptionPolicyCaps as validateCapsRule } from "@exam/domain";
 
-const POSTGRES_INTEGER_MAX = 2_147_483_647;
+export const POSTGRES_INTEGER_MAX = 2_147_483_647;
 
 export const InterruptionTimePolicySchema = z.enum([
   "strict",
@@ -44,35 +45,22 @@ function validatePolicyCaps(
   value: PolicyConfiguration,
   ctx: z.RefinementCtx,
 ): void {
-  const hasIncidentCap = value.perIncidentCapSeconds !== null;
-  const hasAggregateCap = value.perAttemptAggregateCapSeconds !== null;
-
-  if (value.policy !== "bounded_grace") {
-    if (hasIncidentCap || hasAggregateCap) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "strict and operator_incident policies require null caps",
-      });
-    }
-    return;
-  }
-
-  if (
-    value.perIncidentCapSeconds === null ||
-    value.perAttemptAggregateCapSeconds === null
-  ) {
+  // Single semantic source: the shared leaf rule in `@exam/domain`
+  // (`validateInterruptionPolicyCaps`), also used by the exam-engine canonical
+  // validator so authoring and publish cannot drift.
+  const findings = validateCapsRule(
+    value.policy,
+    value.perIncidentCapSeconds,
+    value.perAttemptAggregateCapSeconds,
+  );
+  for (const finding of findings) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "bounded_grace requires both caps",
-    });
-    return;
-  }
-
-  if (value.perIncidentCapSeconds > value.perAttemptAggregateCapSeconds) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["perIncidentCapSeconds"],
-      message: "per-incident cap cannot exceed the aggregate cap",
+      path:
+        finding.capField === "perIncidentCapSeconds"
+          ? ["perIncidentCapSeconds"]
+          : [],
+      message: finding.message,
     });
   }
 }

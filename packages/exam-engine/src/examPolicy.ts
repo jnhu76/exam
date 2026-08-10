@@ -15,12 +15,17 @@
 // acceptance gate (design §34).
 
 import type {
+  ControlFlags,
   Exam,
   ExamPolicyConflict,
   InterruptionTimePolicy,
   ResolvedExamPolicy,
 } from "@exam/domain";
-import { ExamPolicyConflictCode, ValidationError } from "@exam/domain";
+import {
+  ExamPolicyConflictCode,
+  ValidationError,
+  validateInterruptionPolicyCaps,
+} from "@exam/domain";
 
 /**
  * Project a published (or draft) Exam row into the typed resolved-policy value.
@@ -129,75 +134,30 @@ export function validateExamPolicy(
   }
 
   // ── Interruption policy cross-field rules (ADR-013). ──
-  // Mirrors validatePolicyCaps (contracts/interruption.ts) so publish also
-  // revalidates (today publish does NOT). strict/operator_incident ⇒ caps
-  // null; bounded_grace ⇒ both caps > 0; per-incident <= per-attempt.
-  const intConflicts = validateInterruptionPolicyCaps(
+  // strict/operator_incident ⇒ caps null; bounded_grace ⇒ both caps > 0;
+  // per-incident <= per-attempt. Delegates to the SHARED leaf rule in
+  // `@exam/domain` (`validateInterruptionPolicyCaps`) — the same semantics
+  // the contracts-layer normalizer enforces at authoring, so publish
+  // revalidation cannot drift from authoring (design §19).
+  for (const finding of validateInterruptionPolicyCaps(
     policy.interruption.interruptionTimePolicy,
     policy.interruption.interruptionGracePerIncidentSeconds,
     policy.interruption.interruptionGracePerAttemptSeconds,
-  );
-  conflicts.push(...intConflicts);
-
-  return conflicts;
-}
-
-/**
- * Canonical interruption-policy caps validator. Mirrors the rules in
- * `contracts/interruption.ts` `validatePolicyCaps` so the same semantics are
- * enforced at publish (which the contracts-layer normalizer does not reach).
- *
- * Kept as a readable function, not a generic rule engine (design §19).
- */
-function validateInterruptionPolicyCaps(
-  policy: InterruptionTimePolicy,
-  perIncident: number | null,
-  perAttempt: number | null,
-): ExamPolicyConflict[] {
-  const fields = [
-    "interruptionTimePolicy",
-    "interruptionGracePerIncidentSeconds",
-    "interruptionGracePerAttemptSeconds",
-  ];
-
-  if (policy !== "bounded_grace") {
-    if (perIncident !== null || perAttempt !== null) {
-      return [
-        {
-          code: ExamPolicyConflictCode.InterruptionPolicyCapsInvalid,
-          fields,
-          message: "strict and operator_incident policies require null caps",
-        },
-      ];
-    }
-    return [];
-  }
-
-  // bounded_grace
-  const conflicts: ExamPolicyConflict[] = [];
-  if (perIncident === null || perAttempt === null) {
+  )) {
     conflicts.push({
       code: ExamPolicyConflictCode.InterruptionPolicyCapsInvalid,
-      fields,
-      message: "bounded_grace requires both caps",
-    });
-    return conflicts;
-  }
-  if (perIncident <= 0 || perAttempt <= 0) {
-    conflicts.push({
-      code: ExamPolicyConflictCode.InterruptionPolicyCapsInvalid,
-      fields,
-      message: "bounded_grace caps must be positive",
-    });
-    return conflicts;
-  }
-  if (perIncident > perAttempt) {
-    conflicts.push({
-      code: ExamPolicyConflictCode.InterruptionPolicyCapsInvalid,
-      fields: ["interruptionGracePerIncidentSeconds"],
-      message: "per-incident cap cannot exceed the aggregate cap",
+      fields:
+        finding.capField === "perIncidentCapSeconds"
+          ? ["interruptionGracePerIncidentSeconds"]
+          : [
+              "interruptionTimePolicy",
+              "interruptionGracePerIncidentSeconds",
+              "interruptionGracePerAttemptSeconds",
+            ],
+      message: finding.message,
     });
   }
+
   return conflicts;
 }
 
@@ -234,12 +194,10 @@ export function assertExamPolicyValid(exam: Exam): void {
 /**
  * Input shape for route-layer policy validation: the merged cross-field values
  * (create: full defaults-applied input; update: `{...existing, ...patch}` after
- * normalization). Only the fields the cross-field validator inspects are
- * required; identity/resource/timestamp fields are intentionally absent.
- *
- * Routes build this from their already-parsed + already-merged state rather
- * than constructing a full `Exam`, so the validator runs on exactly the policy
- * the persistence layer will see.
+ * normalization). Carries the FULL resolved-policy values — including
+ * questionIds and controlFlags — so the validator runs on exactly the policy
+ * the persistence layer will see (design §21). Identity/resource/timestamp
+ * fields are intentionally absent.
  */
 export interface ExamPolicyInput {
   timingMode: Exam["timingMode"];
@@ -249,6 +207,7 @@ export interface ExamPolicyInput {
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
   questionSelectionMode: Exam["questionSelectionMode"];
+  questionIds: string[];
   retakePolicy: Exam["retakePolicy"];
   maxAttempts: number;
   scoreStrategy: Exam["scoreStrategy"];
@@ -258,6 +217,7 @@ export interface ExamPolicyInput {
   interruptionTimePolicy: InterruptionTimePolicy;
   interruptionGracePerIncidentSeconds: number | null;
   interruptionGracePerAttemptSeconds: number | null;
+  controlFlags: ControlFlags;
 }
 
 /**
@@ -280,7 +240,7 @@ export function validateExamPolicyInput(
     },
     questions: {
       questionSelectionMode: input.questionSelectionMode,
-      questionIds: [],
+      questionIds: input.questionIds,
     },
     attempt: {
       retakePolicy: input.retakePolicy,
@@ -300,20 +260,7 @@ export function validateExamPolicyInput(
         input.interruptionGracePerAttemptSeconds,
     },
     control: {
-      // controlFlags are not inspected by the cross-field validator (design
-      // §13); supply a benign value. Routes validate control flag shape via Zod.
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 1,
-        batchInterval: 1,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: false,
-      },
+      controlFlags: input.controlFlags,
     },
   });
 }

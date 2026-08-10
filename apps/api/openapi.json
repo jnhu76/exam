@@ -7480,12 +7480,14 @@
                     "type": "integer",
                     "exclusiveMinimum": true,
                     "minimum": 0,
+                    "maximum": 2147483647,
                     "nullable": true
                   },
                   "interruptionGracePerAttemptSeconds": {
                     "type": "integer",
                     "exclusiveMinimum": true,
                     "minimum": 0,
+                    "maximum": 2147483647,
                     "nullable": true
                   }
                 },
@@ -8345,12 +8347,14 @@
                     "type": "integer",
                     "exclusiveMinimum": true,
                     "minimum": 0,
+                    "maximum": 2147483647,
                     "nullable": true
                   },
                   "interruptionGracePerAttemptSeconds": {
                     "type": "integer",
                     "exclusiveMinimum": true,
                     "minimum": 0,
+                    "maximum": 2147483647,
                     "nullable": true
                   }
                 },

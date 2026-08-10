@@ -135,3 +135,66 @@ export interface ExamPolicyConflict {
   fields: string[];
   message: string;
 }
+
+/**
+ * A finding from the shared interruption-caps leaf rule. `capField` names the
+ * implicated input key so callers can map it onto their own error shape (Zod
+ * issue path vs ExamPolicyConflict fields); null means a policy-level finding.
+ */
+export interface InterruptionCapConflict {
+  capField: "perIncidentCapSeconds" | "perAttemptAggregateCapSeconds" | null;
+  message: string;
+}
+
+/**
+ * Shared leaf rule for interruption-policy caps (ADR-013).
+ *
+ * ONE semantic source for the caps cross-field rules, used by BOTH:
+ *  - `contracts/interruption.ts` `validatePolicyCaps` (authoring normalizer),
+ *    and
+ *  - `exam-engine/examPolicy.ts` (canonical validator, incl. publish
+ *    revalidation, which the contracts layer does not reach).
+ *
+ * Pure and deterministic. Lives here (the leaf package) so both consumers
+ * share the semantics instead of "mirroring" each other.
+ */
+export function validateInterruptionPolicyCaps(
+  policy: InterruptionTimePolicy,
+  perIncidentCapSeconds: number | null,
+  perAttemptAggregateCapSeconds: number | null,
+): InterruptionCapConflict[] {
+  if (policy !== "bounded_grace") {
+    if (
+      perIncidentCapSeconds !== null ||
+      perAttemptAggregateCapSeconds !== null
+    ) {
+      return [
+        {
+          capField: null,
+          message: "strict and operator_incident policies require null caps",
+        },
+      ];
+    }
+    return [];
+  }
+
+  // bounded_grace
+  if (
+    perIncidentCapSeconds === null ||
+    perAttemptAggregateCapSeconds === null
+  ) {
+    return [{ capField: null, message: "bounded_grace requires both caps" }];
+  }
+  if (perIncidentCapSeconds <= 0 || perAttemptAggregateCapSeconds <= 0) {
+    return [{ capField: null, message: "bounded_grace caps must be positive" }];
+  }
+  if (perIncidentCapSeconds > perAttemptAggregateCapSeconds) {
+    return [
+      {
+        capField: "perIncidentCapSeconds",
+        message: "per-incident cap cannot exceed the aggregate cap",
+      },
+    ];
+  }
+  return [];
+}

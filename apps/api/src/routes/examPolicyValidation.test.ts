@@ -140,13 +140,13 @@ describe("P7-M1 exam policy validation — authoring + publish", () => {
 
   // ── PUBLISH revalidation (the freeze/acceptance gate) ─────────────
 
-  it("rejects publish of an inverted-window draft (revalidates whole policy)", async () => {
-    // Create a draft, then patch it into an inverted window via a path that
-    // bypasses the route validator is not possible — so instead create with a
-    // valid window and rely on publish revalidation being exercised by the
-    // happy path below. The inverted-window-at-publish case is covered by the
-    // engine unit tests (examPolicy.test.ts + publishExam guards).
-    // Here we prove the happy publish still works after the M1 refactor.
+  it("publishes a policy-valid draft (M1 publish path)", async () => {
+    // Route authoring validators (create/update) reject every invalid policy
+    // combination before publish, so an inverted-window draft cannot reach
+    // publish through the HTTP surface. The publish revalidation gate itself
+    // is pinned by engine unit tests (examCommands.test.ts: stale invalid
+    // Exam rows → publishExam rejects). Here we prove the happy publish path
+    // still works after the M1 refactor.
     const createRes = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
@@ -161,5 +161,41 @@ describe("P7-M1 exam policy validation — authoring + publish", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("published");
+  });
+
+  it("PATCH bounded_grace draft to strict with explicit null caps succeeds (null-merge regression)", async () => {
+    // Regression for the nullable patch merge: `null` is business semantics
+    // (clearing the caps), so the merged-policy validator must not resurrect
+    // the old caps over an explicit null (`null ?? old` bug). bounded_grace →
+    // strict + null caps is a legal transition and must return 200.
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        ...validCreatePayload(courseId, questionId),
+        interruptionTimePolicy: "bounded_grace",
+        interruptionGracePerIncidentSeconds: 120,
+        interruptionGracePerAttemptSeconds: 300,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const id = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${id}`,
+      payload: {
+        interruptionTimePolicy: "strict",
+        interruptionGracePerIncidentSeconds: null,
+        interruptionGracePerAttemptSeconds: null,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.interruptionTimePolicy).toBe("strict");
+    expect(body.interruptionGracePerIncidentSeconds).toBeNull();
+    expect(body.interruptionGracePerAttemptSeconds).toBeNull();
   });
 });

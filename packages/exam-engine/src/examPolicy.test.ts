@@ -256,6 +256,7 @@ describe("validateExamPolicyInput (route-layer merged input)", () => {
       latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
       minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
       questionSelectionMode: exam.questionSelectionMode,
+      questionIds: exam.questionIds,
       retakePolicy: exam.retakePolicy,
       maxAttempts: exam.maxAttempts,
       scoreStrategy: exam.scoreStrategy,
@@ -265,6 +266,7 @@ describe("validateExamPolicyInput (route-layer merged input)", () => {
       interruptionTimePolicy: "bounded_grace",
       interruptionGracePerIncidentSeconds: 120,
       interruptionGracePerAttemptSeconds: 300,
+      controlFlags: exam.controlFlags,
     });
     expect(viaInput).toEqual(viaExam);
   });
@@ -279,6 +281,7 @@ describe("validateExamPolicyInput (route-layer merged input)", () => {
         latestStartOffsetMinutes: null,
         minSubmitAfterStartMinutes: null,
         questionSelectionMode: "manual",
+        questionIds: ["q1", "q2"],
         retakePolicy: "unlimited",
         maxAttempts: 1,
         scoreStrategy: "highest",
@@ -288,6 +291,18 @@ describe("validateExamPolicyInput (route-layer merged input)", () => {
         interruptionTimePolicy: "strict",
         interruptionGracePerIncidentSeconds: null,
         interruptionGracePerAttemptSeconds: null,
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
       }),
     ).toThrow(ValidationError);
   });

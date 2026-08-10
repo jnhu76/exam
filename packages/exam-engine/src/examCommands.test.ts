@@ -197,6 +197,54 @@ describe("examCommands", () => {
       );
     });
 
+    // ── P7-M1: publish revalidation of stale/invalid drafts ─────────
+    // Publish is the freeze/acceptance gate: it must reject a draft whose
+    // policy is invalid even when the bad combination could only have reached
+    // the row via historical/stale data (create/update reject it earlier).
+
+    it("rejects publish of a stale inverted-window draft", async () => {
+      const repo = makeRepo(
+        makeExam({
+          openAt: new Date("2025-01-02T00:00:00Z"),
+          closeAt: new Date("2025-01-01T00:00:00Z"),
+        }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /openAt must be before closeAt/i,
+      );
+    });
+
+    it("rejects publish when durationMinutes <= 0 (no DB CHECK backs it)", async () => {
+      for (const durationMinutes of [0, -30]) {
+        const repo = makeRepo(makeExam({ durationMinutes }));
+        await expect(
+          publishExam(repo, "exam-1", testQuestions),
+        ).rejects.toThrow(/duration must be positive/i);
+      }
+    });
+
+    it("rejects publish of a stale strict policy carrying caps", async () => {
+      const repo = makeRepo(
+        makeExam({
+          interruptionTimePolicy: "strict",
+          interruptionGracePerIncidentSeconds: 120,
+          interruptionGracePerAttemptSeconds: 300,
+        }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /require null caps/i,
+      );
+    });
+
+    it("rejects publish when retakePolicy max_attempts carries maxAttempts < 1", async () => {
+      const repo = makeRepo(
+        makeExam({ retakePolicy: "max_attempts", maxAttempts: 0 }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /max_attempts.*requires maxAttempts/i,
+      );
+    });
+
     // ── P3-L0-5: publish validation ───────────────────────────────
 
     it("rejects text_response publish when rubric is null", async () => {
