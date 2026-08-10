@@ -218,8 +218,11 @@ requires downtime while PostgreSQL is stopped.
 docker compose down
 
 # 2. Run the backup helper (copies the COMPLETE postgres tree to a fresh
-#    destination with ownership/mode/symlinks preserved):
-scripts/backup/cold-filesystem-backup.sh ./data /mnt/nas/exam-backups/2026-08-10
+#    destination with ownership/mode/symlinks preserved). The source is the
+#    deployment's EXAM_DATA_ROOT (the production Compose default is ./data):
+scripts/backup/cold-filesystem-backup.sh \
+  "${EXAM_DATA_ROOT:-./data}" \
+  /mnt/nas/exam-backups/2026-08-10
 
 # 3. Restart Exam:
 docker compose up -d
@@ -309,8 +312,10 @@ docker compose up -d app email-worker
 The clean-target contract fixes the exact-historical-replacement gap: the
 runbook's older `pg_dump --clean --if-exists | psql` path does **not** remove
 objects that exist in the target DB yet are absent from an older dump. The
-C2 restore script enforces `DROP DATABASE` + `CREATE DATABASE ... TEMPLATE
-template0` (a truly empty database) before `pg_restore`, so no target-only
+C2 restore script enforces `DROP DATABASE ... WITH (FORCE)` (terminates any
+lingering connections; stop the API + worker first per §7.2) +
+`CREATE DATABASE ... TEMPLATE template0` (a truly empty database) before
+`pg_restore`, so no target-only
 schema/data from the previous database survives — the restored database is a
 clean logical reconstruction of the dumped Exam database state. This is NOT a
 claim of physical byte identity; a logical dump reconstructs the dumped
@@ -371,9 +376,9 @@ Properties:
   backup is internally consistent on its own.
 - A `backup_manifest` is produced and **verified** with `pg_verifybackup`
   before the script returns success. `pg_verifybackup` verifies the backup
-  contents against the PostgreSQL backup manifest — every file's
-  size/mtime, the configured per-file checksums (SHA256), and the
-  manifest's own checksum. Manifest verification is backup-integrity
+  contents against the PostgreSQL backup manifest — file presence and
+  size, the configured per-file SHA256 checksums, and the manifest's own
+  checksum. Manifest verification is backup-integrity
   evidence (the manifest uses checksums; it is not a digital-signature
   system); it is NOT proof that Exam can start and satisfy business
   invariants after restore. A restore drill is still required.
@@ -571,7 +576,7 @@ The deterministic suite in `tests/deployment/` proves the contracts
   `postgres-enable-pitr.sh` → base backup → pre-base marker → post-base
   State A → State B (capture LSN) → destructive State C → recover to the
   captured LSN → assert A/A1/B present, C absent, promoted. PASS.
-- **F1 missing REQUIRED archived WAL** — an UNTOUCHED base backup plus a
+- **F1 missing required WAL** — an UNTOUCHED base backup plus a
   complete archive MINUS the one segment that must be replayed to reach an
   explicit `recovery_target_lsn`. The assertion is about failing to REACH
   the target: the cluster stays in archive recovery (`pg_controldata`

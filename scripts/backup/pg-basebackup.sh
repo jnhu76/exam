@@ -184,8 +184,8 @@ PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
 
 # ── Manifest verification (C3.4) ─────────────────────────────────────────
 # pg_verifybackup verifies the backup contents against the PostgreSQL
-# backup manifest: every file's size/mtime, the configured per-file
-# checksums (SHA256), and the manifest's own checksum. It is an integrity
+# backup manifest: file presence and size, the configured per-file SHA256
+# checksums, and the manifest's own checksum. It is an integrity
 # check, not a digital signature. Limitation (documented): manifest
 # verification is backup-integrity evidence, NOT proof that Exam can start
 # and satisfy business invariants after restore — a restore drill is still
@@ -200,10 +200,9 @@ if ! docker run --rm \
   exit 1
 fi
 
-SIZE="$(docker run --rm -v "${DEST}:/d:ro" alpine:latest sh -c 'du -sh /d 2>/dev/null | cut -f1')"
 echo ""
 echo "Physical base backup COMPLETE."
-echo "  destination: ${DEST} (${SIZE})"
+echo "  destination: ${DEST}"
 echo "  label: ${LABEL}"
 echo "  format: plain (directory tree), WAL streamed (-X stream)"
 echo "  verification: pg_verifybackup manifest OK (SHA256 per-file checksums)"

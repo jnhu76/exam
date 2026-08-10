@@ -7,6 +7,7 @@ import {
   ErrorResponseSchema,
 } from "@exam/contracts";
 import { AdminAlreadyExistsError } from "@exam/domain";
+import type { PublicBrandingContext } from "@exam/domain";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { bootstrapAdminOnFreshDb } from "../scripts/bootstrap-admin.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
@@ -72,7 +73,9 @@ const launchpadRoutes: FastifyPluginAsync = async (fastify) => {
    * (architecture lint: routes use repositories, not raw queries).
    */
   async function isInstallationInitialized(): Promise<boolean> {
-    return createOrganizationRepo(fastify.db).defaultOrganizationExists();
+    return createOrganizationRepo(fastify.db).defaultOrganizationExists({
+      purpose: "public_branding",
+    } as PublicBrandingContext);
   }
 
   fastify.get(

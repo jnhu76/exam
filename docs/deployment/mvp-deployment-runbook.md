@@ -802,9 +802,12 @@ directory to an off-host destination, restart. Use the helper scripts,
 which preserve ownership/mode/symlinks and refuse unsafe paths:
 
 ```bash
-# Stop Exam first (PostgreSQL must be STOPPED — a live copy is corrupt-prone):
+# Stop Exam first (PostgreSQL must be STOPPED — a live copy is corrupt-prone).
+# The source is the deployment's EXAM_DATA_ROOT (default ./data):
 docker compose down
-scripts/backup/cold-filesystem-backup.sh ./data /mnt/nas/exam-backups/$(date +%Y%m%d)
+scripts/backup/cold-filesystem-backup.sh \
+  "${EXAM_DATA_ROOT:-./data}" \
+  /mnt/nas/exam-backups/$(date +%Y%m%d)
 docker compose up -d
 ```
 

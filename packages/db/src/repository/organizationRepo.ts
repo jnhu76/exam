@@ -115,7 +115,9 @@ export function createOrganizationRepo(db: Database) {
      * `activeAdminCount == 0` (removing the last Admin must not reopen
      * launchpad).
      */
-    async defaultOrganizationExists(): Promise<boolean> {
+    async defaultOrganizationExists(
+      _ctx: PublicBrandingContext,
+    ): Promise<boolean> {
       const rows = await db
         .select({ id: organizations.id })
         .from(organizations)

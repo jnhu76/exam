@@ -139,13 +139,15 @@ fi
 # from an older dump). TARGET_DB is passed as a psql variable and referenced
 # with :"..." (quoted-identifier interpolation) so it can never inject SQL;
 # the conservative name contract above additionally bounds it to a plain
-# identifier.
+# identifier. WITH (FORCE) terminates any lingering connections so a stale
+# session cannot block the DROP (the documented contract is still to stop
+# the API + worker first; FORCE is robustness, not a license to skip that).
 echo "Dropping and recreating '${TARGET_DB}' from template0..."
 # -i keeps stdin attached so the heredoc reaches psql inside the container.
 docker exec -i -e PGPASSWORD="${PGPASSWORD:-}" "${DB_CONTAINER}" \
   sh -c 'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 -v target_db="$1"' \
   sh "${TARGET_DB}" <<SQL
-DROP DATABASE IF EXISTS :"target_db";
+DROP DATABASE IF EXISTS :"target_db" WITH (FORCE);
 CREATE DATABASE :"target_db" TEMPLATE template0;
 SQL
 

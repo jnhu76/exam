@@ -30,6 +30,13 @@
 #   EXAM_DATA_ROOT="${EXAM_DATA_ROOT}" docker compose up -d
 set -euo pipefail
 
+# Helper container: the deployment's OWN postgres image (pinned by
+# docker-compose.yml and already present on any host that runs this
+# deployment). It provides sh/cp/find for PGDATA validation and the
+# container-assisted copy. There is deliberately NO separate helper image
+# dependency.
+HELPER_IMAGE="postgres:18.4-bookworm"
+
 print_usage() {
   cat >&2 <<'EOF'
 Usage: cold-filesystem-restore.sh <BACKUP_DIR> <DEST_EXAM_DATA_ROOT>
@@ -80,7 +87,7 @@ if [ ! -d "${SRC_PG}" ]; then
 fi
 # Validate the backup still looks like a PGDATA (helper container; the files
 # are owned by the container postgres user and may not be host-readable).
-if ! docker run --rm -v "${SRC_PG}:/from:ro" alpine:latest \
+if ! docker run --rm -v "${SRC_PG}:/from:ro" "${HELPER_IMAGE}" \
   sh -c 'find /from -maxdepth 3 -name PG_VERSION -print -quit 2>/dev/null | grep -q .'; then
   echo "FAIL: no PG_VERSION found under ${SRC_PG}; does not look like a PGDATA backup." >&2
   exit 2
@@ -128,11 +135,11 @@ echo "Copying COMPLETE postgres tree from backup to destination..."
 docker run --rm \
   -v "${SRC_PG}:/from:ro" \
   -v "${DEST_PG}:/to" \
-  alpine:latest \
+  "${HELPER_IMAGE}" \
   sh -c 'cp -a /from/. /to/'
 
 # Verify the restore landed.
-if ! docker run --rm -v "${DEST_PG}:/to:ro" alpine:latest \
+if ! docker run --rm -v "${DEST_PG}:/to:ro" "${HELPER_IMAGE}" \
   sh -c 'find /to -maxdepth 3 -name PG_VERSION -print -quit 2>/dev/null | grep -q .'; then
   echo "FAIL: restore verification failed — PG_VERSION missing in destination." >&2
   exit 1

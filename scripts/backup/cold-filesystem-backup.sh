@@ -43,9 +43,16 @@
 #   ./cold-filesystem-backup.sh <EXAM_DATA_ROOT> <DEST_DIR>
 # Example:
 #   # 1. Stop Exam first:     docker compose down
-#   # 2. Run this script:     ./cold-filesystem-backup.sh ./data /mnt/nas/exam-backups/2026-08-10
+#   # 2. Run this script:     ./cold-filesystem-backup.sh "${EXAM_DATA_ROOT:-./data}" /mnt/nas/exam-backups/2026-08-10
 #   # 3. Restart Exam:        docker compose up -d
 set -euo pipefail
+
+# Helper container: the deployment's OWN postgres image (pinned by
+# docker-compose.yml and already present on any host that runs this
+# deployment). It provides sh/cp/find for PGDATA validation and the
+# container-assisted copy. There is deliberately NO separate helper image
+# dependency.
+HELPER_IMAGE="postgres:18.4-bookworm"
 
 print_usage() {
   cat >&2 <<'EOF'
@@ -107,14 +114,14 @@ fi
 # are owned by the container postgres user and not readable by the host
 # user). Locate the major-version subdir (e.g. 18/docker) and check for
 # PG_VERSION + postgresql.conf.
-PGDATA_SUBDIR="$(docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
+PGDATA_SUBDIR="$(docker run --rm -v "${SRC_PG}:/pg:ro" "${HELPER_IMAGE}" \
   sh -c 'find /pg -maxdepth 3 -name PG_VERSION -print -quit 2>/dev/null || true')"
 if [ -z "${PGDATA_SUBDIR}" ]; then
   echo "FAIL: no PG_VERSION found under ${SRC_PG}; does not look like a PGDATA tree." >&2
   exit 2
 fi
 PGDATA_DIR="$(dirname "${PGDATA_SUBDIR}")"
-if ! docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
+if ! docker run --rm -v "${SRC_PG}:/pg:ro" "${HELPER_IMAGE}" \
   sh -c "test -f '${PGDATA_DIR}/postgresql.conf'" 2>/dev/null; then
   echo "FAIL: postgresql.conf not found next to PG_VERSION at ${PGDATA_DIR}." >&2
   exit 2
@@ -131,7 +138,7 @@ fi
 # a postmaster is (or believes it is) still owning THIS cluster. We do NOT
 # build a process detector framework. The supported flow is
 # `docker compose down` THEN this script.
-if docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
+if docker run --rm -v "${SRC_PG}:/pg:ro" "${HELPER_IMAGE}" \
   sh -c "test -f '${PGDATA_DIR}/postmaster.pid'" 2>/dev/null; then
   echo "FAIL: postmaster.pid present at ${PGDATA_DIR}." >&2
   echo "       A postmaster appears to still own this PGDATA. Run" >&2
@@ -167,14 +174,14 @@ echo "Copying COMPLETE postgres tree..."
 docker run --rm \
   -v "${SRC_PG}:/from:ro" \
   -v "${DEST}/postgres:/to" \
-  alpine:latest \
+  "${HELPER_IMAGE}" \
   sh -c 'cp -a /from/. /to/'
 
 # Verify the copy landed and looks like a PGDATA (use find so we do not
 # depend on path arithmetic between the /pg source mount and the /to dest
 # mount). The backup layout mirrors the deployment data root, so PGDATA is
 # at ${DEST}/postgres/18/docker/PG_VERSION (depth 4 from ${DEST}).
-if ! docker run --rm -v "${DEST}:/to:ro" alpine:latest \
+if ! docker run --rm -v "${DEST}:/to:ro" "${HELPER_IMAGE}" \
   sh -c 'find /to -maxdepth 4 -name PG_VERSION -print -quit 2>/dev/null | grep -q .'; then
   echo "FAIL: copy verification failed — PG_VERSION missing in destination." >&2
   exit 1
