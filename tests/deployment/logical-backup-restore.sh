@@ -39,8 +39,8 @@ fi
 
 RUN_TS="$(date +%s)"
 PROJECT="logical-${RUN_TS}"
-ROOT="$(safe_temp_root logical-data)"
-BACKUP_DIR_PARENT="$(safe_temp_root logical-bp)"
+safe_temp_root logical-data ROOT
+safe_temp_root logical-bp BACKUP_DIR_PARENT
 BACKUP_DUMP="${BACKUP_DIR_PARENT}/stateA-${RUN_TS}.dump"
 export EXAM_DATA_ROOT="${ROOT}"
 export POSTGRES_PASSWORD="logical-pg-$(openssl rand -hex 6)"

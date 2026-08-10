@@ -52,7 +52,7 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   exit 1
 fi
 
-WORK="$(safe_temp_root launchpad)"
+safe_temp_root launchpad WORK
 
 # Strong per-run credentials (test-only, isolated throwaway stacks).
 PG_PASSWORD="launchpad-pass-${TS}-$(openssl rand -hex 8)"
@@ -85,10 +85,10 @@ cleanup() {
   echo "--- cleanup: tearing down isolated projects ---"
   compose_down_best_effort "${PROJECT_A}"
   compose_down_best_effort "${PROJECT_B}"
-  if [ -n "${WORK:-}" ] && [ -d "${WORK}" ] \
-    && printf '%s\n' "${WORK}" | grep -q '^/tmp/launchpad-'; then
-    rm -rf "${WORK}" > /dev/null 2>&1 || true
-  fi
+  # Remove ONLY the temp work root this script created via safe_temp_root
+  # (registry-checked; container-assisted because PGDATA files are owned by
+  # the container postgres user).
+  cleanup_temp_root "${WORK}"
 }
 trap cleanup EXIT
 

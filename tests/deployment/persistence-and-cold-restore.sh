@@ -39,10 +39,10 @@ PROJECT_A="persist-a-${RUN_TS}"
 PROJECT_B="persist-b-${RUN_TS}"
 PROJECT_C="persist-c-${RUN_TS}"
 
-ROOT_A="$(safe_temp_root persist-a)"
-ROOT_B="$(safe_temp_root persist-b)"
-ROOT_C="$(safe_temp_root persist-c)"
-BACKUP_DIR_PARENT="$(safe_temp_root persist-bp)"
+safe_temp_root persist-a ROOT_A
+safe_temp_root persist-b ROOT_B
+safe_temp_root persist-c ROOT_C
+safe_temp_root persist-bp BACKUP_DIR_PARENT
 BACKUP_DIR="${BACKUP_DIR_PARENT}/backup-${RUN_TS}"
 
 export POSTGRES_PASSWORD="persist-pg-${RUN_TS}-$(openssl rand -hex 8)"

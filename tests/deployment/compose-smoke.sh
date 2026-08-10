@@ -44,7 +44,7 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   exit 1
 fi
 
-EXAM_DATA_ROOT="$(safe_temp_root compose-smoke)"
+safe_temp_root compose-smoke EXAM_DATA_ROOT
 export EXAM_DATA_ROOT
 
 # Strong per-run credentials (test-only, isolated throwaway stack).

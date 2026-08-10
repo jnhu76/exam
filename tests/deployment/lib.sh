@@ -142,12 +142,19 @@ wait_for_archived_wal() {
 # never matters and an arbitrary path can never be removed.
 SAFE_TEMP_ROOTS=()
 
-# Create a temp root with the given mktemp prefix and record it.
+# Create a temp root with the given mktemp prefix, record it in the
+# registry, and assign the path to the caller's variable (passed by NAME).
+# The variable-name convention is REQUIRED: a `VAR="$(safe_temp_root ...)"`
+# command-substitution call would run the function in a subshell and the
+# registry append would be lost, silently disabling cleanup. printf -v
+# assigns in the caller's scope, so both effects survive.
 safe_temp_root() {
+  local prefix="${1:?safe_temp_root: missing mktemp prefix}"
+  local var="${2:?safe_temp_root: missing variable name}"
   local d
-  d="$(mktemp -d -t "${1}-XXXXXX")"
+  d="$(mktemp -d -t "${prefix}-XXXXXX")"
   SAFE_TEMP_ROOTS+=("${d}")
-  echo "${d}"
+  printf -v "${var}" '%s' "${d}"
 }
 
 # Remove a temp root created by safe_temp_root. Files inside may be owned
@@ -177,6 +184,9 @@ cleanup_temp_root() {
     sh -c 'rm -rf /d/* /d/.[!.]* 2>/dev/null || true' \
     >/dev/null 2>&1 || true
   rmdir "${d}" 2>/dev/null || rm -rf "${d}" 2>/dev/null || true
+  if [ -d "${d}" ]; then
+    echo "WARN: cleanup_temp_root could not fully remove ${d} (left in place)." >&2
+  fi
 }
 
 # ── PostgreSQL version discovery ─────────────────────────────────────────

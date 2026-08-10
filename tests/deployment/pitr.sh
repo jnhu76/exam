@@ -55,9 +55,9 @@ fi
 RUN_TS="$(date +%s)"
 PROJECT_SRC="pitr-src-${RUN_TS}"
 PROJECT_REC="pitr-rec-${RUN_TS}"
-SRC_ROOT="$(safe_temp_root pitr-src)"
-REC_ROOT="$(safe_temp_root pitr-rec)"
-BASEBACKUP_DIR_PARENT="$(safe_temp_root pitr-bb)"
+safe_temp_root pitr-src SRC_ROOT
+safe_temp_root pitr-rec REC_ROOT
+safe_temp_root pitr-bb BASEBACKUP_DIR_PARENT
 BASEBACKUP_DIR="${BASEBACKUP_DIR_PARENT}/base-${RUN_TS}"
 
 CREATED_DIRS=("${SRC_ROOT}" "${REC_ROOT}" "${BASEBACKUP_DIR_PARENT}")
@@ -245,7 +245,7 @@ start_recovery() {
 # ── 4. Happy PITR: recover to the captured LSN ───────────────────────────
 echo ""
 echo "--- 4. happy PITR: recover to LSN ${TARGET_LSN} (A present, B present, C absent) ---"
-REC_HAPPY="$(safe_temp_root pitr-rec)"
+safe_temp_root pitr-rec REC_HAPPY
 CREATED_DIRS+=("${REC_HAPPY}")
 PROJECTS+=("${PROJECT_REC}-happy")
 prepare_recovery "${REC_HAPPY}" "${SRC_ROOT}/wal-archive" "" "${TARGET_LSN}"
@@ -294,7 +294,7 @@ echo "--- 5. F1: remove ONE required archived WAL segment (${SEG_B}); target mus
 #   - pg_controldata still reports the cluster "in archive recovery" — the
 #     definitive proof that the target was not reached and the server is
 #     still waiting for the missing WAL.
-REC_MISS="$(safe_temp_root pitr-miss)"
+safe_temp_root pitr-miss REC_MISS
 CREATED_DIRS+=("${REC_MISS}")
 PROJECTS+=("${PROJECT_REC}-miss")
 prepare_recovery "${REC_MISS}" "${SRC_ROOT}/wal-archive" "${SEG_B}" "${TARGET_LSN}"
@@ -380,7 +380,7 @@ fi
 # ── 7. F3: invalid recovery target → refused loudly ──────────────────────
 echo ""
 echo "--- 7. F3: malformed recovery_target_lsn; PostgreSQL MUST refuse loudly ---"
-REC_INV="$(safe_temp_root pitr-inv)"
+safe_temp_root pitr-inv REC_INV
 CREATED_DIRS+=("${REC_INV}")
 PROJECTS+=("${PROJECT_REC}-inv")
 prepare_recovery "${REC_INV}" "${SRC_ROOT}/wal-archive" "" "THIS-IS-NOT-A-VALID-LSN"
