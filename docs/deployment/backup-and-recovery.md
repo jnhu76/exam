@@ -10,6 +10,37 @@
 
 ---
 
+## One-Compose model (read first)
+
+There is **exactly ONE production/operator Docker Compose entry point**:
+
+```text
+docker-compose.yml
+```
+
+Normal operations are always:
+
+```bash
+docker compose up -d
+docker compose down
+```
+
+There is **no** alternative production startup command involving another
+Compose file. Optional PostgreSQL capabilities such as PITR are **database
+configuration**, not an alternate Docker topology:
+
+```text
+Docker/container topology  !=  PostgreSQL backup policy
+PITR                        =  optional PostgreSQL cluster capability
+PITR                        != alternate Exam deployment topology
+```
+
+Development/test Compose files (`docker-compose.dev.yml`,
+`docker-compose.test.yml`) are development infrastructure and may remain;
+they are NOT operator entry points.
+
+---
+
 ## 0. Read this first — what is authoritative
 
 ```text
@@ -42,7 +73,8 @@ exam/
 ├── .env
 └── data/
     ├── postgres/      ← authoritative: the PostgreSQL data directory (PGDATA)
-    └── redis/         ← non-authoritative: rate-limit AOF/RDB (may be lost)
+    ├── redis/         ← non-authoritative: rate-limit AOF/RDB (may be lost)
+    └── wal-archive/   ← PITR archive (only meaningful when PITR is enabled)
 ```
 
 - `data/postgres/` is **required**. Deleting it destroys authoritative Exam
@@ -51,9 +83,17 @@ exam/
   `data/postgres` parent.
 - `data/redis/` is **optional for correctness**. It holds rate-limit state;
   losing it resets operational history but never affects Exam authority.
+- `data/wal-archive/` is the default WAL archive path. The mount is ALWAYS
+  present on the db service but is **inert by default** (`archive_mode = off`).
+  It only matters once PITR is enabled
+  (`scripts/backup/postgres-enable-pitr.sh`). A normal operator never needs
+  to understand WAL/PITR just to run Exam.
 
 Set `EXAM_DATA_ROOT` to relocate the whole data root (e.g. to a mounted
-NAS volume). The default is `./data` relative to the Compose file.
+NAS volume). The default is `./data` relative to the Compose file. Set
+`EXAM_WAL_ARCHIVE_HOST_PATH` to point the WAL archive at an **independent
+failure domain** for real disaster recovery (the local default is for
+development/drills only and is NOT host-loss protection).
 
 ---
 
@@ -254,8 +294,9 @@ domain**.
 docker compose stop app email-worker
 
 # 2. Restore into a CLEAN target (DROP + recreate from template0, then
-#    pg_restore). The result is an EXACT match of the dump — NOT a merge.
-#    The script requires you to type the target DB name to confirm.
+#    pg_restore). No target-only schema/data from the previous database
+#    survives (clean logical reconstruction of the dumped state — NOT a
+#    merge). The script requires you to type the target DB name to confirm.
 scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
 
 # 3. Restart the API + worker to use the restored database:
@@ -268,8 +309,11 @@ The clean-target contract fixes the exact-historical-replacement gap: the
 runbook's older `pg_dump --clean --if-exists | psql` path does **not** remove
 objects that exist in the target DB yet are absent from an older dump. The
 C2 restore script enforces `DROP DATABASE` + `CREATE DATABASE ... TEMPLATE
-template0` (a truly empty database) before `pg_restore`, so the restored
-database is byte-for-byte the dump's state. This was validated by an
+template0` (a truly empty database) before `pg_restore`, so no target-only
+schema/data from the previous database survives — the restored database is a
+clean logical reconstruction of the dumped Exam database state. This is NOT a
+claim of physical byte identity; a logical dump reconstructs the dumped
+database's logical schema/data under the supported deployment contract. This was validated by an
 automated drill
 (`scripts/deployment/p7-c2-logical-restore-drill.sh`) that proves a fresh
 working Exam with State A is produced from a State-A dump, and State-B-only
@@ -331,10 +375,26 @@ Properties:
   business invariants after restore. A restore drill is still required.
 - The backup target must be OUTSIDE the live PGDATA (never write a base
   backup into the directory PostgreSQL is running from).
-- The replication connection uses the configured `exam` superuser over the
-  loopback network namespace of the db container. A narrowly scoped
-  replication role for a hardened deployment is documented in the script
-  header (do NOT give the API itself replication authority).
+- The replication connection uses the configured PostgreSQL superuser
+  (`POSTGRES_USER`) over the loopback network namespace of the db container,
+  authenticated with the deployment password (`POSTGRES_PASSWORD`) passed via
+  `PGPASSWORD` (never argv). `pg_basebackup` requires a SUPERUSER or
+  REPLICATION-capable role; the bootstrap superuser satisfies this for the
+  bundled single-node path. A narrowly scoped replication-only role is NOT
+  provisioned today (future hardening / P7-E); the API itself never gets
+  replication authority.
+
+> **PITR base-backup rule:** WAL archiving MUST be active BEFORE the base
+> backup that will anchor PITR. The sequence is:
+> ```text
+> enable WAL archiving (postgres-enable-pitr.sh)
+>   → verify the archiver actually works
+>   → take pg_basebackup
+>   → continue archiving WAL
+>   → PITR can target later history
+> ```
+> A base backup taken BEFORE WAL archiving was established is NOT a valid
+> anchor for later continuous PITR in the documented procedure.
 
 A base backup is a **whole-cluster** snapshot — it is NOT a per-database
 restore. To restore only the `exam` database (or cross PG-major), use the
@@ -345,41 +405,60 @@ C2 logical backup (§7).
 Point-in-time recovery requires a **continuously archived WAL chain** that
 starts BEFORE the first base backup. PostgreSQL's documented contract:
 "the WAL archiving procedure must be active before the first base backup is
-taken." Apply the optional PITR compose override to enable it:
+taken."
+
+PITR is enabled by ONE canonical operator command — there is no PITR Compose
+file:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.pitr.yml up -d
+scripts/backup/postgres-enable-pitr.sh [COMPOSE_PROJECT] [COMPOSE_FILE]
 ```
 
-The override:
+The script:
 
-- sets `archive_mode = on` (postmaster-level — restart required);
-- sets `archive_command = 'test ! -f /wal-archive/%f && cp %p /wal-archive/%f'`
-  — the PostgreSQL-documented Unix idiom that **REFUSES to silently
-  overwrite** a WAL segment with the same filename. If a file with the
-  target name already exists, `archive_command` returns non-zero and
-  archiving FAILS VISIBLY (`archive_status` stays `.ready`); PostgreSQL
-  retries; the operator sees a stuck archive and investigates;
-- sets `archive_timeout = 60s` so a low-write cluster still archives in a
-  bounded window;
-- bind-mounts `${EXAM_WAL_ARCHIVE_HOST_PATH:-${EXAM_DATA_ROOT:-./data}/wal-archive}`
-  into the db container at `/wal-archive`.
+1. locates the canonical db container and requires PostgreSQL healthy;
+2. makes `/wal-archive` writable by the postgres user with **restrictive**
+   permissions (NEVER `chmod 777` — WAL contains database contents);
+3. checks `wal_level != minimal` (`replica` is already sufficient);
+4. `ALTER SYSTEM SET archive_mode = 'on'` (postmaster-level — restart required);
+5. sets an **idempotent** `archive_command` (see §8.2.1);
+6. `ALTER SYSTEM SET archive_timeout = '60s'`;
+7. restarts ONLY the db service;
+8. waits deterministically for PostgreSQL readiness;
+9. verifies `archive_mode` / `archive_command` / `archive_timeout`;
+10. forces a WAL switch and polls `pg_stat_archiver` for REAL archive evidence
+    (not a fixed sleep) — it reports success only after the archiver has
+    actually archived a segment.
+
+Because the mechanism is `ALTER SYSTEM` (persisted into
+`postgresql.auto.conf` inside PGDATA), the configuration survives
+`docker compose down` / `docker compose up` / host relocation of the same
+PGDATA. No separate configuration topology is needed.
 
 **The WAL archive MUST be on an INDEPENDENT failure domain** from the
-database (NAS / another server / a separate disk). If the WAL archive lives
-on the same disk as PGDATA and that disk dies, PITR dies with it. Set
-`EXAM_WAL_ARCHIVE_HOST_PATH` to the independent-storage path in production.
+database (NAS / another server / a separate disk). Set
+`EXAM_WAL_ARCHIVE_HOST_PATH` to the independent-storage path in production
+(the local default `${EXAM_DATA_ROOT}/wal-archive` is for
+development/drills only and is NOT host-loss protection).
 
-For an already-initialized cluster (the override only seeds `archive_*` at
-first init via `/docker-entrypoint-initdb.d/`), apply the same settings via
-`ALTER SYSTEM` and restart:
+#### 8.2.1 Idempotent `archive_command`
 
-```sql
-ALTER SYSTEM SET archive_mode = 'on';
-ALTER SYSTEM SET archive_command = 'test ! -f /wal-archive/%f && cp %p /wal-archive/%f';
-ALTER SYSTEM SET archive_timeout = '60s';
--- then restart the db container to make archive_mode effective
+PostgreSQL may retry archiving the same WAL segment. The canonical
+`archive_command` is correct for all three cases (proved by
+`scripts/deployment/p7-c3-archive-idempotency-drill.sh`):
+
+```text
+test ! -f /wal-archive/%f && cp %p /wal-archive/%f || cmp -s %p /wal-archive/%f
+
+target absent                    → cp succeeds → exit 0
+target exists + identical bytes  → cmp -s succeeds → exit 0
+target exists + different bytes  → cmp -s fails → exit non-zero (FAILURE)
 ```
+
+This replaces the older `test ! -f target && cp source target` form, which
+would fail forever on an identical retry (target already exists → non-zero).
+A byte collision under the same WAL filename is a visible stuck archive, NOT
+a silent overwrite.
 
 ### 8.3 PITR — recover to an explicit target
 
@@ -432,27 +511,47 @@ for the boundary.
   same-history). Any offline-client recovery-epoch concern is a future
   Phase 4 concern; no schema change is introduced here.
 
-### 8.5 Minimal retention (operator-owned)
+### 8.5 Retention (operator-owned; no automation shipped)
 
-For a PITR window of `N` days you MUST retain:
+> **P7-C3 does NOT ship automatic PITR retention/pruning.** Retention is
+> operator discipline. Future retention automation belongs in later
+> operations / P7-E work, or a mature PostgreSQL backup system (§8.7).
 
-- the **most recent base backup** taken AFTER WAL archiving was already
-  active (a base backup without the WAL chain forward from its
-  `backup_label` checkpoint is useless for PITR);
-- **every archived WAL segment** from that base backup's start checkpoint
-  through the latest recoverable point in the window.
+A base backup can only recover **forward** from its own history. A common
+but **incorrect** rule is: *"For an N-day PITR window, retain only the most
+recent base backup plus WAL."* That is wrong — the most recent base backup
+may have been taken INSIDE the window, so it cannot anchor recovery to any
+point before itself.
+
+For an earliest desired recovery point `T`, retain at least:
+
+```text
+a usable base backup whose completion/history PRECEDES T
++
+all WAL required from that base backup through the desired recovery window
++
+required timeline history files when timelines exist
+```
+
+Conservative guidance:
+
+```text
+Do not manually delete base backups or archived WAL that may be required
+for the promised recovery window.
+```
 
 You MAY delete:
 
-- older base backups, AS LONG AS you keep at least one base backup plus the
-  complete, unbroken WAL chain forward from its checkpoint to the present
-  (or to the end of your PITR window);
+- older base backups, AS LONG AS you keep at least one base backup whose
+  history precedes the earliest point in your recovery window, plus the
+  complete unbroken WAL chain forward from its checkpoint to the end of the
+  window;
 - archived WAL segments OLDER than the retained base backup's start
   checkpoint (these cannot be replayed against any retained base backup).
 
 Do NOT delete:
 
-- the most recent base backup;
+- the base backup(s) anchoring your recovery window;
 - any WAL segment between the retained base backup and the current end of
   the PITR window — a single missing segment breaks the chain.
 
@@ -463,14 +562,44 @@ discipline. P7-E may add a control plane; it is NOT started.
 
 The deterministic drills in `scripts/deployment/` prove the contracts:
 
-- `p7-c3-pitr-drill.sh` — happy path: base backup → marker A → marker B
-  (capture LSN) → destructive marker C → PITR to the captured LSN →
-  assert A present, B present, C absent. PASS.
-- `p7-c3-pitr-failure-drill.sh` — failure modes:
+- `p7-c3-pitr-drill.sh` — happy path: enable PITR via the canonical
+  `postgres-enable-pitr.sh` → base backup → marker A → marker B (capture
+  LSN) → destructive marker C → PITR to the captured LSN → assert A
+  present, B present, C absent. PASS.
+- `p7-c3-pitr-failure-drill.sh` — failure modes (also uses the canonical
+  enable-PITR script):
   - corrupt a base-backup file → `pg_verifybackup` rejects it loudly;
   - invalid `recovery_target_lsn` → recovery cluster refuses to start;
   - remove the WAL archive → recovery surfaces the missing segment loudly.
   All three PASS.
+- `p7-c3-archive-idempotency-drill.sh` — the idempotent `archive_command`
+  is correct for all three cases: empty target → success; identical retry
+  → success; byte collision under the same name → non-zero failure. PASS.
+
+> **Product path == test path (P7-C corrective pass §25).** The operator
+> path and the drill path are the SAME enable-PITR script. No drill
+> privately configures PostgreSQL through a second hidden method.
+
+### 8.7 Future boundary: WAL-G / pgBackRest
+
+P7-C deliberately does NOT introduce WAL-G or pgBackRest. But if Exam later
+requires any of:
+
+```text
+automatic off-host WAL shipping
+S3/MinIO
+encryption
+compression
+incremental physical backups
+automated retention
+large backup chains
+low operational RPO
+```
+
+then evaluate **WAL-G** or **pgBackRest** instead of growing Exam's own
+shell scripts into a bespoke PostgreSQL backup product. Current scope stays
+PostgreSQL-native and small. This is an explicit future boundary, not
+near-term work.
 
 ---
 

@@ -315,6 +315,62 @@ all capability extensions.
 
 ---
 
-## 15. Verdict
+---
+
+## 16. Corrective pass (adversarial audit P7-C-REBUILD-ADVERSARIAL-PG-BACKUP-CONFIG-AUDIT)
+
+This section records the corrective pass that addressed the adversarial
+audit findings. It does NOT erase the history above; §1–§15 remain the
+rebuild record.
+
+- **Previous head:** `0ebdf6eb` (`docs(p7-c): close portable backup and recovery program`)
+- **Corrective final head:** `f0016c2e` (`docs(p7-c): align backup and recovery operator contract`)
+- **Audit source:** `docs/audits/P7-C-REBUILD-ADVERSARIAL-PG-BACKUP-CONFIG-AUDIT.md`
+
+### What changed and why
+
+| Correction | What was wrong | What the corrective pass did |
+| --- | --- | --- |
+| **One-Compose model** | `docker-compose.pitr.yml` created a second operator Compose topology for PITR. | Deleted `docker-compose.pitr.yml` and `docker/pitr/wal-archive.conf`. There is now exactly ONE production Compose entry point (`docker-compose.yml`). PITR is a database capability, not an alternate topology. A repository guard (`deployment-topology-contract.mjs`) forbids production Compose variants while allowing dev/test files. |
+| **WAL archive mount** | The WAL archive only existed behind the PITR override. | Added ONE WAL archive mount to the canonical `db` service (`${EXAM_WAL_ARCHIVE_HOST_PATH:-…}/wal-archive:/wal-archive`). The mount exists but stays inert (`archive_mode=off`) until an operator enables PITR. |
+| **Canonical enable-PITR command** | The `.conf` initdb seed was silently ignored (official postgres image ignores `.conf` in `/docker-entrypoint-initdb.d/`), and the drills configured PITR via a private `ALTER SYSTEM` path that operators never use. | Created `scripts/backup/postgres-enable-pitr.sh` — the SINGLE operator command. It uses `ALTER SYSTEM` (persists into `postgresql.auto.conf`, survives down/up), sets an idempotent `archive_command`, restrictive `/wal-archive` permissions (never `chmod 777`), and polls `pg_stat_archiver` for REAL archiver evidence (not a fixed sleep). The C3 drills now use this SAME canonical path (product path == test path). |
+| **Idempotent `archive_command`** | The old `test ! -f target && cp source target` would fail forever on an identical retry (target exists → non-zero). | Replaced with `test ! -f /wal-archive/%f && cp %p /wal-archive/%f \|\| cmp -s %p /wal-archive/%f` — correct for all three cases (absent→copy, identical retry→cmp OK, byte collision→failure). A dedicated drill (`p7-c3-archive-idempotency-drill.sh`) proves it. |
+| **Launchpad token wiring** | `LAUNCHPAD_SETUP_TOKEN` was documented as "set in `.env`" but never forwarded to the app container (Compose uses `.env` for interpolation only); the browser first-install UX was inert. | Added `LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}` to the `app` service `environment:` block (verified by the topology guard). Added it to `.env.example`. A bare `docker compose up` still starts normally (empty default disables launchpad, not fail-fast). |
+| **`pg_basebackup` auth truth** | The script claimed "no replication password needed" while connecting over loopback TCP (`-h 127.0.0.1`), which the official image authenticates with `scram-sha-256` (trust is Unix-socket only). | The script now derives the actual deployment's `POSTGRES_USER`/`POSTGRES_PASSWORD` from the running db container and passes the password via `PGPASSWORD` (never argv). The comment and implementation agree: loopback TCP + scram-sha-256 + deployment password. `PGUSER`/`PGPASSWORD` follow the deployment, not a hardcoded `exam`. |
+| **Replication privilege honesty** | Implied a narrowly scoped replication role existed. | Documented that the bundled path uses the bootstrap superuser (which satisfies `pg_basebackup`'s SUPERUSER/REPLICATION requirement); a dedicated replication-only role is future hardening, not claimed. |
+| **Cold backup running-source refusal** | The cold-backup script only printed "make sure PostgreSQL is stopped" and copied anyway. | `cold-filesystem-backup.sh` now refuses an obviously running source (a Compose db container running OR a live `postmaster.pid` in the actual PGDATA) before copying. |
+| **Logical-restore overclaim** | The C2 restore docs claimed "byte-for-byte exact" / "EXACT match". | Reworded to "clean logical reconstruction of the dumped state" — a logical dump reconstructs logical schema/data, not physical byte identity. |
+| **PITR retention rule** | Stated "retain only the most recent base backup plus WAL" — incorrect (a base backup can only recover forward from its own history). | Corrected: for an earliest recovery point `T`, retain a base backup whose history precedes `T` + all WAL from it through the window. P7-C3 ships no automatic pruning. |
+| **PITR base-backup ordering** | Not stated that WAL archiving must be active before the base backup. | Documented the sequence: enable WAL archiving → verify archiver → `pg_basebackup` → continue archiving → PITR can target later history. |
+| **WAL-G / pgBackRest boundary** | Not stated. | Added an explicit future boundary: if Exam later needs off-host WAL shipping / S3 / encryption / compression / incremental physical backups / automated retention, evaluate WAL-G or pgBackRest rather than growing bespoke scripts. |
+| **Bootstrap concurrency serialization** | First-install "exactly one winner" relied on RR-isolation + ON CONFLICT retry semantics alone. | Added a transaction-scoped PostgreSQL advisory lock (`pg_advisory_xact_lock`) at the start of `bootstrapAdminOnFreshDb`, shared by HTTP Launchpad and the CLI, making the serialization domain explicit. |
+
+### Drills rerun on the corrective head
+
+The deterministic Docker drills were re-run on the corrective head. The C3
+drills now exercise the SAME canonical `postgres-enable-pitr.sh` path
+operators use (product path == test path):
+
+| Drill | Result |
+| --- | --- |
+| `p7-c1-persistence-smoke.sh` | PASS (unchanged code path) |
+| `p7-c1-cold-backup-restore-drill.sh` | PASS (cold-backup now also refuses a running source) |
+| `p7-c2-logical-restore-drill.sh` | PASS (A present, B absent) |
+| `p7-c3-pitr-drill.sh` | PASS (uses canonical `postgres-enable-pitr.sh`; A+B present, C absent) |
+| `p7-c3-pitr-failure-drill.sh` | PASS (F1 missing WAL, F2 corrupt backup, F3 invalid LSN — all loud) |
+| `p7-c3-archive-idempotency-drill.sh` (NEW) | PASS (absent→copy, identical retry→OK, collision→failure) |
+| `p7-c1-launchpad-compose-drill.sh` (NEW) | PASS (12 checks: fresh status uninitialized; wrong token 403; correct token → first Admin; correct token again → 409 (never reopens, no token oracle); Admin login; DB invariants 1/0/1/1; register disabled API + no client route; unset token → launchpad disabled) |
+
+Static gates on the corrective head:
+
+| Gate | Result |
+| --- | --- |
+| `pnpm verify:static` | PASS (incl. the one-compose repository guard + LAUNCHPAD_SETUP_TOKEN wiring check) |
+| `pnpm test` | PASS (2019 tests, 7 skipped) |
+| `pnpm build` | PASS (9 tasks) |
+
+---
+
+## 17. Verdict
 
 P7-C PORTABLE PERSISTENCE / BACKUP / POSTGRESQL RECOVERY READY FOR HUMAN REVIEW

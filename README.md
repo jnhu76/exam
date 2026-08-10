@@ -215,16 +215,22 @@ Alternatively, on a fresh installation you can use the **Launchpad**
 first-install page: set `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` in
 `.env`, start the stack, and navigate to `/launchpad` to complete the
 first-Admin setup in the browser. The Launchpad and the CLI share one
-canonical atomic mutation body; once the installation is initialized,
-`/launchpad` redirects to `/login` (it never reopens). See
-[`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md) §8.
+canonical atomic mutation body (serialized by a transaction-scoped
+PostgreSQL advisory lock so exactly one first installation may win); once
+the installation is initialized, `/launchpad` redirects to `/login` (it
+never reopens). See
+[`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md) §11.
 
 #### Backup and recovery
 
 Authoritative state is the PostgreSQL data directory under
 `./data/postgres`. **Host persistence is not backup** — see
 [`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md)
-for the full decision tree: stopped-directory relocation (C1),
+for the full decision tree. There is exactly ONE production/operator Docker
+Compose entry point (`docker-compose.yml`); optional capabilities such as
+PITR are PostgreSQL database configuration
+(`scripts/backup/postgres-enable-pitr.sh`), not an alternate Docker
+topology. The supported paths are: stopped-directory relocation (C1),
 cold-filesystem backup/restore (C1), C2 logical `pg_dump` online backup +
 clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 

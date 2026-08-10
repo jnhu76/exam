@@ -877,7 +877,9 @@ which produces a `pg_dump -Fc` artifact and is verified by a clean-restore
 drill) for routine backups. Physical `pg_basebackup`, continuous WAL
 archiving, and PITR are now implemented (P7-C3): see
 [`docs/deployment/backup-and-recovery.md`](backup-and-recovery.md) §8 for
-the pg_basebackup script, the `docker-compose.pitr.yml` WAL-archive
-override, the PITR procedure, retention contract, and drill evidence.
-Schedule backups via cron on the Docker host — the platform does not ship a
-backup scheduler (a control plane is a P7-E concern, not started).
+the pg_basebackup script, the canonical `scripts/backup/postgres-enable-pitr.sh`
+WAL-archiving command (there is no PITR Compose file — PITR is a database
+capability configured via `ALTER SYSTEM`, not an alternate Docker topology),
+the PITR procedure, retention contract, and drill evidence. Schedule backups
+via cron on the Docker host — the platform does not ship a backup scheduler
+(a control plane is a P7-E concern, not started).
