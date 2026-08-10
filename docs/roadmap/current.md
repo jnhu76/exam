@@ -135,22 +135,21 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
      preview, rollback, and import/export in Admin settings;
    - freeze resolved policies at publish/attempt creation.
 
-   > **P7-E0 status (2026-08-10):** the configuration reality audit is **READY
-   > FOR HUMAN REVIEW** (docs-only, on branch `feat/p7-e0-config-audit` / PR
-   > #276) — see
+   > **P7-E0 status (2026-08-10):** the configuration reality audit is **CLOSED**
+   > (merged via PR #276) — see
    > [`docs/audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md`](../audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md).
    > It inventories every configuration item, classifies it into the five
    > authority classes (deployment/secret, system operational, organization,
    > exam policy, code invariant), and records the snapshot/hazard map. Key
    > verdict: **no generic settings subsystem is justified by current evidence,
-   > and no P7-E1 implementation is currently justified** — close E0 and proceed
-   > to P7-M1 (exam policy resolution / freeze model), which is where the real
+   > and no P7-E1 implementation is currently justified** — proceed to P7-M1
+   > (exam policy resolution / freeze model), which is where the real
    > configuration pressure already exists (the profile-resolution freeze
    > hazard). A future E1 is triggered only by a confirmed near-term requirement
    > for Admin-editable operational settings; Email worker/retry is a candidate
    > under that gate, not preselected; backup automation/status is a separate
    > operational capability. P7-E itself is **NOT** complete; P7-E1 is **NOT**
-   > started. (Status flips to CLOSED when this PR merges.)
+   > started.
 
 7. **Configurable exam profiles**
    - model timing, admission, session/device, navigation, interruption,

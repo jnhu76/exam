@@ -1,6 +1,6 @@
 # P7-E0 Configuration Reality Audit
 
-**Status:** READY FOR HUMAN REVIEW
+**Status:** CLOSED (merged via PR #276, 2026-08-10)
 **Program:** P7-E — Configuration control plane (pre-implementation audit)
 **Baseline (`origin/master`):** `b4e18b2bf0390e717edd54ec9467a27ac2d19a8a`
 **Tree at audit:** clean
@@ -1248,4 +1248,4 @@ Separate:     backup automation/status workstream
 
 ---
 
-P7-E0 CONFIGURATION REALITY AUDIT — READY FOR HUMAN REVIEW
+P7-E0 CONFIGURATION REALITY AUDIT — CLOSED (PR #276)
