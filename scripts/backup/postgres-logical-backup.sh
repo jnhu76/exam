@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C2 PostgreSQL logical online backup helper.
+# PostgreSQL logical online backup helper.
 #
 # Takes an internally consistent PostgreSQL backup while Exam is running,
 # using PostgreSQL-native pg_dump in custom format (-Fc). Custom format is
@@ -85,15 +85,27 @@ if ! docker inspect "${DB_CONTAINER}" >/dev/null 2>&1; then
   exit 2
 fi
 
+# Derive the actual deployment's PostgreSQL user/db from the RUNNING db
+# container (NOT hardcoded). The bundled Compose seeds these from
+# POSTGRES_USER / POSTGRES_DB; an operator that customized them is honored.
+DEPLOY_PG_USER="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_USER=//p' | head -1)"
+DEPLOY_PG_DB="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_DB=//p' | head -1)"
+DEPLOY_PG_USER="${DEPLOY_PG_USER:-exam}"
+DEPLOY_PG_DB="${DEPLOY_PG_DB:-exam}"
+
 # Confirm PostgreSQL is reachable (db up). The API does NOT need to be up.
-if ! docker exec "${DB_CONTAINER}" pg_isready -U exam -d exam >/dev/null 2>&1; then
+if ! docker exec "${DB_CONTAINER}" pg_isready -U "${DEPLOY_PG_USER}" -d "${DEPLOY_PG_DB}" >/dev/null 2>&1; then
   echo "FAIL: PostgreSQL is not ready in ${DB_CONTAINER}." >&2
   echo "       This backup requires PostgreSQL to be UP (the API may be down)." >&2
   exit 2
 fi
 
 echo "Logical online backup (pg_dump -Fc):"
-echo "  source: ${DB_CONTAINER} (db exam)"
+echo "  source: ${DB_CONTAINER} (db ${DEPLOY_PG_DB})"
 echo "  destination: ${DEST}"
 echo "  PostgreSQL remains ONLINE; API availability is not required."
 
@@ -105,7 +117,6 @@ echo "  PostgreSQL remains ONLINE; API availability is not required."
 # in the postgres user's environment via ~/.pgpass-free trust for local
 # connections; if PGPASSWORD is exported on the host it is passed through to
 # the exec environment explicitly (still not on argv).
-TS="$(date -u +%Y%m%dT%H%M%SZ)"
 docker exec \
   -e PGPASSWORD="${PGPASSWORD:-}" \
   "${DB_CONTAINER}" \
@@ -154,7 +165,7 @@ echo "  format:   PostgreSQL custom (-Fc), --no-owner"
 echo "  verification: non-empty + PGDMP magic + pg_restore --list OK"
 echo ""
 echo "  IMPORTANT: backup creation is not restore proof. Run a clean-restore"
-echo "  drill (postgres-logical-restore.sh + p7-c2-logical-restore-drill.sh)"
-echo "  before relying on this artifact for recovery."
+echo "  drill (postgres-logical-restore.sh + tests/deployment/"
+echo "  logical-backup-restore.sh) before relying on this artifact for recovery."
 echo "  Store this artifact on an INDEPENDENT failure domain (NAS / another"
 echo "  server / a separate disk)."

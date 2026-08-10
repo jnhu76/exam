@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C3 PostgreSQL physical online base backup helper (pg_basebackup).
+# PostgreSQL physical online base backup helper (pg_basebackup).
 #
 # Takes a physical online backup of a RUNNING PostgreSQL server using
 # PostgreSQL-native pg_basebackup. The base backup is a complete PostgreSQL
@@ -14,7 +14,7 @@
 #   - backup target OUTSIDE the live PGDATA
 #   - no unsafe --no-sync in the production path
 #
-# Authentication truth (P7-C corrective pass §17): pg_basebackup runs in a
+# Authentication truth: pg_basebackup runs in a
 # sibling container that shares the db container's NETWORK namespace and
 # connects over loopback TCP (-h 127.0.0.1). The official postgres image
 # authenticates TCP connections with scram-sha-256 by default (trust applies
@@ -25,7 +25,7 @@
 # deployment; an operator does not need to maintain a separate backup
 # credential namespace for the bundled single-node path.
 #
-# Replication privilege (P7-C corrective pass §19): pg_basebackup requires a
+# Replication privilege: pg_basebackup requires a
 # SUPERUSER or REPLICATION-capable role. For the bundled single-node
 # deployment, this script uses the bootstrap PostgreSQL superuser
 # (POSTGRES_USER), which satisfies that requirement. A narrowly scoped
@@ -37,10 +37,11 @@
 #
 # Manifest verification (C3.4): after the base backup, run pg_verifybackup on
 # the manifest as an integrity check. NOTE the documented limitation: manifest
-# verification is backup-integrity evidence (files match their SHA256 + the
-# manifest signature is valid), NOT proof that Exam can successfully start and
-# satisfy business invariants after restore. A restore drill is still required
-# (see the PITR drill / physical-restore path).
+# verification is backup-integrity evidence (backup contents match the
+# manifest's per-file checksums and the manifest's own checksum verifies), NOT
+# proof that Exam can successfully start and satisfy business invariants after
+# restore. A restore drill is still required (see the PITR drill /
+# physical-restore path).
 #
 # PITR base-backup rule (§21): WAL archiving MUST be active BEFORE the base
 # backup that will anchor PITR. Run scripts/backup/postgres-enable-pitr.sh
@@ -166,7 +167,7 @@ mkdir -p "${DEST}"
 #                  backup host does not leave a half-written backup.
 LABEL="exam-basebackup-$(date -u +%Y%m%dT%H%M%SZ)"
 # NOTE: PGPASSWORD is passed via -e (environment), NEVER on the argv, so it
-# does not leak via the process list or docker inspect of the basebackup cmd.
+# does not leak via the process list of the basebackup invocation.
 PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
   -v "${DEST}:/backup:rw" \
   --network "container:${DB_CONTAINER}" \
@@ -182,8 +183,10 @@ PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
     --manifest-checksums SHA256
 
 # ── Manifest verification (C3.4) ─────────────────────────────────────────
-# pg_verifybackup checks every file in the backup against the manifest and
-# verifies the manifest signature. Limitation (documented): manifest
+# pg_verifybackup verifies the backup contents against the PostgreSQL
+# backup manifest: every file's size/mtime, the configured per-file
+# checksums (SHA256), and the manifest's own checksum. It is an integrity
+# check, not a digital signature. Limitation (documented): manifest
 # verification is backup-integrity evidence, NOT proof that Exam can start
 # and satisfy business invariants after restore — a restore drill is still
 # required.
@@ -203,7 +206,7 @@ echo "Physical base backup COMPLETE."
 echo "  destination: ${DEST} (${SIZE})"
 echo "  label: ${LABEL}"
 echo "  format: plain (directory tree), WAL streamed (-X stream)"
-echo "  verification: pg_verifybackup manifest OK (SHA256)"
+echo "  verification: pg_verifybackup manifest OK (SHA256 per-file checksums)"
 echo ""
 echo "  IMPORTANT:"
 echo "  - Manifest verification is backup-integrity evidence, NOT proof that"

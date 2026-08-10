@@ -249,6 +249,9 @@ describe("launchpad routes", () => {
       .from(schema.auditLogs)
       .where(eq(schema.auditLogs.action, "admin.bootstrap"));
     expect(auditRows.length).toBeGreaterThanOrEqual(1);
+    // The HTTP adapter's canonical mutation records the launchpad source.
+    const auditMetadata = auditRows[0]!.metadata as Record<string, unknown>;
+    expect(auditMetadata.source).toBe("launchpad");
     // Token must NEVER appear in the audit row.
     const auditJson = JSON.stringify(auditRows);
     expect(auditJson).not.toContain(VALID_TOKEN);
@@ -270,5 +273,44 @@ describe("launchpad routes", () => {
       }),
     });
     expect(second.statusCode).toBe(409);
+  });
+
+  it("concurrent HTTP bootstrap attempts: exactly one 200, one 409, never 500", async () => {
+    // Two simultaneous first-install requests race through the freshness
+    // gate (both may pass it), then serialize on the transaction-scoped
+    // advisory lock inside the canonical mutation. The loser must map to
+    // the same 409 as the freshness gate — never an internal 500.
+    vi.stubEnv("LAUNCHPAD_SETUP_TOKEN", VALID_TOKEN);
+    resetRuntimeConfigForTest();
+    await resetToUninitialized(ctx);
+
+    const [ra, rb] = await Promise.all([
+      ctx.app.inject({
+        method: "POST",
+        url: "/api/launchpad/bootstrap",
+        payload: basePayload({
+          adminUsername: `lprace1-${crypto.randomUUID().slice(0, 8)}`,
+        }),
+      }),
+      ctx.app.inject({
+        method: "POST",
+        url: "/api/launchpad/bootstrap",
+        payload: basePayload({
+          adminUsername: `lprace2-${crypto.randomUUID().slice(0, 8)}`,
+        }),
+      }),
+    ]);
+
+    const codes = [ra.statusCode, rb.statusCode].sort();
+    expect(codes).toEqual([200, 409]);
+    const loser = ra.statusCode === 409 ? ra : rb;
+    expect(loser.json().error.code).toBe("LAUNCHPAD_ALREADY_INITIALIZED");
+
+    // Exactly one Admin authority remains after the race.
+    const adminRows = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.role, "Admin"));
+    expect(adminRows).toHaveLength(1);
   });
 });

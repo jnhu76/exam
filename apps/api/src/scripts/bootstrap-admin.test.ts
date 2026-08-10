@@ -6,6 +6,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { and, eq, sql } from "drizzle-orm";
 import { verifyPassword } from "@exam/auth/src/password.js";
+import { AdminAlreadyExistsError } from "@exam/domain";
 import {
   bootstrapAdmin,
   bootstrapAdminOnFreshDb,
@@ -443,6 +444,131 @@ describe("bootstrapAdminOnFreshDb (production bootstrap path)", () => {
       .where(eq(schema.users.role, "Candidate"));
     // The fresh schema started empty; bootstrap never adds Candidates.
     expect(candidates).toHaveLength(0);
+  });
+
+  it("records the adapter source in the admin.bootstrap audit metadata", async () => {
+    // The canonical mutation accepts an explicit source so the audit
+    // reflects the real entry point (CLI = local_script, HTTP launchpad =
+    // launchpad) instead of a single hardcoded value.
+    const iso = await setupIsolatedTestDb({
+      namespace: "script-bootstrap-source",
+      databaseUrl: resolveTestDbUrl(),
+    });
+    try {
+      const conn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
+      const sourceDb = conn.db;
+      await migratePostgres(sourceDb, { migrationsSchema: iso.schemaName });
+      try {
+        const username = `source-${Date.now()}`;
+        await bootstrapAdminOnFreshDb(
+          sourceDb,
+          {
+            username,
+            password: "StrongPass123!",
+            name: "Source Admin",
+          },
+          { organizationName: "Source Org" },
+          "launchpad",
+        );
+        const audits = await sourceDb
+          .select()
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.action, "admin.bootstrap"));
+        expect(audits).toHaveLength(1);
+        const metadata = audits[0]!.metadata as Record<string, unknown>;
+        expect(metadata.source).toBe("launchpad");
+      } finally {
+        await conn.sql.end();
+      }
+    } finally {
+      await iso.cleanup();
+    }
+  });
+
+  it("serializes concurrent first-install attempts: exactly one winner, one Admin, one audit", async () => {
+    // Two non-force bootstrap attempts race on a migrated-but-empty schema.
+    // The transaction-scoped advisory lock makes the serialization domain
+    // explicit: exactly one attempt commits; the loser re-reads the Admin
+    // authority inside its own (now-serialized) transaction and refuses
+    // with the typed AdminAlreadyExistsError — never a silent second Admin.
+    const iso = await setupIsolatedTestDb({
+      namespace: "script-bootstrap-race",
+      databaseUrl: resolveTestDbUrl(),
+    });
+    try {
+      const conn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
+      const raceDb = conn.db;
+      await migratePostgres(raceDb, { migrationsSchema: iso.schemaName });
+      try {
+        const ts = Date.now();
+        const [a, b] = await Promise.allSettled([
+          bootstrapAdminOnFreshDb(
+            raceDb,
+            {
+              username: `race-a-${ts}`,
+              password: "StrongPass123!",
+              name: "Race Admin A",
+            },
+            { organizationName: "Race Org" },
+            "local_script",
+          ),
+          bootstrapAdminOnFreshDb(
+            raceDb,
+            {
+              username: `race-b-${ts}`,
+              password: "StrongPass123!",
+              name: "Race Admin B",
+            },
+            { organizationName: "Race Org" },
+            "launchpad",
+          ),
+        ]);
+
+        const winner = a.status === "fulfilled" ? a : b;
+        const loser = a.status === "rejected" ? a : b;
+        expect(winner.status).toBe("fulfilled");
+        if (loser.status === "rejected") {
+          expect(loser.reason).toBeInstanceOf(AdminAlreadyExistsError);
+        } else {
+          expect.unreachable("the race loser must reject");
+        }
+
+        // Exactly one Admin authority.
+        const admins = await raceDb
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.role, "Admin"));
+        expect(admins).toHaveLength(1);
+
+        // Exactly one primary Admin assignment.
+        const assignments = await raceDb
+          .select()
+          .from(schema.userRoleAssignments);
+        const primaryAdmins = assignments.filter(
+          (x) => x.role === "Admin" && x.isPrimary && x.isActive,
+        );
+        expect(primaryAdmins).toHaveLength(1);
+
+        // Exactly one first-bootstrap audit, sourced from the winner's
+        // adapter (the loser's transaction rolled back).
+        const audits = await raceDb
+          .select()
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.action, "admin.bootstrap"));
+        expect(audits).toHaveLength(1);
+        const metadata = audits[0]!.metadata as Record<string, unknown>;
+        const winnerSource =
+          winner.status === "fulfilled" &&
+          winner.value.user.username === `race-a-${ts}`
+            ? "local_script"
+            : "launchpad";
+        expect(metadata.source).toBe(winnerSource);
+      } finally {
+        await conn.sql.end();
+      }
+    } finally {
+      await iso.cleanup();
+    }
   });
 });
 

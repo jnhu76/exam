@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C1 Launchpad production-Compose first-install drill (§32).
+# Launchpad first-install deployment contract suite.
 #
 # Exercises the bundled production docker-compose.yml with a baked-in
 # LAUNCHPAD_SETUP_TOKEN and proves the first-install contract end to end:
@@ -25,16 +25,14 @@
 # docker-compose.yml wiring itself, not a private second path.
 #
 # Both stacks run under an isolated Compose project name and a per-run temp
-# EXAM_DATA_ROOT (P7-C1 C1.3 isolation rule: drills never share the
-# repo-root ./data/ nor any other stack). The temp directory is removed on
-# exit after guarding against an empty/unsafe path.
+# EXAM_DATA_ROOT. The temp directory is removed on exit (path-guarded).
 #
-# Usage: ./p7-c1-launchpad-compose-drill.sh
+# Usage: ./launchpad-bootstrap.sh
 set -euo pipefail
 
 TS="$(date +%s)"
-PROJECT_A="p7c1-launchpad-a-${TS}"
-PROJECT_B="p7c1-launchpad-b-${TS}"
+PROJECT_A="launchpad-a-${TS}"
+PROJECT_B="launchpad-b-${TS}"
 PORT_A=$((32000 + (TS % 1000)))
 PORT_B=$((34000 + (TS % 1000)))
 
@@ -42,22 +40,22 @@ SCRIPT_DIR="$(
   cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1
   pwd
 )"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
 
 if [ ! -f "${COMPOSE_FILE}" ]; then
   echo "FAIL: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
   exit 1
 fi
 
-WORK="$(mktemp -d -t p7c1-launchpad-XXXXXX)"
+WORK="$(safe_temp_root launchpad)"
 
 # Strong per-run credentials (test-only, isolated throwaway stacks).
-PG_PASSWORD="p7c1-lp-pass-${TS}-$(openssl rand -hex 8)"
-JWT_SECRET="p7c1-lp-jwt-${TS}-$(openssl rand -hex 16)"
+PG_PASSWORD="launchpad-pass-${TS}-$(openssl rand -hex 8)"
+JWT_SECRET="launchpad-jwt-${TS}-$(openssl rand -hex 16)"
 TOKEN="lp-$(openssl rand -hex 32)"
 ADMIN_USER="lpadmin${TS}"
-ADMIN_PASS="P7C1-Lp-Admin-${TS}-$(openssl rand -hex 8)"
+ADMIN_PASS="Launchpad-Admin-${TS}-$(openssl rand -hex 8)"
 ADMIN_NAME="Launchpad Drill Admin ${TS}"
 ORG_NAME="Launchpad Drill Org ${TS}"
 
@@ -75,18 +73,16 @@ fail() {
   FAIL_COUNT=$((FAIL_COUNT + 1))
   echo "  FAIL: $1" >&2
   if [ -n "${2:-}" ]; then echo "  detail: $2" >&2; fi
-  echo "=== P7-C1 LAUNCHPAD DRILL: FAILED (${FAIL_COUNT} failure(s)) ===" >&2
+  echo "=== LAUNCHPAD SUITE: FAILED (${FAIL_COUNT} failure(s)) ===" >&2
   exit 1
 }
 
 cleanup() {
   echo "--- cleanup: tearing down isolated projects ---"
-  docker compose -p "${PROJECT_A}" -f "${COMPOSE_FILE}" down --remove-orphans \
-    > /dev/null 2>&1 || true
-  docker compose -p "${PROJECT_B}" -f "${COMPOSE_FILE}" down --remove-orphans \
-    > /dev/null 2>&1 || true
+  compose_down_best_effort "${PROJECT_A}"
+  compose_down_best_effort "${PROJECT_B}"
   if [ -n "${WORK:-}" ] && [ -d "${WORK}" ] \
-    && printf '%s\n' "${WORK}" | grep -q '^/tmp/p7c1-launchpad-'; then
+    && printf '%s\n' "${WORK}" | grep -q '^/tmp/launchpad-'; then
     rm -rf "${WORK}" > /dev/null 2>&1 || true
   fi
 }
@@ -99,9 +95,9 @@ wait_app_healthy() {
   local project="$1"
   for i in $(seq 1 90); do
     local app_status db_status
-    app_status=$(docker inspect "${project}-app-1" \
+    app_status=$(docker inspect "$(app_container "${project}")" \
       --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
-    db_status=$(docker inspect "${project}-db-1" \
+    db_status=$(docker inspect "$(db_container "${project}")" \
       --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
     if [ "${app_status}" = "healthy" ] && [ "${db_status}" = "healthy" ]; then
       echo "  stack healthy (app=${app_status}, db=${db_status})."
@@ -110,7 +106,7 @@ wait_app_healthy() {
     sleep 2
   done
   echo "  FAIL: stack did not become healthy in 180s (app=${app_status}, db=${db_status})."
-  docker compose -p "${project}" -f "${COMPOSE_FILE}" logs --tail=40 app
+  compose_logs "${project}" app
   exit 1
 }
 
@@ -118,20 +114,19 @@ start_stack() {
   local project="$1" data_root="$2" port="$3"
   mkdir -p "${data_root}"
   # The API's CSRF origin guard fail-closes on any Origin outside the
-  # configured allowlist (security.ts). The drill overrides CORS_ORIGIN /
-  # PUBLIC_WEB_ORIGIN for its own port so the host-side curl requests pass
-  # (shell env wins over .env during compose interpolation).
+  # configured allowlist (security.ts). Override CORS_ORIGIN /
+  # PUBLIC_WEB_ORIGIN for this stack's own port so the host-side curl
+  # requests pass (shell env wins over .env during compose interpolation).
   local origin="http://localhost:${port}"
   EXAM_DATA_ROOT="${data_root}" APP_PORT="${port}" \
     CORS_ORIGIN="${origin}" PUBLIC_WEB_ORIGIN="${origin}" \
-    docker compose -p "${project}" -f "${COMPOSE_FILE}" up -d --build \
-    --quiet-pull 2>&1 | tail -6
+    run_compose "${project}" up -d --build --quiet-pull 2>&1 | tail -6
   wait_app_healthy "${project}"
 }
 
 db_query() {
   local project="$1" query="$2"
-  docker exec "${project}-db-1" \
+  docker exec "$(db_container "${project}")" \
     psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${query}" 2>&1
 }
 
@@ -152,7 +147,7 @@ bootstrap_body() {
       adminUsername: $u, adminPassword: $p}'
 }
 
-echo "=== P7-C1 LAUNCHPAD PRODUCTION-COMPOSE DRILL (ts ${TS}) ==="
+echo "=== LAUNCHPAD PRODUCTION-COMPOSE SUITE (ts ${TS}) ==="
 
 # ── Stack A: LAUNCHPAD_SETUP_TOKEN baked in (operator .env equivalent) ─────
 echo "--- start stack A (token baked via compose interpolation) ---"
@@ -250,12 +245,11 @@ else
 fi
 
 echo "--- teardown stack A ---"
-docker compose -p "${PROJECT_A}" -f "${COMPOSE_FILE}" down --remove-orphans \
-  > /dev/null 2>&1 || true
+compose_down_best_effort "${PROJECT_A}"
 
 # ── Stack B: NO LAUNCHPAD_SETUP_TOKEN (disabled launchpad) ─────────────────
 echo "--- start stack B (token unset: launchpad disabled) ---"
-export -n LAUNCHPAD_SETUP_TOKEN 2>/dev/null || unset LAUNCHPAD_SETUP_TOKEN
+unset LAUNCHPAD_SETUP_TOKEN 2>/dev/null || true
 start_stack "${PROJECT_B}" "${EXAM_DATA_ROOT_B}" "${PORT_B}"
 
 echo "--- B1: fresh status uninitialized; bootstrap refused (403, disabled) ---"
@@ -281,12 +275,11 @@ B1_ADMINS="$(db_query "${PROJECT_B}" \
       "admins=${B1_ADMINS}"
 
 echo "--- teardown stack B ---"
-docker compose -p "${PROJECT_B}" -f "${COMPOSE_FILE}" down --remove-orphans \
-  > /dev/null 2>&1 || true
+compose_down_best_effort "${PROJECT_B}"
 
 echo ""
-echo "=== P7-C1 LAUNCHPAD DRILL SUMMARY ==="
+echo "=== LAUNCHPAD SUITE SUMMARY ==="
 echo "  passed: ${PASS_COUNT}"
 echo "  failed: ${FAIL_COUNT}"
 [ "${FAIL_COUNT}" = "0" ] || exit 1
-echo "=== P7-C1 LAUNCHPAD PRODUCTION-COMPOSE DRILL: ALL CHECKS PASSED ==="
+echo "=== LAUNCHPAD PRODUCTION-COMPOSE SUITE: ALL CHECKS PASSED ==="

@@ -158,7 +158,7 @@ docker compose up -d --build    # build + start app, db, email-worker
 docker compose logs -f app
 docker compose ps               # verify app, db, email-worker are up
 docker compose down             # stops + removes containers (keeps ./data)
-# NOTE (P7-C1): authoritative state lives in the operator-visible host bind
+# NOTE: authoritative state lives in the operator-visible host bind
 # mount ./data/postgres (EXAM_DATA_ROOT, default ./data). `docker compose down`
 # retains it; `docker compose down -v` is a no-op for bind mounts. To destroy
 # authoritative data you must explicitly delete ./data/postgres. See

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C1 cold-filesystem backup helper.
+# Cold-filesystem backup helper.
 #
 # Treats a STOPPED copy of PostgreSQL's complete persistent directory as a
 # simple same-version/same-major cold physical backup. This is the simplest
@@ -19,11 +19,10 @@
 #     existing destination.
 #   - It validates the source looks like a PGDATA (presence of
 #     PG_VERSION/postgresql.conf under the postgres major-version subdir).
-#   - It refuses an obviously RUNNING source (P7-C corrective pass §7): if a
-#     Compose db container is running OR a live `postmaster.pid` is present
-#     in the actual PGDATA, it aborts before copying. Do not merely print
-#     "make sure PostgreSQL is stopped" and copy anyway. The operator MUST
-#     `docker compose down` first.
+#   - It refuses an obviously RUNNING source: if a live `postmaster.pid` is
+#     present in the actual PGDATA, it aborts before copying. Do not merely
+#     print "make sure PostgreSQL is stopped" and copy anyway. The operator
+#     MUST `docker compose down` first.
 #   - It does NOT start, stop, or restart the deployment for you. The
 #     operator must stop PostgreSQL cleanly BEFORE running this script and
 #     restart it AFTER. A live copy of an active PGDATA is corrupt-prone and
@@ -105,8 +104,8 @@ if [ -e "${DEST}" ]; then
 fi
 
 # Validate the source looks like a PGDATA via a helper container (the files
-# are owned by the container postgres user, uid 999, and not readable by the
-# host user). Locate the major-version subdir (e.g. 18/docker) and check for
+# are owned by the container postgres user and not readable by the host
+# user). Locate the major-version subdir (e.g. 18/docker) and check for
 # PG_VERSION + postgresql.conf.
 PGDATA_SUBDIR="$(docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
   sh -c 'find /pg -maxdepth 3 -name PG_VERSION -print -quit 2>/dev/null || true')"
@@ -121,7 +120,7 @@ if ! docker run --rm -v "${SRC_PG}:/pg:ro" alpine:latest \
   exit 2
 fi
 
-# ── P7-C corrective pass §7: refuse an obviously RUNNING source. ──
+# ── Refuse an obviously RUNNING source. ──
 # A live copy of an active PGDATA is corrupt-prone and NOT supported. The
 # smallest SOURCE-SPECIFIC evidence is a live `postmaster.pid` present in the
 # actual PGDATA being backed up. (A broad `docker ps | grep db-1` check is
@@ -155,16 +154,15 @@ echo "Cold-filesystem backup:"
 echo "  source PGDATA: ${SRC_PG}  (PGDATA at ${PGDATA_DIR#/pg})"
 echo "  destination:   ${DEST}/postgres"
 echo ""
-echo "  IMPORTANT: PostgreSQL must be STOPPED before this copy. A live copy"
-echo "  of an active PGDATA is corrupt-prone and is NOT supported."
-echo "  Stopped already? Press Enter to continue, or Ctrl-C to abort."
-read -r _confirm
+echo "  IMPORTANT: PostgreSQL must be STOPPED before this copy (the"
+echo "  postmaster.pid check above is the safety gate). A live copy of an"
+echo "  active PGDATA is corrupt-prone and is NOT supported."
 
 # Container-assisted copy preserves ownership/mode/symlinks. The PGDATA files
-# are owned by the container postgres user (uid 999) and not readable by the
-# host user, so a host-side cp -a would fail with EACCES. Equivalent to
-# running `rsync -aHAX` or `tar | tar` as root on the host. Copy the
-# COMPLETE postgres tree (never partial relation files) into ${DEST}/postgres.
+# are owned by the container postgres user and not readable by the host user,
+# so a host-side cp -a would fail with EACCES. Equivalent to running
+# `rsync -aHAX` or `tar | tar` as root on the host. Copy the COMPLETE postgres
+# tree (never partial relation files) into ${DEST}/postgres.
 echo "Copying COMPLETE postgres tree..."
 docker run --rm \
   -v "${SRC_PG}:/from:ro" \

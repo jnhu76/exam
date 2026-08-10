@@ -176,9 +176,8 @@ deployment A (host A)
     → same Exam state
 ```
 
-The PGDATA files are owned by the container's postgres user (uid 999) and
-are not readable by the host user, so copy as root (or via a helper
-container):
+The PGDATA files are owned by the container's postgres user and are not
+readable by the host user, so copy as root (or via a helper container):
 
 ```bash
 # Stop Exam on host A first.
@@ -254,12 +253,14 @@ image fixes ownership/permissions of the PGDATA on container start; no host
 
 ### 6.3 Permissions
 
-The PGDATA files are owned by the container postgres user (uid 999) with
-mode `drwxrwxr-x`-style permissions. Relocation tools (`rsync -aHAX`,
-`tar`, or the helper-container `cp -a` used by the scripts) preserve
-owner/group/mode. Do **not** run broad host `chmod 777` on the data
-directory. The official postgres image chowns the PGDATA on container
-start, so a fresh empty bind mount is also initialized correctly.
+The PGDATA files are owned by the container's postgres user with the
+ownership/mode the official PostgreSQL image produces. The operator
+contract is: **preserve** that ownership/mode — do not `chmod` PGDATA
+broadly. Relocation tools (`rsync -aHAX`, `tar`, or the helper-container
+`cp -a` used by the scripts) preserve owner/group/mode. Do **not** run
+broad host `chmod 777` on the data directory. The official postgres image
+chowns the PGDATA on container start, so a fresh empty bind mount is also
+initialized correctly.
 
 ---
 
@@ -314,8 +315,8 @@ schema/data from the previous database survives — the restored database is a
 clean logical reconstruction of the dumped Exam database state. This is NOT a
 claim of physical byte identity; a logical dump reconstructs the dumped
 database's logical schema/data under the supported deployment contract. This was validated by an
-automated drill
-(`scripts/deployment/p7-c2-logical-restore-drill.sh`) that proves a fresh
+automated suite
+(`tests/deployment/logical-backup-restore.sh`) that proves a fresh
 working Exam with State A is produced from a State-A dump, and State-B-only
 data is correctly absent. Restore is **operator-only** (no browser restore
 button; the Phase 1 rule).
@@ -369,10 +370,13 @@ Properties:
   required WAL is **streamed at backup time** (`-X stream`), so the base
   backup is internally consistent on its own.
 - A `backup_manifest` is produced and **verified** with `pg_verifybackup`
-  before the script returns success. Manifest verification is
-  backup-integrity evidence (files match their SHA256 + the manifest
-  signature is valid); it is NOT proof that Exam can start and satisfy
-  business invariants after restore. A restore drill is still required.
+  before the script returns success. `pg_verifybackup` verifies the backup
+  contents against the PostgreSQL backup manifest — every file's
+  size/mtime, the configured per-file checksums (SHA256), and the
+  manifest's own checksum. Manifest verification is backup-integrity
+  evidence (the manifest uses checksums; it is not a digital-signature
+  system); it is NOT proof that Exam can start and satisfy business
+  invariants after restore. A restore drill is still required.
 - The backup target must be OUTSIDE the live PGDATA (never write a base
   backup into the directory PostgreSQL is running from).
 - The replication connection uses the configured PostgreSQL superuser
@@ -445,7 +449,7 @@ development/drills only and is NOT host-loss protection).
 
 PostgreSQL may retry archiving the same WAL segment. The canonical
 `archive_command` is correct for all three cases (proved by
-`scripts/deployment/p7-c3-archive-idempotency-drill.sh`):
+`tests/deployment/pitr.sh`):
 
 ```text
 test ! -f /wal-archive/%f && cp %p /wal-archive/%f || cmp -s %p /wal-archive/%f
@@ -558,27 +562,40 @@ Do NOT delete:
 There is no retention automation today; retention is the operator's
 discipline. P7-E may add a control plane; it is NOT started.
 
-### 8.6 Drill evidence
+### 8.6 Verification evidence
 
-The deterministic drills in `scripts/deployment/` prove the contracts:
+The deterministic suite in `tests/deployment/` proves the contracts
+(`pnpm test:deployment:pitr`, or the whole suite with `pnpm test:deployment`):
 
-- `p7-c3-pitr-drill.sh` — happy path: enable PITR via the canonical
-  `postgres-enable-pitr.sh` → base backup → marker A → marker B (capture
-  LSN) → destructive marker C → PITR to the captured LSN → assert A
-  present, B present, C absent. PASS.
-- `p7-c3-pitr-failure-drill.sh` — failure modes (also uses the canonical
-  enable-PITR script):
-  - corrupt a base-backup file → `pg_verifybackup` rejects it loudly;
-  - invalid `recovery_target_lsn` → recovery cluster refuses to start;
-  - remove the WAL archive → recovery surfaces the missing segment loudly.
-  All three PASS.
-- `p7-c3-archive-idempotency-drill.sh` — the idempotent `archive_command`
-  is correct for all three cases: empty target → success; identical retry
-  → success; byte collision under the same name → non-zero failure. PASS.
+- **Happy PITR** — enable archiving via the canonical
+  `postgres-enable-pitr.sh` → base backup → pre-base marker → post-base
+  State A → State B (capture LSN) → destructive State C → recover to the
+  captured LSN → assert A/A1/B present, C absent, promoted. PASS.
+- **F1 missing REQUIRED archived WAL** — an UNTOUCHED base backup plus a
+  complete archive MINUS the one segment that must be replayed to reach an
+  explicit `recovery_target_lsn`. The assertion is about failing to REACH
+  the target: the cluster stays in archive recovery (`pg_controldata`
+  reports `in archive recovery`), restore_command failures for the missing
+  segment are visible, and the server never completes recovery (no
+  promotion) within a bounded window. Note: `restore_command` returning
+  file-not-found for a missing segment is NORMAL at the end of any archive
+  — routine recovery routinely asks for files that do not exist. Only a
+  recovery target that requires replay through a missing segment proves
+  "required WAL missing".
+- **F2 corrupt base backup** — tamper one backed-up file →
+  `pg_verifybackup` rejects it loudly (per-file checksum mismatch).
+- **F3 invalid recovery target** — malformed `recovery_target_lsn` →
+  PostgreSQL refuses recovery loudly.
+- **Archive idempotency** — the idempotent `archive_command` is correct
+  for all three cases: empty target → success; identical retry → success;
+  byte collision under the same name → non-zero failure.
 
-> **Product path == test path (P7-C corrective pass §25).** The operator
-> path and the drill path are the SAME enable-PITR script. No drill
-> privately configures PostgreSQL through a second hidden method.
+> **Product path == test path.** The operator path and the test path are
+> the SAME enable-PITR script. No test privately configures PostgreSQL
+> through a second hidden method, and no test generates a temporary Compose
+> override — recovery clusters start from the same `docker-compose.yml`
+> with isolated `EXAM_DATA_ROOT` / `EXAM_WAL_ARCHIVE_HOST_PATH` /
+> `COMPOSE_PROJECT_NAME`.
 
 ### 8.7 Future boundary: WAL-G / pgBackRest
 

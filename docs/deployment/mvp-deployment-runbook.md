@@ -816,16 +816,16 @@ scripts/backup/cold-filesystem-restore.sh /mnt/nas/exam-backups/<date> /opt/exam
 EXAM_DATA_ROOT=/opt/exam/data-fresh POSTGRES_PASSWORD=<same> docker compose up -d
 ```
 
-Both procedures were validated by an automated drill
-(`scripts/deployment/p7-c1-cold-backup-restore-drill.sh`) that proves a
+Both procedures were validated by an automated suite
+(`tests/deployment/persistence-and-cold-restore.sh`) that proves a
 fresh working Exam deployment with identical authoritative state is
 produced from the backup. See backup-and-recovery.md §6.
 
 ### pg_dump logical backup and clean restore (validated by C2)
 
 The C2 logical path is the recommended routine backup (PostgreSQL stays
-online). It was validated by an automated drill
-(`scripts/deployment/p7-c2-logical-restore-drill.sh`) that proves a fresh
+online). It was validated by an automated suite
+(`tests/deployment/logical-backup-restore.sh`) that proves a fresh
 working Exam with State A is produced from a State-A dump, with State-B-only
 data correctly absent — closing the P7-C0 P2-2/P2-3 gaps. The clean-restore
 contract (DROP + recreate from template0, then `pg_restore`) is enforced by

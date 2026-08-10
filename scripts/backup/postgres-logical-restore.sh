@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C2 PostgreSQL logical restore helper (CLEAN target).
+# PostgreSQL logical restore helper (CLEAN target).
 #
 # Restores a pg_dump custom-format backup (produced by
 # postgres-logical-backup.sh) into a CLEAN target database, then lets the
@@ -72,6 +72,16 @@ case "${TARGET_DB}" in
     exit 2
     ;;
 esac
+# Conservative database-name contract: the target name is interpolated into
+# SQL and shell commands, so it must be a plain PostgreSQL identifier
+# (lowercase letters, digits, underscore; not starting with a digit). This
+# prevents arbitrary operator text from reaching DDL or nested sh -c strings.
+if ! printf '%s' "${TARGET_DB}" | grep -Eq '^[a-z_][a-z0-9_]*$'; then
+  echo "FAIL: TARGET_DB '${TARGET_DB}' is not a conservative database name." >&2
+  echo "       Use only lowercase letters, digits, and underscores (not" >&2
+  echo "       starting with a digit)." >&2
+  exit 2
+fi
 if [ ! -f "${DUMP}" ]; then
   echo "FAIL: dump artifact not found at ${DUMP}." >&2
   exit 2
@@ -86,7 +96,19 @@ if ! docker inspect "${DB_CONTAINER}" >/dev/null 2>&1; then
   echo "FAIL: db container '${DB_CONTAINER}' not found (project '${PROJECT}')." >&2
   exit 2
 fi
-if ! docker exec "${DB_CONTAINER}" pg_isready -U exam -d exam >/dev/null 2>&1; then
+
+# Derive the actual deployment's PostgreSQL user/db from the RUNNING db
+# container (NOT hardcoded).
+DEPLOY_PG_USER="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_USER=//p' | head -1)"
+DEPLOY_PG_DB="$(docker inspect "${DB_CONTAINER}" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^POSTGRES_DB=//p' | head -1)"
+DEPLOY_PG_USER="${DEPLOY_PG_USER:-exam}"
+DEPLOY_PG_DB="${DEPLOY_PG_DB:-exam}"
+
+if ! docker exec "${DB_CONTAINER}" pg_isready -U "${DEPLOY_PG_USER}" -d "${DEPLOY_PG_DB}" >/dev/null 2>&1; then
   echo "FAIL: PostgreSQL is not ready in ${DB_CONTAINER}." >&2
   exit 2
 fi
@@ -114,19 +136,25 @@ fi
 # empty database without local additions, preventing duplicate-definition
 # errors during restore. This is the exact-historical-replacement contract
 # that --clean --if-exists alone does NOT provide (it leaves objects absent
-# from an older dump).
+# from an older dump). TARGET_DB is passed as a psql variable and referenced
+# with :"..." (quoted-identifier interpolation) so it can never inject SQL;
+# the conservative name contract above additionally bounds it to a plain
+# identifier.
 echo "Dropping and recreating '${TARGET_DB}' from template0..."
 # -i keeps stdin attached so the heredoc reaches psql inside the container.
 docker exec -i -e PGPASSWORD="${PGPASSWORD:-}" "${DB_CONTAINER}" \
-  sh -c 'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1' <<SQL
-DROP DATABASE IF EXISTS "${TARGET_DB}";
-CREATE DATABASE "${TARGET_DB}" TEMPLATE template0;
+  sh -c 'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 -v target_db="$1"' \
+  sh "${TARGET_DB}" <<SQL
+DROP DATABASE IF EXISTS :"target_db";
+CREATE DATABASE :"target_db" TEMPLATE template0;
 SQL
 
 echo "Restoring dump into clean '${TARGET_DB}'..."
 # pg_restore into the recreated database. --no-owner (matches the dump) so the
 # restore is portable across the role that owns objects. --exit-on-error makes
 # any restore error fail the script immediately (no partial silent restore).
+# TARGET_DB is a plain identifier (validated above), safe to interpolate into
+# the -d argument.
 docker exec \
   -e PGPASSWORD="${PGPASSWORD:-}" \
   -i "${DB_CONTAINER}" \

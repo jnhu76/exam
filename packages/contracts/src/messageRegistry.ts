@@ -33,6 +33,7 @@ export const errorMessages = {
   INTERNAL_ERROR: "服务器内部错误",
   CURRENT_PASSWORD_INVALID: "当前密码不正确",
   USER_ALREADY_EXISTS: "用户名已存在",
+  ADMIN_ALREADY_EXISTS: "已存在启用的管理员",
   CANDIDATE_IDENTITY_CONFLICT: "身份信息已存在",
   CANDIDATE_FIELD_IN_USE: "该身份字段正在使用，无法删除",
   CANDIDATE_IDENTITY_FIELD_CONFLICT: "只能设置一个唯一身份字段",

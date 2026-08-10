@@ -3,222 +3,205 @@
 **Status:** READY FOR HUMAN REVIEW
 **Program:** P7-C REBUILD (portable persistence / backup / PostgreSQL DR)
 **Baseline (`origin/master`):** `2a1a9eb30fc40a10d119571d4ad3befb5b52e26e`
-**Final head:** `0df4ba721340532e6b88f6d9fbd926b3f95635c8`
+**Verification implementation head:** see Git history / PR (the commit on
+which the deployment suite in §5 was executed)
 **Branch:** `feat/p7-c-portable-backup-recovery`
-**Closeout date:** 2026-08-10
 
-This document is the single source of truth for what P7-C rebuilt, what it
-shipped, what it deliberately does NOT ship, and what remains for P7-E.
-Authoritative procedures live in `docs/deployment/backup-and-recovery.md`;
-this closeout is the audit/decision record.
+This document is the single source of truth for the FINAL P7-C shape: what
+the program shipped, what it deliberately does NOT ship, and what remains
+for P7-E. Authoritative procedures live in
+`docs/deployment/backup-and-recovery.md`; this closeout is the audit /
+decision record. Historical development mistakes and earlier architecture
+states are recorded in `docs/audits/*` and Git history, not repeated here.
 
 ---
 
-## 1. Mission recap
+## 1. Final architecture
 
-P7-C was rebuilt from scratch off `origin/master`. The previous attempt
-(PR #273) is treated as historical/reference evidence only — it is NOT the
-baseline and was NOT repaired, cherry-picked, or simplified. The rebuild
-executed the full C1 → C2 → C3 phase sequence in one branch with one
-commit per phase.
+```text
+ONE production docker-compose.yml
 
-**Authority stores (reconfirmed at C0):**
+C1  portable persistence (operator-visible host bind mounts)
+    + stopped filesystem backup/restore
+
+C2  pg_dump -Fc (online logical backup)
+    + clean pg_restore (DROP + template0, --no-owner --exit-on-error)
+
+C3  pg_basebackup (physical base backup)
+    + pg_verifybackup (physical integrity)
+    + optional PostgreSQL-native WAL archiving / PITR
+
+Launchpad  first-install only (HTTP adapter over the canonical bootstrap)
+           + operator CLI fallback
+```
+
+**One-Compose model.** `docker-compose.yml` is the ONLY production/operator
+Compose entry point. There is no `docker-compose.pitr.yml`, no custom
+postgres-pitr image, no backup/restore Compose variant. A repository guard
+(`scripts/repository-contract/deployment-topology-contract.mjs`) forbids
+production Compose variants while allowing intentional dev/test files
+(`docker-compose.dev.yml`, `docker-compose.test*.yml`).
+
+**PITR is a PostgreSQL cluster capability, not a topology.** Enabling it is
+`scripts/backup/postgres-enable-pitr.sh` — `ALTER SYSTEM SET archive_mode =
+on` (plus idempotent `archive_command` and `archive_timeout = 60s`), a
+db-only restart, then real archiver evidence from `pg_stat_archiver`.
+`ALTER SYSTEM` persists into `postgresql.auto.conf` inside PGDATA, so the
+configuration survives `docker compose down` / `up` and host relocation of
+the same PGDATA.
+
+**Routine vs. recovery backup.**
+
+```text
+routine backup   = pg_dump -Fc (C2, online)
+physical backup  = pg_basebackup -X stream -Fp --manifest-checksums SHA256 (C3)
+physical check   = pg_verifybackup (per-file checksums + manifest integrity)
+PITR             = WAL archive + explicit recovery target (C3, optional)
+Redis            = non-authoritative (rate-limit counters only)
+restore          = operator-owned (no browser restore, ever)
+```
+
+---
+
+## 2. Authority stores
 
 | Store | Authority | Durability |
 | --- | --- | --- |
 | PostgreSQL | **sole authoritative** durable store | `pgdata` → `${EXAM_DATA_ROOT}/postgres` (bind-mounted, operator-visible) |
 | Redis | **non-authoritative** | rate-limit counters only, TTL-bounded, optional profile |
-| App filesystem | **no durable writes** | `/app/data` unused; no durable state outside PostgreSQL |
-
-No contradiction with `master`. This is the foundation every backup/restore
-procedure below rests on.
+| App filesystem | **no durable writes** | no durable state outside PostgreSQL |
 
 ---
 
-## 2. Phase-by-phase evidence
+## 3. Backup / recovery matrix
 
-### C1 — Portable persistence + cold backup/DR + Launchpad
-Commit `df2d07df` — `feat(p7-c1): portable persistence, cold backup and launchpad`
-
-| Item | Evidence |
-| --- | --- |
-| Bind-mount portable persistence | `docker-compose.yml`: `${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql` + `/redis:/data`; top-level named-volume block removed; `.gitignore` adds `/data/` |
-| Deployment-topology contract upheld | `pnpm verify:static` — `docker-compose.yml deploys the required MVP topology` PASS (POSTGRES_PASSWORD required-expansion, redis auth, profiles) |
-| Dev/test isolation preserved | `docker-compose.dev.yml` untouched (keeps anonymous volume); `p6-corr1-compose-smoke.sh` uses path-guarded `mktemp -d` EXAM_DATA_ROOT |
-| Cold relocation proof | `scripts/deployment/p7-c1-persistence-smoke.sh` — up → bootstrap → invariants → down → relocate (`cp -a` via container-assisted copy for uid-999 files) → up → identical invariants. **PASS** |
-| Cold backup/restore round-trip | `scripts/deployment/p7-c1-cold-backup-restore-drill.sh` — backup → wipe → restore → invariants match. **PASS** |
-| Launchpad (first-install only) | `GET /api/launchpad/status` + `POST /api/launchpad/bootstrap`; constant-time token compare; init-gate runs FIRST (no token oracle); shares `bootstrapAdminOnFreshDb` canonical mutation; `/launchpad` page redirects to `/login` once initialized; removing last Admin does NOT reopen launchpad |
-| Launchpad tests | `apps/api/src/routes/launchpad.test.ts` (6 tests) + `apps/web/src/pages/LaunchpadPage.test.tsx` (5 tests) — all PASS |
-
-### C2 — PostgreSQL logical backup + clean restore
-Commit `e164fd30` — `feat(p7-c2): logical backup and verified clean restore`
-
-| Item | Evidence |
-| --- | --- |
-| Online logical backup | `scripts/backup/postgres-logical-backup.sh` — `pg_dump -Fc`; asserts artifact non-empty + `pg_restore --list` succeeds; password via `PGPASSWORD` (never argv) |
-| Clean restore contract | `scripts/backup/postgres-logical-restore.sh` — `DROP DATABASE` + `CREATE DATABASE ... TEMPLATE template0` + `pg_restore --no-owner --exit-on-error` (NOT `--clean --if-exists` into a dirty DB — closes the C2 pre-rebuild gap) |
-| A-present/B-absent drill | `scripts/deployment/p7-c2-logical-restore-drill.sh` — State A → dump → mutate to State B → restore A into CLEAN fresh-target → assert A present, B absent, business invariants (org/admin/audit + Admin password hash) match A. **PASS** |
-| Works API-down, PG-up | Both scripts talk to the db container directly; the API does not need to be running |
-
-### C3 — PostgreSQL physical backup / WAL / PITR
-Commit `0df4ba72` — `feat(p7-c3): physical backup and PITR`
-
-| Item | Evidence |
-| --- | --- |
-| Runtime re-audit | `postgres:18.4-bookworm`; `wal_level=replica` (sufficient for PITR; `minimal` is the only blocker); `archive_mode=off` by default |
-| Physical base backup | `scripts/backup/pg-basebackup.sh` — `pg_basebackup -X stream -c fast -Fp --manifest-checksums SHA256`; `pg_verifybackup` on the manifest before success |
-| WAL continuous archiving | `docker-compose.pitr.yml` + `docker/pitr/wal-archive.conf` — `archive_mode=on`, non-overwriting `archive_command = 'test ! -f /wal-archive/%f && cp %p /wal-archive/%f'` (collision = visible failure, not silent overwrite); `archive_timeout=60s` |
-| PITR happy path | `scripts/deployment/p7-c3-pitr-drill.sh` — base backup → marker A → marker B (capture LSN) → destructive marker C → recover to captured LSN → A present, B present, C absent. **PASS** |
-| PITR failure modes | `scripts/deployment/p7-c3-pitr-failure-drill.sh` — F1 missing WAL segment (loud), F2 corrupt base backup (`pg_verifybackup: error: checksum mismatch`, loud), F3 invalid `recovery_target_lsn` (cluster refuses to start, loud). **3/3 PASS** |
-| `recovery_target_lsn` chosen | clock-skew-independent; the xid8-vs-xid mismatch (the pre-LSN attempt) is documented in `backup-and-recovery.md` §8.3 |
-
----
-
-## 3. Backup / restore matrix
-
-| Path | Online? | Scope | Replaces history? | Script | Drill |
+| Path | Online? | Scope | Replaces history? | Operator command | Verification |
 | --- | --- | --- | --- | --- | --- |
-| Stopped relocation (C1) | No (stop) | Whole data dir | **No** — same history | (manual `cp -a` / rsync `-aHAX`) | `p7-c1-persistence-smoke.sh` |
-| Cold-filesystem backup (C1) | No (stop) | Whole data dir | Yes | `cold-filesystem-backup.sh` / `-restore.sh` | `p7-c1-cold-backup-restore-drill.sh` |
-| Logical backup (C2) | **Yes** | One DB (`exam`) | Yes (clean restore) | `postgres-logical-backup.sh` / `-restore.sh` | `p7-c2-logical-restore-drill.sh` |
-| Physical base backup (C3) | **Yes** | Whole cluster | Yes | `pg-basebackup.sh` | (part of PITR drill) |
-| WAL archive + PITR (C3) | **Yes** | WAL replay to target | Yes (replay + promote) | `docker-compose.pitr.yml` override | `p7-c3-pitr-drill.sh` + failure drill |
+| Container restart / recreation | — | — | No — same history | `docker compose down` / `up -d` | `persistence-and-cold-restore.sh` |
+| Stopped-directory relocation (C1) | No (stop) | Whole data dir | **No** — same history | `cp -a` / `rsync -aHAX` while stopped | `persistence-and-cold-restore.sh` |
+| Cold-filesystem backup/restore (C1) | No (stop) | Whole data dir | Yes | `cold-filesystem-backup.sh` / `-restore.sh` | `persistence-and-cold-restore.sh` |
+| Logical backup (C2) | **Yes** | One DB (`exam`) | Yes (clean restore) | `postgres-logical-backup.sh` / `-restore.sh` | `logical-backup-restore.sh` |
+| Physical base backup (C3) | **Yes** | Whole cluster | Yes | `pg-basebackup.sh` | `pitr.sh` (base backup + verify) |
+| WAL archive + PITR (C3) | **Yes** | WAL replay to target | Yes (replay + promote) | `postgres-enable-pitr.sh` + recovery procedure | `pitr.sh` (happy + failure modes) |
 
 ---
 
-## 4. Downtime requirements
+## 4. Operator commands
 
-| Operation | Exam downtime | Notes |
-| --- | --- | --- |
-| Stopped relocation (C1 §5) | Full (stop → copy → start) | Same history; new host |
-| Cold-filesystem backup (C1 §6) | Full during backup | Simplest full snapshot |
-| Cold-filesystem restore (C1 §6) | Full during restore | History replacement |
-| Logical backup (C2 §7) | **None** (online) | Routine path |
-| Logical restore (C2 §7) | Full during restore | Clean DB replacement; stop API+worker first |
-| Physical base backup (C3 §8.1) | **None** (online) | `pg_basebackup` of running cluster |
-| PITR restore (C3 §8.3) | Full during restore | Stop source → restore base + WAL → recover to target → promote |
+```text
+scripts/backup/
+├── cold-filesystem-backup.sh     # stopped PGDATA copy (refuses a running source)
+├── cold-filesystem-restore.sh    # restore into a fresh data root (explicit confirm)
+├── postgres-logical-backup.sh    # online pg_dump -Fc --no-owner
+├── postgres-logical-restore.sh   # DROP + template0 + pg_restore (CLEAN target)
+├── pg-basebackup.sh              # online physical base backup + pg_verifybackup
+└── postgres-enable-pitr.sh       # ALTER SYSTEM archive_* + archiver proof
+```
 
----
+All scripts derive the deployment's `POSTGRES_USER` / `POSTGRES_DB` (and
+password where needed) from the RUNNING db container — no hardcoded
+credentials, no password on argv.
 
-## 5. Version compatibility
+Verification lives separately under `tests/deployment/` (capability-named,
+phase-free):
 
-- **Physical backups are PG-major-tied.** A `pg_basebackup` from PG18
-  restores on PG18. To cross PG majors, use the C2 logical path
-  (`pg_dump`/`pg_restore`).
-- **Logical backups are portable** across PG majors (subject to the usual
-  dump/restore caveats for deprecated features).
-- **Cold copies are PG-major-tied** (they ARE the PGDATA).
+```text
+tests/deployment/
+├── lib.sh                          # mechanical shared helpers (polling, temp roots, probes)
+├── compose-smoke.sh                # production Compose parses/starts; env contract; worker/redis wiring
+├── launchpad-bootstrap.sh          # first-install deployment contract (token wiring, 409, register disabled)
+├── persistence-and-cold-restore.sh # container recreation + relocation + cold round-trip
+├── logical-backup-restore.sh       # online dump; A present, B absent after clean restore
+└── pitr.sh                         # archive idempotency; happy PITR; missing-WAL / corrupt / invalid-target
+```
 
----
-
-## 6. Off-host requirement
-
-- **C1 cold backup, C2 logical, C3 base backup, C3 WAL archive** must ALL
-  land on an **independent failure domain** from the database host. A
-  backup on the same disk as PGDATA dies with the disk.
-- The C3 WAL archive override exposes `EXAM_WAL_ARCHIVE_HOST_PATH` so the
-  operator can point the archive at NAS / a separate server / a separate
-  disk. The default `${EXAM_DATA_ROOT}/wal-archive` is for development /
-  drills only.
+Entry points: `pnpm test:deployment` (full suite) and per-capability
+`test:deployment:compose|launchpad|persistence|logical|pitr`.
 
 ---
 
-## 7. Drill evidence (final adversarial run, 2026-08-10)
+## 5. Verification evidence
 
-All five deterministic Docker drills were re-run on the final head. Each
-uses isolated temp `EXAM_DATA_ROOT` / project names / data roots and cleans
-up with path-guarded traps. **No human/dev database is touched.**
+### 5.1 Deployment suite (deterministic Docker drills)
 
-| Drill | Result |
+All tests run the canonical `docker-compose.yml` against isolated Compose
+projects and isolated temp `EXAM_DATA_ROOT`s — the repo-root `./data/` and
+any human/dev stack are never touched. No test generates a temporary
+Compose override; recovery clusters are started with the canonical Compose
+plus environment (`EXAM_DATA_ROOT`, `EXAM_WAL_ARCHIVE_HOST_PATH`,
+`POSTGRES_PASSWORD`, `COMPOSE_PROJECT_NAME`). Readiness is bounded polling
+(`pg_isready`, `/api/health`, `pg_stat_archiver`, archived-segment
+presence), never arbitrary fixed sleeps.
+
+| Suite | Proves |
 | --- | --- |
-| `p7-c1-persistence-smoke.sh` (persistence + cold relocation) | **PASS** |
-| `p7-c1-cold-backup-restore-drill.sh` (cold round-trip) | **PASS** |
-| `p7-c2-logical-restore-drill.sh` (A-present/B-absent clean restore) | **PASS** |
-| `p7-c3-pitr-drill.sh` (PITR happy path: A+B present, C absent) | **PASS** |
-| `p7-c3-pitr-failure-drill.sh` (F1 missing WAL, F2 corrupt backup, F3 invalid LSN) | **3/3 PASS** |
+| `compose-smoke.sh` | `POSTGRES_PASSWORD` required; Redis optional at parse, authenticated when enabled; app/db/worker ordering; migrations exactly once; bootstrap-admin one Admin; login; seed refusal; SIGTERM clean shutdown |
+| `launchpad-bootstrap.sh` | token reaches app via compose interpolation; wrong token 403; first Admin 200; re-bootstrap 409 (no token oracle); register disabled; unset token disables launchpad |
+| `persistence-and-cold-restore.sh` | container recreation persistence; stopped-directory relocation; cold backup/restore round-trip — identical invariants each time |
+| `logical-backup-restore.sh` | online `pg_dump -Fc`; State A → mutate B → clean restore → A present, B absent, org/admin/audit + Admin password hash match A |
+| `pitr.sh` | archive idempotency (absent → OK, identical retry → OK, byte collision → FAIL); happy PITR (A + A1 + B present, C absent, promoted); F1 missing REQUIRED WAL (explicit target unreachable — recovery stays in recovery, replay LSN < target, post-missing state absent, restore_command failures visible); F2 corrupt base backup (`pg_verifybackup` rejects); F3 invalid recovery target (refused loudly) |
 
-Final gates on the final head:
+### 5.2 Repository gates
 
 | Gate | Result |
 | --- | --- |
-| `pnpm verify:static` | PASS (lint, architecture, env-contract, repo-contract, topology, migration journal 29 entries) |
-| `pnpm test` | PASS (2019 tests, 7 skipped, 0 failed across 153 files) |
-| `pnpm build` | PASS (9 tasks) |
+| `pnpm verify:static` | PASS (lint, architecture, env-contract, repo-contract incl. one-compose guard, migration journal) |
+| `pnpm test` | PASS (see PR for final counts) |
+| `pnpm build` | PASS |
+| CI | see PR (do not merge automatically) |
 
 ---
 
-## 8. Adversarial matrix (§7 of the program prompt)
+## 6. Known limitations
 
-| Scenario | Outcome |
-| --- | --- |
-| Stop Exam, copy COMPLETE PGDATA, restart on new host | PASS (C1 relocation drill) |
-| Stop Exam, copy COMPLETE PGDATA, restart on same host | PASS (C1 cold drill) |
-| Live-copy active PGDATA with ordinary `cp`/`tar` | REFUSED — not supported; documented as corrupting. Cold path requires stopped server. |
-| Partial copy of PostgreSQL relation files | REFUSED — not supported; documented. |
-| `pg_dump` online, restore into CLEAN DB | PASS (C2 drill, A-present/B-absent) |
-| `pg_dump` restore into dirty DB via `--clean --if-exists` | REFUSED — clean-restore contract only |
-| `pg_basebackup` online, `pg_verifybackup` clean | PASS (C3 drill) |
-| `pg_basebackup` + corrupt one file | LOUD FAIL — `pg_verifybackup: checksum mismatch` (F2) |
-| WAL archive with non-overwriting `archive_command` | PASS — collision = visible stuck archive |
-| PITR to captured LSN | PASS — A+B present, C absent |
-| PITR with missing WAL segment | LOUD FAIL — recovery surfaces missing segment (F1) |
-| PITR with invalid `recovery_target_lsn` | LOUD FAIL — cluster refuses to start (F3) |
-| `recovery_target_xid` fed a 64-bit xid8 | DOCUMENTED PITFALL — use `recovery_target_lsn` or a 32-bit xid; the drill uses LSN |
-| Restore while API is up | DOCUMENTED — stop API+worker before any restore; restore is operator-owned |
-| Admin "restore" button in the browser | REFUSED — explicitly out of scope; restore is operator CLI/script territory |
-| Launchpad as a token-validity oracle on a completed install | REFUSED — init-gate runs FIRST; 409 regardless of token once initialized |
-| Removing the last Admin reopens Launchpad | REFUSED — init-gate is `default org exists`, not `activeAdminCount == 0` |
-| Broad host `chmod 777` | REFUSED — only the WAL archive dir in the isolated drill is chmod'd; production docs do not instruct host-wide chmod |
-| Unvalidated `rm -rf "$EXAM_DATA_ROOT"` | REFUSED — every drill cleanup is path-guarded (`grep -Eq '/tmp/p7c[0-9a-z_-]+$'`) |
+1. **Retention is manual.** P7-C does NOT automate PITR retention/pruning.
+   A promised recovery window requires: a usable base backup old enough to
+   precede the earliest desired target, every required WAL segment from
+   that base backup through the target window, and required timeline
+   history. Do not manually prune backup/WAL history unless the retained
+   chain has been deliberately validated. (§8.5 of `backup-and-recovery.md`.)
+2. **Physical backups are PG-major-tied.** Cross-major migration requires
+   the C2 logical path.
+3. **PITR target granularity is bounded by `archive_timeout` (60s).** A
+   low-write cluster still archives within 60s, but sub-minute PITR
+   targets in a quiet period may be coarser than wall-clock suggests.
+4. **C3 replication uses the configured `POSTGRES_USER` superuser over the
+   db container's loopback namespace.** A hardened deployment should create
+   a narrowly scoped replication role (documented in `pg-basebackup.sh`);
+   the API itself never gets replication authority.
+5. **The WAL archive default path is `${EXAM_DATA_ROOT}/wal-archive`.**
+   Production MUST override `EXAM_WAL_ARCHIVE_HOST_PATH` to an independent
+   failure domain; the default is for development/drills only and is NOT
+   host-loss protection.
+6. **No Admin backup visibility.** Operators run scripts from the host;
+   there is no in-product backup dashboard. Restore is operator-only by
+   design.
+7. **Same-host relocation proof.** The automated relocation regression uses
+   two temp dirs on the same host. The product contract is ordinary
+   filesystem relocation while PostgreSQL is stopped; per-OS filesystem
+   proof is out of scope.
+8. **`recovery_target_lsn` is the recommended target type.** Time-based
+   targets need clock alignment; xid-based targets need a 32-bit xid (the
+   64-bit xid8 from `pg_current_xact_id()` is rejected). Documented in
+   `backup-and-recovery.md` §8.3.
 
----
-
-## 9. Scope discipline (what was NOT built)
-
-Per the program spec ("Delete ceremony, not safety"), the following were
-deliberately NOT introduced. This list is the negative-space contract.
-
-- NO custom relocation manifest protocol (C1 relocation is ordinary
-  filesystem copy of a stopped PGDATA — no metadata protocol).
-- NO Docker image identity framework / OCI digest authority subsystem.
-- NO cross-runner `docker-save` recovery bundle.
-- NO migration-history preflight framework (the drizzle journal already
-  lives in the database; the bundled image self-migrates on start).
-- NO historical-migration omission allowlist in deployment startup.
-- NO custom recovery-epoch implementation (per ADR-016, no schema change
-  marks history-replacement events; same-history vs. replacement is a
-  documented boundary, not a runtime mechanism).
-- NO generic startup reconciler / background job framework.
-- NO Kubernetes, NO Patroni, NO HA cluster (single-node is the supported
-  Phase 1 deployment shape).
-- NO Admin restore button (restore is operator-owned).
-- NO Desktop recovery-epoch implementation (Phase 4 concern).
-- NO PG18 incremental base backups (scale does not justify today).
-- NO retention engine (retention is operator discipline; P7-E may add a
-  control plane — not started).
-- NO PITR automation in the base `docker-compose.yml` (the override is
-  opt-in; base stays PITR-free for simple deployments).
-- NO P7-E config control plane (RPO/RTO profile automation, Admin backup
-  visibility, files/settings backup beyond PostgreSQL — all future).
-
-PR #273 remains historical/reference material only. The rebuilt C1/C2/C3
-does not recreate PR #273 under different names: it ships a thin Launchpad
-HTTP adapter over the existing canonical `bootstrapAdminOnFreshDb`
-mutation, the PG-native backup tooling (`pg_dump`/`pg_basebackup`/WAL
-archive) that PostgreSQL already provides, and deterministic drills. No
-ceremony was reintroduced.
+**Future boundary (explicit, not started):** if Exam later requires
+automatic off-host WAL shipping, S3/MinIO, encryption, compression,
+incremental backup chains, automated pruning/retention, large backup sets,
+or low-RPO operational automation, evaluate **WAL-G** or **pgBackRest**
+rather than growing Exam's shell scripts indefinitely.
 
 ---
 
-## 10. ADR-016 boundary (same history vs. history replacement)
+## 7. Same-history vs. history-replacement boundary (ADR-016)
 
 | Event | Same authoritative history? |
 | --- | --- |
 | Container restart / recreation | Yes |
-| §5 stopped-directory relocation (C1) | Yes — same files, same timeline, new host |
-| §6 cold-filesystem restore (C1) | **No** — snapshot from a past moment replaces the live history |
-| §7 logical restore (C2) | **No** — fresh-clean database from a dump |
-| §8 physical restore / PITR (C3) | **No** — base backup + WAL replay to target, then promote (new timeline) |
+| Stopped-directory relocation (C1) | Yes — same files, same timeline, new host |
+| Cold-filesystem restore (C1) | **No** — snapshot from a past moment replaces the live history |
+| Logical restore (C2) | **No** — fresh-clean database from a dump |
+| Physical restore / PITR (C3) | **No** — base backup + WAL replay to target, then promote (new timeline) |
 
 No schema change is introduced to mark history-replacement events. The
 exam system's authoritative state is whatever PostgreSQL currently holds;
@@ -228,53 +211,27 @@ implemented here.
 
 ---
 
-## 11. Known limitations
+## 8. Scope discipline (what was NOT built)
 
-1. **Retention is manual.** Operators must keep (a) at least one base
-   backup whose start checkpoint is covered by the retained WAL chain and
-   (b) every WAL segment from that checkpoint forward to the end of the
-   PITR window. Deleting a single in-window segment breaks the chain.
-   P7-E may add automation; not started.
-2. **Physical backups are PG-major-tied.** Cross-major migration requires
-   the C2 logical path.
-3. **PITR target granularity is bounded by `archive_timeout` (60s).** A
-   low-write cluster still archives within 60s, but sub-minute PITR
-   targets in a quiet period may be coarser than wall-clock suggests.
-4. **C3 replication uses the configured `exam` superuser over the db
-   container's loopback namespace.** A hardened deployment should create a
-   narrowly scoped replication role (documented in the script header); the
-   API itself never gets replication authority.
-5. **The WAL archive default path is `${EXAM_DATA_ROOT}/wal-archive`.**
-   Production MUST override `EXAM_WAL_ARCHIVE_HOST_PATH` to independent
-   storage; the default is for development/drills only.
-6. **No Admin backup visibility.** Operators run scripts from the host;
-   there is no in-product backup dashboard. Restore is operator-only by
-   design.
-7. **Same-host C1 relocation drill.** The automated C1 relocation
-   regression uses two temp dirs on the same host (the program prompt
-   explicitly allows this). The product contract is ordinary filesystem
-   relocation; per-OS filesystem proof is out of scope.
-8. **`recovery_target_lsn` is the recommended target type.** Time-based
-   targets need clock alignment; xid-based targets need a 32-bit xid (the
-   64-bit xid8 from `pg_current_xact_id()` is rejected). This is
-   documented in `backup-and-recovery.md` §8.3.
+- NO second production Compose; NO PITR Docker image; NO migration
+  preflight; NO custom backup format; NO backup manifest protocol; NO
+  custom WAL manager; NO retention engine; NO backup scheduler; NO backup
+  UI; NO restore UI.
+- NO WAL-G; NO pgBackRest; NO Kubernetes; NO Patroni; NO HA; NO startup
+  reconciler; NO P7-E.
+- Launchpad remains FIRST-INSTALL ONLY. The canonical bootstrap mutation
+  (`bootstrapAdminOnFreshDb`) is shared verbatim by the HTTP Launchpad
+  adapter and the `bootstrap-admin` CLI; both serialize on the same
+  transaction-scoped PostgreSQL advisory lock (`pg_advisory_xact_lock`), so
+  HTTP-vs-HTTP, HTTP-vs-CLI, and CLI-vs-CLI races have exactly one winner.
+  The audit records the real adapter (`source: "local_script" | "launchpad"`);
+  the HTTP race loser maps to `409 LAUNCHPAD_ALREADY_INITIALIZED` (never an
+  internal 500). Covered by deterministic concurrency tests
+  (`bootstrap-admin.test.ts`, `launchpad.test.ts`).
 
 ---
 
-## 12. P0–P3 findings
-
-| Severity | Count | Notes |
-| --- | --- | --- |
-| **P0** (blocks release) | 0 | — |
-| **P1** (must fix before merge, safety) | 0 | — |
-| **P2** (should fix, tracked) | 0 | (P2-2 / P2-3 from the C0 audit — clean-restore contract + round-trip drill — are CLOSED by the C2 and C1 drills respectively) |
-| **P3** (nice-to-have) | 0 | — |
-
-No outstanding P0/P1/P2/P3 against this rebuild.
-
----
-
-## 13. P7-E handoff
+## 9. P7-E handoff
 
 The following are explicitly deferred to a future P7-E control-plane
 program (NOT started, NOT scheduled by this closeout):
@@ -296,81 +253,22 @@ program (NOT started, NOT scheduled by this closeout):
    `pg_dump`-on-old → `pg_restore`-on-new procedure (the C2 primitives
    exist; the playbook is P7-E).
 
-None of the above is a safety regression in the current rebuild. They are
-all capability extensions.
+None of the above is a safety regression in the current shape. They are all
+capability extensions.
 
 ---
 
-## 14. Roadmap reconciliation
+## 10. Findings
 
-- `docs/roadmap/current.md`: P7 row updated; execution-order block
-  records P7-C as REBUILT & SHIPPED; Workstream-4 description carries the
-  post-rebuild status note.
-- `docs/roadmap/P7-system-readiness-and-exam-modes.md`: Workstream C
-  re-scoped to the rebuilt C0/C1/C2/C3 shape; the pre-rebuild
-  C1=config-taxonomy / C2=settings-service / C3=settings-UI framing is
-  explicitly superseded (those items now live under Workstream E and are
-  not started); the sequence block records P7-C as shipped and P7-E as
-  the future control plane.
-
----
-
----
-
-## 16. Corrective pass (adversarial audit P7-C-REBUILD-ADVERSARIAL-PG-BACKUP-CONFIG-AUDIT)
-
-This section records the corrective pass that addressed the adversarial
-audit findings. It does NOT erase the history above; §1–§15 remain the
-rebuild record.
-
-- **Previous head:** `0ebdf6eb` (`docs(p7-c): close portable backup and recovery program`)
-- **Corrective final head:** `49b04567` (`docs(p7-c): align backup and recovery operator contract`)
-- **Audit source:** `docs/audits/P7-C-REBUILD-ADVERSARIAL-PG-BACKUP-CONFIG-AUDIT.md`
-
-### What changed and why
-
-| Correction | What was wrong | What the corrective pass did |
+| Severity | Count | Notes |
 | --- | --- | --- |
-| **One-Compose model** | `docker-compose.pitr.yml` created a second operator Compose topology for PITR. | Deleted `docker-compose.pitr.yml` and `docker/pitr/wal-archive.conf`. There is now exactly ONE production Compose entry point (`docker-compose.yml`). PITR is a database capability, not an alternate topology. A repository guard (`deployment-topology-contract.mjs`) forbids production Compose variants while allowing dev/test files. |
-| **WAL archive mount** | The WAL archive only existed behind the PITR override. | Added ONE WAL archive mount to the canonical `db` service (`${EXAM_WAL_ARCHIVE_HOST_PATH:-…}/wal-archive:/wal-archive`). The mount exists but stays inert (`archive_mode=off`) until an operator enables PITR. |
-| **Canonical enable-PITR command** | The `.conf` initdb seed was silently ignored (official postgres image ignores `.conf` in `/docker-entrypoint-initdb.d/`), and the drills configured PITR via a private `ALTER SYSTEM` path that operators never use. | Created `scripts/backup/postgres-enable-pitr.sh` — the SINGLE operator command. It uses `ALTER SYSTEM` (persists into `postgresql.auto.conf`, survives down/up), sets an idempotent `archive_command`, restrictive `/wal-archive` permissions (never `chmod 777`), and polls `pg_stat_archiver` for REAL archiver evidence (not a fixed sleep). The C3 drills now use this SAME canonical path (product path == test path). |
-| **Idempotent `archive_command`** | The old `test ! -f target && cp source target` would fail forever on an identical retry (target exists → non-zero). | Replaced with `test ! -f /wal-archive/%f && cp %p /wal-archive/%f \|\| cmp -s %p /wal-archive/%f` — correct for all three cases (absent→copy, identical retry→cmp OK, byte collision→failure). A dedicated drill (`p7-c3-archive-idempotency-drill.sh`) proves it. |
-| **Launchpad token wiring** | `LAUNCHPAD_SETUP_TOKEN` was documented as "set in `.env`" but never forwarded to the app container (Compose uses `.env` for interpolation only); the browser first-install UX was inert. | Added `LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}` to the `app` service `environment:` block (verified by the topology guard). Added it to `.env.example`. A bare `docker compose up` still starts normally (empty default disables launchpad, not fail-fast). |
-| **`pg_basebackup` auth truth** | The script claimed "no replication password needed" while connecting over loopback TCP (`-h 127.0.0.1`), which the official image authenticates with `scram-sha-256` (trust is Unix-socket only). | The script now derives the actual deployment's `POSTGRES_USER`/`POSTGRES_PASSWORD` from the running db container and passes the password via `PGPASSWORD` (never argv). The comment and implementation agree: loopback TCP + scram-sha-256 + deployment password. `PGUSER`/`PGPASSWORD` follow the deployment, not a hardcoded `exam`. |
-| **Replication privilege honesty** | Implied a narrowly scoped replication role existed. | Documented that the bundled path uses the bootstrap superuser (which satisfies `pg_basebackup`'s SUPERUSER/REPLICATION requirement); a dedicated replication-only role is future hardening, not claimed. |
-| **Cold backup running-source refusal** | The cold-backup script only printed "make sure PostgreSQL is stopped" and copied anyway. | `cold-filesystem-backup.sh` now refuses an obviously running source (a Compose db container running OR a live `postmaster.pid` in the actual PGDATA) before copying. |
-| **Logical-restore overclaim** | The C2 restore docs claimed "byte-for-byte exact" / "EXACT match". | Reworded to "clean logical reconstruction of the dumped state" — a logical dump reconstructs logical schema/data, not physical byte identity. |
-| **PITR retention rule** | Stated "retain only the most recent base backup plus WAL" — incorrect (a base backup can only recover forward from its own history). | Corrected: for an earliest recovery point `T`, retain a base backup whose history precedes `T` + all WAL from it through the window. P7-C3 ships no automatic pruning. |
-| **PITR base-backup ordering** | Not stated that WAL archiving must be active before the base backup. | Documented the sequence: enable WAL archiving → verify archiver → `pg_basebackup` → continue archiving → PITR can target later history. |
-| **WAL-G / pgBackRest boundary** | Not stated. | Added an explicit future boundary: if Exam later needs off-host WAL shipping / S3 / encryption / compression / incremental physical backups / automated retention, evaluate WAL-G or pgBackRest rather than growing bespoke scripts. |
-| **Bootstrap concurrency serialization** | First-install "exactly one winner" relied on RR-isolation + ON CONFLICT retry semantics alone. | Added a transaction-scoped PostgreSQL advisory lock (`pg_advisory_xact_lock`) at the start of `bootstrapAdminOnFreshDb`, shared by HTTP Launchpad and the CLI, making the serialization domain explicit. |
-
-### Drills rerun on the corrective head
-
-The deterministic Docker drills were re-run on the corrective head. The C3
-drills now exercise the SAME canonical `postgres-enable-pitr.sh` path
-operators use (product path == test path):
-
-| Drill | Result |
-| --- | --- |
-| `p7-c1-persistence-smoke.sh` | PASS (unchanged code path) |
-| `p7-c1-cold-backup-restore-drill.sh` | PASS (cold-backup now also refuses a running source) |
-| `p7-c2-logical-restore-drill.sh` | PASS (A present, B absent) |
-| `p7-c3-pitr-drill.sh` | PASS (uses canonical `postgres-enable-pitr.sh`; A+B present, C absent) |
-| `p7-c3-pitr-failure-drill.sh` | PASS (F1 missing WAL, F2 corrupt backup, F3 invalid LSN — all loud) |
-| `p7-c3-archive-idempotency-drill.sh` (NEW) | PASS (absent→copy, identical retry→OK, collision→failure) |
-| `p7-c1-launchpad-compose-drill.sh` (NEW) | PASS (12 checks: fresh status uninitialized; wrong token 403; correct token → first Admin; correct token again → 409 (never reopens, no token oracle); Admin login; DB invariants 1/0/1/1; register disabled API + no client route; unset token → launchpad disabled) |
-
-Static gates on the corrective head:
-
-| Gate | Result |
-| --- | --- |
-| `pnpm verify:static` | PASS (incl. the one-compose repository guard + LAUNCHPAD_SETUP_TOKEN wiring check) |
-| `pnpm test` | PASS (2019 tests, 7 skipped) |
-| `pnpm build` | PASS (9 tasks) |
+| **P0** (blocks release) | 0 | — |
+| **P1** (must fix before merge, safety) | 0 | — |
+| **P2** (should fix, tracked) | 0 | — |
+| **P3** (nice-to-have) | 0 | — |
 
 ---
 
-## 17. Verdict
+## 11. Verdict
 
 P7-C PORTABLE PERSISTENCE / BACKUP / POSTGRESQL RECOVERY READY FOR HUMAN REVIEW

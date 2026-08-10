@@ -41,6 +41,7 @@ import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
+import { AdminAlreadyExistsError } from "@exam/domain";
 import { recordAtomicSystemAudit } from "../audit/auditWriter.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
@@ -81,6 +82,15 @@ export interface BootstrapAdminParams {
   name: string;
   force?: boolean;
 }
+
+/**
+ * Which adapter invoked the canonical bootstrap mutation. Recorded in the
+ * `admin.bootstrap` audit metadata so the audit reflects the real entry
+ * point instead of a single hardcoded value:
+ *   - `local_script` — the bootstrap-admin CLI (operator shell);
+ *   - `launchpad`    — the HTTP Launchpad first-install adapter.
+ */
+export type BootstrapAdminSource = "local_script" | "launchpad";
 
 export interface BootstrapAdminOrganizationOptions {
   /**
@@ -124,6 +134,7 @@ export async function bootstrapAdmin(
   db: Database,
   organizationId: string,
   params: BootstrapAdminParams,
+  source: BootstrapAdminSource = "local_script",
 ): Promise<{
   user: BootstrapAdminResult["user"];
 }> {
@@ -146,7 +157,7 @@ export async function bootstrapAdmin(
       "Admin",
     );
     if (activeAdminCount > 0 && !params.force) {
-      throw new Error(
+      throw new AdminAlreadyExistsError(
         `An active Admin already exists in this organization. ` +
           `Use --force to create an additional Admin.`,
       );
@@ -180,7 +191,7 @@ export async function bootstrapAdmin(
         metadata: {
           username: user.username,
           name: user.name,
-          source: "local_script",
+          source,
         },
       },
     );
@@ -304,16 +315,17 @@ export async function bootstrapAdminOnFreshDb(
   db: Database,
   params: BootstrapAdminParams,
   options: BootstrapAdminOrganizationOptions = {},
+  source: BootstrapAdminSource = "local_script",
 ): Promise<BootstrapAdminResult> {
   const passwordHash = await hashPassword(params.password);
 
   const result = await executeInTransaction(db, async (tx) => {
-    // P7-C corrective pass §6: serialize the first-install "exactly one
-    // winner" invariant across BOTH adapters (HTTP Launchpad AND this CLI)
-    // via a transaction-scoped PostgreSQL advisory lock. RR-isolation +
-    // ON CONFLICT already protects correctness; this makes the domain
-    // explicit and removes reliance on retry semantics alone. The lock is
-    // auto-released at COMMIT/ROLLBACK. See BOOTSTRAP_ADVISORY_XACT_LOCK_KEY.
+    // Serialize the first-install "exactly one winner" invariant across BOTH
+    // adapters (HTTP Launchpad AND this CLI) via a transaction-scoped
+    // PostgreSQL advisory lock. RR-isolation + ON CONFLICT already protects
+    // correctness; this makes the domain explicit and removes reliance on
+    // retry semantics alone. The lock is auto-released at COMMIT/ROLLBACK.
+    // See BOOTSTRAP_ADVISORY_XACT_LOCK_KEY.
     await tx.execute(
       sql.raw(
         `SELECT pg_advisory_xact_lock(${BOOTSTRAP_ADVISORY_XACT_LOCK_KEY.toString()})`,
@@ -342,7 +354,7 @@ export async function bootstrapAdminOnFreshDb(
       "Admin",
     );
     if (activeAdminCount > 0 && !params.force) {
-      throw new Error(
+      throw new AdminAlreadyExistsError(
         `An active Admin already exists in this organization. ` +
           `Use --force to create an additional Admin.`,
       );
@@ -377,7 +389,7 @@ export async function bootstrapAdminOnFreshDb(
         metadata: {
           username: user.username,
           name: user.name,
-          source: "local_script",
+          source,
         },
       },
     );
@@ -457,7 +469,12 @@ async function main() {
     if (params.organizationDisplayName) {
       orgOptions.organizationDisplayName = params.organizationDisplayName;
     }
-    const result = await bootstrapAdminOnFreshDb(conn.db, params, orgOptions);
+    const result = await bootstrapAdminOnFreshDb(
+      conn.db,
+      params,
+      orgOptions,
+      "local_script",
+    );
     const orgVerb = result.organization.created ? "Created" : "Resolved";
     process.stdout.write(
       `Organization ${orgVerb}.\n` +

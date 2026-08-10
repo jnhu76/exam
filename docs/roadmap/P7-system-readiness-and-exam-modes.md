@@ -285,8 +285,10 @@ accepted ADR.
 >   archiving (`archive_mode=on`, non-overwriting `archive_command`), and
 >   PITR to an explicit `recovery_target_lsn`/`time`/`xid`.
 >
-> All four phases are backed by deterministic Docker drills
-> (`scripts/deployment/p7-c1-*`, `p7-c2-*`, `p7-c3-*`). Scope discipline:
+> All four phases are backed by deterministic Docker suites under
+> `tests/deployment/` (`compose-smoke.sh`, `launchpad-bootstrap.sh`,
+> `persistence-and-cold-restore.sh`, `logical-backup-restore.sh`,
+> `pitr.sh`). Scope discipline:
 > NO Admin restore button, NO retention engine, NO Desktop recoveryEpoch,
 > NO schema change for history-replacement marking (see ADR-016). A
 > future P7-E control plane (RPO/RTO profiles, retention automation,

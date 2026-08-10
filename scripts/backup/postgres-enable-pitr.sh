@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C corrective pass — canonical operator command to enable PostgreSQL
+# Canonical operator command to enable PostgreSQL
 # continuous WAL archiving (PITR capability).
 #
 # ONE-COMPOSE MODEL: this is the ONLY way to enable PITR. There is no
@@ -10,7 +10,7 @@
 # survives `docker compose down` / `docker compose up` / host relocation of
 # the same PGDATA. No separate configuration topology is needed.
 #
-# Contract (P7-C corrective pass §12-§16):
+# Contract:
 #   1. locate the canonical db container
 #   2. require PostgreSQL healthy
 #   3. make /wal-archive writable by the postgres user with RESTRICTIVE
@@ -114,10 +114,10 @@ wait_db
 
 # 3. Make /wal-archive writable by the postgres user with RESTRICTIVE
 #    permissions. WAL contains database contents and is sensitive. The
-#    postgres container user is uid 70 (postgres:18-bookworm) inside the
-#    image; chown the archive dir to that user and mode 0700. We run this
-#    inside the db container so the chown targets the same uid the postgres
-#    process runs as. NEVER chmod 777.
+#    archive directory must be owned by the postgres user inside the
+#    official image (the same user the postgres process runs as); chown by
+#    NAME and mode 0700. We run this inside the db container so the chown
+#    targets the same user the postgres process runs as. NEVER chmod 777.
 echo "--- prepare /wal-archive (restrictive permissions, postgres-owned) ---"
 docker exec "${DB_CONTAINER}" sh -c '
   set -e

@@ -1,6 +1,6 @@
 # Production Compose contract.
 #
-# ONE-COMPOSE MODEL (P7-C corrective pass): this file is the ONLY
+# ONE-COMPOSE MODEL: this file is the ONLY
 # production/operator Docker Compose entry point. There is no
 # docker-compose.pitr.yml / backup.yml / restore.yml / production.yml.
 # Optional PostgreSQL capabilities such as PITR are DATABASE configuration,
@@ -27,13 +27,13 @@
 #     bare `docker compose up` needs no Redis configuration. When the
 #     profile IS enabled it MUST be authenticated: the redis container
 #     refuses to start without REDIS_PASSWORD (startup guard) and the
-#     server runs with `requirepass` (P7 review P1-1 — Redis now owns the
+#     server runs with `requirepass` (Redis now owns the
 #     shared rate-limit state, so an open instance is not acceptable). The
 #     API reads REDIS_URL; when the profile is enabled the operator must set
 #     it to the authenticated URL, e.g. redis://:<REDIS_PASSWORD>@redis:6379.
 #     See docs/deployment/mvp-deployment-runbook.md §10.
 #
-# Portable persistence (P7-C1): authoritative state lives in operator-visible
+# Portable persistence: authoritative state lives in operator-visible
 # host bind mounts under ${EXAM_DATA_ROOT:-./data}. Containers are disposable;
 # the declared host data directory is not. See
 # docs/deployment/backup-and-recovery.md. The official PostgreSQL image owns
@@ -41,7 +41,7 @@
 # abstraction is simply ${EXAM_DATA_ROOT}/postgres — operators do not need to
 # understand the internal subdirectories. Scripts that launch this topology
 # for tests/smoke MUST set EXAM_DATA_ROOT to an isolated temp directory so they
-# never share the repo-root ./data/ (P7-C1 C1.3 isolation rule).
+# never share the repo-root ./data/ (isolation rule).
 services:
   app:
     build: .
@@ -71,7 +71,7 @@ services:
       # change business-time comparison semantics).
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
-      # P7-C corrective pass: forward the Launchpad first-install setup
+      # Forward the Launchpad first-install setup
       # token explicitly (NOT via a broad env_file, to keep explicit
       # environment ownership). Unset/empty disables Launchpad (the
       # bootstrap endpoint refuses) so a bare `docker compose up` still
@@ -113,11 +113,11 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
-      # P7-C1: authoritative state is an operator-visible host bind mount.
+      # Authoritative state is an operator-visible host bind mount.
       # Containers are disposable; this host directory is not. The official
       # postgres image owns its internal PGDATA layout under this path.
       - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
-      # P7-C corrective pass: the WAL archive mount is ALWAYS present on the
+      # The WAL archive mount is ALWAYS present on the
       # canonical db service, but it is inert by default (archive_mode stays
       # off until an operator enables PITR via
       # scripts/backup/postgres-enable-pitr.sh). The mount existing != PITR
@@ -146,7 +146,7 @@ services:
 
   # Redis is OPTIONAL in the implemented MVP (ADR-001 / P6-010), but it owns
   # the shared rate-limit state when enabled (P7) — so an ENABLED production
-  # Redis MUST be authenticated (P7 review P1-1; ADR-001 security
+  # Redis MUST be authenticated (ADR-001 security
   # considerations). The service is gated behind the `redis` profile: it is
   # NOT started by a bare `docker compose up`. The password check lives at
   # CONTAINER STARTUP (not Compose expansion), so the profile stays truly
@@ -176,14 +176,14 @@ services:
         exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     profiles: ["redis"]
     environment:
-      # P7 review P1: the empty default keeps Redis optional at Compose
+      # The empty default keeps Redis optional at Compose
       # parse time (a bare `docker compose up` needs no Redis
       # configuration); the startup guard above enforces the password when
       # the redis profile actually runs.
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
-      # P7-C1: Redis persistence is OPTIONAL for correctness. It holds only
+      # Redis persistence is OPTIONAL for correctness. It holds only
       # rate-limit counters; losing it resets operational history but never
       # affects PostgreSQL authority. Restoring Redis is NOT a condition for
       # restoring Exam authority (C1.2).
@@ -278,7 +278,7 @@ services:
       - exam-net
     restart: unless-stopped
 
-# P7-C1: no top-level named volumes. Authoritative state lives in
+# No top-level named volumes: authoritative state lives in
 # operator-visible host bind mounts under ${EXAM_DATA_ROOT:-./data}
 # (see the db and redis service volumes above).
 

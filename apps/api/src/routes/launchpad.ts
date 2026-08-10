@@ -6,6 +6,7 @@ import {
   LaunchpadBootstrapResponseSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
+import { AdminAlreadyExistsError } from "@exam/domain";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { bootstrapAdminOnFreshDb } from "../scripts/bootstrap-admin.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
@@ -160,15 +161,34 @@ const launchpadRoutes: FastifyPluginAsync = async (fastify) => {
       if (data.organizationDisplayName) {
         orgOptions.organizationDisplayName = data.organizationDisplayName;
       }
-      const result = await bootstrapAdminOnFreshDb(
-        fastify.db,
-        {
-          username: data.adminUsername,
-          password: data.adminPassword,
-          name: data.adminName,
-        },
-        orgOptions,
-      );
+      let result: Awaited<ReturnType<typeof bootstrapAdminOnFreshDb>>;
+      try {
+        result = await bootstrapAdminOnFreshDb(
+          fastify.db,
+          {
+            username: data.adminUsername,
+            password: data.adminPassword,
+            name: data.adminName,
+          },
+          orgOptions,
+          "launchpad",
+        );
+      } catch (err) {
+        // First-install race loser: another bootstrap (HTTP or CLI) won the
+        // advisory-lock serialization and committed the first Admin while
+        // this request was in flight. Both requests passed the freshness
+        // gate before the lock, so the loser discovers the winner inside
+        // the canonical mutation. This is an EXPECTED outcome — map it to
+        // the same 409 as the freshness gate, never an internal 500.
+        if (err instanceof AdminAlreadyExistsError) {
+          return reply
+            .code(409)
+            .send(
+              buildErrorResponse(request.id, "LAUNCHPAD_ALREADY_INITIALIZED"),
+            );
+        }
+        throw err;
+      }
 
       return {
         ok: true as const,

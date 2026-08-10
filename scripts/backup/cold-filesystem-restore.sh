@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P7-C1 cold-filesystem restore helper.
+# Cold-filesystem restore helper.
 #
 # Restores a cold-filesystem backup (produced by cold-filesystem-backup.sh)
 # into a fresh/isolated host data root, then lets the compatible PostgreSQL
@@ -79,7 +79,7 @@ if [ ! -d "${SRC_PG}" ]; then
   exit 2
 fi
 # Validate the backup still looks like a PGDATA (helper container; the files
-# may be owned by uid 999 and not host-readable).
+# are owned by the container postgres user and may not be host-readable).
 if ! docker run --rm -v "${SRC_PG}:/from:ro" alpine:latest \
   sh -c 'find /from -maxdepth 3 -name PG_VERSION -print -quit 2>/dev/null | grep -q .'; then
   echo "FAIL: no PG_VERSION found under ${SRC_PG}; does not look like a PGDATA backup." >&2
@@ -122,7 +122,8 @@ DEST_PG="${DEST_ROOT}/postgres"
 mkdir -p "${DEST_PG}"
 
 # Container-assisted copy preserves ownership/mode/symlinks (the PGDATA files
-# are owned by uid 999). Equivalent to `rsync -aHAX` or `tar | tar` as root.
+# are owned by the container postgres user). Equivalent to `rsync -aHAX` or
+# `tar | tar` as root.
 echo "Copying COMPLETE postgres tree from backup to destination..."
 docker run --rm \
   -v "${SRC_PG}:/from:ro" \
