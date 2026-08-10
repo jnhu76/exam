@@ -324,7 +324,7 @@ audit findings. It does NOT erase the history above; §1–§15 remain the
 rebuild record.
 
 - **Previous head:** `0ebdf6eb` (`docs(p7-c): close portable backup and recovery program`)
-- **Corrective final head:** `f0016c2e` (`docs(p7-c): align backup and recovery operator contract`)
+- **Corrective final head:** `49b04567` (`docs(p7-c): align backup and recovery operator contract`)
 - **Audit source:** `docs/audits/P7-C-REBUILD-ADVERSARIAL-PG-BACKUP-CONFIG-AUDIT.md`
 
 ### What changed and why
