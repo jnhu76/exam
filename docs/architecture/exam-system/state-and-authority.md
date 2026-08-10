@@ -327,6 +327,15 @@ Additional operational notification types remain P5-N2+ scope.
 
 ## 6. Policy Fields
 
+> **P7-M1 (policy authority + validation):** exam policy now has one canonical
+> cross-field validator (`validateExamPolicy` / `assertExamPolicyValid` in
+> `@exam/exam-engine`), run on create, draft-update, and publish (publish
+> revalidates the whole resolved policy as the freeze/acceptance gate). Policy
+> freezes through **two** mechanisms — true snapshots (question /
+> interruption / deadline / submitted answers) and published-row immutability
+> (result mode / retake / score strategy / passing score / control flags).
+> See `docs/audits/P7-M1-EXAM-POLICY-AUTHORITY-AND-VALIDATION.md`.
+
 ### 6.1 Result Publication Policy
 
 | Field | Type | Effect |
