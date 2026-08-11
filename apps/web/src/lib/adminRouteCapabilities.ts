@@ -133,6 +133,21 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     label: "exam-scores",
   },
   {
+    pattern: "exam-profiles",
+    capability: Permission.ExamView,
+    label: "exam-profiles",
+  },
+  {
+    pattern: "exam-profiles/new",
+    capability: Permission.ExamCreate,
+    label: "exam-profile-create",
+  },
+  {
+    pattern: "exam-profiles/:id/edit",
+    capability: Permission.ExamUpdate,
+    label: "exam-profile-edit",
+  },
+  {
     pattern: "exams/:id/proctor",
     capability: Permission.ExamRoomView,
     label: "exam-proctor-dashboard",

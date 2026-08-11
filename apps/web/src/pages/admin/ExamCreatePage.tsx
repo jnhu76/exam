@@ -160,6 +160,9 @@ export function ExamCreatePage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
+  // Auto-calc totalScore from the selected questions (mirrors the legacy
+  // ExamConfigForm behavior); the user may switch to manual entry.
+  const [manualTotalScore, setManualTotalScore] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -314,6 +317,21 @@ export function ExamCreatePage() {
     (q) => !state.questionIds.includes(q.id),
   );
   const computedTotal = selectedQuestions.reduce((sum, q) => sum + q.score, 0);
+  const hasQuestions = state.questionIds.length > 0;
+
+  // Auto-calc totalScore from the selected questions whenever the selection
+  // changes (mirrors the legacy ExamConfigForm behavior). The publish gate
+  // requires totalScore === sum(question scores); auto-calc prevents
+  // avoidable publish-time 400s. The user may switch to manual entry.
+  useEffect(() => {
+    if (hasQuestions && !manualTotalScore && computedTotal > 0) {
+      setState((s) =>
+        s.totalScore === computedTotal
+          ? s
+          : { ...s, totalScore: computedTotal },
+      );
+    }
+  }, [computedTotal, hasQuestions, manualTotalScore]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
@@ -533,14 +551,43 @@ export function ExamCreatePage() {
           <FormSection title={t("admin.examWizard.questions.totalScore")}>
             <FieldRow>
               <Field>
-                <Label htmlFor="wiz-totalScore" data-testid="totalScore-label">
-                  {t("admin.examWizard.questions.totalScore")}
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="wiz-totalScore">
+                    {t("admin.examWizard.questions.totalScore")}
+                  </Label>
+                  {hasQuestions && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      onClick={() => {
+                        if (manualTotalScore) {
+                          setManualTotalScore(false);
+                          if (computedTotal > 0) {
+                            setState((s) => ({
+                              ...s,
+                              totalScore: computedTotal,
+                            }));
+                          }
+                        } else {
+                          setManualTotalScore(true);
+                        }
+                      }}
+                    >
+                      {manualTotalScore
+                        ? t("admin.examWizard.questions.autoCalc")
+                        : t("admin.examWizard.questions.manualInput")}
+                    </Button>
+                  )}
+                </div>
                 <Input
                   id="wiz-totalScore"
                   type="number"
                   min={1}
                   value={state.totalScore}
+                  readOnly={hasQuestions && !manualTotalScore}
+                  aria-label={t("admin.examWizard.questions.totalScore")}
                   onChange={(e) =>
                     setState((s) => ({
                       ...s,
@@ -548,7 +595,15 @@ export function ExamCreatePage() {
                     }))
                   }
                 />
-                {selectedQuestions.length > 0 &&
+                {hasQuestions && !manualTotalScore && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("admin.examWizard.questions.autoCalcLabel", {
+                      score: computedTotal,
+                    })}
+                  </p>
+                )}
+                {hasQuestions &&
+                  manualTotalScore &&
                   state.totalScore !== computedTotal && (
                     <p className="text-xs text-destructive">
                       {t("admin.examWizard.questions.scoreMismatch", {

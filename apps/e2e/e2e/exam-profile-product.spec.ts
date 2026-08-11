@@ -21,10 +21,13 @@ test.describe("P7-M exam profile management product path", () => {
     // Navigate to the profile list via the sidebar nav.
     await page.getByRole("link", { name: "策略模板" }).click();
     await expect(page).toHaveURL(/\/admin\/exam-profiles(?:$|[/?#])/);
-    await expect(page.getByRole("heading", { name: "策略模板" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "策略模板", exact: true }),
+    ).toBeVisible();
 
-    // Open the create editor.
-    await page.getByRole("button", { name: "新建模板" }).click();
+    // Open the create editor. The button appears both in the header actions
+    // and in the empty-state action; either one leads to the editor.
+    await page.getByRole("button", { name: "新建模板" }).first().click();
     await expect(page).toHaveURL(/\/admin\/exam-profiles\/new(?:$|[/?#])/);
 
     const profileName = `E2E模板-${Date.now()}`;
