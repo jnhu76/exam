@@ -1,6 +1,6 @@
 # P7-M Configurable Exam Modes Closeout
 
-Status: **READY FOR HUMAN REVIEW**
+Status: **FUNCTIONALLY COMPLETE — READY FOR MULTIMODAL VISUAL REVIEW**
 
 Baseline: `5641221745a3f03472d4d3c41c230cbdbf87eb07` (origin/master, post-PR-#278 M2 merge)
 Branch: `feat/p7-m-exam-modes-product-closeout`
@@ -10,8 +10,11 @@ Closeout date: 2026-08-11
 
 ## 1. Executive verdict
 
-The P7-M configurable-exam-modes product is **COMPLETE and TRUTHFUL** for the
-currently supported engine semantics.
+The P7-M configurable-exam-modes product is **FUNCTIONALLY COMPLETE** for the
+currently supported engine semantics. Per the agreed two-round closeout
+protocol, the **multimodal visual review round is still pending** — visual
+hierarchy / spacing / density / responsive / usability will be inspected
+page-by-page with a browser before this closeout may be marked CLOSED.
 
 - Profile management (list / create / edit / delete) is a real Admin/Teacher
   surface under the Exam-authoring domain, not a generic settings panel.
@@ -30,7 +33,7 @@ currently supported engine semantics.
 This closeout does **NOT** claim that every original roadmap wishlist
 dimension (timed_sync, queue admission, proctoring, lockdown, …) exists. It
 claims that the configurable-mode **mechanism and supported product
-experience** are complete and honest.
+experience** are functionally complete and honest.
 
 ## 2. Baseline
 
@@ -165,7 +168,7 @@ and/or the profile editor):
 
 | Starter | Promise to user | Profile values | Required runtime capability | Implemented? | Ship? |
 | --- | --- | --- | --- | --- | --- |
-| `basic_quiz` (基础测验) | single attempt, immediate publish, strict timing | duration 30, retake unlimited, immediate, strict interruption, no caps | timed_window + grading + immediate publication + strict interruption | ✅ | ✅ |
+| `basic_quiz` (基础测验) | single attempt, immediate publish, strict timing | duration 30, **max_attempts 1** (single attempt), immediate, strict interruption, no caps | timed_window + grading + immediate publication + strict interruption | ✅ | ✅ |
 | `standard_online` (标准在线考试) | retake allowed, highest score, after-grading publish, bounded grace | duration 60, late-start 15, min-submit 10, max_attempts 2, highest, after_grading, bounded_grace (300s/600s) | timed_window + gates + retake + grading + after-grading publication + ADR-013 restore | ✅ | ✅ |
 | `controlled` | queue admission, randomization, proctor requirement, synchronized timing | — | queue state-machine, random selection, proctor admission, timed_sync | ❌ | **DEFERRED** |
 | `strict` | device binding, managed client, lockdown, strong identity, continuous monitoring | — | device/session binding, managed desktop, IP/lockdown, identity, proctoring | ❌ | **DEFERRED** |
@@ -242,11 +245,22 @@ complete.
 
 - Per-step client validation gates navigation (title/course required on step
   1; passing ≤ total on step 3; schedule required + ordered on step 4) with
-  inline `FieldError`s — convenience only.
+  inline `FieldError`s — convenience only. Stepper FUTURE steps are disabled:
+  forward progress requires the 下一步 flow, so validation cannot be
+  bypassed by clicking a later step (review P1-4).
+- The payload builder FAILS CLOSED when the schedule is missing — it never
+  invents "now" / "now + 24h" times the user did not choose (review P1-4).
 - Server validation errors with `details.fields[]` are mapped to the owning
   step via `stepForField` (title/courseId/profileId → 1; policy fields → 2;
   questionIds/totalScore/passingScore → 3; openAt/closeAt → 4; fallback → 5)
-  and shown per-field where applicable, plus an `InlineErrorBanner`.
+  and shown per-field where applicable (step 4 renders `time`/`openAt`/
+  `closeAt`), plus an `InlineErrorBanner`. The routing is proven by a test
+  that walks a locally-valid schedule to step 5, rejects the POST with a
+  server `closeAt` field error, and asserts the UI returns to step 4 with the
+  SERVER's inline message (review P2-3 — the previous test never reached
+  `apiPost`).
+- Re-validating a step drops that step's stale errors, so a fixed field never
+  keeps a ghost error (review P2-2).
 - M1 canonical validator remains the only semantic authority; the frontend
   performs no policy-conflict evaluation of its own.
 
@@ -262,8 +276,10 @@ complete.
 - No color-only status communication: provenance badges use text labels;
   validation uses text.
 - Responsive: step nav wraps at narrow widths; two-column `FieldRow` grids
-  stack (`sm:grid-cols-2` → single column); action rows wrap. Tested at
-  1280/1440 desktop widths; no horizontal scroll for normal forms.
+  stack (`sm:grid-cols-2` → single column); action rows wrap. Initial
+  implementation check at 1280/1440 desktop widths showed no horizontal
+  scroll for normal forms — final visual/spacing/density verification is
+  part of the pending multimodal visual review round.
 - Existing UI authority reused throughout (`PageHeader`, `PageSection`,
   `FormSection`, `FieldGroup`/`Field`/`FieldRow`, `FieldError`,
   `InlineErrorBanner`, `EmptyState`, `ErrorState`, `LoadingState`,
@@ -294,7 +310,9 @@ New specs (run via `bash scripts/e2e/run-wsl.sh` or `pnpm e2e:docker`):
   confirm wording; plus a starter-recipe prefill path.
 - `apps/e2e/e2e/exam-wizard-product.spec.ts` — profile-based exam create
   with an explicit override (duration 90 over profile 60; POST carries
-  profileId + override only); no-profile exam create (compatibility);
+  profileId + override only); profile duration INHERITANCE without override
+  (POST omits durationMinutes; materialized exam carries the profile's 90,
+  not the code default 60); no-profile exam create (compatibility);
   schedule-conflict validation shown inline at step 4 (not a generic
   banner).
 - `apps/e2e/e2e/teacher-product-path.spec.ts` — updated to drive the new
@@ -304,11 +322,35 @@ New specs (run via `bash scripts/e2e/run-wsl.sh` or `pnpm e2e:docker`):
 ## 16. P0/P1/P2/P3
 
 - **P0:** 0.
-- **P1:** 0. (The wizard never sends `controlFlags.showResultImmediately`
-  when a profile supplies `resultPublicationMode` — M2 P2-1 mitigated.)
+- **P1:** 0 open. The PR-head review round (head `9d4c6a6d`) raised 4 P1s —
+  all fixed on this branch:
+  1. Profile duration inheritance broken by the unconditional
+     `durationMinutes = 60` fallback → the builder now OMITS `durationMinutes`
+     on the profile path unless explicitly overridden (explicit > profile >
+     default); unit proof in `wizardState.test.ts` + E2E inheritance spec.
+  2. `basic_quiz` promised "single attempt" but configured `unlimited`
+     retakes (the engine ignores `maxAttempts` under `unlimited`) → recipe now
+     `max_attempts` + `maxAttempts: 1`; the truthfulness test asserts both.
+  3. `bounded_grace → strict` could not override a profile's grace caps →
+     the wizard writes policy + both caps (`null`) ATOMICALLY via
+     `setInterruptionPolicyOverride` (mirrors ExamProfileEditPage), so the
+     M1 `INVALID_INTERRUPTION_POLICY` case cannot occur.
+  4. Stepper bypassed forward validation and the payload silently invented
+     schedule times → future steps are disabled (下一步 is the only forward
+     path, every step gate runs) and `buildCreateExamPayload` fails closed on
+     a missing schedule.
+
+  (Standing P1 mitigation unchanged: the wizard never sends
+  `controlFlags.showResultImmediately` when a profile supplies
+  `resultPublicationMode` — M2 P2-1.)
 - **P2:** 0 new. (Latent control flags remain hidden from the new product
   entry; legacy edit UI still exposes them for compatibility — recorded, not
-  absorbed.)
+  absorbed.) Review-round P2s also fixed: duplicated frontend code defaults
+  (single `WIZARD_CODE_DEFAULTS` authority), ghost field errors (per-step
+  clearing on re-validation), the fake server-routing test (now really
+  exercises `stepForField` against a rejected POST), and the profile editor's
+  copy-pasted "考试时长" section title over name/description (new
+  `sections.basic` = "模板信息").
 - **P3:** 0 new.
 
 ## 17. Deferred prerequisites outside P7-M
@@ -339,11 +381,11 @@ feature exists".
 | Latent control flags not marketed as enforcement | ✅ (hidden from wizard) |
 | No fake Strict profile | ✅ (deferred, not shipped) |
 | No fake Controlled profile | ✅ (deferred, not shipped) |
-| Every shipped starter promise is real | ✅ (truthfulness guard test) |
-| Responsive enough for supported widths | ✅ |
-| Keyboard/accessibility basics pass | ✅ |
+| Every shipped starter promise is real | ✅ (truthfulness guard test asserts `basic_quiz` = max_attempts 1) |
+| Responsive enough for supported widths | ⏳ implemented; final visual verification pending multimodal review round |
+| Keyboard/accessibility basics pass | ⏳ implemented (stepper/aria/FieldError); final visual verification pending multimodal review round |
 | Existing UI authority reused | ✅ |
-| Frontend behavior tests | ✅ (28 new frontend tests) |
+| Frontend behavior tests | ✅ (40 new frontend tests incl. wizard-state payload proofs) |
 | API/integration tests | ✅ (existing M1/M2 suites unchanged, green) |
 | Browser E2E | ✅ (3 specs covering profile CRUD, wizard paths, validation) |
 | Static gates | ✅ (lint:copy, lint:arch, ESLint incl. exam-ui, typecheck, OpenAPI check) |
@@ -351,4 +393,5 @@ feature exists".
 | Build | ✅ (`pnpm build`) |
 | CI | ✅ (PR-head CI inspected) |
 
-**P7-M — Configurable Exam Modes ✅ CLOSED**
+**P7-M — Configurable Exam Modes — FUNCTIONALLY COMPLETE; visual product closeout pending**
+(CLOSED only after the multimodal visual review round passes.)

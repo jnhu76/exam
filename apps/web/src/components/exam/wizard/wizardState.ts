@@ -91,6 +91,31 @@ export function setOverride(
 }
 
 /**
+ * Set the interruption policy override ATOMICALLY. Leaving `bounded_grace`
+ * (strict / operator_incident) also writes explicit `null` for both grace
+ * caps, so profile-supplied caps cannot survive into a policy that forbids
+ * them (ADR-013 / M1 INVALID_INTERRUPTION_POLICY). This mirrors the
+ * ExamProfileEditPage semantics for the same transition.
+ */
+export function setInterruptionPolicyOverride(
+  state: WizardState,
+  value: ExamProfilePolicyDefaults["interruptionTimePolicy"],
+): WizardState {
+  if (value === "bounded_grace") {
+    return setOverride(state, "interruptionTimePolicy", value);
+  }
+  return {
+    ...state,
+    overrides: {
+      ...state.overrides,
+      interruptionTimePolicy: value,
+      interruptionGracePerIncidentSeconds: null,
+      interruptionGracePerAttemptSeconds: null,
+    },
+  };
+}
+
+/**
  * Remove an explicit override so the field inherits the selected profile (or
  * code default) again. This is the "恢复模板值" affordance.
  */
@@ -130,6 +155,14 @@ export function goToStep(state: WizardState, step: number): WizardState {
  * Omitted overrides are NOT sent, so the backend applies the profile default.
  * This is the wire-faithful subset — the server re-resolves canonically.
  *
+ * `durationMinutes` follows the same wire rule: an explicit override is always
+ * sent; with a profile and no override it is OMITTED (backend applies the
+ * profile value); only the no-profile path sends the code default. The code
+ * default must never overwrite a profile value (explicit > profile > default).
+ *
+ * The schedule is a required user decision — missing openAt/closeAt FAILS
+ * CLOSED instead of silently inventing "now" / "now + 24h" authority.
+ *
  * Per M2 P2-1: when a profile supplies resultPublicationMode, the wizard does
  * NOT send controlFlags.showResultImmediately (it sends no controlFlags at
  * all — control flags are not part of the supported policy surface).
@@ -137,27 +170,31 @@ export function goToStep(state: WizardState, step: number): WizardState {
 export function buildCreateExamPayload(
   state: WizardState,
 ): Record<string, unknown> {
+  if (!state.openAt || !state.closeAt) {
+    throw new Error(
+      "Exam schedule (openAt/closeAt) is required before creating an exam",
+    );
+  }
   const payload: Record<string, unknown> = {
     title: state.title.trim(),
     description: state.description,
     courseId: state.courseId,
     timingMode: "timed_window",
     questionSelectionMode: "manual",
-    durationMinutes:
-      resolveOverrideOrPlaceholder(state, "durationMinutes") ??
-      WIZARD_CODE_DEFAULTS.durationMinutes,
-    openAt: state.openAt
-      ? new Date(state.openAt).toISOString()
-      : new Date().toISOString(),
-    closeAt: state.closeAt
-      ? new Date(state.closeAt).toISOString()
-      : new Date(Date.now() + 86400000).toISOString(),
+    openAt: new Date(state.openAt).toISOString(),
+    closeAt: new Date(state.closeAt).toISOString(),
     passingScore: state.passingScore,
     totalScore: state.totalScore,
     questionIds: state.questionIds,
   };
   if (state.profileId) {
     payload.profileId = state.profileId;
+  }
+  const duration = resolveOverrideOrPlaceholder(state, "durationMinutes");
+  if (duration !== undefined) {
+    payload.durationMinutes = duration;
+  } else if (!state.profileId) {
+    payload.durationMinutes = WIZARD_CODE_DEFAULTS.durationMinutes;
   }
   // Send ONLY explicit overrides (own keys), preserving null. Absent keys are
   // omitted so the backend applies the profile (or code default).

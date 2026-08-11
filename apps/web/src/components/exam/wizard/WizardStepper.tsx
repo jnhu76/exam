@@ -15,6 +15,10 @@ const STEP_KEYS = [
  * Accessible step indicator for the exam-creation wizard. Steps are buttons
  * (keyboard-reachable); the current step carries aria-current="step". This is
  * a plain composition over Button — NOT a generic stepper framework.
+ *
+ * Forward validation must not be bypassable: FUTURE steps are disabled —
+ * reaching them requires the 下一步 flow, which runs each step's validation
+ * gate. Past/current steps stay clickable so the user can go back and edit.
  */
 export function WizardStepper({
   current,
@@ -31,12 +35,14 @@ export function WizardStepper({
           const step = (idx + 1) as WizardStep;
           const isCurrent = step === current;
           const isPast = step < current;
+          const isFuture = step > current;
           return (
             <li key={key} className="flex items-center gap-2">
               <Button
                 type="button"
                 variant={isCurrent ? "default" : "outline"}
                 size="sm"
+                disabled={isFuture}
                 aria-current={isCurrent ? "step" : undefined}
                 onClick={() => onNavigate(step)}
                 className={cn(isPast && !isCurrent && "opacity-70")}

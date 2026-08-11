@@ -59,7 +59,9 @@ export const STARTER_PROFILE_RECIPES: readonly StarterProfileRecipe[] = [
       durationMinutes: 30,
       latestStartOffsetMinutes: null,
       minSubmitAfterStartMinutes: null,
-      retakePolicy: "unlimited",
+      // "Single attempt" is an honest promise only as max_attempts + 1:
+      // under `unlimited` the engine ignores maxAttempts and retakes freely.
+      retakePolicy: "max_attempts",
       maxAttempts: 1,
       scoreStrategy: "highest",
       resultPublicationMode: "immediate",

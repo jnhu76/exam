@@ -590,7 +590,7 @@ export function ExamProfileEditPage() {
 
       <Separator />
 
-      <FormSection title={t("admin.examProfilePages.sections.duration")}>
+      <FormSection title={t("admin.examProfilePages.sections.basic")}>
         <FieldGroup>
           <Field>
             <Label htmlFor="name">

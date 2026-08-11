@@ -1020,6 +1020,7 @@ const zhCN = {
         "删除此模板不会影响已使用它创建的考试。已创建考试的具体设置保持不变。",
       deleteConfirmAction: "确认删除",
       sections: {
+        basic: "模板信息",
         duration: "考试时长",
         entrySubmit: "进入与提交限制",
         retake: "重考策略",

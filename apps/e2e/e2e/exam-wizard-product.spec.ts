@@ -23,6 +23,7 @@ async function setupFixtures(
   request: APIRequestContext,
   token: string,
   unique: string,
+  opts: { durationMinutes?: number } = {},
 ): Promise<{ courseId: string; questionId: string; profileId: string }> {
   const courseRes = await request.post(`${BASE_URL}/api/courses`, {
     headers: { Cookie: `auth-token=${token}` },
@@ -49,7 +50,7 @@ async function setupFixtures(
     data: {
       name: `Wizard模板-${unique}`,
       description: "e2e",
-      durationMinutes: 60,
+      durationMinutes: opts.durationMinutes ?? 60,
       latestStartOffsetMinutes: 15,
       minSubmitAfterStartMinutes: 10,
       retakePolicy: "max_attempts",
@@ -161,6 +162,72 @@ test.describe("P7-M exam creation wizard product path", () => {
     // Sanity: fixture ids are real.
     expect(courseId).toBeTruthy();
     expect(questionId).toBeTruthy();
+    expect(profileId).toBeTruthy();
+  });
+
+  test("profile duration INHERITS when the user does not override it", async ({
+    page,
+    request,
+  }) => {
+    // P1-1 proof: the wizard must NOT smuggle the code default (60) into the
+    // POST when a profile supplies the duration. Profile = 90 (≠ code default
+    // 60); user never touches the duration field.
+    const token = await adminApiToken(request);
+    const unique = `inh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const { courseId, profileId } = await setupFixtures(
+      request,
+      token,
+      unique,
+      {
+        durationMinutes: 90,
+      },
+    );
+
+    await loginAsAdmin(page);
+    await page.goto(`${BASE_URL}/admin/exams/new`);
+
+    const examTitle = `Wizard继承-${unique}`;
+    await page.getByPlaceholder("请输入考试名称").fill(examTitle);
+    await page.getByRole("combobox", { name: "使用现有模板" }).click();
+    await page.getByRole("option", { name: `Wizard模板-${unique}` }).click();
+
+    // Walk to step 4 WITHOUT touching the duration field (no override).
+    await page.getByRole("button", { name: /下一步/ }).click();
+    await page.getByRole("button", { name: /下一步/ }).click();
+    await page.getByRole("button", { name: /下一步/ }).click();
+    await page.getByLabel("开始时间").fill("2026-09-01T09:00");
+    await page.getByLabel("结束时间").fill("2026-09-01T11:00");
+    await page.getByRole("button", { name: /下一步/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "创建前检查" }),
+    ).toBeVisible();
+
+    const createResp = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/exams$/.test(new URL(res.url()).pathname),
+    );
+    await page.getByRole("button", { name: "创建草稿" }).click();
+    const created = await createResp;
+    expect(created.ok(), `create exam: ${created.status()}`).toBe(true);
+
+    // The POST MUST omit durationMinutes (explicit > profile > default).
+    const body = (await created.request().postDataJSON()) as {
+      durationMinutes?: number;
+    };
+    expect(body).not.toHaveProperty("durationMinutes");
+
+    // The materialized Exam carries the PROFILE duration (90), not the code
+    // default (60).
+    const examId = ((await created.json()) as { id: string }).id;
+    const examDetailRes = await request.get(`${BASE_URL}/api/exams/${examId}`, {
+      headers: { Cookie: `auth-token=${token}` },
+    });
+    const examDetail = (await examDetailRes.json()) as {
+      durationMinutes: number;
+    };
+    expect(examDetail.durationMinutes).toBe(90);
+    expect(courseId).toBeTruthy();
     expect(profileId).toBeTruthy();
   });
 

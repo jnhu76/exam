@@ -366,41 +366,127 @@ describe("ExamCreatePage wizard — profile path", () => {
 });
 
 describe("ExamCreatePage wizard — validation routing", () => {
-  it("routes a server schedule error (openAt/closeAt) to step 4", async () => {
+  it("routes a server schedule error (openAt/closeAt) to step 4 with the inline error", async () => {
     const user = userEvent.setup();
+    const serverMsg = "服务器校验：结束时间无效";
     apiPost.mockRejectedValueOnce(
-      Object.assign(new Error("结束时间必须晚于开始时间"), {
+      Object.assign(new Error(serverMsg), {
         details: {
-          fields: [
-            {
-              field: "closeAt",
-              message: "结束时间必须晚于开始时间",
-              code: "X",
-            },
-          ],
+          fields: [{ field: "closeAt", message: serverMsg, code: "X" }],
         },
       }),
     );
     renderPage();
     await screen.findByText("创建考试");
     fillTitle("Bad Schedule");
-    // Walk to step 5 and submit.
-    for (let i = 0; i < 4; i++) {
+    // Walk to step 4 with a LOCALLY VALID schedule, so the local gate passes
+    // and the POST is actually reached (this test proves server routing).
+    for (let i = 0; i < 3; i++) {
       await user.click(screen.getByRole("button", { name: /下一步/ }));
-      // Step 4 needs schedule to pass its own gate.
-      if (i === 2) {
-        fireEvent.change(screen.getByLabelText("开始时间"), {
-          target: { value: "2026-09-01T11:00" },
-        });
-        fireEvent.change(screen.getByLabelText("结束时间"), {
-          target: { value: "2026-09-01T09:00" },
-        });
-      }
     }
-    // The per-step gate on step 4 will block; that's expected — we're testing
-    // that the inline field error renders (validation is local here).
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-09-01T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-09-01T11:00" },
+    });
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    // On step 5 (review). Submit; the server rejects with a closeAt field error.
+    await screen.findByText("创建前检查");
+    await user.click(screen.getByRole("button", { name: "创建草稿" }));
+    // The UI routes back to step 4 and renders the SERVER's inline field error
+    // (distinct copy — it can only have come from the mocked rejection).
+    expect(await screen.findByText(serverMsg)).toBeInTheDocument();
+    expect(screen.getByLabelText("开始时间")).toBeInTheDocument();
+    // Step 5's review heading is gone (queryByRole — getByRole throws on absence).
     expect(
-      await screen.findByText("结束时间必须晚于开始时间"),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "创建前检查" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stepper future steps are disabled — forward validation cannot be bypassed", async () => {
+    renderPage();
+    await screen.findByText("创建考试");
+    // On step 1, steps 2–5 are locked; only 下一步 advances.
+    // (Accessible names concatenate the step number + label with no space.)
+    expect(screen.getByRole("button", { name: /5检查并创建/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /2考试策略/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /1基本信息/ })).toBeEnabled();
+  });
+
+  it("fixed validation errors do not linger as ghosts after re-validation", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("创建考试");
+    // Trigger the title-required error.
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    expect(await screen.findByText("请输入考试名称")).toBeInTheDocument();
+    // Fix the title and advance — the error must be gone (we land on step 2).
+    fillTitle("Fixed Title");
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    await screen.findByLabelText("考试时长（分钟）");
+    expect(screen.queryByText("请输入考试名称")).not.toBeInTheDocument();
+  });
+});
+
+describe("ExamCreatePage wizard — interruption policy override semantics", () => {
+  it("switching a bounded_grace profile to strict atomically nulls both grace caps in the POST", async () => {
+    const profile: ExamProfileDTO = {
+      id: "p-grace",
+      organizationId: "00000000-0000-0000-0000-000000000001",
+      name: "宽限模板",
+      description: "",
+      durationMinutes: 90,
+      latestStartOffsetMinutes: null,
+      minSubmitAfterStartMinutes: null,
+      retakePolicy: "unlimited",
+      maxAttempts: 1,
+      scoreStrategy: "highest",
+      resultPublicationMode: "immediate",
+      interruptionTimePolicy: "bounded_grace",
+      interruptionGracePerIncidentSeconds: 300,
+      interruptionGracePerAttemptSeconds: 600,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-10T00:00:00.000Z",
+    };
+    apiGet.mockImplementation((path: string) => {
+      if (path.includes("/api/exam-profiles")) return [profile];
+      return defaultApiGet(path);
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("创建考试");
+    fillTitle("Strict Exam");
+    await user.click(screen.getByRole("combobox", { name: "使用现有模板" }));
+    await user.click(await screen.findByRole("option", { name: "宽限模板" }));
+    // Step 1 → 2.
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    // Switch policy from bounded_grace to strict (不补时).
+    await user.click(screen.getByRole("combobox", { name: "中断恢复策略" }));
+    await user.click(await screen.findByRole("option", { name: "不补时" }));
+    // Walk to review and create.
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByRole("button", { name: /下一步/ }));
+    }
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-09-01T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-09-01T11:00" },
+    });
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    await screen.findByText("创建前检查");
+    await user.click(screen.getByRole("button", { name: "创建草稿" }));
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/exams",
+        expect.objectContaining({
+          profileId: "p-grace",
+          interruptionTimePolicy: "strict",
+          interruptionGracePerIncidentSeconds: null,
+          interruptionGracePerAttemptSeconds: null,
+        }),
+      );
+    });
   });
 });

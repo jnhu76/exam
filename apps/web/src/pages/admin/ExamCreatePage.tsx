@@ -58,6 +58,7 @@ import {
   initialWizardState,
   selectProfile,
   setOverride,
+  setInterruptionPolicyOverride,
   clearOverride,
   WIZARD_CODE_DEFAULTS,
   WIZARD_TOTAL_STEPS,
@@ -230,7 +231,18 @@ export function ExamCreatePage() {
   const onSetOverride = (
     field: keyof ExamProfilePolicyDefaults,
     value: ExamProfilePolicyDefaults[keyof ExamProfilePolicyDefaults] | null,
-  ) => setState((s) => setOverride(s, field, value));
+  ) =>
+    setState((s) =>
+      field === "interruptionTimePolicy"
+        ? // Atomic policy write: leaving bounded_grace also nulls both grace
+          // caps, so profile-supplied caps can't leak into strict /
+          // operator_incident (ADR-013). Mirrors ExamProfileEditPage.
+          setInterruptionPolicyOverride(
+            s,
+            value as ExamProfilePolicyDefaults["interruptionTimePolicy"],
+          )
+        : setOverride(s, field, value),
+    );
   const onClearOverride = (field: keyof ExamProfilePolicyDefaults) =>
     setState((s) => clearOverride(s, field));
 
@@ -249,6 +261,30 @@ export function ExamCreatePage() {
   }
 
   // ── per-step validation ──
+  /**
+   * Error keys each step owns: local validation keys plus the server field
+   * names `stepForField` may route here. Used to drop stale errors when a step
+   * is re-validated, so a fixed field never keeps a ghost error.
+   */
+  const STEP_FIELD_KEYS: Record<number, string[]> = {
+    1: ["title", "courseId", "profileId"],
+    2: [
+      "durationMinutes",
+      "latestStartOffsetMinutes",
+      "minSubmitAfterStartMinutes",
+      "retakePolicy",
+      "maxAttempts",
+      "scoreStrategy",
+      "resultPublicationMode",
+      "interruptionTimePolicy",
+      "interruptionGracePerIncidentSeconds",
+      "interruptionGracePerAttemptSeconds",
+    ],
+    3: ["score", "questionIds", "totalScore", "passingScore"],
+    4: ["time", "openAt", "closeAt"],
+    5: [],
+  };
+
   function validateCurrentStep(): boolean {
     const errors: Record<string, string> = {};
     if (state.step === 1) {
@@ -267,7 +303,13 @@ export function ExamCreatePage() {
       else if (new Date(state.closeAt) <= new Date(state.openAt))
         errors.time = t("admin.examWizard.validation.timeInvalid");
     }
-    setFieldErrors((prev) => ({ ...prev, ...errors }));
+    // Drop this step's stale errors (local + server field names) before
+    // merging the fresh result, so a fixed field never keeps a ghost error.
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const key of STEP_FIELD_KEYS[state.step] ?? []) delete next[key];
+      return { ...next, ...errors };
+    });
     return Object.keys(errors).length === 0;
   }
 
@@ -669,7 +711,10 @@ export function ExamCreatePage() {
               />
             </Field>
           </FieldRow>
-          {fieldErrors.time && <FieldError>{fieldErrors.time}</FieldError>}
+          {/* Local validation key + server-routed field names both render. */}
+          <FieldError>{fieldErrors.time}</FieldError>
+          <FieldError>{fieldErrors.openAt}</FieldError>
+          <FieldError>{fieldErrors.closeAt}</FieldError>
         </FormSection>
       )}
 

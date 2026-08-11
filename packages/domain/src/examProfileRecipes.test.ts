@@ -140,7 +140,10 @@ describe("STARTER_PROFILE_RECIPES — truthfulness guard", () => {
   it("basic_quiz is the simplest honest profile (single attempt, strict, no caps)", () => {
     const basic = findStarterRecipe("basic_quiz");
     expect(basic).not.toBeNull();
-    expect(basic!.defaults.retakePolicy).toBe("unlimited");
+    // "Single attempt" must be max_attempts + 1 — under `unlimited` the
+    // engine ignores maxAttempts and retakes are free (truthfulness guard).
+    expect(basic!.defaults.retakePolicy).toBe("max_attempts");
+    expect(basic!.defaults.maxAttempts).toBe(1);
     expect(basic!.defaults.interruptionTimePolicy).toBe("strict");
     expect(basic!.defaults.interruptionGracePerIncidentSeconds).toBeNull();
     expect(basic!.defaults.interruptionGracePerAttemptSeconds).toBeNull();

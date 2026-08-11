@@ -627,9 +627,11 @@ P7-C  Portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
          (control plane; not started)
   → P7-M1  Exam policy schema + conflict validator
   → P7-M2  Profile templates + snapshot resolution
-  → P7-M   Configurable exam modes (product closeout) ✅ CLOSED
+  → P7-M   Configurable exam modes (product closeout) — functional
+         implementation complete; visual product closeout pending
          (profile management UI + exam creation wizard + truthful starter
-         recipes; see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
+         recipes; multimodal visual review round pending before CLOSED; see
+         docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
 
 P7-U1  UI pilot migration
   → P7-U2+ family-by-family UI closeout

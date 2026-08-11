@@ -17,6 +17,7 @@ import { isOverridden } from "@/lib/wizardPolicyPreview";
 import type { WizardProfileLike } from "@/lib/wizardPolicyPreview";
 import type { ExamProfilePolicyDefaults } from "@exam/domain";
 import type { WizardState } from "./wizardState";
+import { WIZARD_CODE_DEFAULTS } from "./wizardState";
 
 /**
  * Step 2 — exam policy fields. Renders the 10 profile-safe, runtime-enforced
@@ -54,7 +55,7 @@ export function WizardPolicyFields({
       return state.overrides[field] as ExamProfilePolicyDefaults[T];
     }
     if (selectedProfile) return selectedProfile.defaults[field];
-    return CODE_DEFAULTS[field];
+    return WIZARD_CODE_DEFAULTS[field];
   }
 
   function sourceBadge(field: keyof ExamProfilePolicyDefaults) {
@@ -418,19 +419,3 @@ export function WizardPolicyFields({
     </FieldGroup>
   );
 }
-
-// Local code-defaults mirror for the no-profile preview path. Kept here (not
-// exported from wizardState) because this component owns the display-only
-// fallback; the actual authority is the server.
-const CODE_DEFAULTS: ExamProfilePolicyDefaults = {
-  durationMinutes: 60,
-  latestStartOffsetMinutes: null,
-  minSubmitAfterStartMinutes: null,
-  retakePolicy: "unlimited",
-  maxAttempts: 1,
-  scoreStrategy: "highest",
-  resultPublicationMode: "immediate",
-  interruptionTimePolicy: "strict",
-  interruptionGracePerIncidentSeconds: null,
-  interruptionGracePerAttemptSeconds: null,
-};
