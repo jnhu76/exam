@@ -195,7 +195,8 @@ P7-M2  profile templates + authoring-time resolution ✅ CLOSED
        (organization-owned exam policy profiles, copy-on-apply into typed
        Exam columns, no runtime profile dependency; see
        docs/audits/P7-M2-PROFILE-TEMPLATES-AND-RESOLUTION.md)
-P7-M   configurable exam modes (product closeout) ✅ CLOSED
+P7-M   configurable exam modes (product closeout) — FUNCTIONALLY COMPLETE;
+       visual product closeout pending (multimodal visual review round)
        (profile management UI + exam creation wizard; two truthful starter
        recipes shipped; Controlled/Strict deferred to their owning subsystems;
        see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)

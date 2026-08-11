@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -226,16 +226,17 @@ export function ExamProfileEditPage() {
       const pa = form.interruptionGracePerAttemptSeconds;
       if (pi === null || pi <= 0) {
         errors.interruptionGracePerIncidentSeconds = t(
-          "admin.examProfilePages.feedback.durationRequired",
+          "admin.examProfilePages.feedback.graceCapRequired",
         );
       }
       if (pa === null || pa <= 0) {
         errors.interruptionGracePerAttemptSeconds = t(
-          "admin.examProfilePages.feedback.durationRequired",
+          "admin.examProfilePages.feedback.graceCapRequired",
         );
       } else if (pi !== null && pi > pa) {
+        // Ordering error is distinct from missing/non-positive values.
         errors.interruptionGracePerIncidentSeconds = t(
-          "admin.examProfilePages.feedback.durationRequired",
+          "admin.examProfilePages.feedback.graceCapOrder",
         );
       }
     }
@@ -262,9 +263,11 @@ export function ExamProfileEditPage() {
       if (Object.keys(fieldMap).length > 0) {
         setFieldErrors((prev) => ({ ...prev, ...fieldMap }));
       }
-      // 409 duplicate name → friendly message.
+      // 409 duplicate name → friendly message (production ApiError shape:
+      // status 409 and/or code RESOURCE_CONFLICT — not message parsing).
       const isDuplicate =
-        err instanceof Error && /409|RESOURCE_CONFLICT/i.test(err.message);
+        err instanceof ApiError &&
+        (err.status === 409 || err.code === "RESOURCE_CONFLICT");
       const message = isDuplicate
         ? t("admin.examProfilePages.feedback.duplicateName")
         : getApiErrorMessage(
@@ -636,7 +639,7 @@ export function ExamProfileEditPage() {
       </div>
 
       <Dialog open={starterDialogOpen} onOpenChange={setStarterDialogOpen}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {t("admin.examProfilePages.starterDialogTitle")}
@@ -654,13 +657,14 @@ export function ExamProfileEditPage() {
               return (
                 <div
                   key={recipe.key}
+                  data-starter-recipe={recipe.key}
                   className="flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <p className="font-medium">
+                    <p className="type-section-title">
                       {t(`admin.starterProfiles.${i18nKey}.name` as never)}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="type-secondary">
                       {t(
                         `admin.starterProfiles.${i18nKey}.description` as never,
                       )}

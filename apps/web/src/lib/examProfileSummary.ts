@@ -19,7 +19,6 @@ import type { ExamProfilePolicyDefaults } from "@exam/domain";
  */
 export interface ProfileSummaryLabels {
   durationMinutes: (m: number) => string;
-  noLimit: string;
   latestStart: (m: number) => string;
   minSubmit: (m: number) => string;
   retake: {
@@ -48,6 +47,11 @@ export interface ProfileSummaryLabels {
 
 /** The policy subset this formatter knows how to render. */
 export type ProfileSummarySource = ExamProfilePolicyDefaults;
+
+/** Exhaustive-case guard: a new enum member fails to compile instead of being silently omitted. */
+function assertNever(value: never): never {
+  throw new Error(`Unhandled summary case: ${String(value)}`);
+}
 
 /**
  * Build a concise human-readable summary string of a profile's policy fields.
@@ -80,6 +84,8 @@ export function summarizeProfile(
     case "pass_then_stop":
       segments.push(labels.retake.passThenStop);
       break;
+    default:
+      return assertNever(src.retakePolicy);
   }
 
   segments.push(labels.scoreStrategy[src.scoreStrategy]);
@@ -93,6 +99,8 @@ export function summarizeProfile(
     case "manual":
       segments.push(labels.resultPublication.manual);
       break;
+    default:
+      return assertNever(src.resultPublicationMode);
   }
   switch (src.interruptionTimePolicy) {
     case "strict":
@@ -104,6 +112,8 @@ export function summarizeProfile(
     case "operator_incident":
       segments.push(labels.interruption.operatorIncident);
       break;
+    default:
+      return assertNever(src.interruptionTimePolicy);
   }
 
   return segments.join(labels.separator);

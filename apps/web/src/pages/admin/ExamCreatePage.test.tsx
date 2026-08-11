@@ -118,8 +118,25 @@ describe("ExamCreatePage wizard — step 1 (basic + profile)", () => {
   });
 
   it("does NOT surface latent Phase-2 control flags anywhere in the wizard", async () => {
+    const user = userEvent.setup();
     renderPage();
     await screen.findByText("创建考试");
+    // Step 1, then step 2 (policy fields — where such flags would appear)…
+    fillTitle("Flags Exam");
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    await screen.findByLabelText("考试时长（分钟）");
+    // …then the review step, covering every conditional surface.
+    for (let i = 0; i < 2; i++) {
+      await user.click(screen.getByRole("button", { name: /下一步/ }));
+    }
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-09-01T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-09-01T11:00" },
+    });
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    await screen.findByText("创建前检查");
     expect(screen.queryByText(/随机选题/)).not.toBeInTheDocument();
     expect(screen.queryByText(/排队入场/)).not.toBeInTheDocument();
     expect(screen.queryByText(/限制访问网络/)).not.toBeInTheDocument();
@@ -138,11 +155,10 @@ describe("ExamCreatePage wizard — step 1 (basic + profile)", () => {
     expect(apiPost).not.toHaveBeenCalled();
   });
 
-  it("choosing 不使用模板 keeps profileId null", async () => {
-    const user = userEvent.setup();
+  it("profile select defaults to 不使用模板", async () => {
     renderPage();
     await screen.findByText("创建考试");
-    // Profile select defaults to __none__ (不使用模板).
+    // Profile select defaults to __none__ (不使用模板) — no interaction needed.
     expect(
       screen.getByRole("combobox", { name: "使用现有模板" }),
     ).toHaveTextContent("不使用模板");
@@ -192,6 +208,27 @@ describe("ExamCreatePage wizard — step 3 (questions + scores)", () => {
       expect(screen.getByText("已选题目 (0)")).toBeInTheDocument(),
     );
   });
+
+  it("auto-calculates totalScore from the selected questions (10 + 15 = 25)", async () => {
+    const user = userEvent.setup();
+    await goToStep3(user);
+    await user.click(screen.getByRole("button", { name: "手动选题" }));
+    const dialog = await screen.findByRole("dialog");
+    // Add BOTH fixture questions (scores 10 and 15).
+    const addButtons = within(dialog).getAllByRole("button", { name: "添加" });
+    await user.click(addButtons[0]!);
+    await user.click(addButtons[1]!);
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    // Auto mode: the 总分 input shows the sum and the auto-calc hint appears.
+    // (getByLabelText matches both the section title and the input — scope to
+    // the input element.)
+    await waitFor(() => {
+      expect(screen.getByLabelText("总分", { selector: "input" })).toHaveValue(
+        25,
+      );
+    });
+    expect(screen.getByText("自动计算：25 分")).toBeInTheDocument();
+  });
 });
 
 describe("ExamCreatePage wizard — no-profile create flow", () => {
@@ -200,12 +237,10 @@ describe("ExamCreatePage wizard — no-profile create flow", () => {
     renderPage();
     await screen.findByText("创建考试");
     fillTitle("My Exam");
-    // 1 → 2 → 3 → 4 → 5
+    // 1 → 2 → 3 → 4 (schedule), then fill the schedule, then 4 → 5.
     await user.click(screen.getByRole("button", { name: /下一步/ }));
     await user.click(screen.getByRole("button", { name: /下一步/ }));
     await user.click(screen.getByRole("button", { name: /下一步/ }));
-    await user.click(screen.getByRole("button", { name: /下一步/ }));
-    // Step 4 (schedule): defaults empty → validation blocks. Fill schedule.
     fireEvent.change(screen.getByLabelText("开始时间"), {
       target: { value: "2026-09-01T09:00" },
     });
@@ -395,8 +430,10 @@ describe("ExamCreatePage wizard — validation routing", () => {
     await screen.findByText("创建前检查");
     await user.click(screen.getByRole("button", { name: "创建草稿" }));
     // The UI routes back to step 4 and renders the SERVER's inline field error
-    // (distinct copy — it can only have come from the mocked rejection).
-    expect(await screen.findByText(serverMsg)).toBeInTheDocument();
+    // (distinct copy — it can only have come from the mocked rejection). It
+    // appears both inline (FieldError) and in the global save-error banner.
+    const serverErrors = await screen.findAllByText(serverMsg);
+    expect(serverErrors.length).toBeGreaterThan(0);
     expect(screen.getByLabelText("开始时间")).toBeInTheDocument();
     // Step 5's review heading is gone (queryByRole — getByRole throws on absence).
     expect(
@@ -408,10 +445,10 @@ describe("ExamCreatePage wizard — validation routing", () => {
     renderPage();
     await screen.findByText("创建考试");
     // On step 1, steps 2–5 are locked; only 下一步 advances.
-    // (Accessible names concatenate the step number + label with no space.)
-    expect(screen.getByRole("button", { name: /5检查并创建/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /2考试策略/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /1基本信息/ })).toBeEnabled();
+    // (Stepper buttons expose an explicit aria-label with a number + label.)
+    expect(screen.getByRole("button", { name: /5 检查并创建/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /2 考试策略/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /1 基本信息/ })).toBeEnabled();
   });
 
   it("fixed validation errors do not linger as ghosts after re-validation", async () => {

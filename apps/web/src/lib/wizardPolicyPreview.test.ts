@@ -38,7 +38,7 @@ const profile: WizardProfileLike = {
 };
 
 describe("buildWizardPolicyPreview — no-profile path", () => {
-  it("falls back to code defaults with no overrides (all source override=false meaning not-overridden, but profile=null)", () => {
+  it("falls back to code defaults with no overrides (source=default)", () => {
     const { resolved, sources, profileName } = buildWizardPolicyPreview({
       profile: null,
       overrides: {},
@@ -46,8 +46,9 @@ describe("buildWizardPolicyPreview — no-profile path", () => {
     });
     expect(resolved).toEqual(codeDefaults);
     expect(profileName).toBeNull();
-    // No profile + no overrides → every field is "override" (code default).
-    expect(sources.durationMinutes).toBe("override");
+    // No profile + no overrides → every field is "default" (code default),
+    // distinct from an explicit "override".
+    expect(sources.durationMinutes).toBe("default");
   });
 
   it("applies an explicit override over code default", () => {

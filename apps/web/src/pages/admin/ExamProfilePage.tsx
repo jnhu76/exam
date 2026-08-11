@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Pencil, Plus, Trash2, LayoutTemplate } from "lucide-react";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import {
   summarizeProfile,
   type ProfileSummaryLabels,
@@ -26,21 +27,12 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import type { ExamProfileDTO } from "@exam/contracts";
 
-/** Format an ISO datetime as a short local date string. */
-function formatUpdatedAt(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /** Resolve i18n labels for the profile summary formatter (single source). */
 function useProfileSummaryLabels(): ProfileSummaryLabels {
   const { t } = useTranslation();
   return {
     durationMinutes: (m) =>
       t("admin.examProfilePages.summaryDuration", { count: m }),
-    noLimit: t("admin.examProfilePages.fields.noLimitPlaceholder"),
     latestStart: (m) =>
       t("admin.examProfilePages.summaryLatestStart", { count: m }),
     minSubmit: (m) =>
@@ -89,12 +81,16 @@ export function ExamProfilePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const labels = useProfileSummaryLabels();
+  const { formatDateTime } = useProductDateTime();
   const [profiles, setProfiles] = useState<ExamProfileDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
     setIsLoading(true);
+    // A successful retry must clear the prior failure so the list renders
+    // again instead of staying on ErrorState.
+    setError(null);
     try {
       const data = await api.get<ExamProfileDTO[]>("/api/exam-profiles");
       setProfiles(data);
@@ -120,12 +116,7 @@ export function ExamProfilePage() {
       toast.success(t("admin.examProfilePages.feedback.deleteSuccess"));
       await loadProfiles();
     } catch (err) {
-      toast.error(
-        getApiErrorMessage(
-          err,
-          t("admin.examProfilePages.feedback.saveFailed"),
-        ),
-      );
+      toast.error(getApiErrorMessage(err, t("admin.common.deleteFailed")));
     }
   }
 
@@ -192,7 +183,7 @@ export function ExamProfilePage() {
                     {summarizeProfile(p, labels)}
                   </DataTableCell>
                   <DataTableCell role="date">
-                    {formatUpdatedAt(p.updatedAt)}
+                    {formatDateTime(p.updatedAt)}
                   </DataTableCell>
                   <DataTableCell role="actions">
                     <RowActions>

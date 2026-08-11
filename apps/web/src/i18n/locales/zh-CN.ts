@@ -1071,7 +1071,7 @@ const zhCN = {
       starterCancel: "取消",
       feedback: {
         loadFailed: "加载策略模板失败",
-        loadOneFailed: "加载策略模板失败",
+        loadOneFailed: "加载模板详情失败",
         createSuccess: "策略模板已创建",
         updateSuccess: "策略模板已更新",
         deleteSuccess: "策略模板已删除",
@@ -1079,6 +1079,8 @@ const zhCN = {
         duplicateName: "同名策略模板已存在",
         nameRequired: "请输入模板名称",
         durationRequired: "请输入考试时长",
+        graceCapRequired: "请输入中断补时上限（正整数）",
+        graceCapOrder: "每次中断补时上限不能大于累计中断补时上限",
       },
       actions: {
         cancel: "取消",
@@ -1217,6 +1219,7 @@ const zhCN = {
         timeRequired: "请设置开始与结束时间",
         timeInvalid: "结束时间必须晚于开始时间",
         durationRequired: "请输入考试时长",
+        maxAttemptsInvalid: "最大尝试次数至少为 1",
         scoreInvalid: "及格分不能超过总分",
       },
       feedback: {

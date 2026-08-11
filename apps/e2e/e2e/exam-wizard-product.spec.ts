@@ -127,7 +127,8 @@ test.describe("P7-M exam creation wizard product path", () => {
     ).toBeVisible();
 
     // Create the draft. The POST MUST carry profileId + the explicit override
-    // (durationMinutes: 90) and omit the non-overridden profile fields.
+    // (durationMinutes: 90) and omit every non-overridden profile policy field
+    // (explicit > profile > default — the backend re-resolves the rest).
     const createResp = page.waitForResponse(
       (res) =>
         res.request().method() === "POST" &&
@@ -136,6 +137,31 @@ test.describe("P7-M exam creation wizard product path", () => {
     await page.getByRole("button", { name: "创建草稿" }).click();
     const created = await createResp;
     expect(created.ok(), `create exam: ${created.status()}`).toBe(true);
+
+    // POST body assertions: profileId + durationMinutes 90 present; every
+    // non-overridden profile field ABSENT from the request body.
+    const body = (await created.request().postDataJSON()) as Record<
+      string,
+      unknown
+    >;
+    expect(body.profileId).toBe(profileId);
+    expect(body.durationMinutes).toBe(90);
+    for (const omitted of [
+      "latestStartOffsetMinutes",
+      "minSubmitAfterStartMinutes",
+      "retakePolicy",
+      "maxAttempts",
+      "scoreStrategy",
+      "resultPublicationMode",
+      "interruptionTimePolicy",
+      "interruptionGracePerIncidentSeconds",
+      "interruptionGracePerAttemptSeconds",
+    ]) {
+      expect(
+        body,
+        `non-overridden field ${omitted} must be omitted from the POST`,
+      ).not.toHaveProperty(omitted);
+    }
 
     // Land on the exam DETAIL page (draft review).
     const examId = ((await created.json()) as { id: string }).id;

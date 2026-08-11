@@ -112,9 +112,14 @@ export function WizardPolicyFields({
               type="number"
               min={1}
               value={resolved("durationMinutes")}
-              onChange={(e) =>
-                setOverride("durationMinutes", Number(e.target.value))
-              }
+              onChange={(e) => {
+                // Empty input reverts to inheritance — never store 0.
+                if (e.target.value === "") {
+                  clearOverride("durationMinutes");
+                } else {
+                  setOverride("durationMinutes", Number(e.target.value));
+                }
+              }}
             />
             <FieldError>{fieldErrors.durationMinutes}</FieldError>
             {resetBtn("durationMinutes")}
@@ -146,6 +151,7 @@ export function WizardPolicyFields({
               }
               placeholder={t("admin.examWizard.fields.noLimitPlaceholder")}
             />
+            <FieldError>{fieldErrors.latestStartOffsetMinutes}</FieldError>
             {resetBtn("latestStartOffsetMinutes")}
           </Field>
           <Field>
@@ -170,6 +176,7 @@ export function WizardPolicyFields({
               }
               placeholder={t("admin.examWizard.fields.noLimitPlaceholder")}
             />
+            <FieldError>{fieldErrors.minSubmitAfterStartMinutes}</FieldError>
             {resetBtn("minSubmitAfterStartMinutes")}
           </Field>
         </FieldRow>
@@ -211,6 +218,7 @@ export function WizardPolicyFields({
                 </SelectItem>
               </SelectContent>
             </Select>
+            <FieldError>{fieldErrors.retakePolicy}</FieldError>
             {resetBtn("retakePolicy")}
           </Field>
           {showMaxAttempts && (
@@ -226,10 +234,16 @@ export function WizardPolicyFields({
                 type="number"
                 min={1}
                 value={resolved("maxAttempts")}
-                onChange={(e) =>
-                  setOverride("maxAttempts", Number(e.target.value))
-                }
+                onChange={(e) => {
+                  // Empty input reverts to inheritance — never store 0.
+                  if (e.target.value === "") {
+                    clearOverride("maxAttempts");
+                  } else {
+                    setOverride("maxAttempts", Number(e.target.value));
+                  }
+                }}
               />
+              <FieldError>{fieldErrors.maxAttempts}</FieldError>
               {resetBtn("maxAttempts")}
             </Field>
           )}
@@ -269,6 +283,7 @@ export function WizardPolicyFields({
                 </SelectItem>
               </SelectContent>
             </Select>
+            <FieldError>{fieldErrors.scoreStrategy}</FieldError>
             {resetBtn("scoreStrategy")}
           </Field>
           <Field>
@@ -307,6 +322,7 @@ export function WizardPolicyFields({
                 </SelectItem>
               </SelectContent>
             </Select>
+            <FieldError>{fieldErrors.resultPublicationMode}</FieldError>
             {resetBtn("resultPublicationMode")}
           </Field>
         </FieldRow>
@@ -350,6 +366,7 @@ export function WizardPolicyFields({
                 </SelectItem>
               </SelectContent>
             </Select>
+            <FieldError>{fieldErrors.interruptionTimePolicy}</FieldError>
             {resetBtn("interruptionTimePolicy")}
           </Field>
           {showGraceCaps && (

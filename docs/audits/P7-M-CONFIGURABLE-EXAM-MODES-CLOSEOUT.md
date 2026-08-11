@@ -16,7 +16,7 @@ protocol, the **multimodal visual review round is still pending** — visual
 hierarchy / spacing / density / responsive / usability will be inspected
 page-by-page with a browser before this closeout may be marked CLOSED.
 
-- Profile management (list / create / edit / delete) is a real Admin/Teacher
+- Profile management (list / create / edit / delete) is a real Admin
   surface under the Exam-authoring domain, not a generic settings panel.
 - The overloaded single-form exam-creation page was replaced by a 5-step
   wizard built around user decisions, with a first-class no-profile path.
@@ -89,7 +89,7 @@ create+publish.
 ## 5. Profile management
 
 - **Surface:** `/admin/exam-profiles` (策略模板 nav item under 考试 group,
-  visible to ExamView holders — Admin + Teacher, matching M2 RBAC).
+  visible to ExamView holders — Admin, the Phase 1 product role).
 - **List:** name, human-readable one-line summary (e.g.
   `60 分钟 · 最多 2 次 · 取最高分 · 阅卷完成后公布 · 断线有限补时`),
   updated-at, edit/delete row actions. No raw enum codes are shown.
@@ -162,7 +162,7 @@ and/or the profile editor):
 - **Deprecated** (`showResultImmediately`): legacy input, superseded by
   `resultPublicationMode`; hidden (the wizard sends no controlFlags at all).
 - Exam-instance fields (course, schedule, scores, questions, lifecycle) are
-  profile-editor fields; they are wizard inputs only.
+  NOT profile-editor fields; they are wizard inputs only.
 
 ## 9. Starter profile matrix
 
@@ -309,15 +309,18 @@ New specs (run via `bash scripts/e2e/run-wsl.sh` or `pnpm e2e:docker`):
   human-readable summary, edits duration, deletes with the COPY-ON-APPLY
   confirm wording; plus a starter-recipe prefill path.
 - `apps/e2e/e2e/exam-wizard-product.spec.ts` — profile-based exam create
-  with an explicit override (duration 90 over profile 60; POST carries
-  profileId + override only); profile duration INHERITANCE without override
-  (POST omits durationMinutes; materialized exam carries the profile's 90,
-  not the code default 60); no-profile exam create (compatibility);
-  schedule-conflict validation shown inline at step 4 (not a generic
-  banner).
-- `apps/e2e/e2e/teacher-product-path.spec.ts` — updated to drive the new
-  wizard; remains the no-profile teacher happy path through supported UI,
-  then publishes on the detail page (unchanged).
+  with an explicit override (duration 90 over profile 60; POST body carries
+  profileId + durationMinutes 90 and omits every non-overridden profile
+  field); profile duration INHERITANCE without override (POST omits
+  durationMinutes; materialized exam carries the profile's 90, not the code
+  default 60); no-profile exam create (compatibility); schedule-conflict
+  validation shown inline at step 4 (not a generic banner).
+
+The `teacher-product-path.spec.ts` E2E (P4-C3, Phase 3 authorization
+validation) also drives the new wizard, but it is **not** P7-M acceptance
+evidence: the Phase 1.x role model is Admin + Candidate only, and Teacher
+bundles are Phase 3. It is cited here only to note that the wizard is the
+shared authoring surface.
 
 ## 16. P0/P1/P2/P3
 
@@ -391,7 +394,56 @@ feature exists".
 | Static gates | ✅ (lint:copy, lint:arch, ESLint incl. exam-ui, typecheck, OpenAPI check) |
 | Full tests | ✅ (`pnpm test`) |
 | Build | ✅ (`pnpm build`) |
-| CI | ✅ (PR-head CI inspected) |
+| CI | ✅ (PR-head CI inspected; full CI green on review-fix push) |
+
+## 19. Completion record (review round)
+
+**Modified files (review-fix round, `b4f83b6d`):**
+
+- `apps/web/src/components/exam/wizard/wizardState.ts` — profile-path
+  duration inheritance, fail-closed schedule, atomic interruption override,
+  generic keyed `setOverride`, reuses `buildExplicitOverridesPayload`.
+- `apps/web/src/components/exam/wizard/WizardPolicyFields.tsx` — empty-input
+  guards (revert to inheritance instead of storing 0), per-field server error
+  rendering, single `WIZARD_CODE_DEFAULTS` authority.
+- `apps/web/src/components/exam/wizard/WizardStepper.tsx` — future steps
+  disabled; explicit accessible step labels.
+- `apps/web/src/pages/admin/ExamCreatePage.tsx` — step-2 validation, module-
+  scope `STEP_FIELD_KEYS`/`stepForField`, schedule display via
+  `useProductDateTime`, save-error banner on all steps, semantic review
+  headings, all-page question loading.
+- `apps/web/src/pages/admin/ExamProfileEditPage.tsx` — 409/RESOURCE_CONFLICT
+  detection, grace-cap-specific messages, starter-card semantic typography +
+  `data-starter-recipe` hook, Radix dialog description wiring.
+- `apps/web/src/pages/admin/ExamProfilePage.tsx` — retry clears error state,
+  `common.deleteFailed` key, timezone-aware `formatDateTime`.
+- `apps/web/src/lib/wizardPolicyPreview.ts` — no `any`, `default` source
+  provenance, shared override-payload helper.
+- `apps/web/src/lib/examProfileSummary.ts` — exhaustive enum switches,
+  `noLimit` label contract removed.
+- `apps/web/src/i18n/locales/zh-CN.ts` — `sections.basic`, grace-cap
+  messages, `maxAttemptsInvalid`, distinct `loadOneFailed`.
+- `packages/domain/src/examProfileRecipes.ts` — `basic_quiz` single-attempt
+  honesty (`max_attempts` + 1); readonly recipe interface.
+- `apps/e2e/e2e/exam-wizard-product.spec.ts` — POST-body assertions +
+  inheritance spec.
+- Docs: closeout + roadmap (P7-M functional-complete status; Gate P7-5
+  revision).
+
+**New tests:** `wizardState.test.ts` (payload wire semantics, fail-closed
+schedule, atomic interruption override, clear/goToStep) + expanded
+`ExamCreatePage.test.tsx` (server routing, stepper lock, ghost errors,
+atomic caps, auto-calc) + `examProfileRecipes.test.ts` truthfulness —
+40 new frontend tests total on this branch.
+
+**Coverage / verify:** full local `pnpm verify` is green on the static gates,
+typecheck, web+api+domain suites; the three local `@exam/db#coverage`
+failures observed during the review round are the documented BUG-FLAKE-001
+host-contention family (issue #280 — different db test each run, all pass in
+isolation, CI green). Final `pnpm verify` result recorded in the PR.
+
+**Known limitations:** multimodal visual review (visual hierarchy / spacing /
+density / responsive / usability) is the pending round before CLOSED.
 
 **P7-M — Configurable Exam Modes — FUNCTIONALLY COMPLETE; visual product closeout pending**
 (CLOSED only after the multimodal visual review round passes.)

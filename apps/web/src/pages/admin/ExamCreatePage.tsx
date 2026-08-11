@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import {
   buildWizardPolicyPreview,
   type WizardProfileLike,
@@ -83,6 +84,38 @@ interface PaginatedResponse<T> {
 }
 
 /**
+ * Error keys each wizard step owns: local validation keys plus the server
+ * field names `stepForField` may route here. Used to drop stale errors when a
+ * step is re-validated, so a fixed field never keeps a ghost error.
+ */
+const STEP_FIELD_KEYS: Record<number, string[]> = {
+  1: ["title", "courseId", "profileId"],
+  2: [
+    "durationMinutes",
+    "latestStartOffsetMinutes",
+    "minSubmitAfterStartMinutes",
+    "retakePolicy",
+    "maxAttempts",
+    "scoreStrategy",
+    "resultPublicationMode",
+    "interruptionTimePolicy",
+    "interruptionGracePerIncidentSeconds",
+    "interruptionGracePerAttemptSeconds",
+  ],
+  3: ["score", "questionIds", "totalScore", "passingScore"],
+  4: ["time", "openAt", "closeAt"],
+  5: [],
+};
+
+/** Map a server validation field name to the wizard step that owns it. */
+function stepForField(field: string): number {
+  for (const [step, keys] of Object.entries(STEP_FIELD_KEYS)) {
+    if (keys.includes(field)) return Number(step);
+  }
+  return 5;
+}
+
+/**
  * Resolve the i18n label source for summarizeProfile. Kept here (near the only
  * wizard consumer) to avoid a second hook in the shared lib.
  */
@@ -92,7 +125,6 @@ function useSummaryLabels(): ProfileSummaryLabels {
     () => ({
       durationMinutes: (m) =>
         t("admin.examProfilePages.summaryDuration", { count: m }),
-      noLimit: t("admin.examProfilePages.fields.noLimitPlaceholder"),
       latestStart: (m) =>
         t("admin.examProfilePages.summaryLatestStart", { count: m }),
       minSubmit: (m) =>
@@ -150,6 +182,7 @@ export function ExamCreatePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const summaryLabels = useSummaryLabels();
+  const { formatDateTime } = useProductDateTime();
 
   const [state, setState] = useState<WizardState>(initialWizardState);
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -170,7 +203,11 @@ export function ExamCreatePage() {
     try {
       const [cData, qData, pData] = await Promise.all([
         api.get<PaginatedResponse<CourseRow>>("/api/courses"),
-        api.get<PaginatedResponse<QuestionRow>>("/api/questions"),
+        // Load all selectable questions (API caps pageSize at 100) so the
+        // picker is not silently limited to the first page.
+        api.get<PaginatedResponse<QuestionRow>>(
+          "/api/questions?page=1&pageSize=100",
+        ),
         api.get<ExamProfileDTO[]>("/api/exam-profiles"),
       ]);
       setCourses(cData.items);
@@ -241,7 +278,10 @@ export function ExamCreatePage() {
             s,
             value as ExamProfilePolicyDefaults["interruptionTimePolicy"],
           )
-        : setOverride(s, field, value),
+        : // Explicit key type argument: the field narrowing on this branch
+          // would otherwise shrink the generic key union and reject the
+          // full-union value.
+          setOverride<keyof ExamProfilePolicyDefaults>(s, field, value),
     );
   const onClearOverride = (field: keyof ExamProfilePolicyDefaults) =>
     setState((s) => clearOverride(s, field));
@@ -261,30 +301,6 @@ export function ExamCreatePage() {
   }
 
   // ── per-step validation ──
-  /**
-   * Error keys each step owns: local validation keys plus the server field
-   * names `stepForField` may route here. Used to drop stale errors when a step
-   * is re-validated, so a fixed field never keeps a ghost error.
-   */
-  const STEP_FIELD_KEYS: Record<number, string[]> = {
-    1: ["title", "courseId", "profileId"],
-    2: [
-      "durationMinutes",
-      "latestStartOffsetMinutes",
-      "minSubmitAfterStartMinutes",
-      "retakePolicy",
-      "maxAttempts",
-      "scoreStrategy",
-      "resultPublicationMode",
-      "interruptionTimePolicy",
-      "interruptionGracePerIncidentSeconds",
-      "interruptionGracePerAttemptSeconds",
-    ],
-    3: ["score", "questionIds", "totalScore", "passingScore"],
-    4: ["time", "openAt", "closeAt"],
-    5: [],
-  };
-
   function validateCurrentStep(): boolean {
     const errors: Record<string, string> = {};
     if (state.step === 1) {
@@ -292,6 +308,23 @@ export function ExamCreatePage() {
         errors.title = t("admin.examWizard.validation.titleRequired");
       if (!state.courseId)
         errors.courseId = t("admin.examWizard.validation.courseRequired");
+    }
+    if (state.step === 2) {
+      // User-supplied policy values must stay in their valid domain; the
+      // profile/default fallback is already valid (validated on save).
+      if (preview.resolved.durationMinutes < 1) {
+        errors.durationMinutes = t(
+          "admin.examWizard.validation.durationRequired",
+        );
+      }
+      if (
+        preview.resolved.retakePolicy === "max_attempts" &&
+        preview.resolved.maxAttempts < 1
+      ) {
+        errors.maxAttempts = t(
+          "admin.examWizard.validation.maxAttemptsInvalid",
+        );
+      }
     }
     if (state.step === 3) {
       if (state.passingScore > state.totalScore)
@@ -630,12 +663,14 @@ export function ExamCreatePage() {
                   value={state.totalScore}
                   readOnly={hasQuestions && !manualTotalScore}
                   aria-label={t("admin.examWizard.questions.totalScore")}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    // Empty input keeps the previous value — never store 0.
+                    if (e.target.value === "") return;
                     setState((s) => ({
                       ...s,
                       totalScore: Number(e.target.value),
-                    }))
-                  }
+                    }));
+                  }}
                 />
                 {hasQuestions && !manualTotalScore && (
                   <p className="text-xs text-muted-foreground">
@@ -664,12 +699,14 @@ export function ExamCreatePage() {
                   type="number"
                   min={0}
                   value={state.passingScore}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    // Empty input keeps the previous value — never store 0.
+                    if (e.target.value === "") return;
                     setState((s) => ({
                       ...s,
                       passingScore: Number(e.target.value),
-                    }))
-                  }
+                    }));
+                  }}
                 />
                 {fieldErrors.score && (
                   <FieldError>{fieldErrors.score}</FieldError>
@@ -723,7 +760,7 @@ export function ExamCreatePage() {
         <FieldGroup>
           <FormSection title={t("admin.examWizard.review.title")}>
             <div>
-              <h3 className="font-medium">
+              <h3 className="type-section-title">
                 {t("admin.examWizard.review.summaryHeading")}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -732,7 +769,7 @@ export function ExamCreatePage() {
             </div>
             <Separator />
             <div>
-              <h3 className="font-medium">
+              <h3 className="type-section-title">
                 {t("admin.examWizard.review.basicHeading")}
               </h3>
               <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
@@ -750,23 +787,23 @@ export function ExamCreatePage() {
             </div>
             <Separator />
             <div>
-              <h3 className="font-medium">
+              <h3 className="type-section-title">
                 {t("admin.examWizard.review.scheduleHeading")}
               </h3>
               <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
                 <dt className="text-muted-foreground">
                   {t("admin.examWizard.schedule.startTime")}
                 </dt>
-                <dd>{state.openAt || "—"}</dd>
+                <dd>{state.openAt ? formatDateTime(state.openAt) : "—"}</dd>
                 <dt className="text-muted-foreground">
                   {t("admin.examWizard.schedule.endTime")}
                 </dt>
-                <dd>{state.closeAt || "—"}</dd>
+                <dd>{state.closeAt ? formatDateTime(state.closeAt) : "—"}</dd>
               </dl>
             </div>
             <Separator />
             <div>
-              <h3 className="font-medium">
+              <h3 className="type-section-title">
                 {t("admin.examWizard.review.scoringHeading")}
               </h3>
               <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
@@ -795,7 +832,7 @@ export function ExamCreatePage() {
             </div>
             <Separator />
             <div>
-              <h3 className="font-medium">
+              <h3 className="type-section-title">
                 {t("admin.examWizard.review.questionsHeading")}
               </h3>
               <p className="mt-1 text-sm">
@@ -807,9 +844,11 @@ export function ExamCreatePage() {
               </p>
             </div>
           </FormSection>
-          {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
         </FieldGroup>
       )}
+
+      {/* Save errors render on every step (server routing may land anywhere). */}
+      {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
 
       {/* Navigation */}
       <Separator />
@@ -911,31 +950,4 @@ export function ExamCreatePage() {
       </Dialog>
     </div>
   );
-}
-
-/** Map a server validation field name to the wizard step that owns it. */
-function stepForField(field: string): number {
-  if (field === "title" || field === "courseId" || field === "profileId")
-    return 1;
-  if (
-    field === "durationMinutes" ||
-    field === "retakePolicy" ||
-    field === "maxAttempts" ||
-    field === "scoreStrategy" ||
-    field === "resultPublicationMode" ||
-    field === "interruptionTimePolicy" ||
-    field === "interruptionGracePerIncidentSeconds" ||
-    field === "interruptionGracePerAttemptSeconds" ||
-    field === "latestStartOffsetMinutes" ||
-    field === "minSubmitAfterStartMinutes"
-  )
-    return 2;
-  if (
-    field === "questionIds" ||
-    field === "totalScore" ||
-    field === "passingScore"
-  )
-    return 3;
-  if (field === "openAt" || field === "closeAt") return 4;
-  return 5;
 }

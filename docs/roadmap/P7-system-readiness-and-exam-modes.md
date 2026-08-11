@@ -698,6 +698,17 @@ If P7-D1 concluded that no Redis adoption is warranted:
 - profile edits do not mutate published exams;
 - each profile has API and representative browser E2E proof.
 
+> **Revised (2026-08-11, P7-M closeout):** `Controlled` / `Strict` are
+> DEFERRED — their promised capabilities (queue admission, device binding,
+> lockdown, IP restriction, randomization, continuous monitoring) are
+> unimplemented, so those two classes have no API/E2E proof and must not be
+> shipped or claimed (truthfulness gate; P7-M closeout §10). Gate P7-5's
+> E2E-proof bullet therefore applies to the shipped minimal/standard-
+> equivalent recipes (`basic_quiz`, `standard_online`); the Controlled/Strict
+> classes are re-validated against this gate when their owning subsystems
+> land. The multimodal visual review round is the remaining P7-M closeout
+> item before CLOSED.
+
 ### Gate P7-6 — UI closeout
 
 - settings, status, recovery, backup, and profile workflows are usable through

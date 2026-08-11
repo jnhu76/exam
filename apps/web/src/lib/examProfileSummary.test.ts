@@ -8,7 +8,6 @@ import type { ExamProfilePolicyDefaults } from "@exam/domain";
 /** English labels for deterministic snapshot-free assertions. */
 const en: ProfileSummaryLabels = {
   durationMinutes: (m) => `${m} min`,
-  noLimit: "no limit",
   latestStart: (m) => `late ${m}m`,
   minSubmit: (m) => `min-submit ${m}m`,
   retake: {

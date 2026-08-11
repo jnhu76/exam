@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCreateExamPayload,
+  clearOverride,
+  goToStep,
   initialWizardState,
   setInterruptionPolicyOverride,
   setOverride,
@@ -94,5 +96,44 @@ describe("setInterruptionPolicyOverride — atomic caps clearing", () => {
     );
     const next = setInterruptionPolicyOverride(s, "bounded_grace");
     expect(next.overrides).toEqual({ interruptionTimePolicy: "bounded_grace" });
+  });
+});
+
+describe("clearOverride — revert to inheritance", () => {
+  it("removes the selected override entirely", () => {
+    const s = setOverride(initialWizardState(), "durationMinutes", 45);
+    expect(clearOverride(s, "durationMinutes").overrides).toEqual({});
+  });
+
+  it("restores inheritance for the cleared field while keeping other overrides", () => {
+    const s = setOverride(
+      setOverride(initialWizardState(), "durationMinutes", 45),
+      "retakePolicy",
+      "max_attempts",
+    );
+    const next = clearOverride(s, "durationMinutes");
+    expect(next.overrides).toEqual({ retakePolicy: "max_attempts" });
+    // The cleared field resolves back to the code default on the no-profile path.
+    const payload = buildCreateExamPayload(
+      stateWith({ profileId: null, overrides: next.overrides }),
+    );
+    expect(payload.durationMinutes).toBe(WIZARD_CODE_DEFAULTS.durationMinutes);
+  });
+});
+
+describe("goToStep — clamping", () => {
+  it("clamps below 1 to step 1", () => {
+    expect(goToStep(initialWizardState(), 0).step).toBe(1);
+    expect(goToStep(initialWizardState(), -3).step).toBe(1);
+  });
+
+  it("clamps above 5 to step 5", () => {
+    expect(goToStep(initialWizardState(), 9).step).toBe(5);
+  });
+
+  it("preserves valid indices", () => {
+    expect(goToStep(initialWizardState(), 3).step).toBe(3);
+    expect(goToStep(initialWizardState(), 1).step).toBe(1);
+    expect(goToStep(initialWizardState(), 5).step).toBe(5);
   });
 });

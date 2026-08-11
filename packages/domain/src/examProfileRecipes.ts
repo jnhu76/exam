@@ -39,10 +39,11 @@ export type StarterProfileRecipeKey = "basic_quiz" | "standard_online";
 /**
  * A starter recipe: stable key + the profile-safe defaults it prefills.
  * `name`/`description` are intentionally absent — they live in i18n.
+ * Readonly so `findStarterRecipe` results cannot mutate the shared recipe.
  */
 export interface StarterProfileRecipe {
-  key: StarterProfileRecipeKey;
-  defaults: ExamProfilePolicyDefaults;
+  readonly key: StarterProfileRecipeKey;
+  readonly defaults: Readonly<ExamProfilePolicyDefaults>;
 }
 
 /**

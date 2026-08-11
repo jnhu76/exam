@@ -44,6 +44,9 @@ export function WizardStepper({
                 size="sm"
                 disabled={isFuture}
                 aria-current={isCurrent ? "step" : undefined}
+                // Explicit label: the visible number + label would otherwise
+                // concatenate without a separator for assistive technology.
+                aria-label={`${step} ${t(`admin.examWizard.steps.${key}`)}`}
                 onClick={() => onNavigate(step)}
                 className={cn(isPast && !isCurrent && "opacity-70")}
               >

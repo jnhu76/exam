@@ -32,8 +32,9 @@ export interface WizardProfileLike {
 /**
  * Where a resolved field's value came from. Used only for UI provenance
  * badges (来自模板 / 已自定义). NEVER persisted; NEVER submitted to the API.
+ * `default` = no profile selected and no explicit override (code default).
  */
-export type WizardFieldSource = "profile" | "override";
+export type WizardFieldSource = "profile" | "override" | "default";
 
 /** Per-field resolution result for display. */
 export interface WizardPolicyPreview {
@@ -92,12 +93,13 @@ export function buildWizardPolicyPreview(args: {
   >;
   for (const field of PROFILE_POLICY_FIELDS) {
     // An explicitly-overridden field (present in overrides, incl. null) is
-    // "override"; otherwise it comes from the profile (or code default).
+    // "override"; otherwise it comes from the profile — or, with no profile,
+    // from the code default ("default", distinct from "override").
     sources[field] = Object.prototype.hasOwnProperty.call(overrides, field)
       ? "override"
       : profile
         ? "profile"
-        : "override";
+        : "default";
   }
 
   return {
@@ -117,11 +119,14 @@ export function buildExplicitOverridesPayload(
   overrides: Partial<ExamProfilePolicyDefaults>,
 ): Partial<ExamProfilePolicyDefaults> {
   const payload: Partial<ExamProfilePolicyDefaults> = {};
+  // TS cannot correlate a union field key to its exact value type on the
+  // assignment target; write through a plain record so the union-keyed write
+  // is checked against the full value union (incl. explicit null) without
+  // coercion to `any`.
+  const out = payload as Record<string, unknown>;
   for (const field of PROFILE_POLICY_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(overrides, field)) {
-      // Preserve explicit values INCLUDING null; never coerce.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (payload as any)[field] = overrides[field];
+      out[field] = overrides[field];
     }
   }
   return payload;

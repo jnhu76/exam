@@ -10,6 +10,7 @@
 // `buildWizardPolicyPreview` — the frontend NEVER re-implements precedence.
 
 import type { ExamProfilePolicyDefaults } from "@exam/domain";
+import { buildExplicitOverridesPayload } from "@/lib/wizardPolicyPreview";
 
 /** Code defaults mirroring the contract's canonical CreateExamRequest defaults. */
 export const WIZARD_CODE_DEFAULTS: ExamProfilePolicyDefaults = {
@@ -77,12 +78,14 @@ export function initialWizardState(): WizardState {
  * here, because that would erase the distinction the contract depends on.
  *
  * Explicit `null` is a real semantic value ("disabled") for the nullable
- * offset/cap fields, and is preserved.
+ * offset/cap fields, and is preserved. The value type binds to the selected
+ * field, so a non-nullable field (e.g. durationMinutes) rejects `null` at
+ * compile time.
  */
-export function setOverride(
+export function setOverride<K extends keyof ExamProfilePolicyDefaults>(
   state: WizardState,
-  field: keyof ExamProfilePolicyDefaults,
-  value: ExamProfilePolicyDefaults[typeof field] | null,
+  field: K,
+  value: ExamProfilePolicyDefaults[K],
 ): WizardState {
   return {
     ...state,
@@ -196,28 +199,23 @@ export function buildCreateExamPayload(
   } else if (!state.profileId) {
     payload.durationMinutes = WIZARD_CODE_DEFAULTS.durationMinutes;
   }
-  // Send ONLY explicit overrides (own keys), preserving null. Absent keys are
-  // omitted so the backend applies the profile (or code default).
-  for (const field of Object.keys(state.overrides) as Array<
-    keyof ExamProfilePolicyDefaults
-  >) {
-    if (Object.prototype.hasOwnProperty.call(state.overrides, field)) {
-      payload[field] = state.overrides[field];
-    }
-  }
+  // Send ONLY the explicit overrides (own keys, preserving null) via the
+  // shared wire-faithful helper. Absent keys are omitted so the backend
+  // applies the profile (or code default).
+  Object.assign(payload, buildExplicitOverridesPayload(state.overrides));
   return payload;
 }
 
 /**
  * Helper: returns the explicit override value for a field if present, else
- * undefined (meaning "inherit profile/code default"). Used only by
- * buildCreateExamPayload to supply durationMinutes as a top-level field for
- * the no-profile path; the backend re-resolves everything anyway.
+ * undefined (meaning "inherit profile/code default"). The value type binds to
+ * the selected field. Used only by buildCreateExamPayload to supply
+ * durationMinutes as a top-level field for the no-profile path; the backend
+ * re-resolves everything anyway.
  */
-function resolveOverrideOrPlaceholder(
-  state: WizardState,
-  field: keyof ExamProfilePolicyDefaults,
-): ExamProfilePolicyDefaults[typeof field] | undefined {
+function resolveOverrideOrPlaceholder<
+  K extends keyof ExamProfilePolicyDefaults,
+>(state: WizardState, field: K): ExamProfilePolicyDefaults[K] | undefined {
   if (Object.prototype.hasOwnProperty.call(state.overrides, field)) {
     return state.overrides[field];
   }

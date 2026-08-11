@@ -3,18 +3,22 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { ExamProfileEditPage } from "./ExamProfileEditPage";
 import type { ExamProfileDTO } from "@exam/contracts";
 
-vi.mock("@/lib/api", () => ({
-  api: {
-    get: vi.fn(),
-    post: vi.fn(),
-    patch: vi.fn(),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    api: {
+      get: vi.fn(),
+      post: vi.fn(),
+      patch: vi.fn(),
+    },
+    setNavigate: () => {},
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -119,18 +123,25 @@ describe("ExamProfileEditPage — create path", () => {
     // Two starter recipes present.
     expect(within(dialog).getByText("基础测验")).toBeInTheDocument();
     expect(within(dialog).getByText("标准在线考试")).toBeInTheDocument();
-    // Pick standard online → duration prefilled to 60, retake max_attempts.
-    const useButtons = within(dialog).getAllByRole("button", {
-      name: "使用此模板",
-    });
-    await userEvent.click(useButtons[1]!);
+    // Pick the standard-online card via its stable data-starter-recipe hook
+    // (not button index), then use its 使用此模板 button.
+    const standardCard = within(dialog)
+      .getByText("标准在线考试")
+      .closest("[data-starter-recipe]");
+    expect(standardCard).not.toBeNull();
+    await userEvent.click(
+      within(standardCard as HTMLElement).getByRole("button", {
+        name: "使用此模板",
+      }),
+    );
     // After prefill, the bounded_grace caps inputs are visible.
     expect(screen.getByLabelText("每次中断补时上限（秒）")).toBeInTheDocument();
     expect(screen.getByLabelText("考试时长（分钟）")).toHaveValue(60);
   });
 
   it("maps a 409 duplicate-name server error to a friendly message", async () => {
-    const err = new Error("409 RESOURCE_CONFLICT");
+    // Production ApiError shape: status 409 + code RESOURCE_CONFLICT.
+    const err = new ApiError(409, "资源状态冲突", "RESOURCE_CONFLICT");
     vi.mocked(api.post).mockRejectedValueOnce(err);
     await act(async () => {
       renderPage();

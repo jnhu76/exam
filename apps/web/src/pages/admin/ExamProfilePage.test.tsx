@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -140,6 +140,13 @@ describe("ExamProfilePage (list)", () => {
       within(dialog).getByRole("button", { name: "确认删除" }),
     );
     expect(api.delete).toHaveBeenCalledWith("/api/exam-profiles/p-std");
+    // The list reloads after deletion (second GET on /api/exam-profiles) and
+    // the emptied list renders.
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(api.get).toHaveBeenLastCalledWith("/api/exam-profiles");
+    });
+    expect(await screen.findByText("暂无策略模板")).toBeInTheDocument();
   });
 
   it("shows an error state when the list fails to load", async () => {
