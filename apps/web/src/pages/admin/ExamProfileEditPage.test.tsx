@@ -212,6 +212,26 @@ describe("ExamProfileEditPage — edit path", () => {
     expect(screen.getByLabelText("模板名称")).toHaveValue("标准在线考试");
   });
 
+  it("retry after a load failure clears the stale error and renders the form", async () => {
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new ApiError(500, "load failed", "INTERNAL"))
+      .mockResolvedValueOnce(existing);
+    await act(async () => {
+      renderPage("/admin/exam-profiles/p-1/edit");
+    });
+    expect(
+      await screen.findByRole("button", { name: "重试" }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    // A successful retry renders the loaded form (ErrorState is gone).
+    expect(await screen.findByLabelText("模板名称")).toHaveValue(
+      "标准在线考试",
+    );
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("patches on save", async () => {
     vi.mocked(api.get).mockResolvedValueOnce(existing);
     vi.mocked(api.patch).mockResolvedValueOnce(existing);

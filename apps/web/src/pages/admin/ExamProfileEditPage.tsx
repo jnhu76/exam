@@ -142,6 +142,7 @@ export function ExamProfileEditPage() {
 
   const loadProfile = useCallback(async () => {
     if (!id) return;
+    setError(null);
     setIsLoading(true);
     try {
       const p = await api.get<ExamProfileDTO>(`/api/exam-profiles/${id}`);

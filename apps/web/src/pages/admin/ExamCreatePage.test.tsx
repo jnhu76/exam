@@ -56,9 +56,10 @@ vi.mock("sonner", () => ({
 }));
 
 function defaultApiGet(path: string): unknown {
-  if (path.includes("/api/courses")) return { items: mockCourses, total: 1 };
+  if (path.includes("/api/courses"))
+    return { items: mockCourses, total: 1, totalPages: 1 };
   if (path.includes("/api/questions"))
-    return { items: mockQuestions, total: 2 };
+    return { items: mockQuestions, total: 2, totalPages: 1 };
   if (path.includes("/api/exam-profiles")) return [] as ExamProfileDTO[];
   return {};
 }
@@ -207,6 +208,38 @@ describe("ExamCreatePage wizard — step 3 (questions + scores)", () => {
     await waitFor(() =>
       expect(screen.getByText("已选题目 (0)")).toBeInTheDocument(),
     );
+  });
+
+  it("loads questions from every page when more than 100 exist", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path.includes("/api/questions")) {
+        if (path.includes("page=2"))
+          return {
+            items: [
+              {
+                id: "q3",
+                type: "single_choice",
+                content: "Second page question",
+                score: 5,
+              },
+            ],
+            total: 3,
+            totalPages: 2,
+          };
+        return { items: mockQuestions, total: 3, totalPages: 2 };
+      }
+      return defaultApiGet(path);
+    });
+    const user = userEvent.setup();
+    await goToStep3(user);
+    await user.click(screen.getByRole("button", { name: "手动选题" }));
+    const dialog = await screen.findByRole("dialog");
+    // Page 1 and page 2 items are both selectable in the picker.
+    expect(within(dialog).getByText("2+2=4")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Second page question"),
+    ).toBeInTheDocument();
+    expect(apiGet).toHaveBeenCalledWith("/api/questions?page=2&pageSize=100");
   });
 
   it("auto-calculates totalScore from the selected questions (10 + 15 = 25)", async () => {

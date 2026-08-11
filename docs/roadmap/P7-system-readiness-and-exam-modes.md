@@ -571,7 +571,7 @@ choose profile
   → customize allowed dimensions
   → validate conflicts
   → preview candidate/operator behavior
-  → publish and freeze
+  → create draft (publishing stays on the exam detail page)
 ```
 
 #### Recovery center
@@ -692,11 +692,13 @@ If P7-D1 concluded that no Redis adoption is warranted:
 
 ### Gate P7-5 — Exam profiles are coherent
 
-- minimal, standard, controlled, and strict profiles resolve to one policy
-  schema;
+- the shipped minimal/standard-equivalent recipes (`basic_quiz`,
+  `standard_online`) resolve to one policy schema; the deferred
+  `Controlled` / `Strict` classes are excluded from this gate until their
+  owning subsystems land (see note below);
 - invalid combinations fail before publish;
 - profile edits do not mutate published exams;
-- each profile has API and representative browser E2E proof.
+- each shipped recipe has API and representative browser E2E proof.
 
 > **Revised (2026-08-11, P7-M closeout):** `Controlled` / `Strict` are
 > DEFERRED — their promised capabilities (queue admission, device binding,

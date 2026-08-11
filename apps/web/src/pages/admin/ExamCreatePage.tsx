@@ -81,6 +81,7 @@ interface QuestionRow {
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
+  totalPages: number;
 }
 
 /**
@@ -199,6 +200,7 @@ export function ExamCreatePage() {
   const [manualTotalScore, setManualTotalScore] = useState(false);
 
   const loadData = useCallback(async () => {
+    setError(null);
     setIsLoading(true);
     try {
       const [cData, qData, pData] = await Promise.all([
@@ -211,11 +213,22 @@ export function ExamCreatePage() {
         api.get<ExamProfileDTO[]>("/api/exam-profiles"),
       ]);
       setCourses(cData.items);
-      setQuestions(qData.items);
       setProfiles(pData);
       setState((prev) =>
         prev.courseId ? prev : { ...prev, courseId: cData.items[0]?.id ?? "" },
       );
+      // The questions list can span multiple pages (pageSize cap = 100).
+      // Fetch the remaining pages and combine so the picker sees every
+      // selectable question; a single page short-circuits to page 1 alone.
+      const pageCount = Math.max(1, qData.totalPages);
+      const restPages = await Promise.all(
+        Array.from({ length: pageCount - 1 }, (_, i) =>
+          api.get<PaginatedResponse<QuestionRow>>(
+            `/api/questions?page=${i + 2}&pageSize=100`,
+          ),
+        ),
+      );
+      setQuestions([...qData.items, ...restPages.flatMap((r) => r.items)]);
     } catch {
       setError(t("admin.examWizard.feedback.loadDataFailed"));
     } finally {
