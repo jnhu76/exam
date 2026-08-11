@@ -387,6 +387,15 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "best_effort",
     "domain_state",
     "low",
+    // P7-M2: optional provenance only (design §15). The profile is NOT
+    // runtime authority — the Exam row already contains the applied concrete
+    // values. sourceProfileId/sourceProfileName are never resolved at runtime.
+    z
+      .object({
+        sourceProfileId: identifier.optional(),
+        sourceProfileName: z.string().max(100).optional(),
+      })
+      .strict(),
   ),
   [AuditAction.ExamUpdate]: definition(
     "active",
@@ -474,6 +483,28 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "domain_history",
     "domain_state",
     "burst",
+  ),
+  // P7-M2 exam policy profiles — ordinary authoring data (editable templates,
+  // NOT execution authority). Best-effort durability mirrors course/question
+  // authoring mutations; profiles carry no secrets.
+  [AuditAction.ExamProfileCreate]: definition(
+    "active",
+    "best_effort",
+    "domain_state",
+    "low",
+  ),
+  [AuditAction.ExamProfileUpdate]: definition(
+    "active",
+    "best_effort",
+    "domain_state",
+    "low",
+    changedFieldsPayload,
+  ),
+  [AuditAction.ExamProfileDelete]: definition(
+    "active",
+    "best_effort",
+    "domain_state",
+    "low",
   ),
   [AuditAction.QuestionCreate]: definition(
     "active",

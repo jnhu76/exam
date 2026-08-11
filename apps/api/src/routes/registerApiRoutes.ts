@@ -10,6 +10,7 @@ import candidateRoutes from "./candidate.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import examRoutes from "./exam.js";
+import examProfileRoutes from "./examProfile.js";
 import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
 import { exportRoutes } from "./export.js";
@@ -49,6 +50,7 @@ export async function registerApiRoutes(
   await app.register(courseRoutes, { prefix });
   await app.register(questionRoutes, { prefix });
   await app.register(examRoutes, { prefix });
+  await app.register(examProfileRoutes, { prefix });
   await app.register(attemptRoutes, { prefix });
   await app.register(scoreRoutes, { prefix });
   await app.register(exportRoutes, { prefix });

@@ -80,6 +80,11 @@ export const AuditAction = {
   ExamOpen: "exam.open",
   ExamClosed: "exam.closed",
 
+  // ── Exam policy profiles (P7-M2 authoring templates) ──
+  ExamProfileCreate: "exam_profile.create",
+  ExamProfileUpdate: "exam_profile.update",
+  ExamProfileDelete: "exam_profile.delete",
+
   // ── Question ──
   QuestionCreate: "question.create",
   QuestionUpdate: "question.update",
