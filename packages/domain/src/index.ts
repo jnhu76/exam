@@ -7,3 +7,4 @@ export * from "./notification.js";
 export * from "./attemptCommandPayload.js";
 export * from "./examPolicy.js";
 export * from "./examProfile.js";
+export * from "./examProfileRecipes.js";

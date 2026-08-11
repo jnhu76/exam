@@ -152,12 +152,18 @@ test.describe("P4-C3 Teacher positive product path", () => {
     await page.getByRole("button", { name: "创建考试" }).click();
     await expect(page).toHaveURL(/\/admin\/exams\/new(?:$|[/?#])/);
 
-    // Fill the exam title through the rendered form. The course Select is
+    // Fill the exam title through the rendered wizard. The course Select is
     // auto-defaulted to the first course by ExamCreatePage.loadData (the
     // Teacher-created course is the only course in this org after API setup,
-    // so it is the selected value). Times default server-side when left blank.
+    // so it is the selected value). The new ExamCreatePage is a 5-step wizard
+    // (P7-M): 基本信息 → 考试策略 → 题目与分数 → 时间安排 → 检查并创建.
     const examTitle = `Teacher考试-${unique}`;
     await page.getByPlaceholder("请输入考试名称").fill(examTitle);
+
+    // Step 1 → 2 (policy): accept profile-free defaults.
+    await page.getByRole("button", { name: /下一步/ }).click();
+    // Step 2 → 3 (questions + scores).
+    await page.getByRole("button", { name: /下一步/ }).click();
 
     // Pick a question through the rendered 手动选题 dialog. The dialog lists
     // the first page of /api/questions; the first available question belongs
@@ -183,14 +189,26 @@ test.describe("P4-C3 Teacher positive product path", () => {
     // locator survives Field-wrapper DOM changes.
     await page.getByTestId("passingScore-input").fill("1");
 
-    // Save as draft through the rendered UI. Capture the created exam id from
-    // the POST /api/exams response so we can open its detail page next.
+    // Step 3 → 4 (schedule): set an explicit open/close so the per-step gate
+    // passes. The wizard requires both fields to advance.
+    await page.getByRole("button", { name: /下一步/ }).click();
+    const openAt = "2026-09-01T09:00";
+    const closeAt = "2026-09-01T11:00";
+    await page.getByLabel("开始时间").fill(openAt);
+    await page.getByLabel("结束时间").fill(closeAt);
+
+    // Step 4 → 5 (review).
+    await page.getByRole("button", { name: /下一步/ }).click();
+
+    // Create the draft exam through the rendered UI (wizard final step).
+    // Capture the created exam id from the POST /api/exams response so we can
+    // open its detail page next.
     const createResponsePromise = page.waitForResponse(
       (res) =>
         res.request().method() === "POST" &&
         /\/api\/exams$/.test(new URL(res.url()).pathname),
     );
-    await page.getByRole("button", { name: "保存草稿" }).click();
+    await page.getByRole("button", { name: "创建草稿" }).click();
     const createResponse = await createResponsePromise;
     expect(
       createResponse.ok(),
@@ -199,8 +217,11 @@ test.describe("P4-C3 Teacher positive product path", () => {
     const examId = ((await createResponse.json()) as { id: string }).id;
     expect(examId).toBeTruthy();
 
-    // Submission succeeds → observable navigation back to /admin/exams.
-    await expect(page).toHaveURL(/\/admin\/exams(?:$|[/?#])/);
+    // Submission succeeds → observable navigation to the exam DETAIL page
+    // (the wizard routes to /admin/exams/:id for draft review, not the list).
+    await expect(page).toHaveURL(
+      new RegExp(`/admin/exams/${examId}(?:$|[/?#])`),
+    );
 
     // ── Step 4c (F-1 browser mutation): Teacher publishes the exam through ──
     // the rendered ExamDetailPage. Open the created exam's detail page, then

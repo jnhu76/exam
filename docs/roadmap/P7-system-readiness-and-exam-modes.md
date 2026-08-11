@@ -571,7 +571,7 @@ choose profile
   → customize allowed dimensions
   → validate conflicts
   → preview candidate/operator behavior
-  → publish and freeze
+  → create draft (publishing stays on the exam detail page)
 ```
 
 #### Recovery center
@@ -627,7 +627,11 @@ P7-C  Portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
          (control plane; not started)
   → P7-M1  Exam policy schema + conflict validator
   → P7-M2  Profile templates + snapshot resolution
-  → P7-M3  Exam creation wizard
+  → P7-M   Configurable exam modes (product closeout) — functional
+         implementation complete; visual product closeout pending
+         (profile management UI + exam creation wizard + truthful starter
+         recipes; multimodal visual review round pending before CLOSED; see
+         docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
 
 P7-U1  UI pilot migration
   → P7-U2+ family-by-family UI closeout
@@ -688,11 +692,24 @@ If P7-D1 concluded that no Redis adoption is warranted:
 
 ### Gate P7-5 — Exam profiles are coherent
 
-- minimal, standard, controlled, and strict profiles resolve to one policy
-  schema;
+- the shipped minimal/standard-equivalent recipes (`basic_quiz`,
+  `standard_online`) resolve to one policy schema; the deferred
+  `Controlled` / `Strict` classes are excluded from this gate until their
+  owning subsystems land (see note below);
 - invalid combinations fail before publish;
 - profile edits do not mutate published exams;
-- each profile has API and representative browser E2E proof.
+- each shipped recipe has API and representative browser E2E proof.
+
+> **Revised (2026-08-11, P7-M closeout):** `Controlled` / `Strict` are
+> DEFERRED — their promised capabilities (queue admission, device binding,
+> lockdown, IP restriction, randomization, continuous monitoring) are
+> unimplemented, so those two classes have no API/E2E proof and must not be
+> shipped or claimed (truthfulness gate; P7-M closeout §10). Gate P7-5's
+> E2E-proof bullet therefore applies to the shipped minimal/standard-
+> equivalent recipes (`basic_quiz`, `standard_online`); the Controlled/Strict
+> classes are re-validated against this gate when their owning subsystems
+> land. The multimodal visual review round is the remaining P7-M closeout
+> item before CLOSED.
 
 ### Gate P7-6 — UI closeout
 

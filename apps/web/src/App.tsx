@@ -30,6 +30,8 @@ import { ExamPage } from "@/pages/admin/ExamPage";
 import { ExamCreatePage } from "@/pages/admin/ExamCreatePage";
 import { ExamDetailPage } from "@/pages/admin/ExamDetailPage";
 import { ExamEditPage } from "@/pages/admin/ExamEditPage";
+import { ExamProfilePage } from "@/pages/admin/ExamProfilePage";
+import { ExamProfileEditPage } from "@/pages/admin/ExamProfileEditPage";
 import { ExamListPage } from "@/pages/exam/ExamListPage";
 import { ExamSettingsPage } from "@/pages/exam/ExamSettingsPage";
 import { StartExamPage } from "@/pages/exam/StartExamPage";
@@ -92,6 +94,12 @@ export function AppRoutes() {
         <Route path="exams/:id" element={<ExamDetailPage />} />
         <Route path="exams/:id/edit" element={<ExamEditPage />} />
         <Route path="exams/:id/scores" element={<ScoreListPage />} />
+        <Route path="exam-profiles" element={<ExamProfilePage />} />
+        <Route path="exam-profiles/new" element={<ExamProfileEditPage />} />
+        <Route
+          path="exam-profiles/:id/edit"
+          element={<ExamProfileEditPage />}
+        />
         <Route path="exams/:id/proctor" element={<ProctorDashboardPage />} />
         <Route path="proctor" element={<ProctorWorkspacePage />} />
         <Route
