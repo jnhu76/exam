@@ -547,37 +547,47 @@ describe("0027 convergence — G. partial incompatible (wrong column type)", () 
     ).toBeNull();
   });
 
-  it("fails closed when a required column is missing (not a raw missing-column DB error)", async () => {
-    // A table that omits exam_id but keeps every other expected column. Before
-    // the count=11 set-equality fix this slipped past the B1 subset check (every
-    // remaining column was still in the allow-list) and only failed later in B2
-    // with a raw "column does not exist" error during index CREATE. With the
-    // fix it must be rejected up front with the named 0027-B1 shape error.
-    const env2 = await makeEnv("mig0027incompat2");
-    try {
-      await env2.conn.sql.unsafe(`
-        DROP TABLE IF EXISTS exam_proctor_assignment_events CASCADE;
-        DROP TABLE IF EXISTS exam_proctor_assignments CASCADE;
-        CREATE TABLE exam_proctor_assignments (
-          "id" text PRIMARY KEY NOT NULL,
-          "organization_id" text NOT NULL,
-          "proctor_user_id" text NOT NULL,
-          "status" text DEFAULT 'active' NOT NULL,
-          "assigned_by" text NOT NULL,
-          "assigned_at" timestamp with time zone NOT NULL,
-          "revoked_by" text,
-          "revoked_at" timestamp with time zone,
-          "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-          "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  it(
+    "fails closed when a required column is missing (not a raw missing-column DB error)",
+    // This case is the only one that bootstraps a SECOND isolated schema
+    // inside the test body (makeEnv → full migrate → sabotage DDL). Under
+    // full-suite coverage contention that can exceed the 5s default
+    // (BUG-FLAKE-001 family; issue #280) — heavier budget for this specific
+    // test per the packages/db vitest.config.ts stress-note pattern, not a
+    // package-wide override.
+    { timeout: 15_000 },
+    async () => {
+      // A table that omits exam_id but keeps every other expected column. Before
+      // the count=11 set-equality fix this slipped past the B1 subset check (every
+      // remaining column was still in the allow-list) and only failed later in B2
+      // with a raw "column does not exist" error during index CREATE. With the
+      // fix it must be rejected up front with the named 0027-B1 shape error.
+      const env2 = await makeEnv("mig0027incompat2");
+      try {
+        await env2.conn.sql.unsafe(`
+          DROP TABLE IF EXISTS exam_proctor_assignment_events CASCADE;
+          DROP TABLE IF EXISTS exam_proctor_assignments CASCADE;
+          CREATE TABLE exam_proctor_assignments (
+            "id" text PRIMARY KEY NOT NULL,
+            "organization_id" text NOT NULL,
+            "proctor_user_id" text NOT NULL,
+            "status" text DEFAULT 'active' NOT NULL,
+            "assigned_by" text NOT NULL,
+            "assigned_at" timestamp with time zone NOT NULL,
+            "revoked_by" text,
+            "revoked_at" timestamp with time zone,
+            "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+            "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+          );
+        `);
+        await expect(run0027(env2.conn)).rejects.toThrow(
+          /0027-B1: exam_proctor_assignments exists with an incompatible column shape/,
         );
-      `);
-      await expect(run0027(env2.conn)).rejects.toThrow(
-        /0027-B1: exam_proctor_assignments exists with an incompatible column shape/,
-      );
-    } finally {
-      await teardown(env2);
-    }
-  });
+      } finally {
+        await teardown(env2);
+      }
+    },
+  );
 });
 
 // ============================================================
