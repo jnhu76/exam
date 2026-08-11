@@ -1,0 +1,64 @@
+import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import type { WizardStep } from "./wizardState";
+
+const STEP_KEYS = [
+  "basic",
+  "policy",
+  "questions",
+  "schedule",
+  "review",
+] as const;
+
+/**
+ * Accessible step indicator for the exam-creation wizard. Steps are buttons
+ * (keyboard-reachable); the current step carries aria-current="step". This is
+ * a plain composition over Button — NOT a generic stepper framework.
+ */
+export function WizardStepper({
+  current,
+  onNavigate,
+}: {
+  current: WizardStep;
+  onNavigate: (step: WizardStep) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <nav aria-label={t("admin.examWizard.stepperLabel")}>
+      <ol className="flex flex-wrap items-center gap-2">
+        {STEP_KEYS.map((key, idx) => {
+          const step = (idx + 1) as WizardStep;
+          const isCurrent = step === current;
+          const isPast = step < current;
+          return (
+            <li key={key} className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={isCurrent ? "default" : "outline"}
+                size="sm"
+                aria-current={isCurrent ? "step" : undefined}
+                onClick={() => onNavigate(step)}
+                className={cn(isPast && !isCurrent && "opacity-70")}
+              >
+                <span className="tabular-nums">{step}</span>
+                <span>{t(`admin.examWizard.steps.${key}`)}</span>
+              </Button>
+              {idx < STEP_KEYS.length - 1 && (
+                <span aria-hidden="true" className="text-muted-foreground">
+                  ›
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {t("admin.examWizard.stepOf", {
+          current,
+          total: STEP_KEYS.length,
+        })}
+      </p>
+    </nav>
+  );
+}
