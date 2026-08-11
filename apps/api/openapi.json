@@ -7347,8 +7347,7 @@
                   },
                   "description": {
                     "type": "string",
-                    "maxLength": 2000,
-                    "default": ""
+                    "maxLength": 2000
                   },
                   "courseId": {
                     "type": "string",
@@ -7356,8 +7355,7 @@
                   },
                   "timingMode": {
                     "type": "string",
-                    "enum": ["timed_window"],
-                    "default": "timed_window"
+                    "enum": ["timed_window"]
                   },
                   "durationMinutes": {
                     "type": "integer",
@@ -7383,80 +7381,30 @@
                   },
                   "questionSelectionMode": {
                     "type": "string",
-                    "enum": ["manual"],
-                    "default": "manual"
+                    "enum": ["manual"]
                   },
                   "questionIds": {
                     "type": "array",
                     "items": {
                       "type": "string",
                       "format": "uuid"
-                    },
-                    "default": []
+                    }
                   },
                   "controlFlags": {
                     "type": "object",
-                    "properties": {
-                      "shuffleQuestions": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "shuffleOptions": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "detectTabSwitch": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "disableCopyPaste": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "requireQueue": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "batchSize": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "default": 10
-                      },
-                      "batchInterval": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "default": 3
-                      },
-                      "restrictIp": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "requireLockdown": {
-                        "type": "boolean",
-                        "default": false
-                      },
-                      "showResultImmediately": {
-                        "type": "boolean",
-                        "default": true
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": {}
+                    "additionalProperties": {}
                   },
                   "retakePolicy": {
                     "type": "string",
-                    "enum": ["unlimited", "max_attempts", "pass_then_stop"],
-                    "default": "unlimited"
+                    "enum": ["unlimited", "max_attempts", "pass_then_stop"]
                   },
                   "scoreStrategy": {
                     "type": "string",
-                    "enum": ["highest", "latest", "first"],
-                    "default": "highest"
+                    "enum": ["highest", "latest", "first"]
                   },
                   "maxAttempts": {
                     "type": "integer",
-                    "minimum": 1,
-                    "default": 1
+                    "minimum": 1
                   },
                   "latestStartOffsetMinutes": {
                     "type": "integer",
@@ -7489,12 +7437,15 @@
                     "minimum": 0,
                     "maximum": 2147483647,
                     "nullable": true
+                  },
+                  "profileId": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
                 "required": [
                   "title",
                   "courseId",
-                  "durationMinutes",
                   "openAt",
                   "closeAt",
                   "passingScore",
@@ -11879,6 +11830,1151 @@
                   },
                   "required": ["candidates", "total"],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exam-profiles": {
+      "get": {
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Teacher"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "organizationId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "durationMinutes": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "minimum": 0
+                      },
+                      "latestStartOffsetMinutes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "nullable": true
+                      },
+                      "minSubmitAfterStartMinutes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "nullable": true
+                      },
+                      "retakePolicy": {
+                        "type": "string",
+                        "enum": ["unlimited", "max_attempts", "pass_then_stop"]
+                      },
+                      "maxAttempts": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "scoreStrategy": {
+                        "type": "string",
+                        "enum": ["highest", "latest", "first"]
+                      },
+                      "resultPublicationMode": {
+                        "type": "string",
+                        "enum": ["immediate", "after_grading", "manual"]
+                      },
+                      "interruptionTimePolicy": {
+                        "type": "string",
+                        "enum": ["strict", "bounded_grace", "operator_incident"]
+                      },
+                      "interruptionGracePerIncidentSeconds": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "minimum": 0,
+                        "maximum": 2147483647,
+                        "nullable": true
+                      },
+                      "interruptionGracePerAttemptSeconds": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "minimum": 0,
+                        "maximum": 2147483647,
+                        "nullable": true
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "organizationId",
+                      "name",
+                      "description",
+                      "durationMinutes",
+                      "latestStartOffsetMinutes",
+                      "minSubmitAfterStartMinutes",
+                      "retakePolicy",
+                      "maxAttempts",
+                      "scoreStrategy",
+                      "resultPublicationMode",
+                      "interruptionTimePolicy",
+                      "interruptionGracePerIncidentSeconds",
+                      "interruptionGracePerAttemptSeconds",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": ""
+                  },
+                  "durationMinutes": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "latestStartOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "minSubmitAfterStartMinutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "retakePolicy": {
+                    "type": "string",
+                    "enum": ["unlimited", "max_attempts", "pass_then_stop"]
+                  },
+                  "maxAttempts": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "scoreStrategy": {
+                    "type": "string",
+                    "enum": ["highest", "latest", "first"]
+                  },
+                  "resultPublicationMode": {
+                    "type": "string",
+                    "enum": ["immediate", "after_grading", "manual"]
+                  },
+                  "interruptionTimePolicy": {
+                    "type": "string",
+                    "enum": ["strict", "bounded_grace", "operator_incident"]
+                  },
+                  "interruptionGracePerIncidentSeconds": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "maximum": 2147483647,
+                    "nullable": true
+                  },
+                  "interruptionGracePerAttemptSeconds": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "maximum": 2147483647,
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "name",
+                  "durationMinutes",
+                  "retakePolicy",
+                  "maxAttempts",
+                  "scoreStrategy",
+                  "resultPublicationMode",
+                  "interruptionTimePolicy"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Teacher"],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "organizationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "durationMinutes": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "latestStartOffsetMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "minSubmitAfterStartMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "retakePolicy": {
+                      "type": "string",
+                      "enum": ["unlimited", "max_attempts", "pass_then_stop"]
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "scoreStrategy": {
+                      "type": "string",
+                      "enum": ["highest", "latest", "first"]
+                    },
+                    "resultPublicationMode": {
+                      "type": "string",
+                      "enum": ["immediate", "after_grading", "manual"]
+                    },
+                    "interruptionTimePolicy": {
+                      "type": "string",
+                      "enum": ["strict", "bounded_grace", "operator_incident"]
+                    },
+                    "interruptionGracePerIncidentSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "maximum": 2147483647,
+                      "nullable": true
+                    },
+                    "interruptionGracePerAttemptSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "maximum": 2147483647,
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "name",
+                    "description",
+                    "durationMinutes",
+                    "latestStartOffsetMinutes",
+                    "minSubmitAfterStartMinutes",
+                    "retakePolicy",
+                    "maxAttempts",
+                    "scoreStrategy",
+                    "resultPublicationMode",
+                    "interruptionTimePolicy",
+                    "interruptionGracePerIncidentSeconds",
+                    "interruptionGracePerAttemptSeconds",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exam-profiles/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Teacher"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "organizationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "durationMinutes": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "latestStartOffsetMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "minSubmitAfterStartMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "retakePolicy": {
+                      "type": "string",
+                      "enum": ["unlimited", "max_attempts", "pass_then_stop"]
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "scoreStrategy": {
+                      "type": "string",
+                      "enum": ["highest", "latest", "first"]
+                    },
+                    "resultPublicationMode": {
+                      "type": "string",
+                      "enum": ["immediate", "after_grading", "manual"]
+                    },
+                    "interruptionTimePolicy": {
+                      "type": "string",
+                      "enum": ["strict", "bounded_grace", "operator_incident"]
+                    },
+                    "interruptionGracePerIncidentSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "maximum": 2147483647,
+                      "nullable": true
+                    },
+                    "interruptionGracePerAttemptSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "maximum": 2147483647,
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "name",
+                    "description",
+                    "durationMinutes",
+                    "latestStartOffsetMinutes",
+                    "minSubmitAfterStartMinutes",
+                    "retakePolicy",
+                    "maxAttempts",
+                    "scoreStrategy",
+                    "resultPublicationMode",
+                    "interruptionTimePolicy",
+                    "interruptionGracePerIncidentSeconds",
+                    "interruptionGracePerAttemptSeconds",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "durationMinutes": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "latestStartOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "minSubmitAfterStartMinutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "nullable": true
+                  },
+                  "retakePolicy": {
+                    "type": "string",
+                    "enum": ["unlimited", "max_attempts", "pass_then_stop"]
+                  },
+                  "maxAttempts": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "scoreStrategy": {
+                    "type": "string",
+                    "enum": ["highest", "latest", "first"]
+                  },
+                  "resultPublicationMode": {
+                    "type": "string",
+                    "enum": ["immediate", "after_grading", "manual"]
+                  },
+                  "interruptionTimePolicy": {
+                    "type": "string",
+                    "enum": ["strict", "bounded_grace", "operator_incident"]
+                  },
+                  "interruptionGracePerIncidentSeconds": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "maximum": 2147483647,
+                    "nullable": true
+                  },
+                  "interruptionGracePerAttemptSeconds": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "maximum": 2147483647,
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Teacher"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "organizationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "durationMinutes": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "latestStartOffsetMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "minSubmitAfterStartMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "retakePolicy": {
+                      "type": "string",
+                      "enum": ["unlimited", "max_attempts", "pass_then_stop"]
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "scoreStrategy": {
+                      "type": "string",
+                      "enum": ["highest", "latest", "first"]
+                    },
+                    "resultPublicationMode": {
+                      "type": "string",
+                      "enum": ["immediate", "after_grading", "manual"]
+                    },
+                    "interruptionTimePolicy": {
+                      "type": "string",
+                      "enum": ["strict", "bounded_grace", "operator_incident"]
+                    },
+                    "interruptionGracePerIncidentSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "maximum": 2147483647,
+                      "nullable": true
+                    },
+                    "interruptionGracePerAttemptSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "maximum": 2147483647,
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "name",
+                    "description",
+                    "durationMinutes",
+                    "latestStartOffsetMinutes",
+                    "minSubmitAfterStartMinutes",
+                    "retakePolicy",
+                    "maxAttempts",
+                    "scoreStrategy",
+                    "resultPublicationMode",
+                    "interruptionTimePolicy",
+                    "interruptionGracePerIncidentSeconds",
+                    "interruptionGracePerAttemptSeconds",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Teacher"],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "enum": ["null"],
+                  "nullable": true
                 }
               }
             }

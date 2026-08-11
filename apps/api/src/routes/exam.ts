@@ -17,6 +17,7 @@ import {
   normalizeInterruptionPolicyConfiguration,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import { createExamProfileRepo } from "@exam/db/src/repository/examProfileRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
@@ -40,9 +41,12 @@ import type {
   ControlFlags,
   RequestContext,
   Exam,
+  ExamProfile,
+  ExamProfilePolicyDefaults,
   Question,
 } from "@exam/domain";
 import {
+  applyExamProfileDefaults,
   InvalidStateTransitionError,
   ExamAlreadyPublishedError,
   ExamNotDraftError,
@@ -255,6 +259,24 @@ function resolveResultPublicationMode(
   return parsedMode;
 }
 
+/**
+ * P7-M2: the profile-owned policy fields (`ExamProfilePolicyDefaults`).
+ * Used for presence-based profile-default injection during exam creation
+ * (design §20 Option A).
+ */
+const PROFILE_POLICY_FIELDS = [
+  "durationMinutes",
+  "latestStartOffsetMinutes",
+  "minSubmitAfterStartMinutes",
+  "retakePolicy",
+  "maxAttempts",
+  "scoreStrategy",
+  "resultPublicationMode",
+  "interruptionTimePolicy",
+  "interruptionGracePerIncidentSeconds",
+  "interruptionGracePerAttemptSeconds",
+] as const;
+
 /** Zod schema for route params containing a UUID `examId`. */
 const examIdParamsSchema = z.object({ examId: z.string().uuid() });
 
@@ -454,6 +476,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireCapability(Permission.ExamCreate),
       ],
       schema: {
+        // Raw defaults-free shape (P7-M2 §20 Option A): the fastify zod
+        // validator writes its parsed output back into `request.body`, so a
+        // defaults-applying schema would inject code defaults into the body
+        // and defeat the profile presence detection. The handler re-parses
+        // with the canonical full schema (defaults + refine).
         body: CreateExamRequestBaseSchema,
         security: cookieAuth,
         "x-role": ["Admin", "Teacher"],
@@ -472,7 +499,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(400)
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
-      const data = parsed.data;
+      // `let`: with a selected profile the merged authoring input is re-parsed
+      // after profile-default injection (P7-M2 §20 Option A).
+      let data = parsed.data;
       const repo = createExamRepo(fastify.db);
       const course = await createCourseRepo(fastify.db).findById(
         ctx,
@@ -509,10 +538,125 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
+      // P7-M2: optional exam policy profile (authoring template). When
+      // selected, the profile's typed defaults are COPY-ON-APPLY'd into the
+      // concrete Exam columns below — the created Exam never depends on the
+      // profile at runtime (design §3/§4). Resolution precedence (design
+      // §18): explicit request value > profile value > existing code default,
+      // preserving explicit `null`.
+      //
+      // ONE resolution path (design §20 Option A): the fastify body schema is
+      // the raw defaults-free shape, so `request.body` carries TRUE caller
+      // presence — a Zod-inserted code default can never defeat a profile
+      // default. The resolver overlays explicitly-supplied values, then the
+      // merged raw input is re-parsed with the canonical schema, which
+      // applies existing code defaults to anything still omitted.
+      const rawBody = request.body as Record<string, unknown>;
+      let profile: ExamProfile | null = null;
+      let resolvedDefaults: ExamProfilePolicyDefaults | null = null;
+      if (data.profileId) {
+        profile = (await createExamProfileRepo(fastify.db).findById(
+          ctx,
+          data.profileId,
+        )) as ExamProfile | null;
+        if (!profile) {
+          // Unknown or foreign-org profile id resolves identically — no
+          // cross-org existence leak (design §37).
+          return reply.code(400).send(
+            buildErrorResponse(request.id, "VALIDATION_ERROR", {
+              fields: [
+                {
+                  field: "profileId",
+                  code: "RESOURCE_NOT_FOUND",
+                  message: "考试策略模板不存在",
+                },
+              ],
+            }),
+          );
+        }
+        const explicitOverrides: Partial<ExamProfilePolicyDefaults> = {};
+        if (rawBody.durationMinutes !== undefined) {
+          explicitOverrides.durationMinutes = data.durationMinutes as number;
+        }
+        if (rawBody.latestStartOffsetMinutes !== undefined) {
+          explicitOverrides.latestStartOffsetMinutes =
+            data.latestStartOffsetMinutes as number | null;
+        }
+        if (rawBody.minSubmitAfterStartMinutes !== undefined) {
+          explicitOverrides.minSubmitAfterStartMinutes =
+            data.minSubmitAfterStartMinutes as number | null;
+        }
+        if (rawBody.retakePolicy !== undefined) {
+          explicitOverrides.retakePolicy = data.retakePolicy;
+        }
+        if (rawBody.maxAttempts !== undefined) {
+          explicitOverrides.maxAttempts = data.maxAttempts;
+        }
+        if (rawBody.scoreStrategy !== undefined) {
+          explicitOverrides.scoreStrategy = data.scoreStrategy;
+        }
+        if (rawBody.resultPublicationMode !== undefined) {
+          explicitOverrides.resultPublicationMode =
+            data.resultPublicationMode as ExamProfilePolicyDefaults["resultPublicationMode"];
+        }
+        if (rawBody.interruptionTimePolicy !== undefined) {
+          explicitOverrides.interruptionTimePolicy =
+            data.interruptionTimePolicy as ExamProfilePolicyDefaults["interruptionTimePolicy"];
+        }
+        if (rawBody.interruptionGracePerIncidentSeconds !== undefined) {
+          explicitOverrides.interruptionGracePerIncidentSeconds =
+            data.interruptionGracePerIncidentSeconds as number | null;
+        }
+        if (rawBody.interruptionGracePerAttemptSeconds !== undefined) {
+          explicitOverrides.interruptionGracePerAttemptSeconds =
+            data.interruptionGracePerAttemptSeconds as number | null;
+        }
+        resolvedDefaults = applyExamProfileDefaults(profile, explicitOverrides);
+
+        // Inject the profile-resolved value for every profile-owned field the
+        // caller omitted (`undefined` = omitted; `null` = explicit semantic
+        // value and wins), then run the canonical full parse so code defaults
+        // apply to anything still omitted.
+        const merged: Record<string, unknown> = { ...rawBody };
+        for (const field of PROFILE_POLICY_FIELDS) {
+          if (merged[field] === undefined) {
+            merged[field] = resolvedDefaults[field];
+          }
+        }
+        const reparsed = CreateExamRequestSchema.safeParse(merged);
+        if (!reparsed.success) {
+          return reply
+            .code(400)
+            .send(buildValidationErrorResponse(request.id, reparsed.error));
+        }
+        data = reparsed.data;
+      }
+
+      // P7-M2 canonical guard (design §20): after the canonical parse,
+      // `durationMinutes` is present iff a profile supplied it or the caller
+      // sent it (the schema refine rejects the no-profile omission). Fail
+      // closed rather than persisting undefined.
+      if (data.durationMinutes === undefined) {
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "durationMinutes",
+                code: "INVALID_TYPE",
+                message: "Required",
+              },
+            ],
+          }),
+        );
+      }
+
       // ADR-013 §3: resolve the interruption policy from the (optional)
-      // authoring input. Normalization enforces the cross-field rules
-      // (strict/operator_incident ⇒ null caps; bounded_grace ⇒ both caps
-      // present, positive, perIncident ≤ perAttempt) and fails closed.
+      // authoring input. `data` already carries the merged authoring values
+      // (explicit request > profile default > code default; explicit null
+      // preserved), so the master-form normalization applies. It enforces the
+      // cross-field rules (strict/operator_incident ⇒ null caps; bounded_grace
+      // ⇒ both caps present, positive, perIncident ≤ perAttempt) and fails
+      // closed.
       let interruptionPolicy: ReturnType<
         typeof normalizeInterruptionPolicyConfiguration
       >;
@@ -554,15 +698,24 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           })),
         });
       }
+      // P2D-J5a legacy compatibility: if a client omits `resultPublicationMode`
+      // but sends the legacy `controlFlags.showResultImmediately` flag, derive
+      // the mode from the legacy flag. `data.resultPublicationMode` already
+      // carries the profile default when the caller omitted the mode (P7-M2);
+      // an explicitly sent legacy flag is explicit request input and wins over
+      // the profile default.
       const resolvedResultPublicationMode = resolveResultPublicationMode(
         request.body,
         data.resultPublicationMode ?? "immediate",
       );
 
       // P7-M1: canonical cross-field policy validation on create (design §21).
-      // Runs on the exact merged policy that will be persisted, so authoring
-      // rejects invalid combinations early. Publish revalidates the whole
-      // policy again as the freeze/acceptance gate.
+      // Runs on the exact merged policy that will be persisted (profile
+      // defaults already materialized), so authoring rejects invalid
+      // combinations early. Publish revalidates the whole policy again as the
+      // freeze/acceptance gate. Ownership is unchanged — the M1 validator is
+      // the ONE canonical semantic owner; profiles never get their own
+      // validator (design §43).
       assertExamPolicyInputValid({
         timingMode: data.timingMode,
         durationMinutes: data.durationMinutes,
@@ -617,6 +770,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         action: "exam.create",
         targetType: "exam",
         targetId: exam.id,
+        // Provenance ONLY (design §15): the profile is not runtime authority;
+        // the Exam row already contains the applied concrete values.
+        ...(profile
+          ? {
+              metadata: {
+                sourceProfileId: profile.id,
+                sourceProfileName: profile.name,
+              },
+            }
+          : {}),
       });
 
       return reply.code(201).send(toExamResponse(exam as Exam));

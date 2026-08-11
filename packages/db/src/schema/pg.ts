@@ -18,6 +18,8 @@ import type {
   AttemptInterruptionEvent,
   AttemptTimeAdjustment,
   InterruptionTimePolicy,
+  ExamProfileRetakePolicy,
+  ScoreStrategy,
 } from "@exam/domain";
 import {
   bigint,
@@ -305,6 +307,103 @@ export const exams = pgTable(
     ),
     check(
       "exams_interruption_policy_caps_check",
+      sql`
+        (
+          ${table.interruptionTimePolicy} IN ('strict', 'operator_incident')
+          AND ${table.interruptionGracePerIncidentSeconds} IS NULL
+          AND ${table.interruptionGracePerAttemptSeconds} IS NULL
+        )
+        OR
+        (
+          ${table.interruptionTimePolicy} = 'bounded_grace'
+          AND ${table.interruptionGracePerIncidentSeconds} IS NOT NULL
+          AND ${table.interruptionGracePerAttemptSeconds} IS NOT NULL
+          AND ${table.interruptionGracePerIncidentSeconds} > 0
+          AND ${table.interruptionGracePerAttemptSeconds} > 0
+          AND ${table.interruptionGracePerIncidentSeconds} <= ${table.interruptionGracePerAttemptSeconds}
+        )
+      `,
+    ),
+  ],
+);
+
+/**
+ * Exam policy profiles — P7-M2 organization-owned authoring templates.
+ *
+ * A profile is an EDITABLE AUTHORING CONVENIENCE, NOT execution authority
+ * (P7-M2 design: copy-on-apply). Applying a profile to an exam copies its
+ * typed values into the ordinary `exams` columns; the published Exam row is
+ * the immutable execution authority and is never resolved through a profile
+ * again. Typed columns instead of a `policy_defaults jsonb` blob so the
+ * small known set is SQL-visible, migration-readable, and auditable.
+ *
+ * Excluded from profiles (by design): courseId, openAt/closeAt,
+ * passingScore/totalScore, questionIds/snapshot, lifecycle status,
+ * title/description, timingMode + questionSelectionMode (fixed Phase-1
+ * literals), and ALL control_flags (latent/unenforced — see P7-M1 §13).
+ */
+export const examPolicyProfiles = pgTable(
+  "exam_policy_profiles",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
+    minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
+    retakePolicy: text("retake_policy")
+      .$type<ExamProfileRetakePolicy>()
+      .notNull(),
+    maxAttempts: integer("max_attempts").notNull(),
+    scoreStrategy: text("score_strategy").$type<ScoreStrategy>().notNull(),
+    resultPublicationMode: text("result_publication_mode")
+      .$type<ResultPublicationMode>()
+      .notNull(),
+    interruptionTimePolicy: text("interruption_time_policy")
+      .$type<InterruptionTimePolicy>()
+      .notNull()
+      .default("strict"),
+    interruptionGracePerIncidentSeconds: integer(
+      "interruption_grace_per_incident_seconds",
+    ),
+    interruptionGracePerAttemptSeconds: integer(
+      "interruption_grace_per_attempt_seconds",
+    ),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("exam_policy_profiles_org_name_unique").on(
+      table.organizationId,
+      table.name,
+    ),
+    check(
+      "exam_policy_profiles_duration_minutes_positive_check",
+      sql`${table.durationMinutes} > 0`,
+    ),
+    check(
+      "exam_policy_profiles_latest_start_offset_minutes_check",
+      sql`${table.latestStartOffsetMinutes} >= 0`,
+    ),
+    check(
+      "exam_policy_profiles_min_submit_after_start_minutes_check",
+      sql`${table.minSubmitAfterStartMinutes} >= 0`,
+    ),
+    check(
+      "exam_policy_profiles_retake_policy_check",
+      sql`${table.retakePolicy} IN ('unlimited', 'max_attempts', 'pass_then_stop')`,
+    ),
+    check(
+      "exam_policy_profiles_score_strategy_check",
+      sql`${table.scoreStrategy} IN ('highest', 'latest', 'first')`,
+    ),
+    check(
+      "exam_policy_profiles_interruption_time_policy_check",
+      sql`${table.interruptionTimePolicy} IN ('strict', 'bounded_grace', 'operator_incident')`,
+    ),
+    check(
+      "exam_policy_profiles_interruption_policy_caps_check",
       sql`
         (
           ${table.interruptionTimePolicy} IN ('strict', 'operator_incident')

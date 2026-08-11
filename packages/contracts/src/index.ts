@@ -23,3 +23,4 @@ export * from "./emailField.js";
 export * from "./notification.js";
 export * from "./interruption.js";
 export * from "./recovery.js";
+export * from "./examProfile.js";

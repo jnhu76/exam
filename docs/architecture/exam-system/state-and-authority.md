@@ -496,3 +496,30 @@ Redis remains limited to shared rate-limit ephemeral state and read-only
 system-health diagnostics. It owns no exam fact, and no TTL can trigger an
 irreversible transition (ADR-013 §11 freeze). P7-S2 adds no Redis
 responsibility.
+
+### Exam policy profiles — authoring boundary (P7-M2)
+
+Exam policy profiles (`exam_policy_profiles`) are organization-owned,
+editable **authoring templates**, NOT execution authority. Applying a profile
+during exam creation COPIES its typed values into the ordinary `exams`
+columns (copy-on-apply); the created Exam never depends on the profile again.
+
+```text
+Exam Policy Profile = reusable authoring template
+Applying it copies values into Exam authority.
+It is not consulted during runtime.
+```
+
+Consequences (authority model unchanged):
+
+- Runtime (attempt start, answer save, heartbeat, deadline scanner,
+  interruption recovery, grading, result publication, candidate view,
+  submission) NEVER loads a profile — profile lookup count in the runtime
+  path is 0 (structural test + package dependency boundary).
+- Profile edits or deletions after application can never change an existing
+  (draft or published) Exam.
+- The published Exam row remains the immutable execution authority; the
+  canonical M1 validator still validates the fully materialized policy at
+  create and publish.
+- Exam creation through a profile records `sourceProfileId` /
+  `sourceProfileName` in the `exam.create` audit metadata as provenance only.

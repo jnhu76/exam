@@ -15,6 +15,7 @@ export * from "./repository/candidateRepo.js";
 export * from "./repository/courseRepo.js";
 export * from "./repository/enrollmentRepo.js";
 export * from "./repository/examRepo.js";
+export * from "./repository/examProfileRepo.js";
 export * from "./repository/organizationRepo.js";
 export * from "./repository/questionRepo.js";
 export * from "./repository/settingsRepo.js";

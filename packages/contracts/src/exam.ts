@@ -23,7 +23,7 @@ const TimingModeEnum = z.enum([
   "untimed",
 ]);
 const QuestionSelectionModeEnum = z.enum(["manual", "random"]);
-const ScoreStrategyEnum = z.enum(["highest", "latest", "first"]);
+export const ScoreStrategyEnum = z.enum(["highest", "latest", "first"]);
 const RetakePolicyEnum = z.enum([
   "unlimited",
   "max_attempts",
@@ -33,7 +33,7 @@ const RetakePolicyEnum = z.enum([
 ]);
 const Phase1TimingModeEnum = z.literal("timed_window");
 const Phase1QuestionSelectionModeEnum = z.literal("manual");
-const Phase1RetakePolicyEnum = z.enum([
+export const Phase1RetakePolicyEnum = z.enum([
   "unlimited",
   "max_attempts",
   "pass_then_stop",
@@ -116,25 +116,46 @@ export type EnrollCandidatesRequest = z.infer<
 >;
 
 /**
- * Request schema for creating a new exam. Phase 1 supports only `timed_window` timing
- * and `manual` question selection.
+ * Raw authoring shape for creating an exam (P7-M2 §20 Option A).
+ *
+ * This is the FASTIFY-BOUNDARY schema: it validates the raw request shape
+ * WITHOUT applying any defaults (and without the canonical refine). Because
+ * the fastify zod validator writes its parsed output back into
+ * `request.body`, a defaults-applying schema would inject code defaults into
+ * the body and defeat the profile presence detection ("caller omitted field"
+ * would be indistinguishable from "Zod inserted the code default"). With this
+ * raw schema the handler can detect TRUE omission, overlay profile defaults,
+ * and then run the canonical full parse (`CreateExamRequestSchema`) which
+ * applies code defaults to whatever is still omitted.
+ *
+ * Phase 1 supports only `timed_window` timing and `manual` question selection.
  */
 export const CreateExamRequestBaseSchema = z.object({
   title: z.string().min(1).max(200),
-  description: z.string().max(2000).default(""),
+  // Every field that carries a code default in the canonical schema is
+  // OPTIONAL here (shape-only, no default, no required): the canonical parse
+  // in the handler applies the defaults. `durationMinutes` is optional
+  // because a selected exam policy profile may supply it — without a
+  // profileId the canonical refine keeps it REQUIRED, so no-profile create
+  // behavior is unchanged.
+  description: z.string().max(2000).optional(),
   courseId: z.string().uuid(),
-  timingMode: Phase1TimingModeEnum.default("timed_window"),
-  durationMinutes: z.number().int().positive(),
+  timingMode: Phase1TimingModeEnum.optional(),
+  durationMinutes: z.number().int().positive().optional(),
   openAt: z.string().datetime(),
   closeAt: z.string().datetime(),
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
-  questionSelectionMode: Phase1QuestionSelectionModeEnum.default("manual"),
-  questionIds: z.array(z.string().uuid()).default([]),
-  controlFlags: ControlFlagsSchema.default({}),
-  retakePolicy: Phase1RetakePolicyEnum.default("unlimited"),
-  scoreStrategy: ScoreStrategyEnum.default("highest"),
-  maxAttempts: z.number().int().min(1).default(1),
+  questionSelectionMode: Phase1QuestionSelectionModeEnum.optional(),
+  questionIds: z.array(z.string().uuid()).optional(),
+  // Raw passthrough at the fastify boundary: ControlFlagsSchema applies nested
+  // defaults (showResultImmediately etc.), which would make the route's legacy
+  // showResultImmediately presence check see a defaulted flag as explicit
+  // input. The full schema parse in the handler validates the real shape.
+  controlFlags: z.record(z.unknown()).optional(),
+  retakePolicy: Phase1RetakePolicyEnum.optional(),
+  scoreStrategy: ScoreStrategyEnum.optional(),
+  maxAttempts: z.number().int().min(1).optional(),
   // ADR-005 Slice 3 timing policy. null/omitted = disabled.
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
@@ -166,9 +187,40 @@ export const CreateExamRequestBaseSchema = z.object({
     .positive()
     .max(POSTGRES_INTEGER_MAX)
     .nullish(),
+  // P7-M2: optional authoring input selecting an exam policy profile. The
+  // profile's defaults are COPY-ON-APPLY into the concrete Exam columns at
+  // creation; the created Exam never depends on the profile at runtime.
+  profileId: z.string().uuid().optional(),
 });
 
-export const CreateExamRequestSchema = CreateExamRequestBaseSchema;
+/**
+ * Canonical create-exam schema: the raw shape + the existing code defaults +
+ * the P7-M2 guard. `durationMinutes` may be omitted ONLY when a profile is
+ * selected (the profile supplies it). Without a profile, omitting
+ * `durationMinutes` fails with the exact same `invalid_type` issue the schema
+ * previously produced for the required field — no-profile behavior is
+ * byte-identical.
+ */
+export const CreateExamRequestSchema = CreateExamRequestBaseSchema.extend({
+  description: z.string().max(2000).default(""),
+  timingMode: Phase1TimingModeEnum.default("timed_window"),
+  questionSelectionMode: Phase1QuestionSelectionModeEnum.default("manual"),
+  questionIds: z.array(z.string().uuid()).default([]),
+  controlFlags: ControlFlagsSchema.default({}),
+  retakePolicy: Phase1RetakePolicyEnum.default("unlimited"),
+  scoreStrategy: ScoreStrategyEnum.default("highest"),
+  maxAttempts: z.number().int().min(1).default(1),
+}).superRefine((data, ctx) => {
+  if (data.profileId === undefined && data.durationMinutes === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.invalid_type,
+      expected: "number",
+      received: "undefined",
+      path: ["durationMinutes"],
+      message: "Required",
+    });
+  }
+});
 
 /** Type for a create-exam request. */
 export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
