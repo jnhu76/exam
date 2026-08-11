@@ -195,7 +195,10 @@ P7-M2  profile templates + authoring-time resolution ✅ CLOSED
        (organization-owned exam policy profiles, copy-on-apply into typed
        Exam columns, no runtime profile dependency; see
        docs/audits/P7-M2-PROFILE-TEMPLATES-AND-RESOLUTION.md)
-P7-M3  exam creation wizard ← NEXT
+P7-M   configurable exam modes (product closeout) ✅ CLOSED
+       (profile management UI + exam creation wizard; two truthful starter
+       recipes shipped; Controlled/Strict deferred to their owning subsystems;
+       see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
 Future P7-E1  (only if a confirmed Admin-editable operational-settings
        requirement emerges): identify ONE coherent first vertical slice.
        Backup automation/status is a separate operational capability, not E1.
