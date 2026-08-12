@@ -384,6 +384,23 @@ SQL status updates.
 
 ## 8. Workstream E — Configuration control plane
 
+> **Program redefinition (2026-08-12, P7-E1):** the P7-E program now means
+> **operational authority separation (Admin ≠ Maintainer)** — not (only) the
+> settings control plane of this section. The P7-E1 reality audit + authority
+> contract is **CLOSED as READY FOR HUMAN REVIEW** (docs-only; see
+> [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
+> and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)).
+> Verdict: the hard boundary (no product surface for infrastructure
+> execution; no Admin capability reaches machine/DB/secret authority;
+> secrets env/Compose-only; restore operator-owned forever) **already holds
+> structurally**; the Maintainer is a deployment/operator identity, NOT a
+> product DB role (Option B); no new role/schema/login is introduced in
+> E1/E2. The real gap is durable backup *evidence* (P7-C ships mechanisms
+> with zero in-product records). Recommended next slice: **GO P7-E2
+> (conditional on human review)** — evidence-first backup run ledger
+> (typed `backup_runs` + script instrumentation + read-only Admin view);
+> no scheduler, no retention engine, no restore surface, no Maintainer role.
+>
 > **P7-E0 status (2026-08-10):** the configuration reality audit is **CLOSED**
 > (merged via PR #276) — see
 > [`docs/audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md`](../audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md).
@@ -398,8 +415,10 @@ SQL status updates.
 > future profile-resolution hazard (P2-M1) as the key P7-M1 design input. A
 > future E1 is triggered only by a confirmed near-term requirement for
 > Admin-editable operational settings (Email worker/retry is a candidate under
-> that gate, not preselected; backup automation/status is a separate
-> operational capability). P7-E itself is NOT complete; P7-E1 is NOT started.
+> that gate, not preselected; backup automation/status is the separate
+> operational capability owned by the P7-E2 evidence slice above). P7-E
+> itself is NOT complete; the E0 settings question is distinct from the
+> P7-E1 authority contract.
 
 ### Configuration classification
 
