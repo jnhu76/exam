@@ -142,6 +142,12 @@ export interface HeartbeatConfig {
   timeoutMs: number;
   /** Whole seconds derived from timeoutMs; heartbeat/scanner use this. */
   heartbeatTimeoutSeconds: number;
+  /**
+   * P7-E closeout (E0 P2-2): the deadline scanner interval, resolved through
+   * the canonical loader (DEADLINE_SCAN_INTERVAL_MS) — the plugin no longer
+   * reads process.env directly.
+   */
+  deadlineScanIntervalMs: number;
 }
 
 /** Email transport selection (M3 — Email Outbox). */
@@ -830,6 +836,9 @@ export function loadRuntimeConfig(
   const scanIntervalMs = positiveIntSchema.parse(
     env.HEARTBEAT_SCAN_INTERVAL_MS ?? "30000",
   );
+  const deadlineScanIntervalMs = positiveIntSchema.parse(
+    env.DEADLINE_SCAN_INTERVAL_MS ?? scanIntervalMs.toString(),
+  );
   const timeoutMs = positiveIntSchema.parse(
     env.HEARTBEAT_TIMEOUT_MS ?? "60000",
   );
@@ -862,7 +871,12 @@ export function loadRuntimeConfig(
       manualExamOpenClose: isTruthy(env.FEATURE_MANUAL_EXAM_OPEN_CLOSE),
       liveScoreList: isTruthy(env.FEATURE_LIVE_SCORE_LIST),
     },
-    heartbeat: { scanIntervalMs, timeoutMs, heartbeatTimeoutSeconds },
+    heartbeat: {
+      scanIntervalMs,
+      timeoutMs,
+      heartbeatTimeoutSeconds,
+      deadlineScanIntervalMs,
+    },
     apiReference: {
       enabled: apiReferenceEnabled,
       uiPath: "/_dev/api-reference",

@@ -124,6 +124,17 @@ export class AdminAlreadyExistsError extends AppError {
   }
 }
 
+/**
+ * Operational policy intent version conflict (P7-E3, HTTP 409). The Admin's
+ * intent record was modified concurrently — the client must re-read the
+ * current version (CAS) and retry.
+ */
+export class OpsPolicyVersionConflictError extends AppError {
+  constructor(message = "Operational policy intent was modified concurrently") {
+    super(message, "OPS_POLICY_VERSION_CONFLICT", 409);
+  }
+}
+
 /** Candidate identity field value conflicts with an existing candidate (HTTP 409). */
 export class CandidateIdentityConflictError extends AppError {
   constructor(message = "Candidate identity already exists") {

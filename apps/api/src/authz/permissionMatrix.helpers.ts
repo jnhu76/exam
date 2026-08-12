@@ -33,6 +33,7 @@ const ASSIGNABLE_ROLES: readonly MatrixRole[] = [
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ];
 
 export type MatrixVerdict = "denied" | "passed" | "unexpected";
@@ -60,6 +61,7 @@ const ROLES: readonly MatrixRole[] = [
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ];
 
 function errorCodeFrom(body: unknown): unknown {

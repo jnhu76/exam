@@ -34,6 +34,7 @@ const staticRouteTitleKeys = new Map<string, string>([
   [routes.admin.proctorWorkspace, "pageMeta.static.proctorWorkspace"],
   [routes.admin.results, "pageMeta.static.results"],
   [routes.admin.system, "pageMeta.static.system"],
+  [routes.admin.operations, "pageMeta.static.operations"],
   [routes.admin.auditLogs, "pageMeta.static.auditLogs"],
   [routes.admin.importLogs, "pageMeta.static.importLogs"],
   [routes.admin.recovery, "pageMeta.static.recovery"],

@@ -70,8 +70,15 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
   // Overview / system
   {
     pattern: "dashboard",
-    capability: Permission.SystemHealthView,
+    capability: Permission.SystemBusinessSummaryView,
     label: "dashboard",
+  },
+  // P7-E2C: Operations surface (health / diagnostics / backup / restore
+  // readiness) — Admin + Maintainer.
+  {
+    pattern: "operations",
+    capability: Permission.SystemHealthView,
+    label: "operations",
   },
   {
     pattern: "system",

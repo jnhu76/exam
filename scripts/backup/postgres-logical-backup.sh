@@ -59,6 +59,65 @@ fi
 PROJECT="$1"
 DEST="$2"
 
+# P7-E2B: stable logical-run identity for the evidence ledger. Defaults to
+# the HOUR slot (<type>:<YYYY-MM-DD>T<HH>) — the ledger allows at most one
+# verified success per operation id, so a default of "one per day" would
+# collide for any schedule finer than daily (e.g. hourly backups with a
+# desired RPO < 24h). A manual/cron invocation may override with
+# EVIDENCE_OPERATION_ID; retries of the same logical run MUST reuse the same
+# id so the ledger can reconcile them, and a schedule finer than one hour
+# MUST pass a per-slot id (see docs/deployment/backup-and-recovery.md). The
+# artifact label is the file NAME only — the ledger never stores host paths.
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-logical:$(date +%Y-%m-%dT%H)}"
+ARTIFACT_LABEL="$(basename "${DEST}")"
+
+# Runs the typed operator evidence command inside the app container.
+# Start evidence is best-effort (a missing start record never blocks the
+# backup); COMPLETE evidence is a hard gate — a verified artifact that cannot
+# be recorded is reported loudly and the script exits non-zero so cron does
+# not silently count a run the product ledger cannot see.
+#
+# Container-name addressing (like DB_CONTAINER below) — deliberately NOT
+# `docker compose -p ... exec`, which requires a compose file in the invoking
+# cwd (breaks under host cron with a different working directory).
+evidence() {
+  docker exec "${PROJECT}-app-1" node dist/scripts/backup-evidence.js "$@"
+}
+
+evidence_start() {
+  if ! evidence start --operation-id "${EVIDENCE_OPERATION_ID}" \
+      --type logical --artifact-label "${ARTIFACT_LABEL}" --executor host_script; then
+    echo "WARN: evidence start unavailable (app container down?) — this run will not" >&2
+    echo "      appear as in-progress in the product ledger. Completion evidence is" >&2
+    echo "      still required." >&2
+  fi
+}
+
+evidence_fail() {
+  # Best-effort: the primary failure is already reported by the caller.
+  evidence fail --operation-id "${EVIDENCE_OPERATION_ID}" \
+    --type logical --executor host_script --reason "$1" >/dev/null 2>&1 || true
+}
+
+evidence_complete() {
+  local size_bytes
+  size_bytes="$(stat -c %s "${DEST}" 2>/dev/null || echo 0)"
+  if ! evidence complete --operation-id "${EVIDENCE_OPERATION_ID}" \
+      --type logical --artifact-label "${ARTIFACT_LABEL}" \
+      --size-bytes "${size_bytes}" --verification-method pg_restore_list \
+      --executor host_script; then
+    echo "FAIL: backup artifact produced and verified, but EVIDENCE RECORDING failed." >&2
+    echo "      artifact: ${DEST} (${size_bytes} bytes)" >&2
+    echo "      Re-run the evidence CLI to record it, or the product ledger will not" >&2
+    echo "      show a verified backup:" >&2
+    echo "        docker exec ${PROJECT}-app-1 node dist/scripts/backup-evidence.js complete \\" >&2
+    echo "          --operation-id ${EVIDENCE_OPERATION_ID} --type logical \\" >&2
+    echo "          --artifact-label ${ARTIFACT_LABEL} --size-bytes ${size_bytes} \\" >&2
+    echo "          --verification-method pg_restore_list --executor host_script" >&2
+    exit 1
+  fi
+}
+
 if [ -z "${PROJECT}" ] || [ -z "${DEST}" ]; then
   echo "FAIL: COMPOSE_PROJECT and DEST_DUMP_PATH must be non-empty." >&2
   exit 2
@@ -109,6 +168,11 @@ echo "  source: ${DB_CONTAINER} (db ${DEPLOY_PG_DB})"
 echo "  destination: ${DEST}"
 echo "  PostgreSQL remains ONLINE; API availability is not required."
 
+# P7-E2B: record the run start BEFORE the dump (crash semantics: a process
+# that dies before the artifact exists leaves a running record that the next
+# start closes as abandoned — it never claims success).
+evidence_start
+
 # Run pg_dump INSIDE the db container (so it uses the container's local auth
 # and the bundled POSTGRES_USER/POSTGRES_DB env). -Fc = custom format
 # (built-in compression, pg_restore support, better version portability than
@@ -117,11 +181,15 @@ echo "  PostgreSQL remains ONLINE; API availability is not required."
 # in the postgres user's environment via ~/.pgpass-free trust for local
 # connections; if PGPASSWORD is exported on the host it is passed through to
 # the exec environment explicitly (still not on argv).
-docker exec \
+if ! docker exec \
   -e PGPASSWORD="${PGPASSWORD:-}" \
   "${DB_CONTAINER}" \
   sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner' \
-  > "${DEST}"
+  > "${DEST}"; then
+  echo "FAIL: pg_dump exited non-zero — no backup produced." >&2
+  evidence_fail "pg_dump failed"
+  exit 1
+fi
 
 # ── Verification (C2.4): do not equate "pg_dump exited 0" with "restore proven". ──
 # At minimum: artifact exists, non-empty, and pg_restore --list succeeds
@@ -130,6 +198,7 @@ docker exec \
 if [ ! -s "${DEST}" ]; then
   echo "FAIL: backup artifact is empty — pg_dump produced no output." >&2
   rm -f "${DEST}" 2>/dev/null || true
+  evidence_fail "artifact empty"
   exit 1
 fi
 
@@ -140,6 +209,7 @@ if [ "${MAGIC}" != "PGDMP" ]; then
   echo "FAIL: artifact does not start with the 'PGDMP' custom-format magic." >&2
   echo "       The captured stream may be an error message, not a dump." >&2
   rm -f "${DEST}" 2>/dev/null || true
+  evidence_fail "artifact missing PGDMP magic"
   exit 1
 fi
 
@@ -154,8 +224,14 @@ if ! docker exec -i -e PGPASSWORD="${PGPASSWORD:-}" "${DB_CONTAINER}" \
   echo "       --- pg_restore --list output ---" >&2
   cat "${LIST_OUT}" >&2
   rm -f "${DEST}" 2>/dev/null || true
+  evidence_fail "verification failed: pg_restore --list rejected the archive"
   exit 1
 fi
+
+# P7-E2B: verification passed — record the VERIFIED success. This is the
+# ONLY path that makes the run SUCCESS in the ledger (artifact + readable +
+# verification + durable evidence, ADR-017 D10).
+evidence_complete
 
 SIZE="$(du -h "${DEST}" | cut -f1)"
 echo ""

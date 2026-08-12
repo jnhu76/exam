@@ -2,6 +2,11 @@ import type {
   AnswerRecord,
   Attachment,
   AttemptGradingEntry,
+  BackupExecutorType,
+  BackupRunEventType,
+  BackupRunStatus,
+  BackupType,
+  BackupVerificationStatus,
   ControlFlags,
   EmailOutboxStatus,
   EmailType,
@@ -13,6 +18,8 @@ import type {
   NotificationType,
   QuestionScoreResult,
   QuestionSnapshot,
+  RestoreDrillResult,
+  RestoreDrillSource,
   ResultPublicationMode,
   SubmittedAnswersSnapshot,
   AttemptInterruptionEvent,
@@ -1201,10 +1208,239 @@ export const workerHeartbeats = pgTable(
 );
 
 /**
+ * Backup-run evidence ledger (P7-E2B).
+ *
+ * Durable, truthful records of backup mechanism executions, written by the
+ * typed operator evidence CLI at the P7-C scripts' natural checkpoints.
+ * This is NOT a scheduler, NOT a generic event store, NOT a settings table —
+ * it is the evidence projection the product reads to answer "last backup",
+ * "last VERIFIED backup", "last failure", "RPO posture" (E3).
+ *
+ * SUCCESS semantics (ADR-017 D10, P7-E1 §12.4):
+ *   `succeeded` requires artifact produced + readable + verification passed
+ *   + durable evidence committed. A run whose verification never happened is
+ *   `pending`/`abandoned` — never success. `pg_dump exit 0` alone is not
+ *   success; `file exists` alone is not success.
+ *
+ * Idempotency / duplicate-run invariant (D10 #2): at most ONE `succeeded`
+ * row per (organization, operation_id) — enforced by the partial unique
+ * index `backup_runs_org_operation_succeeded_unique`. A retry whose
+ * completion would contradict an existing success is recorded as `failed`
+ * with reason `duplicate_operation_conflict` (fail closed).
+ *
+ * Secrets: the ledger NEVER stores credentials, host paths, or the backup
+ * destination URL. `artifact_label` is a safe reference (file name /
+ * operator-provided label) suitable for display.
+ */
+export const backupRuns = pgTable(
+  "backup_runs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Stable logical run identity (e.g. `logical:2026-08-12` for the daily
+     *  cron slot). Retries of the same logical run share the operationId. */
+    operationId: text("operation_id").notNull(),
+    backupType: text("backup_type").notNull().$type<BackupType>(),
+    status: text("status").notNull().$type<BackupRunStatus>(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    /** Safe artifact reference (file name / label) — never a host path. */
+    artifactLabel: text("artifact_label"),
+    artifactSizeBytes: bigint("artifact_size_bytes", { mode: "number" }),
+    verificationMethod: text("verification_method"),
+    verificationStatus: text(
+      "verification_status",
+    ).$type<BackupVerificationStatus>(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }),
+    /** Sanitized failure reason (no secrets, no credentials, no paths). */
+    failureReason: text("failure_reason"),
+    executorType: text("executor_type").notNull().$type<BackupExecutorType>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // At most one SUCCESS per logical run (D10 #2 — no contradictory
+    // terminal evidence). Retry attempts (running/failed/abandoned) may
+    // share the operationId freely.
+    uniqueIndex("backup_runs_org_operation_succeeded_unique")
+      .on(table.organizationId, table.operationId)
+      .where(sql`status = 'succeeded'`),
+    index("backup_runs_org_started_idx").on(
+      table.organizationId,
+      table.startedAt,
+    ),
+    check(
+      "backup_runs_status_check",
+      sql`${table.status} IN ('running', 'succeeded', 'failed', 'abandoned')`,
+    ),
+    check(
+      "backup_runs_type_check",
+      sql`${table.backupType} IN ('logical', 'physical_base', 'cold_filesystem')`,
+    ),
+    check(
+      "backup_runs_verification_status_check",
+      sql`${table.verificationStatus} IN ('verified', 'failed', 'pending')`,
+    ),
+    // SUCCESS requires verification evidence (D10 #1): a `succeeded` row must
+    // carry verificationStatus = 'verified' at the DB level. NULL-safe: a
+    // NULL verification_status must NOT satisfy the constraint (PostgreSQL
+    // CHECK semantics would otherwise treat NULL as "passes").
+    check(
+      "backup_runs_success_verified_check",
+      sql`(${table.status} <> 'succeeded' OR (${table.verificationStatus} IS NOT NULL AND ${table.verificationStatus} = 'verified'))`,
+    ),
+  ],
+);
+
+/**
+ * Append-only transition log for backup runs (P7-E2B). One row per evidence
+ * transition (started / succeeded / failed / abandoned / duplicate_rejected),
+ * carrying the sanitized detail of that transition. Enables forensic answers
+ * for crash/idempotency analysis ("the retry closed the previous running
+ * attempt as abandoned") without overloading the run row.
+ */
+export const backupRunEvents = pgTable(
+  "backup_run_events",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    runId: text("run_id")
+      .notNull()
+      .references(() => backupRuns.id, { onDelete: "cascade" }),
+    operationId: text("operation_id").notNull(),
+    eventType: text("event_type").notNull().$type<BackupRunEventType>(),
+    detail: text("detail"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("backup_run_events_org_run_idx").on(
+      table.organizationId,
+      table.runId,
+    ),
+    check(
+      "backup_run_events_type_check",
+      sql`${table.eventType} IN ('started', 'succeeded', 'failed', 'abandoned', 'duplicate_rejected')`,
+    ),
+  ],
+);
+
+/**
+ * Operational policy INTENT (P7-E3, ADR-017 D9).
+ *
+ * The typed, audited record of the Admin's DESIRED operational objectives:
+ * recovery point objective (RPO), retention objective, and restore-drill
+ * cadence. This is INTENT ONLY — it never binds, schedules, or rewrites
+ * infrastructure (host cron / scripts remain the execution authority; the
+ * product renders DESIRED vs OBSERVED vs STATUS and nothing else).
+ *
+ * This is NOT a generic settings store: the fields are typed with safe
+ * ranges (CHECK constraints), the row is versioned for optimistic
+ * concurrency (CAS), and every change is audited with a reason. One row per
+ * organization (Phase 1 single-tenant); absence = NOT_CONFIGURED.
+ *
+ * Sole intent owner: Admin (system.ops.policy.manage). Maintainer reads the
+ * intent (system.ops.policy.view) and never modifies it.
+ */
+export const backupOperationalPolicy = pgTable(
+  "backup_operational_policy",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Desired RPO in seconds (safe range 5 minutes .. 7 days). */
+    desiredRpoSeconds: integer("desired_rpo_seconds").notNull(),
+    /** Desired backup retention objective in days (1 .. 3650). */
+    desiredRetentionDays: integer("desired_retention_days").notNull(),
+    /** Desired restore-drill cadence in days (1 .. 365). */
+    desiredDrillCadenceDays: integer("desired_drill_cadence_days").notNull(),
+    /** Optimistic-concurrency version (CAS on every update). */
+    version: integer("version").notNull().default(1),
+    /** Required human-readable reason for the change. */
+    reason: text("reason").notNull(),
+    /** Actor that created/updated the intent. */
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("backup_operational_policy_org_unique").on(
+      table.organizationId,
+    ),
+    check(
+      "backup_operational_policy_rpo_check",
+      sql`${table.desiredRpoSeconds} BETWEEN 300 AND 604800`,
+    ),
+    check(
+      "backup_operational_policy_retention_check",
+      sql`${table.desiredRetentionDays} BETWEEN 1 AND 3650`,
+    ),
+    check(
+      "backup_operational_policy_cadence_check",
+      sql`${table.desiredDrillCadenceDays} BETWEEN 1 AND 365`,
+    ),
+  ],
+);
+
+/**
+ * Restore-drill evidence (P7-E2B). Records restore-readiness drills: the
+ * deterministic deployment drills (automated) and operator-recorded drills
+ * (operator_declared). The read projection distinguishes the two — a declared
+ * success is never rendered as automated proof. Restore itself remains
+ * host-only; this table only records EVIDENCE of drills, never execution
+ * authority.
+ */
+export const restoreDrillRuns = pgTable(
+  "restore_drill_runs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Stable drill identity (e.g. `logical-restore:2026-08-12`). */
+    operationId: text("operation_id").notNull(),
+    backupType: text("backup_type").notNull().$type<BackupType>(),
+    result: text("result").notNull().$type<RestoreDrillResult>(),
+    source: text("source").notNull().$type<RestoreDrillSource>(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    durationMs: bigint("duration_ms", { mode: "number" }),
+    failureReason: text("failure_reason"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("restore_drill_runs_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    check(
+      "restore_drill_runs_result_check",
+      sql`${table.result} IN ('succeeded', 'failed')`,
+    ),
+    check(
+      "restore_drill_runs_source_check",
+      sql`${table.source} IN ('automated', 'operator_declared')`,
+    ),
+  ],
+);
+
+/**
  * Roles assignable to a user via the RBAC-M8 role-assignment surface.
  * `System` is excluded (synthetic, non-assignable). `SuperAdmin` is not defined
  * (no ADR). Phase 1 `users.role` still only carries Admin/Candidate; the
- * assignment table is the path to the broader Phase 3 set.
+ * assignment table is the path to the broader Phase 3 set. P7-E2A (ADR-017 D2
+ * amendment of ADR-010) adds `Maintainer` — the application-side System
+ * Operations Owner preset (operational observation only).
  */
 export const ASSIGNABLE_ROLES = [
   "Admin",
@@ -1212,6 +1448,7 @@ export const ASSIGNABLE_ROLES = [
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ] as const;
 // NOTE: AssignableRole is also defined in @exam/contracts (AssignableRoleSchema).
 // The two are structurally identical by design — db cannot depend on contracts
@@ -1259,7 +1496,7 @@ export const userRoleAssignments = pgTable(
       .where(sql`is_primary = true AND is_active = true`),
     check(
       "user_role_assignments_role_check",
-      sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate')`,
+      sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate', 'Maintainer')`,
     ),
   ],
 );
@@ -1895,4 +2132,8 @@ export const schema = {
   examProctorAssignments,
   examProctorAssignmentEvents,
   attemptCommandReceipts,
+  backupRuns,
+  backupRunEvents,
+  backupOperationalPolicy,
+  restoreDrillRuns,
 };

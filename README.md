@@ -123,7 +123,7 @@ Requires a running PostgreSQL instance. Use `pnpm db:up` to start one via Docker
 
 ```bash
 pnpm install
-pnpm db:up       # Start PostgreSQL container (port 5432)
+pnpm db:up       # Start PostgreSQL container (port 15432)
 pnpm db:migrate  # Run migrations
 pnpm db:seed     # Seed with test users
 pnpm dev         # Start API + Web with hot reload
@@ -131,7 +131,7 @@ pnpm dev         # Start API + Web with hot reload
 
 - Web: <http://localhost:5173>
 - API: <http://localhost:3000>
-- Database: PostgreSQL 18 on `localhost:5432`
+- Database: PostgreSQL 18 on `localhost:15432`
 
 ### Mode 2: Docker Compose (Full Stack)
 
@@ -259,7 +259,7 @@ clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 | `pnpm db:push`           | Push schema changes to database                             |
 | `pnpm db:migrate`        | Run database migrations                                     |
 | `pnpm db:studio`         | Open Drizzle Studio                                         |
-| `pnpm db:up`             | Start PostgreSQL container (dev, port 5432)                |
+| `pnpm db:up`             | Start PostgreSQL container (dev, port 15432)                |
 | `pnpm db:down`           | Stop PostgreSQL container                                   |
 | `pnpm db:reset`          | Reset dev database (down + up + migrate)                   |
 | `pnpm test`              | Run all tests                                               |

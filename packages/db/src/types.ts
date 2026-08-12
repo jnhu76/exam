@@ -92,11 +92,12 @@ const RETRYABLE_ERROR_CODES = new Set([
 const MAX_RETRIES = 3;
 
 /**
- * Checks if an error represents a retryable transaction concurrency error.
- * Walks the error chain (Drizzle wraps the underlying Postgres error).
- * Uses a `visited` Set to guard against circular `cause` references.
+ * True when the error — or any error in its `cause` chain, because Drizzle
+ * wraps the underlying PostgreSQL error — carries the given PostgreSQL
+ * error code (e.g. `23505` unique_violation). Uses a `visited` Set to guard
+ * against circular `cause` references.
  */
-function isRetryableError(err: unknown): boolean {
+export function hasPostgresErrorCode(err: unknown, code: string): boolean {
   let current: unknown = err;
   const visited = new Set<unknown>();
   while (current && !visited.has(current)) {
@@ -105,8 +106,7 @@ function isRetryableError(err: unknown): boolean {
       typeof current === "object" &&
       current !== null &&
       "code" in current &&
-      typeof (current as { code: unknown }).code === "string" &&
-      RETRYABLE_ERROR_CODES.has((current as { code: string }).code)
+      (current as { code: unknown }).code === code
     ) {
       return true;
     }
@@ -117,6 +117,16 @@ function isRetryableError(err: unknown): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Checks if an error represents a retryable transaction concurrency error.
+ * Walks the error chain (Drizzle wraps the underlying Postgres error).
+ */
+function isRetryableError(err: unknown): boolean {
+  return [...RETRYABLE_ERROR_CODES].some((code) =>
+    hasPostgresErrorCode(err, code),
+  );
 }
 
 /**

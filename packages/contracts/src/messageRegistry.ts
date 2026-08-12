@@ -41,6 +41,7 @@ export const errorMessages = {
   ATTEMPT_ALREADY_STARTED: "考试尝试已开始",
   ATTEMPT_CLOSED: "考试已结束",
   ANSWER_VERSION_CONFLICT: "答案版本冲突",
+  OPS_POLICY_VERSION_CONFLICT: "策略意图已被其他操作修改，请刷新后重试",
   EXAM_NOT_OPEN: "考试尚未开放",
   ATTEMPT_DEADLINE_EXCEEDED: "考试时间已到",
   DEADLINE_EXCEEDS_EXAM_CLOSE: "延长后的截止时间不能超过考试结束时间",

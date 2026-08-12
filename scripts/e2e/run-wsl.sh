@@ -371,12 +371,14 @@ run_pids=()
 set +e
 for (( i=0; i<E2E_WORKERS; i++ )); do
   local_port=$((E2E_WORKER_BASE_PORT+i))
+  local_url="${DB_BASE_URL_NO_NAME}/${WORKER_DB_PREFIX}${i}"
   shard_out_dir="test-results/shard-${i}"
   mkdir -p "$shard_out_dir"
   (
     E2E_BASE_URL="http://localhost:${local_port}" \
       E2E_SHARD_TOTAL="$E2E_WORKERS" \
       PLAYWRIGHT_BLOB_OUTPUT_DIR="blob-report/shard-${i}" \
+      E2E_TEST_DATABASE_URL="$local_url" \
       setsid npx playwright test "${PW_ARGS[@]}" \
       --shard="$((i+1))/${E2E_WORKERS}" \
       --output="$shard_out_dir" \

@@ -11,12 +11,12 @@ import { ROLE_PRESETS, Role, type RoleKey, Permission } from "@exam/authz";
 import type { RolePreset } from "@exam/authz";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
-import { executeInTransaction } from "@exam/db/src/types.js";
 import { NotFoundError } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
 import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
+import { mutateWithAuthorityInvariants } from "../authz/adminMaintainerExclusion.js";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -142,32 +142,40 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ requestId: request.id, error: "RESOURCE_NOT_FOUND" });
       }
-      const created = await executeInTransaction(fastify.db, async (tx) => {
-        const assignment = await createUserRoleAssignmentRepo(
-          tx,
-        ).assignWithinTransaction(tx, ctx, {
-          userId: id,
-          role: data.role,
-          isPrimary: data.isPrimary ?? false,
-          isActive: true,
-        });
-        if (assignment.isPrimary) {
-          await syncUsersRoleFromPrimary(tx, ctx, id);
-        }
-        await recordAtomicHttpAudit(tx, request, ctx, {
-          action: "user.role_changed",
-          targetType: "user",
-          targetId: id,
-          metadata: assignment.isPrimary
-            ? { oldRole: target.role, newRole: data.role }
-            : {
-                assignmentAdded: true,
-                role: data.role,
-                isPrimary: false,
-              },
-        });
-        return assignment;
-      });
+      // P7-E2A (ADR-017 D14): assignment creation runs inside the canonical
+      // authority-mutation seam — same org advisory lock + Admin↔Maintainer
+      // exclusion post-condition. A secondary Maintainer assignment for an
+      // Admin actor (or vice versa) is rejected before commit.
+      const created = await mutateWithAuthorityInvariants(
+        fastify.db,
+        ctx,
+        async (tx) => {
+          const assignment = await createUserRoleAssignmentRepo(
+            tx,
+          ).assignWithinTransaction(tx, ctx, {
+            userId: id,
+            role: data.role,
+            isPrimary: data.isPrimary ?? false,
+            isActive: true,
+          });
+          if (assignment.isPrimary) {
+            await syncUsersRoleFromPrimary(tx, ctx, id);
+          }
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "user.role_changed",
+            targetType: "user",
+            targetId: id,
+            metadata: assignment.isPrimary
+              ? { oldRole: target.role, newRole: data.role }
+              : {
+                  assignmentAdded: true,
+                  role: data.role,
+                  isPrimary: false,
+                },
+          });
+          return assignment;
+        },
+      );
       return reply.code(201).send({
         id: created.id,
         userId: created.userId,
@@ -201,20 +209,27 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
       const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
 
       if (data.isPrimary === true) {
-        const promoted = await executeInTransaction(fastify.db, async (tx) => {
-          const value = await createUserRoleAssignmentRepo(
-            tx,
-          ).setPrimaryWithinTransaction(tx, ctx, assignmentId);
-          if (!value) return null;
-          await syncUsersRoleFromPrimary(tx, ctx, value.userId);
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: "user.role_changed",
-            targetType: "user",
-            targetId: value.userId,
-            metadata: { newRole: value.role },
-          });
-          return value;
-        });
+        // P7-E2A (ADR-017 D14): promoting a secondary assignment to primary
+        // changes effective authority — run inside the authority-mutation
+        // seam so Admin↔Maintainer exclusion is enforced transactionally.
+        const promoted = await mutateWithAuthorityInvariants(
+          fastify.db,
+          ctx,
+          async (tx) => {
+            const value = await createUserRoleAssignmentRepo(
+              tx,
+            ).setPrimaryWithinTransaction(tx, ctx, assignmentId);
+            if (!value) return null;
+            await syncUsersRoleFromPrimary(tx, ctx, value.userId);
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "user.role_changed",
+              targetType: "user",
+              targetId: value.userId,
+              metadata: { newRole: value.role },
+            });
+            return value;
+          },
+        );
         if (!promoted) throw new NotFoundError("role assignment");
         return {
           id: promoted.id,
@@ -222,6 +237,54 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           role: promoted.role,
           isPrimary: promoted.isPrimary,
           isActive: promoted.isActive,
+        };
+      }
+      if (data.isActive === true) {
+        // P7-E2A (ADR-017 D14): reactivating a deactivated assignment can
+        // make an Admin/Maintainer authority effective again — run inside
+        // the authority-mutation seam (org advisory lock + exclusion
+        // post-condition). A reactivated primary restores that role as the
+        // user's active primary authority (users.role re-synced).
+        const activated = await mutateWithAuthorityInvariants(
+          fastify.db,
+          ctx,
+          async (tx) => {
+            const result = await createUserRoleAssignmentRepo(
+              tx,
+            ).activateWithinTransaction(tx, ctx, assignmentId);
+            if (!result) return null;
+            const { row: value, changed } = result;
+            // Audit/sync truthfulness (P7-E review P2-1): a no-op reactivation
+            // of an already-active assignment must NOT re-sync users.role (an
+            // unconditional UPDATE that bumps updatedAt with no real change)
+            // and must NOT emit role_changed (a state change that never
+            // happened). Only a genuine inactive→active transition is.
+            if (changed && value.isPrimary) {
+              await syncUsersRoleFromPrimary(tx, ctx, value.userId);
+            }
+            if (changed) {
+              await recordAtomicHttpAudit(tx, request, ctx, {
+                action: "user.role_changed",
+                targetType: "user",
+                targetId: value.userId,
+                metadata: {
+                  assignmentActivated: true,
+                  role: value.role,
+                  isPrimary: value.isPrimary,
+                  assignmentId: value.id,
+                },
+              });
+            }
+            return value;
+          },
+        );
+        if (!activated) throw new NotFoundError("role assignment");
+        return {
+          id: activated.id,
+          userId: activated.userId,
+          role: activated.role,
+          isPrimary: activated.isPrimary,
+          isActive: activated.isActive,
         };
       }
       if (data.isActive === false) {
@@ -278,7 +341,11 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           isActive: deactivated!.isActive,
         };
       }
-      // No-op patch (neither isPrimary nor isActive=false given): return as-is.
+      // Unreachable in practice: PatchRoleAssignmentRequestSchema (XOR
+      // command contract, P7-E review P2-1) rejects any payload that does not
+      // carry exactly one of { isPrimary: true } / { isActive: true } /
+      // { isActive: false } with 400 before the handler runs. This guard only
+      // catches a future contract regression where a payload slips through.
       throw new NotFoundError("role assignment");
     },
   );

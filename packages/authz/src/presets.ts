@@ -115,6 +115,22 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // System / diagnostics (current /system/diagnostics is Admin-gated)
   Permission.SystemHealthView,
   Permission.SystemDiagnosticsView,
+  // P7-E2A (ADR-017 D8): the business-integrity diagnostics block is an
+  // Admin-only business-domain surface; Maintainer never receives it.
+  Permission.SystemBusinessIntegrityView,
+  // P7-E2B: backup evidence + restore-readiness drill evidence read views.
+  Permission.SystemBackupView,
+  Permission.SystemRestoreReadinessView,
+  // P7-E2C: the business-owner summary dashboard is Admin-only business
+  // observation — never granted to Maintainer.
+  Permission.SystemBusinessSummaryView,
+  // P7-E3 (ADR-017 D9): Admin is the SOLE operational-policy intent owner.
+  Permission.SystemOpsPolicyView,
+  Permission.SystemOpsPolicyManage,
+  // P7-E2A (ADR-017 D7): email test is a side effect, split out of the
+  // diagnostics view capability. Admin keeps it (compatibility preserved);
+  // Maintainer does NOT receive it by default.
+  Permission.SystemEmailTest,
   // Incident management (ADR-014)
   Permission.IncidentView,
   Permission.IncidentCreate,
@@ -185,6 +201,31 @@ const GRADER_PERMISSIONS: readonly PermissionKey[] = [
   // GradingFinalize — ⚠️ scoped (not all graders finalize); omitted by default.
   // GradingIdentityView — ⚠️ scoped (double-blind denies); omitted by default.
   // Explicitly NOT granted: ExamResultPublish.
+];
+
+// ───────────────────────── Maintainer (system operations owner) ─────────────────────────
+
+/**
+ * Application Maintainer preset (P7-E2A — ADR-017 D2/D3 Plane B, amends
+ * ADR-010 role preset set).
+ *
+ * HARD CONSTRAINT: ONLY operational observation capabilities, zero business
+ * permissions. No `user.*`, `candidate.*`, `course.*`, `question.*`, `exam.*`,
+ * `grading.*`, `score.*`, no incident business mutation, no force-submit /
+ * time-grant / misconduct, no result publish, no email test side effect, no
+ * permanently-forbidden execution capability (ADR-017 D4).
+ *
+ * `system.backup.view` / `system.restore_readiness.view` /
+ * `system.ops.policy.view` are added when their E2B/E3 read surfaces ship.
+ */
+const MAINTAINER_PERMISSIONS: readonly PermissionKey[] = [
+  Permission.SystemHealthView,
+  Permission.SystemDiagnosticsView,
+  // P7-E2B: backup evidence + restore-readiness drill evidence read views.
+  Permission.SystemBackupView,
+  Permission.SystemRestoreReadinessView,
+  // P7-E3: Maintainer MAY view the Admin's policy intent — never modify it.
+  Permission.SystemOpsPolicyView,
 ];
 
 // ───────────────────────── Candidate (own-scope runtime) ─────────────────────────
@@ -291,6 +332,20 @@ export const ROLE_PRESETS: Record<RoleKey, RolePreset> = {
     defaultScope: Scope.OwnAttempt,
     permissions: CANDIDATE_PERMISSIONS,
     sensitivePermissions: [], // all own-scope, low blast radius
+  },
+
+  [Role.Maintainer]: {
+    key: Role.Maintainer,
+    label: "Maintainer",
+    purpose:
+      "Application-side system operations owner — operational observation only (system scope).",
+    isSystem: true,
+    assignable: true,
+    loginAllowed: true,
+    defaultScope: Scope.System,
+    permissions: MAINTAINER_PERMISSIONS,
+    // Read-only observation; no side effects, no business mutation.
+    sensitivePermissions: [],
   },
 
   [Role.System]: {

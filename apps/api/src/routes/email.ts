@@ -5,6 +5,8 @@ import {
 } from "@exam/contracts";
 import { DisabledEmailSender } from "../email/senders.js";
 import { sanitizeEmailError } from "../email/sanitizeError.js";
+import { recordBestEffortAudit } from "../audit/auditWriter.js";
+import { getRequestContext } from "./helpers.js";
 import { Permission } from "@exam/authz";
 
 /** OpenAPI security scheme requiring cookie-based authentication. */
@@ -29,13 +31,18 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
    *
    * `to` is validated as an email so the endpoint cannot be used as an open
    * relay and rejects malformed input fast.
+   *
+   * P7-E2A (ADR-017 D7): gated by the dedicated SystemEmailTest capability —
+   * VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT. `system.diagnostics.view`
+   * no longer grants this mutation; the Maintainer preset does not receive
+   * `system.email.test` by default.
    */
   fastify.post(
     "/email/test",
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.SystemDiagnosticsView),
+        fastify.requireCapability(Permission.SystemEmailTest),
       ],
       schema: {
         body: SendTestEmailRequestSchema,
@@ -58,6 +65,14 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
           subject: "Test email",
           text: "This is a test email from the exam platform.",
         });
+        // P7-E2A (P2-3): the side effect is audited under its own action with
+        // a masked recipient (never the verbatim address).
+        recordBestEffortAudit(fastify, request, getRequestContext(request), {
+          action: "system.email.test",
+          targetType: "system",
+          targetId: "email-test",
+          metadata: { recipientMasked: maskEmail(to) },
+        });
         return { ok: true, status: "sent" as const };
       } catch (err) {
         return {
@@ -69,3 +84,18 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 };
+
+/**
+ * Masks an email address for audit metadata so the recipient is not recorded
+ * verbatim (recipient addresses are personal data; the audit records only the
+ * domain shape of the test recipient).
+ */
+function maskEmail(email: string): string {
+  const [local = "", domain] = email.split("@");
+  if (!domain) return "***";
+  const maskedLocal =
+    local.length <= 2
+      ? "*".repeat(local.length)
+      : `${local[0]}***${local.slice(-1)}`;
+  return `${maskedLocal}@${domain}`;
+}

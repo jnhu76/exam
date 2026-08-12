@@ -144,7 +144,6 @@ services:
 
 volumes:
   pgdata:
-  redisdata:
 
 networks:
   exam-net:

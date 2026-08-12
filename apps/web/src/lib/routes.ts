@@ -37,6 +37,7 @@ export const routes = {
     recoveryExam: (id: string) => `/admin/recovery/exams/${id}`,
     system: "/admin/system",
     diagnostics: "/admin/system",
+    operations: "/admin/operations",
   },
   exam: {
     list: "/exam/list",

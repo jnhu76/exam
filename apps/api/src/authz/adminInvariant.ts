@@ -6,33 +6,42 @@ import type {
 import type { RequestContext } from "@exam/domain";
 import { acquireOrganizationAdvisoryLock } from "@exam/db/src/lock.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
 
 /**
- * Runs an authority-mutating callback inside a transaction that holds an
- * organization-scoped advisory lock and enforces the effective-Admin
- * post-condition: after the mutation, the organization must still have at
- * least one active user with an active Admin assignment.
+ * Runs an authority-mutating callback inside a transaction that holds the
+ * organization-scoped authority advisory lock and enforces both authority
+ * post-conditions:
  *
- * This is the unified safety seam for every path that can remove effective
- * Admin authority:
- *   - disabling or deleting a user
- *   - deactivating or deleting an Admin role assignment
+ *   1. (P7-E2A, ADR-017 D14) ADMIN / MAINTAINER MUTUAL EXCLUSION — no actor
+ *      may hold active Admin + active Maintainer assignments; and
+ *   2. the effective-Admin post-condition — the organization must still have
+ *      at least one active user with an active Admin assignment.
+ *
+ * This is the unified safety seam for every path that can change effective
+ * authority:
+ *   - creating a user with a primary role
+ *   - assigning / activating / promoting a role
  *   - replacing a user's primary role away from Admin
+ *   - disabling or deleting a user, deactivating or deleting an assignment
  *
- * The lock prevents concurrent transactions from simultaneously observing
- * count > 1 and each removing a different Admin, which would leave the
- * organization with zero effective Admins (write-skew). The post-condition
- * check guarantees that even if a caller's intent is mis-modeled, the
- * invariant cannot be violated.
+ * The lock (SHARED with {@link mutateWithAuthorityInvariants} via the single
+ * `authority-invariants` lock family) prevents concurrent transactions from
+ * simultaneously observing consistent snapshots and each committing a
+ * different half of an invariant violation (write-skew). The post-condition
+ * checks guarantee that even if a caller's intent is mis-modeled, the
+ * invariants cannot be violated.
  *
  * @param db - Database instance.
  * @param ctx - Tenant or request context carrying the organization anchor.
  * @param mutate - Callback that performs all authority mutations against the
  *   supplied transaction handle. It must not open its own transaction.
  * @returns The value returned by `mutate`.
- * @throws ValidationError with `reason: "LAST_ACTIVE_ADMIN"` if the mutation
+ * @throws ValidationError with `reason: "ADMIN_MAINTAINER_EXCLUSION"` if the
+ *   mutation would create an actor holding both active Admin and active
+ *   Maintainer assignments; `reason: "LAST_ACTIVE_ADMIN"` if the mutation
  *   would leave the organization with no effective Admin.
  */
 export async function mutateWithEffectiveAdminPostcondition<T>(
@@ -46,10 +55,24 @@ export async function mutateWithEffectiveAdminPostcondition<T>(
       await acquireOrganizationAdvisoryLock(
         tx,
         ctx.organizationId,
-        "effective-admin-invariant",
+        "authority-invariants",
       );
 
       const result = await mutate(tx);
+
+      const violations =
+        await createUserRoleAssignmentRepo(
+          tx,
+        ).findAdminMaintainerExclusionViolations(ctx);
+      if (violations.length > 0) {
+        const v = violations[0]!;
+        throw new ValidationError("同一账号不能同时拥有管理员与维护者身份", {
+          reason: "ADMIN_MAINTAINER_EXCLUSION",
+          userId: v.userId,
+          adminAssignmentId: v.adminAssignmentId,
+          maintainerAssignmentId: v.maintainerAssignmentId,
+        });
+      }
 
       const effectiveAdminCount = await createUserRepo(
         tx,
@@ -63,6 +86,11 @@ export async function mutateWithEffectiveAdminPostcondition<T>(
 
       return result;
     },
+    // "read committed" is LOAD-BEARING here: both post-conditions must see
+    // the latest committed rows after the advisory lock is granted. Under
+    // REPEATABLE READ the transaction snapshot is taken at its first
+    // statement (before the lock wait), so the post-condition would miss a
+    // concurrently committed assignment — the write-skew D14 forbids.
     "read committed",
   );
 }

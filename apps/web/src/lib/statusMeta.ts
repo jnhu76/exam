@@ -13,6 +13,7 @@ import {
   LoaderCircle,
   Lock,
   LockOpen,
+  SlidersHorizontal,
   Play,
   Radio,
   Send,
@@ -240,6 +241,33 @@ export const statusMeta = {
     labelKey: "status.fallback.unknown",
     tone: "muted",
     icon: HelpCircle,
+  },
+  // P7-E3 compliance projection statuses (DESIRED vs OBSERVED vs STATUS).
+  compliance_satisfied: {
+    labelKey: "status.ops.compliance.satisfied",
+    tone: "success",
+    icon: CheckCircle2,
+  },
+  compliance_not_satisfied: {
+    labelKey: "status.ops.compliance.not_satisfied",
+    tone: "destructive",
+    icon: CircleAlert,
+    iconPolicy: "show",
+  },
+  compliance_unknown: {
+    labelKey: "status.ops.compliance.unknown",
+    tone: "warning",
+    icon: HelpCircle,
+  },
+  compliance_not_configured: {
+    labelKey: "status.ops.compliance.not_configured",
+    tone: "muted",
+    icon: SlidersHorizontal,
+  },
+  compliance_not_enforced: {
+    labelKey: "status.ops.compliance.not_enforced",
+    tone: "muted",
+    icon: Lock,
   },
   passed: { labelKey: "status.result.passed", tone: "success", icon: Trophy },
   not_passed: {

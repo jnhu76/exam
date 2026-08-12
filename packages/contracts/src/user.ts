@@ -6,12 +6,14 @@ import { nullableEmailField, optionalEmailField } from "./emailField.js";
 
 /**
  * Roles assignable to a human user (RBAC-M8). Phase 3 widens the Phase 1
- * {Admin, Candidate} set with Teacher / Proctor / Grader. `System` is excluded
- * (synthetic, non-assignable); `SuperAdmin` is not defined (no ADR).
+ * {Admin, Candidate} set with Teacher / Proctor / Grader; P7-E2A (ADR-017 D2)
+ * adds Maintainer — the application-side System Operations Owner (operational
+ * observation only). `System` is excluded (synthetic, non-assignable);
+ * `SuperAdmin` is not defined (no ADR).
  *
  * `RoleSchema` mirrors the assignable set because a user's primary active
  * assignment — which becomes `users.role` (the compatibility cache) and the
- * value returned by login/`/auth/me` — may now be any of these five. Route
+ * value returned by login/`/auth/me` — may now be any of these six. Route
  * authorization gates are NOT flipped in this PR; assignment is a capability,
  * not an enforcement change (enforcement is PR #3).
  */
@@ -21,6 +23,7 @@ export const AssignableRoleSchema = z.enum([
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ]);
 // NOTE: AssignableRole is also defined in @exam/db (schema/pg.ts ASSIGNABLE_ROLES).
 // The two are structurally identical by design — db cannot depend on contracts
@@ -97,11 +100,38 @@ export const AssignRoleRequestSchema = z.object({
 });
 export type AssignRoleRequest = z.infer<typeof AssignRoleRequestSchema>;
 
-/** Request body for patching an assignment (set primary / activate). */
-export const PatchRoleAssignmentRequestSchema = z.object({
-  isPrimary: z.boolean().optional(),
-  isActive: z.boolean().optional(),
-});
+/**
+ * Request body for patching an assignment — an XOR command contract (P7-E
+ * review P2-1): exactly ONE of the three commands per PATCH.
+ *
+ *   { isPrimary: true }  → promote this assignment to primary active
+ *   { isActive: true }   → (re)activate this assignment
+ *   { isActive: false }  → deactivate this assignment
+ *
+ * Anything else — `{}`, `{ isPrimary: false }`, or a mixed payload like
+ * `{ isPrimary: true, isActive: false }` — is an invalid command and must be
+ * rejected with 400, never silently half-applied (the old permissive schema
+ * let `{ isPrimary: true, isActive: false }` through and the route simply
+ * ignored `isActive`).
+ */
+export const PatchRoleAssignmentRequestSchema = z
+  .object({
+    isPrimary: z.literal(true).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const present = [
+      value.isPrimary !== undefined ? "isPrimary" : null,
+      value.isActive !== undefined ? "isActive" : null,
+    ].filter((k): k is string => k !== null);
+    if (present.length !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "exactly one of { isPrimary: true } | { isActive: true } | { isActive: false } is required",
+      });
+    }
+  });
 export type PatchRoleAssignmentRequest = z.infer<
   typeof PatchRoleAssignmentRequestSchema
 >;

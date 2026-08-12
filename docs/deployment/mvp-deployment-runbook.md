@@ -601,8 +601,11 @@ docker compose stop    # stops containers without removing them
 # or
 docker compose down    # stops and removes containers (keeps volumes)
 # or
-docker compose down -v # DANGEROUS: also removes pgdata + redisdata volumes
-                       # (destroys all data — only for clean reinstall)
+docker compose down -v # DANGEROUS: removes the pgdata named volume and
+                       # destroys all data (only for clean reinstall).
+                       # NOTE: data under ./data/* (bind mounts, incl. the
+                       # Redis dir and backup spools) is NOT removed by
+                       # `down -v` — delete those manually if they must go.
 ```
 
 Graceful shutdown behavior:
@@ -843,7 +846,22 @@ scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%
 docker compose stop app email-worker
 scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
 docker compose up -d app email-worker
+
+# P7-E2B — record the restore drill in the product ledger after restart
+# (the restore script prints the exact command with its measured duration):
+docker compose exec app node dist/scripts/backup-evidence.js drill \
+  --operation-id logical-restore:$(date +%F) --backup-type logical \
+  --result succeeded --source operator_declared --duration-ms <ms>
 ```
+
+The P7-C scripts record durable evidence of every run into the product
+ledger (`backup_runs` etc.) at their natural checkpoints — see
+`backup-and-recovery.md` §0.5. The `postgres-logical-backup.sh` and
+`pg-basebackup.sh` scripts record start/completion automatically (completion
+is a hard gate: a verified artifact whose evidence cannot be recorded fails
+the script loudly rather than silently vanishing from the product view).
+Cold-filesystem backups spool evidence and are imported after restart via
+`backup-evidence.js cold-import --spool <path>`.
 
 The older `pg_dump --clean --if-exists | psql` one-liner is retained below
 for reference, but the clean-target contract above is the supported path

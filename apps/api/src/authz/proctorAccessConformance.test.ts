@@ -379,6 +379,7 @@ describe("J4-I1B proctorAccess structural conformance (ADR-015 §8)", () => {
       Role.Proctor,
       Role.Grader,
       Role.Candidate,
+      Role.Maintainer,
       Role.System,
     ];
     for (const perm of ASSIGNMENT_PERMISSIONS) {

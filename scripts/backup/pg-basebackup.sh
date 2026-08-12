@@ -149,6 +149,48 @@ echo "  destination: ${DEST}"
 echo "  PostgreSQL stays ONLINE; required WAL streamed (-X stream)."
 echo "  auth: loopback TCP + scram-sha-256, password via PGPASSWORD (never argv)."
 
+# P7-E2B: stable logical-run identity + evidence hooks (see
+# postgres-logical-backup.sh for the semantics; the ledger stores the
+# artifact NAME only, never host paths). Default = HOUR slot
+# (physical_base:YYYY-MM-DDTHH) so sub-daily schedules never collide on the
+# one-success-per-operationId invariant.
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-physical_base:$(date +%Y-%m-%dT%H)}"
+ARTIFACT_LABEL="$(basename "${DEST}")"
+# Container-name addressing (cwd-independent — see the same note in
+# postgres-logical-backup.sh).
+evidence() {
+  docker exec "${PROJECT}-app-1" node dist/scripts/backup-evidence.js "$@"
+}
+evidence_start() {
+  if ! evidence start --operation-id "${EVIDENCE_OPERATION_ID}" \
+      --type physical_base --artifact-label "${ARTIFACT_LABEL}" --executor host_script; then
+    echo "WARN: evidence start unavailable (app container down?) — completion" >&2
+    echo "      evidence is still required." >&2
+  fi
+}
+evidence_fail() {
+  evidence fail --operation-id "${EVIDENCE_OPERATION_ID}" \
+    --type physical_base --executor host_script --reason "$1" >/dev/null 2>&1 || true
+}
+evidence_complete() {
+  local size_bytes
+  # Compute the size FIRST, then default to 0 — `du | cut || echo 0` would
+  # bind the fallback to `cut` (which succeeds with empty output when du
+  # fails), producing an invalid empty --size-bytes that the evidence CLI
+  # rejects and fails a REAL, verified backup.
+  size_bytes="$(du -sb "${DEST}" 2>/dev/null | cut -f1)"
+  size_bytes="${size_bytes:-0}"
+  if ! evidence complete --operation-id "${EVIDENCE_OPERATION_ID}" \
+      --type physical_base --artifact-label "${ARTIFACT_LABEL}" \
+      --size-bytes "${size_bytes}" --verification-method pg_verifybackup \
+      --executor host_script; then
+    echo "FAIL: base backup produced and verified, but EVIDENCE RECORDING failed." >&2
+    echo "      destination: ${DEST}" >&2
+    exit 1
+  fi
+}
+evidence_start
+
 # Run pg_basebackup in a sibling container that shares the db container's
 # network namespace and connects over loopback TCP. -D points at a path
 # INSIDE the container; we bind-mount the host destination as the backup
@@ -168,7 +210,7 @@ mkdir -p "${DEST}"
 LABEL="exam-basebackup-$(date -u +%Y%m%dT%H%M%SZ)"
 # NOTE: PGPASSWORD is passed via -e (environment), NEVER on the argv, so it
 # does not leak via the process list of the basebackup invocation.
-PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
+if ! PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
   -v "${DEST}:/backup:rw" \
   --network "container:${DB_CONTAINER}" \
   -e PGPASSWORD="${EFFECTIVE_PGPASSWORD}" \
@@ -180,7 +222,11 @@ PGPASSWORD="${EFFECTIVE_PGPASSWORD}" docker run --rm \
     -c fast \
     -Fp \
     -l "${LABEL}" \
-    --manifest-checksums SHA256
+    --manifest-checksums SHA256; then
+  echo "FAIL: pg_basebackup exited non-zero — no base backup produced." >&2
+  evidence_fail "pg_basebackup failed"
+  exit 1
+fi
 
 # ── Manifest verification (C3.4) ─────────────────────────────────────────
 # pg_verifybackup verifies the backup contents against the PostgreSQL
@@ -197,8 +243,12 @@ if ! docker run --rm \
   pg_verifybackup /backup; then
   echo "FAIL: pg_verifybackup failed — the backup manifest is not valid." >&2
   echo "       The backup at ${DEST} is NOT trustworthy; do not use it." >&2
+  evidence_fail "verification failed: pg_verifybackup rejected the manifest"
   exit 1
 fi
+
+# P7-E2B: verification passed — record the VERIFIED success.
+evidence_complete
 
 echo ""
 echo "Physical base backup COMPLETE."

@@ -45,6 +45,7 @@ import { ExamMonitoringPage } from "@/pages/admin/ExamMonitoringPage";
 import { ProctorWorkspacePage } from "@/pages/admin/ProctorWorkspacePage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
 import { SystemDiagnosticsPage } from "@/pages/admin/SystemDiagnosticsPage";
+import { OperationsPage } from "@/pages/admin/OperationsPage";
 import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
 import { GradingDetailPage } from "@/pages/admin/GradingDetailPage";
 import { AuditLogPage } from "@/pages/admin/AuditLogPage";
@@ -76,6 +77,7 @@ export function AppRoutes() {
         <Route index element={<AdminIndexRoute />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="system" element={<SystemDiagnosticsPage />} />
+        <Route path="operations" element={<OperationsPage />} />
         <Route
           path="diagnostics"
           element={<Navigate to="/admin/system" replace />}

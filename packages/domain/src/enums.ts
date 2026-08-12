@@ -1,12 +1,15 @@
 /**
  * Product roles within the platform.
  *
- * The 6 Phase 3 role presets (matches `@exam/authz` RoleKey): Admin, Teacher,
- * Proctor, Grader, Candidate are human, login-capable, assignable roles.
- * `System` is a **synthetic, non-login, non-assignable** actor identity used
- * only by background scanners (deadline auto-submit, heartbeat disrupted-scan)
- * — it never originates from a `users.role` row and never appears in
- * user-management UI. See ADR §System Actor Policy.
+ * The 7 Phase 3+ role presets (matches `@exam/authz` RoleKey): Admin, Teacher,
+ * Proctor, Grader, Candidate, Maintainer are human, login-capable, assignable
+ * roles. `System` is a **synthetic, non-login, non-assignable** actor identity
+ * used only by background scanners (deadline auto-submit, heartbeat
+ * disrupted-scan) — it never originates from a `users.role` row and never
+ * appears in user-management UI. See ADR §System Actor Policy.
+ *
+ * Maintainer (P7-E2A, ADR-017 D2) is the application-side System Operations
+ * Owner — operational observation only, zero business permissions.
  *
  * Widening to the full set (RBAC runtime activation) lets Proctor/Grader log
  * in and be gated by `requireCapability`. The login path does not reject any
@@ -18,6 +21,7 @@ export const Role = {
   Proctor: "Proctor",
   Grader: "Grader",
   Candidate: "Candidate",
+  Maintainer: "Maintainer",
   System: "System",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];

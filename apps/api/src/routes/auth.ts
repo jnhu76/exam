@@ -43,13 +43,17 @@ import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
  * Provides login, logout, current-user retrieval, and password change
  * for the internal default organization. Registration is disabled in Phase 1.
  */
-/** Login-capable assignable roles (RBAC runtime activation). Static. */
+/**
+ * Login-capable assignable roles (RBAC runtime activation). Static.
+ * P7-E2A (ADR-017 D2): Maintainer is a login-capable built-in role.
+ */
 const ASSIGNABLE_LOGIN_ROLES = new Set([
   "Admin",
   "Teacher",
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ]);
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -249,12 +253,56 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const primaryRole = authority.authority.primaryRole;
+      const activeRoles = authority.authority.activeRoles;
 
-      // RBAC runtime activation: only the 5 assignable human roles
-      // (Admin/Teacher/Proctor/Grader/Candidate) may log in. System is the
-      // synthetic non-login actor; any other/unknown role string (SuperAdmin,
-      // legacy future roles, garbage) is rejected. ADR §System Actor Policy.
-      // The check is against the authoritative primaryRole, not users.role.
+      // P7-E2A (ADR-017 D14) read-side guard: the write-side invariant
+      // (`mutateWithAuthorityInvariants` / `mutateWithEffectiveAdminPostcondition`)
+      // must make this unreachable, but a hand-edited (or future
+      // bypass-written) row set of active Admin + active Maintainer for one
+      // actor must fail closed at login — the union authority would otherwise
+      // grant the full Admin capability set to a Maintainer account. The
+      // response stays generic so it does not leak the reason to the client.
+      if (
+        (activeRoles as readonly string[]).includes("Admin") &&
+        (activeRoles as readonly string[]).includes("Maintainer")
+      ) {
+        const excludedCtx: RequestContext = {
+          actorId: user.id,
+          organizationId: user.organizationId,
+          targetOrganizationId: user.organizationId,
+          role: primaryRole as Role,
+          permissions: [],
+          sessionId: "anonymous",
+        };
+        recordBestEffortAudit(fastify, request, excludedCtx, {
+          action: "login.failure",
+          targetType: "login",
+          targetId: user.id,
+          metadata: { reason: "admin_maintainer_exclusion" },
+        });
+        fastify.log.error(
+          {
+            event: "security.authentication",
+            outcome: "denied",
+            reason: "admin_maintainer_exclusion",
+            organizationKnown: true,
+            organizationId: org.id,
+            actorId: user.id,
+            requestId: request.id,
+          },
+          "Login denied: account holds both Admin and Maintainer assignments (D14 invariant violated in committed state)",
+        );
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
+      }
+
+      // RBAC runtime activation: only the 6 assignable human roles
+      // (Admin/Maintainer/Teacher/Proctor/Grader/Candidate) may log in. System
+      // is the synthetic non-login actor; any other/unknown role string
+      // (SuperAdmin, legacy future roles, garbage) is rejected. ADR §System
+      // Actor Policy. The check is against the authoritative primaryRole, not
+      // users.role.
       if (!ASSIGNABLE_LOGIN_ROLES.has(primaryRole)) {
         const blockedCtx: RequestContext = {
           actorId: user.id,

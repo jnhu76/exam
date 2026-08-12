@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { Database, TenantContext, TransactionDatabase } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { userRoleAssignments, type AssignableRole } from "../schema/pg.js";
+import {
+  userRoleAssignments,
+  users,
+  type AssignableRole,
+} from "../schema/pg.js";
 import {
   resolveOrganizationId,
   createAsyncTenantCrudRepo,
   now,
 } from "./baseRepo.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { executeInTransaction } from "../types.js";
 
 /** A user-role-assignment row shape returned by the repo. */
@@ -20,6 +24,18 @@ export type UserRoleAssignmentRow = {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+};
+
+/**
+ * Result of {@link activateWithinTransaction}. `changed` distinguishes a
+ * genuine inactive→active transition (changed=true) from an idempotent
+ * re-activation of an already-active row (changed=false, NO state mutation).
+ * Callers use `changed` to gate audit/sync so a no-op command produces no
+ * synthetic side effects (P7-E review P2-1).
+ */
+export type ActivationResult = {
+  row: UserRoleAssignmentRow;
+  changed: boolean;
 };
 
 function row(
@@ -464,6 +480,84 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   /**
+   * Reactivates a deactivated assignment (keeps the row for audit history).
+   * Activation is IDEMPOTENT: an already-active assignment — primary or
+   * secondary — returns as-is and is NEVER re-demoted (P7-E review P1:
+   * PATCH { isActive: true } on an active primary must not self-demote the
+   * row and orphan the authority). For a genuine reactivation of a row that
+   * carries the primary flag, the user's OTHER active primaries are demoted
+   * first so the ≤1-primary-active partial unique index stays satisfiable
+   * (mirrors setPrimaryWithinTransaction) — the reactivated primary becomes
+   * the authority again. A reactivated non-primary assignment never changes
+   * users.role. Returns the row, or null if not found. Transaction-only
+   * variant.
+   */
+  async function activateWithinTransaction(
+    tx: TransactionDatabase,
+    ctx: TenantContext | RequestContext,
+    assignmentId: string,
+  ): Promise<ActivationResult | null> {
+    const orgId = resolveOrganizationId(ctx);
+    const before = await tx
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.id, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!before[0]) return null;
+    if (before[0]!.isActive) {
+      // Idempotent: an already-active assignment returns as-is with NO state
+      // mutation. changed=false lets the route skip the synthetic role_changed
+      // audit + the users.role re-sync (both would record a change that never
+      // happened). P7-E review P1 (never self-demote) + P2-1 (audit truth).
+      return { row: row(before[0]!), changed: false };
+    }
+    if (before[0]!.isPrimary) {
+      // The reactivated row carries the primary flag: demote the user's
+      // OTHER active primaries so exactly one active primary can exist.
+      // The target itself is inactive at this point; the id exclusion is
+      // defense-in-depth so the demote can never touch the target row.
+      await tx
+        .update(userRoleAssignments)
+        .set({ isPrimary: false, updatedAt: now() })
+        .where(
+          and(
+            eq(userRoleAssignments.organizationId, orgId),
+            eq(userRoleAssignments.userId, before[0]!.userId),
+            eq(userRoleAssignments.isPrimary, true),
+            eq(userRoleAssignments.isActive, true),
+            ne(userRoleAssignments.id, assignmentId),
+          ),
+        );
+    }
+    const updated = await tx
+      .update(userRoleAssignments)
+      .set({ isActive: true, updatedAt: now() })
+      .where(eq(userRoleAssignments.id, assignmentId))
+      .returning();
+    return updated[0] ? { row: row(updated[0]), changed: true } : null;
+  }
+
+  /**
+   * Public wrapper for {@link activateWithinTransaction}. Do NOT call from
+   * inside another transaction. Returns only the row (drops the `changed`
+   * disposition — callers that need it must use the tx variant directly).
+   */
+  async function activate(
+    ctx: TenantContext | RequestContext,
+    assignmentId: string,
+  ): Promise<UserRoleAssignmentRow | null> {
+    return executeInTransaction(db, async (tx) => {
+      const result = await activateWithinTransaction(tx, ctx, assignmentId);
+      return result?.row ?? null;
+    });
+  }
+
+  /**
    * Public wrapper for {@link deactivateWithinTransaction}. Do NOT call from
    * inside another transaction.
    */
@@ -521,11 +615,83 @@ export function createUserRoleAssignmentRepo(db: Database) {
     );
   }
 
+  /**
+   * P7-E2A (ADR-017 D14): finds every (org, user) holding BOTH an active
+   * Admin assignment and an active Maintainer assignment — the forbidden
+   * ADMIN ∩ MAINTAINER combination. Returns one entry per violating user,
+   * with the active Admin and Maintainer assignment ids for diagnostics.
+   *
+   * Only EFFECTIVE combinations count: the user row must be active too
+   * (symmetric with `countEffectiveActiveUsersWithRole`). A disabled user's
+   * assignments are latent — re-activating the user is itself an authority
+   * mutation that runs this post-condition (the adminInvariant seam), so the
+   * combination can never become effective.
+   *
+   * Called as a transaction post-condition by the authority-mutation seam
+   * (`mutateWithAuthorityInvariants`, apps/api) after every mutation that can
+   * create or activate an Admin/Maintainer assignment. The caller holds the
+   * organization advisory lock, so two concurrent mutations cannot each
+   * insert one of the two roles for the same actor (write-skew).
+   */
+  async function findAdminMaintainerExclusionViolations(
+    ctx: TenantContext | RequestContext,
+  ): Promise<
+    Array<{
+      userId: string;
+      adminAssignmentId: string;
+      maintainerAssignmentId: string;
+    }>
+  > {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select({
+        userId: userRoleAssignments.userId,
+        role: userRoleAssignments.role,
+        id: userRoleAssignments.id,
+      })
+      .from(userRoleAssignments)
+      .innerJoin(users, eq(users.id, userRoleAssignments.userId))
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.isActive, true),
+          eq(users.isActive, true),
+          or(
+            eq(userRoleAssignments.role, "Admin"),
+            eq(userRoleAssignments.role, "Maintainer"),
+          ),
+        ),
+      );
+    const byUser = new Map<string, { admin?: string; maintainer?: string }>();
+    for (const r of rows) {
+      const entry = byUser.get(r.userId) ?? {};
+      if (r.role === "Admin") entry.admin = r.id;
+      else entry.maintainer = r.id;
+      byUser.set(r.userId, entry);
+    }
+    const violations: Array<{
+      userId: string;
+      adminAssignmentId: string;
+      maintainerAssignmentId: string;
+    }> = [];
+    for (const [userId, entry] of byUser) {
+      if (entry.admin && entry.maintainer) {
+        violations.push({
+          userId,
+          adminAssignmentId: entry.admin,
+          maintainerAssignmentId: entry.maintainer,
+        });
+      }
+    }
+    return violations.sort((a, b) => (a.userId < b.userId ? -1 : 1));
+  }
+
   return {
     ...repo,
     listForUser,
     listActiveForUser,
     findPrimaryActiveForUser,
+    findAdminMaintainerExclusionViolations,
     assign,
     assignWithinTransaction,
     ensurePrimaryAssignment,
@@ -536,6 +702,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
     replacePrimaryRoleWithinTransaction,
     setPrimaryWithinTransaction,
     setPrimary,
+    activate,
+    activateWithinTransaction,
     deactivate,
     deactivateWithinTransaction,
     remove,

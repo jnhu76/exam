@@ -86,6 +86,7 @@ const roleChangePayload: AuditPayloadSchema = z
     role: shortText.optional(),
     isPrimary: z.boolean().optional(),
     assignmentAdded: z.boolean().optional(),
+    assignmentActivated: z.boolean().optional(),
     assignmentDeactivated: z.boolean().optional(),
     oldPrimaryRole: shortText.optional(),
     resultingPrimaryRole: shortText.nullable().optional(),
@@ -296,6 +297,35 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "domain_state",
     "low",
     changedFieldsPayload,
+  ),
+  // P7-E2A (ADR-017 D7): the email test side effect is audited under its own
+  // action with a masked recipient (never the verbatim address).
+  [AuditAction.SystemEmailTest]: definition(
+    "active",
+    "best_effort",
+    "operational",
+    "low",
+    z
+      .object({
+        recipientMasked: shortText,
+      })
+      .strict(),
+  ),
+  // P7-E3 (ADR-017 D9): Admin's operational policy INTENT change — atomic
+  // with the write, carrying the desired values + reason.
+  [AuditAction.OpsPolicyUpdated]: definition(
+    "active",
+    "atomic",
+    "domain_state",
+    "low",
+    z
+      .object({
+        desiredRpoSeconds: z.number().int(),
+        desiredRetentionDays: z.number().int(),
+        desiredDrillCadenceDays: z.number().int(),
+        reason: shortText,
+      })
+      .strict(),
   ),
   [AuditAction.CandidateCreate]: definition(
     "active",

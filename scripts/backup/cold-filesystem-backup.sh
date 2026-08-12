@@ -171,6 +171,9 @@ echo "  active PGDATA is corrupt-prone and is NOT supported."
 # `rsync -aHAX` or `tar | tar` as root on the host. Copy the COMPLETE postgres
 # tree (never partial relation files) into ${DEST}/postgres.
 echo "Copying COMPLETE postgres tree..."
+# Capture the REAL start time BEFORE the copy — the evidence spool must be
+# truthful (startedAt is when the cold copy began, not when it finished).
+COLD_START_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 docker run --rm \
   -v "${SRC_PG}:/from:ro" \
   -v "${DEST}/postgres:/to" \
@@ -187,6 +190,42 @@ if ! docker run --rm -v "${DEST}:/to:ro" "${HELPER_IMAGE}" \
   exit 1
 fi
 
+# ── P7-E2B evidence spool ─────────────────────────────────────────
+# Cold backups run while PostgreSQL is STOPPED, so the ledger (in
+# PostgreSQL) is unreachable during the copy. The script therefore writes a
+# typed evidence SPOOL file next to the artifact; after `docker compose
+# up -d` the operator imports it into the ledger with ONE command (printed
+# below). The spool is a transit file, NOT a second authority store — the
+# ledger in PostgreSQL remains the single durable authority; a lost spool
+# simply means no evidence (fail closed, never a false success). Crash
+# during the stopped window = no spool = no evidence.
+# Default = HOUR slot (cold_filesystem:YYYY-MM-DDTHH) so sub-daily schedules
+# never collide on the one-success-per-operationId invariant (see
+# postgres-logical-backup.sh for the full semantics).
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-cold_filesystem:$(date +%Y-%m-%dT%H)}"
+SPOOL="${DEST}/evidence.json"
+# Compute the size FIRST, then default to 0 — `du | cut || echo 0` would bind
+# the fallback to `cut` (which succeeds with empty output when du fails),
+# producing an invalid empty artifactSizeBytes in the spool JSON.
+SIZE_BYTES="$(du -sb "${DEST}" 2>/dev/null | cut -f1)"
+SIZE_BYTES="${SIZE_BYTES:-0}"
+# startedAt = the real copy start (COLD_START_ISO, captured before the copy);
+# completedAt = when the copy finished (here, post-verification).
+COLD_END_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cat > "${SPOOL}" <<EOF
+{
+  "schemaVersion": 1,
+  "operationId": "${EVIDENCE_OPERATION_ID}",
+  "backupType": "cold_filesystem",
+  "artifactLabel": "$(basename "${DEST}")",
+  "artifactSizeBytes": ${SIZE_BYTES},
+  "verificationMethod": "pg_version_presence",
+  "startedAt": "${COLD_START_ISO}",
+  "completedAt": "${COLD_END_ISO}",
+  "executorType": "host_script"
+}
+EOF
+
 echo ""
 echo "Cold-filesystem backup COMPLETE."
 echo "  destination: ${DEST}"
@@ -196,3 +235,7 @@ echo "  is a weak local copy, NOT disaster recovery."
 echo "  Raw PGDATA is tied to the PostgreSQL major version; restore only with"
 echo "  a compatible postgres image. See cold-filesystem-restore.sh and"
 echo "  docs/deployment/backup-and-recovery.md."
+echo ""
+echo "  P7-E2B evidence: after 'docker compose up -d', import this run into the"
+echo "  product ledger with:"
+echo "    docker compose exec app node dist/scripts/backup-evidence.js cold-import --spool ${SPOOL}"

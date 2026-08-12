@@ -156,13 +156,18 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
   [
     // ── auth (mostly public/self) ──
     {
+      // P7-E2A (ADR-017 D7): the email test is a SIDE-EFFECTING action; it is
+      // gated by its own capability (system.email.test), never by a view
+      // capability. Audited under `system.email.test` (best-effort, masked
+      // recipient).
       method: "POST",
       path: "/email/test",
       legacyGate: "Admin",
-      permission: Permission.SystemDiagnosticsView,
+      permission: Permission.SystemEmailTest,
       scope: Scope.System,
       resolver: "system",
-      sensitive: false,
+      auditAction: "system.email.test",
+      sensitive: true,
       proctorAccess: "admin_only",
       migrationStage: 6,
     },
@@ -835,10 +840,13 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
+      // P7-E2C: the dashboard is the BUSINESS summary surface (question/exam/
+      // candidate/attempt aggregates) — Admin-only business observation. The
+      // Maintainer preset does not hold it.
       method: "GET",
       path: "/system/dashboard",
       legacyGate: "Admin",
-      permission: Permission.SystemHealthView,
+      permission: Permission.SystemBusinessSummaryView,
       scope: Scope.System,
       resolver: "system",
       sensitive: false,
@@ -846,6 +854,12 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
+      // P7-E2A (ADR-017 D8): the diagnostics route gate is the operational
+      // SystemDiagnosticsView capability; the business-integrity block inside
+      // the response is projected server-side by the actor's
+      // system.business_integrity.view capability (Admin-only). The registry
+      // records the route gate; the field-level projection is enforced in the
+      // handler (routes/system.ts).
       method: "GET",
       path: "/system/diagnostics",
       legacyGate: "Admin",
@@ -855,6 +869,61 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       sensitive: true,
       proctorAccess: "admin_only",
       migrationStage: 6,
+    },
+    {
+      // P7-E2B: read-only backup evidence projection (Admin + Maintainer).
+      // No write sibling exists — backup.trigger/schedule/retention are
+      // decision-gated (ADR-017 D5) and NOT implemented.
+      method: "GET",
+      path: "/system/backups",
+      legacyGate: "Admin",
+      permission: Permission.SystemBackupView,
+      scope: Scope.System,
+      resolver: "system",
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 9,
+    },
+    {
+      // P7-E2B: read-only restore-readiness / drill evidence projection
+      // (Admin + Maintainer). Restore itself stays host-only (ADR-017 D4).
+      method: "GET",
+      path: "/system/restore-readiness",
+      legacyGate: "Admin",
+      permission: Permission.SystemRestoreReadinessView,
+      scope: Scope.System,
+      resolver: "system",
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 9,
+    },
+    {
+      // P7-E3 (ADR-017 D9): read the Admin's operational policy intent +
+      // compliance projection (Admin + Maintainer).
+      method: "GET",
+      path: "/system/ops-policy",
+      legacyGate: "Admin",
+      permission: Permission.SystemOpsPolicyView,
+      scope: Scope.System,
+      resolver: "system",
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 10,
+    },
+    {
+      // P7-E3 (ADR-017 D9): Admin is the SOLE intent owner. Writes the
+      // typed, audited, non-binding policy intent record. Never granted to
+      // Maintainer.
+      method: "PUT",
+      path: "/system/ops-policy",
+      legacyGate: "Admin",
+      permission: Permission.SystemOpsPolicyManage,
+      scope: Scope.System,
+      resolver: "system",
+      auditAction: "ops.policy.updated",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 10,
     },
 
     // ── Exam lifecycle ──
