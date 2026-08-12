@@ -1,12 +1,12 @@
 # P7-E — Operational Control Plane Closeout
 
-**Status:** FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW
+**Status:** FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW (round 2 hardened)
 **Program:** P7-E — Operational Control Plane
 **Date:** 2026-08-12
 **Branch:** `feat/p7-e-operational-control-plane`
 **Baseline (`origin/master`):** `a50643f5c22dad912dd876819a9a781b617ef07e` (PR #281 merged; working tree clean)
-**Described head:** `20d9a893` — last implementation commit; the terminal
-closeout commit is the branch tip (see `git log` for its hash).
+**Described head:** round-2 hardening applied on top of `08d9a719`; the
+terminal closeout commit is the branch tip (see `git log` for its hash).
 **Working tree:** clean
 
 Commits (atomic, reviewable):
@@ -25,7 +25,12 @@ ee3c6de6 fix(p7-e2b): harden evidence ledger constraints and projections
 cc826c3e fix(p7-e2c): gate policy edit by capability and handle save conflicts
 71f9b1cc fix(p7-e2c): skip evidence E2E without CLI; harden backup scripts
 20d9a893 docs(p7-e): align env examples and runbook with code reality
-(terminal) docs(p7-e): complete review-hardened closeout — this document
+08d9a719 docs(p7-e): complete review-hardened closeout
+be7e7c49 fix(p7-e3): enforce real CAS on ops policy intent and truthful compliance projection
+f407b6eb fix(p7-e2b): preserve true backup completion times and split drill result/source
+ab884ee4 fix(p7-e2b): harden backup scripts (size fallback, hour-slot operation ids)
+c02ecd99 fix(p7-e2a): implement role assignment reactivation through the exclusion seam
+(terminal) docs(p7-e): record review round 2 and refresh closeout metadata
 ```
 
 Authority documents: ADR-017 (ACCEPTED, rev 3, PR #281) > P7-E0/P7-E1
@@ -82,7 +87,9 @@ audits > implemented code reality > old roadmap planning prose.
 
 - **Typed evidence model** (NOT a generic event/settings store): `backup_runs`
   (one row per attempt), `backup_run_events` (append-only transitions),
-  `restore_drill_runs` (drill evidence with source). Migration 0031.
+  `restore_drill_runs` (drill evidence with ORTHOGONAL outcome + provenance:
+  `result` = succeeded | failed, `source` = automated | operator_declared).
+  Migration 0031.
 - **SUCCESS semantics (D10 #1)**: `succeeded` requires artifact produced +
   readable + verification passed + durable commit. DB CHECK forbids a
   `succeeded` row without `verificationStatus = 'verified'` — NULL-safe (a
@@ -103,8 +110,11 @@ audits > implemented code reality > old roadmap planning prose.
   operator recording evidence into a test database would silently miss the
   product ledger) and prints the resolved target database on every command;
   cold-import validates the spool (schema version, non-negative integer
-  size, parseable timestamps) and stores the spool's real start time; never
-  stores secrets or host paths (artifact label only).
+  size, parseable timestamps) and stores the spool's REAL start AND
+  completion times — the completion time is the RPO authority, so an old
+  backup imported today is never re-stamped as freshly verified (evidence
+  ingestion time lives only in createdAt/updatedAt); never stores secrets
+  or host paths (artifact label only).
 - **Script instrumentation**: `postgres-logical-backup.sh` and
   `pg-basebackup.sh` record start/verified-complete/fail at natural
   checkpoints (completion is a hard gate — a verified artifact whose
@@ -163,13 +173,20 @@ audits > implemented code reality > old roadmap planning prose.
   cadence (1..365 d), safe-range CHECKs, version (CAS), required reason,
   actor columns. Migration 0032. Absence = NOT_CONFIGURED.
 - **Admin is the sole intent owner (D9)**: `system.ops.policy.manage`
-  (Admin only) — typed, audited (`ops.policy.updated`, atomic), CAS
-  (409 `OPS_POLICY_VERSION_CONFLICT`). Maintainer: `system.ops.policy.view`
+  (Admin only) — typed, audited (`ops.policy.updated`, atomic), REAL CAS
+  (the version is part of the UPDATE predicate, so two concurrent writers
+  can never silently overwrite each other; first-create races map the
+  unique-org-index violation to the same conflict; dual-connection
+  READ COMMITTED tests prove exactly one winner — 409
+  `OPS_POLICY_VERSION_CONFLICT`). Maintainer: `system.ops.policy.view`
   read-only; PUT → 403.
 - **DESIRED vs OBSERVED vs STATUS**: RPO (from last verified backup age →
-  SATISFIED / NOT_SATISFIED / UNKNOWN / NOT_CONFIGURED), retention
-  (truthfully NOT_ENFORCED — host-managed, never a lie), drill cadence
-  (proven drill age vs cadence, source shown).
+  SATISFIED / NOT_SATISFIED / UNKNOWN / NOT_CONFIGURED — age measured from
+  the backup's REAL completion/verification time, never from evidence
+  ingestion), retention (truthfully NOT_ENFORCED — host-managed, never a
+  lie), drill cadence (only SUCCEEDED drills prove cadence — a failed
+  automated OR operator-declared drill never satisfies it; the proven
+  drill's source is shown).
 - **Intent never binds infrastructure**: the PUT writes three numbers + a
   reason; there is no scheduler, no trigger, no retention engine, no
   cross-authority protocol. Compliance rendering is the only consumer.
@@ -202,10 +219,12 @@ probe).
   share the single `authority-invariants` org advisory lock:
   user creation (`routes/user.ts` POST /users), assignment create
   (`roleAssignments.ts` POST /users/:id/role-assignments), primary
-  promotion (PATCH /role-assignments/:assignmentId isPrimary), role
-  replacement (PATCH /users/:id via the effective-Admin seam), seed +
-  demo-seed post-conditions, and the exclusion post-condition on the
-  effective-Admin seam itself.
+  promotion (PATCH /role-assignments/:assignmentId isPrimary), assignment
+  activation (PATCH /role-assignments/:assignmentId isActive=true — a
+  reactivated Admin/Maintainer assignment must pass the exclusion
+  post-condition), role replacement (PATCH /users/:id via the
+  effective-Admin seam), seed + demo-seed post-conditions, and the
+  exclusion post-condition on the effective-Admin seam itself.
 - **Transaction mechanism**: `executeInTransaction` (read committed) +
   `pg_advisory_xact_lock(hashtext('authority-invariants'), hashtext(org))`
   + post-condition query `findAdminMaintainerExclusionViolations`; the
@@ -231,9 +250,9 @@ probe).
 | SUCCESS definition | artifact produced ∧ readable ∧ verification passed ∧ durable evidence committed (DB CHECK `backup_runs_success_verified_check`) |
 | Verification | `pg_restore_list` (logical), `pg_verifybackup` (physical), `pg_version_presence` (cold); recorded with method + timestamp |
 | Crash behavior | start-only → `running` → closed `abandoned` by next start; never success |
-| Idempotency | operationId = `<type>:<date>` (override via `EVIDENCE_OPERATION_ID`); identical re-completion no-op; contradictory duplicate → `duplicate_operation_conflict` (fail closed) |
+| Idempotency | operationId = `<type>:<YYYY-MM-DD>T<HH>` hour slot (override via `EVIDENCE_OPERATION_ID`; sub-hourly schedules MUST pass a per-slot id); identical re-completion no-op; contradictory duplicate → `duplicate_operation_conflict` (fail closed) |
 | Evidence failure | CLI exits non-zero; script completion is a hard gate; cold spool import rejected on conflict |
-| Restore drill | `restore_drill_runs` with `source` automated vs operator_declared; declared success never rendered as automated proof |
+| Restore drill | `restore_drill_runs`: `result` (succeeded/failed) × `source` (automated/operator_declared) orthogonal; declared success never rendered as automated proof; a FAILED drill — automated or declared — never satisfies the drill cadence |
 | Secrets | ledger stores artifact LABEL only; no credentials, no host paths, no URI (API + E2E assert absence) |
 
 ## 5. Operations UX
@@ -315,6 +334,8 @@ online-edit requirement; knobs now documented in `.env.example`).
 
 ## 10. Verification (actually run)
 
+Round 1 (head `08d9a719`):
+
 ```text
 pnpm verify (full gate)                              PASS (typecheck, lint,
                                                       static checks, build)
@@ -330,6 +351,29 @@ bash scripts/e2e/run-wsl.sh operations               PASS (both shards; includes
                                                       evidence-state + policy E2E)
 Evidence CLI smoke (dev DB)                          PASS: start/complete/fail/
                                                       duplicate-conflict/drill
+```
+
+Round 2 (this revision — after the P1/P2 fixes):
+
+```text
+pnpm verify (full gate)                              PASS (format, lint suite,
+                                                      typecheck, openapi check,
+                                                      coverage, build)
+pnpm --filter @exam/api vitest run                   PASS: 161 files, 2161 tests (7 skipped)
+                                                      — includes NEW dual-connection
+                                                      READ COMMITTED CAS races,
+                                                      cold-import RPO truthfulness,
+                                                      failed-drill cadence, and
+                                                      activation seam tests
+pnpm --filter web vitest run                         PASS: 116 files, 1627 tests
+packages/authz vitest run                            PASS: 10 files, 79 tests
+Migration 0031 CHECK tightened in place (unmerged)   dev DB constraint aligned
+                                                      manually (non-destructive)
+Evidence CLI cold-import smoke (dev DB)              PASS: spool start/completion
+                                                      times recorded truthfully
+                                                      (verified_at = completion,
+                                                      created_at = import time);
+                                                      smoke row removed after
 ```
 
 Suites named in the closeout gate that were run as part of the above:
@@ -395,6 +439,24 @@ comments). Disposition:
 | Closeout SHA/commit list stale; `adversarialAudit.test.ts` uncited | **FIXED** | this revision (SHA amended at push) |
 | E2A: no read-side login guard; exclusion asymmetric on `users.isActive`; preset not exact-pinned; load-bearing `read committed` undocumented | **FIXED** | login fails closed on dual-role sets; exclusion counts effective combinations (re-enable is seam-guarded); preset pinned to the exact 5-capability set; isolation rationale documented at both seams |
 | "Remove the Maintainer product role from Phase 1.x" (CodeRabbit ×2) | **REJECTED** | contradicts the mission instruction and ADR-017, which the human ACCEPTED in PR #281 after review; Maintainer is an OPERATIONAL observation role with zero business permissions — not a business role bundle like Teacher/Proctor/Grader — and is the core of this workstream (E2A). The Phase 1.x single-tenant rule targets business roles and tenant modes (SuperAdmin, org-slug login, tenant switcher), none of which are exposed. Rejection rationale posted on PR #282. |
+
+### Adversarial review round 2 (head `08d9a719` → this revision)
+
+A second full review of PR #282 (ADR-017 + the P7-E mission) surfaced three
+P1 correctness issues — all of the same class: **the system could render
+green / SATISFIED while the real world did not satisfy the requirement**
+(evidence truthfulness). All were fixed in this revision:
+
+| Finding | Class | Resolution |
+| --- | --- | --- |
+| `ops policy` CAS was not a CAS (version checked in a pre-read only; the UPDATE carried no version predicate) → two concurrent writers both pass and the first write is silently overwritten (lost update) | **P1** | UPDATE now carries `WHERE id = ? AND version = expectedVersion`; zero returned rows → `OPS_POLICY_VERSION_CONFLICT`; first-create races map the unique-org-index violation (23505, walked through Drizzle's error `cause` chain) to the same conflict; dual-connection READ COMMITTED concurrency tests prove exactly one winner for both the update race and the first-create race |
+| Cold backup spool `completedAt` was parsed but never used: `cold-import` stamped `verifiedAt = now` → a backup taken 40h ago, imported today, rendered as freshly verified (RPO false green) | **P1** | `completeRun` accepts the true `completedAt`; `cold-import` records `completedAt = verifiedAt = spool.completedAt` (startedAt from the spool, ingestion time only in createdAt/updatedAt); repo + API tests prove "old cold backup + imported now + desired RPO 1h → NOT_SATISFIED" |
+| A FAILED operator-declared drill could satisfy the drill cadence (the `latestDeclared` fallback filtered only by source, not by result) | **P1** | the `latestDeclared` fallback is gone: only SUCCEEDED drills (automated first, declared accepted with source shown) prove cadence; failed drills surface via restore-readiness as the latest drill, never as proof; projection tests cover failed-today + old-success cases |
+| `RestoreDrillResult` conflated outcome and provenance (`"succeeded" \| "failed" \| "operator_declared"`) | **P2** | orthogonal model: `result` = succeeded \| failed, `source` = automated \| operator_declared; DB CHECK, contracts, CLI, and tests updated (migration 0031 edited in place — unmerged; dev DB constraint aligned manually) |
+| `pg-basebackup.sh` size fallback bound to `cut` (`du \| cut \|\| echo 0`) → empty `--size-bytes` on du failure could fail a REAL verified backup | **P2** | fallback computed then defaulted (`size_bytes="${size_bytes:-0}"`) — matches the cold script |
+| assignment PATCH contract promised `isActive: true` (activate) but the route 404'd | **P2** | `activate` implemented through the Admin↔Maintainer exclusion seam (`mutateWithAuthorityInvariants`): reactivating a deactivated primary restores it as the active primary (users.role re-synced); reactivating a Maintainer assignment for an actor with active Admin is rejected; route + seam tests added; audit metadata schema extended (`assignmentActivated`) |
+| Default operationId `logical:YYYY-MM-DD` (one logical run per day) contradicts sub-24h desired RPO (hourly backups would collide on the one-success invariant) | **P2** | default is now the HOUR slot `<type>:<YYYY-MM-DD>T<HH>` in all three backup scripts; runbook documents the mandatory contract: sub-hourly schedules MUST pass an explicit per-slot `EVIDENCE_OPERATION_ID` |
+| PR body / closeout metadata stale (final SHA `d9131e11`, "6 atomic commits", "Draft") | **P2** | this revision (PR body rewritten after all fixes; closeout head/commits amended at push) |
 
 No Critical findings from either review remained open; all accepted
 findings are fixed and covered by tests in this revision.
