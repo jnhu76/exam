@@ -123,6 +123,12 @@ export const Permission = {
   // block only for actors holding this capability; the operational projection
   // (Maintainer) never receives it.
   SystemBusinessIntegrityView: "system.business_integrity.view",
+  // SystemBusinessSummaryView (system.business_summary.view): P7-E2C — the
+  // business-owner summary dashboard (question/exam/candidate/attempt
+  // aggregates + recent exams) is BUSINESS-domain observation, Admin-only.
+  // The Maintainer preset must never receive business statistics through an
+  // operational capability.
+  SystemBusinessSummaryView: "system.business_summary.view",
   // SystemBackupView (system.backup.view): P7-E2B — read-only backup evidence
   // projection (latest / latest verified / history / last failure). No write
   // sibling exists: backup.trigger / schedule / retention are decision-gated

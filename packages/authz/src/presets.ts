@@ -121,6 +121,9 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // P7-E2B: backup evidence + restore-readiness drill evidence read views.
   Permission.SystemBackupView,
   Permission.SystemRestoreReadinessView,
+  // P7-E2C: the business-owner summary dashboard is Admin-only business
+  // observation — never granted to Maintainer.
+  Permission.SystemBusinessSummaryView,
   // P7-E2A (ADR-017 D7): email test is a side effect, split out of the
   // diagnostics view capability. Admin keeps it (compatibility preserved);
   // Maintainer does NOT receive it by default.

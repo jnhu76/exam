@@ -128,10 +128,32 @@ export function canSeeSettings(
   return can(user, Permission.SettingsView);
 }
 
+/**
+ * Business-owner summary dashboard — Admin-only business observation
+ * (P7-E2C). The Maintainer preset does not hold system.business_summary.view.
+ */
 export function canSeeDashboard(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): boolean {
+  return can(user, Permission.SystemBusinessSummaryView);
+}
+
+/**
+ * Operations surface (health / diagnostics / backup evidence / restore
+ * readiness) — Admin + Maintainer (P7-E2C).
+ */
+export function canSeeOperations(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.SystemHealthView);
+}
+
+/** System Diagnostics page (full diagnostics incl. business-integrity for
+ *  Admin; operational projection for Maintainer). */
+export function canSeeSystemDiagnostics(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.SystemDiagnosticsView);
 }
 
 export function canSeeCourses(
@@ -250,13 +272,15 @@ export function adminLandingPath(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): string | null {
   // Most specific role workspaces first, tiered by role specificity.
-  // Dashboard (SystemHealthView) is Admin-only — check first so Admin lands
-  // on the dashboard even though Admin also holds all other capability perms.
-  // Proctor workspace is the most targeted non-Admin surface, followed by
-  // grading queue, then exams as a general fallback. CourseView, QuestionView,
-  // and management-surface perms extend the set so non-standard presets or
+  // Dashboard (SystemBusinessSummaryView, P7-E2C) is the business owner's
+  // landing — check first so Admin lands on the dashboard. Maintainer (no
+  // business-summary capability) lands on the Operations surface. Proctor
+  // workspace is the most targeted non-Admin surface, followed by grading
+  // queue, then exams as a general fallback. CourseView, QuestionView, and
+  // management-surface perms extend the set so non-standard presets or
   // multi-role unions still get a console landing.
   if (canSeeDashboard(user)) return routes.admin.dashboard;
+  if (canSeeOperations(user)) return routes.admin.operations;
   if (canSeeProctor(user)) return routes.admin.proctorWorkspace;
   if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
   if (canSeeExams(user)) return routes.admin.exams;

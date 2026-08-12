@@ -840,10 +840,13 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
+      // P7-E2C: the dashboard is the BUSINESS summary surface (question/exam/
+      // candidate/attempt aggregates) — Admin-only business observation. The
+      // Maintainer preset does not hold it.
       method: "GET",
       path: "/system/dashboard",
       legacyGate: "Admin",
-      permission: Permission.SystemHealthView,
+      permission: Permission.SystemBusinessSummaryView,
       scope: Scope.System,
       resolver: "system",
       sensitive: false,

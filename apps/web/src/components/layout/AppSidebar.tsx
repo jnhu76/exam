@@ -1,4 +1,5 @@
 import type { MeResponse } from "@exam/contracts";
+import { Permission } from "@exam/authz";
 import {
   canImportQuestions,
   canSeeCourses,
@@ -6,10 +7,13 @@ import {
   canSeeExams,
   canSeeGradingQueue,
   canSeeManagement,
+  canSeeOperations,
   canSeeProctor,
   canSeeQuestions,
   canSeeRecovery,
   canSeeResults,
+  canSeeSettings,
+  canSeeSystemDiagnostics,
 } from "@/lib/capabilities";
 import {
   BookOpen,
@@ -81,6 +85,21 @@ const groups: NavGroup[] = [
         to: routes.admin.dashboard,
         icon: LayoutDashboard,
         visible: canSeeDashboard,
+      },
+    ],
+  },
+  {
+    // P7-E2C: the Operations group is the operational control-plane surface
+    // (Admin business-owner summary + Application Maintainer detail). It is
+    // distinct from business management navigation — Maintainer sees this
+    // group and nothing else.
+    labelKey: "nav.groups.operations",
+    items: [
+      {
+        labelKey: "nav.items.operations",
+        to: routes.admin.operations,
+        icon: Monitor,
+        visible: canSeeOperations,
       },
     ],
   },
@@ -172,36 +191,44 @@ const managementItems: NavItem[] = [
     labelKey: "nav.items.users",
     to: routes.admin.users,
     icon: UsersRound,
+    visible: (user) => user.capabilities.includes(Permission.UserView),
   },
   {
     labelKey: "nav.items.candidates",
     to: routes.admin.candidates,
     icon: UserRoundCheck,
+    visible: (user) => user.capabilities.includes(Permission.CandidateView),
   },
   {
     labelKey: "nav.items.importLogs",
     to: routes.admin.importLogs,
     icon: Upload,
+    visible: (user) => user.capabilities.includes(Permission.AuditLogView),
   },
   {
     labelKey: "nav.items.auditLogs",
     to: routes.admin.auditLogs,
     icon: ScrollText,
+    visible: (user) => user.capabilities.includes(Permission.AuditLogView),
   },
   {
     labelKey: "nav.items.settings",
     to: routes.admin.settings,
     icon: Settings,
+    visible: canSeeSettings,
   },
   {
     labelKey: "nav.items.candidateFields",
     to: routes.admin.candidateFields,
     icon: Tags,
+    visible: (user) =>
+      user.capabilities.includes(Permission.CandidateFieldView),
   },
   {
     labelKey: "nav.items.system",
     to: routes.admin.system,
     icon: Monitor,
+    visible: canSeeSystemDiagnostics,
   },
 ];
 
@@ -257,7 +284,12 @@ export function SidebarContent({
 }) {
   const { t } = useTranslation();
   const showManagement = canSeeManagement(user);
-  const management = managementItems;
+  // P7-E2C (P3-3 closure): management items are individually capability-gated
+  // so a partial-authority actor (e.g. Maintainer) never sees an item that
+  // would 403 on click (dead navigation).
+  const management = managementItems.filter(
+    (item) => !item.visible || item.visible(user),
+  );
   const initials = user.name.slice(0, 2);
 
   // UX-only capability filter (lib/capabilities.ts). Hides nav entries the

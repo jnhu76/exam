@@ -322,7 +322,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/system/dashboard", {
     preHandler: [
       fastify.authenticate,
-      fastify.requireCapability(Permission.SystemHealthView),
+      // P7-E2C: the dashboard returns BUSINESS aggregates (questions/exams/
+      // candidates/attempts) — gated by the Admin-only business-summary
+      // capability, never by the operational health capability.
+      fastify.requireCapability(Permission.SystemBusinessSummaryView),
     ],
     schema: {
       security: cookieAuth,
