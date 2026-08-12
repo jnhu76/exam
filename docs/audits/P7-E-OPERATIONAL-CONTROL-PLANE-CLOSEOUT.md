@@ -1,15 +1,12 @@
 # P7-E — Operational Control Plane Closeout
 
-**Status:** FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW (round 2 hardened)
+**Status:** FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW (round 3 hardened)
 **Program:** P7-E — Operational Control Plane
 **Date:** 2026-08-12
 **Branch:** `feat/p7-e-operational-control-plane`
 **Baseline (`origin/master`):** `a50643f5c22dad912dd876819a9a781b617ef07e` (PR #281 merged; working tree clean)
-**Described head:** `4558f1f4` — the round-2-hardened tip: all P1/P2
-fixes from the adversarial review on `08d9a719` (real CAS, cold-import
-completion truth, failed-drill cadence, drill result/source split, script
-hardening, activation seam, hour-slot operation ids) are in this revision;
-the metadata-pin commit that follows contains no content changes.
+**Described head:** round-3 hardening applied on top of `4558f1f4`; the
+terminal closeout commit is the branch tip (see `git log` for its hash).
 **Working tree:** clean
 
 Commits (atomic, reviewable):
@@ -34,6 +31,11 @@ f407b6eb fix(p7-e2b): preserve true backup completion times and split drill resu
 ab884ee4 fix(p7-e2b): harden backup scripts (size fallback, hour-slot operation ids)
 c02ecd99 fix(p7-e2a): implement role assignment reactivation through the exclusion seam
 4558f1f4 docs(p7-e): record review round 2 and refresh closeout metadata
+63c6da26 fix(p7-e2a): make assignment activation idempotent and XOR the PATCH command contract
+3025d0f9 fix(p7-e3): prefer the latest successful drill for cadence; gate CAS races on isolation
+12db5720 fix(p7-e2b): evidence CLI verifies the connected DB identity (fail closed on test-like names)
+5a4b0767 docs(p7-e): fix README dev port residue (5432 → 15432)
+(terminal) docs(p7-e): record review round 3 and refresh closeout metadata
 ```
 
 Authority documents: ADR-017 (ACCEPTED, rev 3, PR #281) > P7-E0/P7-E1
@@ -379,6 +381,33 @@ Evidence CLI cold-import smoke (dev DB)              PASS: spool start/completio
                                                       smoke row removed after
 ```
 
+Round 3 (this revision — after the round-3 fixes):
+
+```text
+pnpm verify (full gate)                              PASS (format, lint suite,
+                                                      typecheck, openapi check,
+                                                      coverage, build; the first
+                                                      run hit a test-infra
+                                                      lifecycle-lock timeout in
+                                                      @exam/db coverage — an
+                                                      environmental flake, re-run
+                                                      green)
+pnpm --filter @exam/api vitest run                   PASS: 161 files, 2165 tests (7 skipped)
+                                                      — includes NEW activation
+                                                      idempotency (repo + route),
+                                                      PATCH XOR-contract, and
+                                                      drill-recency cadence tests
+packages/db vitest run (coverage)                    PASS: 42 files, 566 tests
+                                                      — includes the repo-level
+                                                      activation idempotency test
+Evidence CLI connected-DB identity smoke (dev DB)    PASS: `exam` connects and
+                                                      proceeds; `exam_test`
+                                                      fails closed (test-like
+                                                      name rejected)
+OpenAPI spec                                         regenerated (PATCH isPrimary
+                                                      → enum [true]) and committed
+```
+
 Suites named in the closeout gate that were run as part of the above:
 authz tests, role-assignment tests, concurrency tests, API tests, web
 tests, E2E, route-registry conformance, shadow parity, permission
@@ -394,7 +423,10 @@ recommended in human review alongside `pnpm verify:static`.
 - **P0: 0**
 - **P1: 0**
 - **P2: 0** (all E0/E1 P2 items are FIXED or SUPERSEDED above; P2-3
-  accepted with rationale)
+  accepted with rationale; all round-3 review items — activation
+  idempotency, PATCH XOR contract, CAS race gating, README port residue,
+  CLI connected-DB identity, drill recency semantics — are FIXED, see
+  §13 "Adversarial review round 3")
 - **P3: 3** (accepted, non-blocking; numbered R1–R3 to avoid collision with
   the §8 P3-N reconciliation table)
   - R1: `packages/auth` session TTL hardcoded `24h` (deployment knob
@@ -463,6 +495,25 @@ green / SATISFIED while the real world did not satisfy the requirement**
 
 No Critical findings from either review remained open; all accepted
 findings are fixed and covered by tests in this revision.
+
+### Adversarial review round 3 (head `4558f1f4` → this revision)
+
+A third full review of PR #282 turned its attention from evidence
+truthfulness to the authority-mutation seam. One P1 — **the authority model
+could be corrupted by the API itself** — and five P2s; all fixed in this
+revision:
+
+| Finding | Class | Resolution |
+| --- | --- | --- |
+| `activateWithinTransaction` demoted the TARGET row when re-activating an already-active primary (the demote-other-primaries query did not exclude the row being activated) → PATCH `{ isActive: true }` on an active primary self-demoted it: active assignments with ZERO active primary + stale `users.role` cache, and the post-mutation sync never ran | **P1** | activation is now idempotent (early return on already-active rows, primary or secondary) and the demote query excludes the target id (`ne(id, assignmentId)`) as defense-in-depth; regression tests: repo-level + route-level (repeated PATCH stays active+primary, users.role unchanged, exactly one active primary) |
+| PATCH body contract ambiguous: `{ isPrimary: true, isActive: false }` was legal per schema but the route ignored `isActive`; `{}` / `{ isPrimary: false }` fell through to 404 (resource-not-found) instead of invalid-command | **P2** | `PatchRoleAssignmentRequestSchema` is now an XOR command — exactly one of `{ isPrimary: true }` / `{ isActive: true }` / `{ isActive: false }`; invalid payloads → 400; route tests for mixed and empty/unsupported bodies; OpenAPI regenerated |
+| Dual-connection CAS concurrency tests could silently run without schema isolation (`getIsolatedTestDb` falls back to the shared test DB; the second `createDatabase(undefined, undefined)` resolved the env DATABASE_URL) — the "proof" raced nothing | **P2** | both races gate on `isTestDbIsolationEnabled()` (`raceIt = isTestDbIsolationEnabled() ? it : it.skip`) with the reason documented; production CAS implementation untouched |
+| Issue #275 port-drift residue: README still described dev Postgres on host 5432 while dev compose publishes 15432 | **P2** | README local-dev lines fixed (3 places); CI-context 5432 references remain (isolated VM) |
+| Evidence CLI trusted the URL-parsed DB name: `APP_MODE=development` + `DATABASE_URL=…/exam_test` recorded "successful" evidence into a test DB while the production ledger stayed empty | **P2** | after connecting, the CLI runs `SELECT current_database()` and fails closed on test-like names (`test`/`e2e`/`ci` substring — the same convention as the test-name guard); smoke-verified both paths (dev DB connects, `exam_test` rejected) |
+| Drill cadence preferred an OLDER automated success over a NEWER operator-declared success (`latestAutomatedSuccess ?? latestSuccess`) → a successful restore today could render NOT_SATISFIED (false negative) while the declared-source policy was already "declared counts" | **P2** | recency is the truth: the latest SUCCEEDED drill (either source, source shown) proves cadence in both the compliance projection and restore-readiness; new projection test proves declared-today outranks automated-40d |
+| `exam_e2e_w*` parallel-shard worker DBs (CodeRabbit thread) | **ACCEPTED** | not a #282 defect — per-shard worker DBs are the existing WSL parallel-isolation architecture; deliberately NOT overturned here (separate test-infrastructure contract cleanup / repo-guideline update, not a merge blocker) |
+
+All round-3 findings are fixed and covered by tests in this revision.
 
 ---
 
