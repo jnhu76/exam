@@ -6,6 +6,7 @@ import {
   type OperationalPolicyRow,
 } from "@exam/db/src/repository/operationalPolicyRepo.js";
 import { createDatabase } from "@exam/db/src/database.js";
+import { isTestDbIsolationEnabled } from "@exam/db/src/testIsolation.js";
 import { organizations } from "@exam/db/src/schema/pg.js";
 import type { Database, TenantContext } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -17,7 +18,15 @@ import { ValidationError } from "@exam/domain";
  * Proves: typed/versioned intent record with CAS; absence = NOT_CONFIGURED;
  * the intent never binds infrastructure (the repo only stores the desired
  * objectives); VERSION_CONFLICT on stale writes; reason required.
+ *
+ * The two dual-connection CAS races need per-file schema isolation so both
+ * writers race on the SAME row. With TEST_DB_ISOLATION disabled,
+ * getIsolatedTestDb falls back to the shared test DB and a second
+ * createDatabase() call would resolve the env DATABASE_URL — the writers
+ * would not be racing the same row and the "proof" would be meaningless
+ * (P7-E review P2-2). Skip with an explicit reason instead of running it.
  */
+const raceIt = isTestDbIsolationEnabled() ? it : it.skip;
 describe("P7-E3 operational policy intent", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
@@ -126,39 +135,40 @@ describe("P7-E3 operational policy intent", () => {
     expect(read?.version).toBe(2);
   });
 
-  it("concurrent updates with the same expected version: exactly one wins (real CAS, no lost update)", async () => {
-    await upsert(0); // version 1
-    // Two writers both read version 1 and race to update. The CAS predicate
-    // (version in the UPDATE WHERE) must reject the loser — its write is NOT
-    // silently overwritten. The race runs on TWO real connections at READ
-    // COMMITTED (the single-connection test pool would serialize the writers
-    // and never exercise the predicate): under READ COMMITTED a lost update
-    // would otherwise be visible; under REPEATABLE READ the loser would be
-    // rejected by snapshot isolation instead of by the CAS itself.
-    const conn2 = await createDatabase(databaseUrl, schemaName);
-    try {
-      const [a, b] = await Promise.allSettled([
-        executeInTransaction(
-          db,
-          (tx) =>
-            repo().upsertPolicyWithinTransaction(ctx, tx, {
-              desiredRpoSeconds: 7200,
-              desiredRetentionDays: 30,
-              desiredDrillCadenceDays: 7,
-              expectedVersion: 1,
-              reason: "writer A",
-              actorId: ctx.actorId,
-              now: new Date(),
-            }),
-          "read committed",
-        ),
-        executeInTransaction(
-          conn2.db,
-          (tx) =>
-            createOperationalPolicyRepo(conn2.db).upsertPolicyWithinTransaction(
-              ctx,
-              tx,
-              {
+  raceIt(
+    "concurrent updates with the same expected version: exactly one wins (real CAS, no lost update)",
+    async () => {
+      await upsert(0); // version 1
+      // Two writers both read version 1 and race to update. The CAS predicate
+      // (version in the UPDATE WHERE) must reject the loser — its write is NOT
+      // silently overwritten. The race runs on TWO real connections at READ
+      // COMMITTED (the single-connection test pool would serialize the writers
+      // and never exercise the predicate): under READ COMMITTED a lost update
+      // would otherwise be visible; under REPEATABLE READ the loser would be
+      // rejected by snapshot isolation instead of by the CAS itself.
+      const conn2 = await createDatabase(databaseUrl, schemaName);
+      try {
+        const [a, b] = await Promise.allSettled([
+          executeInTransaction(
+            db,
+            (tx) =>
+              repo().upsertPolicyWithinTransaction(ctx, tx, {
+                desiredRpoSeconds: 7200,
+                desiredRetentionDays: 30,
+                desiredDrillCadenceDays: 7,
+                expectedVersion: 1,
+                reason: "writer A",
+                actorId: ctx.actorId,
+                now: new Date(),
+              }),
+            "read committed",
+          ),
+          executeInTransaction(
+            conn2.db,
+            (tx) =>
+              createOperationalPolicyRepo(
+                conn2.db,
+              ).upsertPolicyWithinTransaction(ctx, tx, {
                 desiredRpoSeconds: 9000,
                 desiredRetentionDays: 30,
                 desiredDrillCadenceDays: 7,
@@ -166,63 +176,66 @@ describe("P7-E3 operational policy intent", () => {
                 reason: "writer B",
                 actorId: ctx.actorId,
                 now: new Date(),
-              },
-            ),
-          "read committed",
-        ),
-      ]);
-      const winners = [a, b].filter(
-        (r): r is PromiseFulfilledResult<OperationalPolicyRow> =>
-          r.status === "fulfilled" && r.value.version === 2,
-      );
-      const conflicts = [a, b].filter(
-        (r): r is PromiseRejectedResult =>
-          r.status === "rejected" &&
-          (r.reason as { code?: string }).code ===
-            "OPS_POLICY_VERSION_CONFLICT",
-      );
-      expect(winners).toHaveLength(1);
-      expect(conflicts).toHaveLength(1);
-      // The loser's value never landed: the committed row carries ONLY the
-      // winner's desiredRpoSeconds (the loser's write was rejected, not
-      // silently overwritten).
-      const read = await repo().getPolicy(ctx);
-      expect(read?.version).toBe(2);
-      expect(read?.desiredRpoSeconds).toBe(winners[0]!.value.desiredRpoSeconds);
-      expect([7200, 9000]).toContain(read?.desiredRpoSeconds);
-    } finally {
-      await conn2.sql.end();
-    }
-  });
+              }),
+            "read committed",
+          ),
+        ]);
+        const winners = [a, b].filter(
+          (r): r is PromiseFulfilledResult<OperationalPolicyRow> =>
+            r.status === "fulfilled" && r.value.version === 2,
+        );
+        const conflicts = [a, b].filter(
+          (r): r is PromiseRejectedResult =>
+            r.status === "rejected" &&
+            (r.reason as { code?: string }).code ===
+              "OPS_POLICY_VERSION_CONFLICT",
+        );
+        expect(winners).toHaveLength(1);
+        expect(conflicts).toHaveLength(1);
+        // The loser's value never landed: the committed row carries ONLY the
+        // winner's desiredRpoSeconds (the loser's write was rejected, not
+        // silently overwritten).
+        const read = await repo().getPolicy(ctx);
+        expect(read?.version).toBe(2);
+        expect(read?.desiredRpoSeconds).toBe(
+          winners[0]!.value.desiredRpoSeconds,
+        );
+        expect([7200, 9000]).toContain(read?.desiredRpoSeconds);
+      } finally {
+        await conn2.sql.end();
+      }
+    },
+  );
 
-  it("concurrent first-creation: exactly one wins, the other gets VERSION_CONFLICT", async () => {
-    // Two writers both see NO row (expectedVersion 0) and race to insert on
-    // two real connections. The unique org index serializes them; the loser
-    // is mapped to VERSION_CONFLICT instead of a raw unique-violation.
-    const conn2 = await createDatabase(databaseUrl, schemaName);
-    try {
-      const [a, b] = await Promise.allSettled([
-        executeInTransaction(
-          db,
-          (tx) =>
-            repo().upsertPolicyWithinTransaction(ctx, tx, {
-              desiredRpoSeconds: 3600,
-              desiredRetentionDays: 30,
-              desiredDrillCadenceDays: 7,
-              expectedVersion: 0,
-              reason: "creator A",
-              actorId: ctx.actorId,
-              now: new Date(),
-            }),
-          "read committed",
-        ),
-        executeInTransaction(
-          conn2.db,
-          (tx) =>
-            createOperationalPolicyRepo(conn2.db).upsertPolicyWithinTransaction(
-              ctx,
-              tx,
-              {
+  raceIt(
+    "concurrent first-creation: exactly one wins, the other gets VERSION_CONFLICT",
+    async () => {
+      // Two writers both see NO row (expectedVersion 0) and race to insert on
+      // two real connections. The unique org index serializes them; the loser
+      // is mapped to VERSION_CONFLICT instead of a raw unique-violation.
+      const conn2 = await createDatabase(databaseUrl, schemaName);
+      try {
+        const [a, b] = await Promise.allSettled([
+          executeInTransaction(
+            db,
+            (tx) =>
+              repo().upsertPolicyWithinTransaction(ctx, tx, {
+                desiredRpoSeconds: 3600,
+                desiredRetentionDays: 30,
+                desiredDrillCadenceDays: 7,
+                expectedVersion: 0,
+                reason: "creator A",
+                actorId: ctx.actorId,
+                now: new Date(),
+              }),
+            "read committed",
+          ),
+          executeInTransaction(
+            conn2.db,
+            (tx) =>
+              createOperationalPolicyRepo(
+                conn2.db,
+              ).upsertPolicyWithinTransaction(ctx, tx, {
                 desiredRpoSeconds: 1800,
                 desiredRetentionDays: 30,
                 desiredDrillCadenceDays: 7,
@@ -230,30 +243,32 @@ describe("P7-E3 operational policy intent", () => {
                 reason: "creator B",
                 actorId: ctx.actorId,
                 now: new Date(),
-              },
-            ),
-          "read committed",
-        ),
-      ]);
-      const winners = [a, b].filter(
-        (r): r is PromiseFulfilledResult<OperationalPolicyRow> =>
-          r.status === "fulfilled" && r.value.version === 1,
-      );
-      const conflicts = [a, b].filter(
-        (r): r is PromiseRejectedResult =>
-          r.status === "rejected" &&
-          (r.reason as { code?: string }).code ===
-            "OPS_POLICY_VERSION_CONFLICT",
-      );
-      expect(winners).toHaveLength(1);
-      expect(conflicts).toHaveLength(1);
-      const read = await repo().getPolicy(ctx);
-      expect(read?.version).toBe(1);
-      expect(read?.desiredRpoSeconds).toBe(winners[0]!.value.desiredRpoSeconds);
-    } finally {
-      await conn2.sql.end();
-    }
-  });
+              }),
+            "read committed",
+          ),
+        ]);
+        const winners = [a, b].filter(
+          (r): r is PromiseFulfilledResult<OperationalPolicyRow> =>
+            r.status === "fulfilled" && r.value.version === 1,
+        );
+        const conflicts = [a, b].filter(
+          (r): r is PromiseRejectedResult =>
+            r.status === "rejected" &&
+            (r.reason as { code?: string }).code ===
+              "OPS_POLICY_VERSION_CONFLICT",
+        );
+        expect(winners).toHaveLength(1);
+        expect(conflicts).toHaveLength(1);
+        const read = await repo().getPolicy(ctx);
+        expect(read?.version).toBe(1);
+        expect(read?.desiredRpoSeconds).toBe(
+          winners[0]!.value.desiredRpoSeconds,
+        );
+      } finally {
+        await conn2.sql.end();
+      }
+    },
+  );
 
   it("rejects a first-creation with a non-zero version", async () => {
     await expect(upsert(1)).rejects.toMatchObject({
@@ -619,6 +634,41 @@ describe3(
       expect3(
         (body.compliance.drill.observed as string).startsWith("40d"),
       ).toBe(true);
+    });
+
+    it("a NEWER operator-declared success outranks an OLDER automated success (P7-E review P2)", async () => {
+      // Same org as the previous test: the automated success is 40d old (one
+      // test earlier). A fresh operator-declared success TODAY is the recency
+      // truth — cadence (7d) must be SATISFIED, NOT the false negative that
+      // would come from preferring the older automated proof.
+      const ctx = {
+        organizationId: orgId3,
+        actorId: "test",
+        role: "Admin" as const,
+        permissions: [],
+      };
+      await createBackupEvidenceRepo(appCtx.db).recordDrill(ctx, {
+        operationId: "logical-restore:declared-today",
+        backupType: "logical",
+        result: "succeeded",
+        source: "operator_declared",
+        startedAt: new Date(Date.now() - 1800_000),
+        completedAt: new Date(),
+      });
+
+      const res = await appCtx.app.inject({
+        method: "GET",
+        url: "/api/system/ops-policy",
+        cookies: { "auth-token": adminToken3 },
+      });
+      expect3(res.statusCode).toBe(200);
+      const body = res.json();
+      expect3(body.compliance.drill.status).toBe("SATISFIED");
+      expect3(body.compliance.drill.observed).toBe("0d ago");
+      // The source stays visible on the row that actually satisfied cadence.
+      expect3(body.compliance.drill.observedDetail as string).toContain(
+        "operator_declared",
+      );
     });
   },
 );

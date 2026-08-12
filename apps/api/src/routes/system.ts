@@ -540,20 +540,20 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     handler: async (request) => {
       const ctx = getRequestContext(request);
       const repo = createBackupEvidenceRepo(anyDb);
-      const [latestDrill, latestAutomatedSuccess, latestSuccess, drills] =
-        await Promise.all([
-          repo.latestDrill(ctx),
-          repo.latestSucceededDrill(ctx, "automated"),
-          repo.latestSucceededDrill(ctx),
-          repo.listDrills(ctx, 20),
-        ]);
+      const [latestDrill, latestSuccess, drills] = await Promise.all([
+        repo.latestDrill(ctx),
+        repo.latestSucceededDrill(ctx),
+        repo.listDrills(ctx, 20),
+      ]);
       // Unbounded lookups: a long run of recent drill failures must not hide
-      // an older automated (or any) success from the projection.
-      const latestSuccessful = latestAutomatedSuccess ?? latestSuccess;
+      // an older successful drill from the projection. The latest SUCCEEDED
+      // drill (automated or operator-declared — the source is shown on the
+      // row) is the recency truth; an older automated success must not
+      // outrank a newer operator-declared success (P7-E review P2).
       return {
         latestDrill: latestDrill ? toRestoreDrillWire(latestDrill) : null,
-        latestSuccessfulDrill: latestSuccessful
-          ? toRestoreDrillWire(latestSuccessful)
+        latestSuccessfulDrill: latestSuccess
+          ? toRestoreDrillWire(latestSuccess)
           : null,
         drillHistory: drills.map(toRestoreDrillWire),
       };
@@ -591,12 +591,15 @@ function toBackupRunWire(r: BackupRunRow) {
  *   - Retention: retention/pruning is host-managed today (host cron +
  *     manual + fail-closed invariant) — the product has no enforcement
  *     evidence, so the status is always NOT_ENFORCED (never a lie).
- *   - Drill: observed = age of the most recent SUCCESSFUL drill evidence
- *     (automated success first, operator-declared success accepted with its
- *     source shown). A FAILED drill — automated or operator-declared —
- *     NEVER satisfies cadence; it surfaces via the restore-readiness
- *     projection as the latest drill, not as proof. No successful drill →
- *     UNKNOWN; age <= cadence → SATISFIED; otherwise NOT_SATISFIED.
+ *   - Drill: observed = age of the most recent SUCCESSFUL drill evidence,
+ *     whether automated or operator-declared (the source is shown on the
+ *     row). A FAILED drill — automated or operator-declared — NEVER
+ *     satisfies cadence; it surfaces via the restore-readiness projection as
+ *     the latest drill, not as proof. No successful drill → UNKNOWN; age <=
+ *     cadence → SATISFIED; otherwise NOT_SATISFIED. Recency is the truth:
+ *     an older automated success does NOT outrank a newer operator-declared
+ *     success (P7-E review P2) — picking the older one would be a false
+ *     NOT_SATISFIED despite a successful restore today.
  *   - The projection NEVER changes infrastructure — it only renders truth.
  */
 async function buildOpsPolicyProjection(
@@ -609,13 +612,11 @@ async function buildOpsPolicyProjection(
   const ctx = getRequestContext(request);
   const evidence = createBackupEvidenceRepo(fastify.db);
   const now = fastify.now();
-  const [latestVerified, latestAutomatedSuccess, latestSuccess, drills] =
-    await Promise.all([
-      evidence.latestSucceededRun(ctx),
-      evidence.latestSucceededDrill(ctx, "automated"),
-      evidence.latestSucceededDrill(ctx),
-      evidence.listDrills(ctx, 20),
-    ]);
+  const [latestVerified, latestSuccess, drills] = await Promise.all([
+    evidence.latestSucceededRun(ctx),
+    evidence.latestSucceededDrill(ctx),
+    evidence.listDrills(ctx, 20),
+  ]);
 
   const policyWire = policy
     ? {
@@ -668,9 +669,11 @@ async function buildOpsPolicyProjection(
   // operator-declared) never satisfies it, so there is deliberately NO
   // "latest declared drill" fallback here. `latestSucceededDrill` is
   // unbounded: a long run of recent failures must not hide an older
-  // success. Operator-declared successes count (with their source shown),
-  // automated successes win the tiebreak.
-  const provenDrill = latestAutomatedSuccess ?? latestSuccess ?? null;
+  // success. The latest SUCCEEDED drill — automated or operator-declared,
+  // with its source shown — is the recency truth; an older automated
+  // success must not outrank a newer operator-declared success (P7-E
+  // review P2).
+  const provenDrill = latestSuccess ?? null;
   const drillAgeSeconds =
     provenDrill?.completedAt != null
       ? Math.max(0, (now.getTime() - provenDrill.completedAt.getTime()) / 1000)
