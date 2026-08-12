@@ -150,6 +150,25 @@ async function main(): Promise<void> {
   process.stderr.write(`backup-evidence: target database "${databaseName}"\n`);
   const conn = await createDatabase(databaseUrl);
   try {
+    // Connected-DB identity check (P7-E review P2-4): the URL-parsed name is
+    // only a hint — APP_MODE=development with DATABASE_URL=…/exam_test would
+    // otherwise record "successful" evidence into a test database while the
+    // production Operations page stays empty. Ask the server what database
+    // this connection actually uses and fail closed on test-like names.
+    const identity = await conn.sql.unsafe<{ db: string }[]>(
+      "SELECT current_database() AS db",
+    );
+    const connectedDb = identity[0]?.db;
+    if (!connectedDb || /(test|e2e|ci)/.test(connectedDb)) {
+      fail(
+        `refusing to record evidence: connected database "${connectedDb ?? "?"}" is test-like ` +
+          `(APP_MODE=${appMode}, DATABASE_URL database "${databaseName}"). ` +
+          "Point DATABASE_URL at the deployment database.",
+      );
+    }
+    process.stderr.write(
+      `backup-evidence: connected to database "${connectedDb}"\n`,
+    );
     const [command, ...rest] = process.argv.slice(2);
     if (!command) {
       fail(
