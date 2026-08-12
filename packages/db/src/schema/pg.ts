@@ -1288,10 +1288,12 @@ export const backupRuns = pgTable(
       sql`${table.verificationStatus} IN ('verified', 'failed', 'pending')`,
     ),
     // SUCCESS requires verification evidence (D10 #1): a `succeeded` row must
-    // carry verificationStatus = 'verified' at the DB level.
+    // carry verificationStatus = 'verified' at the DB level. NULL-safe: a
+    // NULL verification_status must NOT satisfy the constraint (PostgreSQL
+    // CHECK semantics would otherwise treat NULL as "passes").
     check(
       "backup_runs_success_verified_check",
-      sql`(${table.status} <> 'succeeded' OR ${table.verificationStatus} = 'verified')`,
+      sql`(${table.status} <> 'succeeded' OR (${table.verificationStatus} IS NOT NULL AND ${table.verificationStatus} = 'verified'))`,
     ),
   ],
 );
@@ -2130,4 +2132,8 @@ export const schema = {
   examProctorAssignments,
   examProctorAssignmentEvents,
   attemptCommandReceipts,
+  backupRuns,
+  backupRunEvents,
+  backupOperationalPolicy,
+  restoreDrillRuns,
 };

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Database, TenantContext, TransactionDatabase } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { userRoleAssignments, type AssignableRole } from "../schema/pg.js";
+import {
+  userRoleAssignments,
+  users,
+  type AssignableRole,
+} from "../schema/pg.js";
 import {
   resolveOrganizationId,
   createAsyncTenantCrudRepo,
@@ -527,6 +531,12 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * ADMIN ∩ MAINTAINER combination. Returns one entry per violating user,
    * with the active Admin and Maintainer assignment ids for diagnostics.
    *
+   * Only EFFECTIVE combinations count: the user row must be active too
+   * (symmetric with `countEffectiveActiveUsersWithRole`). A disabled user's
+   * assignments are latent — re-activating the user is itself an authority
+   * mutation that runs this post-condition (the adminInvariant seam), so the
+   * combination can never become effective.
+   *
    * Called as a transaction post-condition by the authority-mutation seam
    * (`mutateWithAuthorityInvariants`, apps/api) after every mutation that can
    * create or activate an Admin/Maintainer assignment. The caller holds the
@@ -550,10 +560,12 @@ export function createUserRoleAssignmentRepo(db: Database) {
         id: userRoleAssignments.id,
       })
       .from(userRoleAssignments)
+      .innerJoin(users, eq(users.id, userRoleAssignments.userId))
       .where(
         and(
           eq(userRoleAssignments.organizationId, orgId),
           eq(userRoleAssignments.isActive, true),
+          eq(users.isActive, true),
           or(
             eq(userRoleAssignments.role, "Admin"),
             eq(userRoleAssignments.role, "Maintainer"),

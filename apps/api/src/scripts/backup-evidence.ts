@@ -72,7 +72,10 @@ function parseArgs(argv: string[]): Record<string, string> {
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
       const value = argv[i + 1];
-      if (!value) fail(`missing value for --${key}`);
+      // Only `undefined` is a missing value; an option flag must never be
+      // consumed as a value (e.g. `--reason --executor host_script`).
+      if (value === undefined || value.startsWith("--"))
+        fail(`missing value for --${key}`);
       args[key] = value;
       i++;
     }
@@ -130,7 +133,25 @@ async function resolveDefaultOrgId(
 
 async function main(): Promise<void> {
   loadRootEnv();
+  // Test-mode guard: APP_MODE test/ci/e2e routes the resolver to
+  // TEST_DATABASE_URL (fail-fast) — an operator recording evidence against a
+  // test database would make the product ledger silently miss the run while
+  // the shell hard gate passes. Refuse instead of writing to the wrong DB.
+  const appMode = process.env.APP_MODE;
+  if (appMode === "test" || appMode === "ci" || appMode === "e2e") {
+    fail(
+      `refusing to record evidence with APP_MODE=${appMode} (test database). ` +
+        "Set APP_MODE=development and DATABASE_URL to the deployment database.",
+    );
+  }
   const databaseUrl = resolveDatabaseUrlFromEnv(process.env);
+  let databaseName = "?";
+  try {
+    databaseName = new URL(databaseUrl).pathname.replace(/^\//, "") || "?";
+  } catch {
+    // Unparseable URL — the connection attempt below will surface the error.
+  }
+  process.stderr.write(`backup-evidence: target database "${databaseName}"\n`);
   const conn = await createDatabase(databaseUrl);
   try {
     const [command, ...rest] = process.argv.slice(2);
@@ -227,6 +248,7 @@ async function main(): Promise<void> {
         // contradictory duplicate). A malformed spool is rejected.
         const spoolPath = required(args, "spool");
         let spool: {
+          schemaVersion?: unknown;
           operationId?: unknown;
           backupType?: unknown;
           artifactLabel?: unknown;
@@ -244,6 +266,10 @@ async function main(): Promise<void> {
         } catch {
           fail(`cannot read spool file: ${spoolPath}`);
         }
+        if (spool.schemaVersion !== undefined && spool.schemaVersion !== 1)
+          fail(
+            `spool: unsupported schemaVersion ${String(spool.schemaVersion)}`,
+          );
         if (typeof spool.operationId !== "string")
           fail("spool: operationId missing");
         if (typeof spool.backupType !== "string")
@@ -251,16 +277,28 @@ async function main(): Promise<void> {
         if (typeof spool.artifactLabel !== "string")
           fail("spool: artifactLabel missing");
         const backupType = assertOneOf(spool.backupType, BACKUP_TYPES, "type");
-        const sizeBytes =
-          typeof spool.artifactSizeBytes === "number"
-            ? spool.artifactSizeBytes
-            : 0;
+        let sizeBytes = 0;
+        if (spool.artifactSizeBytes !== undefined) {
+          if (
+            typeof spool.artifactSizeBytes !== "number" ||
+            !Number.isInteger(spool.artifactSizeBytes) ||
+            spool.artifactSizeBytes < 0
+          ) {
+            fail("spool: artifactSizeBytes must be a non-negative integer");
+          }
+          sizeBytes = spool.artifactSizeBytes;
+        }
         const verificationMethod =
           typeof spool.verificationMethod === "string"
             ? spool.verificationMethod
             : "pg_version_presence";
+        // The spool is an untrusted operator file: a malformed timestamp must
+        // fail cleanly (never an uncaught RangeError from toISOString).
         const startedAt =
           typeof spool.startedAt === "string" ? new Date(spool.startedAt) : now;
+        if (Number.isNaN(startedAt.getTime())) {
+          fail(`spool: startedAt is not a valid date: ${spool.startedAt}`);
+        }
         const run = await repo.completeRun(ctx, {
           operationId: spool.operationId,
           backupType,
@@ -274,6 +312,7 @@ async function main(): Promise<void> {
               : "host_script",
           ),
           now,
+          startedAt,
         });
         if (run.status === "succeeded") {
           process.stdout.write(

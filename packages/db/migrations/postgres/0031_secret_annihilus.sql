@@ -18,7 +18,7 @@ CREATE TABLE "backup_runs" (
 	CONSTRAINT "backup_runs_status_check" CHECK ("backup_runs"."status" IN ('running', 'succeeded', 'failed', 'abandoned')),
 	CONSTRAINT "backup_runs_type_check" CHECK ("backup_runs"."backup_type" IN ('logical', 'physical_base', 'cold_filesystem')),
 	CONSTRAINT "backup_runs_verification_status_check" CHECK ("backup_runs"."verification_status" IN ('verified', 'failed', 'pending')),
-	CONSTRAINT "backup_runs_success_verified_check" CHECK (("backup_runs"."status" <> 'succeeded' OR "backup_runs"."verification_status" = 'verified'))
+	CONSTRAINT "backup_runs_success_verified_check" CHECK (("backup_runs"."status" <> 'succeeded' OR ("backup_runs"."verification_status" IS NOT NULL AND "backup_runs"."verification_status" = 'verified')))
 );
 --> statement-breakpoint
 CREATE TABLE "backup_run_events" (

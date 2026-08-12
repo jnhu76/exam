@@ -238,6 +238,9 @@ export function createBackupEvidenceRepo(db: Database) {
       verifiedAt: Date;
       executorType: BackupExecutorType;
       now: Date;
+      /** True start of the run, when the caller knows it (e.g. cold-import
+       *  spool); defaults to `now` when start evidence was not recorded. */
+      startedAt?: Date;
     },
   ): Promise<BackupRunRow> {
     try {
@@ -261,7 +264,9 @@ export function createBackupEvidenceRepo(db: Database) {
             return prior;
           }
           // Contradictory duplicate: record the new attempt as failed and
-          // never touch the existing success (fail closed).
+          // never touch the existing success (fail closed). The rejected
+          // attempt carries verificationStatus 'failed' (matching failRun) —
+          // a failed row must never render as verification-verified.
           const inserted = await tx
             .insert(backupRuns)
             .values({
@@ -270,12 +275,12 @@ export function createBackupEvidenceRepo(db: Database) {
               operationId: params.operationId,
               backupType: params.backupType,
               status: "failed",
-              startedAt: params.now,
+              startedAt: params.startedAt ?? params.now,
               completedAt: params.now,
               artifactLabel: params.artifactLabel,
               artifactSizeBytes: params.artifactSizeBytes,
-              verificationStatus: "verified",
-              verifiedAt: params.verifiedAt,
+              verificationStatus: "failed",
+              verifiedAt: null,
               failureReason: "duplicate_operation_conflict",
               executorType: params.executorType,
               createdAt: params.now,
@@ -335,9 +340,10 @@ export function createBackupEvidenceRepo(db: Database) {
               backupType: params.backupType,
               status: "succeeded",
               // Start evidence was not recorded (crash before the start hook):
-              // the ledger records start==complete (evidence time). Truthful:
-              // no claim is made about when the run actually began.
-              startedAt: params.now,
+              // the ledger records start==complete (evidence time) unless the
+              // caller knows the true start (e.g. cold-import spool).
+              // Truthful: no claim is made about when the run actually began.
+              startedAt: params.startedAt ?? params.now,
               completedAt: params.now,
               artifactLabel: params.artifactLabel,
               artifactSizeBytes: params.artifactSizeBytes,
@@ -516,7 +522,7 @@ export function createBackupEvidenceRepo(db: Database) {
           ...(operationId ? [eq(backupRuns.operationId, operationId)] : []),
         ),
       )
-      .orderBy(desc(backupRuns.verifiedAt))
+      .orderBy(sql`${backupRuns.verifiedAt} DESC NULLS LAST`)
       .limit(1);
     return rows[0] ? runRow(rows[0]) : null;
   }
@@ -534,7 +540,7 @@ export function createBackupEvidenceRepo(db: Database) {
           eq(backupRuns.status, "failed"),
         ),
       )
-      .orderBy(desc(backupRuns.completedAt))
+      .orderBy(sql`${backupRuns.completedAt} DESC NULLS LAST`)
       .limit(1);
     return rows[0] ? runRow(rows[0]) : null;
   }
@@ -580,11 +586,38 @@ export function createBackupEvidenceRepo(db: Database) {
   /** The most recent restore-drill record. */
   async function latestDrill(
     ctx: TenantContext | RequestContext,
+    source?: RestoreDrillSource,
   ): Promise<RestoreDrillRow | null> {
     const rows = await db
       .select()
       .from(restoreDrillRuns)
-      .where(eq(restoreDrillRuns.organizationId, ctx.organizationId))
+      .where(
+        and(
+          eq(restoreDrillRuns.organizationId, ctx.organizationId),
+          ...(source ? [eq(restoreDrillRuns.source, source)] : []),
+        ),
+      )
+      .orderBy(desc(restoreDrillRuns.startedAt))
+      .limit(1);
+    return rows[0] ? drillRow(rows[0]) : null;
+  }
+
+  /** The most recent SUCCESSFUL restore-drill record, unbounded — a long
+   *  history of recent failures must not hide an older automated success. */
+  async function latestSucceededDrill(
+    ctx: TenantContext | RequestContext,
+    source?: RestoreDrillSource,
+  ): Promise<RestoreDrillRow | null> {
+    const rows = await db
+      .select()
+      .from(restoreDrillRuns)
+      .where(
+        and(
+          eq(restoreDrillRuns.organizationId, ctx.organizationId),
+          eq(restoreDrillRuns.result, "succeeded"),
+          ...(source ? [eq(restoreDrillRuns.source, source)] : []),
+        ),
+      )
       .orderBy(desc(restoreDrillRuns.startedAt))
       .limit(1);
     return rows[0] ? drillRow(rows[0]) : null;
@@ -631,7 +664,11 @@ export function createBackupEvidenceRepo(db: Database) {
             restoreDrillRuns.operationId,
           ],
           // A re-recorded drill for the same operationId updates in place
-          // (the drill is re-run, not a new logical identity).
+          // (the drill is re-run, not a new logical identity) — EXCEPT that
+          // an existing AUTOMATED record is preserved: operator-declared
+          // evidence must never overwrite automated proof (setWhere skips the
+          // update; the returned row is then the preserved automated one).
+          setWhere: sql`${restoreDrillRuns.source} <> 'automated'`,
           set: {
             result: params.result,
             source: params.source,
@@ -643,7 +680,20 @@ export function createBackupEvidenceRepo(db: Database) {
           },
         })
         .returning();
-      return drillRow(inserted[0]!);
+      if (inserted[0]) return drillRow(inserted[0]!);
+      // setWhere skipped the update: the conflicting row is preserved
+      // automated evidence — return the row that won.
+      const preserved = await tx
+        .select()
+        .from(restoreDrillRuns)
+        .where(
+          and(
+            eq(restoreDrillRuns.organizationId, ctx.organizationId),
+            eq(restoreDrillRuns.operationId, params.operationId),
+          ),
+        )
+        .limit(1);
+      return drillRow(preserved[0]!);
     });
   }
 
@@ -659,6 +709,7 @@ export function createBackupEvidenceRepo(db: Database) {
     statusCounts,
     listDrills,
     latestDrill,
+    latestSucceededDrill,
     recordDrill,
   };
 }

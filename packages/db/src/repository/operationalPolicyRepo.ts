@@ -69,8 +69,8 @@ export function createOperationalPolicyRepo(db: Database) {
    * transaction wrapper.
    */
   async function upsertPolicyWithinTransaction(
-    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
+    tx: TransactionDatabase,
     params: {
       desiredRpoSeconds: number;
       desiredRetentionDays: number;

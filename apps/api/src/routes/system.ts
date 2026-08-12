@@ -491,7 +491,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       const policy = await executeInTransaction(anyDb, async (tx) => {
         const updated = await createOperationalPolicyRepo(
           tx,
-        ).upsertPolicyWithinTransaction(tx, ctx, {
+        ).upsertPolicyWithinTransaction(ctx, tx, {
           desiredRpoSeconds: data.desiredRpoSeconds,
           desiredRetentionDays: data.desiredRetentionDays,
           desiredDrillCadenceDays: data.desiredDrillCadenceDays,
@@ -540,16 +540,16 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     handler: async (request) => {
       const ctx = getRequestContext(request);
       const repo = createBackupEvidenceRepo(anyDb);
-      const [latestDrill, drills] = await Promise.all([
-        repo.latestDrill(ctx),
-        repo.listDrills(ctx, 20),
-      ]);
-      const latestSuccessful =
-        drills.find(
-          (d) => d.result === "succeeded" && d.source === "automated",
-        ) ??
-        drills.find((d) => d.result === "succeeded") ??
-        null;
+      const [latestDrill, latestAutomatedSuccess, latestSuccess, drills] =
+        await Promise.all([
+          repo.latestDrill(ctx),
+          repo.latestSucceededDrill(ctx, "automated"),
+          repo.latestSucceededDrill(ctx),
+          repo.listDrills(ctx, 20),
+        ]);
+      // Unbounded lookups: a long run of recent drill failures must not hide
+      // an older automated (or any) success from the projection.
+      const latestSuccessful = latestAutomatedSuccess ?? latestSuccess;
       return {
         latestDrill: latestDrill ? toRestoreDrillWire(latestDrill) : null,
         latestSuccessfulDrill: latestSuccessful
@@ -606,8 +606,20 @@ async function buildOpsPolicyProjection(
   const ctx = getRequestContext(request);
   const evidence = createBackupEvidenceRepo(fastify.db);
   const now = fastify.now();
-  const [latestVerified, drills] = await Promise.all([
+  const [
+    latestVerified,
+    latestAutomatedSuccess,
+    latestSuccess,
+    latestDeclared,
+    drills,
+  ] = await Promise.all([
     evidence.latestSucceededRun(ctx),
+    evidence.latestSucceededDrill(ctx, "automated"),
+    evidence.latestSucceededDrill(ctx),
+    // The automated drill path records only succeeded/failed results, so
+    // result='operator_declared' ⟺ source='operator_declared' in practice;
+    // the source filter expresses the same evidence class.
+    evidence.latestDrill(ctx, "operator_declared"),
     evidence.listDrills(ctx, 20),
   ]);
 
@@ -658,11 +670,11 @@ async function buildOpsPolicyProjection(
   // ── Restore drill cadence ──
   let drillStatus: ComplianceStatus;
   let drillDetail: string | null;
+  // Unbounded lookups keep the same preference (automated success first,
+  // then any success, then operator-declared evidence) but never miss older
+  // proof because of the bounded history page.
   const provenDrill =
-    drills.find((d) => d.result === "succeeded" && d.source === "automated") ??
-    drills.find((d) => d.result === "succeeded") ??
-    drills.find((d) => d.result === "operator_declared") ??
-    null;
+    latestAutomatedSuccess ?? latestSuccess ?? latestDeclared ?? null;
   const drillAgeSeconds =
     provenDrill?.completedAt != null
       ? Math.max(0, (now.getTime() - provenDrill.completedAt.getTime()) / 1000)

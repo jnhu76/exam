@@ -1376,7 +1376,7 @@
         },
         "backup_runs_success_verified_check": {
           "name": "backup_runs_success_verified_check",
-          "value": "(\"backup_runs\".\"status\" <> 'succeeded' OR \"backup_runs\".\"verification_status\" = 'verified')"
+          "value": "(\"backup_runs\".\"status\" <> 'succeeded' OR (\"backup_runs\".\"verification_status\" IS NOT NULL AND \"backup_runs\".\"verification_status\" = 'verified'))"
         }
       },
       "isRLSEnabled": false
