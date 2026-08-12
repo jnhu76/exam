@@ -286,6 +286,105 @@ describe("RBAC-M8 role-assignment routes", () => {
     expect(graderRow.id).toBe(graderId);
   });
 
+  it("PATCH activate of an already-active primary is IDEMPOTENT: repeated { isActive: true } never self-demotes (P7-E review P1)", async () => {
+    const target = await createTargetUser(ctx.db, ctx.org.id, "idem-active");
+    const prim = await createPrimaryAssignment(
+      ctx.db,
+      ctx.org.id,
+      target.id,
+      "Candidate",
+    );
+
+    // First PATCH on the already-active primary.
+    const first = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: true },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ isActive: true, isPrimary: true });
+
+    // Repeated PATCH must be a no-op — NOT a self-demote that leaves an
+    // active-but-primaryless authority behind.
+    const second = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: true },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ isActive: true, isPrimary: true });
+
+    // users.role cache untouched (still the assignment role).
+    const userRow = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, target.id));
+    expect(userRow[0]!.role).toBe("Candidate");
+
+    // Exactly one active primary remains.
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const activePrimaries = listRes
+      .json()
+      .items.filter(
+        (i: { isPrimary: boolean; isActive: boolean }) =>
+          i.isPrimary && i.isActive,
+      );
+    expect(activePrimaries).toHaveLength(1);
+    expect(activePrimaries[0]!.id).toBe(prim.id);
+  });
+
+  it("PATCH with a mixed command ({ isPrimary: true, isActive: false }) is rejected with 400, not silently half-applied", async () => {
+    const target = await createTargetUser(ctx.db, ctx.org.id, "mixed-cmd");
+    const prim = await createPrimaryAssignment(
+      ctx.db,
+      ctx.org.id,
+      target.id,
+      "Candidate",
+    );
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isPrimary: true, isActive: false },
+    });
+    expect(res.statusCode).toBe(400);
+    // Nothing changed: the assignment is still the active primary.
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const row = listRes
+      .json()
+      .items.find((i: { id: string }) => i.id === prim.id);
+    expect(row).toMatchObject({ isActive: true, isPrimary: true });
+  });
+
+  it("PATCH with an empty or unsupported body is rejected with 400 (invalid command, not resource-not-found)", async () => {
+    const target = await createTargetUser(ctx.db, ctx.org.id, "empty-cmd");
+    const prim = await createPrimaryAssignment(
+      ctx.db,
+      ctx.org.id,
+      target.id,
+      "Candidate",
+    );
+    for (const payload of [{}, { isPrimary: false }]) {
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/role-assignments/${prim.id}`,
+        cookies: { "auth-token": ctx.adminToken },
+        payload,
+      });
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
   it("DELETE a primary assignment promotes the next active + syncs users.role (review #5/#7)", async () => {
     const target = await createTargetUser(ctx.db, ctx.org.id, "del-primary");
     await createPrimaryAssignment(ctx.db, ctx.org.id, target.id, "Candidate");

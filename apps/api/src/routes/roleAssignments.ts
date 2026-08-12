@@ -333,7 +333,11 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           isActive: deactivated!.isActive,
         };
       }
-      // No-op patch (no recognized change given): return as-is.
+      // Unreachable in practice: PatchRoleAssignmentRequestSchema (XOR
+      // command contract, P7-E review P2-1) rejects any payload that does not
+      // carry exactly one of { isPrimary: true } / { isActive: true } /
+      // { isActive: false } with 400 before the handler runs. This guard only
+      // catches a future contract regression where a payload slips through.
       throw new NotFoundError("role assignment");
     },
   );

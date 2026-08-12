@@ -11,7 +11,7 @@ import {
   createAsyncTenantCrudRepo,
   now,
 } from "./baseRepo.js";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { executeInTransaction } from "../types.js";
 
 /** A user-role-assignment row shape returned by the repo. */
@@ -469,12 +469,16 @@ export function createUserRoleAssignmentRepo(db: Database) {
 
   /**
    * Reactivates a deactivated assignment (keeps the row for audit history).
-   * If the reactivated row carries the primary flag, the user's other ACTIVE
-   * primaries are demoted first so the ≤1-primary-active partial unique
-   * index stays satisfiable (mirrors setPrimaryWithinTransaction) — the
-   * reactivated primary becomes the authority again. A reactivated
-   * non-primary assignment never changes users.role. Returns the row, or
-   * null if not found. Transaction-only variant.
+   * Activation is IDEMPOTENT: an already-active assignment — primary or
+   * secondary — returns as-is and is NEVER re-demoted (P7-E review P1:
+   * PATCH { isActive: true } on an active primary must not self-demote the
+   * row and orphan the authority). For a genuine reactivation of a row that
+   * carries the primary flag, the user's OTHER active primaries are demoted
+   * first so the ≤1-primary-active partial unique index stays satisfiable
+   * (mirrors setPrimaryWithinTransaction) — the reactivated primary becomes
+   * the authority again. A reactivated non-primary assignment never changes
+   * users.role. Returns the row, or null if not found. Transaction-only
+   * variant.
    */
   async function activateWithinTransaction(
     tx: TransactionDatabase,
@@ -493,9 +497,14 @@ export function createUserRoleAssignmentRepo(db: Database) {
       )
       .limit(1);
     if (!before[0]) return null;
+    if (before[0]!.isActive) {
+      return row(before[0]!);
+    }
     if (before[0]!.isPrimary) {
       // The reactivated row carries the primary flag: demote the user's
-      // other ACTIVE primaries so exactly one active primary can exist.
+      // OTHER active primaries so exactly one active primary can exist.
+      // The target itself is inactive at this point; the id exclusion is
+      // defense-in-depth so the demote can never touch the target row.
       await tx
         .update(userRoleAssignments)
         .set({ isPrimary: false, updatedAt: now() })
@@ -505,6 +514,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
             eq(userRoleAssignments.userId, before[0]!.userId),
             eq(userRoleAssignments.isPrimary, true),
             eq(userRoleAssignments.isActive, true),
+            ne(userRoleAssignments.id, assignmentId),
           ),
         );
     }

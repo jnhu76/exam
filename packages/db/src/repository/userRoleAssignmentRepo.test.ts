@@ -170,6 +170,24 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     expect(newPrimary?.role).toBe("Grader");
   });
 
+  it("activate is idempotent: re-activating an already-active primary never self-demotes (P7-E review P1)", async () => {
+    const { userId, ctx } = await seedOrgAndUser(db, "idem-active");
+    const repo = createUserRoleAssignmentRepo(db);
+    const primary = await repo.assign(ctx, {
+      userId,
+      role: "Candidate",
+      isPrimary: true,
+    });
+    // No-op reactivation of the ACTIVE primary: must stay primary. (The old
+    // demote-other-active-primaries query did not exclude the target row and
+    // demoted the very assignment being activated — orphaning authority.)
+    const again = await repo.activate(ctx, primary.id);
+    expect(again).toMatchObject({ isActive: true, isPrimary: true });
+    expect((await repo.findPrimaryActiveForUser(ctx, userId))?.id).toBe(
+      primary.id,
+    );
+  });
+
   it("auto-promotes the next active assignment when the primary is removed (review #7)", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "heidi");
     const repo = createUserRoleAssignmentRepo(db);
