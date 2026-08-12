@@ -325,17 +325,11 @@ export async function scanDatabaseForExpiredAttempts(
   return { submittedCount, failedCount };
 }
 
-function readPositiveInteger(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
-  const scanIntervalMs = readPositiveInteger(
-    process.env.DEADLINE_SCAN_INTERVAL_MS,
-    config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS,
-  );
+  // P7-E closeout (E0 P2-2): the interval resolves through the canonical
+  // loader — no direct process.env read at plugin registration.
+  const scanIntervalMs = config.heartbeat.deadlineScanIntervalMs;
   deadlineScannerMetrics.scanIntervalMs = scanIntervalMs;
 
   let activeScan: Promise<void> | null = null;

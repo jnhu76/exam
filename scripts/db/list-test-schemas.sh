@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:5432/exam_test}"
+DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:15432/exam_test}"
 
 psql "$DB_URL" -t -A <<'SQL'
   SELECT schema_name
