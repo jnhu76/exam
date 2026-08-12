@@ -198,17 +198,22 @@ audit, external log shipping. All Phase 4; none started.
 
 ## Known limitations
 
-- **Operational authority separation (P7-E1) is an accepted design, not yet
-  implemented code.** The P7-E1 audit (docs-only, 2026-08-12,
+- **Operational authority separation (P7-E1) is READY FOR HUMAN REVIEW —
+  design only, not yet accepted or implemented.** The P7-E1 audit (docs-only
+  PR #281, 2026-08-12,
   [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
-  + ADR-017) verified that the Admin/Maintainer hard boundary already holds
+  + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md),
+  PROPOSED) verified that the Admin/Maintainer hard boundary already holds
   structurally — no product surface (route/capability/UI) can perform
-  infrastructure execution (backup/restore/PITR/WAL/restart/secrets); the
-  Maintainer is a host/operator identity, not a product DB role. What does
+  infrastructure execution (backup/restore/PITR/WAL/restart/secrets).
+  Authority model (proposed): Admin = business owner; Application Maintainer
+  = recognized-but-not-implemented product role concept holding ONLY
+  operational capabilities; Host Maintainer = host/CLI identity. What does
   NOT exist yet: durable in-product backup/restore-drill **evidence**
   (P7-C ships mechanisms only — "last successful/verified backup", "RPO
   posture", "last failure" are unanswerable in-product today). The planned
-  P7-E2 evidence-first backup run ledger is gated on human review of E1.
+  P7-E2 sequence (E2A RBAC boundary → E2B evidence ledger → E2C views) is
+  gated on human review of E1.
 - **Interruption time compensation**: REC-I3 implements candidate direct-entry
   restore. REC-I4-I1 implemented the persistence foundation (ADR-013 `strict`
   default, explicit bounded caps, operator attribution, episode identity,

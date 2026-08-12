@@ -12,7 +12,7 @@
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
 | Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
 | Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
-| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). P7-E1 operational-authority / Admin–Maintainer separation audit CLOSED (docs-only, 2026-08-12; see [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md) + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md) — READY FOR HUMAN REVIEW, E2 gated on review). State-machine, config-control-plane, exam-modes, and UI workstreams remain open. |
+| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). P7-E1 operational-authority / Admin–Maintainer separation audit + authority contract **READY FOR HUMAN REVIEW** (docs-only PR #281, 2026-08-12; see [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md) + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md) — PROPOSED; P7-E2 gated on review). State-machine, config-control-plane, exam-modes, and UI workstreams remain open. |
 | Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
@@ -121,9 +121,9 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > C2 logical, C3 physical + PITR), with deterministic drills. The
    > remaining items here (RPO/RTO profile automation, Admin backup
    > surface, settings/files backup beyond the PostgreSQL authority)
-   > are P7-E control-plane work — the Admin backup *visibility* surface
-   > is the planned first P7-E2 slice (evidence-first backup run ledger),
-   > NOT started (see the P7-E1 audit below).
+   > are P7-E control-plane work — the backup *evidence* ledger is the
+   > planned P7-E2B slice (after the E2A RBAC boundary), NOT started
+   > (see the P7-E1 audit below).
 
 5. **Crash and outage recovery**
    - define API/host/PostgreSQL/Redis/worker/scanner failure behavior;
@@ -144,32 +144,40 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > authority classes (deployment/secret, system operational, organization,
    > exam policy, code invariant), and records the snapshot/hazard map. Key
    > verdict: **no generic settings subsystem is justified by current evidence,
-   > and no P7-E1 implementation is currently justified** — proceed to P7-M1
+   > and no E1 settings slice is currently justified** — proceed to P7-M1
    > (exam policy resolution / freeze model), which is where the real
    > configuration pressure already exists (the profile-resolution freeze
-   > hazard). A future E1 is triggered only by a confirmed near-term requirement
-   > for Admin-editable operational settings; Email worker/retry is a candidate
-   > under that gate, not preselected; backup automation/status is a separate
-   > operational capability. P7-E itself is **NOT** complete.
+   > hazard). A settings slice is triggered only by a confirmed near-term
+   > requirement for Admin-editable operational settings; Email worker/retry
+   > is a candidate under that gate, not preselected; backup automation/status
+   > is the separate E2B operational capability. P7-E itself is **NOT**
+   > complete.
    >
-   > **P7-E1 status (2026-08-12):** the P7-E program was redefined from
-   > "configuration control plane" to **operational authority separation
-   > (Admin ≠ Maintainer)**. The P7-E1 reality audit + authority contract is
-   > **CLOSED as READY FOR HUMAN REVIEW** (docs-only, no code changes; see
+   > **P7-E1 status (2026-08-12):** P7-E is the **Operational Control Plane**
+   > (authority separation + configuration ownership + operational evidence +
+   > operational policy + Admin/Maintainer views). The P7-E1 reality audit +
+   > authority contract is **READY FOR HUMAN REVIEW** (docs-only PR #281, no
+   > code changes; see
    > [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
-   > and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)).
-   > Verdict: the hard boundary (no product surface for infra execution; no
-   > Admin capability reaches machine/DB/secret authority; secrets stay
-   > env/Compose-owned; restore stays operator-owned) **already holds
-   > structurally**. The Maintainer is a deployment/operator identity, NOT a
-   > product DB role (Option B); no new role/schema/login is introduced. The
-   > real gap is **evidence, not authority**: P7-C ships mechanisms with zero
+   > and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)
+   > — PROPOSED, rev 2). Verdict: the hard boundary (no product surface for
+   > infra execution; no Admin capability reaches machine/DB/secret authority;
+   > secrets stay env/Compose-owned; restore stays operator-owned) **already
+   > holds structurally**. Authority model: **Hybrid Option C** — Admin is the
+   > business owner; the Application Maintainer is a recognized (not yet
+   > implemented) product role concept holding ONLY operational capabilities;
+   > the Host Maintainer holds infrastructure execution (host/CLI). The real
+   > gap is **evidence, not authority**: P7-C ships mechanisms with zero
    > durable in-product records, so "last successful/verified backup" and
    > "RPO posture" are unanswerable in-product today. Recommended next slice:
-   > **GO P7-E2 (conditional on human review)** — evidence-first backup run
-   > ledger (typed `backup_runs` evidence + script instrumentation +
-   > read-only Admin view), no scheduler, no retention engine, no restore
-   > surface, no Maintainer role.
+   > **GO P7-E2 (conditional on human review)** — authority-first:
+   > E2A Operational RBAC Boundary (Maintainer observation bundle, split
+   > action-under-view capabilities) → E2B Backup Evidence Ledger (typed
+   > `backup_runs` evidence + script instrumentation + read projections) →
+   > E2C Admin/Maintainer Operational Views. No scheduler, no retention
+   > engine, no restore surface, no Maintainer role seed in E1; decision-gated
+   > capabilities (backup.trigger etc.) stay host-owned pending their own
+   > recorded decisions.
 
 7. **Configurable exam profiles**
    - model timing, admission, session/device, navigation, interruption,
@@ -207,12 +215,13 @@ P7-C  portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
   scope here — restore is operator-owned; no browser restore button.
 
 P7-E0  configuration reality audit  →  verdict: no settings control plane
-       justified now; no P7-E1 settings slice.
-P7-E1  operational authority & Admin–Maintainer separation ✅ AUDIT + DESIGN
-       READY FOR HUMAN REVIEW (docs-only, 2026-08-12; ADR-017 PROPOSED).
-       Verdict: the Admin/Maintainer hard boundary already holds; Maintainer
-       is a host/operator identity (Option B); the gap is durable backup
-       evidence, not authority.
+       justified now; no E1 settings slice.
+P7-E1  operational authority & Admin–Maintainer separation 🔵 AUDIT + DESIGN
+       READY FOR HUMAN REVIEW (docs-only PR #281, 2026-08-12; ADR-017
+       PROPOSED rev 2 — Hybrid Option C). Verdict: the Admin/Maintainer hard
+       boundary already holds; Application Maintainer = recognized future
+       product role (observation-only preset); Host Maintainer = host/CLI;
+       the gap is durable backup evidence, not authority.
 P7-M1  exam policy authority + canonical conflict validator ✅ CLOSED (PR #277)
        (one typed policy value + one validator; create/update/publish share it;
        publish revalidates whole policy; NO profile persistence, NO new DB cols)
@@ -225,16 +234,25 @@ P7-M   configurable exam modes (product closeout) — FUNCTIONALLY COMPLETE;
        (profile management UI + exam creation wizard; two truthful starter
        recipes shipped; Controlled/Strict deferred to their owning subsystems;
        see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
-Future P7-E2  (gated on human review of P7-E1): evidence-first backup run
-       ledger — durable backup_run/restore_drill evidence written by the
-       existing P7-C scripts at their natural checkpoints, read-only Admin
-       backup-status view (system.backup.view), crash/idempotency semantics.
+Future P7-E2  (gated on human review of P7-E1) — authority-first sequence
+       (ADR-017 D13; may merge into one or more PRs):
+         E2A Operational RBAC Boundary — Maintainer observation capability
+             bundle; split action-under-view capabilities (email-test
+             invariant); diagnostics domain split; zero business perms
+         E2B Backup Evidence Ledger — typed backup_run/restore_drill
+             evidence written by the existing P7-C scripts at their natural
+             checkpoints, truthful verification evidence, read projections
+         E2C Admin/Maintainer Operational Views — business-owner summary vs
+             detailed ops view; operational policy intent records
        NO scheduler, NO retention engine, NO restore surface, NO Maintainer
-       product role in E2.
-Future P7-E1  (settings; only if a confirmed Admin-editable operational-settings
-       requirement emerges): identify ONE coherent first vertical slice.
-       Email worker/retry is a candidate under that gate; backup automation/status
-       is the separate E2 operational capability above, not a settings slice.
+       role seed in E1; backup.trigger etc. stay decision-gated (host-owned
+       today).
+Future P7-E3  (operational settings; only if a confirmed Admin-editable
+       operational-settings requirement emerges — the former "future E1
+       settings" item, renamed to avoid E1 numbering conflict): identify ONE
+       coherent first vertical slice. Email worker/retry is a candidate under
+       that gate; backup automation/status is the separate E2B operational
+       capability above, not a settings slice.
 UI pilot → controlled family-by-family UI closeout
 ```
 

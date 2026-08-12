@@ -4,6 +4,10 @@
 
 * Status: **PROPOSED** (accepted when P7-E1 is reviewed by a human)
 * Date: 2026-08-12
+* Revision: 2 (2026-08-12) — corrected from "Maintainer = pure host/operator
+  identity" (Option B, previous PR #281 head) to the **Hybrid Maintainer
+  Model (Option C)**. Both revisions belong to the same review cycle of PR
+  #281; revision 1's Option B decision is superseded by this revision.
 * Decision owners: project
 * Supersedes: none
 * Superseded by: none
@@ -23,11 +27,11 @@
 > as independent baseline evidence for one another.
 
 This ADR records the **authority boundary** between the Exam Product /
-Organization Owner (Admin) and the Deployment / Infrastructure / Operations
+Organization Business Owner (Admin) and the System Operations / Maintenance
 Owner (Maintainer) for the single-deployment, single-organization,
 LAN/on-premise product. It does **not** authorize any new UI, role, schema,
-route, or infrastructure execution surface. It freezes what already holds
-structurally in the current tree and prohibits specific future
+route, or infrastructure execution surface in E1. It freezes the authority
+**architecture** the product must grow into, and prohibits specific future
 regressions.
 
 ---
@@ -42,98 +46,267 @@ PostgreSQL backup (logical/physical/cold), WAL archiving / PITR, restore
 scripts, migration/rollback/backfill CLIs, Compose lifecycle — that are
 executed by a deployment operator on the host.
 
-Two questions must be answered once, durably:
+The audit verified that the current tree enforces the hard part structurally:
+no route, capability, or UI can perform infrastructure execution; no Admin
+capability reaches machine-, database-, or secret-level authority; secrets
+are env/Compose-owned; restore is operator-owned permanently (evidence:
+P7-E1 audit §4–§8).
 
-1. **Does holding the product `Admin` role imply machine-, database-, or
-   secret-level authority?** The program's answer is no; the audit verified
-   the current tree already enforces this by surface absence (no route, no
-   capability, no UI can perform infrastructure execution).
-2. **Is the person who operates the deployment a product identity?** The
-   program considered three options (product role / pure host identity /
-   hybrid) and this ADR selects the minimal-security answer: the Maintainer
-   is a **deployment/operator identity**, not a product DB role, for E1/E2.
-
-Evidence for both answers is in the P7-E1 audit (§4–§9): the permission
-catalog contains no backup/restore/infra/secret capability; every backup,
-restore, PITR, and WAL script is host-CLI-only with zero HTTP entry point;
-secrets are env/Compose-owned and never stored in PostgreSQL; the product's
-operational surface is read-only observation gated by `system.health.view`
-and `system.diagnostics.view`, both correctly granted to Admin.
+The remaining question is the **target architecture**: is the Maintainer a
+product identity, a host identity, or both? The program's core goal is that
+Admin and Maintainer are **two distinct system roles with different
+responsibilities**. A pure host identity (Option B) fails that goal in one
+direction: the product would have no way to grant a separate operations
+person *application-side* access (observation / control-plane) without giving
+them Admin. This revision therefore selects the **Hybrid Maintainer Model**.
 
 ---
 
 ## Decision
 
-### D1. Admin is the Exam Product / Organization Owner
+### D1. Admin is the Exam Product / Organization Business Owner
 
-- Admin holds business capabilities plus **limited, read-only operational
-  observation** (health, diagnostics, email test, audit log; backup/restore
-  status read views if and when E2 ships them).
+- Admin holds business capabilities (users, roles, candidates, courses,
+  questions, exam profiles, exam authoring/publish, grading, result publish,
+  business recovery decisions, organization settings) **plus limited
+  operational visibility** — a business-owner summary:
+  `system healthy? / backup healthy? / RPO satisfied? / last verified backup?
+  / critical warning?`.
+- **Admin MAY observe system health. Admin DOES NOT thereby become System
+  Maintainer.** Observation does not imply control-plane or execution
+  authority.
 - Admin **never** holds infrastructure execution authority through the
   product: no backup trigger, no schedule mutation, no restore/PITR, no WAL
   or destination control, no service restart, no DB/Redis endpoint control,
   no secret access (read or write).
 
-### D2. Maintainer is a deployment/operator identity, not a product DB role
+### D2. Maintainer is the System Operations / Maintenance Owner — Hybrid model (Option C)
 
-- The Maintainer's authority is host access: docker/Compose lifecycle,
-  `scripts/backup/*`, operator CLI scripts (`bootstrap-admin`,
-  `reset-admin-password`, `migrate`, rollback, backfill), secret store,
-  filesystem/WAL/backup destinations, host logs.
-- No Maintainer role preset, no login path, no schema change is created in
-  E1/E2. A product identity for Maintainer is justified **only** if a future
-  slice needs an in-product *viewer* that Admin should not hold; that is an
-  E3 question, and if built it must be an observation-only capability preset
-  (never business capabilities, never execution capabilities).
-- Launchpad keeps creating `role = Admin` only; there is no
-  "first Maintainer" bootstrap.
-
-### D3. Infrastructure execution is architecturally outside the product
-
-The following are **permanently forbidden as product capabilities or
-surfaces** (not deferred, not "future capabilities"):
+Maintainer authority spans **two separate trust planes**. They may be held by
+the same person in reality, but architecturally they are distinct and must
+never be conflated:
 
 ```text
-backup.execute / backup.schedule.manage / restore.* / pitr.* /
-secret.* / infra.restart / db.endpoint.manage / redis.topology.manage
+Application Maintainer identity         Host Maintainer identity
+──────────────────────────────          ──────────────────────────
+authenticated product operations        infrastructure execution
+viewer/controller                       Docker / Compose
+                                        PostgreSQL / WAL archive
+ONLY operational observation /          filesystem / backup destination
+control-plane capabilities              secret store / service lifecycle
+                                        restore / PITR / PGDATA
+NO business authority                   migration / rollback / backfill
+NO destructive infrastructure           ──────────────────────────
+execution authority                     NOT product RBAC authority
 ```
 
-Restore and PITR remain Maintainer + CLI/runbook + host access, forever.
-The browser must never perform restore, PITR, PGDATA deletion, or any
-destructive DB control.
+1. **Application Maintainer identity** — an authenticated product role
+   concept (capability bundle). When the product needs to give an
+   independent maintainer an operational UI, it must be built with the
+   existing capability-based RBAC as a **Maintainer preset** — never by
+   granting Admin. Future Maintainer preset principles:
+   - ONLY operational capabilities:
+     `system.health.view`, `system.diagnostics.view`, `system.backup.view`,
+     `system.restore_readiness.view`, `system.ops.policy.view`
+     (naming per repo `domain.resource.action` convention; each is
+     individually decision-gated when introduced).
+   - Explicitly NOT granted, ever: `user.*`, `candidate.*`, `course.*`,
+     `question.*`, `exam.*`, `grading.*`, `score.*`, incident business
+     mutation, attempt force-submit, time grant, misconduct marking,
+     result publish.
+   - **E1 does not implement this identity.** The architecture explicitly
+     recognizes it as the future operational role/preset. It is
+     provisioned, when E2/E3 operational surfaces require it, through the
+     ordinary authenticated user/role-assignment path or a separately
+     reviewed operator onboarding path — it must NOT inherit Admin
+     capabilities.
+2. **Host Maintainer identity** — infrastructure execution authority on the
+   deployment host. These are **not** product RBAC authority: they are
+   docker/CLI/host facts (see the audit's infra-only inventory, §6).
 
-### D4. Admin policy is intent, not infrastructure capability
+### D3. Three authority planes
+
+| Plane | Owner | Examples |
+| --- | --- | --- |
+| **A. Business authority** | Admin only (Maintainer default none) | users, roles, candidates, courses, questions, exam profiles, exam authoring, exam publish, grading, result publish, business recovery decisions (force-submit / time-grant / misconduct / incident resolve), organization settings |
+| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`, `operational.policy.manage`) only under D5 |
+| **C. Infrastructure execution authority** | Host Maintainer (host/CLI) | Docker/Compose, PostgreSQL, WAL archive, filesystem, backup destination, secret store, service lifecycle, restore, PITR, PGDATA, migration/rollback/backfill |
+
+### D4. Permanently forbidden through normal product UI
+
+The following are **architecturally excluded** from the ordinary browser
+control plane — not deferred, not "future capabilities":
+
+```text
+restore.execute
+pitr.execute
+pgdata.delete
+database.destructive_recovery
+secret.read_plaintext
+secret.export
+host.filesystem.raw_manage
+db.endpoint.raw_manage
+redis.credentials.read
+```
+
+Core principle:
+
+> **Destructive history replacement / raw secret / raw host authority never
+> enters the ordinary browser control plane.**
+
+Restore and PITR remain Host Maintainer + CLI/runbook + host access, forever.
+
+### D5. Decision-gated operational capabilities
+
+The following are **NOT permanently forbidden**:
+
+```text
+backup.trigger
+backup.schedule.manage
+backup.retention.manage
+service.restart
+operational.policy.manage
+```
+
+Today they are:
+
+```text
+NOT IMPLEMENTED
+HOST-OWNED TODAY
+FUTURE DECISION-GATED
+```
+
+They may enter the product control plane **only** when all of the following
+hold for the specific capability: a typed contract, least privilege, audit,
+idempotency, explicit failure semantics, and a non-secret abstraction. This
+ADR neither promises to implement them nor permanently forbids them; each
+requires its own recorded decision (following the P7-D1 decision-gate
+pattern).
+
+### D6. Backup trigger abstraction (if ever built)
+
+Backup and Restore have different risk levels and must be treated
+differently. A future product-side **backup trigger** is acceptable in
+principle:
+
+```text
+Maintainer → Trigger verified logical backup
+≠
+Maintainer → choose arbitrary shell command
+```
+
+If ever implemented, the product surface must invoke only a **predefined,
+typed, non-destructive, audited, idempotent backup command** — and must
+never expose raw paths, raw `pg_dump` arguments, shell, the DB password, or
+filesystem credentials. Restore/PITR are not part of this abstraction and
+stay host-only. Nothing is implemented in E1; this paragraph only freezes
+the architecture boundary.
+
+### D7. View capability must not authorize side effect (invariant)
+
+```text
+VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT
+
+system.diagnostics.view  ≠  email.test.execute
+```
+
+`POST /email/test` is currently gated by `system.diagnostics.view`
+(`apps/api/src/routes/email.ts:33`) although it is a side-effecting action
+(transmits an email through the SMTP channel). The invariant is violated
+today. This is not ordinary UX debt: it is a **precondition for the
+Maintainer RBAC rollout (P7-E2A)** — when an operational view is granted to
+a non-Admin principal, the action must be split into an independent
+capability (e.g. `system.email.test`, named per the repo permission
+convention) with its own gate and audit. E1 is docs-only; the route is not
+changed in this PR.
+
+### D8. Diagnostics authority-domain split (future requirement)
+
+`GET /system/diagnostics` currently mixes two domains:
+
+```text
+Operational diagnostics        vs   Business integrity / recovery diagnostics
+DB latency                           submitted-not-terminalized anomalies
+Redis state                          workset-mismatch anomalies
+scanner state                        attempt/candidate/exam-level integrity detail
+worker state
+```
+
+A future Application Maintainer must see **operational diagnostics** but
+must **not automatically** see business-domain integrity details that involve
+attempts/candidates/exams. E1 does not change the route, but the current
+`/system/diagnostics` response must **not** be handed unchanged to a
+Maintainer viewer; E2A must define the semantic split.
+
+### D9. Admin policy is intent, not infrastructure capability
 
 If/when an operational policy record exists (desired RPO, retention window,
-drill cadence — an E2 question), it is a **typed, audited, domain-owned
+drill cadence — E2/E3 territory), it is a **typed, audited, domain-owned
 intent record**. It never binds or rewrites infrastructure. The product
 renders DESIRED vs CURRENT CAPABILITY vs STATUS (e.g. `NOT SATISFIED`) and
 never lets a DB setting claim to change infrastructure.
 
-### D5. Backup SUCCESS is evidence-defined
+### D10. Backup SUCCESS is evidence-defined — invariants only
 
-A backup is SUCCESS only when the artifact exists, is readable, and passed
-verification, and a durable `succeeded` evidence record (artifact
-fingerprint + verification result) is committed. Crash/lease/abandoned
-semantics, idempotency (operationId), and the fail-closed prune rule are
-specified in P7-E1 §12 and are requirements for any E2 evidence slice.
+E1 freezes the **invariants**:
 
-### D6. Secrets stay in deployment/secret configuration
+```text
+1. a backup must not become SUCCESS before verification
+2. a duplicate logical run must not produce contradictory evidence
+3. a crash before verified evidence must not claim success
+4. pruning must fail closed when safety cannot be proven
+```
+
+E1 does **not** freeze mechanisms: lease-based abandoned transitions, a
+specific reconciler, an `active_restore_target` DB record, or an exact
+`operationId` derivation format are **E2 adversarial-design space**, not
+commitments of this audit.
+
+Open design question for E2 (explicitly unresolved here): restore is
+host-only, so product-side retention logic "checking the active restore
+target" requires a **cross-authority protocol** between the host-side
+restore action and the product's evidence/retention records. E1 does not
+assume this protocol exists.
+
+### D11. Secrets stay in deployment/secret configuration
 
 `DATABASE_URL`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `REDIS_PASSWORD` /
 `REDIS_URL`, `SMTP_PASSWORD`, `LAUNCHPAD_SETUP_TOKEN`, TLS/fs credentials:
 env/Compose/secret store only. Never PostgreSQL, never plaintext in UI,
 never in audit logs, never exported. UI shows status adjectives only.
 
-### D7. Honest trust boundary
+### D12. Honest trust boundary
 
 A host operator with root/docker access can technically read PGDATA and
 backup artifacts. Software RBAC cannot prevent root from reading disks. The
 separation guarantees that host authority does not automatically confer
-**application-authorized business action** (the Maintainer has no product
-account in E1/E2, so cannot log in, publish, grade, or assign through the
-product). Deployment selection of whom to trust with host access is a
-documented operational decision, not a software guarantee.
+**application-authorized business action** (a Host Maintainer holds no
+product identity in E1/E2; a future Application Maintainer preset grants
+observation only). Deployment selection of whom to trust with host access is
+a documented operational decision, not a software guarantee.
+
+### D13. E2 sequencing (authority first)
+
+No further **Admin-only** operations surface may be added before the
+operational RBAC boundary exists. The E2 order is:
+
+```text
+P7-E2A  Operational RBAC Boundary
+          define/implement the Maintainer observation capability bundle
+          split dangerous action-under-view capabilities (D7)
+          ensure Maintainer has zero business permissions
+P7-E2B  Backup Evidence Ledger
+          backup_runs / backup_run_events
+          script instrumentation at natural checkpoints
+          truthful verification evidence (D10 invariants)
+          read projections
+P7-E2C  Admin / Maintainer Operational Views
+          Admin gets the business-owner summary (D1)
+          Maintainer gets the detailed operations view (D2/D8)
+```
+
+E2A–E2C may be merged into one or more PRs; the ordering constraint is what
+binds.
 
 ---
 
@@ -141,47 +314,60 @@ documented operational decision, not a software guarantee.
 
 Positive:
 
-- The separation is enforced by surface absence, which cannot regress
-  accidentally and needs no new machinery.
-- Least privilege is preserved: no new login path, no new role, no new
-  destructive surface.
-- The E2 evidence slice can be built with zero new execution authority.
+- Admin and Maintainer become **two distinct system roles** as the program
+  requires, while the current tree needs no schema/role/UI change in E1.
+- The hard execution boundary (D4) is enforced by surface absence and cannot
+  regress accidentally.
+- The E2 path is authority-first: the RBAC boundary (E2A) precedes any new
+  operations surface (E2B/E2C), so Maintainer is never an afterthought.
+- Decision-gated capabilities (D5) leave room for safe future control-plane
+  actions (e.g. a typed backup trigger, D6) without committing to them.
 
 Negative:
 
-- In-product operational *reading* stays Admin-gated; a deployment that
-  wants a separate non-business person to read ops status in-product must
-  wait for the E3 observation-only viewer (or grant host/CLI access).
+- The Application Maintainer identity is a *concept* until E2A — in-product
+  operational reading stays Admin-gated in the meantime; a deployment that
+  wants a separate non-business ops viewer must wait for E2A (or use
+  host/CLI access).
+- `POST /email/test` remains gated by a view capability until E2A (D7) —
+  safe today because only Admin holds it, but a known invariant violation.
 - The Admin role remains the highest-value product account; deployments
   must not additionally grant Admin users host access (that coupling would
   defeat the separation by possession).
-- Reads of operational observation are currently un-audited (P7-E1 P2-3);
-  acceptable today, tracked for E3.
 
 Risks:
 
-- Scope creep: an "Admin backup button" or "Maintainer dashboard with
-  actions" would violate D3. Any proposal must be reviewed against this ADR
-  before design.
+- Scope creep: an "Admin backup button" or "Maintainer dashboard with raw
+  actions" would violate D4/D5. Any proposal must be reviewed against this
+  ADR before design.
+- E2A must resist the temptation to seed a Maintainer preset with any
+  business capability; the preset principle (D2) is a hard constraint.
 
 ---
 
 ## Alternatives considered
 
-1. **Option A — Maintainer as a product DB role.** Rejected: no product
-   surface authorizes infra execution, so the role would authorize nothing
-   while inviting destructive UI (the exact coupling the program forbids).
-2. **Option B — pure deployment/operator identity.** **Selected** (D2).
-3. **Option C — hybrid (product observation capability + host execution).**
-   The observation half is already realized today (Admin-gated read surface);
-   a separate observation-only *viewer* preset is deferred to E3 and must
-   follow the capability rules in D2/D3.
+1. **Option A — Maintainer as a product DB role, implemented now.**
+   Rejected: no product surface authorizes infra execution today, so an
+   implemented role would authorize nothing while inviting destructive UI
+   (the exact coupling the program forbids). A role concept is recognized
+   (D2) but only materialized when a real surface exists.
+2. **Option B — pure deployment/operator identity (revision 1 of this
+   ADR).** Rejected in revision 2: it fails the program's core goal that
+   Admin and Maintainer are **two distinct system roles** — the product
+   would have no application-side identity for a separate operations person,
+   forcing "observation via product" to remain Admin-only forever, and any
+   future ops viewer would require granting Admin.
+3. **Option C — Hybrid (application operational identity + host execution
+   identity).** **Selected** (D2). The application half is recognized now,
+   implemented later (E2A) through the existing capability RBAC; the host
+   half is today's reality.
 
 ---
 
 ## Migration / rollout
 
-None required: this ADR is a boundary contract over the current tree; it
-adds no schema, no code, no configuration. It takes effect as binding
-authority on acceptance. Future work (E2 evidence slice, E3 UI) must
-conform to D1–D7.
+None required for this revision: it is a boundary contract over the current
+tree; it adds no schema, no code, no configuration. It takes effect as
+binding authority on acceptance. Future work (E2A/E2B/E2C) must conform to
+D1–D13.
