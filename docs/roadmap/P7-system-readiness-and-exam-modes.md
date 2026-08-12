@@ -391,7 +391,7 @@ SQL status updates.
 > REVIEW** (docs-only PR #281; see
 > [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
 > and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)
-> — PROPOSED, rev 2). Verdict: the hard boundary (no product surface for
+> — PROPOSED, rev 3). Verdict: the hard boundary (no product surface for
 > infrastructure execution; no Admin capability reaches machine/DB/secret
 > authority; secrets env/Compose-only; restore operator-owned forever)
 > **already holds structurally**. Authority model: **Hybrid Option C** —
@@ -404,8 +404,8 @@ SQL status updates.
 > slice: **GO P7-E2 (conditional on human review)** — authority-first:
 > E2A Operational RBAC Boundary (Maintainer observation bundle — amends
 > ADR-010's role preset set; split action-under-view capabilities;
-> diagnostics domain split; no Admin visibility regression during
-> migration) → E2B Backup Evidence Ledger (typed `backup_runs` + script
+> diagnostics domain split; Admin ↔ Maintainer mutual exclusion; no Admin
+> visibility regression during migration) → E2B Backup Evidence Ledger (typed `backup_runs` + script
 > instrumentation + truthful verification evidence + read projections) →
 > E2C Admin/Maintainer Operational Views (views only). No scheduler, no
 > retention engine, no restore surface, no Maintainer role seed in E1;

@@ -4,10 +4,11 @@
 
 * Status: **PROPOSED** (accepted when P7-E1 is reviewed by a human)
 * Date: 2026-08-12
-* Revision: 2 (2026-08-12) — corrected from "Maintainer = pure host/operator
-  identity" (Option B, previous PR #281 head) to the **Hybrid Maintainer
-  Model (Option C)**. Both revisions belong to the same review cycle of PR
-  #281; revision 1's Option B decision is superseded by this revision.
+* Revision: 3 (2026-08-12) — revision 2 corrected the model to the **Hybrid
+  Maintainer Model (Option C)**; revision 3 freezes the **Admin ↔ Maintainer
+  mutual-exclusion invariant** (D14) and folds it into the E2A scope. All
+  revisions belong to the same review cycle of PR #281; revision 1's Option
+  B decision is superseded by revision 2.
 * Decision owners: project
 * Supersedes: none
 * Superseded by: none
@@ -345,6 +346,8 @@ P7-E2A  Operational RBAC Boundary
           split dangerous action-under-view capabilities (D7)
           split diagnostics domains (D8)
           ensure Maintainer has zero business permissions
+          enforce Admin ↔ Maintainer mutual exclusion (D14) — a
+          server-side invariant across every active-assignment path
           MIGRATION CONTRACT: split authority WITHOUT breaking existing
           Admin visibility — during migration Admin temporarily retains
           both summary + detailed read; Maintainer receives ONLY
@@ -372,6 +375,53 @@ separation that matters is that Admin cannot **OPERATE** infrastructure —
 not that Admin must be blind to infrastructure details. Do not manufacture
 read denial for role-differentness.
 
+### D14. Admin ↔ Maintainer mutual exclusion (invariant)
+
+The runtime authority kernel resolves a human actor's effective authority
+as the **union of every active role assignment's preset permissions**
+(`apps/api/src/authz/assignmentAuthority.ts`) — one actor holding two active
+assignments holds both capability sets. Adding the Maintainer preset (E2A)
+without an exclusion would therefore let a user holding Admin + Maintainer
+recombine, through the assignment back door, the two roles this ADR exists
+to separate.
+
+```text
+ADMIN / MAINTAINER MUTUAL EXCLUSION
+
+No human actor may hold active Admin and Maintainer assignments
+at the same time.
+
+Admin ∩ Maintainer = ∅
+at the effective-authority / active-assignment level.
+```
+
+Committed state must never contain active Admin + active Maintainer for the
+same human actor. This is the assignment-level expression of the program's
+core goal — "Admin and Maintainer are not the same person" — and it is a
+**server-side authority invariant, not a UI rule**.
+
+Scope:
+
+- **Forbidden:** active Admin + active Maintainer, same actor.
+- **Not prohibited:** Maintainer + any other role (e.g. Teacher) — left open
+  for a later decision. Host Maintainer access is not an RBAC assignment at
+  all (D12) and is unaffected.
+
+E2A must enforce the invariant on **every path that produces an active
+assignment**: create assignment, activate assignment, replace primary role,
+promote secondary → primary, user creation / role change, and seed /
+migration / backfill. The check + mutation must run **in the same
+transaction under an explicit concurrency fence** — two concurrent
+transactions must not each insert one of the two roles for the same actor
+(write-skew). Pattern: the existing last-effective-Admin serialized
+invariant (`mutateWithEffectiveAdminPostcondition`,
+`apps/api/src/authz/adminInvariant.ts` — organization advisory lock +
+post-condition). The DB per-row CHECK constraint (`ASSIGNABLE_ROLES`,
+`packages/db/src/schema/pg.ts`) is per-row and cannot express cross-row
+exclusivity, so the invariant lives in the transactional command layer, not
+the schema. The exact mechanism is E2A adversarial-design space; this ADR
+freezes only the invariant.
+
 ---
 
 ## Consequences
@@ -384,6 +434,9 @@ Positive:
   regress accidentally.
 - The E2 path is authority-first: the RBAC boundary (E2A) precedes any new
   operations surface (E2B/E2C), so Maintainer is never an afterthought.
+- The Admin ↔ Maintainer mutual-exclusion invariant (D14) closes the
+  multi-assignment union back door: the two roles can never recombine for
+  one actor, no matter which assignment path was used.
 - Decision-gated capabilities (D5) leave room for safe future control-plane
   actions (e.g. a typed backup trigger, D6) without committing to them.
 
@@ -406,6 +459,9 @@ Risks:
   ADR before design.
 - E2A must resist the temptation to seed a Maintainer preset with any
   business capability; the preset principle (D2) is a hard constraint.
+- E2A must implement D14 transactionally with a concurrency fence — a
+  UI-only or best-effort mutual-exclusion check would be an invariant
+  regression.
 
 ---
 
@@ -436,4 +492,4 @@ Risks:
 None required for this revision: it is a boundary contract over the current
 tree; it adds no schema, no code, no configuration. It takes effect as
 binding authority on acceptance. Future work (E2A/E2B/E2C) must conform to
-D1–D13.
+D1–D14.

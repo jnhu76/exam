@@ -213,7 +213,9 @@ audit, external log shipping. All Phase 4; none started.
   (P7-C ships mechanisms only — "last successful/verified backup", "RPO
   posture", "last failure" are unanswerable in-product today). The planned
   P7-E2 sequence (E2A RBAC boundary → E2B evidence ledger → E2C views) is
-  gated on human review of E1.
+  gated on human review of E1; E2A additionally enforces the frozen
+  **Admin ↔ Maintainer mutual-exclusion invariant** — no human actor may
+  hold both active assignments (ADR-017 D14).
 - **Interruption time compensation**: REC-I3 implements candidate direct-entry
   restore. REC-I4-I1 implemented the persistence foundation (ADR-013 `strict`
   default, explicit bounded caps, operator attribution, episode identity,

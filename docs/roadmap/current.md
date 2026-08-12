@@ -160,7 +160,7 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > code changes; see
    > [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
    > and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)
-   > — PROPOSED, rev 2). Verdict: the hard boundary (no product surface for
+   > — PROPOSED, rev 3). Verdict: the hard boundary (no product surface for
    > infra execution; no Admin capability reaches machine/DB/secret authority;
    > secrets stay env/Compose-owned; restore stays operator-owned) **already
    > holds structurally**. Authority model: **Hybrid Option C** — Admin is the
@@ -172,7 +172,8 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > "RPO posture" are unanswerable in-product today. Recommended next slice:
    > **GO P7-E2 (conditional on human review)** — authority-first:
    > E2A Operational RBAC Boundary (Maintainer observation bundle, split
-   > action-under-view capabilities) → E2B Backup Evidence Ledger (typed
+   > action-under-view capabilities, Admin ↔ Maintainer mutual exclusion)
+   > → E2B Backup Evidence Ledger (typed
    > `backup_runs` evidence + script instrumentation + read projections) →
    > E2C Admin/Maintainer Operational Views. No scheduler, no retention
    > engine, no restore surface, no Maintainer role seed in E1; decision-gated
@@ -218,7 +219,7 @@ P7-E0  configuration reality audit  →  verdict: no settings control plane
        justified now; no E1 settings slice.
 P7-E1  operational authority & Admin–Maintainer separation 🔵 AUDIT + DESIGN
        READY FOR HUMAN REVIEW (docs-only PR #281, 2026-08-12; ADR-017
-       PROPOSED rev 2 — Hybrid Option C). Verdict: the Admin/Maintainer hard
+       PROPOSED rev 3 — Hybrid Option C). Verdict: the Admin/Maintainer hard
        boundary already holds; Application Maintainer = recognized future
        product role (observation-only preset); Host Maintainer = host/CLI;
        the gap is durable backup evidence, not authority.
@@ -239,8 +240,9 @@ Future P7-E2  (gated on human review of P7-E1) — authority-first sequence
          E2A Operational RBAC Boundary — Maintainer observation capability
              bundle (amends ADR-010 role preset set; zero business perms);
              split action-under-view capabilities (email-test invariant);
-             diagnostics domain split; no Admin visibility regression
-             during migration
+             diagnostics domain split; Admin ↔ Maintainer mutual exclusion
+             (server-side invariant, ADR-017 D14); no Admin visibility
+             regression during migration
          E2B Backup Evidence Ledger — typed backup_run/restore_drill
              evidence written by the existing P7-C scripts at their natural
              checkpoints, truthful verification evidence, read projections

@@ -45,7 +45,7 @@ Every ADR carries this metadata (in its Status section or header):
 | [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED (runtime implemented — J3, PR #242; Admin recovery center J5 closed) | Current | none | none |
 | [ADR-015](ADR-015-proctor-exam-scope-authority.md) | Proctor-to-Exam Resource Scope Authority | ACCEPTED (runtime implemented — J4-I1, PR #250) | Current | none | none |
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future Offline-Resilient Client Data and Recovery Model | DEFERRED | Current | none | none |
-| [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | PROPOSED (rev 2 — Hybrid Maintainer Model; accepted with P7-E1 human review) | Current | none | none |
+| [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | PROPOSED (rev 3 — Hybrid Maintainer Model + Admin↔Maintainer mutual exclusion; accepted with P7-E1 human review) | Current | none | none |
 
 ## Numbering
 

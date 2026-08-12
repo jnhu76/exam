@@ -323,8 +323,9 @@ organization designates to run the exam business on the deployment:
   owner, SMTP credential owner, Redis operator, PITR/destructive-restore
   operator, and — per the corrected architecture — not the operational
   control-plane operator either (that is the Application Maintainer's
-  plane, §9.2). Admin's long-term ops read is the summary; the detailed
-  diagnostics read belongs to the Maintainer role.
+  plane, §9.2). Admin's summary read is **guaranteed**; Admin's detailed
+  diagnostics read is **optional/read-only** afterwards (migration contract
+  §17.2, ADR-017 D13); Maintainer's detailed diagnostics read is guaranteed.
 
 ### 9.2 Who is Maintainer?
 
@@ -399,8 +400,10 @@ Three options were compared:
    *concept* — and its ADR-010 role-preset amendment — is frozen in
    ADR-017 so it cannot be back-filled as an Admin clone later.
 2. **E2 starts with the RBAC boundary, not with more Admin-only surfaces.**
-   E2A defines the Maintainer observation capability bundle and splits
-   action-under-view capabilities before any new ops view ships (§17).
+   E2A defines the Maintainer observation capability bundle, splits
+   action-under-view capabilities, and enforces the Admin ↔ Maintainer
+   mutual-exclusion invariant (ADR-017 D14) before any new ops view ships
+   (§17).
 3. **Launchpad stays first-Admin-only** (§14) — the first Admin is a
    business bootstrap; a product-side Maintainer account, when required, is
    provisioned through the ordinary authenticated user/role-assignment path
@@ -437,18 +440,23 @@ Three options were compared:
 | 18 | View secret plaintext through product UI | **no** | **no** | **preferably never through product UI** | — |
 | 19 | Exam content / Candidate identity / grades through product | **write (business)** | **no** | **no** | product |
 | 20 | `POST /email/test` (side-effecting) | **read today via view capability (invariant violation, D7 — to be split in E2A)** | **no (until split into its own capability)** | n/a | product |
+| 21 | Hold BOTH active Admin and active Maintainer assignments | **no — forbidden combination (invariant, ADR-017 D14)** | **no** | — | assignment level — Admin ∩ Maintainer = ∅ |
 
-### 9.5 Which actions remain CLI/host-only (permanent)
+### 9.5 Which actions are host-only today
 
 Everything in §6.1–§6.2 (backup, restore, PITR, WAL enable, cold copy,
 migrate, rollback, backfill, reset-admin-password, bootstrap CLI), plus
-Compose lifecycle, secret management, and host log access. Restore/PITR and
-raw secret/host authority are **permanently** host-only (ADR-017 D4). A
-narrow class of *non-destructive* operational actions (backup trigger,
-schedule/retention manage, service restart, ops policy manage) is
+Compose lifecycle, secret management, and host log access, is **host-only
+today**. Only a subset is **permanently** host-only: restore, PITR, raw
+secret access, raw filesystem/PGDATA control, and destructive recovery
+(ADR-017 D4). A narrow class of *non-destructive* operational actions
+(backup trigger, schedule/retention manage, service restart) is
 **decision-gated** — NOT implemented, host-owned today, and admitted to the
 product control plane only under the D5 conditions (typed contract, least
 privilege, audit, idempotency, failure semantics, non-secret abstraction).
+Operational-policy intent (`system.ops.policy.manage`) is in neither class:
+it is an Admin-only intent capability (E3, §13.3), deliberately absent from
+the decision-gated list (ADR-017 D9).
 
 ### 9.6 Where do secrets live?
 
@@ -509,7 +517,7 @@ recorded here as the future preset's capability contract; "Host Maintainer"
 | `grading.*` (queue/detail/answer/score.write/finalize/identity) | ✅ | no | — | business |
 | `score.all.view` / `score.export` | ✅ | no | — | business |
 | **`system.health.view`** | ✅ | ✅ (proposed preset) | n/a (host) | observation — Admin keeps the summary read |
-| **`system.diagnostics.view`** | ✅ (re-scoped to summary in E2A) | ✅ (proposed preset — detailed ops) | n/a (host) | observation; domain split per D8/P2-2 |
+| **`system.diagnostics.view`** | ✅ (summary guaranteed; detailed read retained through E2A/E2C — migration contract §17.2 — optional/read-only afterwards) | ✅ (proposed preset — detailed ops) | n/a (host) | observation; domain split per D8/P2-2 |
 | `system.info.view` | (UNRESOLVED, no consumer) | — | n/a | P3-1 |
 | `system.auto_submit` / `system.heartbeat_scan` / `system.lifecycle_reconcile` | System actor only | no | — | non-login, non-assignable |
 | `incident.*` (view/create/investigate/resolve) | ✅ | no | — | resolve/dismiss Admin-only |
@@ -533,6 +541,10 @@ recorded here as the future preset's capability contract; "Host Maintainer"
   invariant violation and an E2A precondition (ADR-017 D7, §16 P2-1).
 - Decision-gated capabilities are **not** Admin capabilities; they belong to
   the Maintainer control plane and each requires its own recorded decision.
+- **ADMIN ↔ MAINTAINER MUTUAL EXCLUSION** — no human actor may hold active
+  Admin + active Maintainer assignments at the same time; Admin ∩ Maintainer
+  = ∅ at the effective-authority / active-assignment level. Committed state
+  must never contain both for the same actor (ADR-017 D14, §17.2).
 
 ---
 
@@ -1016,6 +1028,11 @@ P7-E2A  Operational RBAC Boundary
           split dangerous action-under-view capabilities (D7 / P2-1:
           POST /email/test → its own capability + audit)
           split the operational-vs-business diagnostics domains (D8 / P2-2)
+          enforce Admin ↔ Maintainer mutual exclusion (ADR-017 D14) —
+          server-side invariant, check + mutation in one transaction
+          under a concurrency fence, covering every active-assignment
+          path (create / activate / replace primary / promote secondary
+          → primary / user creation / seed / migration / backfill)
           MIGRATION CONTRACT: split authority WITHOUT breaking existing
           Admin visibility — during migration Admin temporarily retains
           both summary + detailed read; Maintainer receives ONLY
@@ -1107,9 +1124,11 @@ Operational policy records + editable policy UI + UI closeout:
   role concept is recognized (Option C, §9.3) but must NOT be seeded,
   schemed, or given a login path in this PR; E2A defines the preset
   contract, provisioning follows ADR-017 D2 and never inherits Admin.
-- NO decision-gated capability (backup.trigger, schedule/retention manage,
-  service.restart, ops policy manage) admitted to the product control
-  plane without its own recorded decision meeting ADR-017 D5 conditions.
+- NO decision-gated capability (backup.trigger, backup.schedule.manage,
+  backup.retention.manage, service.restart) admitted to the product control
+  plane without its own recorded decision meeting ADR-017 D5 conditions;
+  `operational.policy.manage` is deliberately absent from the decision-gated
+  class — it is Admin-only intent (E3, §13.3).
 - NO Exam/Profile policy changes; NO changes to P7-M authority.
 - NO generic workflow engine; NO Kubernetes/Patroni/HA.
 - NO operational policy that binds or rewrites infrastructure (intent only).
@@ -1192,6 +1211,12 @@ Operational policy records + editable policy UI + UI closeout:
     owner, Admin). Permanently forbidden through product UI:
     restore/PITR/PGDATA-delete/destructive-recovery, raw secret read/export,
     raw host/filesystem/db-endpoint/redis-credential access (§13.4/§13.5).
+20. **Can one person be both Admin and Maintainer?** Not through product
+    assignments after E2A: Admin ∩ Maintainer = ∅ is a frozen invariant
+    (ADR-017 D14), enforced server-side on every active-assignment path.
+    The same real person may additionally hold Host Maintainer access (host
+    access is a deployment decision, D12) — but never both the Admin and
+    the Application Maintainer assignment.
 
 ---
 
@@ -1216,6 +1241,8 @@ Authority decision:
                            secrets / lifecycle — not product RBAC)
 
   Application Maintainer ≠ Host root: two trust planes, possibly one person.
+  Admin ∩ Maintainer = ∅ at the active-assignment level (frozen invariant —
+  no actor holds both, ADR-017 D14).
 
 The hard boundary already holds:
   - zero product surface for infra execution (backup/restore/PITR/WAL/
@@ -1235,8 +1262,9 @@ Recommended next slice:  GO P7-E2 (conditional on human review)
     E2A Operational RBAC Boundary — Maintainer observation capability
         bundle (amends ADR-010 role preset set — seventh built-in role);
         split action-under-view capabilities (email-test invariant D7);
-        diagnostics domain split (D8); zero business perms; migration
-        contract: no Admin visibility regression during the split
+        diagnostics domain split (D8); zero business perms; Admin ↔
+        Maintainer mutual exclusion (D14); migration contract: no Admin
+        visibility regression during the split
     E2B Backup Evidence Ledger — typed backup_runs/events, script
         instrumentation, truthful verification evidence, read projections
     E2C Admin/Maintainer Operational Views — VIEWS ONLY (business-owner
