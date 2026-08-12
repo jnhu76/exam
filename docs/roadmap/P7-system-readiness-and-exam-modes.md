@@ -413,6 +413,15 @@ SQL status updates.
 > pending their own recorded decisions; operational-policy intent has ONE
 > owner (Admin, `system.ops.policy.manage` — E3).
 >
+> **P7-E status (2026-08-12, closeout):** E2A (Maintainer RBAC boundary +
+> Admin ↔ Maintainer mutual exclusion), E2B (backup evidence ledger), E2C
+> (Admin/Maintainer operations views), and E3 (operational policy intent)
+> are **IMPLEMENTED** — FUNCTIONALLY COMPLETE, READY FOR HUMAN REVIEW
+> ([`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
+> Decision-gated capabilities (backup.trigger / schedule / retention /
+> service.restart) are **DEFERRED (NO-GO)** with recorded rationale
+> ([`docs/audits/P7-E3-DECISION-GATES.md`](../audits/P7-E3-DECISION-GATES.md)).
+>
 > **P7-E0 status (2026-08-10):** the configuration reality audit is **CLOSED**
 > (merged via PR #276) — see
 > [`docs/audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md`](../audits/P7-E0-CONFIGURATION-REALITY-AUDIT.md).
@@ -450,19 +459,28 @@ Remain outside normal Admin settings:
 These may be referenced and tested by the Admin UI, but not exposed as
 plaintext editable values.
 
-#### Runtime operational settings
+#### Runtime operational settings — ownership map (P7-E closeout)
 
-Move to audited database-backed settings where safe:
+The historical "move to audited database-backed settings" list below is
+**superseded** by the P7-E0 verdict (no generic settings subsystem) and the
+P7-E implementation. Every configuration item has exactly one typed owner:
 
-- default rate limits and route policies;
-- Email sender display settings and retry policy;
-- worker intervals/batch sizes within validated limits;
-- backup schedule, retention, and destination reference;
-- data-retention policy;
-- default exam policy profile;
-- notification policy toggles;
-- UI branding and organization display settings;
-- feature activation that does not alter bootstrap topology.
+| Item class | Owner (authority) | Mechanism |
+| --- | --- | --- |
+| Deployment / secrets (DB/Redis/SMTP/JWT/TLS, ports, topology) | Host Maintainer | env / Compose / secret store (P7-E0 §5) |
+| Organization settings (branding) | Admin | existing typed DB authority (`organization_settings`) |
+| Exam policy (timing/admission/save/submit/retake/score) | Admin (authoring) | Exam + P7-M profile authority (copy-on-apply snapshots) |
+| Operational evidence (backup runs, restore drills) | System (evidence) | P7-E typed evidence ledger (`backup_runs` / `restore_drill_runs`) |
+| Operational policy INTENT (desired RPO / retention / drill cadence) | Admin (sole intent owner, ADR-017 D9) | P7-E typed domain policy (`backup_operational_policy`, versioned + audited) |
+| Code invariants (answer save protocol, submit freeze, …) | Code | code (no runtime knob) |
+| Worker intervals / email retry / rate limits | Host Maintainer (deployment) | env + restart-required (P7-E3 decision record) |
+
+**There is NO generic key/value settings registry, no `system_settings` JSON
+blob, no precedence engine, and no feature-flag platform.** The historical
+items below (rate limits, email retry, worker intervals, backup schedule,
+data retention, notification toggles, feature activation) remain
+**env/Compose-owned and restart-required** unless a confirmed near-term
+online-edit requirement appears — none exists today (P7-E3 decision gate).
 
 #### Exam and attempt policies
 
@@ -479,19 +497,31 @@ Stored on Exam/template and frozen into snapshots:
 - monitoring/audit level;
 - retake and score strategy.
 
-### Settings requirements
+### Settings requirements — as satisfied by P7-E (no generic registry)
 
-- typed schema and range validation;
-- version and optimistic concurrency;
-- actor/time/reason audit;
-- current effective value and source layer;
-- restart-required marker;
-- preview/diff before activation;
-- rollback to a previous version;
-- import/export with secret redaction;
-- capability-gated access;
-- safe defaults and migration/backfill;
-- health warning when runtime env overrides a database setting.
+The historical generic "settings requirements" list (version/rollback/
+import/export/preview) is **superseded**. The only database-backed
+operational configuration that P7-E ships is the **operational policy
+intent** (`backup_operational_policy`), and it satisfies the requirements
+that actually apply to an intent record:
+
+- typed schema and safe-range validation (Zod + DB CHECKs);
+- version + optimistic concurrency (CAS on every write);
+- actor / time / reason audit (atomic `ops.policy.updated` audit);
+- capability-gated access (`system.ops.policy.view` / `.manage`);
+- restart-required marker: N/A — intent is read live and never affects
+  process configuration;
+- rollback: version history is preserved by the audit ledger; no generic
+  import/export is offered (intent is 3 numbers + reason);
+- health warning when runtime env overrides a database setting: N/A —
+  there are no runtime-overridable DB settings; env is the only runtime
+  source.
+
+Backup schedule / retention / destination remain **host-owned** (host cron
++ scripts + operator); the product reads EVIDENCE of them and renders
+DESIRED vs OBSERVED vs STATUS. There is deliberately no product-side
+scheduler, retention engine, restore surface, or settings import/export
+(ADR-017 D4/D5; P7-E3 decision record).
 
 ## 9. Workstream F — Exam policy profiles
 

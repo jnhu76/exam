@@ -198,24 +198,51 @@ audit, external log shipping. All Phase 4; none started.
 
 ## Known limitations
 
-- **Operational authority separation (P7-E1) is ACCEPTED — design contract
-  only, no runtime implementation (docs + ADR; PR #281 merged 2026-08-12).**
-  The P7-E1 audit (docs-only PR #281, 2026-08-12,
-  [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
-  + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md),
-  ACCEPTED, rev 3) verified that the Admin/Maintainer hard boundary already holds
-  structurally — no product surface (route/capability/UI) can perform
-  infrastructure execution (backup/restore/PITR/WAL/restart/secrets).
-  Authority model (proposed): Admin = business owner; Application Maintainer
-  = recognized-but-not-implemented product role concept holding ONLY
-  operational capabilities; Host Maintainer = host/CLI identity. What does
-  NOT exist yet: durable in-product backup/restore-drill **evidence**
-  (P7-C ships mechanisms only — "last successful/verified backup", "RPO
-  posture", "last failure" are unanswerable in-product today). The planned
-  P7-E2 sequence (E2A RBAC boundary → E2B evidence ledger → E2C views) is
-  gated on scheduling (E1 accepted 2026-08-12); E2A additionally enforces the frozen
-  **Admin ↔ Maintainer mutual-exclusion invariant** — no human actor may
-  hold both active assignments (ADR-017 D14).
+- **Operational Control Plane (P7-E) is FUNCTIONALLY COMPLETE — READY FOR
+  HUMAN REVIEW** (branch `feat/p7-e-operational-control-plane`; E2A/E2B/E2C/E3
+  implemented; see [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
+  - **E2A — Operational RBAC Boundary**: Maintainer is the seventh built-in
+    assignable role (ADR-017 D2), preset holds ONLY `system.health.view` +
+    `system.diagnostics.view` (+ E2B/E3 read views), zero business
+    permissions. **Admin ↔ Maintainer mutual exclusion (D14)** enforced
+    server-side transactionally under the org advisory lock on every
+    assignment path (create/activate/promote/replace/seed), with write-skew
+    concurrency tests. `POST /email/test` split off the diagnostics view into
+    `system.email.test` (D7) with audit. Diagnostics domain split (D8):
+    business-integrity block projected server-side by
+    `system.business_integrity.view` (Admin-only) — Maintainer never receives
+    it. Business dashboard gated Admin-only (`system.business_summary.view`).
+  - **E2B — Backup Evidence Ledger**: typed `backup_runs` /
+    `backup_run_events` / `restore_drill_runs` (NOT a generic event/settings
+    store). SUCCESS requires artifact + readable + verification + durable
+    commit (DB CHECK + partial-unique at most-one-success-per-operation);
+    crash/idempotency/duplicate semantics tested. Operator evidence CLI
+    (`backup-evidence.js`) instruments `postgres-logical-backup.sh` +
+    `pg-basebackup.sh` at natural checkpoints; cold backups spool + import;
+    restore drills recorded (automated vs operator-declared). Read-only
+    `GET /system/backups` + `GET /system/restore-readiness` (Admin +
+    Maintainer).
+  - **E2C — Operations views**: `/admin/operations` (health, backup posture,
+    restore readiness, operational diagnostics; truthful NO EVIDENCE / NOT
+    VERIFIED / warning states), capability-gated navigation (no dead business
+    nav for Maintainer; direct business routes 403), E2E coverage.
+  - **E3 — Operational Policy Intent**: typed `backup_operational_policy`
+    (safe ranges, CAS version, required reason, atomic audit); Admin sole
+    intent owner (`system.ops.policy.manage`), Maintainer read-only
+    (`system.ops.policy.view`); DESIRED vs OBSERVED vs STATUS projection
+    (RPO SATISFIED/NOT_SATISFIED/UNKNOWN/NOT_CONFIGURED; retention truthfully
+    NOT_ENFORCED; drill cadence with automated vs declared source). Intent
+    never binds infrastructure.
+  - **Decision gates (E3)**: `backup.trigger`, `backup.schedule.manage`,
+    `backup.retention.manage`, `service.restart` → **DEFERRED (NO-GO)** with
+    explicit rationale (host cron/scripts remain execution authority; see
+    [`docs/audits/P7-E3-DECISION-GATES.md`](../audits/P7-E3-DECISION-GATES.md)).
+    Email worker/runtime settings stay env + restart-required (no confirmed
+    online-edit requirement).
+  - **E0 residue**: `DEADLINE_SCAN_INTERVAL_MS` canonical-loader bypass
+    fixed; env-example gaps, unused `redisdata` volume, and test-script port
+    defaults fixed; remaining E0 findings reconciled (FIXED / SUPERSEDED /
+    ACCEPTED) in the closeout audit.
 - **Interruption time compensation**: REC-I3 implements candidate direct-entry
   restore. REC-I4-I1 implemented the persistence foundation (ADR-013 `strict`
   default, explicit bounded caps, operator attribution, episode identity,
