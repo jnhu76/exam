@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { Permission } from "@exam/authz";
 import type {
   SystemHealthResponse,
   DiagnosticsResponse,
@@ -7,7 +8,9 @@ import type {
   RestoreReadinessResponse,
   OpsPolicyResponse,
 } from "@exam/contracts";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { can } from "@/lib/capabilities";
+import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/logger";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -25,20 +28,6 @@ import { Label } from "@/components/ui/label";
 import { Database, HeartPulse, MemoryStick, ShieldCheck } from "lucide-react";
 
 const HEALTH_REFRESH_MS = 15_000;
-const BACKUP_REFRESH_MS = 60_000;
-const POLICY_REFRESH_MS = 60_000;
-
-function getStatusLevel(value: number): SystemHealthResponse["status"] {
-  if (value > 95) return "critical";
-  if (value > 80) return "degraded";
-  return "ok";
-}
-
-function getDbStatusLevel(ms: number): SystemHealthResponse["status"] {
-  if (ms > 1000) return "critical";
-  if (ms > 500) return "degraded";
-  return "ok";
-}
 
 /**
  * P7-E2C — Operations surface (Admin business-owner summary + Application
@@ -59,7 +48,14 @@ function getDbStatusLevel(ms: number): SystemHealthResponse["status"] {
  */
 export function OperationsPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { formatDateTime, formatDuration } = useProductDateTime();
+  // P7-E3 (ADR-017 D9): Admin is the SOLE policy-intent owner. The page is
+  // shared with the Maintainer observation plane, so the edit control is
+  // capability-gated (backend remains authoritative; this prevents a
+  // Maintainer from reaching the draft form and a dead 403-on-save).
+  const canManagePolicy =
+    user !== null && can(user, Permission.SystemOpsPolicyManage);
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [backup, setBackup] = useState<BackupEvidenceResponse | null>(null);
@@ -96,9 +92,9 @@ export function OperationsPage() {
       setStale(false);
     } catch (err) {
       setStale(true);
-      if (error === null) {
-        setError(t("ops.errors.loadFailed"));
-      }
+      // Functional state update — the callback closure must not read a stale
+      // `error` value across polls.
+      setError((prev) => (prev === null ? t("ops.errors.loadFailed") : prev));
       logger.warn("operations.poll_failed", {
         error: err instanceof Error ? err.message : String(err),
       });
@@ -135,9 +131,21 @@ export function OperationsPage() {
       setPolicyDraft(null);
       setPolicySaved(true);
     } catch (err) {
-      setPolicyError(t("ops.policy.saveFailed"));
+      // CAS conflict: the intent changed under the editor. Reload the latest
+      // version and close the draft — saving again against the stale version
+      // would fail the same way.
+      const conflict =
+        err instanceof ApiError && err.code === "OPS_POLICY_VERSION_CONFLICT";
+      setPolicyError(
+        conflict ? t("ops.policy.conflict") : t("ops.policy.saveFailed"),
+      );
+      if (conflict) {
+        setPolicyDraft(null);
+        void loadAll();
+      }
       logger.warn("ops_policy.save_failed", {
         error: err instanceof Error ? err.message : String(err),
+        conflict,
       });
     } finally {
       setPolicySaving(false);
@@ -290,9 +298,9 @@ export function OperationsPage() {
                     {t("ops.backup.lastVerified")}
                   </span>
                   <span className="text-sm tabular-nums">
-                    {latestVerified
+                    {latestVerified?.verifiedAt
                       ? `${latestVerified.artifactLabel} · ${formatDateTime(
-                          new Date(latestVerified.verifiedAt!),
+                          new Date(latestVerified.verifiedAt),
                         )}`
                       : t("ops.backup.noVerifiedArtifact")}
                   </span>
@@ -477,11 +485,6 @@ export function OperationsPage() {
                         }
                       />
                     </div>
-                    {policyError && (
-                      <p role="alert" className="text-sm text-destructive">
-                        {policyError}
-                      </p>
-                    )}
                     <div className="flex gap-2">
                       <Button
                         type="button"
@@ -501,7 +504,7 @@ export function OperationsPage() {
                       </Button>
                     </div>
                   </div>
-                ) : (
+                ) : canManagePolicy ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -523,6 +526,11 @@ export function OperationsPage() {
                   >
                     {t("ops.policy.edit")}
                   </Button>
+                ) : null}
+                {policyError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {policyError}
+                  </p>
                 )}
                 {policySaved && (
                   <p className="text-sm text-foreground">

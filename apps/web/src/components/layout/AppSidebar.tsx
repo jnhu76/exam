@@ -283,13 +283,17 @@ export function SidebarContent({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
-  const showManagement = canSeeManagement(user);
   // P7-E2C (P3-3 closure): management items are individually capability-gated
   // so a partial-authority actor (e.g. Maintainer) never sees an item that
   // would 403 on click (dead navigation).
   const management = managementItems.filter(
     (item) => !item.visible || item.visible(user),
   );
+  // The group-level gate (canSeeManagement) passes on ANY management-surface
+  // permission — including system.health.view, which Maintainer holds — so
+  // the section must ALSO be hidden when the per-item filter removed every
+  // item (empty "管理" heading + stray separator otherwise).
+  const showManagement = canSeeManagement(user) && management.length > 0;
   const initials = user.name.slice(0, 2);
 
   // UX-only capability filter (lib/capabilities.ts). Hides nav entries the

@@ -1,13 +1,32 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/lib/api";
+import { permissionsForRole } from "@exam/authz";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { api, ApiError } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { OperationsPage } from "./OperationsPage";
 
 vi.mock("@/lib/api", () => ({
   api: {
     get: vi.fn(),
+    put: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {
+    constructor(
+      readonly status: number,
+      message: string,
+      readonly code?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+    }
   },
   setNavigate: () => {},
 }));
@@ -22,6 +41,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 const getMock = vi.mocked(api.get);
+const putMock = vi.mocked(api.put);
 
 /** Health response shape used by the page. */
 function health() {
@@ -178,11 +198,22 @@ function restore(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function renderPage() {
+async function renderPage(role: "Admin" | "Maintainer" = "Admin") {
   await act(async () => {
     render(
       <MemoryRouter>
-        <OperationsPage />
+        <AuthProvider
+          initialUser={{
+            id: "actor-1",
+            username: "actor",
+            name: "Actor",
+            role,
+            organizationId: "org1",
+            capabilities: [...permissionsForRole(role)],
+          }}
+        >
+          <OperationsPage />
+        </AuthProvider>
       </MemoryRouter>,
     );
   });
@@ -191,6 +222,7 @@ async function renderPage() {
 describe("OperationsPage (P7-E2C)", () => {
   beforeEach(() => {
     getMock.mockReset();
+    putMock.mockReset();
   });
 
   afterEach(() => {
@@ -363,6 +395,7 @@ describe("OperationsPage (P7-E2C)", () => {
 describe("OperationsPage policy intent (P7-E3)", () => {
   beforeEach(() => {
     getMock.mockReset();
+    putMock.mockReset();
   });
 
   afterEach(() => {
@@ -432,10 +465,148 @@ describe("OperationsPage policy intent (P7-E3)", () => {
       .mockResolvedValueOnce(backup())
       .mockResolvedValueOnce(restore())
       .mockResolvedValueOnce(policyResponse());
-    await renderPage();
+    await renderPage("Admin");
 
     await waitFor(() => {
       expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
     });
+  });
+
+  it("Maintainer never sees the policy edit control (Admin is sole owner)", async () => {
+    getMock
+      .mockResolvedValueOnce(health())
+      .mockResolvedValueOnce(diag())
+      .mockResolvedValueOnce(backup())
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
+    await renderPage("Maintainer");
+
+    await waitFor(() => {
+      expect(screen.getByText("运维策略意图")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("policy-edit-button")).not.toBeInTheDocument();
+  });
+
+  it("Admin saves the intent through PUT with the current CAS version", async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/health")) return Promise.resolve(health());
+      if (path.includes("/diagnostics")) return Promise.resolve(diag());
+      if (path.includes("/backups")) return Promise.resolve(backup());
+      if (path.includes("/restore-readiness"))
+        return Promise.resolve(restore());
+      return Promise.resolve(policyResponse());
+    });
+    putMock.mockResolvedValue(
+      policyResponse({
+        policy: {
+          desiredRpoSeconds: 600,
+          desiredRetentionDays: 30,
+          desiredDrillCadenceDays: 7,
+          version: 2,
+          reason: "rpo tightened",
+          updatedBy: "admin",
+          updatedAt: "2026-08-12T11:00:00.000Z",
+        },
+        compliance: {
+          rpo: {
+            desired: "600s",
+            observed: "7200s",
+            status: "NOT_SATISFIED",
+            observedDetail: "last verified backup age 7200s > desired 600s",
+          },
+          retention: {
+            desired: "30d",
+            observed: "host-managed",
+            status: "NOT_ENFORCED",
+            observedDetail: "retention/pruning is host-managed",
+          },
+          drill: {
+            desired: "7d",
+            observed: "1d ago",
+            status: "SATISFIED",
+            observedDetail: "last drill 1d ago <= desired 7d (automated)",
+          },
+        },
+      }),
+    );
+    await renderPage("Admin");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
+    });
+    await act(async () => {
+      screen.getByTestId("policy-edit-button").click();
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("恢复点目标 (RPO) (s)"), {
+        target: { value: "600" },
+      });
+      fireEvent.change(screen.getByLabelText("变更原因（必填）"), {
+        target: { value: "rpo tightened" },
+      });
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "保存" }).click();
+    });
+
+    await waitFor(() => {
+      expect(putMock).toHaveBeenCalledWith("/api/system/ops-policy", {
+        desiredRpoSeconds: 600,
+        desiredRetentionDays: 30,
+        desiredDrillCadenceDays: 7,
+        version: 1,
+        reason: "rpo tightened",
+      });
+      expect(
+        screen.getByText("已保存（仅意图记录，不影响基础设施）"),
+      ).toBeInTheDocument();
+    });
+    // The draft closed after a successful save.
+    expect(screen.queryByTestId("policy-edit-button")).toBeInTheDocument();
+  });
+
+  it("a CAS version conflict closes the draft and refetches the latest policy", async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/health")) return Promise.resolve(health());
+      if (path.includes("/diagnostics")) return Promise.resolve(diag());
+      if (path.includes("/backups")) return Promise.resolve(backup());
+      if (path.includes("/restore-readiness"))
+        return Promise.resolve(restore());
+      return Promise.resolve(policyResponse());
+    });
+    putMock.mockRejectedValue(
+      new ApiError(
+        409,
+        "策略意图已被其他操作修改，请刷新后重试",
+        "OPS_POLICY_VERSION_CONFLICT",
+      ),
+    );
+    await renderPage("Admin");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
+    });
+    await act(async () => {
+      screen.getByTestId("policy-edit-button").click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "保存" }).click();
+    });
+
+    // Conflict message shown, draft closed (edit button back), data refetched.
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "策略意图已被其他操作修改，已刷新最新版本，请重新编辑",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
+    });
+    expect(putMock).toHaveBeenCalledWith(
+      "/api/system/ops-policy",
+      expect.any(Object),
+    );
+    // Refetch: get called again after the failed save (5 initial + 5 refresh).
+    expect(getMock.mock.calls.length).toBeGreaterThan(5);
   });
 });
