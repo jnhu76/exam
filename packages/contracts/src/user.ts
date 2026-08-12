@@ -100,7 +100,7 @@ export const AssignRoleRequestSchema = z.object({
 });
 export type AssignRoleRequest = z.infer<typeof AssignRoleRequestSchema>;
 
-/** Request body for patching an assignment (set primary / activate). */
+/** Request body for patching an assignment (set primary / activate / deactivate). */
 export const PatchRoleAssignmentRequestSchema = z.object({
   isPrimary: z.boolean().optional(),
   isActive: z.boolean().optional(),

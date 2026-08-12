@@ -89,6 +89,71 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     expect(await violationsFor(ctx)).toEqual([]);
   });
 
+  it("allows reactivating a deactivated Maintainer assignment for an actor without Admin", async () => {
+    const { user, assignment } = await createUser(
+      "maintainer-reactivate",
+      "Maintainer",
+    );
+    const deact = await createUserRoleAssignmentRepo(db).deactivate(
+      ctx,
+      assignment.id,
+    );
+    expect(deact?.isActive).toBe(false);
+    expect(await violationsFor(ctx)).toEqual([]);
+
+    // Reactivation runs inside the seam and must succeed when no Admin
+    // assignment exists for the actor.
+    const reactivated = await mutateWithAuthorityInvariants(
+      db,
+      ctx,
+      async (tx) =>
+        createUserRoleAssignmentRepo(tx).activateWithinTransaction(
+          tx,
+          ctx,
+          assignment.id,
+        ),
+    );
+    expect(reactivated!.isActive).toBe(true);
+    expect(reactivated!.role).toBe("Maintainer");
+    expect(reactivated!.isPrimary).toBe(true);
+    expect(await violationsFor(ctx)).toEqual([]);
+  });
+
+  it("rejects REACTIVATING a Maintainer assignment for an actor with active Admin", async () => {
+    const { user } = await createUser("admin-actor-reactivate", "Admin");
+    // A latent (deactivated) Maintainer assignment for the same actor — the
+    // exact row set that must not become effective through reactivation.
+    const latent = await createUserRoleAssignmentRepo(db).assign(ctx, {
+      userId: user.id,
+      role: "Maintainer",
+      isPrimary: false,
+      isActive: false,
+    });
+    expect(latent.isActive).toBe(false);
+
+    await expect(
+      mutateWithAuthorityInvariants(db, ctx, async (tx) => {
+        await createUserRoleAssignmentRepo(tx).activateWithinTransaction(
+          tx,
+          ctx,
+          latent.id,
+        );
+      }),
+    ).rejects.toMatchObject({
+      details: {
+        reason: "ADMIN_MAINTAINER_EXCLUSION",
+      },
+    });
+
+    // Nothing committed: the Maintainer assignment stays deactivated.
+    const rows = await createUserRoleAssignmentRepo(db).listForUser(
+      ctx,
+      user.id,
+    );
+    expect(rows.find((r) => r.role === "Maintainer")?.isActive).toBe(false);
+    expect(await violationsFor(ctx)).toEqual([]);
+  });
+
   it("rejects adding a Maintainer assignment to an actor with active Admin", async () => {
     const { user } = await createUser("admin-actor", "Admin");
 

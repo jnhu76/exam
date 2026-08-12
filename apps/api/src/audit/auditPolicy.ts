@@ -86,6 +86,7 @@ const roleChangePayload: AuditPayloadSchema = z
     role: shortText.optional(),
     isPrimary: z.boolean().optional(),
     assignmentAdded: z.boolean().optional(),
+    assignmentActivated: z.boolean().optional(),
     assignmentDeactivated: z.boolean().optional(),
     oldPrimaryRole: shortText.optional(),
     resultingPrimaryRole: shortText.nullable().optional(),

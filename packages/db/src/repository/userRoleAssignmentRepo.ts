@@ -468,6 +468,68 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   /**
+   * Reactivates a deactivated assignment (keeps the row for audit history).
+   * If the reactivated row carries the primary flag, the user's other ACTIVE
+   * primaries are demoted first so the ≤1-primary-active partial unique
+   * index stays satisfiable (mirrors setPrimaryWithinTransaction) — the
+   * reactivated primary becomes the authority again. A reactivated
+   * non-primary assignment never changes users.role. Returns the row, or
+   * null if not found. Transaction-only variant.
+   */
+  async function activateWithinTransaction(
+    tx: TransactionDatabase,
+    ctx: TenantContext | RequestContext,
+    assignmentId: string,
+  ): Promise<UserRoleAssignmentRow | null> {
+    const orgId = resolveOrganizationId(ctx);
+    const before = await tx
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.id, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!before[0]) return null;
+    if (before[0]!.isPrimary) {
+      // The reactivated row carries the primary flag: demote the user's
+      // other ACTIVE primaries so exactly one active primary can exist.
+      await tx
+        .update(userRoleAssignments)
+        .set({ isPrimary: false, updatedAt: now() })
+        .where(
+          and(
+            eq(userRoleAssignments.organizationId, orgId),
+            eq(userRoleAssignments.userId, before[0]!.userId),
+            eq(userRoleAssignments.isPrimary, true),
+            eq(userRoleAssignments.isActive, true),
+          ),
+        );
+    }
+    const updated = await tx
+      .update(userRoleAssignments)
+      .set({ isActive: true, updatedAt: now() })
+      .where(eq(userRoleAssignments.id, assignmentId))
+      .returning();
+    return updated[0] ? row(updated[0]) : null;
+  }
+
+  /**
+   * Public wrapper for {@link activateWithinTransaction}. Do NOT call from
+   * inside another transaction.
+   */
+  async function activate(
+    ctx: TenantContext | RequestContext,
+    assignmentId: string,
+  ): Promise<UserRoleAssignmentRow | null> {
+    return executeInTransaction(db, async (tx) =>
+      activateWithinTransaction(tx, ctx, assignmentId),
+    );
+  }
+
+  /**
    * Public wrapper for {@link deactivateWithinTransaction}. Do NOT call from
    * inside another transaction.
    */
@@ -612,6 +674,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
     replacePrimaryRoleWithinTransaction,
     setPrimaryWithinTransaction,
     setPrimary,
+    activate,
+    activateWithinTransaction,
     deactivate,
     deactivateWithinTransaction,
     remove,

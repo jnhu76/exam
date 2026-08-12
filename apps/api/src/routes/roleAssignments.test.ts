@@ -182,6 +182,110 @@ describe("RBAC-M8 role-assignment routes", () => {
     expect(userRow[0]!.role).toBe("Grader");
   });
 
+  it("PATCH activate reactivates a deactivated secondary assignment (users.role unchanged)", async () => {
+    const target = await createTargetUser(ctx.db, ctx.org.id, "activate-sec");
+    await createPrimaryAssignment(ctx.db, ctx.org.id, target.id, "Candidate");
+    // Add a secondary Grader assignment.
+    const addRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { role: "Grader", isPrimary: false },
+    });
+    const graderId = addRes.json().id;
+
+    // Deactivate it (secondary deactivation is not an authority change).
+    const deact = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${graderId}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: false },
+    });
+    expect(deact.statusCode).toBe(200);
+    expect(deact.json().isActive).toBe(false);
+
+    // Reactivate it through the PATCH surface (contract: { isActive: true }).
+    const react = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${graderId}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: true },
+    });
+    expect(react.statusCode).toBe(200);
+    expect(react.json().isActive).toBe(true);
+    expect(react.json().isPrimary).toBe(false);
+
+    // A secondary activation never changes users.role.
+    const userRow = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, target.id));
+    expect(userRow[0]!.role).toBe("Candidate");
+  });
+
+  it("PATCH activate of a deactivated PRIMARY restores it as the active primary (users.role synced)", async () => {
+    const target = await createTargetUser(ctx.db, ctx.org.id, "activate-prim");
+    const prim = await createPrimaryAssignment(
+      ctx.db,
+      ctx.org.id,
+      target.id,
+      "Candidate",
+    );
+    const addRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { role: "Grader", isPrimary: false },
+    });
+    const graderId = addRes.json().id;
+
+    // Deactivate the primary Candidate → Grader auto-promotes.
+    const deact = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: false },
+    });
+    expect(deact.statusCode).toBe(200);
+    let userRow = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, target.id));
+    expect(userRow[0]!.role).toBe("Grader");
+
+    // Reactivate the deactivated primary Candidate: it demotes the promoted
+    // Grader and becomes the active primary authority again.
+    const react = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: true },
+    });
+    expect(react.statusCode).toBe(200);
+    expect(react.json().isActive).toBe(true);
+    expect(react.json().isPrimary).toBe(true);
+    userRow = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, target.id));
+    expect(userRow[0]!.role).toBe("Candidate");
+
+    // The Grader assignment survives as a secondary active assignment.
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const graderRow = listRes
+      .json()
+      .items.find(
+        (i: { role: string; isPrimary: boolean }) =>
+          i.role === "Grader" && !i.isPrimary,
+      );
+    expect(graderRow.isActive).toBe(true);
+    expect(graderRow.id).toBe(graderId);
+  });
+
   it("DELETE a primary assignment promotes the next active + syncs users.role (review #5/#7)", async () => {
     const target = await createTargetUser(ctx.db, ctx.org.id, "del-primary");
     await createPrimaryAssignment(ctx.db, ctx.org.id, target.id, "Candidate");

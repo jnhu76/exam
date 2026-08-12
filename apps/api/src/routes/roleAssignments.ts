@@ -239,6 +239,46 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           isActive: promoted.isActive,
         };
       }
+      if (data.isActive === true) {
+        // P7-E2A (ADR-017 D14): reactivating a deactivated assignment can
+        // make an Admin/Maintainer authority effective again — run inside
+        // the authority-mutation seam (org advisory lock + exclusion
+        // post-condition). A reactivated primary restores that role as the
+        // user's active primary authority (users.role re-synced).
+        const activated = await mutateWithAuthorityInvariants(
+          fastify.db,
+          ctx,
+          async (tx) => {
+            const value = await createUserRoleAssignmentRepo(
+              tx,
+            ).activateWithinTransaction(tx, ctx, assignmentId);
+            if (!value) return null;
+            if (value.isPrimary) {
+              await syncUsersRoleFromPrimary(tx, ctx, value.userId);
+            }
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "user.role_changed",
+              targetType: "user",
+              targetId: value.userId,
+              metadata: {
+                assignmentActivated: true,
+                role: value.role,
+                isPrimary: value.isPrimary,
+                assignmentId: value.id,
+              },
+            });
+            return value;
+          },
+        );
+        if (!activated) throw new NotFoundError("role assignment");
+        return {
+          id: activated.id,
+          userId: activated.userId,
+          role: activated.role,
+          isPrimary: activated.isPrimary,
+          isActive: activated.isActive,
+        };
+      }
       if (data.isActive === false) {
         const targetAssignment = await assignmentRepo.findById(
           ctx,
@@ -293,7 +333,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           isActive: deactivated!.isActive,
         };
       }
-      // No-op patch (neither isPrimary nor isActive=false given): return as-is.
+      // No-op patch (no recognized change given): return as-is.
       throw new NotFoundError("role assignment");
     },
   );
