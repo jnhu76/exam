@@ -591,7 +591,7 @@ export function createBackupEvidenceRepo(db: Database) {
     return rows.map(drillRow);
   }
 
-  /** The most recent restore-drill record. */
+  /** The most recent restore-drill record (by COMPLETION time). */
   async function latestDrill(
     ctx: TenantContext | RequestContext,
     source?: RestoreDrillSource,
@@ -605,7 +605,17 @@ export function createBackupEvidenceRepo(db: Database) {
           ...(source ? [eq(restoreDrillRuns.source, source)] : []),
         ),
       )
-      .orderBy(desc(restoreDrillRuns.startedAt))
+      // "Latest" = most recently COMPLETED, not most recently started: a drill
+      // that started later but finished earlier is the older evidence, and the
+      // compliance projection measures recency as `now - completedAt`, so the
+      // selection authority must match. NULLS LAST excludes in-progress rows
+      // (completedAt is nullable); startedAt then id are a deterministic
+      // tie-breaker. (P7-E review P2-2.)
+      .orderBy(
+        sql`${restoreDrillRuns.completedAt} DESC NULLS LAST`,
+        desc(restoreDrillRuns.startedAt),
+        desc(restoreDrillRuns.id),
+      )
       .limit(1);
     return rows[0] ? drillRow(rows[0]) : null;
   }
@@ -626,7 +636,16 @@ export function createBackupEvidenceRepo(db: Database) {
           ...(source ? [eq(restoreDrillRuns.source, source)] : []),
         ),
       )
-      .orderBy(desc(restoreDrillRuns.startedAt))
+      // Authority = completedAt (matches the cadence projection `now -
+      // completedAt`). Ordering by startedAt instead would pick a drill that
+      // started later but COMPLETED earlier as "latest", understating recency
+      // and flipping the SATISFIED/NOT_SATISFIED boundary. NULLS LAST +
+      // startedAt/id tie-breaker for determinism. (P7-E review P2-2.)
+      .orderBy(
+        sql`${restoreDrillRuns.completedAt} DESC NULLS LAST`,
+        desc(restoreDrillRuns.startedAt),
+        desc(restoreDrillRuns.id),
+      )
       .limit(1);
     return rows[0] ? drillRow(rows[0]) : null;
   }

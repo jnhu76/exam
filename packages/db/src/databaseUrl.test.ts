@@ -159,11 +159,13 @@ describe("resolveDatabaseUrl — dev/prod modes", () => {
     ).toBe("postgresql://u:p@h:5432/exam");
   });
 
-  it("falls back to a localhost default in development when DATABASE_URL is unset", () => {
-    // A bare `pnpm dev` (or a config-only unit test) must not be forced to set
-    // DATABASE_URL. Production never gets this fallback.
-    expect(resolveDatabaseUrl(env({ APP_MODE: "development" }))).toBe(
-      "postgresql://exam:exam@localhost:5432/exam",
+  it("throws in development when DATABASE_URL is unset (no hardcoded default)", () => {
+    // A missing DATABASE_URL is a misconfiguration, not a guessed localhost
+    // connection. The dev compose exposes port 15432, not 5432; a hardcoded
+    // fallback would guess the wrong port and fail confusingly (or, worse,
+    // connect to an unintended local instance). Fail fast and require .env.
+    expect(() => resolveDatabaseUrl(env({ APP_MODE: "development" }))).toThrow(
+      /DATABASE_URL is required in development/,
     );
   });
 

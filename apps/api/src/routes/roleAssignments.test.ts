@@ -12,7 +12,7 @@ import roleAssignmentRoutes from "./roleAssignments.js";
 import { buildTestApp } from "./testHelpers.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
 import * as adminInvariantModule from "../authz/adminInvariant.js";
@@ -337,6 +337,85 @@ describe("RBAC-M8 role-assignment routes", () => {
       );
     expect(activePrimaries).toHaveLength(1);
     expect(activePrimaries[0]!.id).toBe(prim.id);
+  });
+
+  it("PATCH activate audit truthfulness: a genuine reactivation writes role_changed; an already-active re-activation writes NONE (P7-E review P2-1)", async () => {
+    const target = await createTargetUser(
+      ctx.db,
+      ctx.org.id,
+      "audit-truth-activate",
+    );
+    const prim = await createPrimaryAssignment(
+      ctx.db,
+      ctx.org.id,
+      target.id,
+      "Candidate",
+    );
+    // A secondary keeps deactivating the primary a valid, non-last-admin move.
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { role: "Grader", isPrimary: false },
+    });
+
+    // Count role_changed audits targeting this user (robust to setup noise —
+    // the POST above may add its own; only the activation deltas matter).
+    const countRoleChanged = async (): Promise<number> => {
+      const rows = await ctx.db
+        .select({ id: schema.auditLogs.id })
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.action, "user.role_changed"),
+            eq(schema.auditLogs.targetType, "user"),
+            eq(schema.auditLogs.targetId, target.id),
+          ),
+        );
+      return rows.length;
+    };
+
+    // Deactivate the primary Candidate so the next activate is a GENUINE
+    // inactive→active transition (Grader auto-promotes here).
+    await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: false },
+    });
+    const beforeActivate = await countRoleChanged();
+
+    // Genuine reactivation → exactly ONE more role_changed audit.
+    const react = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: true },
+    });
+    expect(react.statusCode).toBe(200);
+    expect(await countRoleChanged()).toBe(beforeActivate + 1);
+
+    // Consecutive idempotent re-activation (already active) → NO new
+    // role_changed audit and NO state change. This is the P2-1 contract: a
+    // no-op command must not fabricate a state-change audit.
+    const second = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/role-assignments/${prim.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { isActive: true },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ isActive: true, isPrimary: true });
+    expect(
+      await countRoleChanged(),
+      "idempotent re-activation must not add a role_changed audit",
+    ).toBe(beforeActivate + 1);
+
+    const userRow = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, target.id));
+    expect(userRow[0]!.role).toBe("Candidate");
   });
 
   it("PATCH with a mixed command ({ isPrimary: true, isActive: false }) is rejected with 400, not silently half-applied", async () => {

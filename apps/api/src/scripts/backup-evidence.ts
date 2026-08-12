@@ -112,6 +112,62 @@ function parsePositiveInt(v: string, flag: string): number {
 }
 
 /**
+ * Connected-DB identity check (P7-E review P2-4), as a pure decision.
+ *
+ * The URL-parsed name is only a hint — APP_MODE=development with
+ * DATABASE_URL=…/exam_test would otherwise record "successful" evidence into
+ * a test database while the production ledger stayed empty. The caller passes
+ * the server's `current_database()` result in; this fails closed on test-like
+ * names (test/e2e/ci substring, the same convention as the test-name guard).
+ *
+ * The E2E harness legitimately records ledger evidence into the exam_e2e DB
+ * (by the three-DB contract that name must contain "e2e") to verify the
+ * Operations rendering. `allowUnsafeTestDb` is the explicit opt-in for that —
+ * mirroring ALLOW_UNSAFE_TEST_DATABASE_URL — and is never set by a production
+ * deployment, so the operator path still fails closed. An unreadable connected
+ * identity is ALWAYS fatal: the opt-in is for a KNOWN test DB, not for an
+ * unreadable one.
+ */
+export interface EvidenceDbAccessInput {
+  connectedDb: string | undefined;
+  /** Raw APP_MODE env value (string | undefined) — displayed in reasons only. */
+  appMode: string | undefined;
+  urlDatabaseName: string;
+  allowUnsafeTestDb: boolean;
+}
+export type EvidenceDbAccessDecision =
+  | { allowed: true; bypassed: boolean }
+  | { allowed: false; reason: string };
+
+export function decideEvidenceDbAccess(
+  input: EvidenceDbAccessInput,
+): EvidenceDbAccessDecision {
+  const mode = input.appMode ?? "(unset)";
+  if (!input.connectedDb) {
+    return {
+      allowed: false,
+      reason:
+        `refusing to record evidence: could not determine the connected database ` +
+        `(APP_MODE=${mode}, DATABASE_URL database "${input.urlDatabaseName}")`,
+    };
+  }
+  if (!/(test|e2e|ci)/.test(input.connectedDb)) {
+    return { allowed: true, bypassed: false };
+  }
+  if (input.allowUnsafeTestDb) {
+    return { allowed: true, bypassed: true };
+  }
+  return {
+    allowed: false,
+    reason:
+      `refusing to record evidence: connected database "${input.connectedDb}" is test-like ` +
+      `(APP_MODE=${mode}, DATABASE_URL database "${input.urlDatabaseName}"). ` +
+      "Point DATABASE_URL at the deployment database, or set " +
+      "ALLOW_UNSAFE_EVIDENCE_TEST_DB=1 only for the E2E harness.",
+  };
+}
+
+/**
  * Resolves the single-tenant organization anchor (Phase 1 default org). The
  * evidence ledger is org-scoped like every business table.
  */
@@ -150,24 +206,26 @@ async function main(): Promise<void> {
   process.stderr.write(`backup-evidence: target database "${databaseName}"\n`);
   const conn = await createDatabase(databaseUrl);
   try {
-    // Connected-DB identity check (P7-E review P2-4): the URL-parsed name is
-    // only a hint — APP_MODE=development with DATABASE_URL=…/exam_test would
-    // otherwise record "successful" evidence into a test database while the
-    // production Operations page stays empty. Ask the server what database
-    // this connection actually uses and fail closed on test-like names.
+    // Connected-DB identity check (P7-E review P2-4): ask the server what
+    // database this connection actually uses and fail closed on test-like
+    // names (see decideEvidenceDbAccess). The E2E harness sets
+    // ALLOW_UNSAFE_EVIDENCE_TEST_DB=1 to opt in to recording into exam_e2e.
     const identity = await conn.sql.unsafe<{ db: string }[]>(
       "SELECT current_database() AS db",
     );
     const connectedDb = identity[0]?.db;
-    if (!connectedDb || /(test|e2e|ci)/.test(connectedDb)) {
-      fail(
-        `refusing to record evidence: connected database "${connectedDb ?? "?"}" is test-like ` +
-          `(APP_MODE=${appMode}, DATABASE_URL database "${databaseName}"). ` +
-          "Point DATABASE_URL at the deployment database.",
-      );
-    }
+    const access = decideEvidenceDbAccess({
+      connectedDb,
+      appMode,
+      urlDatabaseName: databaseName,
+      allowUnsafeTestDb: process.env.ALLOW_UNSAFE_EVIDENCE_TEST_DB === "1",
+    });
+    if (!access.allowed) fail(access.reason);
     process.stderr.write(
-      `backup-evidence: connected to database "${connectedDb}"\n`,
+      `backup-evidence: connected to database "${connectedDb ?? "?"}"` +
+        (access.bypassed
+          ? " (test-DB guard bypassed via ALLOW_UNSAFE_EVIDENCE_TEST_DB)\n"
+          : "\n"),
     );
     const [command, ...rest] = process.argv.slice(2);
     if (!command) {
@@ -400,4 +458,10 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+// Run CLI only when invoked directly, not when imported by tests.
+const isDirectInvocation =
+  process.argv[1]?.endsWith("backup-evidence.ts") ||
+  process.argv[1]?.endsWith("backup-evidence.js");
+if (isDirectInvocation) {
+  void main();
+}

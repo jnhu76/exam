@@ -71,6 +71,15 @@ const ENV_KEYS = [
   "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
 ] as const;
 
+/**
+ * DATABASE_URL for dev-mode `loadRuntimeConfig` fixtures. P2/P3 removed the
+ * hardcoded localhost fallback, so DATABASE_URL is required in dev too; these
+ * config tests exercise NON-DB fields and spread this rather than repeating
+ * the URL. The dev-throws-when-missing contract is covered in
+ * packages/db/src/databaseUrl.test.ts.
+ */
+const DEV_DB = { DATABASE_URL: "postgresql://exam:exam@localhost:15432/exam" };
+
 describe("runtimeConfig", () => {
   // Snapshot the true entry env once at file load. Vitest 4 / Vite 6 leaves
   // NODE_ENV="production" at test entry, and the test command may pass
@@ -99,6 +108,14 @@ describe("runtimeConfig", () => {
     for (const key of ENV_KEYS) {
       delete process.env[key];
     }
+    // DATABASE_URL is required in dev mode now (P7-E review P2/P3 removed the
+    // hardcoded localhost fallback). These config tests exercise NON-DB fields
+    // in the default dev baseline, so provide a dev DATABASE_URL here — this
+    // mirrors a real `pnpm dev` that has read DATABASE_URL from .env. The
+    // DB-resolution contract itself (incl. dev-throws-when-missing) is covered
+    // in packages/db/src/databaseUrl.test.ts. Tests that need DATABASE_URL
+    // absent delete it explicitly (e.g. the production-throws case).
+    process.env.DATABASE_URL = "postgresql://exam:exam@localhost:15432/exam";
   });
 
   afterEach(() => {
@@ -570,6 +587,7 @@ describe("runtimeConfig", () => {
     it("development comma list → string[]", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         CORS_ORIGIN: "http://localhost:5173,http://localhost:3000",
       });
       expect(config.cors.origin).toEqual([
@@ -619,6 +637,7 @@ describe("runtimeConfig", () => {
     it("trims whitespace and filters empty entries", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         CORS_ORIGIN: " http://a , , http://b ,",
       });
       expect(config.cors.origin).toEqual(["http://a", "http://b"]);
@@ -627,6 +646,7 @@ describe("runtimeConfig", () => {
     it("single value with no comma stays string", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         CORS_ORIGIN: "http://only",
       });
       expect(config.cors.origin).toBe("http://only");
@@ -635,6 +655,7 @@ describe("runtimeConfig", () => {
     it("comma value collapses to single string when only one survives", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         CORS_ORIGIN: "http://only,",
       });
       expect(config.cors.origin).toBe("http://only");
@@ -653,13 +674,14 @@ describe("runtimeConfig", () => {
 
   describe("DEPLOYMENT_MODE fail-fast", () => {
     it("unset -> singleTenant", () => {
-      const config = loadRuntimeConfig({ APP_MODE: "development" });
+      const config = loadRuntimeConfig({ APP_MODE: "development", ...DEV_DB });
       expect(config.mode).toBe("singleTenant");
     });
 
     it("singleTenant -> singleTenant", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         DEPLOYMENT_MODE: "singleTenant",
       });
       expect(config.mode).toBe("singleTenant");
@@ -668,6 +690,7 @@ describe("runtimeConfig", () => {
     it("trims whitespace before comparison", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         DEPLOYMENT_MODE: "  singleTenant  ",
       });
       expect(config.mode).toBe("singleTenant");
@@ -755,6 +778,7 @@ describe("runtimeConfig", () => {
     it("valid string number works", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         RATE_LIMIT_MAX: "200",
         RATE_LIMIT_WINDOW_MS: "120000",
       });
@@ -763,7 +787,7 @@ describe("runtimeConfig", () => {
     });
 
     it("undefined falls back to defaults", () => {
-      const config = loadRuntimeConfig({ APP_MODE: "development" });
+      const config = loadRuntimeConfig({ APP_MODE: "development", ...DEV_DB });
       expect(config.rateLimit.max).toBe(100);
       expect(config.rateLimit.timeWindow).toBe(60000);
     });
@@ -771,6 +795,7 @@ describe("runtimeConfig", () => {
     it("empty string falls back", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         RATE_LIMIT_MAX: "",
         RATE_LIMIT_WINDOW_MS: "",
       });
@@ -781,6 +806,7 @@ describe("runtimeConfig", () => {
     it("negative number falls back", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         RATE_LIMIT_MAX: "-5",
         RATE_LIMIT_WINDOW_MS: "-1000",
       });
@@ -791,6 +817,7 @@ describe("runtimeConfig", () => {
     it("zero falls back", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         RATE_LIMIT_MAX: "0",
         RATE_LIMIT_WINDOW_MS: "0",
       });
@@ -801,6 +828,7 @@ describe("runtimeConfig", () => {
     it("decimal falls back", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         RATE_LIMIT_MAX: "10.5",
         RATE_LIMIT_WINDOW_MS: "1000.7",
       });
@@ -811,6 +839,7 @@ describe("runtimeConfig", () => {
     it("non-numeric falls back", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
+        ...DEV_DB,
         RATE_LIMIT_MAX: "abc",
         RATE_LIMIT_WINDOW_MS: "fast",
       });

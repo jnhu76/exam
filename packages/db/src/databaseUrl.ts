@@ -134,12 +134,17 @@ export function resolveDatabaseUrl(
   const url = env.DATABASE_URL;
   if (url) return url;
 
-  if (mode === "production") {
-    throw new Error("DATABASE_URL is required in production");
-  }
-  // Development convenience fallback: a bare local dev server (or a unit test
-  // that only inspects non-DB config) should not be forced to set DATABASE_URL.
-  return "postgresql://exam:exam@localhost:5432/exam";
+  // DATABASE_URL is required in EVERY non-test mode. There is deliberately NO
+  // hardcoded localhost default: a guessed URL would silently connect
+  // somewhere unexpected (the dev compose exposes port 15432, not the 5432 a
+  // guess hits) or fail confusingly. A missing DATABASE_URL is a
+  // misconfiguration that must fail fast — copy .env.example → .env to set it
+  // for local dev. (The docstring policy above already states this; the former
+  // 5432 fallback violated it and guessed the wrong port. P7-E review P2/P3.)
+  throw new Error(
+    `DATABASE_URL is required in ${mode} mode (no hardcoded default). ` +
+      "Copy .env.example to .env and set DATABASE_URL for local development.",
+  );
 }
 
 /**

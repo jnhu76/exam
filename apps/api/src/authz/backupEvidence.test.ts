@@ -472,6 +472,41 @@ describe("P7-E2B backup evidence ledger", () => {
     expect(redone.result).toBe("succeeded");
   });
 
+  it("latestSucceededDrill / latestDrill select by COMPLETION time, not start time (crossed durations, P7-E review P2-2)", async () => {
+    // Drill A started EARLIER but COMPLETED LATER (long duration).
+    await repo().recordDrill(ctx, {
+      operationId: "logical-restore:crossed-A",
+      backupType: "logical",
+      result: "succeeded",
+      source: "automated",
+      startedAt: new Date("2026-08-12T10:00:00Z"),
+      completedAt: new Date("2026-08-12T11:00:00Z"),
+      durationMs: 3600000,
+    });
+    // Drill B started LATER but COMPLETED EARLIER (short duration).
+    await repo().recordDrill(ctx, {
+      operationId: "logical-restore:crossed-B",
+      backupType: "logical",
+      result: "succeeded",
+      source: "automated",
+      startedAt: new Date("2026-08-12T10:30:00Z"),
+      completedAt: new Date("2026-08-12T10:40:00Z"),
+      durationMs: 600000,
+    });
+    // The most recent SUCCESSFUL drill EVIDENCE is A (completed 11:00), not B
+    // (completed 10:40) — even though B started later. Ordering by startedAt
+    // would wrongly pick B, understating recency and flipping the cadence
+    // projection (now - completedAt) at the boundary.
+    const latestSuccess = await repo().latestSucceededDrill(ctx);
+    expect(latestSuccess?.operationId).toBe("logical-restore:crossed-A");
+    expect(latestSuccess?.completedAt).toEqual(
+      new Date("2026-08-12T11:00:00Z"),
+    );
+
+    const latest = await repo().latestDrill(ctx);
+    expect(latest?.operationId).toBe("logical-restore:crossed-A");
+  });
+
   it("latestSucceededDrill sees an older success beyond the bounded history page", async () => {
     // 25 failed/declared drills fill the 20-row history page; the older
     // automated success must still be visible via the unbounded lookup.

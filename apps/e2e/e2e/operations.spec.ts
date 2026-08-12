@@ -77,10 +77,16 @@ function recordEvidence(args: string[]): void {
   execFileSync("node", [EVIDENCE_CLI, ...args], {
     // Point the CLI at the API server's database (APP_MODE=development makes
     // the resolver read DATABASE_URL explicitly — never a stale shell var).
+    // ALLOW_UNSAFE_EVIDENCE_TEST_DB=1 opts the E2E harness past the CLI's
+    // connected-DB test-name guard: the E2E DB is exam_e2e by contract (its
+    // name must contain "e2e"), and these tests must record ledger evidence
+    // into it to verify the Operations rendering. A production deployment
+    // never sets this flag, so the operator path still fails closed.
     env: {
       ...process.env,
       APP_MODE: "development",
       DATABASE_URL: EVIDENCE_DATABASE_URL,
+      ALLOW_UNSAFE_EVIDENCE_TEST_DB: "1",
     },
     stdio: "pipe",
   });

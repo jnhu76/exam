@@ -26,6 +26,18 @@ export type UserRoleAssignmentRow = {
   updatedAt: Date;
 };
 
+/**
+ * Result of {@link activateWithinTransaction}. `changed` distinguishes a
+ * genuine inactive→active transition (changed=true) from an idempotent
+ * re-activation of an already-active row (changed=false, NO state mutation).
+ * Callers use `changed` to gate audit/sync so a no-op command produces no
+ * synthetic side effects (P7-E review P2-1).
+ */
+export type ActivationResult = {
+  row: UserRoleAssignmentRow;
+  changed: boolean;
+};
+
 function row(
   r: typeof userRoleAssignments.$inferSelect,
 ): UserRoleAssignmentRow {
@@ -484,7 +496,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
     tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     assignmentId: string,
-  ): Promise<UserRoleAssignmentRow | null> {
+  ): Promise<ActivationResult | null> {
     const orgId = resolveOrganizationId(ctx);
     const before = await tx
       .select()
@@ -498,7 +510,11 @@ export function createUserRoleAssignmentRepo(db: Database) {
       .limit(1);
     if (!before[0]) return null;
     if (before[0]!.isActive) {
-      return row(before[0]!);
+      // Idempotent: an already-active assignment returns as-is with NO state
+      // mutation. changed=false lets the route skip the synthetic role_changed
+      // audit + the users.role re-sync (both would record a change that never
+      // happened). P7-E review P1 (never self-demote) + P2-1 (audit truth).
+      return { row: row(before[0]!), changed: false };
     }
     if (before[0]!.isPrimary) {
       // The reactivated row carries the primary flag: demote the user's
@@ -523,20 +539,22 @@ export function createUserRoleAssignmentRepo(db: Database) {
       .set({ isActive: true, updatedAt: now() })
       .where(eq(userRoleAssignments.id, assignmentId))
       .returning();
-    return updated[0] ? row(updated[0]) : null;
+    return updated[0] ? { row: row(updated[0]), changed: true } : null;
   }
 
   /**
    * Public wrapper for {@link activateWithinTransaction}. Do NOT call from
-   * inside another transaction.
+   * inside another transaction. Returns only the row (drops the `changed`
+   * disposition — callers that need it must use the tx variant directly).
    */
   async function activate(
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
-    return executeInTransaction(db, async (tx) =>
-      activateWithinTransaction(tx, ctx, assignmentId),
-    );
+    return executeInTransaction(db, async (tx) => {
+      const result = await activateWithinTransaction(tx, ctx, assignmentId);
+      return result?.row ?? null;
+    });
   }
 
   /**

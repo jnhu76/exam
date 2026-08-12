@@ -113,9 +113,12 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
           assignment.id,
         ),
     );
-    expect(reactivated!.isActive).toBe(true);
-    expect(reactivated!.role).toBe("Maintainer");
-    expect(reactivated!.isPrimary).toBe(true);
+    // activateWithinTransaction now returns { row, changed }; a genuine
+    // reactivation of a deactivated row is a real state transition.
+    expect(reactivated!.changed).toBe(true);
+    expect(reactivated!.row.isActive).toBe(true);
+    expect(reactivated!.row.role).toBe("Maintainer");
+    expect(reactivated!.row.isPrimary).toBe(true);
     expect(await violationsFor(ctx)).toEqual([]);
   });
 

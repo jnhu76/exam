@@ -249,24 +249,32 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           fastify.db,
           ctx,
           async (tx) => {
-            const value = await createUserRoleAssignmentRepo(
+            const result = await createUserRoleAssignmentRepo(
               tx,
             ).activateWithinTransaction(tx, ctx, assignmentId);
-            if (!value) return null;
-            if (value.isPrimary) {
+            if (!result) return null;
+            const { row: value, changed } = result;
+            // Audit/sync truthfulness (P7-E review P2-1): a no-op reactivation
+            // of an already-active assignment must NOT re-sync users.role (an
+            // unconditional UPDATE that bumps updatedAt with no real change)
+            // and must NOT emit role_changed (a state change that never
+            // happened). Only a genuine inactive→active transition is.
+            if (changed && value.isPrimary) {
               await syncUsersRoleFromPrimary(tx, ctx, value.userId);
             }
-            await recordAtomicHttpAudit(tx, request, ctx, {
-              action: "user.role_changed",
-              targetType: "user",
-              targetId: value.userId,
-              metadata: {
-                assignmentActivated: true,
-                role: value.role,
-                isPrimary: value.isPrimary,
-                assignmentId: value.id,
-              },
-            });
+            if (changed) {
+              await recordAtomicHttpAudit(tx, request, ctx, {
+                action: "user.role_changed",
+                targetType: "user",
+                targetId: value.userId,
+                metadata: {
+                  assignmentActivated: true,
+                  role: value.role,
+                  isPrimary: value.isPrimary,
+                  assignmentId: value.id,
+                },
+              });
+            }
             return value;
           },
         );
