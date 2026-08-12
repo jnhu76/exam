@@ -5,8 +5,11 @@
 **Date:** 2026-08-12
 **Branch:** `feat/p7-e-operational-control-plane`
 **Baseline (`origin/master`):** `a50643f5c22dad912dd876819a9a781b617ef07e` (PR #281 merged; working tree clean)
-**Described head:** round-3 hardening applied on top of `4558f1f4`; the
-terminal closeout commit is the branch tip (see `git log` for its hash).
+**Described head:** `fca25625` — the round-3-hardened tip: all P1/P2
+fixes from the adversarial review on `4558f1f4` (activation idempotency,
+PATCH XOR command contract, CAS race gating, README port residue, CLI
+connected-DB identity, drill recency semantics) are in this revision;
+the metadata-pin commit that follows contains no content changes.
 **Working tree:** clean
 
 Commits (atomic, reviewable):
@@ -35,7 +38,7 @@ c02ecd99 fix(p7-e2a): implement role assignment reactivation through the exclusi
 3025d0f9 fix(p7-e3): prefer the latest successful drill for cadence; gate CAS races on isolation
 12db5720 fix(p7-e2b): evidence CLI verifies the connected DB identity (fail closed on test-like names)
 5a4b0767 docs(p7-e): fix README dev port residue (5432 → 15432)
-(terminal) docs(p7-e): record review round 3 and refresh closeout metadata
+fca25625 docs(p7-e): record review round 3 and refresh closeout metadata
 ```
 
 Authority documents: ADR-017 (ACCEPTED, rev 3, PR #281) > P7-E0/P7-E1
