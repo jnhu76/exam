@@ -182,10 +182,114 @@ describe("P7-E2B backup evidence ledger", () => {
     });
     expect(second.status).toBe("failed");
     expect(second.failureReason).toBe("duplicate_operation_conflict");
+    // The rejected attempt must never render as verification-verified: its
+    // terminal verification state matches the failed status.
+    expect(second.verificationStatus).toBe("failed");
+    expect(second.verifiedAt).toBeNull();
 
     // The original success is untouched and still authoritative.
     const latest = await repo().latestSucceededRun(ctx);
     expect(latest?.artifactLabel).toBe("first.dump");
+  });
+
+  it("the DB CHECK forbids a succeeded row with NULL verification (NULL-safe)", async () => {
+    // PostgreSQL CHECK semantics pass on NULL — the constraint must be
+    // NULL-safe so a forged `succeeded` row cannot skip the verified
+    // evidence requirement via a NULL verification_status.
+    await expect(
+      db.insert(backupRuns).values({
+        id: randomUUID(),
+        organizationId: orgId,
+        operationId: "logical:forged-null",
+        backupType: "logical",
+        status: "succeeded",
+        startedAt: new Date(),
+        verificationStatus: null,
+        executorType: "host_script",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("completeRun stores the caller-provided start time (cold-import truth)", async () => {
+    const operationId = opId();
+    const startedAt = new Date("2026-08-10T22:00:00Z");
+    const done = await repo().completeRun(ctx, {
+      operationId,
+      backupType: "cold_filesystem",
+      artifactLabel: "cold.dump",
+      artifactSizeBytes: 50,
+      verificationMethod: "pg_version_presence",
+      verifiedAt: new Date("2026-08-11T06:00:00Z"),
+      executorType: "host_script",
+      now: new Date("2026-08-11T06:00:00Z"),
+      startedAt,
+    });
+    expect(done.status).toBe("succeeded");
+    expect(done.startedAt.toISOString()).toBe(startedAt.toISOString());
+  });
+
+  it("lastFailure ignores failed rows with a NULL completion time (NULLS LAST)", async () => {
+    const operationId = opId();
+    await repo().failRun(ctx, {
+      operationId: `${operationId}-old`,
+      backupType: "logical",
+      executorType: "host_script",
+      reason: "old failure",
+      now: new Date("2026-08-10T08:00:00Z"),
+    });
+    // Raw insert: a failed row with a NULL completedAt must not win the
+    // "last failure" projection over a row with a real timestamp.
+    await db.insert(backupRuns).values({
+      id: randomUUID(),
+      organizationId: orgId,
+      operationId: `${operationId}-null`,
+      backupType: "logical",
+      status: "failed",
+      startedAt: new Date("2026-08-12T08:00:00Z"),
+      completedAt: null,
+      failureReason: "null-completed row",
+      executorType: "host_script",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const last = await repo().lastFailure(ctx);
+    expect(last?.failureReason).toBe("old failure");
+  });
+
+  it("latestSucceededRun ignores succeeded rows with a NULL verifiedAt (NULLS LAST)", async () => {
+    const operationId = opId();
+    await repo().completeRun(ctx, {
+      operationId,
+      backupType: "logical",
+      artifactLabel: "verified-recent.dump",
+      artifactSizeBytes: 100,
+      verificationMethod: "pg_restore_list",
+      verifiedAt: new Date("2026-08-12T10:00:00Z"),
+      executorType: "host_script",
+      now: new Date("2026-08-12T10:00:00Z"),
+    });
+    // Raw insert: a succeeded+verified row with a NULL verifiedAt must not
+    // outrank the row with a real verifiedAt.
+    await db.insert(backupRuns).values({
+      id: randomUUID(),
+      organizationId: orgId,
+      operationId: `${operationId}-null`,
+      backupType: "logical",
+      status: "succeeded",
+      startedAt: new Date("2026-08-12T11:00:00Z"),
+      completedAt: new Date("2026-08-12T11:00:00Z"),
+      artifactLabel: "null-verified.dump",
+      verificationMethod: "pg_restore_list",
+      verificationStatus: "verified",
+      verifiedAt: null,
+      executorType: "host_script",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const latest = await repo().latestSucceededRun(ctx);
+    expect(latest?.artifactLabel).toBe("verified-recent.dump");
   });
 
   it("complete without a prior start still records verified evidence (start-loss)", async () => {
@@ -278,6 +382,85 @@ describe("P7-E2B backup evidence ledger", () => {
     const latest = await repo().latestDrill(ctx);
     expect(latest?.result).toBe("operator_declared");
     expect(latest?.source).toBe("operator_declared");
+  });
+
+  it("operator-declared evidence never overwrites an automated drill record", async () => {
+    const operationId = "logical-restore:preserved";
+    await repo().recordDrill(ctx, {
+      operationId,
+      backupType: "logical",
+      result: "succeeded",
+      source: "automated",
+      startedAt: new Date("2026-08-10T09:00:00Z"),
+      completedAt: new Date("2026-08-10T09:42:00Z"),
+      durationMs: 2520000,
+    });
+    // A later operator declaration for the same logical drill must NOT
+    // replace the automated proof (the setWhere guard preserves it).
+    const returned = await repo().recordDrill(ctx, {
+      operationId,
+      backupType: "logical",
+      result: "failed",
+      source: "operator_declared",
+      startedAt: new Date("2026-08-11T09:00:00Z"),
+      completedAt: new Date("2026-08-11T09:30:00Z"),
+    });
+    expect(returned.source).toBe("automated");
+    expect(returned.result).toBe("succeeded");
+
+    const latest = await repo().latestDrill(ctx);
+    expect(latest?.source).toBe("automated");
+    expect(latest?.result).toBe("succeeded");
+
+    // Compatible re-recording (operator_declared over operator_declared)
+    // still updates in place.
+    await repo().recordDrill(ctx, {
+      operationId: "logical-restore:declared",
+      backupType: "logical",
+      result: "operator_declared",
+      source: "operator_declared",
+      startedAt: new Date("2026-08-10T09:00:00Z"),
+      completedAt: new Date("2026-08-10T09:30:00Z"),
+    });
+    const redone = await repo().recordDrill(ctx, {
+      operationId: "logical-restore:declared",
+      backupType: "logical",
+      result: "succeeded",
+      source: "operator_declared",
+      startedAt: new Date("2026-08-11T09:00:00Z"),
+      completedAt: new Date("2026-08-11T09:30:00Z"),
+    });
+    expect(redone.source).toBe("operator_declared");
+    expect(redone.result).toBe("succeeded");
+  });
+
+  it("latestSucceededDrill sees an older success beyond the bounded history page", async () => {
+    // 25 failed/declared drills fill the 20-row history page; the older
+    // automated success must still be visible via the unbounded lookup.
+    for (let i = 0; i < 25; i++) {
+      await repo().recordDrill(ctx, {
+        operationId: `logical-restore:recent-${i}`,
+        backupType: "logical",
+        result: "failed",
+        source: "automated",
+        startedAt: new Date(Date.UTC(2026, 7, 1, 0, i)),
+        completedAt: new Date(Date.UTC(2026, 7, 1, 0, i + 1)),
+      });
+    }
+    await repo().recordDrill(ctx, {
+      operationId: "logical-restore:old-success",
+      backupType: "logical",
+      result: "succeeded",
+      source: "automated",
+      startedAt: new Date("2026-07-01T09:00:00Z"),
+      completedAt: new Date("2026-07-01T09:42:00Z"),
+    });
+    const latest = await repo().latestSucceededDrill(ctx);
+    expect(latest?.operationId).toBe("logical-restore:old-success");
+    const history = await repo().listDrills(ctx, 20);
+    expect(
+      history.some((d) => d.operationId === "logical-restore:old-success"),
+    ).toBe(false);
   });
 });
 
@@ -381,7 +564,9 @@ describe2("P7-E2B backup read API", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.latest).not.toBeNull();
+    expect(body.latestVerified).not.toBeNull();
+    expect(body.latestVerified.artifactLabel).toBe("exam-2026-08-10.dump");
+    expect(body.latestVerified.verificationStatus).toBe("verified");
   });
 
   it("Maintainer can read restore-readiness drill evidence", async () => {

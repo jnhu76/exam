@@ -61,7 +61,7 @@ describe("P7-E3 operational policy intent", () => {
     overrides: Record<string, unknown> = {},
   ) {
     return executeInTransaction(db, (tx) =>
-      repo().upsertPolicyWithinTransaction(tx, ctx, {
+      repo().upsertPolicyWithinTransaction(ctx, tx, {
         desiredRpoSeconds:
           (overrides.desiredRpoSeconds as number) ?? base.desiredRpoSeconds,
         desiredRetentionDays:
@@ -130,7 +130,7 @@ describe("P7-E3 operational policy intent", () => {
     // application layer were bypassed.
     await expect(
       executeInTransaction(db, (tx) =>
-        repo().upsertPolicyWithinTransaction(tx, ctx, {
+        repo().upsertPolicyWithinTransaction(ctx, tx, {
           desiredRpoSeconds: 60, // below the 300s floor
           desiredRetentionDays: 30,
           desiredDrillCadenceDays: 7,
