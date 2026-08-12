@@ -20,12 +20,16 @@ describe("RBAC Maintainer preset — operational-only boundary (P7-E2A)", () => 
 
   it("holds exactly the operational observation capabilities", () => {
     const perms = permissionsForRole(Role.Maintainer);
-    expect(perms).toEqual(
-      expect.arrayContaining([
-        Permission.SystemHealthView,
-        Permission.SystemDiagnosticsView,
-      ]),
-    );
+    // Exact set pin: a regression adding ANY capability to the preset
+    // (business or Admin-only system.*) must fail this test — arrayContaining
+    // would let an extra Admin-only capability slip through.
+    expect(perms).toEqual([
+      Permission.SystemHealthView,
+      Permission.SystemDiagnosticsView,
+      Permission.SystemBackupView,
+      Permission.SystemRestoreReadinessView,
+      Permission.SystemOpsPolicyView,
+    ]);
     // Every permission is from the system domain (operational observation).
     for (const p of perms) {
       expect(p.startsWith("system."), `${p} is not operational`).toBe(true);

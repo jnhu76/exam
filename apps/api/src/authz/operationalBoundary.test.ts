@@ -7,6 +7,8 @@ import {
 } from "../routes/testHelpers.js";
 import { registerApiRoutes } from "../routes/registerApiRoutes.js";
 import type { TestContext } from "../routes/testHelpers.js";
+import { schema } from "@exam/db/src/schema/pg.js";
+import { eq } from "drizzle-orm";
 
 /**
  * P7-E2A — Operational RBAC Boundary product tests (ADR-017 D1/D2/D7/D8/D14).
@@ -106,6 +108,44 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       expect(typeof body.dbLatency).toBe("number");
       expect(body.redisStatus).toBeDefined();
       expect(body.emailStatus).toBeDefined();
+    });
+
+    it("a dual-role account (hand-edited DB) fails closed at login (D14 read-side)", async () => {
+      // The write-side invariant makes this state unreachable through the
+      // product; a hand-edited row set must still fail closed at login — the
+      // union authority would otherwise grant the full Admin capability set
+      // to a Maintainer account.
+      const { user } = await createAssignedUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Admin",
+        "dual-login",
+      );
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        userId: user.id,
+        role: "Maintainer",
+        isPrimary: false,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { username: user.username, password: "password123" },
+      });
+      expect(res.statusCode).toBe(401);
+
+      // Clean up the deliberately-created violation: the org-wide fail-closed
+      // backfill guard would reject every later authority mutation in this
+      // file while a violating row remains.
+      await ctx.db
+        .delete(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.userId, user.id));
+      await ctx.db.delete(schema.users).where(eq(schema.users.id, user.id));
     });
 
     it("Maintainer NEVER receives business-integrity diagnostics (D8)", async () => {

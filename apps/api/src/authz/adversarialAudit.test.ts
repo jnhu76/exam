@@ -205,6 +205,9 @@ describe("P7-E adversarial audit", () => {
       expect(put.statusCode).toBe(403);
 
       const diag = await asMaintainer("GET", "/api/system/diagnostics");
+      // Assert authorized access FIRST — `not.toHaveProperty` would otherwise
+      // pass vacuously on a 403/500 error body.
+      expect(diag.statusCode).toBe(200);
       expect(diag.json()).not.toHaveProperty("integrity");
     });
   });

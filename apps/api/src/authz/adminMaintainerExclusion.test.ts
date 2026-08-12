@@ -106,7 +106,12 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
         );
       }),
     ).rejects.toMatchObject({
-      details: { reason: "ADMIN_MAINTAINER_EXCLUSION" },
+      details: {
+        reason: "ADMIN_MAINTAINER_EXCLUSION",
+        // Diagnostics carry both offending assignment ids.
+        adminAssignmentId: expect.any(String),
+        maintainerAssignmentId: expect.any(String),
+      },
     });
 
     // Nothing committed: the actor still holds only Admin.
@@ -147,6 +152,63 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     expect(rows.filter((r) => r.isActive).map((r) => r.role)).toEqual([
       "Maintainer",
     ]);
+  });
+
+  it("a disabled dual-role account can be disabled; re-enabling is rejected until cleanup", async () => {
+    // Raw-inserted dual-role account (the invariant normally prevents this; a
+    // hand-edited DB can still produce it). The exclusion counts EFFECTIVE
+    // combinations (active user + active assignments), so disabling the user
+    // succeeds (the combination becomes latent) and re-enabling — itself an
+    // authority mutation running the post-condition — is rejected until one
+    // of the two assignments is deactivated.
+    const { user } = await createUser("dual-role", "Admin");
+    await createUserRoleAssignmentRepo(db).assign(ctx, {
+      userId: user.id,
+      role: "Maintainer",
+      isPrimary: false,
+      isActive: true,
+    });
+    expect(await violationsFor(ctx)).toHaveLength(1);
+
+    // Disable (through the seam — needs a second effective Admin).
+    await createUser("other-admin", "Admin");
+    await mutateWithEffectiveAdminPostcondition(db, ctx, async (tx) => {
+      await createUserRepo(tx).update(ctx, user.id, { isActive: false });
+    });
+    // Latent: no effective violation while the user is disabled.
+    expect(await violationsFor(ctx)).toEqual([]);
+
+    // Re-enable is rejected until an assignment is cleaned up.
+    await expect(
+      mutateWithEffectiveAdminPostcondition(db, ctx, async (tx) => {
+        await createUserRepo(tx).update(ctx, user.id, { isActive: true });
+      }),
+    ).rejects.toMatchObject({
+      details: { reason: "ADMIN_MAINTAINER_EXCLUSION" },
+    });
+
+    // Cleanup via assignment removal, then re-enable succeeds.
+    const dualRows = await createUserRoleAssignmentRepo(db).listForUser(
+      ctx,
+      user.id,
+    );
+    const maintainerAssignment = dualRows.find((r) => r.role === "Maintainer")!;
+    await mutateWithEffectiveAdminPostcondition(db, ctx, async (tx) => {
+      await createUserRoleAssignmentRepo(tx).removeWithinTransaction(
+        tx,
+        ctx,
+        maintainerAssignment.id,
+      );
+    });
+    await mutateWithEffectiveAdminPostcondition(db, ctx, async (tx) => {
+      await createUserRepo(tx).update(ctx, user.id, { isActive: true });
+    });
+    const after = await createUserRepo(db).findByOrganizationAndId(
+      ctx,
+      user.id,
+    );
+    expect(after?.isActive).toBe(true);
+    expect(await violationsFor(ctx)).toEqual([]);
   });
 
   it("rejects promoting an Admin assignment for an actor with active Maintainer", async () => {
@@ -295,13 +357,18 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     expect(rejected).toBe(1);
     expect(await violationsFor(ctx)).toEqual([]);
 
+    // Either winner is legal — the race is settled by lock acquisition order.
+    // Exactly one authority role must survive.
     const rows = await createUserRoleAssignmentRepo(db).listForUser(
       ctx,
       actor.id,
     );
-    expect(rows.filter((r) => r.isActive).map((r) => r.role)).toEqual([
-      "Admin",
-    ]);
+    const activeRoles = rows
+      .filter((r) => r.isActive)
+      .map((r) => r.role)
+      .sort();
+    expect(activeRoles).toHaveLength(1);
+    expect(["Admin", "Maintainer"]).toContain(activeRoles[0]);
   });
 
   it("shares the fence with the effective-Admin seam (mixed races)", async () => {

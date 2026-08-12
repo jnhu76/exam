@@ -64,11 +64,19 @@ export async function mutateWithAuthorityInvariants<T>(
         throw new ValidationError("同一账号不能同时拥有管理员与维护者身份", {
           reason: "ADMIN_MAINTAINER_EXCLUSION",
           userId: v.userId,
+          adminAssignmentId: v.adminAssignmentId,
+          maintainerAssignmentId: v.maintainerAssignmentId,
         });
       }
 
       return result;
     },
+    // "read committed" is LOAD-BEARING here: the post-condition must see the
+    // latest committed rows after the advisory lock is granted. Under
+    // REPEATABLE READ the transaction snapshot is taken at its first
+    // statement (before the lock wait), so the post-condition would miss a
+    // concurrently committed assignment and both transactions could commit —
+    // the exact write-skew D14 forbids.
     "read committed",
   );
 }

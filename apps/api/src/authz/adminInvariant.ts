@@ -65,9 +65,12 @@ export async function mutateWithEffectiveAdminPostcondition<T>(
           tx,
         ).findAdminMaintainerExclusionViolations(ctx);
       if (violations.length > 0) {
+        const v = violations[0]!;
         throw new ValidationError("同一账号不能同时拥有管理员与维护者身份", {
           reason: "ADMIN_MAINTAINER_EXCLUSION",
-          userId: violations[0]!.userId,
+          userId: v.userId,
+          adminAssignmentId: v.adminAssignmentId,
+          maintainerAssignmentId: v.maintainerAssignmentId,
         });
       }
 
@@ -83,6 +86,11 @@ export async function mutateWithEffectiveAdminPostcondition<T>(
 
       return result;
     },
+    // "read committed" is LOAD-BEARING here: both post-conditions must see
+    // the latest committed rows after the advisory lock is granted. Under
+    // REPEATABLE READ the transaction snapshot is taken at its first
+    // statement (before the lock wait), so the post-condition would miss a
+    // concurrently committed assignment — the write-skew D14 forbids.
     "read committed",
   );
 }
