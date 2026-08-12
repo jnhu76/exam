@@ -61,7 +61,7 @@ const DRILL_SOURCES: readonly RestoreDrillSource[] = [
 ];
 
 function fail(message: string): never {
-  console.error(`backup-evidence: ${message}`);
+  process.stderr.write(`backup-evidence: ${message}` + "\n");
   process.exit(1);
 }
 
@@ -163,8 +163,8 @@ async function main(): Promise<void> {
           executorType,
           now,
         });
-        console.log(
-          `started run ${run.id} (${run.operationId}, ${run.backupType})`,
+        process.stdout.write(
+          `started run ${run.id} (${run.operationId}, ${run.backupType})\n`,
         );
         break;
       }
@@ -189,12 +189,12 @@ async function main(): Promise<void> {
           now,
         });
         if (run.status === "succeeded") {
-          console.log(
-            `verified success: ${run.artifactLabel} (${sizeBytes} bytes, ${verificationMethod})`,
+          process.stdout.write(
+            `verified success: ${run.artifactLabel} (${sizeBytes} bytes, ${verificationMethod})\n`,
           );
         } else if (run.status === "failed") {
-          console.error(
-            `duplicate operation conflict: a verified success for ${operationId} already exists with a different artifact; this attempt was NOT recorded as success`,
+          process.stderr.write(
+            `duplicate operation conflict: a verified success for ${operationId} already exists with a different artifact; this attempt was NOT recorded as success\n`,
           );
           process.exit(1);
         }
@@ -212,7 +212,9 @@ async function main(): Promise<void> {
           reason,
           now,
         });
-        console.log(`recorded failure for ${operationId}: ${reason}`);
+        process.stdout.write(
+          `recorded failure for ${operationId}: ${reason}` + "\n",
+        );
         break;
       }
       case "cold-import": {
@@ -274,12 +276,12 @@ async function main(): Promise<void> {
           now,
         });
         if (run.status === "succeeded") {
-          console.log(
-            `imported verified cold backup ${run.operationId} (started ${startedAt.toISOString()})`,
+          process.stdout.write(
+            `imported verified cold backup ${run.operationId} (started ${startedAt.toISOString()})\n`,
           );
         } else {
-          console.error(
-            `duplicate operation conflict: a verified success for ${spool.operationId} already exists; spool NOT imported`,
+          process.stderr.write(
+            `duplicate operation conflict: a verified success for ${spool.operationId} already exists; spool NOT imported\n`,
           );
           process.exit(1);
         }
@@ -315,8 +317,8 @@ async function main(): Promise<void> {
           ...(durationMs !== undefined ? { durationMs } : {}),
           ...(args.reason ? { failureReason: args.reason } : {}),
         });
-        console.log(
-          `recorded ${source} restore drill ${drill.operationId}: ${drill.result}`,
+        process.stdout.write(
+          `recorded ${source} restore drill ${drill.operationId}: ${drill.result}\n`,
         );
         break;
       }
