@@ -2,6 +2,11 @@ import type {
   AnswerRecord,
   Attachment,
   AttemptGradingEntry,
+  BackupExecutorType,
+  BackupRunEventType,
+  BackupRunStatus,
+  BackupType,
+  BackupVerificationStatus,
   ControlFlags,
   EmailOutboxStatus,
   EmailType,
@@ -13,6 +18,8 @@ import type {
   NotificationType,
   QuestionScoreResult,
   QuestionSnapshot,
+  RestoreDrillResult,
+  RestoreDrillSource,
   ResultPublicationMode,
   SubmittedAnswersSnapshot,
   AttemptInterruptionEvent,
@@ -1196,6 +1203,174 @@ export const workerHeartbeats = pgTable(
     index("worker_heartbeats_last_poll_at_idx").on(
       table.workerName,
       table.lastPollAt,
+    ),
+  ],
+);
+
+/**
+ * Backup-run evidence ledger (P7-E2B).
+ *
+ * Durable, truthful records of backup mechanism executions, written by the
+ * typed operator evidence CLI at the P7-C scripts' natural checkpoints.
+ * This is NOT a scheduler, NOT a generic event store, NOT a settings table —
+ * it is the evidence projection the product reads to answer "last backup",
+ * "last VERIFIED backup", "last failure", "RPO posture" (E3).
+ *
+ * SUCCESS semantics (ADR-017 D10, P7-E1 §12.4):
+ *   `succeeded` requires artifact produced + readable + verification passed
+ *   + durable evidence committed. A run whose verification never happened is
+ *   `pending`/`abandoned` — never success. `pg_dump exit 0` alone is not
+ *   success; `file exists` alone is not success.
+ *
+ * Idempotency / duplicate-run invariant (D10 #2): at most ONE `succeeded`
+ * row per (organization, operation_id) — enforced by the partial unique
+ * index `backup_runs_org_operation_succeeded_unique`. A retry whose
+ * completion would contradict an existing success is recorded as `failed`
+ * with reason `duplicate_operation_conflict` (fail closed).
+ *
+ * Secrets: the ledger NEVER stores credentials, host paths, or the backup
+ * destination URL. `artifact_label` is a safe reference (file name /
+ * operator-provided label) suitable for display.
+ */
+export const backupRuns = pgTable(
+  "backup_runs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Stable logical run identity (e.g. `logical:2026-08-12` for the daily
+     *  cron slot). Retries of the same logical run share the operationId. */
+    operationId: text("operation_id").notNull(),
+    backupType: text("backup_type").notNull().$type<BackupType>(),
+    status: text("status").notNull().$type<BackupRunStatus>(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    /** Safe artifact reference (file name / label) — never a host path. */
+    artifactLabel: text("artifact_label"),
+    artifactSizeBytes: bigint("artifact_size_bytes", { mode: "number" }),
+    verificationMethod: text("verification_method"),
+    verificationStatus: text(
+      "verification_status",
+    ).$type<BackupVerificationStatus>(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }),
+    /** Sanitized failure reason (no secrets, no credentials, no paths). */
+    failureReason: text("failure_reason"),
+    executorType: text("executor_type").notNull().$type<BackupExecutorType>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // At most one SUCCESS per logical run (D10 #2 — no contradictory
+    // terminal evidence). Retry attempts (running/failed/abandoned) may
+    // share the operationId freely.
+    uniqueIndex("backup_runs_org_operation_succeeded_unique")
+      .on(table.organizationId, table.operationId)
+      .where(sql`status = 'succeeded'`),
+    index("backup_runs_org_started_idx").on(
+      table.organizationId,
+      table.startedAt,
+    ),
+    check(
+      "backup_runs_status_check",
+      sql`${table.status} IN ('running', 'succeeded', 'failed', 'abandoned')`,
+    ),
+    check(
+      "backup_runs_type_check",
+      sql`${table.backupType} IN ('logical', 'physical_base', 'cold_filesystem')`,
+    ),
+    check(
+      "backup_runs_verification_status_check",
+      sql`${table.verificationStatus} IN ('verified', 'failed', 'pending')`,
+    ),
+    // SUCCESS requires verification evidence (D10 #1): a `succeeded` row must
+    // carry verificationStatus = 'verified' at the DB level.
+    check(
+      "backup_runs_success_verified_check",
+      sql`(${table.status} <> 'succeeded' OR ${table.verificationStatus} = 'verified')`,
+    ),
+  ],
+);
+
+/**
+ * Append-only transition log for backup runs (P7-E2B). One row per evidence
+ * transition (started / succeeded / failed / abandoned / duplicate_rejected),
+ * carrying the sanitized detail of that transition. Enables forensic answers
+ * for crash/idempotency analysis ("the retry closed the previous running
+ * attempt as abandoned") without overloading the run row.
+ */
+export const backupRunEvents = pgTable(
+  "backup_run_events",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    runId: text("run_id")
+      .notNull()
+      .references(() => backupRuns.id, { onDelete: "cascade" }),
+    operationId: text("operation_id").notNull(),
+    eventType: text("event_type").notNull().$type<BackupRunEventType>(),
+    detail: text("detail"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("backup_run_events_org_run_idx").on(
+      table.organizationId,
+      table.runId,
+    ),
+    check(
+      "backup_run_events_type_check",
+      sql`${table.eventType} IN ('started', 'succeeded', 'failed', 'abandoned', 'duplicate_rejected')`,
+    ),
+  ],
+);
+
+/**
+ * Restore-drill evidence (P7-E2B). Records restore-readiness drills: the
+ * deterministic deployment drills (automated) and operator-recorded drills
+ * (operator_declared). The read projection distinguishes the two — a declared
+ * success is never rendered as automated proof. Restore itself remains
+ * host-only; this table only records EVIDENCE of drills, never execution
+ * authority.
+ */
+export const restoreDrillRuns = pgTable(
+  "restore_drill_runs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Stable drill identity (e.g. `logical-restore:2026-08-12`). */
+    operationId: text("operation_id").notNull(),
+    backupType: text("backup_type").notNull().$type<BackupType>(),
+    result: text("result").notNull().$type<RestoreDrillResult>(),
+    source: text("source").notNull().$type<RestoreDrillSource>(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    durationMs: bigint("duration_ms", { mode: "number" }),
+    failureReason: text("failure_reason"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("restore_drill_runs_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    check(
+      "restore_drill_runs_result_check",
+      sql`${table.result} IN ('succeeded', 'failed', 'operator_declared')`,
+    ),
+    check(
+      "restore_drill_runs_source_check",
+      sql`${table.source} IN ('automated', 'operator_declared')`,
     ),
   ],
 );

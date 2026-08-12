@@ -131,6 +131,14 @@ if [ "${confirm}" != "${TARGET_DB}" ]; then
   exit 1
 fi
 
+# P7-E2B: drill-run identity + start time for the restore-readiness ledger.
+# The app container is STOPPED during the restore, so the drill evidence is
+# recorded AFTER restart — by the operator (operator_declared) or by the
+# automated deployment drill harness (automated). A drill with no evidence
+# record is simply not visible in the ledger (fail closed, no false proof).
+RESTORE_DRILL_OPERATION_ID="${RESTORE_DRILL_OPERATION_ID:-logical-restore:$(date +%F)}"
+RESTORE_START_EPOCH="$(date +%s)"
+
 # ── Clean-target contract: DROP + recreate from template0, then pg_restore. ──
 # postgresql.org/docs/18/app-pgdump.html: use template0 to ensure a truly
 # empty database without local additions, preventing duplicate-definition
@@ -168,3 +176,10 @@ echo "Logical restore COMPLETE into clean target '${TARGET_DB}'."
 echo "  Restart the API + worker to use the restored database:"
 echo "    docker compose up -d app email-worker"
 echo "  Run your Exam business-invariant checks after restart."
+echo ""
+echo "  P7-E2B: record this restore drill in the product ledger after restart:"
+RESTORE_DURATION_MS="$(( ($(date +%s) - RESTORE_START_EPOCH) * 1000 ))"
+echo "    docker compose exec app node dist/scripts/backup-evidence.js drill \\"
+echo "      --operation-id ${RESTORE_DRILL_OPERATION_ID} --backup-type logical \\"
+echo "      --result succeeded --source operator_declared --duration-ms ${RESTORE_DURATION_MS}"
+echo "  (A failed restore must be recorded with --result failed --reason '<sanitized>'.)"

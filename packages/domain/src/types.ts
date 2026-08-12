@@ -880,3 +880,69 @@ export interface AttemptCommandPayloadByType {
   force_submit: ForceSubmitRequestPayload;
   misconduct_mark: MisconductMarkRequestPayload;
 }
+
+// ───────────────────────── Backup / restore-drill evidence (P7-E2B) ─────────────────────────
+
+/**
+ * Backup mechanism kinds recorded by the evidence ledger (P7-E2B). Mirrors the
+ * P7-C script inventory (`scripts/backup/*`): logical online dump (-Fc),
+ * physical base backup (pg_basebackup + pg_verifybackup), cold filesystem
+ * copy. `pitr_wal` archiving is a continuous process, not a runnable artifact,
+ * and is not a run kind.
+ */
+export type BackupType = "logical" | "physical_base" | "cold_filesystem";
+
+/**
+ * Terminal-or-transient run status of a backup attempt in the evidence
+ * ledger. SUCCESS semantics (ADR-017 D10 / P7-E1 §12.4): `succeeded` is the
+ * ONLY success state and requires artifact produced + readable + verification
+ * passed + durable evidence committed.
+ */
+export type BackupRunStatus = "running" | "succeeded" | "failed" | "abandoned";
+
+/**
+ * Verification outcome recorded on a backup run.
+ * - `verified`: the artifact passed its required verification (e.g.
+ *   pg_restore --list / pg_verifybackup).
+ * - `failed`: verification ran and rejected the artifact.
+ * - `pending`: the run ended without verification evidence (crash / no
+ *   verification hook) — never promotable to `succeeded`.
+ * `not_required` is deliberately absent: every recorded run carries the
+ * verification evidence it actually has; a run without verification is
+ * `pending` and therefore NOT success.
+ */
+export type BackupVerificationStatus = "verified" | "failed" | "pending";
+
+/**
+ * Who initiated the run. `host_script` = P7-C script instrumentation;
+ * `deployment_drill` = the automated deployment drill harness; future
+ * decision-gated triggers would add their own executor type.
+ */
+export type BackupExecutorType = "host_script" | "deployment_drill";
+
+/**
+ * Restore-drill outcome (P7-E2B). `operator_declared` results are human
+ * attestations recorded by the operator after a host-side drill; they are
+ * NEVER rendered as automated proof. `succeeded`/`failed` come from the
+ * automated drill harness (or the host restore script's own verification).
+ */
+export type RestoreDrillResult = "succeeded" | "failed" | "operator_declared";
+
+/**
+ * Source of a restore-drill evidence record:
+ * - `automated`: the deterministic deployment drill ran and proved the result.
+ * - `operator_declared`: the operator recorded the drill outcome manually.
+ * The read projection must distinguish these — a declared success is not
+ * automated proof.
+ */
+export type RestoreDrillSource = "automated" | "operator_declared";
+
+/**
+ * Backup-run evidence event kinds (append-only `backup_run_events`).
+ */
+export type BackupRunEventType =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "abandoned"
+  | "duplicate_rejected";

@@ -62,7 +62,54 @@ layers, `/app/data`, logs, browser storage — is disposable.
 
 ---
 
-## 1. Where data is stored
+## 0.5 Evidence ledger (P7-E2B) — what the product knows about backups
+
+The backup scripts record **durable evidence** of every run into the
+PostgreSQL evidence ledger (`backup_runs`, `backup_run_events`,
+`restore_drill_runs`) via the typed operator command
+`backup-evidence.js` (runs in the app container). The product reads this
+ledger to answer "last backup", "last **verified** backup", "last failure",
+and restore-readiness — the Admin/Maintainer Operations views.
+
+```text
+backup SUCCESS  =  artifact produced
+                AND artifact readable
+                AND required verification passed
+                AND durable evidence committed
+```
+
+Consequences:
+
+- `pg_dump` exiting 0 is **not** success; `file exists` is **not** success.
+  A run only becomes `succeeded` when its completion evidence carries the
+  verification result (`pg_restore --list` for logical, `pg_verifybackup`
+  for physical, `pg_version_presence` for cold copies).
+- A crash before verified evidence leaves the run `running`; the next start
+  of the same logical run closes it as `abandoned`. No crash ever claims
+  success.
+- The same logical run (same `EVIDENCE_OPERATION_ID`, default
+  `<type>:<YYYY-MM-DD>` for the daily cron slot) cannot produce two
+  contradictory successes: at most one `succeeded` row per operation id; a
+  conflicting re-completion is recorded `failed`
+  (`duplicate_operation_conflict`) and the original success stays
+  authoritative.
+- The ledger stores the artifact **label** (file name) only — never host
+  paths, never credentials, never the destination URI. The host layout
+  remains Host Maintainer territory.
+- Cold-filesystem backups run while PostgreSQL is stopped; the script writes
+  a typed evidence spool (`evidence.json`) next to the artifact and the
+  operator imports it after restart (`backup-evidence.js cold-import
+  --spool <path>`). The spool is a transit file, not a second authority.
+- Restore drills are recorded via `backup-evidence.js drill` with
+  `--source automated` (deterministic deployment drill) or
+  `--source operator_declared` (operator-recorded). A declared success is
+  never rendered as automated proof.
+- The ledger is read-only through the product (`system.backup.view`,
+  `system.restore_readiness.view`). Backup trigger / schedule / retention
+  remain **host-owned** (host cron) and decision-gated (ADR-017 D5); there
+  is no product-side backup button.
+
+
 
 The production Compose topology (`docker-compose.yml`) uses operator-visible
 host bind mounts under `${EXAM_DATA_ROOT:-./data}`:

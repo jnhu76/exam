@@ -187,6 +187,33 @@ if ! docker run --rm -v "${DEST}:/to:ro" "${HELPER_IMAGE}" \
   exit 1
 fi
 
+# ── P7-E2B evidence spool ─────────────────────────────────────────
+# Cold backups run while PostgreSQL is STOPPED, so the ledger (in
+# PostgreSQL) is unreachable during the copy. The script therefore writes a
+# typed evidence SPOOL file next to the artifact; after `docker compose
+# up -d` the operator imports it into the ledger with ONE command (printed
+# below). The spool is a transit file, NOT a second authority store — the
+# ledger in PostgreSQL remains the single durable authority; a lost spool
+# simply means no evidence (fail closed, never a false success). Crash
+# during the stopped window = no spool = no evidence.
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-cold_filesystem:$(date +%F)}"
+SPOOL="${DEST}/evidence.json"
+SIZE_BYTES="$(du -sb "${DEST}" 2>/dev/null | cut -f1 || echo 0)"
+STARTED_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cat > "${SPOOL}" <<EOF
+{
+  "schemaVersion": 1,
+  "operationId": "${EVIDENCE_OPERATION_ID}",
+  "backupType": "cold_filesystem",
+  "artifactLabel": "$(basename "${DEST}")",
+  "artifactSizeBytes": ${SIZE_BYTES},
+  "verificationMethod": "pg_version_presence",
+  "startedAt": "${STARTED_ISO}",
+  "completedAt": "${STARTED_ISO}",
+  "executorType": "host_script"
+}
+EOF
+
 echo ""
 echo "Cold-filesystem backup COMPLETE."
 echo "  destination: ${DEST}"
@@ -196,3 +223,7 @@ echo "  is a weak local copy, NOT disaster recovery."
 echo "  Raw PGDATA is tied to the PostgreSQL major version; restore only with"
 echo "  a compatible postgres image. See cold-filesystem-restore.sh and"
 echo "  docs/deployment/backup-and-recovery.md."
+echo ""
+echo "  P7-E2B evidence: after 'docker compose up -d', import this run into the"
+echo "  product ledger with:"
+echo "    docker compose exec app node dist/scripts/backup-evidence.js cold-import --spool ${SPOOL}"

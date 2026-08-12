@@ -10,11 +10,18 @@ import {
   SystemHealthResponseSchema,
   DashboardResponseSchema,
   DiagnosticsResponseSchema,
+  BackupEvidenceResponseSchema,
+  RestoreReadinessResponseSchema,
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createWorkerHeartbeatRepo } from "@exam/db/src/repository/workerHeartbeatRepo.js";
 import { createIntegrityDiagnosticsRepo } from "@exam/db/src/repository/integrityDiagnosticsRepo.js";
+import { createBackupEvidenceRepo } from "@exam/db/src/repository/backupEvidenceRepo.js";
+import type {
+  BackupRunRow,
+  RestoreDrillRow,
+} from "@exam/db/src/repository/backupEvidenceRepo.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -375,7 +382,126 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       return { ...base, integrity };
     },
   });
+
+  /**
+   * GET /system/backups
+   *
+   * P7-E2B — READ-ONLY backup evidence projection: latest run, latest
+   * VERIFIED run, last failure, status counts, and bounded history. The
+   * artifact is referenced by safe label only (no host paths, no
+   * credentials). No write sibling exists: backup.trigger / schedule /
+   * retention are decision-gated (ADR-017 D5) and NOT implemented.
+   *
+   * Gated by SystemBackupView (Admin + Maintainer presets).
+   */
+  fastify.get("/system/backups", {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemBackupView),
+    ],
+    schema: {
+      security: cookieAuth,
+      "x-role": ["Admin", "Maintainer"],
+      response: { 200: BackupEvidenceResponseSchema },
+    },
+    handler: async (request) => {
+      const ctx = getRequestContext(request);
+      const repo = createBackupEvidenceRepo(anyDb);
+      const [latest, latestVerified, lastFailure, counts, history] =
+        await Promise.all([
+          repo.latestRun(ctx),
+          repo.latestSucceededRun(ctx),
+          repo.lastFailure(ctx),
+          repo.statusCounts(ctx),
+          repo.listRuns(ctx, 50),
+        ]);
+      return {
+        latest: latest ? toBackupRunWire(latest) : null,
+        latestVerified: latestVerified ? toBackupRunWire(latestVerified) : null,
+        lastFailure: lastFailure ? toBackupRunWire(lastFailure) : null,
+        counts,
+        history: history.map(toBackupRunWire),
+      };
+    },
+  });
+
+  /**
+   * GET /system/restore-readiness
+   *
+   * P7-E2B — READ-ONLY restore-readiness / drill evidence projection: latest
+   * drill, latest successful drill, and drill history. The `source` field
+   * distinguishes automated proof from operator declaration. Restore itself
+   * remains host-only (ADR-017 D4); this route reads drill EVIDENCE only.
+   *
+   * Gated by SystemRestoreReadinessView (Admin + Maintainer presets).
+   */
+  fastify.get("/system/restore-readiness", {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemRestoreReadinessView),
+    ],
+    schema: {
+      security: cookieAuth,
+      "x-role": ["Admin", "Maintainer"],
+      response: { 200: RestoreReadinessResponseSchema },
+    },
+    handler: async (request) => {
+      const ctx = getRequestContext(request);
+      const repo = createBackupEvidenceRepo(anyDb);
+      const [latestDrill, drills] = await Promise.all([
+        repo.latestDrill(ctx),
+        repo.listDrills(ctx, 20),
+      ]);
+      const latestSuccessful =
+        drills.find(
+          (d) => d.result === "succeeded" && d.source === "automated",
+        ) ??
+        drills.find((d) => d.result === "succeeded") ??
+        null;
+      return {
+        latestDrill: latestDrill ? toRestoreDrillWire(latestDrill) : null,
+        latestSuccessfulDrill: latestSuccessful
+          ? toRestoreDrillWire(latestSuccessful)
+          : null,
+        drillHistory: drills.map(toRestoreDrillWire),
+      };
+    },
+  });
 };
+
+/** Maps a backup-run row to the wire shape (ISO timestamps). */
+function toBackupRunWire(r: BackupRunRow) {
+  return {
+    id: r.id,
+    operationId: r.operationId,
+    backupType: r.backupType,
+    status: r.status,
+    startedAt: r.startedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+    artifactLabel: r.artifactLabel,
+    artifactSizeBytes: r.artifactSizeBytes,
+    verificationMethod: r.verificationMethod,
+    verificationStatus: r.verificationStatus,
+    verifiedAt: r.verifiedAt?.toISOString() ?? null,
+    failureReason: r.failureReason,
+    executorType: r.executorType,
+  };
+}
+
+/** Maps a restore-drill row to the wire shape (ISO timestamps). */
+function toRestoreDrillWire(r: RestoreDrillRow) {
+  return {
+    id: r.id,
+    operationId: r.operationId,
+    backupType: r.backupType,
+    result: r.result,
+    source: r.source,
+    startedAt: r.startedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+    durationMs: r.durationMs,
+    failureReason: r.failureReason,
+  };
+}
 
 /**
  * P7-E2A (ADR-017 D8) — builds the OPERATIONAL diagnostics payload (the

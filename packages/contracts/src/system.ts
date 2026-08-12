@@ -215,3 +215,90 @@ export const DiagnosticsResponseSchema = z.object({
 
 /** Type for the system diagnostics response. */
 export type DiagnosticsResponse = z.infer<typeof DiagnosticsResponseSchema>;
+
+// ── Backup evidence (P7-E2B) ─────────────────────────────────────
+
+/**
+ * A backup-run evidence record as exposed by the read projection. The
+ * artifact is referenced by its safe LABEL only — never a host path, never a
+ * credential-bearing URI (ADR-017 D11). `failureReason` is sanitized.
+ */
+export const BackupRunSchema = z.object({
+  id: z.string().uuid(),
+  operationId: z.string(),
+  backupType: z.enum(["logical", "physical_base", "cold_filesystem"]),
+  status: z.enum(["running", "succeeded", "failed", "abandoned"]),
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+  artifactLabel: z.string().nullable(),
+  artifactSizeBytes: z.number().int().min(0).nullable(),
+  verificationMethod: z.string().nullable(),
+  verificationStatus: z.enum(["verified", "failed", "pending"]).nullable(),
+  verifiedAt: z.string().nullable(),
+  failureReason: z.string().nullable(),
+  executorType: z.enum(["host_script", "deployment_drill"]),
+});
+
+/** Type for a backup-run evidence record. */
+export type BackupRun = z.infer<typeof BackupRunSchema>;
+
+/**
+ * Response schema for GET /system/backups — the read-only backup evidence
+ * projection (Admin + Maintainer). Read-only by construction: no write
+ * sibling exists (backup.trigger / schedule / retention are decision-gated,
+ * ADR-017 D5).
+ */
+export const BackupEvidenceResponseSchema = z.object({
+  latest: BackupRunSchema.nullable(),
+  latestVerified: BackupRunSchema.nullable(),
+  lastFailure: BackupRunSchema.nullable(),
+  counts: z.object({
+    running: z.number().int().min(0),
+    succeeded: z.number().int().min(0),
+    failed: z.number().int().min(0),
+    abandoned: z.number().int().min(0),
+  }),
+  history: z.array(BackupRunSchema),
+});
+
+/** Type for the backup evidence response. */
+export type BackupEvidenceResponse = z.infer<
+  typeof BackupEvidenceResponseSchema
+>;
+
+// ── Restore-readiness evidence (P7-E2B) ──────────────────────────
+
+/**
+ * A restore-drill evidence record. `source` distinguishes automated proof
+ * (`automated`) from operator declaration (`operator_declared`) — a declared
+ * success is never rendered as automated proof. Restore itself stays
+ * host-only; this is drill EVIDENCE only (ADR-017 D4).
+ */
+export const RestoreDrillRunSchema = z.object({
+  id: z.string().uuid(),
+  operationId: z.string(),
+  backupType: z.enum(["logical", "physical_base", "cold_filesystem"]),
+  result: z.enum(["succeeded", "failed", "operator_declared"]),
+  source: z.enum(["automated", "operator_declared"]),
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+  durationMs: z.number().int().min(0).nullable(),
+  failureReason: z.string().nullable(),
+});
+
+/** Type for a restore-drill evidence record. */
+export type RestoreDrillRun = z.infer<typeof RestoreDrillRunSchema>;
+
+/**
+ * Response schema for GET /system/restore-readiness (Admin + Maintainer).
+ */
+export const RestoreReadinessResponseSchema = z.object({
+  latestDrill: RestoreDrillRunSchema.nullable(),
+  latestSuccessfulDrill: RestoreDrillRunSchema.nullable(),
+  drillHistory: z.array(RestoreDrillRunSchema),
+});
+
+/** Type for the restore-readiness response. */
+export type RestoreReadinessResponse = z.infer<
+  typeof RestoreReadinessResponseSchema
+>;

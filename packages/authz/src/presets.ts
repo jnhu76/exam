@@ -118,6 +118,9 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // P7-E2A (ADR-017 D8): the business-integrity diagnostics block is an
   // Admin-only business-domain surface; Maintainer never receives it.
   Permission.SystemBusinessIntegrityView,
+  // P7-E2B: backup evidence + restore-readiness drill evidence read views.
+  Permission.SystemBackupView,
+  Permission.SystemRestoreReadinessView,
   // P7-E2A (ADR-017 D7): email test is a side effect, split out of the
   // diagnostics view capability. Admin keeps it (compatibility preserved);
   // Maintainer does NOT receive it by default.
@@ -212,6 +215,9 @@ const GRADER_PERMISSIONS: readonly PermissionKey[] = [
 const MAINTAINER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.SystemHealthView,
   Permission.SystemDiagnosticsView,
+  // P7-E2B: backup evidence + restore-readiness drill evidence read views.
+  Permission.SystemBackupView,
+  Permission.SystemRestoreReadinessView,
 ];
 
 // ───────────────────────── Candidate (own-scope runtime) ─────────────────────────

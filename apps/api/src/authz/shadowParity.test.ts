@@ -280,7 +280,7 @@ describe("M10-D shadow parity matrix", () => {
   });
 
   it("Maintainer receives ONLY the two operational M10-D perms (P7-E2A)", () => {
-    const operational = new Set([
+    const operational = new Set<PermissionKey>([
       Permission.SystemHealthView,
       Permission.SystemDiagnosticsView,
     ]);

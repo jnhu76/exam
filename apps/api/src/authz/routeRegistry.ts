@@ -867,6 +867,33 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "admin_only",
       migrationStage: 6,
     },
+    {
+      // P7-E2B: read-only backup evidence projection (Admin + Maintainer).
+      // No write sibling exists — backup.trigger/schedule/retention are
+      // decision-gated (ADR-017 D5) and NOT implemented.
+      method: "GET",
+      path: "/system/backups",
+      legacyGate: "Admin",
+      permission: Permission.SystemBackupView,
+      scope: Scope.System,
+      resolver: "system",
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 9,
+    },
+    {
+      // P7-E2B: read-only restore-readiness / drill evidence projection
+      // (Admin + Maintainer). Restore itself stays host-only (ADR-017 D4).
+      method: "GET",
+      path: "/system/restore-readiness",
+      legacyGate: "Admin",
+      permission: Permission.SystemRestoreReadinessView,
+      scope: Scope.System,
+      resolver: "system",
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 9,
+    },
 
     // ── Exam lifecycle ──
     {

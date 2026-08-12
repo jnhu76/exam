@@ -218,6 +218,13 @@
       "when": 1788500000000,
       "tag": "0030_nifty_nekra",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0031_secret_annihilus",
+      "breakpoints": true
     }
   ]
 }
