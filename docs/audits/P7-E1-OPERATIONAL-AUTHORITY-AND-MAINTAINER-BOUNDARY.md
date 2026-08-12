@@ -157,10 +157,12 @@ P7-C closeout, P7-E0 audit, `docs/architecture/authorization.md`.
   exists anywhere in the catalog.** `grep` across `packages/authz`,
   `apps/api/src`, and `apps/web/src` for backup/restore/pitr/wal/secret
   capability keys returns zero matches.
-- **Roles:** exactly six presets (`catalog.ts:176–183`,
+- **Roles:** exactly six presets today (`catalog.ts:176–183`,
   `presets.ts:213–308`): Admin, Teacher, Proctor, Grader, Candidate, System
-  (non-login, non-assignable). No Maintainer role exists — and per §9.3 none
-  is needed.
+  (non-login, non-assignable). **No Maintainer role exists TODAY** —
+  ADR-017 requires the Application Maintainer preset to be materialized in
+  **P7-E2A** as a seventh built-in role (amending ADR-010's role preset
+  set / closed union / seed contract; §9.3).
 
 ### 4.2 Admin preset (the "compatibility superset")
 
@@ -385,16 +387,17 @@ Three options were compared:
 
 | Option | Shape | Verdict |
 | --- | --- | --- |
-| **A** — Maintainer as a full product DB role, implemented now | seeded role + assignment + login + UI | **Rejected for E1/E2.** No product surface exists today that the role would authorize; implementing it would create pressure for destructive UI before any surface, the exact coupling the program forbids. The role *concept* is recognized (Option C) and materialized later when a real surface exists (E2A). |
+| **A** — Maintainer as a full product DB role, implemented now | seeded role + assignment + login + UI | **Rejected for E1**: do not implement the role before the authority contract is accepted — an implemented role with no surface would invite destructive UI before any surface exists, the exact coupling the program forbids. **E2A materializes only the application-side Maintainer preset defined by Hybrid Option C** (a capability bundle amending ADR-010's role set, not a full product role with UI). |
 | **B** — Maintainer as pure host/operator identity, no product identity (previous PR #281 head) | host/CLI only | **Rejected (corrected in this revision).** It fails the program's core goal: Admin and Maintainer must be **two distinct system roles**. Under B the product had no application-side identity for a separate operations person, so "observation via product" would stay Admin-only forever, and any future ops viewer would require granting Admin. |
-| **C** — Hybrid: application operational identity + host execution identity | product capability preset (future) + host/CLI (today) | **SELECTED.** Preserves least privilege (nothing implemented before a surface exists), satisfies the two-distinct-roles goal, and keeps the hard execution boundary (D4/ADR-017). |
+| **C** — Hybrid: application operational identity + host execution identity | product capability preset (future) + host/CLI (today) | **SELECTED.** Preserves least privilege (nothing implemented before a surface exists), satisfies the two-distinct-roles goal, and keeps the hard execution boundary (D4/ADR-017). The application-side preset is a **required** role (ADR-017 amends ADR-010), materialized in E2A. |
 
 **Consequences of the decision:**
 
-1. **No schema change, no role seed, no login path in E1/E2A-pre.** The
-   separation today is enforced by surface absence + runbook discipline;
-   the Maintainer *concept* is frozen in ADR-017 so it cannot be
-   back-filled as an Admin clone later.
+1. **No schema change, no role seed, no login path in E1** (before the E2A
+   RBAC boundary is accepted and materialized). The separation today is
+   enforced by surface absence + runbook discipline; the Maintainer
+   *concept* — and its ADR-010 role-preset amendment — is frozen in
+   ADR-017 so it cannot be back-filled as an Admin clone later.
 2. **E2 starts with the RBAC boundary, not with more Admin-only surfaces.**
    E2A defines the Maintainer observation capability bundle and splits
    action-under-view capabilities before any new ops view ships (§17).
@@ -415,11 +418,11 @@ Three options were compared:
 | # | Capability | Admin | Application Maintainer (future preset) | Host Maintainer | Where executed |
 | --- | --- | --- | --- | --- | --- |
 | 1 | View business-owner summary (healthy? backup ok? RPO satisfied? critical warning?) | **read** | read | read | product (E2C summary view) |
-| 2 | View detailed ops diagnostics (DB latency, Redis/scanner/worker state, WAL status, backup history, storage pressure, failure detail) | **read (summary today; detailed read re-scoped in E2A)** | **read** | read | product (`/system/diagnostics` split per §13/D8) / host |
+| 2 | View detailed ops diagnostics (DB latency, Redis/scanner/worker state, WAL status, backup history, storage pressure, failure detail) | **read — summary today; detailed read retained through E2A/E2C (migration contract §17.2), optional/read-only afterwards** | **read** | read | product (`/system/diagnostics` split per §13/D8) / host |
 | 3 | View backup status, last success, last verified | **read** | **read** | read | product read view (E2B) / host scripts |
 | 4 | View restore-readiness / drill evidence | **read** | **read** | read | product read view (E2B) / drill output |
-| 5 | View operational policy (desired RPO/retention) | **read** | **read** | read | product (E2C, typed policy record) / runbook |
-| 6 | Set *desired* RPO / retention / drill cadence (intent) | **write (intent only)** | maybe (decision-gated) | maybe | product (E2C) — NEVER binds infra |
+| 5 | View operational policy (desired RPO/retention) | **read** | **read** | read | product (E3, typed policy records) / runbook |
+| 6 | Set *desired* RPO / retention / drill cadence (intent — `system.ops.policy.manage`) | **write (intent only; sole owner)** | **no** (execution-side only: `backup.schedule.manage`, `backup.retention.manage` — decision-gated) | — | product (E3) — NEVER binds infra |
 | 7 | Business authority (users, exams, profiles, grading, publication, recovery decisions, org settings) | **write** | **no** | **no** | product |
 | 8 | View audit log | **read** | no (host logs) | no (host logs) | product |
 | 9 | Backup *trigger* (typed, non-destructive) | **no** | **decision-gated** (D5/D6, not implemented) | **write** | host cron / CLI today |
@@ -514,9 +517,9 @@ recorded here as the future preset's capability contract; "Host Maintainer"
 | `exam.proctor_assignment.view` / `.manage` | ✅ | no | — | Admin-only |
 | **future: `system.backup.view` (E2B)** | ✅ (proposed) | ✅ (proposed) | read (host) | observation, read-only |
 | **future: `system.restore_readiness.view` (E2B)** | ✅ (proposed) | ✅ (proposed) | read (host) | drill evidence, read-only |
-| **future: `system.ops.policy.view` (E2C)** | ✅ (proposed) | ✅ (proposed) | read (host) | observation |
-| **future: `system.ops.policy.manage` (E2C)** | Admin (intent only) | decision-gated | — | intent records, never binds infra |
-| **decision-gated: `backup.trigger` / `backup.schedule.manage` / `backup.retention.manage` / `service.restart` / `operational.policy.manage`** | ❌ (not Admin) | 🔒 decision-gated — NOT IMPLEMENTED, host-owned today, admitted only under ADR-017 D5 conditions | **write (host/CLI today)** | §13.4, ADR-017 D5 |
+| **future: `system.ops.policy.view` (E3)** | ✅ (proposed) | ✅ (proposed) | read (host) | observation (policy records are E3) |
+| **future: `system.ops.policy.manage` (E3)** | Admin (intent only — sole owner) | **no** (execution-side only) | — | intent records, never binds infra; NOT a Maintainer capability |
+| **decision-gated: `backup.trigger` / `backup.schedule.manage` / `backup.retention.manage` / `service.restart`** | ❌ (not Admin) | 🔒 decision-gated — NOT IMPLEMENTED, host-owned today, admitted only under ADR-017 D5 conditions | **write (host/CLI today)** | §13.4, ADR-017 D5 (`operational.policy.manage` deliberately absent — single intent owner is Admin, D9) |
 | **permanently forbidden through product UI: `restore.execute`, `pitr.execute`, `pgdata.delete`, `database.destructive_recovery`, `secret.read_plaintext`, `secret.export`, `host.filesystem.raw_manage`, `db.endpoint.raw_manage`, `redis.credentials.read`** | ❌ | ❌ | host/CLI only | §13.5, ADR-017 D4 |
 
 **Invariants:**
@@ -548,7 +551,7 @@ drill cadence                restore / PITR (host CLI)       failure evidence
 
 | Authority | Owns | Currently implemented? | E2 status |
 | --- | --- | --- | --- |
-| **Admin intent** | desired RPO, retention window, drill cadence — recorded as a **typed operational policy record** (domain-owned, audited, non-binding) | ❌ nothing exists | E2C (operational policy record; §17) |
+| **Admin intent** | desired RPO, retention window, drill cadence — recorded as a **typed operational policy record** (domain-owned, audited, non-binding) | ❌ nothing exists | E3 (intent records + editable policy UI; §17) |
 | **Maintainer execution** | schedule (cron-on-host), destination, WAL archive, retention, restore, PITR, restart — Host Maintainer plane | ✅ P7-C scripts + runbook | **unchanged — never moves into product** (only the non-destructive decision-gated subset could, under ADR-017 D5) |
 | **System evidence** | durable, append-only records of runs + verification + failures + drills, from which Admin (summary) and Maintainer (detail) read truth | ❌ nothing exists | **E2B — the evidence ledger (§17)** |
 
@@ -568,18 +571,30 @@ drill cadence                restore / PITR (host CLI)       failure evidence
 3. Restore readiness display = evidence (last restore drill, backup
    inventory, operator runbook reference). **Restore itself stays
    Host Maintainer + CLI/runbook + host access** (hard boundary, §8/§9.5).
+4. **Admin sets objectives; Maintainer decides implementation** (core P7-E
+   principle, ADR-017 D9). Admin holds `system.ops.policy.manage` (desired
+   objectives — intent only, sole owner); Maintainer holds execution-side
+   policy (`backup.schedule.manage`, `backup.retention.manage`,
+   decision-gated). `operational.policy.manage` is deliberately NOT a
+   capability:
+
+   ```text
+   Admin:      what the system must achieve   (intent)
+   Maintainer: how operations achieve it      (execution/control-plane)
+   System:     whether reality satisfies it   (evidence/status)
+   ```
 
 ---
 
-## 12. Backup run state machine (derived from execution semantics)
+## 12. Backup run execution model — candidate, NON-BINDING
 
 Derived from the **actual P7-C execution semantics** (scripts + drills), not
 adopted from the prompt's example list. **E1 freezes only the invariants**
-(§12.5); the concrete mechanisms below (lease expiry, reconciler sweep,
-active-restore target record, operationId format) are **E2 adversarial-design
-space** — candidates, not commitments of this audit.
+(§12.5); everything in §12.1–§12.4 is a **candidate execution model** —
+lease expiry, reconciler sweep, active-restore target record, operationId
+format are **E2 adversarial-design space**, not commitments of this audit.
 
-### 12.1 States
+### 12.1 Candidate state machine (non-binding)
 
 ```text
         ┌─────────────────────────────────────────────────────────┐
@@ -608,9 +623,9 @@ sidecar file), and the completion record written **after** the restart.
 A restart without a completion record → the run is `abandoned`/`failed` and
 the operator is told to re-verify (§12.9).
 
-### 12.2 Crash questions — answers
+### 12.2 Crash questions — candidate mechanisms
 
-| Question | Answer |
+| Question | Candidate mechanism |
 | --- | --- |
 | Process dies while `running`? | Lease on the `running` record expires; the next run (or reconciler) marks it `abandoned`. The partial artifact is **never** promoted to success. |
 | Same schedule triggered twice? | Host-side single-winner: `operationId` (per schedule-slot + timestamp) has a uniqueness constraint in the evidence store; the second trigger either observes the in-flight record and waits, or is rejected as duplicate (`409`-style no-op), never double-runs. |
@@ -689,7 +704,7 @@ Granted to the **Admin preset** (business-owner summary per §9.4) **and** the
 future **Application Maintainer preset** (detailed ops truth per §9.2).
 Read-only by construction: no write sibling is proposed for execution.
 
-### 13.3 Intent family (E2C candidate, write but non-binding)
+### 13.3 Intent family (E3 candidate, write but non-binding — Admin only)
 
 ```text
 system.ops.policy.manage    # records desired RPO / retention / drill cadence
@@ -697,8 +712,11 @@ system.ops.policy.manage    # records desired RPO / retention / drill cadence
 
 Writes **intent records only** — typed, audited, never bound to infra
 execution, never capable of changing a schedule or destination. The
-DESIRED-vs-CAPABILITY rendering (§11) is its only consumer. Admin may hold
-this; Maintainer may hold it only under a per-capability decision (D5).
+DESIRED-vs-CAPABILITY rendering (§11) is its only consumer. **Admin is the
+sole owner** — this is the single intent capability for operational policy
+(ADR-017 D9). Maintainer's policy authority is execution-side only
+(`backup.schedule.manage`, `backup.retention.manage`, decision-gated
+§13.4); `operational.policy.manage` is deliberately NOT a capability.
 
 ### 13.4 Decision-gated operational capabilities (NOT implemented, host-owned
 today, future decision-gated)
@@ -706,7 +724,6 @@ today, future decision-gated)
 ```text
 backup.trigger             backup.schedule.manage
 backup.retention.manage    service.restart
-operational.policy.manage
 ```
 
 These are **not** Admin capabilities and **not** permanently forbidden. They
@@ -723,6 +740,11 @@ for that specific capability: **typed contract, least privilege, audit,
 idempotency, explicit failure semantics, non-secret abstraction** (ADR-017
 D5). Each admission needs its own recorded decision (P7-D1-style gate). This
 audit neither promises nor forbids them.
+
+`operational.policy.manage` is **deliberately absent**: operational-policy
+intent has exactly ONE owner (Admin, §13.3); Maintainer's policy authority
+is execution-side (`backup.schedule.manage`, `backup.retention.manage`) —
+decision-gated here, not intent.
 
 ### 13.5 Permanently forbidden through normal product UI
 
@@ -855,8 +877,12 @@ RBAC cannot prevent root from reading disks. This is stated honestly, not
 hidden: the product boundary guarantees only that host authority does **not**
 automatically confer **application-authorized business action**:
 
-- the Host Maintainer has no product account in E1/E2; they cannot log in,
-  publish, grade, or assign through the product;
+- the Host Maintainer plane grants no product account by itself in E1/E2;
+  after E2A the same real person may additionally hold an Application
+  Maintainer account — but each plane is granted separately, and host
+  authority DOES NOT IMPLY an Application Maintainer identity (ADR-017
+  D12). Without such an account they cannot log in, publish, grade, or
+  assign through the product;
 - if E2A adds an Application Maintainer viewer identity, it grants
   observation only — and it is a separate plane from host access.
 
@@ -985,11 +1011,15 @@ E1 (this document + ADR-017). This report is the review artifact.
 P7-E2A  Operational RBAC Boundary
           define/implement the Maintainer observation capability bundle
           (observation family §13.2; zero business permissions — hard
-          constraint)
+          constraint) — amends the ADR-010 role preset set (seventh
+          built-in role; §9.3, ADR-017 D2)
           split dangerous action-under-view capabilities (D7 / P2-1:
           POST /email/test → its own capability + audit)
-          record the operational-vs-business diagnostics domain split
-          (D8 / P2-2)
+          split the operational-vs-business diagnostics domains (D8 / P2-2)
+          MIGRATION CONTRACT: split authority WITHOUT breaking existing
+          Admin visibility — during migration Admin temporarily retains
+          both summary + detailed read; Maintainer receives ONLY
+          operational diagnostics, never business-integrity diagnostics
           → no new Admin-only operations surface may ship before this
 
 P7-E2B  Backup Evidence Ledger
@@ -1003,21 +1033,28 @@ P7-E2B  Backup Evidence Ledger
           restore-drill evidence records
           crash/idempotency tests (all §12.2 cases)
 
-P7-E2C  Admin / Maintainer Operational Views
-          Admin gets the business-owner summary (D1): system healthy?,
+P7-E2C  Admin / Maintainer Operational Views (VIEWS ONLY)
+          Admin gets the business-owner summary UI (D1): system healthy?,
           backup healthy?, RPO satisfied?, last verified backup?,
           critical warning?
-          Maintainer gets the detailed operations view (D2/D8): DB latency,
+          Maintainer gets the detailed operations UI (D2/D8): DB latency,
           Redis state, scanner/worker state, WAL status, backup history,
           storage pressure, technical failure detail
-          operational policy intent records (desired RPO/retention) with
-          DESIRED vs CURRENT CAPABILITY vs STATUS rendering
+          operational policy intent records + editable policy UI are
+          P7-E3, NOT E2C
+          only after E2C is usable may detailed Admin visibility be
+          removed, if the product still wants that restriction
 ```
 
 E2A–E2C may be merged into one or more PRs; the ordering constraint is what
 binds. The previous "E2.1 evidence-first" recommendation is superseded:
 **no further Admin-only operations surface may be added before the
 Maintainer RBAC boundary exists.**
+
+Conservative read rule: Admin's summary read is **guaranteed**; Admin's
+detailed diagnostics read is **optional/read-only** afterwards — the
+separation that matters is that Admin cannot **OPERATE** infrastructure, not
+that Admin must be blind to infrastructure details (ADR-017 D13).
 
 ### 17.3 Explicitly NOT in E2 (per stop condition and anti-goals)
 
@@ -1027,17 +1064,26 @@ NO retention engine (manual + fail-closed invariant; cross-authority
    protocol is an open E2 design question, §12.5)
 NO browser restore / PITR / destructive controls (forever, ADR-017 D4)
 NO Maintainer role seed / login path beyond E2A's capability-bundle
-   definition (E2A defines the preset contract; provisioning follows D2)
+   definition (E2A defines the preset contract + ADR-010 amendment;
+   provisioning follows D2)
 NO decision-gated capabilities (backup.trigger etc.) admitted without
    their own recorded decision (ADR-017 D5)
+NO operational policy intent records / editable policy UI (E3, §17.4)
 NO secrets handling changes
 ```
 
 ### 17.4 E3 (only after E2 is accepted and reviewed)
 
-Operational policy records + UI closeout: Admin Operations View (business-
-owner summary) vs Maintainer Operations View (detailed ops) — "不要因为两个
-页面都属于'系统'就把按钮混在一起".
+Operational policy records + editable policy UI + UI closeout:
+
+- `system.ops.policy.manage` — Admin records desired RPO / retention /
+  drill cadence (intent, non-binding; DESIRED vs CURRENT CAPABILITY vs
+  STATUS rendering, §11 rule 4);
+- Admin Operations View (business-owner summary) vs Maintainer Operations
+  View (detailed ops) — "不要因为两个页面都属于'系统'就把按钮混在一起";
+- the former "future E1 settings" slice (confirmed Admin-editable
+  operational settings, Email worker/retry candidate) merges here — E3, not
+  a separate E1 numbering.
 
 ---
 
@@ -1132,16 +1178,18 @@ owner summary) vs Maintainer Operations View (detailed ops) — "不要因为两
     user/role-assignment path and must NOT inherit Admin capabilities (§14).
 17. **What capability family is proposed?** Observation read-only
     (`system.backup.view`, `system.restore_readiness.view`,
-    `system.ops.policy.view`), intent-write (`system.ops.policy.manage`),
-    decision-gated operations (backup.trigger / schedule / retention /
-    service.restart — D5 conditions), permanently-forbidden execution keys
-    (§13).
+    `system.ops.policy.view`), intent-write (`system.ops.policy.manage` —
+    E3, Admin-only, non-binding), decision-gated operations (backup.trigger
+    / schedule / retention / service.restart — D5 conditions;
+    `operational.policy.manage` deliberately absent), permanently-forbidden
+    execution keys (§13).
 18. **Do we need an ADR?** Yes — ADR-017 (PROPOSED, rev 2) freezes the
     boundary and the Hybrid model (§9, §18).
 19. **What is decision-gated vs permanently forbidden?** Decision-gated
     (future, each with its own recorded decision): `backup.trigger`,
-    `backup.schedule.manage`, `backup.retention.manage`, `service.restart`,
-    `operational.policy.manage`. Permanently forbidden through product UI:
+    `backup.schedule.manage`, `backup.retention.manage`, `service.restart`
+    (`operational.policy.manage` deliberately absent — intent has one
+    owner, Admin). Permanently forbidden through product UI:
     restore/PITR/PGDATA-delete/destructive-recovery, raw secret read/export,
     raw host/filesystem/db-endpoint/redis-credential access (§13.4/§13.5).
 
@@ -1185,15 +1233,19 @@ The real gap is evidence, not authority:
 Recommended next slice:  GO P7-E2 (conditional on human review)
   authority-first sequence (ADR-017 D13):
     E2A Operational RBAC Boundary — Maintainer observation capability
-        bundle; split action-under-view capabilities (email-test
-        invariant D7); diagnostics domain split (D8); zero business perms
+        bundle (amends ADR-010 role preset set — seventh built-in role);
+        split action-under-view capabilities (email-test invariant D7);
+        diagnostics domain split (D8); zero business perms; migration
+        contract: no Admin visibility regression during the split
     E2B Backup Evidence Ledger — typed backup_runs/events, script
         instrumentation, truthful verification evidence, read projections
-    E2C Admin/Maintainer Operational Views — business-owner summary vs
-        detailed ops view; intent policy records
+    E2C Admin/Maintainer Operational Views — VIEWS ONLY (business-owner
+        summary vs detailed ops); policy records + editable policy UI
+        are E3
   NO scheduler, NO retention engine, NO restore surface, NO Maintainer
   role seed in E1; decision-gated capabilities (backup.trigger etc.) stay
-  host-owned pending their own recorded decisions (D5).
+  host-owned pending their own recorded decisions (D5); operational-policy
+  intent has ONE owner (Admin, system.ops.policy.manage — E3)
 
 Findings (re-evaluated):  P0: 0 | P1: 0 | P2: 3 (P2-1 view-capability
   side-effect invariant violation → E2A precondition; P2-2 diagnostics

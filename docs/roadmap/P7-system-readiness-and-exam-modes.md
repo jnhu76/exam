@@ -402,13 +402,16 @@ SQL status updates.
 > (host/CLI, not product RBAC). The real gap is durable backup *evidence*
 > (P7-C ships mechanisms with zero in-product records). Recommended next
 > slice: **GO P7-E2 (conditional on human review)** — authority-first:
-> E2A Operational RBAC Boundary (Maintainer observation bundle; split
-> action-under-view capabilities; diagnostics domain split) → E2B Backup
-> Evidence Ledger (typed `backup_runs` + script instrumentation + truthful
-> verification evidence + read projections) → E2C Admin/Maintainer
-> Operational Views. No scheduler, no retention engine, no restore surface,
-> no Maintainer role seed in E1; decision-gated capabilities (backup.trigger
-> etc.) stay host-owned pending their own recorded decisions.
+> E2A Operational RBAC Boundary (Maintainer observation bundle — amends
+> ADR-010's role preset set; split action-under-view capabilities;
+> diagnostics domain split; no Admin visibility regression during
+> migration) → E2B Backup Evidence Ledger (typed `backup_runs` + script
+> instrumentation + truthful verification evidence + read projections) →
+> E2C Admin/Maintainer Operational Views (views only). No scheduler, no
+> retention engine, no restore surface, no Maintainer role seed in E1;
+> decision-gated capabilities (backup.trigger etc.) stay host-owned
+> pending their own recorded decisions; operational-policy intent has ONE
+> owner (Admin, `system.ops.policy.manage` — E3).
 >
 > **P7-E0 status (2026-08-10):** the configuration reality audit is **CLOSED**
 > (merged via PR #276) — see

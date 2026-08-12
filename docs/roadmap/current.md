@@ -237,22 +237,27 @@ P7-M   configurable exam modes (product closeout) — FUNCTIONALLY COMPLETE;
 Future P7-E2  (gated on human review of P7-E1) — authority-first sequence
        (ADR-017 D13; may merge into one or more PRs):
          E2A Operational RBAC Boundary — Maintainer observation capability
-             bundle; split action-under-view capabilities (email-test
-             invariant); diagnostics domain split; zero business perms
+             bundle (amends ADR-010 role preset set; zero business perms);
+             split action-under-view capabilities (email-test invariant);
+             diagnostics domain split; no Admin visibility regression
+             during migration
          E2B Backup Evidence Ledger — typed backup_run/restore_drill
              evidence written by the existing P7-C scripts at their natural
              checkpoints, truthful verification evidence, read projections
-         E2C Admin/Maintainer Operational Views — business-owner summary vs
-             detailed ops view; operational policy intent records
+         E2C Admin/Maintainer Operational Views — VIEWS ONLY
+             (business-owner summary vs detailed ops view)
        NO scheduler, NO retention engine, NO restore surface, NO Maintainer
        role seed in E1; backup.trigger etc. stay decision-gated (host-owned
-       today).
-Future P7-E3  (operational settings; only if a confirmed Admin-editable
-       operational-settings requirement emerges — the former "future E1
-       settings" item, renamed to avoid E1 numbering conflict): identify ONE
-       coherent first vertical slice. Email worker/retry is a candidate under
-       that gate; backup automation/status is the separate E2B operational
-       capability above, not a settings slice.
+       today); operational-policy intent has ONE owner (Admin,
+       system.ops.policy.manage — E3).
+Future P7-E3  operational policy records + editable policy UI — Admin
+       records desired RPO/retention/drill cadence (intent, non-binding);
+       includes the former "future E1 settings" item (renamed to avoid E1
+       numbering conflict) — only if a confirmed Admin-editable
+       operational-settings requirement emerges, identify ONE coherent
+       first slice. Email worker/retry is a candidate under that gate;
+       backup automation/status is the separate E2B operational capability
+       above, not a settings slice.
 UI pilot → controlled family-by-family UI closeout
 ```
 
