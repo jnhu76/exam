@@ -21601,7 +21601,7 @@
                         },
                         "result": {
                           "type": "string",
-                          "enum": ["succeeded", "failed", "operator_declared"]
+                          "enum": ["succeeded", "failed"]
                         },
                         "source": {
                           "type": "string",
@@ -21658,7 +21658,7 @@
                         },
                         "result": {
                           "type": "string",
-                          "enum": ["succeeded", "failed", "operator_declared"]
+                          "enum": ["succeeded", "failed"]
                         },
                         "source": {
                           "type": "string",
@@ -21717,7 +21717,7 @@
                           },
                           "result": {
                             "type": "string",
-                            "enum": ["succeeded", "failed", "operator_declared"]
+                            "enum": ["succeeded", "failed"]
                           },
                           "source": {
                             "type": "string",

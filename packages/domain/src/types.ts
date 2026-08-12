@@ -921,15 +921,21 @@ export type BackupVerificationStatus = "verified" | "failed" | "pending";
 export type BackupExecutorType = "host_script" | "deployment_drill";
 
 /**
- * Restore-drill outcome (P7-E2B). `operator_declared` results are human
- * attestations recorded by the operator after a host-side drill; they are
- * NEVER rendered as automated proof. `succeeded`/`failed` come from the
- * automated drill harness (or the host restore script's own verification).
+ * Restore-drill OUTCOME (P7-E2B). Two orthogonal dimensions — `result` is
+ * WHAT happened, `source` is WHO proved it:
+ *
+ *   result: succeeded | failed
+ *   source: automated | operator_declared
+ *
+ * An operator-confirmed successful restore is `succeeded` +
+ * `operator_declared`; an operator-recorded failure is `failed` +
+ * `operator_declared`. A failed drill NEVER satisfies the drill cadence
+ * regardless of source.
  */
-export type RestoreDrillResult = "succeeded" | "failed" | "operator_declared";
+export type RestoreDrillResult = "succeeded" | "failed";
 
 /**
- * Source of a restore-drill evidence record:
+ * Source of a restore-drill evidence record — who PROVED the outcome:
  * - `automated`: the deterministic deployment drill ran and proved the result.
  * - `operator_declared`: the operator recorded the drill outcome manually.
  * The read projection must distinguish these — a declared success is not

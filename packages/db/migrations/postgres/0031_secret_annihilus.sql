@@ -45,7 +45,7 @@ CREATE TABLE "restore_drill_runs" (
 	"failure_reason" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "restore_drill_runs_result_check" CHECK ("restore_drill_runs"."result" IN ('succeeded', 'failed', 'operator_declared')),
+	CONSTRAINT "restore_drill_runs_result_check" CHECK ("restore_drill_runs"."result" IN ('succeeded', 'failed')),
 	CONSTRAINT "restore_drill_runs_source_check" CHECK ("restore_drill_runs"."source" IN ('automated', 'operator_declared'))
 );
 --> statement-breakpoint

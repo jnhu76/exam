@@ -269,16 +269,18 @@ export type BackupEvidenceResponse = z.infer<
 // ── Restore-readiness evidence (P7-E2B) ──────────────────────────
 
 /**
- * A restore-drill evidence record. `source` distinguishes automated proof
- * (`automated`) from operator declaration (`operator_declared`) — a declared
- * success is never rendered as automated proof. Restore itself stays
- * host-only; this is drill EVIDENCE only (ADR-017 D4).
+ * A restore-drill evidence record. Two orthogonal dimensions: `result` is
+ * WHAT happened (succeeded | failed), `source` is WHO proved it
+ * (`automated` deployment drill vs `operator_declared`). A declared success
+ * is never rendered as automated proof; a failed drill never satisfies the
+ * drill cadence. Restore itself stays host-only; this is drill EVIDENCE
+ * only (ADR-017 D4).
  */
 export const RestoreDrillRunSchema = z.object({
   id: z.string().uuid(),
   operationId: z.string(),
   backupType: z.enum(["logical", "physical_base", "cold_filesystem"]),
-  result: z.enum(["succeeded", "failed", "operator_declared"]),
+  result: z.enum(["succeeded", "failed"]),
   source: z.enum(["automated", "operator_declared"]),
   startedAt: z.string(),
   completedAt: z.string().nullable(),

@@ -5166,7 +5166,7 @@
       "checkConstraints": {
         "restore_drill_runs_result_check": {
           "name": "restore_drill_runs_result_check",
-          "value": "\"restore_drill_runs\".\"result\" IN ('succeeded', 'failed', 'operator_declared')"
+          "value": "\"restore_drill_runs\".\"result\" IN ('succeeded', 'failed')"
         },
         "restore_drill_runs_source_check": {
           "name": "restore_drill_runs_source_check",

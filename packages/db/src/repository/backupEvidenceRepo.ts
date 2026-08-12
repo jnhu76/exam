@@ -12,7 +12,7 @@ import type {
   RestoreDrillResult,
   RestoreDrillSource,
 } from "@exam/domain";
-import { executeInTransaction } from "../types.js";
+import { executeInTransaction, hasPostgresErrorCode } from "../types.js";
 
 /** A backup-run evidence row (P7-E2B). */
 export type BackupRunRow = {
@@ -241,8 +241,18 @@ export function createBackupEvidenceRepo(db: Database) {
       /** True start of the run, when the caller knows it (e.g. cold-import
        *  spool); defaults to `now` when start evidence was not recorded. */
       startedAt?: Date;
+      /** True completion of the run, when the caller knows it (e.g. cold-import
+       *  spool); defaults to `now`. The RPO projection reads `verifiedAt`, so
+       *  a caller with older evidence MUST pass the real completion here and
+       *  as `verifiedAt` — importing an old backup with `now` would falsify
+       *  its age (P7-E truthful evidence). */
+      completedAt?: Date;
     },
   ): Promise<BackupRunRow> {
+    // Evidence time authority: the run's terminal timestamps come from the
+    // caller-provided completion when known, otherwise from `now`. `now`
+    // remains the ledger-ingestion time (createdAt/updatedAt/events).
+    const completedAt = params.completedAt ?? params.now;
     try {
       return await executeInTransaction(db, async (tx) => {
         const orgId = ctx.organizationId;
@@ -276,6 +286,8 @@ export function createBackupEvidenceRepo(db: Database) {
               backupType: params.backupType,
               status: "failed",
               startedAt: params.startedAt ?? params.now,
+              // The REJECTED attempt happened now (at completion/import time) —
+              // never back-dated to the artifact's completion.
               completedAt: params.now,
               artifactLabel: params.artifactLabel,
               artifactSizeBytes: params.artifactSizeBytes,
@@ -321,7 +333,7 @@ export function createBackupEvidenceRepo(db: Database) {
             .update(backupRuns)
             .set({
               status: "succeeded",
-              completedAt: params.now,
+              completedAt,
               artifactLabel: params.artifactLabel,
               artifactSizeBytes: params.artifactSizeBytes,
               verificationMethod: params.verificationMethod,
@@ -343,8 +355,8 @@ export function createBackupEvidenceRepo(db: Database) {
               // the ledger records start==complete (evidence time) unless the
               // caller knows the true start (e.g. cold-import spool).
               // Truthful: no claim is made about when the run actually began.
-              startedAt: params.startedAt ?? params.now,
-              completedAt: params.now,
+              startedAt: params.startedAt ?? completedAt,
+              completedAt,
               artifactLabel: params.artifactLabel,
               artifactSizeBytes: params.artifactSizeBytes,
               verificationMethod: params.verificationMethod,
@@ -376,13 +388,9 @@ export function createBackupEvidenceRepo(db: Database) {
     } catch (err) {
       // Concurrent duplicate completion: another transaction committed a
       // `succeeded` row between our read and insert (23505 on the partial
-      // unique index). Fail closed — re-read and classify.
-      if (
-        typeof err === "object" &&
-        err !== null &&
-        "code" in err &&
-        (err as { code: unknown }).code === "23505"
-      ) {
+      // unique index). Fail closed — re-read and classify. The code check
+      // walks the error chain (Drizzle wraps the Postgres error).
+      if (hasPostgresErrorCode(err, "23505")) {
         const existing = await latestSucceededRun(ctx, params.operationId);
         if (existing && existing.artifactLabel === params.artifactLabel) {
           return existing;

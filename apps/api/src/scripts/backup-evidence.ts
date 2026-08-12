@@ -10,14 +10,14 @@
  *
  * Usage (host, via the app container):
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
- *     start --operation-id logical:2026-08-12 --type logical \
+ *     start --operation-id logical:2026-08-12T10 --type logical \
  *       --artifact-label exam-2026-08-12.dump --executor host_script
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
- *     complete --operation-id logical:2026-08-12 --type logical \
+ *     complete --operation-id logical:2026-08-12T10 --type logical \
  *       --artifact-label exam-2026-08-12.dump --size-bytes 123456 \
  *       --verification-method pg_restore_list --executor host_script
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
- *     fail --operation-id logical:2026-08-12 --type logical \
+ *     fail --operation-id logical:2026-08-12T10 --type logical \
  *       --reason "pg_restore --list rejected the archive" --executor host_script
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
  *     drill --operation-id logical-restore:2026-08-12 --backup-type logical \
@@ -50,11 +50,7 @@ const EXECUTOR_TYPES: readonly BackupExecutorType[] = [
   "host_script",
   "deployment_drill",
 ];
-const DRILL_RESULTS: readonly RestoreDrillResult[] = [
-  "succeeded",
-  "failed",
-  "operator_declared",
-];
+const DRILL_RESULTS: readonly RestoreDrillResult[] = ["succeeded", "failed"];
 const DRILL_SOURCES: readonly RestoreDrillSource[] = [
   "automated",
   "operator_declared",
@@ -299,13 +295,29 @@ async function main(): Promise<void> {
         if (Number.isNaN(startedAt.getTime())) {
           fail(`spool: startedAt is not a valid date: ${spool.startedAt}`);
         }
+        // TRUTHFUL RPO (P7-E review P1-2): the ledger must record WHEN the
+        // backup actually protected the data, not when the evidence was
+        // imported into PostgreSQL. `spool.completedAt` is the true
+        // completion/verification time of the cold copy; `now` is only the
+        // ledger-ingestion time (createdAt/updatedAt/events). A backup taken
+        // days ago must NOT render as freshly verified because it was
+        // imported today. Missing completedAt (legacy spool) falls back to
+        // startedAt — never to `now`, which would overstate the protection.
+        const completedAt =
+          typeof spool.completedAt === "string"
+            ? new Date(spool.completedAt)
+            : startedAt;
+        if (Number.isNaN(completedAt.getTime())) {
+          fail(`spool: completedAt is not a valid date: ${spool.completedAt}`);
+        }
         const run = await repo.completeRun(ctx, {
           operationId: spool.operationId,
           backupType,
           artifactLabel: spool.artifactLabel,
           artifactSizeBytes: sizeBytes,
           verificationMethod,
-          verifiedAt: now,
+          verifiedAt: completedAt,
+          completedAt,
           executorType: assertExecutor(
             typeof spool.executorType === "string"
               ? spool.executorType
@@ -316,7 +328,7 @@ async function main(): Promise<void> {
         });
         if (run.status === "succeeded") {
           process.stdout.write(
-            `imported verified cold backup ${run.operationId} (started ${startedAt.toISOString()})\n`,
+            `imported verified cold backup ${run.operationId} (started ${startedAt.toISOString()}, completed ${completedAt.toISOString()})\n`,
           );
         } else {
           process.stderr.write(

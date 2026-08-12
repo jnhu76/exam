@@ -1425,7 +1425,7 @@ export const restoreDrillRuns = pgTable(
     ),
     check(
       "restore_drill_runs_result_check",
-      sql`${table.result} IN ('succeeded', 'failed', 'operator_declared')`,
+      sql`${table.result} IN ('succeeded', 'failed')`,
     ),
     check(
       "restore_drill_runs_source_check",

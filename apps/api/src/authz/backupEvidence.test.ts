@@ -230,6 +230,38 @@ describe("P7-E2B backup evidence ledger", () => {
     expect(done.startedAt.toISOString()).toBe(startedAt.toISOString());
   });
 
+  it("completeRun stores the caller-provided completion time — an old backup imported now never renders as freshly verified (P7-E truthful RPO)", async () => {
+    const operationId = opId();
+    // A cold backup that ACTUALLY ran Aug 11 01:00→02:00, imported into the
+    // ledger Aug 12 18:00 (the machine was down in between). The ledger must
+    // keep the real completion/verification time as the RPO authority and
+    // record the ingestion time only in createdAt/updatedAt.
+    const startedAt = new Date("2026-08-11T01:00:00Z");
+    const completedAt = new Date("2026-08-11T02:00:00Z");
+    const importTime = new Date("2026-08-12T18:00:00Z");
+    const done = await repo().completeRun(ctx, {
+      operationId,
+      backupType: "cold_filesystem",
+      artifactLabel: "cold-2026-08-11.dump",
+      artifactSizeBytes: 50,
+      verificationMethod: "pg_version_presence",
+      verifiedAt: completedAt,
+      completedAt,
+      executorType: "host_script",
+      now: importTime,
+      startedAt,
+    });
+    expect(done.status).toBe("succeeded");
+    expect(done.startedAt.toISOString()).toBe(startedAt.toISOString());
+    expect(done.completedAt?.toISOString()).toBe(completedAt.toISOString());
+    expect(done.verifiedAt?.toISOString()).toBe(completedAt.toISOString());
+    // Ingestion time is the evidence-commit time, never the protection time.
+    expect(done.createdAt.toISOString()).toBe(importTime.toISOString());
+    // The RPO authority timestamp (verifiedAt) is 40h old — NOT import time.
+    const latest = await repo().latestSucceededRun(ctx);
+    expect(latest?.verifiedAt?.toISOString()).toBe(completedAt.toISOString());
+  });
+
   it("lastFailure ignores failed rows with a NULL completion time (NULLS LAST)", async () => {
     const operationId = opId();
     await repo().failRun(ctx, {
@@ -368,19 +400,22 @@ describe("P7-E2B backup evidence ledger", () => {
       completedAt: new Date("2026-08-10T09:42:00Z"),
       durationMs: 2520000,
     });
+    // An operator-declared FAILED drill: result and source are orthogonal —
+    // `failed` is the outcome, `operator_declared` is who recorded it.
     await repo().recordDrill(ctx, {
       operationId: "logical-restore:2026-08-11",
       backupType: "logical",
-      result: "operator_declared",
+      result: "failed",
       source: "operator_declared",
       startedAt: new Date("2026-08-11T09:00:00Z"),
       completedAt: new Date("2026-08-11T09:30:00Z"),
       durationMs: 1800000,
+      failureReason: "restore rejected the archive",
     });
     const drills = await repo().listDrills(ctx);
     expect(drills).toHaveLength(2);
     const latest = await repo().latestDrill(ctx);
-    expect(latest?.result).toBe("operator_declared");
+    expect(latest?.result).toBe("failed");
     expect(latest?.source).toBe("operator_declared");
   });
 
@@ -404,6 +439,7 @@ describe("P7-E2B backup evidence ledger", () => {
       source: "operator_declared",
       startedAt: new Date("2026-08-11T09:00:00Z"),
       completedAt: new Date("2026-08-11T09:30:00Z"),
+      failureReason: "operator re-check failed",
     });
     expect(returned.source).toBe("automated");
     expect(returned.result).toBe("succeeded");
@@ -413,14 +449,16 @@ describe("P7-E2B backup evidence ledger", () => {
     expect(latest?.result).toBe("succeeded");
 
     // Compatible re-recording (operator_declared over operator_declared)
-    // still updates in place.
+    // still updates in place: a declared FAILURE corrected to a declared
+    // SUCCESS is a single logical drill re-run, not two records.
     await repo().recordDrill(ctx, {
       operationId: "logical-restore:declared",
       backupType: "logical",
-      result: "operator_declared",
+      result: "failed",
       source: "operator_declared",
       startedAt: new Date("2026-08-10T09:00:00Z"),
       completedAt: new Date("2026-08-10T09:30:00Z"),
+      failureReason: "first attempt failed",
     });
     const redone = await repo().recordDrill(ctx, {
       operationId: "logical-restore:declared",
