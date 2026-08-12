@@ -154,8 +154,10 @@ echo "  auth: loopback TCP + scram-sha-256, password via PGPASSWORD (never argv)
 # artifact NAME only, never host paths).
 EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-physical_base:$(date +%F)}"
 ARTIFACT_LABEL="$(basename "${DEST}")"
+# Container-name addressing (cwd-independent — see the same note in
+# postgres-logical-backup.sh).
 evidence() {
-  docker compose -p "${PROJECT}" exec -T app node dist/scripts/backup-evidence.js "$@"
+  docker exec "${PROJECT}-app-1" node dist/scripts/backup-evidence.js "$@"
 }
 evidence_start() {
   if ! evidence start --operation-id "${EVIDENCE_OPERATION_ID}" \

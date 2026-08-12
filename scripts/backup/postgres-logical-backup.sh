@@ -72,8 +72,12 @@ ARTIFACT_LABEL="$(basename "${DEST}")"
 # backup); COMPLETE evidence is a hard gate — a verified artifact that cannot
 # be recorded is reported loudly and the script exits non-zero so cron does
 # not silently count a run the product ledger cannot see.
+#
+# Container-name addressing (like DB_CONTAINER below) — deliberately NOT
+# `docker compose -p ... exec`, which requires a compose file in the invoking
+# cwd (breaks under host cron with a different working directory).
 evidence() {
-  docker compose -p "${PROJECT}" exec -T app node dist/scripts/backup-evidence.js "$@"
+  docker exec "${PROJECT}-app-1" node dist/scripts/backup-evidence.js "$@"
 }
 
 evidence_start() {
@@ -102,7 +106,7 @@ evidence_complete() {
     echo "      artifact: ${DEST} (${size_bytes} bytes)" >&2
     echo "      Re-run the evidence CLI to record it, or the product ledger will not" >&2
     echo "      show a verified backup:" >&2
-    echo "        docker compose -p ${PROJECT} exec app node dist/scripts/backup-evidence.js complete \\" >&2
+    echo "        docker exec ${PROJECT}-app-1 node dist/scripts/backup-evidence.js complete \\" >&2
     echo "          --operation-id ${EVIDENCE_OPERATION_ID} --type logical \\" >&2
     echo "          --artifact-label ${ARTIFACT_LABEL} --size-bytes ${size_bytes} \\" >&2
     echo "          --verification-method pg_restore_list --executor host_script" >&2

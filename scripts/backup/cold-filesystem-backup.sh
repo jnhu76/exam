@@ -171,6 +171,9 @@ echo "  active PGDATA is corrupt-prone and is NOT supported."
 # `rsync -aHAX` or `tar | tar` as root on the host. Copy the COMPLETE postgres
 # tree (never partial relation files) into ${DEST}/postgres.
 echo "Copying COMPLETE postgres tree..."
+# Capture the REAL start time BEFORE the copy — the evidence spool must be
+# truthful (startedAt is when the cold copy began, not when it finished).
+COLD_START_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 docker run --rm \
   -v "${SRC_PG}:/from:ro" \
   -v "${DEST}/postgres:/to" \
@@ -198,8 +201,14 @@ fi
 # during the stopped window = no spool = no evidence.
 EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-cold_filesystem:$(date +%F)}"
 SPOOL="${DEST}/evidence.json"
-SIZE_BYTES="$(du -sb "${DEST}" 2>/dev/null | cut -f1 || echo 0)"
-STARTED_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Compute the size FIRST, then default to 0 — `du | cut || echo 0` would bind
+# the fallback to `cut` (which succeeds with empty output when du fails),
+# producing an invalid empty artifactSizeBytes in the spool JSON.
+SIZE_BYTES="$(du -sb "${DEST}" 2>/dev/null | cut -f1)"
+SIZE_BYTES="${SIZE_BYTES:-0}"
+# startedAt = the real copy start (COLD_START_ISO, captured before the copy);
+# completedAt = when the copy finished (here, post-verification).
+COLD_END_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat > "${SPOOL}" <<EOF
 {
   "schemaVersion": 1,
@@ -208,8 +217,8 @@ cat > "${SPOOL}" <<EOF
   "artifactLabel": "$(basename "${DEST}")",
   "artifactSizeBytes": ${SIZE_BYTES},
   "verificationMethod": "pg_version_presence",
-  "startedAt": "${STARTED_ISO}",
-  "completedAt": "${STARTED_ISO}",
+  "startedAt": "${COLD_START_ISO}",
+  "completedAt": "${COLD_END_ISO}",
   "executorType": "host_script"
 }
 EOF

@@ -189,6 +189,10 @@ test.describe("P7-E2C operations surface", () => {
     page,
     request,
   }) => {
+    // Skip inside the test (not as a placeholder): without the CLI the body
+    // below would throw; test.skip here marks THIS test skipped, and keeps it
+    // from failing the Docker e2e container where the CLI is absent.
+    test.skip(!evidenceAvailable(), "evidence CLI not available in this mode");
     recordEvidence([
       "start",
       "--operation-id",
@@ -240,6 +244,7 @@ test.describe("P7-E2C operations surface", () => {
     page,
     request,
   }) => {
+    test.skip(!evidenceAvailable(), "evidence CLI not available in this mode");
     recordEvidence([
       "complete",
       "--operation-id",
@@ -275,7 +280,9 @@ test.describe("P7-E2C operations surface", () => {
     page,
     request,
   }) => {
-    // Seed a verified backup 26h old so RPO compliance is measurable.
+    test.skip(!evidenceAvailable(), "evidence CLI not available in this mode");
+    // Record a fresh verified backup, then set the desired RPO through the UI
+    // and assert the truthful SATISFIED projection (fresh backup ≤ 300s).
     recordEvidence([
       "complete",
       "--operation-id",
