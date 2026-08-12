@@ -591,8 +591,11 @@ function toBackupRunWire(r: BackupRunRow) {
  *   - Retention: retention/pruning is host-managed today (host cron +
  *     manual + fail-closed invariant) — the product has no enforcement
  *     evidence, so the status is always NOT_ENFORCED (never a lie).
- *   - Drill: observed = most recent drill evidence (automated success first,
- *     operator_declared accepted with its source shown). No drill →
+ *   - Drill: observed = age of the most recent SUCCESSFUL drill evidence
+ *     (automated success first, operator-declared success accepted with its
+ *     source shown). A FAILED drill — automated or operator-declared —
+ *     NEVER satisfies cadence; it surfaces via the restore-readiness
+ *     projection as the latest drill, not as proof. No successful drill →
  *     UNKNOWN; age <= cadence → SATISFIED; otherwise NOT_SATISFIED.
  *   - The projection NEVER changes infrastructure — it only renders truth.
  */
@@ -606,22 +609,13 @@ async function buildOpsPolicyProjection(
   const ctx = getRequestContext(request);
   const evidence = createBackupEvidenceRepo(fastify.db);
   const now = fastify.now();
-  const [
-    latestVerified,
-    latestAutomatedSuccess,
-    latestSuccess,
-    latestDeclared,
-    drills,
-  ] = await Promise.all([
-    evidence.latestSucceededRun(ctx),
-    evidence.latestSucceededDrill(ctx, "automated"),
-    evidence.latestSucceededDrill(ctx),
-    // The automated drill path records only succeeded/failed results, so
-    // result='operator_declared' ⟺ source='operator_declared' in practice;
-    // the source filter expresses the same evidence class.
-    evidence.latestDrill(ctx, "operator_declared"),
-    evidence.listDrills(ctx, 20),
-  ]);
+  const [latestVerified, latestAutomatedSuccess, latestSuccess, drills] =
+    await Promise.all([
+      evidence.latestSucceededRun(ctx),
+      evidence.latestSucceededDrill(ctx, "automated"),
+      evidence.latestSucceededDrill(ctx),
+      evidence.listDrills(ctx, 20),
+    ]);
 
   const policyWire = policy
     ? {
@@ -670,11 +664,13 @@ async function buildOpsPolicyProjection(
   // ── Restore drill cadence ──
   let drillStatus: ComplianceStatus;
   let drillDetail: string | null;
-  // Unbounded lookups keep the same preference (automated success first,
-  // then any success, then operator-declared evidence) but never miss older
-  // proof because of the bounded history page.
-  const provenDrill =
-    latestAutomatedSuccess ?? latestSuccess ?? latestDeclared ?? null;
+  // Only SUCCEEDED drills can prove cadence — a failed drill (automated OR
+  // operator-declared) never satisfies it, so there is deliberately NO
+  // "latest declared drill" fallback here. `latestSucceededDrill` is
+  // unbounded: a long run of recent failures must not hide an older
+  // success. Operator-declared successes count (with their source shown),
+  // automated successes win the tiebreak.
+  const provenDrill = latestAutomatedSuccess ?? latestSuccess ?? null;
   const drillAgeSeconds =
     provenDrill?.completedAt != null
       ? Math.max(0, (now.getTime() - provenDrill.completedAt.getTime()) / 1000)
@@ -684,7 +680,8 @@ async function buildOpsPolicyProjection(
     drillDetail = "no operational policy intent recorded";
   } else if (provenDrill === null) {
     drillStatus = "UNKNOWN";
-    drillDetail = "no restore drill evidence recorded";
+    drillDetail =
+      "no SUCCESSFUL restore drill evidence recorded (failed drills never satisfy cadence)";
   } else if (
     drillAgeSeconds !== null &&
     drillAgeSeconds <= policy.desiredDrillCadenceDays * 86400

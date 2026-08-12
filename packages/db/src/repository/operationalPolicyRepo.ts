@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database, TenantContext, TransactionDatabase } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { backupOperationalPolicy } from "../schema/pg.js";
-import { executeInTransaction } from "../types.js";
+import { executeInTransaction, hasPostgresErrorCode } from "../types.js";
 import { OpsPolicyVersionConflictError } from "@exam/domain";
+
+/** PostgreSQL unique-violation code (first-create race on the org index). */
+const PG_UNIQUE_VIOLATION = "23505";
 
 /** The operational policy INTENT row (P7-E3). */
 export type OperationalPolicyRow = {
@@ -62,11 +65,20 @@ export function createOperationalPolicyRepo(db: Database) {
   }
 
   /**
-   * Creates or updates the intent record with CAS. `expectedVersion` is the
+   * Creates or updates the intent record with REAL optimistic concurrency.
+   *
+   * CAS semantics: the UPDATE carries the version in its predicate
+   * (`WHERE id = ? AND version = expectedVersion`), so two concurrent
+   * writers that both read version N cannot both succeed — the second
+   * UPDATE matches zero rows and is rejected with `VERSION_CONFLICT`
+   * (PostgreSQL re-evaluates the predicate against the committed row after
+   * the row-lock wait under READ COMMITTED). `expectedVersion` is the
    * version the caller read (0 = no row exists / first creation). On
-   * mismatch the write is rejected and nothing changes. The mutation runs
-   * in one transaction with the audit write performed by the caller's
-   * transaction wrapper.
+   * mismatch the write is rejected and nothing changes. A concurrent
+   * first-creation race is detected via the unique org index (23505) and
+   * mapped to the same conflict error. The mutation runs in one
+   * transaction with the audit write performed by the caller's transaction
+   * wrapper.
    */
   async function upsertPolicyWithinTransaction(
     ctx: TenantContext | RequestContext,
@@ -95,6 +107,10 @@ export function createOperationalPolicyRepo(db: Database) {
           `Operational policy intent version mismatch: expected ${params.expectedVersion}, current ${current.version}`,
         );
       }
+      // The version is part of the UPDATE predicate — this is the CAS guard.
+      // Under READ COMMITTED a concurrent writer that read the same version
+      // blocks on the row lock, then re-evaluates the predicate against the
+      // committed row (now one version newer) and matches zero rows.
       const updated = await tx
         .update(backupOperationalPolicy)
         .set({
@@ -106,9 +122,18 @@ export function createOperationalPolicyRepo(db: Database) {
           updatedBy: params.actorId,
           updatedAt: params.now,
         })
-        .where(eq(backupOperationalPolicy.id, current.id))
+        .where(
+          and(
+            eq(backupOperationalPolicy.id, current.id),
+            eq(backupOperationalPolicy.version, params.expectedVersion),
+          ),
+        )
         .returning();
-      return row(updated[0]!);
+      if (updated[0]) return row(updated[0]!);
+      // The row was changed between our read and our write — lost update.
+      throw new OpsPolicyVersionConflictError(
+        `Operational policy intent version mismatch: expected ${params.expectedVersion}, row changed concurrently`,
+      );
     }
 
     if (params.expectedVersion !== 0) {
@@ -116,23 +141,36 @@ export function createOperationalPolicyRepo(db: Database) {
         "Operational policy intent does not exist; expected version 0",
       );
     }
-    const inserted = await tx
-      .insert(backupOperationalPolicy)
-      .values({
-        id: randomUUID(),
-        organizationId: orgId,
-        desiredRpoSeconds: params.desiredRpoSeconds,
-        desiredRetentionDays: params.desiredRetentionDays,
-        desiredDrillCadenceDays: params.desiredDrillCadenceDays,
-        version: 1,
-        reason: params.reason,
-        createdBy: params.actorId,
-        updatedBy: params.actorId,
-        createdAt: params.now,
-        updatedAt: params.now,
-      })
-      .returning();
-    return row(inserted[0]!);
+    try {
+      const inserted = await tx
+        .insert(backupOperationalPolicy)
+        .values({
+          id: randomUUID(),
+          organizationId: orgId,
+          desiredRpoSeconds: params.desiredRpoSeconds,
+          desiredRetentionDays: params.desiredRetentionDays,
+          desiredDrillCadenceDays: params.desiredDrillCadenceDays,
+          version: 1,
+          reason: params.reason,
+          createdBy: params.actorId,
+          updatedBy: params.actorId,
+          createdAt: params.now,
+          updatedAt: params.now,
+        })
+        .returning();
+      return row(inserted[0]!);
+    } catch (err) {
+      // Concurrent first creation: another transaction inserted the org row
+      // between our read and insert (unique org index). Same conflict class —
+      // the caller re-reads and retries with the winner's version. The code
+      // check walks the error chain (Drizzle wraps the Postgres error).
+      if (hasPostgresErrorCode(err, PG_UNIQUE_VIOLATION)) {
+        throw new OpsPolicyVersionConflictError(
+          "Operational policy intent was created concurrently; re-read the current version and retry",
+        );
+      }
+      throw err;
+    }
   }
 
   return {
