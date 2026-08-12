@@ -236,6 +236,21 @@ export async function seed(
     userIds.push(seededUserId!);
   }
 
+  // P7-E2A (ADR-017 D14): seed must never leave committed state with an
+  // actor holding both active Admin and active Maintainer assignments
+  // (e.g. a Maintainer secondary assignment added via the assignment surface
+  // before a re-seed). Fail loudly instead of silently producing the
+  // forbidden combination.
+  const violations =
+    await createUserRoleAssignmentRepo(
+      db,
+    ).findAdminMaintainerExclusionViolations(seedCtx);
+  if (violations.length > 0) {
+    throw new Error(
+      `Seed aborted: user ${violations[0]!.userId} holds both active Admin and active Maintainer assignments (ADMIN_MAINTAINER_EXCLUSION).`,
+    );
+  }
+
   return {
     orgId,
     users: {

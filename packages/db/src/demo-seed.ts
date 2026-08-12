@@ -293,6 +293,19 @@ export async function seedDemo(
     }
   }
 
+  // P7-E2A (ADR-017 D14): demo-seed must never leave committed state with an
+  // actor holding both active Admin and active Maintainer assignments. Fail
+  // loudly instead of silently producing the forbidden combination.
+  const exclusionViolations =
+    await createUserRoleAssignmentRepo(
+      db,
+    ).findAdminMaintainerExclusionViolations(demoSeedCtx);
+  if (exclusionViolations.length > 0) {
+    throw new Error(
+      `Demo seed aborted: user ${exclusionViolations[0]!.userId} holds both active Admin and active Maintainer assignments (ADMIN_MAINTAINER_EXCLUSION).`,
+    );
+  }
+
   // ── CandidateProfiles ─────────────────────────────────────────
   const candidateFieldValues: Record<string, Record<string, unknown>> = {
     candidate1: {

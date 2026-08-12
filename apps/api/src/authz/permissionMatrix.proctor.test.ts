@@ -53,6 +53,7 @@ describe("RBAC permission matrix — proctor routes", () => {
     ["Grader", "denied"],
     ["Candidate", "denied"],
     ["Teacher", "denied"],
+    ["Maintainer", "denied"],
   ])(
     "%s receives the expected proctor capability verdict",
     async (role, expected) => {

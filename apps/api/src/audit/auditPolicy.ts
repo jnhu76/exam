@@ -297,6 +297,19 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
     changedFieldsPayload,
   ),
+  // P7-E2A (ADR-017 D7): the email test side effect is audited under its own
+  // action with a masked recipient (never the verbatim address).
+  [AuditAction.SystemEmailTest]: definition(
+    "active",
+    "best_effort",
+    "operational",
+    "low",
+    z
+      .object({
+        recipientMasked: shortText,
+      })
+      .strict(),
+  ),
   [AuditAction.CandidateCreate]: definition(
     "active",
     "atomic",

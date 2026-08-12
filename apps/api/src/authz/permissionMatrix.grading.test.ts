@@ -42,6 +42,7 @@ describe("RBAC permission matrix — grading routes", () => {
     ["Proctor", "denied"],
     ["Candidate", "denied"],
     ["Teacher", "denied"],
+    ["Maintainer", "denied"],
   ])(
     "%s receives the expected grading capability verdict",
     async (role, expected) => {

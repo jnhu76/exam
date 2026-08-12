@@ -71,6 +71,9 @@ export const LEGACY_ROLE_MAP: Record<LegacyRole, RoleKey> = {
   Proctor: Role.Proctor,
   Grader: Role.Grader,
   Candidate: Role.Candidate,
+  // P7-E2A (ADR-017 D2): Maintainer is a built-in role; map to itself for
+  // completeness (legacy code paths that read users.role must never reject it).
+  Maintainer: Role.Maintainer,
   // System is a synthetic actor identity, not a legacy human role; it maps to
   // itself for completeness now that domain.Role includes it (SYSTEM-M1).
   System: Role.System,

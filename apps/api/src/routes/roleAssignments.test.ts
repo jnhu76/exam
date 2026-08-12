@@ -91,7 +91,14 @@ describe("RBAC-M8 role-assignment routes", () => {
       .items.map((i: { key: string }) => i.key)
       .sort();
     expect(keys).toEqual(
-      ["Admin", "Candidate", "Grader", "Proctor", "Teacher"].sort(),
+      [
+        "Admin",
+        "Candidate",
+        "Grader",
+        "Maintainer",
+        "Proctor",
+        "Teacher",
+      ].sort(),
     );
   });
 

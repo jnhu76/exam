@@ -1204,7 +1204,9 @@ export const workerHeartbeats = pgTable(
  * Roles assignable to a user via the RBAC-M8 role-assignment surface.
  * `System` is excluded (synthetic, non-assignable). `SuperAdmin` is not defined
  * (no ADR). Phase 1 `users.role` still only carries Admin/Candidate; the
- * assignment table is the path to the broader Phase 3 set.
+ * assignment table is the path to the broader Phase 3 set. P7-E2A (ADR-017 D2
+ * amendment of ADR-010) adds `Maintainer` — the application-side System
+ * Operations Owner preset (operational observation only).
  */
 export const ASSIGNABLE_ROLES = [
   "Admin",
@@ -1212,6 +1214,7 @@ export const ASSIGNABLE_ROLES = [
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ] as const;
 // NOTE: AssignableRole is also defined in @exam/contracts (AssignableRoleSchema).
 // The two are structurally identical by design — db cannot depend on contracts
@@ -1259,7 +1262,7 @@ export const userRoleAssignments = pgTable(
       .where(sql`is_primary = true AND is_active = true`),
     check(
       "user_role_assignments_role_check",
-      sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate')`,
+      sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate', 'Maintainer')`,
     ),
   ],
 );

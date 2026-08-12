@@ -156,13 +156,18 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
   [
     // ── auth (mostly public/self) ──
     {
+      // P7-E2A (ADR-017 D7): the email test is a SIDE-EFFECTING action; it is
+      // gated by its own capability (system.email.test), never by a view
+      // capability. Audited under `system.email.test` (best-effort, masked
+      // recipient).
       method: "POST",
       path: "/email/test",
       legacyGate: "Admin",
-      permission: Permission.SystemDiagnosticsView,
+      permission: Permission.SystemEmailTest,
       scope: Scope.System,
       resolver: "system",
-      sensitive: false,
+      auditAction: "system.email.test",
+      sensitive: true,
       proctorAccess: "admin_only",
       migrationStage: 6,
     },
@@ -846,6 +851,12 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
+      // P7-E2A (ADR-017 D8): the diagnostics route gate is the operational
+      // SystemDiagnosticsView capability; the business-integrity block inside
+      // the response is projected server-side by the actor's
+      // system.business_integrity.view capability (Admin-only). The registry
+      // records the route gate; the field-level projection is enforced in the
+      // handler (routes/system.ts).
       method: "GET",
       path: "/system/diagnostics",
       legacyGate: "Admin",

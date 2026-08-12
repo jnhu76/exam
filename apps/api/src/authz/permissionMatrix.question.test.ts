@@ -37,6 +37,7 @@ describe("RBAC permission matrix — question routes", () => {
     ["Candidate", "denied"],
     ["Grader", "denied"],
     ["Proctor", "denied"],
+    ["Maintainer", "denied"],
   ])(
     "%s receives the expected question capability verdict",
     async (role, expected) => {

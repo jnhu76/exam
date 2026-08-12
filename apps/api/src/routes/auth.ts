@@ -43,13 +43,17 @@ import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
  * Provides login, logout, current-user retrieval, and password change
  * for the internal default organization. Registration is disabled in Phase 1.
  */
-/** Login-capable assignable roles (RBAC runtime activation). Static. */
+/**
+ * Login-capable assignable roles (RBAC runtime activation). Static.
+ * P7-E2A (ADR-017 D2): Maintainer is a login-capable built-in role.
+ */
 const ASSIGNABLE_LOGIN_ROLES = new Set([
   "Admin",
   "Teacher",
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ]);
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {

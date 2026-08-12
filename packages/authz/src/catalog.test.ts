@@ -19,9 +19,17 @@ describe("RBAC-M1 catalog — exported shape", () => {
     expect(Scope.OwnScore).toBe("own_score");
   });
 
-  it("exports a Role constant object with the 6 ADR presets", () => {
+  it("exports a Role constant object with the 7 ADR presets", () => {
     expect(Object.values(Role).sort()).toEqual(
-      ["Admin", "Candidate", "Grader", "Proctor", "System", "Teacher"].sort(),
+      [
+        "Admin",
+        "Candidate",
+        "Grader",
+        "Maintainer",
+        "Proctor",
+        "System",
+        "Teacher",
+      ].sort(),
     );
   });
 

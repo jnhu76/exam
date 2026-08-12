@@ -116,6 +116,19 @@ export const Permission = {
   // §4.9 System / Diagnostics
   SystemHealthView: "system.health.view",
   SystemDiagnosticsView: "system.diagnostics.view",
+  // SystemBusinessIntegrityView (system.business_integrity.view): P7-E2A
+  // (ADR-017 D8) — the business-integrity diagnostics block (submitted-not-
+  // terminalized / workset-mismatch attempt anomalies) is a BUSINESS-domain
+  // surface, Admin-only. GET /system/diagnostics includes the `integrity`
+  // block only for actors holding this capability; the operational projection
+  // (Maintainer) never receives it.
+  SystemBusinessIntegrityView: "system.business_integrity.view",
+  // SystemEmailTest (system.email.test): P7-E2A (ADR-017 D7) — the
+  // side-effecting email test action split out of the diagnostics VIEW
+  // capability. VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT; POST /email/test
+  // is gated by this permission, never by SystemDiagnosticsView. Granted to the
+  // Admin preset only; the Maintainer preset does NOT receive it by default.
+  SystemEmailTest: "system.email.test",
   // SystemInfoView (system.info.view): UNRESOLVED — GET /system/info is public
   // today, so no role needs this perm. Retained pending product decision
   // (P4-G-04); removing it is out of P4-C1 scope.
@@ -169,9 +182,15 @@ export type ScopeType = (typeof Scope)[keyof typeof Scope];
 // ───────────────────────── Roles (ADR Role Presets) ─────────────────────────
 
 /**
- * The six Phase 3 role presets. System is non-login, non-assignable; the others
- * are product defaults assigned via the existing user-management surface.
- * Custom roles (Phase 4) are `is_system = false` DB rows, not new keys here.
+ * The seven Phase 3+ role presets. System is non-login, non-assignable; the
+ * others are product defaults assigned via the existing user-management
+ * surface. Custom roles (Phase 4) are `is_system = false` DB rows, not new keys
+ * here.
+ *
+ * P7-E2A (ADR-017 D2 amendment of ADR-010): Maintainer is the seventh
+ * built-in assignable human role — the Application Maintainer / System
+ * Operations Owner preset. It holds ONLY operational observation
+ * capabilities and zero business permissions.
  */
 export const Role = {
   Admin: "Admin",
@@ -179,6 +198,7 @@ export const Role = {
   Proctor: "Proctor",
   Grader: "Grader",
   Candidate: "Candidate",
+  Maintainer: "Maintainer",
   System: "System",
 } as const;
 

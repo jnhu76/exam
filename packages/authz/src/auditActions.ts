@@ -46,6 +46,11 @@ export const AuditAction = {
   // ── Branding / settings ──
   BrandingUpdate: "branding.update",
 
+  // ── System operations (P7-E2A, ADR-017 D7) ──
+  // POST /email/test is a side-effecting action; it is audited under its own
+  // action, never under a diagnostics-view action.
+  SystemEmailTest: "system.email.test",
+
   // ── Candidate ──
   CandidateCreate: "candidate.create",
   CandidateUpdate: "candidate.update",

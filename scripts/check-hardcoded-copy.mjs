@@ -129,6 +129,13 @@ const CJK_ALLOWLIST = [
       "When server-side messages are standardized to English (follow-up); not user-facing.",
   },
   {
+    path: "apps/api/src/authz/adminMaintainerExclusion.ts",
+    reason:
+      "Thrown validation message for ADMIN_MAINTAINER_EXCLUSION invariant (P7-E2A, ADR-017 D14). Server-side only — error handler returns a code, not this message.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
+  },
+  {
     path: "apps/api/src/routes/question.ts",
     reason:
       "Thrown validation messages (课程不存在). Server-side only — error handler returns a code, not this message.",

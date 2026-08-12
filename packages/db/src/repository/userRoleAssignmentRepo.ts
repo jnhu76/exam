@@ -7,7 +7,7 @@ import {
   createAsyncTenantCrudRepo,
   now,
 } from "./baseRepo.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { executeInTransaction } from "../types.js";
 
 /** A user-role-assignment row shape returned by the repo. */
@@ -521,11 +521,75 @@ export function createUserRoleAssignmentRepo(db: Database) {
     );
   }
 
+  /**
+   * P7-E2A (ADR-017 D14): finds every (org, user) holding BOTH an active
+   * Admin assignment and an active Maintainer assignment — the forbidden
+   * ADMIN ∩ MAINTAINER combination. Returns one entry per violating user,
+   * with the active Admin and Maintainer assignment ids for diagnostics.
+   *
+   * Called as a transaction post-condition by the authority-mutation seam
+   * (`mutateWithAuthorityInvariants`, apps/api) after every mutation that can
+   * create or activate an Admin/Maintainer assignment. The caller holds the
+   * organization advisory lock, so two concurrent mutations cannot each
+   * insert one of the two roles for the same actor (write-skew).
+   */
+  async function findAdminMaintainerExclusionViolations(
+    ctx: TenantContext | RequestContext,
+  ): Promise<
+    Array<{
+      userId: string;
+      adminAssignmentId: string;
+      maintainerAssignmentId: string;
+    }>
+  > {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select({
+        userId: userRoleAssignments.userId,
+        role: userRoleAssignments.role,
+        id: userRoleAssignments.id,
+      })
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.isActive, true),
+          or(
+            eq(userRoleAssignments.role, "Admin"),
+            eq(userRoleAssignments.role, "Maintainer"),
+          ),
+        ),
+      );
+    const byUser = new Map<string, { admin?: string; maintainer?: string }>();
+    for (const r of rows) {
+      const entry = byUser.get(r.userId) ?? {};
+      if (r.role === "Admin") entry.admin = r.id;
+      else entry.maintainer = r.id;
+      byUser.set(r.userId, entry);
+    }
+    const violations: Array<{
+      userId: string;
+      adminAssignmentId: string;
+      maintainerAssignmentId: string;
+    }> = [];
+    for (const [userId, entry] of byUser) {
+      if (entry.admin && entry.maintainer) {
+        violations.push({
+          userId,
+          adminAssignmentId: entry.admin,
+          maintainerAssignmentId: entry.maintainer,
+        });
+      }
+    }
+    return violations.sort((a, b) => (a.userId < b.userId ? -1 : 1));
+  }
+
   return {
     ...repo,
     listForUser,
     listActiveForUser,
     findPrimaryActiveForUser,
+    findAdminMaintainerExclusionViolations,
     assign,
     assignWithinTransaction,
     ensurePrimaryAssignment,

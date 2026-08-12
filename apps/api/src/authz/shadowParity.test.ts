@@ -213,6 +213,7 @@ const ALL_ROLES = [
   Role.Proctor,
   Role.Grader,
   Role.Candidate,
+  Role.Maintainer,
   Role.System,
 ] as const;
 
@@ -253,7 +254,13 @@ describe("M10-D shadow parity matrix", () => {
   });
 
   it("no non-Admin role receives accidental access expansion", () => {
-    const nonAdminRoles = ALL_ROLES.filter((r) => r !== Role.Admin);
+    // P7-E2A (ADR-017 D2/D8): Maintainer is the DELIBERATE exception — it
+    // receives the two operational observation perms from the M10-D set
+    // (system.health.view, system.diagnostics.view) and nothing else. The
+    // loop excludes Maintainer; the dedicated test below pins the exception.
+    const nonAdminRoles = ALL_ROLES.filter(
+      (r) => r !== Role.Admin && r !== Role.Maintainer,
+    );
     for (const role of nonAdminRoles) {
       for (const perm of m10dPerms) {
         const r = shadowRequireCapability(
@@ -269,6 +276,30 @@ describe("M10-D shadow parity matrix", () => {
         expect(r.legacyAllowed, `${role} legacy ${perm}`).toBe(false);
         expect(r.capabilityAllowed, `${role} capability ${perm}`).toBe(false);
       }
+    }
+  });
+
+  it("Maintainer receives ONLY the two operational M10-D perms (P7-E2A)", () => {
+    const operational = new Set([
+      Permission.SystemHealthView,
+      Permission.SystemDiagnosticsView,
+    ]);
+    for (const perm of m10dPerms) {
+      const r = shadowRequireCapability(
+        {
+          route: `M10D Maintainer/${perm}`,
+          ctx: ctxFor(Role.Maintainer, "m"),
+          legacyGate: ["Admin"],
+          permission: perm,
+          resource: { type: "organization", id: "org-1" },
+        },
+        makeLogger(),
+      );
+      // Legacy gate stays Admin-only (no legacy broadening).
+      expect(r.legacyAllowed, `Maintainer legacy ${perm}`).toBe(false);
+      expect(r.capabilityAllowed, `Maintainer capability ${perm}`).toBe(
+        operational.has(perm),
+      );
     }
   });
 });

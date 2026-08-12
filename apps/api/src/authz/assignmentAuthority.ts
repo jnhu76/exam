@@ -49,8 +49,9 @@ import type { UserRoleAssignmentRow } from "@exam/db/src/repository/userRoleAssi
  * Closed, assignable role set mirror (kept here to avoid a circular import on
  * the DB schema's `ASSIGNABLE_ROLES`). MUST stay in sync with
  * `packages/db/src/schema/pg.ts` `ASSIGNABLE_ROLES` and the DB CHECK
- * constraint `role IN ('Admin','Teacher','Proctor','Grader','Candidate')`.
- * System is intentionally excluded — it is synthetic and non-assignable.
+ * constraint `role IN ('Admin','Teacher','Proctor','Grader','Candidate',
+ * 'Maintainer')`. System is intentionally excluded — it is synthetic and
+ * non-assignable. Maintainer was added by P7-E2A (ADR-017 D2).
  */
 const ASSIGNABLE_ROLE_KEYS: readonly RoleKey[] = [
   AuthzRole.Admin,
@@ -58,6 +59,7 @@ const ASSIGNABLE_ROLE_KEYS: readonly RoleKey[] = [
   AuthzRole.Proctor,
   AuthzRole.Grader,
   AuthzRole.Candidate,
+  AuthzRole.Maintainer,
 ];
 const ASSIGNABLE_ROLE_SET: ReadonlySet<string> = new Set(ASSIGNABLE_ROLE_KEYS);
 

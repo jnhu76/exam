@@ -175,6 +175,12 @@ export const AttemptIntegrityAnomalySchema = z.object({
  * uptime, database latency, Redis status, heartbeat/deadline scanner status,
  * email infrastructure status, read-only integrity anomalies, and
  * non-sensitive runtime configuration.
+ *
+ * P7-E2A (ADR-017 D8): `integrity` is OPTIONAL — the business-integrity
+ * anomaly block is included only for actors holding
+ * `system.business_integrity.view` (Admin preset). Operational-only viewers
+ * (Application Maintainer) receive the response WITHOUT the block, so the
+ * field is absent rather than zeroed.
  */
 export const DiagnosticsResponseSchema = z.object({
   version: z.string(),
@@ -193,11 +199,13 @@ export const DiagnosticsResponseSchema = z.object({
     autoSubmitCount: z.number().int().min(0),
   }),
   emailStatus: EmailDiagnosticsStatusSchema,
-  integrity: z.object({
-    submittedNotTerminalized: z.number().int().min(0),
-    submittedWorksetMismatch: z.number().int().min(0),
-    anomalies: z.array(AttemptIntegrityAnomalySchema),
-  }),
+  integrity: z
+    .object({
+      submittedNotTerminalized: z.number().int().min(0),
+      submittedWorksetMismatch: z.number().int().min(0),
+      anomalies: z.array(AttemptIntegrityAnomalySchema),
+    })
+    .optional(),
   config: z.object({
     heartbeatInterval: z.number().int().min(0),
     heartbeatTimeout: z.number().int().min(0),

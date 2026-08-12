@@ -5,9 +5,17 @@ import { Permission, Role, Scope } from "./catalog.js";
 const asSet = (perms: readonly string[]) => new Set(perms);
 
 describe("RBAC-M2 role presets — shape", () => {
-  it("defines all 6 ADR presets", () => {
+  it("defines all 7 ADR presets", () => {
     expect(Object.keys(ROLE_PRESETS).sort()).toEqual(
-      ["Admin", "Candidate", "Grader", "Proctor", "System", "Teacher"].sort(),
+      [
+        "Admin",
+        "Candidate",
+        "Grader",
+        "Maintainer",
+        "Proctor",
+        "System",
+        "Teacher",
+      ].sort(),
     );
   });
 

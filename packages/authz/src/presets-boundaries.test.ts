@@ -174,6 +174,7 @@ describe("RBAC-M2 boundary #8 — System actor is non-login, non-assignable, SYS
       Role.Proctor,
       Role.Grader,
       Role.Candidate,
+      Role.Maintainer,
     ];
     for (const r of humanRoles) {
       const set = new Set(permissionsForRole(r));

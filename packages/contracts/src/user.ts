@@ -6,12 +6,14 @@ import { nullableEmailField, optionalEmailField } from "./emailField.js";
 
 /**
  * Roles assignable to a human user (RBAC-M8). Phase 3 widens the Phase 1
- * {Admin, Candidate} set with Teacher / Proctor / Grader. `System` is excluded
- * (synthetic, non-assignable); `SuperAdmin` is not defined (no ADR).
+ * {Admin, Candidate} set with Teacher / Proctor / Grader; P7-E2A (ADR-017 D2)
+ * adds Maintainer — the application-side System Operations Owner (operational
+ * observation only). `System` is excluded (synthetic, non-assignable);
+ * `SuperAdmin` is not defined (no ADR).
  *
  * `RoleSchema` mirrors the assignable set because a user's primary active
  * assignment — which becomes `users.role` (the compatibility cache) and the
- * value returned by login/`/auth/me` — may now be any of these five. Route
+ * value returned by login/`/auth/me` — may now be any of these six. Route
  * authorization gates are NOT flipped in this PR; assignment is a capability,
  * not an enforcement change (enforcement is PR #3).
  */
@@ -21,6 +23,7 @@ export const AssignableRoleSchema = z.enum([
   "Proctor",
   "Grader",
   "Candidate",
+  "Maintainer",
 ]);
 // NOTE: AssignableRole is also defined in @exam/db (schema/pg.ts ASSIGNABLE_ROLES).
 // The two are structurally identical by design — db cannot depend on contracts

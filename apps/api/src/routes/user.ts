@@ -22,6 +22,7 @@ import {
 } from "../audit/auditWriter.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
 import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
+import { mutateWithAuthorityInvariants } from "../authz/adminMaintainerExclusion.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** Zod schema for route params containing a UUID `id`. */
@@ -55,8 +56,13 @@ const userListResponseSchema = z.object({
 /** Generic success response schema used for mutation endpoints that return only a confirmation. */
 const okResponseSchema = z.object({ ok: z.literal(true) });
 
-/** Roles supported in Phase 1 — used to filter the user list to Admin and Candidate only. */
-const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate"] as const;
+/**
+ * Roles supported in the Phase 1 user-list surface — used to filter the user
+ * list to Admin and Candidate. P7-E2A adds Maintainer so an application
+ * Maintainer account is created, listed, and managed through this approved
+ * path (ADR-017 D2 provisioning rule).
+ */
+const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate", "Maintainer"] as const;
 
 /**
  * Fastify plugin that registers user management routes.
@@ -148,34 +154,43 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       // transaction. A crash between the two writes previously left a user
       // with no authority row, which the M10-E flip would lock out. Both
       // writes succeed atomically or roll back together (P0-2 / E19).
-      const user = await executeInTransaction(fastify.db, async (tx) => {
-        const created = await createUserRepo(tx).createUnique(ctx, {
-          username: data.username,
-          passwordHash,
-          name: data.name,
-          role: data.role,
-          isActive: true,
-          // P5-N1 §13: optional recipient email; contract normalizes + maps
-          // blank to undefined, so we store null when absent.
-          email: data.email ?? null,
-        });
-        await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
-          tx,
-          ctx,
-          {
-            userId: created.id,
+      // P7-E2A (ADR-017 D14): user creation writes a PRIMARY active
+      // assignment — run inside the canonical authority-mutation seam so
+      // Admin↔Maintainer exclusion is enforced transactionally (creating a
+      // Maintainer for an actor that already holds active Admin, or an Admin
+      // for an actor holding active Maintainer, is rejected).
+      const user = await mutateWithAuthorityInvariants(
+        fastify.db,
+        ctx,
+        async (tx) => {
+          const created = await createUserRepo(tx).createUnique(ctx, {
+            username: data.username,
+            passwordHash,
+            name: data.name,
             role: data.role,
-            isPrimary: true,
             isActive: true,
-          },
-        );
-        await recordAtomicHttpAudit(tx, request, ctx, {
-          action: "user.create",
-          targetType: "user",
-          targetId: created.id,
-        });
-        return created;
-      });
+            // P5-N1 §13: optional recipient email; contract normalizes + maps
+            // blank to undefined, so we store null when absent.
+            email: data.email ?? null,
+          });
+          await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+            tx,
+            ctx,
+            {
+              userId: created.id,
+              role: data.role,
+              isPrimary: true,
+              isActive: true,
+            },
+          );
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "user.create",
+            targetType: "user",
+            targetId: created.id,
+          });
+          return created;
+        },
+      );
       return reply.code(201).send({
         id: user.id,
         organizationId: user.organizationId,

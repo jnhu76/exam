@@ -211,6 +211,13 @@
       "when": 1788400000000,
       "tag": "0029_exam_policy_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0030_nifty_nekra",
+      "breakpoints": true
     }
   ]
 }

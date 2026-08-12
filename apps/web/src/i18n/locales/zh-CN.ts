@@ -587,6 +587,7 @@ const zhCN = {
         Proctor: "监考员",
         Grader: "阅卷员",
         Candidate: "候选人",
+        Maintainer: "维护者",
       },
       statusLabels: { active: "启用", inactive: "禁用" },
       editLabel: "编辑用户",

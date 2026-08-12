@@ -62,8 +62,10 @@ interface Page<T> {
  * routes (the user list also filters them out). The backend still gates
  * creation on requireRole(["Admin"]) until enforcement (PR #3); the role
  * chosen here is the primary assignment, which syncs users.role.
+ * P7-E2A (ADR-017 D2): Maintainer is creatable through the ordinary
+ * user-management path (application-side System Operations Owner).
  */
-type EditableRole = "Admin" | "Teacher" | "Proctor" | "Grader";
+type EditableRole = "Admin" | "Teacher" | "Proctor" | "Grader" | "Maintainer";
 
 /** Roles available for selection in the user create/edit form. */
 const EDITABLE_ROLES: EditableRole[] = [
@@ -71,6 +73,7 @@ const EDITABLE_ROLES: EditableRole[] = [
   "Teacher",
   "Proctor",
   "Grader",
+  "Maintainer",
 ];
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
