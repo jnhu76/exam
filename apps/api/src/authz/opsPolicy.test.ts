@@ -1,0 +1,326 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { getIsolatedTestDb } from "@exam/db/src/testDb.js";
+import { createOperationalPolicyRepo } from "@exam/db/src/repository/operationalPolicyRepo.js";
+import { organizations } from "@exam/db/src/schema/pg.js";
+import type { Database, TenantContext } from "@exam/db/src/types.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
+import { ValidationError } from "@exam/domain";
+
+/**
+ * P7-E3 — Operational policy INTENT (ADR-017 D9).
+ *
+ * Proves: typed/versioned intent record with CAS; absence = NOT_CONFIGURED;
+ * the intent never binds infrastructure (the repo only stores the desired
+ * objectives); VERSION_CONFLICT on stale writes; reason required.
+ */
+describe("P7-E3 operational policy intent", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  let orgId: string;
+  let ctx: TenantContext;
+
+  beforeAll(async () => {
+    const handle = await getIsolatedTestDb("ops-policy");
+    db = handle.db;
+    cleanup = handle.cleanup;
+  });
+
+  beforeEach(async () => {
+    orgId = randomUUID();
+    await db.insert(organizations).values({
+      id: orgId,
+      name: "Test Org",
+      displayName: "Test Org",
+      slug: `test-org-${orgId.slice(0, 8)}-${Date.now()}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    ctx = {
+      organizationId: orgId,
+      actorId: "admin-1",
+      role: "Admin",
+      permissions: [],
+    };
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  const repo = () => createOperationalPolicyRepo(db);
+  const base = {
+    desiredRpoSeconds: 3600,
+    desiredRetentionDays: 30,
+    desiredDrillCadenceDays: 7,
+    reason: "initial setup",
+  };
+
+  async function upsert(
+    expectedVersion: number,
+    overrides: Record<string, unknown> = {},
+  ) {
+    return executeInTransaction(db, (tx) =>
+      repo().upsertPolicyWithinTransaction(tx, ctx, {
+        desiredRpoSeconds:
+          (overrides.desiredRpoSeconds as number) ?? base.desiredRpoSeconds,
+        desiredRetentionDays:
+          (overrides.desiredRetentionDays as number) ??
+          base.desiredRetentionDays,
+        desiredDrillCadenceDays:
+          (overrides.desiredDrillCadenceDays as number) ??
+          base.desiredDrillCadenceDays,
+        expectedVersion,
+        reason: (overrides.reason as string) ?? base.reason,
+        actorId: ctx.actorId,
+        now: new Date(),
+      }),
+    );
+  }
+
+  it("no policy row = NOT_CONFIGURED (null read)", async () => {
+    expect(await repo().getPolicy(ctx)).toBeNull();
+  });
+
+  it("creates the intent record (version 1) with actor + reason", async () => {
+    const policy = await upsert(0);
+    expect(policy.version).toBe(1);
+    expect(policy.desiredRpoSeconds).toBe(3600);
+    expect(policy.desiredRetentionDays).toBe(30);
+    expect(policy.desiredDrillCadenceDays).toBe(7);
+    expect(policy.createdBy).toBe("admin-1");
+    expect(policy.updatedBy).toBe("admin-1");
+    expect(policy.reason).toBe("initial setup");
+
+    const read = await repo().getPolicy(ctx);
+    expect(read?.version).toBe(1);
+  });
+
+  it("updates with CAS: echo the read version, bump to version 2", async () => {
+    await upsert(0);
+    const updated = await upsert(1, {
+      desiredRpoSeconds: 7200,
+      reason: "tighten RPO",
+    });
+    expect(updated.version).toBe(2);
+    expect(updated.desiredRpoSeconds).toBe(7200);
+    expect(updated.reason).toBe("tighten RPO");
+  });
+
+  it("rejects a stale write (VERSION_CONFLICT) and leaves the row unchanged", async () => {
+    await upsert(0);
+    await upsert(1);
+    await expect(upsert(1, { desiredRpoSeconds: 9999 })).rejects.toMatchObject({
+      code: "OPS_POLICY_VERSION_CONFLICT",
+    });
+    const read = await repo().getPolicy(ctx);
+    expect(read?.desiredRpoSeconds).toBe(3600);
+    expect(read?.version).toBe(2);
+  });
+
+  it("rejects a first-creation with a non-zero version", async () => {
+    await expect(upsert(1)).rejects.toMatchObject({
+      code: "OPS_POLICY_VERSION_CONFLICT",
+    });
+    expect(await repo().getPolicy(ctx)).toBeNull();
+  });
+
+  it("enforces safe ranges at the DB level", async () => {
+    // Out-of-range values are rejected by the CHECK constraints even if the
+    // application layer were bypassed.
+    await expect(
+      executeInTransaction(db, (tx) =>
+        repo().upsertPolicyWithinTransaction(tx, ctx, {
+          desiredRpoSeconds: 60, // below the 300s floor
+          desiredRetentionDays: 30,
+          desiredDrillCadenceDays: 7,
+          expectedVersion: 0,
+          reason: "bad range",
+          actorId: ctx.actorId,
+          now: new Date(),
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await repo().getPolicy(ctx)).toBeNull();
+  });
+});
+
+// ───────────────────────── API surface ─────────────────────────
+
+import {
+  afterAll as afterAll2,
+  beforeAll as beforeAll2,
+  describe as describe2,
+  expect as expect2,
+} from "vitest";
+import type { FastifyPluginAsync } from "fastify";
+import { eq } from "drizzle-orm";
+import { auditLogs } from "@exam/db/src/schema/pg.js";
+import {
+  buildTestApp,
+  createAssignedUserForTest,
+} from "../routes/testHelpers.js";
+import systemRoutes from "../routes/system.js";
+import { createBackupEvidenceRepo } from "@exam/db/src/repository/backupEvidenceRepo.js";
+import type { TestContext } from "../routes/testHelpers.js";
+
+describe2("P7-E3 ops-policy API", () => {
+  let appCtx: TestContext;
+  let cleanup2: () => Promise<void>;
+  let maintainerToken: string;
+
+  beforeAll2(async () => {
+    const built = await buildTestApp(systemRoutes as FastifyPluginAsync, {
+      prefix: "/api",
+    });
+    appCtx = built;
+    cleanup2 = built.cleanup;
+    const m = await createAssignedUserForTest(
+      built.db,
+      built.org.id,
+      "Maintainer",
+      "maintainer-pol",
+    );
+    maintainerToken = m.token;
+    // Seed a verified backup 2h old so RPO compliance is measurable.
+    await createBackupEvidenceRepo(built.db).completeRun(
+      {
+        organizationId: built.org.id,
+        actorId: "test",
+        role: "Admin",
+        permissions: [],
+      },
+      {
+        operationId: "logical:policy-baseline",
+        backupType: "logical",
+        artifactLabel: "policy-baseline.dump",
+        artifactSizeBytes: 10,
+        verificationMethod: "pg_restore_list",
+        verifiedAt: new Date(Date.now() - 2 * 3600_000),
+        executorType: "host_script",
+        now: new Date(),
+      },
+    );
+  });
+
+  afterAll2(async () => {
+    await cleanup2();
+  });
+
+  async function asAdmin(method: string, url: string, payload?: unknown) {
+    return appCtx.app.inject({
+      method,
+      url,
+      payload,
+      cookies: { "auth-token": appCtx.adminToken },
+    });
+  }
+
+  async function asMaintainer(method: string, url: string, payload?: unknown) {
+    return appCtx.app.inject({
+      method,
+      url,
+      payload,
+      cookies: { "auth-token": maintainerToken },
+    });
+  }
+
+  it("GET returns NOT_CONFIGURED before any intent exists", async () => {
+    const res = await asAdmin("GET", "/api/system/ops-policy");
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.policy).toBeNull();
+    expect(body.compliance.rpo.status).toBe("NOT_CONFIGURED");
+  });
+
+  it("Admin records the intent; compliance computes SATISFIED / NOT_SATISFIED truthfully", async () => {
+    // Desired RPO 1h; last verified backup is 2h old → NOT_SATISFIED.
+    const put = await asAdmin("PUT", "/api/system/ops-policy", {
+      desiredRpoSeconds: 3600,
+      desiredRetentionDays: 30,
+      desiredDrillCadenceDays: 7,
+      version: 0,
+      reason: "e2e policy",
+    });
+    expect(put.statusCode).toBe(200);
+    const body = put.json();
+    expect(body.policy.version).toBe(1);
+    expect(body.compliance.rpo.status).toBe("NOT_SATISFIED");
+    expect(body.compliance.retention.status).toBe("NOT_ENFORCED");
+    expect(body.compliance.drill.status).toBe("UNKNOWN");
+
+    // Loosen RPO to 3h → SATISFIED.
+    const put2 = await asAdmin("PUT", "/api/system/ops-policy", {
+      desiredRpoSeconds: 10800,
+      desiredRetentionDays: 30,
+      desiredDrillCadenceDays: 7,
+      version: 1,
+      reason: "loosen rpo",
+    });
+    expect(put2.statusCode).toBe(200);
+    expect(put2.json().compliance.rpo.status).toBe("SATISFIED");
+  });
+
+  it("stale version → 409 VERSION_CONFLICT", async () => {
+    const res = await asAdmin("PUT", "/api/system/ops-policy", {
+      desiredRpoSeconds: 3600,
+      desiredRetentionDays: 30,
+      desiredDrillCadenceDays: 7,
+      version: 1, // current version is 2 after the previous test
+      reason: "stale write",
+    });
+    expect(res.statusCode).toBe(409);
+    expect(JSON.stringify(res.json())).toContain("OPS_POLICY_VERSION_CONFLICT");
+  });
+
+  it("Maintainer can VIEW the intent but CANNOT modify it", async () => {
+    const view = await asMaintainer("GET", "/api/system/ops-policy");
+    expect(view.statusCode).toBe(200);
+    expect(view.json().policy).not.toBeNull();
+
+    const put = await asMaintainer("PUT", "/api/system/ops-policy", {
+      desiredRpoSeconds: 3600,
+      desiredRetentionDays: 30,
+      desiredDrillCadenceDays: 7,
+      version: 2,
+      reason: "maintainer attempt",
+    });
+    expect(put.statusCode).toBe(403);
+  });
+
+  it("invalid ranges are rejected with 400", async () => {
+    const res = await asAdmin("PUT", "/api/system/ops-policy", {
+      desiredRpoSeconds: 60, // below floor
+      desiredRetentionDays: 30,
+      desiredDrillCadenceDays: 7,
+      version: 2,
+      reason: "bad",
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("the intent write is audited (ops.policy.updated)", async () => {
+    // Drain pending best-effort writes, then read the audit table directly.
+    await appCtx.drainAuditWrites();
+    const before = await appCtx.db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.action, "ops.policy.updated"));
+
+    const res = await asAdmin("PUT", "/api/system/ops-policy", {
+      desiredRpoSeconds: 3600,
+      desiredRetentionDays: 14,
+      desiredDrillCadenceDays: 7,
+      version: 2,
+      reason: "audit check",
+    });
+    expect(res.statusCode).toBe(200);
+    await appCtx.drainAuditWrites();
+
+    const after = await appCtx.db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.action, "ops.policy.updated"));
+    expect(after.length).toBe(before.length + 1);
+  });
+});

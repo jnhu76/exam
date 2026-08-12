@@ -1329,6 +1329,63 @@ export const backupRunEvents = pgTable(
 );
 
 /**
+ * Operational policy INTENT (P7-E3, ADR-017 D9).
+ *
+ * The typed, audited record of the Admin's DESIRED operational objectives:
+ * recovery point objective (RPO), retention objective, and restore-drill
+ * cadence. This is INTENT ONLY — it never binds, schedules, or rewrites
+ * infrastructure (host cron / scripts remain the execution authority; the
+ * product renders DESIRED vs OBSERVED vs STATUS and nothing else).
+ *
+ * This is NOT a generic settings store: the fields are typed with safe
+ * ranges (CHECK constraints), the row is versioned for optimistic
+ * concurrency (CAS), and every change is audited with a reason. One row per
+ * organization (Phase 1 single-tenant); absence = NOT_CONFIGURED.
+ *
+ * Sole intent owner: Admin (system.ops.policy.manage). Maintainer reads the
+ * intent (system.ops.policy.view) and never modifies it.
+ */
+export const backupOperationalPolicy = pgTable(
+  "backup_operational_policy",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Desired RPO in seconds (safe range 5 minutes .. 7 days). */
+    desiredRpoSeconds: integer("desired_rpo_seconds").notNull(),
+    /** Desired backup retention objective in days (1 .. 3650). */
+    desiredRetentionDays: integer("desired_retention_days").notNull(),
+    /** Desired restore-drill cadence in days (1 .. 365). */
+    desiredDrillCadenceDays: integer("desired_drill_cadence_days").notNull(),
+    /** Optimistic-concurrency version (CAS on every update). */
+    version: integer("version").notNull().default(1),
+    /** Required human-readable reason for the change. */
+    reason: text("reason").notNull(),
+    /** Actor that created/updated the intent. */
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("backup_operational_policy_org_unique").on(
+      table.organizationId,
+    ),
+    check(
+      "backup_operational_policy_rpo_check",
+      sql`${table.desiredRpoSeconds} BETWEEN 300 AND 604800`,
+    ),
+    check(
+      "backup_operational_policy_retention_check",
+      sql`${table.desiredRetentionDays} BETWEEN 1 AND 3650`,
+    ),
+    check(
+      "backup_operational_policy_cadence_check",
+      sql`${table.desiredDrillCadenceDays} BETWEEN 1 AND 365`,
+    ),
+  ],
+);
+
+/**
  * Restore-drill evidence (P7-E2B). Records restore-readiness drills: the
  * deterministic deployment drills (automated) and operator-recorded drills
  * (operator_declared). The read projection distinguishes the two — a declared

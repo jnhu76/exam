@@ -88,6 +88,15 @@ const zhCN = {
     fallback: {
       unknown: "未知",
     },
+    ops: {
+      compliance: {
+        satisfied: "已满足",
+        not_satisfied: "未满足",
+        unknown: "未知",
+        not_configured: "未配置",
+        not_enforced: "未强制执行",
+      },
+    },
   },
 
   /**
@@ -331,6 +340,34 @@ const zhCN = {
       heartbeatScanner: "心跳扫描",
       deadlineScanner: "截止扫描",
       emailWorker: "邮件 Worker",
+    },
+    policy: {
+      section: "运维策略意图",
+      title: "运维策略意图",
+      intentNote:
+        "此处记录的是管理员期望的运维目标（意图），仅用于对比实际状态；它不会改变任何基础设施配置。",
+      desired: "期望",
+      observed: "实际",
+      status: {
+        SATISFIED: "已满足",
+        NOT_SATISFIED: "未满足",
+        UNKNOWN: "未知",
+        NOT_CONFIGURED: "未配置",
+        NOT_ENFORCED: "未强制执行",
+      },
+      fields: {
+        rpo: "恢复点目标 (RPO)",
+        retention: "保留期目标",
+        drill: "恢复演练周期",
+      },
+      lastChange: "最近变更",
+      edit: "编辑意图",
+      save: "保存",
+      saving: "保存中...",
+      cancel: "取消",
+      saved: "已保存（仅意图记录，不影响基础设施）",
+      saveFailed: "保存失败：版本冲突或输入无效，请刷新后重试",
+      reason: "变更原因（必填）",
     },
   },
 

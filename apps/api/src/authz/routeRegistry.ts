@@ -897,6 +897,34 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "admin_only",
       migrationStage: 9,
     },
+    {
+      // P7-E3 (ADR-017 D9): read the Admin's operational policy intent +
+      // compliance projection (Admin + Maintainer).
+      method: "GET",
+      path: "/system/ops-policy",
+      legacyGate: "Admin",
+      permission: Permission.SystemOpsPolicyView,
+      scope: Scope.System,
+      resolver: "system",
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 10,
+    },
+    {
+      // P7-E3 (ADR-017 D9): Admin is the SOLE intent owner. Writes the
+      // typed, audited, non-binding policy intent record. Never granted to
+      // Maintainer.
+      method: "PUT",
+      path: "/system/ops-policy",
+      legacyGate: "Admin",
+      permission: Permission.SystemOpsPolicyManage,
+      scope: Scope.System,
+      resolver: "system",
+      auditAction: "ops.policy.updated",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 10,
+    },
 
     // ── Exam lifecycle ──
     {

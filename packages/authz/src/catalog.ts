@@ -138,6 +138,16 @@ export const Permission = {
   // read-only restore-readiness / drill evidence projection. Restore itself
   // stays host-only (ADR-017 D4); only drill EVIDENCE is readable.
   SystemRestoreReadinessView: "system.restore_readiness.view",
+  // SystemOpsPolicyView (system.ops.policy.view): P7-E3 — read the Admin's
+  // DESIRED operational objectives (intent) + the compliance projection.
+  // Granted to Admin AND Maintainer (Maintainer may view intent, never
+  // modify it — ADR-017 D9).
+  SystemOpsPolicyView: "system.ops.policy.view",
+  // SystemOpsPolicyManage (system.ops.policy.manage): P7-E3 — Admin is the
+  // SOLE intent owner. Writes the typed, audited, non-binding policy intent
+  // record. Never granted to Maintainer (execution-side policy authority is
+  // decision-gated, ADR-017 D5/D9).
+  SystemOpsPolicyManage: "system.ops.policy.manage",
   // SystemEmailTest (system.email.test): P7-E2A (ADR-017 D7) — the
   // side-effecting email test action split out of the diagnostics VIEW
   // capability. VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT; POST /email/test

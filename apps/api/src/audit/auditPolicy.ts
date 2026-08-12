@@ -310,6 +310,22 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
+  // P7-E3 (ADR-017 D9): Admin's operational policy INTENT change — atomic
+  // with the write, carrying the desired values + reason.
+  [AuditAction.OpsPolicyUpdated]: definition(
+    "active",
+    "atomic",
+    "domain_state",
+    "low",
+    z
+      .object({
+        desiredRpoSeconds: z.number().int(),
+        desiredRetentionDays: z.number().int(),
+        desiredDrillCadenceDays: z.number().int(),
+        reason: shortText,
+      })
+      .strict(),
+  ),
   [AuditAction.CandidateCreate]: definition(
     "active",
     "atomic",

@@ -302,3 +302,121 @@ export const RestoreReadinessResponseSchema = z.object({
 export type RestoreReadinessResponse = z.infer<
   typeof RestoreReadinessResponseSchema
 >;
+
+// ── Operational policy intent (P7-E3, ADR-017 D9) ─────────────────
+
+/**
+ * Safe-range bounds for the Admin's operational policy intent. Typed
+ * validation — out-of-range values are rejected before they reach the DB
+ * (the DB CHECK constraints mirror these bounds).
+ */
+export const OpsPolicyRpoSecondsRange = { min: 300, max: 604800 } as const; // 5 min .. 7 days
+export const OpsPolicyRetentionDaysRange = { min: 1, max: 3650 } as const;
+export const OpsPolicyDrillCadenceDaysRange = { min: 1, max: 365 } as const;
+
+/**
+ * The Admin's DESIRED operational objectives — intent only, never binding
+ * infrastructure. `version` is the optimistic-concurrency (CAS) token; every
+ * update must echo the version it read, and `reason` documents the change.
+ */
+export const OperationalPolicySchema = z.object({
+  desiredRpoSeconds: z
+    .number()
+    .int()
+    .min(OpsPolicyRpoSecondsRange.min)
+    .max(OpsPolicyRpoSecondsRange.max),
+  desiredRetentionDays: z
+    .number()
+    .int()
+    .min(OpsPolicyRetentionDaysRange.min)
+    .max(OpsPolicyRetentionDaysRange.max),
+  desiredDrillCadenceDays: z
+    .number()
+    .int()
+    .min(OpsPolicyDrillCadenceDaysRange.min)
+    .max(OpsPolicyDrillCadenceDaysRange.max),
+  version: z.number().int().min(1),
+  reason: z.string().trim().min(1).max(500),
+  updatedBy: z.string(),
+  updatedAt: z.string(),
+});
+
+/** Type for the operational policy intent record. */
+export type OperationalPolicy = z.infer<typeof OperationalPolicySchema>;
+
+/** Compliance status vocabulary (DESIRED vs OBSERVED vs STATUS). */
+export const ComplianceStatusValues = [
+  "SATISFIED",
+  "NOT_SATISFIED",
+  "UNKNOWN",
+  "NOT_CONFIGURED",
+  "NOT_ENFORCED",
+] as const;
+
+export const ComplianceStatusSchema = z.enum(ComplianceStatusValues);
+
+/** Type for a compliance status. */
+export type ComplianceStatus = z.infer<typeof ComplianceStatusSchema>;
+
+/**
+ * One DESIRED vs OBSERVED vs STATUS row of the compliance projection.
+ * `observedDetail` is a truthful human-readable explanation of the observed
+ * evidence (e.g. "last verified backup age 26h", "retention is host-managed").
+ */
+export const ComplianceItemSchema = z.object({
+  desired: z.string().nullable(),
+  observed: z.string().nullable(),
+  status: ComplianceStatusSchema,
+  observedDetail: z.string().nullable(),
+});
+
+/** Type for a compliance projection row. */
+export type ComplianceItem = z.infer<typeof ComplianceItemSchema>;
+
+/**
+ * Request schema for PUT /system/ops-policy (Admin intent owner). The client
+ * must send the version it read (CAS); mismatch → 409 VERSION_CONFLICT.
+ */
+export const UpsertOpsPolicyRequestSchema = z.object({
+  desiredRpoSeconds: z
+    .number()
+    .int()
+    .min(OpsPolicyRpoSecondsRange.min)
+    .max(OpsPolicyRpoSecondsRange.max),
+  desiredRetentionDays: z
+    .number()
+    .int()
+    .min(OpsPolicyRetentionDaysRange.min)
+    .max(OpsPolicyRetentionDaysRange.max),
+  desiredDrillCadenceDays: z
+    .number()
+    .int()
+    .min(OpsPolicyDrillCadenceDaysRange.min)
+    .max(OpsPolicyDrillCadenceDaysRange.max),
+  /** Echo of the version read (0 for first creation). */
+  version: z.number().int().min(0),
+  /** Required reason for the change (audited). */
+  reason: z.string().trim().min(1).max(500),
+});
+
+/** Type for a policy upsert request. */
+export type UpsertOpsPolicyRequest = z.infer<
+  typeof UpsertOpsPolicyRequestSchema
+>;
+
+/**
+ * Response schema for GET /system/ops-policy: the intent record (or null =
+ * NOT_CONFIGURED) plus the DESIRED vs OBSERVED vs STATUS compliance
+ * projection for RPO, retention, and restore drill.
+ */
+export const OpsPolicyResponseSchema = z.object({
+  policy: OperationalPolicySchema.nullable(),
+  compliance: z.object({
+    rpo: ComplianceItemSchema,
+    retention: ComplianceItemSchema,
+    drill: ComplianceItemSchema,
+  }),
+});
+
+/** Type for the ops-policy response. */
+export type OpsPolicyResponse = z.infer<typeof OpsPolicyResponseSchema>;

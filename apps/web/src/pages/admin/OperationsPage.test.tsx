@@ -114,6 +114,41 @@ function backup(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function policyResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    policy: {
+      desiredRpoSeconds: 3600,
+      desiredRetentionDays: 30,
+      desiredDrillCadenceDays: 7,
+      version: 1,
+      reason: "initial setup",
+      updatedBy: "admin",
+      updatedAt: "2026-08-12T10:00:00.000Z",
+    },
+    compliance: {
+      rpo: {
+        desired: "3600s",
+        observed: "7200s",
+        status: "NOT_SATISFIED",
+        observedDetail: "last verified backup age 7200s > desired 3600s",
+      },
+      retention: {
+        desired: "30d",
+        observed: "host-managed",
+        status: "NOT_ENFORCED",
+        observedDetail: "retention/pruning is host-managed",
+      },
+      drill: {
+        desired: "7d",
+        observed: "1d ago",
+        status: "SATISFIED",
+        observedDetail: "last drill 1d ago <= desired 7d (automated)",
+      },
+    },
+    ...overrides,
+  };
+}
+
 function restore(overrides: Record<string, unknown> = {}) {
   return {
     latestDrill: {
@@ -167,7 +202,8 @@ describe("OperationsPage (P7-E2C)", () => {
       .mockResolvedValueOnce(health())
       .mockResolvedValueOnce(diag())
       .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore());
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
     await renderPage();
 
     await waitFor(() => {
@@ -201,7 +237,8 @@ describe("OperationsPage (P7-E2C)", () => {
       )
       .mockResolvedValueOnce(
         restore({ latestDrill: null, latestSuccessfulDrill: null }),
-      );
+      )
+      .mockResolvedValueOnce(policyResponse());
     await renderPage();
 
     await waitFor(() => {
@@ -226,7 +263,8 @@ describe("OperationsPage (P7-E2C)", () => {
       )
       .mockResolvedValueOnce(
         restore({ latestDrill: null, latestSuccessfulDrill: null }),
-      );
+      )
+      .mockResolvedValueOnce(policyResponse());
     await renderPage();
 
     await waitFor(() => {
@@ -264,7 +302,8 @@ describe("OperationsPage (P7-E2C)", () => {
           counts: { running: 0, succeeded: 1, failed: 1, abandoned: 0 },
         }),
       )
-      .mockResolvedValueOnce(restore());
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
     await renderPage();
 
     await waitFor(() => {
@@ -284,7 +323,8 @@ describe("OperationsPage (P7-E2C)", () => {
       .mockResolvedValueOnce(health())
       .mockResolvedValueOnce(diag())
       .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore());
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
     await renderPage();
 
     await waitFor(() => {
@@ -299,7 +339,8 @@ describe("OperationsPage (P7-E2C)", () => {
       .mockResolvedValueOnce(health())
       .mockResolvedValueOnce(diag())
       .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore());
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
     await renderPage();
 
     await waitFor(() => {
@@ -315,6 +356,86 @@ describe("OperationsPage (P7-E2C)", () => {
 
     await waitFor(() => {
       expect(screen.getByText("运维数据加载失败")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("OperationsPage policy intent (P7-E3)", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders DESIRED vs OBSERVED vs STATUS truthfully", async () => {
+    getMock
+      .mockResolvedValueOnce(health())
+      .mockResolvedValueOnce(diag())
+      .mockResolvedValueOnce(backup())
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("运维策略意图")).toBeInTheDocument();
+    });
+    // NOT_SATISFIED RPO renders through the StatusBadge authority.
+    expect(screen.getByText("未满足")).toBeInTheDocument();
+    expect(screen.getByText("未强制执行")).toBeInTheDocument();
+    expect(screen.getByText("已满足")).toBeInTheDocument();
+  });
+
+  it("shows NOT_CONFIGURED when no intent exists (truthful)", async () => {
+    getMock
+      .mockResolvedValueOnce(health())
+      .mockResolvedValueOnce(diag())
+      .mockResolvedValueOnce(backup())
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(
+        policyResponse({
+          policy: null,
+          compliance: {
+            rpo: {
+              desired: null,
+              observed: null,
+              status: "NOT_CONFIGURED",
+              observedDetail: "no operational policy intent recorded",
+            },
+            retention: {
+              desired: null,
+              observed: "host-managed",
+              status: "NOT_CONFIGURED",
+              observedDetail: "no operational policy intent recorded",
+            },
+            drill: {
+              desired: null,
+              observed: null,
+              status: "NOT_CONFIGURED",
+              observedDetail: "no operational policy intent recorded",
+            },
+          },
+        }),
+      );
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("未配置").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("the edit button exists for Admin (capability-gated UI)", async () => {
+    getMock
+      .mockResolvedValueOnce(health())
+      .mockResolvedValueOnce(diag())
+      .mockResolvedValueOnce(backup())
+      .mockResolvedValueOnce(restore())
+      .mockResolvedValueOnce(policyResponse());
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
     });
   });
 });

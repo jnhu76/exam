@@ -12,7 +12,13 @@ import {
   DiagnosticsResponseSchema,
   BackupEvidenceResponseSchema,
   RestoreReadinessResponseSchema,
+  OpsPolicyResponseSchema,
+  UpsertOpsPolicyRequestSchema,
+  type ComplianceStatus,
 } from "@exam/contracts";
+import { executeInTransaction } from "@exam/db/src/types.js";
+import { createOperationalPolicyRepo } from "@exam/db/src/repository/operationalPolicyRepo.js";
+import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createWorkerHeartbeatRepo } from "@exam/db/src/repository/workerHeartbeatRepo.js";
@@ -429,6 +435,89 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
+   * GET /system/ops-policy
+   *
+   * P7-E3 (ADR-017 D9) — the Admin's DESIRED operational objectives (intent)
+   * plus the DESIRED vs OBSERVED vs STATUS compliance projection. The intent
+   * NEVER binds infrastructure; the projection is computed from ledger
+   * evidence (last verified backup, restore drills) against the current
+   * policy. No policy row = NOT_CONFIGURED.
+   *
+   * Gated by SystemOpsPolicyView (Admin + Maintainer).
+   */
+  fastify.get("/system/ops-policy", {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemOpsPolicyView),
+    ],
+    schema: {
+      security: cookieAuth,
+      "x-role": ["Admin", "Maintainer"],
+      response: { 200: OpsPolicyResponseSchema },
+    },
+    handler: async (request) => {
+      const ctx = getRequestContext(request);
+      const policy = await createOperationalPolicyRepo(anyDb).getPolicy(ctx);
+      return buildOpsPolicyProjection(fastify, request, policy);
+    },
+  });
+
+  /**
+   * PUT /system/ops-policy
+   *
+   * P7-E3 (ADR-017 D9) — Admin is the SOLE intent owner. Records the desired
+   * RPO / retention / drill cadence as a typed, versioned (CAS), audited
+   * intent record. This writes ONLY the intent — it never schedules,
+   * triggers, or rewrites infrastructure (host cron remains the execution
+   * authority). The `version` echo + required `reason` are enforced; a
+   * concurrent edit rejects with VERSION_CONFLICT.
+   *
+   * Gated by SystemOpsPolicyManage (Admin preset ONLY — Maintainer never).
+   */
+  fastify.put("/system/ops-policy", {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemOpsPolicyManage),
+    ],
+    schema: {
+      security: cookieAuth,
+      "x-role": ["Admin"],
+      body: UpsertOpsPolicyRequestSchema,
+      response: { 200: OpsPolicyResponseSchema },
+    },
+    handler: async (request) => {
+      const ctx = getRequestContext(request);
+      const data = UpsertOpsPolicyRequestSchema.parse(request.body);
+      const policy = await executeInTransaction(anyDb, async (tx) => {
+        const updated = await createOperationalPolicyRepo(
+          tx,
+        ).upsertPolicyWithinTransaction(tx, ctx, {
+          desiredRpoSeconds: data.desiredRpoSeconds,
+          desiredRetentionDays: data.desiredRetentionDays,
+          desiredDrillCadenceDays: data.desiredDrillCadenceDays,
+          expectedVersion: data.version,
+          reason: data.reason,
+          actorId: ctx.actorId,
+          now: fastify.now(),
+        });
+        await recordAtomicHttpAudit(tx, request, ctx, {
+          action: "ops.policy.updated",
+          targetType: "system",
+          targetId: "ops-policy",
+          metadata: {
+            desiredRpoSeconds: updated.desiredRpoSeconds,
+            desiredRetentionDays: updated.desiredRetentionDays,
+            desiredDrillCadenceDays: updated.desiredDrillCadenceDays,
+            reason: updated.reason,
+          },
+        });
+        return updated;
+      });
+      return buildOpsPolicyProjection(fastify, request, policy);
+    },
+  });
+
+  /**
    * GET /system/restore-readiness
    *
    * P7-E2B — READ-ONLY restore-readiness / drill evidence projection: latest
@@ -488,6 +577,140 @@ function toBackupRunWire(r: BackupRunRow) {
     verifiedAt: r.verifiedAt?.toISOString() ?? null,
     failureReason: r.failureReason,
     executorType: r.executorType,
+  };
+}
+
+/**
+ * P7-E3 (ADR-017 D9) — builds the DESIRED vs OBSERVED vs STATUS compliance
+ * projection from the policy intent + ledger evidence.
+ *
+ * Truthfulness rules:
+ *   - RPO: observed = age of the last VERIFIED backup (seconds). No policy →
+ *     NOT_CONFIGURED; no verified backup → UNKNOWN (cannot measure); age <=
+ *     desired → SATISFIED; otherwise NOT_SATISFIED.
+ *   - Retention: retention/pruning is host-managed today (host cron +
+ *     manual + fail-closed invariant) — the product has no enforcement
+ *     evidence, so the status is always NOT_ENFORCED (never a lie).
+ *   - Drill: observed = most recent drill evidence (automated success first,
+ *     operator_declared accepted with its source shown). No drill →
+ *     UNKNOWN; age <= cadence → SATISFIED; otherwise NOT_SATISFIED.
+ *   - The projection NEVER changes infrastructure — it only renders truth.
+ */
+async function buildOpsPolicyProjection(
+  fastify: FastifyInstance,
+  request: FastifyRequest,
+  policy: Awaited<
+    ReturnType<ReturnType<typeof createOperationalPolicyRepo>["getPolicy"]>
+  >,
+) {
+  const ctx = getRequestContext(request);
+  const evidence = createBackupEvidenceRepo(fastify.db);
+  const now = fastify.now();
+  const [latestVerified, drills] = await Promise.all([
+    evidence.latestSucceededRun(ctx),
+    evidence.listDrills(ctx, 20),
+  ]);
+
+  const policyWire = policy
+    ? {
+        desiredRpoSeconds: policy.desiredRpoSeconds,
+        desiredRetentionDays: policy.desiredRetentionDays,
+        desiredDrillCadenceDays: policy.desiredDrillCadenceDays,
+        version: policy.version,
+        reason: policy.reason,
+        updatedBy: policy.updatedBy,
+        updatedAt: policy.updatedAt.toISOString(),
+      }
+    : null;
+
+  // ── RPO ──
+  let rpoStatus: ComplianceStatus;
+  let rpoDetail: string | null;
+  const rpoObservedSeconds =
+    latestVerified?.verifiedAt != null
+      ? Math.max(
+          0,
+          (now.getTime() - latestVerified.verifiedAt.getTime()) / 1000,
+        )
+      : null;
+  if (!policy) {
+    rpoStatus = "NOT_CONFIGURED";
+    rpoDetail = "no operational policy intent recorded";
+  } else if (rpoObservedSeconds === null) {
+    rpoStatus = "UNKNOWN";
+    rpoDetail = "no verified backup exists — RPO cannot be measured";
+  } else if (rpoObservedSeconds <= policy.desiredRpoSeconds) {
+    rpoStatus = "SATISFIED";
+    rpoDetail = `last verified backup age ${Math.round(rpoObservedSeconds)}s <= desired ${policy.desiredRpoSeconds}s`;
+  } else {
+    rpoStatus = "NOT_SATISFIED";
+    rpoDetail = `last verified backup age ${Math.round(rpoObservedSeconds)}s > desired ${policy.desiredRpoSeconds}s`;
+  }
+
+  // ── Retention (host-managed — no product enforcement evidence) ──
+  const retentionStatus: ComplianceStatus = policy
+    ? "NOT_ENFORCED"
+    : "NOT_CONFIGURED";
+  const retentionDetail = policy
+    ? "retention/pruning is host-managed (host cron + operator) — the product records no enforcement evidence"
+    : "no operational policy intent recorded";
+
+  // ── Restore drill cadence ──
+  let drillStatus: ComplianceStatus;
+  let drillDetail: string | null;
+  const provenDrill =
+    drills.find((d) => d.result === "succeeded" && d.source === "automated") ??
+    drills.find((d) => d.result === "succeeded") ??
+    drills.find((d) => d.result === "operator_declared") ??
+    null;
+  const drillAgeSeconds =
+    provenDrill?.completedAt != null
+      ? Math.max(0, (now.getTime() - provenDrill.completedAt.getTime()) / 1000)
+      : null;
+  if (!policy) {
+    drillStatus = "NOT_CONFIGURED";
+    drillDetail = "no operational policy intent recorded";
+  } else if (provenDrill === null) {
+    drillStatus = "UNKNOWN";
+    drillDetail = "no restore drill evidence recorded";
+  } else if (
+    drillAgeSeconds !== null &&
+    drillAgeSeconds <= policy.desiredDrillCadenceDays * 86400
+  ) {
+    drillStatus = "SATISFIED";
+    drillDetail = `last drill ${Math.round(drillAgeSeconds / 86400)}d ago <= desired ${policy.desiredDrillCadenceDays}d (${provenDrill.source})`;
+  } else {
+    drillStatus = "NOT_SATISFIED";
+    drillDetail = `last drill ${drillAgeSeconds !== null ? Math.round(drillAgeSeconds / 86400) + "d" : "?"} ago > desired ${policy.desiredDrillCadenceDays}d (${provenDrill.source})`;
+  }
+
+  return {
+    policy: policyWire,
+    compliance: {
+      rpo: {
+        desired: policy ? `${policy.desiredRpoSeconds}s` : null,
+        observed:
+          rpoObservedSeconds !== null
+            ? `${Math.round(rpoObservedSeconds)}s`
+            : null,
+        status: rpoStatus,
+        observedDetail: rpoDetail,
+      },
+      retention: {
+        desired: policy ? `${policy.desiredRetentionDays}d` : null,
+        observed: "host-managed",
+        status: retentionStatus,
+        observedDetail: retentionDetail,
+      },
+      drill: {
+        desired: policy ? `${policy.desiredDrillCadenceDays}d` : null,
+        observed: provenDrill
+          ? `${Math.round((drillAgeSeconds ?? 0) / 86400)}d ago`
+          : null,
+        status: drillStatus,
+        observedDetail: drillDetail,
+      },
+    },
   };
 }
 
