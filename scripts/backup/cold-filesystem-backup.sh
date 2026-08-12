@@ -199,7 +199,10 @@ fi
 # ledger in PostgreSQL remains the single durable authority; a lost spool
 # simply means no evidence (fail closed, never a false success). Crash
 # during the stopped window = no spool = no evidence.
-EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-cold_filesystem:$(date +%F)}"
+# Default = HOUR slot (cold_filesystem:YYYY-MM-DDTHH) so sub-daily schedules
+# never collide on the one-success-per-operationId invariant (see
+# postgres-logical-backup.sh for the full semantics).
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-cold_filesystem:$(date +%Y-%m-%dT%H)}"
 SPOOL="${DEST}/evidence.json"
 # Compute the size FIRST, then default to 0 — `du | cut || echo 0` would bind
 # the fallback to `cut` (which succeeds with empty output when du fails),

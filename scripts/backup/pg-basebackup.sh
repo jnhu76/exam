@@ -151,8 +151,10 @@ echo "  auth: loopback TCP + scram-sha-256, password via PGPASSWORD (never argv)
 
 # P7-E2B: stable logical-run identity + evidence hooks (see
 # postgres-logical-backup.sh for the semantics; the ledger stores the
-# artifact NAME only, never host paths).
-EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-physical_base:$(date +%F)}"
+# artifact NAME only, never host paths). Default = HOUR slot
+# (physical_base:YYYY-MM-DDTHH) so sub-daily schedules never collide on the
+# one-success-per-operationId invariant.
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-physical_base:$(date +%Y-%m-%dT%H)}"
 ARTIFACT_LABEL="$(basename "${DEST}")"
 # Container-name addressing (cwd-independent — see the same note in
 # postgres-logical-backup.sh).
@@ -172,7 +174,12 @@ evidence_fail() {
 }
 evidence_complete() {
   local size_bytes
-  size_bytes="$(du -sb "${DEST}" 2>/dev/null | cut -f1 || echo 0)"
+  # Compute the size FIRST, then default to 0 — `du | cut || echo 0` would
+  # bind the fallback to `cut` (which succeeds with empty output when du
+  # fails), producing an invalid empty --size-bytes that the evidence CLI
+  # rejects and fails a REAL, verified backup.
+  size_bytes="$(du -sb "${DEST}" 2>/dev/null | cut -f1)"
+  size_bytes="${size_bytes:-0}"
   if ! evidence complete --operation-id "${EVIDENCE_OPERATION_ID}" \
       --type physical_base --artifact-label "${ARTIFACT_LABEL}" \
       --size-bytes "${size_bytes}" --verification-method pg_verifybackup \

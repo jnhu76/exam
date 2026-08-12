@@ -60,11 +60,15 @@ PROJECT="$1"
 DEST="$2"
 
 # P7-E2B: stable logical-run identity for the evidence ledger. Defaults to
-# the daily cron slot (<type>:<YYYY-MM-DD>); a manual/cron invocation may
-# override with EVIDENCE_OPERATION_ID (retries of the same logical run MUST
-# reuse the same id so the ledger can reconcile them). The artifact label is
-# the file NAME only — the ledger never stores host paths.
-EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-logical:$(date +%F)}"
+# the HOUR slot (<type>:<YYYY-MM-DD>T<HH>) — the ledger allows at most one
+# verified success per operation id, so a default of "one per day" would
+# collide for any schedule finer than daily (e.g. hourly backups with a
+# desired RPO < 24h). A manual/cron invocation may override with
+# EVIDENCE_OPERATION_ID; retries of the same logical run MUST reuse the same
+# id so the ledger can reconcile them, and a schedule finer than one hour
+# MUST pass a per-slot id (see docs/deployment/backup-and-recovery.md). The
+# artifact label is the file NAME only — the ledger never stores host paths.
+EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-logical:$(date +%Y-%m-%dT%H)}"
 ARTIFACT_LABEL="$(basename "${DEST}")"
 
 # Runs the typed operator evidence command inside the app container.

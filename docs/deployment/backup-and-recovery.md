@@ -87,12 +87,16 @@ Consequences:
 - A crash before verified evidence leaves the run `running`; the next start
   of the same logical run closes it as `abandoned`. No crash ever claims
   success.
-- The same logical run (same `EVIDENCE_OPERATION_ID`, default
-  `<type>:<YYYY-MM-DD>` for the daily cron slot) cannot produce two
+- The same logical run (same `EVIDENCE_OPERATION_ID`) cannot produce two
   contradictory successes: at most one `succeeded` row per operation id; a
   conflicting re-completion is recorded `failed`
   (`duplicate_operation_conflict`) and the original success stays
-  authoritative.
+  authoritative. The default operation id is the **hour slot**
+  (`<type>:<YYYY-MM-DD>T<HH>`), so schedules finer than daily (e.g. hourly
+  backups for a desired RPO < 24h) never collide. **Mandatory contract:**
+  a schedule with a cadence finer than one hour MUST pass an explicit
+  per-slot `EVIDENCE_OPERATION_ID` (include the minutes), and retries of the
+  same logical run MUST reuse the same id.
 - The ledger stores the artifact **label** (file name) only — never host
   paths, never credentials, never the destination URI. The host layout
   remains Host Maintainer territory.
@@ -100,6 +104,10 @@ Consequences:
   a typed evidence spool (`evidence.json`) next to the artifact and the
   operator imports it after restart (`backup-evidence.js cold-import
   --spool <path>`). The spool is a transit file, not a second authority.
+  The import records the spool's REAL start/completion timestamps as the
+  run's times — an old backup imported today is NOT re-stamped as freshly
+  verified (the RPO projection measures from the backup's actual
+  completion, never from the import moment).
 - Restore drills are recorded via `backup-evidence.js drill` with
   `--source automated` (deterministic deployment drill) or
   `--source operator_declared` (operator-recorded). A declared success is
