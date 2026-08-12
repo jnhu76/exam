@@ -12,7 +12,7 @@
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
 | Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
 | Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
-| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). P7-E1 operational-authority / Admin–Maintainer separation audit + authority contract **READY FOR HUMAN REVIEW** (docs-only PR #281, 2026-08-12; see [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md) + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md) — PROPOSED; P7-E2 gated on review). State-machine, config-control-plane, exam-modes, and UI workstreams remain open. |
+| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). P7-E1 operational-authority / Admin–Maintainer separation audit + authority contract **ACCEPTED** (docs-only PR #281 merged 2026-08-12; see [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md) + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md) — ACCEPTED; P7-E2 gated on scheduling). State-machine, config-control-plane, exam-modes, and UI workstreams remain open. |
 | Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
@@ -156,11 +156,11 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > **P7-E1 status (2026-08-12):** P7-E is the **Operational Control Plane**
    > (authority separation + configuration ownership + operational evidence +
    > operational policy + Admin/Maintainer views). The P7-E1 reality audit +
-   > authority contract is **READY FOR HUMAN REVIEW** (docs-only PR #281, no
-   > code changes; see
+   > authority contract is **ACCEPTED** (docs-only PR #281 merged 2026-08-12,
+   > no code changes; see
    > [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
    > and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)
-   > — PROPOSED, rev 3). Verdict: the hard boundary (no product surface for
+   > — ACCEPTED, rev 3). Verdict: the hard boundary (no product surface for
    > infra execution; no Admin capability reaches machine/DB/secret authority;
    > secrets stay env/Compose-owned; restore stays operator-owned) **already
    > holds structurally**. Authority model: **Hybrid Option C** — Admin is the
@@ -170,7 +170,7 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > gap is **evidence, not authority**: P7-C ships mechanisms with zero
    > durable in-product records, so "last successful/verified backup" and
    > "RPO posture" are unanswerable in-product today. Recommended next slice:
-   > **GO P7-E2 (conditional on human review)** — authority-first:
+   > **GO P7-E2** (review gate satisfied 2026-08-12) — authority-first:
    > E2A Operational RBAC Boundary (Maintainer observation bundle, split
    > action-under-view capabilities, Admin ↔ Maintainer mutual exclusion)
    > → E2B Backup Evidence Ledger (typed
@@ -217,9 +217,9 @@ P7-C  portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
 
 P7-E0  configuration reality audit  →  verdict: no settings control plane
        justified now; no E1 settings slice.
-P7-E1  operational authority & Admin–Maintainer separation 🔵 AUDIT + DESIGN
-       READY FOR HUMAN REVIEW (docs-only PR #281, 2026-08-12; ADR-017
-       PROPOSED rev 3 — Hybrid Option C). Verdict: the Admin/Maintainer hard
+P7-E1  operational authority & Admin–Maintainer separation ✅ AUDIT + DESIGN
+       ACCEPTED (docs-only PR #281, 2026-08-12; ADR-017
+       ACCEPTED rev 3 — Hybrid Option C). Verdict: the Admin/Maintainer hard
        boundary already holds; Application Maintainer = recognized future
        product role (observation-only preset); Host Maintainer = host/CLI;
        the gap is durable backup evidence, not authority.
@@ -235,7 +235,8 @@ P7-M   configurable exam modes (product closeout) — FUNCTIONALLY COMPLETE;
        (profile management UI + exam creation wizard; two truthful starter
        recipes shipped; Controlled/Strict deferred to their owning subsystems;
        see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
-Future P7-E2  (gated on human review of P7-E1) — authority-first sequence
+Future P7-E2  (E1 accepted 2026-08-12 — next workstream, not started)
+       — authority-first sequence
        (ADR-017 D13; may merge into one or more PRs):
          E2A Operational RBAC Boundary — Maintainer observation capability
              bundle (amends ADR-010 role preset set; zero business perms);

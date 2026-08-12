@@ -2,13 +2,15 @@
 
 ## Status
 
-* Status: **PROPOSED** (accepted when P7-E1 is reviewed by a human)
+* Status: **ACCEPTED** (2026-08-12 — P7-E1 human review completed, PR #281
+  merged)
 * Date: 2026-08-12
 * Revision: 3 (2026-08-12) — revision 2 corrected the model to the **Hybrid
   Maintainer Model (Option C)**; revision 3 freezes the **Admin ↔ Maintainer
   mutual-exclusion invariant** (D14) and folds it into the E2A scope. All
   revisions belong to the same review cycle of PR #281; revision 1's Option
-  B decision is superseded by revision 2.
+  B decision is superseded by revision 2. Rev 3 accepted with P7-E1
+  (2026-08-12, PR #281).
 * Decision owners: project
 * Supersedes: none
 * Superseded by: none

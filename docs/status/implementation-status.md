@@ -198,12 +198,12 @@ audit, external log shipping. All Phase 4; none started.
 
 ## Known limitations
 
-- **Operational authority separation (P7-E1) is READY FOR HUMAN REVIEW —
-  design only, not yet accepted or implemented.** The P7-E1 audit (docs-only
-  PR #281, 2026-08-12,
+- **Operational authority separation (P7-E1) is ACCEPTED — design contract
+  only, no runtime implementation (docs + ADR; PR #281 merged 2026-08-12).**
+  The P7-E1 audit (docs-only PR #281, 2026-08-12,
   [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
   + [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md),
-  PROPOSED) verified that the Admin/Maintainer hard boundary already holds
+  ACCEPTED, rev 3) verified that the Admin/Maintainer hard boundary already holds
   structurally — no product surface (route/capability/UI) can perform
   infrastructure execution (backup/restore/PITR/WAL/restart/secrets).
   Authority model (proposed): Admin = business owner; Application Maintainer
@@ -213,7 +213,7 @@ audit, external log shipping. All Phase 4; none started.
   (P7-C ships mechanisms only — "last successful/verified backup", "RPO
   posture", "last failure" are unanswerable in-product today). The planned
   P7-E2 sequence (E2A RBAC boundary → E2B evidence ledger → E2C views) is
-  gated on human review of E1; E2A additionally enforces the frozen
+  gated on scheduling (E1 accepted 2026-08-12); E2A additionally enforces the frozen
   **Admin ↔ Maintainer mutual-exclusion invariant** — no human actor may
   hold both active assignments (ADR-017 D14).
 - **Interruption time compensation**: REC-I3 implements candidate direct-entry

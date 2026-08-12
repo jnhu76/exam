@@ -387,11 +387,11 @@ SQL status updates.
 > **Program scope (2026-08-12, P7-E1):** P7-E is the **Operational Control
 > Plane** — authority separation (Admin ≠ Maintainer), configuration
 > ownership, operational evidence, operational policy, and Admin/Maintainer
-> views. The P7-E1 reality audit + authority contract is **READY FOR HUMAN
-> REVIEW** (docs-only PR #281; see
+> views. The P7-E1 reality audit + authority contract is **ACCEPTED**
+> (docs-only PR #281 merged 2026-08-12; see
 > [`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`](../audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md)
 > and [ADR-017](../adr/ADR-017-operational-authority-maintainer-boundary.md)
-> — PROPOSED, rev 3). Verdict: the hard boundary (no product surface for
+> — ACCEPTED, rev 3). Verdict: the hard boundary (no product surface for
 > infrastructure execution; no Admin capability reaches machine/DB/secret
 > authority; secrets env/Compose-only; restore operator-owned forever)
 > **already holds structurally**. Authority model: **Hybrid Option C** —
@@ -401,7 +401,7 @@ SQL status updates.
 > zero business permissions; Host Maintainer = infrastructure execution
 > (host/CLI, not product RBAC). The real gap is durable backup *evidence*
 > (P7-C ships mechanisms with zero in-product records). Recommended next
-> slice: **GO P7-E2 (conditional on human review)** — authority-first:
+> slice: **GO P7-E2** (review gate satisfied 2026-08-12) — authority-first:
 > E2A Operational RBAC Boundary (Maintainer observation bundle — amends
 > ADR-010's role preset set; split action-under-view capabilities;
 > diagnostics domain split; Admin ↔ Maintainer mutual exclusion; no Admin

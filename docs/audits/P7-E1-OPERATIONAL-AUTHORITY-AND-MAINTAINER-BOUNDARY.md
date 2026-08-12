@@ -1,6 +1,7 @@
 # P7-E1 — Operational Authority & Maintainer Boundary
 
-**Status:** READY FOR HUMAN REVIEW
+**Status:** ACCEPTED (2026-08-12 — human review completed, PR #281 merged;
+design contract for P7-E2)
 **Program:** P7-E — Operational authority separation (Admin ≠ Maintainer)
 **Baseline (`origin/master`):** `e3eaaa4ce2116a756ad82aa8a209e249fe4466e1` (merge PR #279, clean tree)
 **Tree at audit:** clean
@@ -55,9 +56,9 @@ the boundary and the architecture in an authority contract (§9), an ADR
 human review.
 
 Findings: **P0: 0, P1: 0, P2: 3, P3: 4** (§16). None blocks the authority
-contract. Recommended next slice: **GO P7-E2 (conditional on human review of
-this document)** — authority-first sequencing: E2A Operational RBAC Boundary
-→ E2B Backup Evidence Ledger → E2C Admin/Maintainer Views (§17).
+contract. Recommended next slice: **GO P7-E2** (review gate satisfied
+2026-08-12, PR #281) — authority-first sequencing: E2A Operational RBAC
+Boundary → E2B Backup Evidence Ledger → E2C Admin/Maintainer Views (§17).
 
 ---
 
@@ -80,8 +81,9 @@ settings" naming conflict):
 
 ```text
 P7-E0  configuration reality audit                 ✅ CLOSED (PR #276)
-P7-E1  operational authority / role separation     🔵 THIS DOCUMENT —
-       (Admin ≠ Maintainer, Hybrid Option C)         READY FOR HUMAN REVIEW
+P7-E1  operational authority / role separation     ✅ ACCEPTED (PR #281,
+       (Admin ≠ Maintainer, Hybrid Option C)         2026-08-12 — design
+                                                      contract for E2)
 P7-E2  operational evidence + RBAC control-plane   ⬜ gated on E1 review
        foundation (E2A boundary → E2B evidence
        ledger → E2C views)
@@ -992,8 +994,8 @@ No finding rises to a correctness or security violation of the separation.
 
 ## 17. Recommended next slice — GO / NO-GO P7-E2
 
-### 17.1 Decision: **GO (conditional on human review of this document and
-ADR-017).**
+### 17.1 Decision: **GO** (review gate satisfied — E1 accepted 2026-08-12,
+PR #281)
 
 Rationale:
 
@@ -1014,8 +1016,10 @@ Rationale:
   boundary precedes any new operations surface, so the Maintainer role is
   never an afterthought (ADR-017 D13).
 
-**Gate:** E2 implementation must not begin until a human reviews and accepts
-E1 (this document + ADR-017). This report is the review artifact.
+**Gate (satisfied 2026-08-12):** E2 implementation must not begin until a
+human reviews and accepts E1 (this document + ADR-017) — acceptance was
+recorded via the PR #281 merge; this report was the review artifact. E2A
+implementation is scheduled as the next workstream, not started.
 
 ### 17.2 E2 scope — authority-first sequence (corrected)
 
@@ -1202,7 +1206,7 @@ Operational policy records + editable policy UI + UI closeout:
     / schedule / retention / service.restart — D5 conditions;
     `operational.policy.manage` deliberately absent), permanently-forbidden
     execution keys (§13).
-18. **Do we need an ADR?** Yes — ADR-017 (PROPOSED, rev 2) freezes the
+18. **Do we need an ADR?** Yes — ADR-017 (ACCEPTED, rev 3, PR #281) freezes the
     boundary and the Hybrid model (§9, §18).
 19. **What is decision-gated vs permanently forbidden?** Decision-gated
     (future, each with its own recorded decision): `backup.trigger`,
@@ -1227,7 +1231,8 @@ P7-E1 OPERATIONAL AUTHORITY / ADMIN-MAINTAINER SEPARATION
 
 Baseline:        e3eaaa4ce2116a756ad82aa8a209e249fe4466e1 (clean tree)
 Code changes:    NONE (docs + ADR only)
-ADR-017:         PROPOSED (rev 2 — Hybrid Maintainer Model, Option C)
+ADR-017:         ACCEPTED (rev 3 — Hybrid Maintainer Model, Option C;
+                 PR #281, 2026-08-12)
 
 Authority decision:
   Admin                  = Exam Product / Organization Business Owner
@@ -1257,7 +1262,8 @@ The real gap is evidence, not authority:
   - "last successful/verified backup", "RPO posture", "last failure" are
     unanswerable in-product today
 
-Recommended next slice:  GO P7-E2 (conditional on human review)
+Recommended next slice:  GO P7-E2 (review gate satisfied — PR #281,
+                         2026-08-12)
   authority-first sequence (ADR-017 D13):
     E2A Operational RBAC Boundary — Maintainer observation capability
         bundle (amends ADR-010 role preset set — seventh built-in role);
@@ -1284,10 +1290,11 @@ Open design questions for E2:  cross-authority retention/restore protocol
   (§12.5); backup state-machine mechanisms (lease/reconciler/operationId —
   invariants frozen, mechanisms not).
 
-Stop condition:  P7-E1 READY FOR HUMAN REVIEW — waiting for review before
-                 any E2 implementation begins.
+Stop condition:  P7-E1 ACCEPTED (human review complete — PR #281 merged
+                 2026-08-12). E2 implementation not started; scheduled as
+                 the next workstream.
 ```
 
 ---
 
-P7-E1 OPERATIONAL AUTHORITY / ADMIN-MAINTAINER SEPARATION — READY FOR HUMAN REVIEW
+P7-E1 OPERATIONAL AUTHORITY / ADMIN-MAINTAINER SEPARATION — ACCEPTED (PR #281, 2026-08-12)
