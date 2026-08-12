@@ -5,8 +5,11 @@
 **Date:** 2026-08-12
 **Branch:** `feat/p7-e-operational-control-plane`
 **Baseline (`origin/master`):** `a50643f5c22dad912dd876819a9a781b617ef07e` (PR #281 merged; working tree clean)
-**Described head:** round-2 hardening applied on top of `08d9a719`; the
-terminal closeout commit is the branch tip (see `git log` for its hash).
+**Described head:** `4558f1f4` — the round-2-hardened tip: all P1/P2
+fixes from the adversarial review on `08d9a719` (real CAS, cold-import
+completion truth, failed-drill cadence, drill result/source split, script
+hardening, activation seam, hour-slot operation ids) are in this revision;
+the metadata-pin commit that follows contains no content changes.
 **Working tree:** clean
 
 Commits (atomic, reviewable):
@@ -30,7 +33,7 @@ be7e7c49 fix(p7-e3): enforce real CAS on ops policy intent and truthful complian
 f407b6eb fix(p7-e2b): preserve true backup completion times and split drill result/source
 ab884ee4 fix(p7-e2b): harden backup scripts (size fallback, hour-slot operation ids)
 c02ecd99 fix(p7-e2a): implement role assignment reactivation through the exclusion seam
-(terminal) docs(p7-e): record review round 2 and refresh closeout metadata
+4558f1f4 docs(p7-e): record review round 2 and refresh closeout metadata
 ```
 
 Authority documents: ADR-017 (ACCEPTED, rev 3, PR #281) > P7-E0/P7-E1
