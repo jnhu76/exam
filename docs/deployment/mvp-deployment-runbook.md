@@ -601,8 +601,11 @@ docker compose stop    # stops containers without removing them
 # or
 docker compose down    # stops and removes containers (keeps volumes)
 # or
-docker compose down -v # DANGEROUS: also removes pgdata + redisdata volumes
-                       # (destroys all data — only for clean reinstall)
+docker compose down -v # DANGEROUS: removes the pgdata named volume and
+                       # destroys all data (only for clean reinstall).
+                       # NOTE: data under ./data/* (bind mounts, incl. the
+                       # Redis dir and backup spools) is NOT removed by
+                       # `down -v` — delete those manually if they must go.
 ```
 
 Graceful shutdown behavior:
