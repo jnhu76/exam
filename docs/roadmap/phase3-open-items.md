@@ -25,8 +25,9 @@ P4 (RBAC MVP role switch) ✅ CLOSED
     workstreams shipped: shared rate limit (PR #265), state/authority (P7-S2,
     PR #269), portable backup/DR (P7-C), operational control plane (P7-E,
     PR #282), exam modes (P7-M, PRs #277/#279), RBAC remediation (PR #284).
-    P7-F closeout: P7-F COMPLETE — P7 REMAINS OPEN (Gate P7-3 retention is the
-    blocking gate; ADR-017 rev4/ADR-018 + #286 pending human decision).
+    P7-F closeout: P7-F COMPLETE — P7 REMAINS OPEN (Gate P7-3 has two
+    unsatisfied bullets — RTO not declared/tested + retention host-owned/
+    NOT_ENFORCED; ADR-017 rev4/ADR-018 + #286 pending human decision).
 ```
 
 The former P2-1 Exam Authoring UI Flow was removed from the active Phase 3 plan
@@ -37,8 +38,8 @@ P7 is mostly shipped — Redis adoption (decision accepted; shared rate limit
 shipped), backup/recovery + DR drills (P7-C), the operational control plane
 (P7-E), configurable exam modes (P7-M), and the RBAC role-reality remediation
 are all on master. The **P7-F final readiness / release-gate closeout**
-verdict is **P7-F COMPLETE — P7 REMAINS OPEN** (Gate P7-3 retention is the one
-blocking gate). See
+verdict is **P7-F COMPLETE — P7 REMAINS OPEN** (Gate P7-3 has two unsatisfied
+bullets: RTO not declared/tested + retention host-owned/`NOT_ENFORCED`). See
 [`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md),
 [`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md),
 and [`docs/status/implementation-status.md`](../status/implementation-status.md).

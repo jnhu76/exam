@@ -12,7 +12,7 @@
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
 | Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
 | Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
-| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). **P7-E Operational Control Plane COMPLETE — on master (PR #282, 2026-08-12)** (E2A Maintainer RBAC boundary + mutual exclusion, E2B backup evidence ledger, E2C operations views, E3 operational policy intent; see [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)). **P7-RBAC role-reality remediation MERGED (PR #284, 2026-08-13)** — the post-P7-E audit ([`P7-RBAC-ROLE-REALITY-AUDIT.md`](../audits/P7-RBAC-ROLE-REALITY-AUDIT.md)) found 0 P0/P1; PR #284 remediates F-01/F-02/F-03/F-05/F-07/F-08/F-09, accepts F-06/F-10/F-11, and explicitly defers F-04 (Teacher course-scope) to a dedicated scoped-RBAC milestone; **ADR-017 revision 4 (PROPOSED)** narrows the Maintainer to a read-only Operational Observer and adds **ADR-018 (Observability Window, PROPOSED)** — both remain PROPOSED pending human acceptance (the runtime already implements the rev-4 model); see [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md). **P7-F final readiness / release-gate closeout is COMPLETE** — see [`P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md); verdict: P7-F COMPLETE, **P7 remains OPEN** solely because Gate P7-3 (backup retention, host-owned/`NOT_ENFORCED`) is not met and ADR-017 rev4/ADR-018 acceptance and #286 closure-clarification are pending human decisions. The state-machine closeout (P7-S2, PR #269) and exam-modes product (P7-M, functionally complete) have shipped; broader Phase 3 product work remains open. |
+| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). **P7-E Operational Control Plane COMPLETE — on master (PR #282, 2026-08-12)** (E2A Maintainer RBAC boundary + mutual exclusion, E2B backup evidence ledger, E2C operations views, E3 operational policy intent; see [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)). **P7-RBAC role-reality remediation MERGED (PR #284, 2026-08-13)** — the post-P7-E audit ([`P7-RBAC-ROLE-REALITY-AUDIT.md`](../audits/P7-RBAC-ROLE-REALITY-AUDIT.md)) found 0 P0/P1; PR #284 remediates F-01/F-02/F-03/F-05/F-07/F-08/F-09, accepts F-06/F-10/F-11, and explicitly defers F-04 (Teacher course-scope) to a dedicated scoped-RBAC milestone; **ADR-017 revision 4 (PROPOSED)** narrows the Maintainer to a read-only Operational Observer and adds **ADR-018 (Observability Window, PROPOSED)** — both remain PROPOSED pending human acceptance (the runtime already implements the rev-4 model); see [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md). **P7-F final readiness / release-gate closeout is COMPLETE** — see [`P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md); verdict: P7-F COMPLETE, **P7 remains OPEN** because Gate P7-3 has **two unsatisfied bullets (RTO not declared/tested + backup retention host-owned/`NOT_ENFORCED`)** and ADR-017 rev4/ADR-018 acceptance and #286 closure-clarification are pending human decisions. The state-machine closeout (P7-S2, PR #269) and the exam-modes product (**P7-M CLOSED** after the P7-F multimodal visual review) have shipped; broader Phase 3 product work remains open. |
 | Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
@@ -116,14 +116,18 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    - add validation, clean-host restore, and restore drills;
    - provide CLI and Admin visibility.
 
-   > **P7-C rebuild status (2026-08-10):** the portable-persistence +
-   > backup + PostgreSQL DR core is shipped (C1 cold path + Launchpad,
-   > C2 logical, C3 physical + PITR), with deterministic drills. The
-   > remaining items here (RPO/RTO profile automation, Admin backup
-   > surface, settings/files backup beyond the PostgreSQL authority)
-   > are P7-E control-plane work — the backup *evidence* ledger is the
-   > planned P7-E2B slice (after the E2A RBAC boundary), NOT started
-   > (see the P7-E1 audit below).
+   > **P7-C rebuild status (2026-08-10, superseded in part):** the
+   > portable-persistence + backup + PostgreSQL DR core is shipped (C1 cold
+   > path + Launchpad, C2 logical, C3 physical + PITR), with deterministic
+   > drills. The remaining items here (RPO/RTO profile automation, Admin
+   > backup surface, settings/files backup beyond the PostgreSQL authority)
+   > are P7-E control-plane work. The backup *evidence* ledger (the former
+   > "planned P7-E2B slice") **SHIPPED via PR #282** (2026-08-12) — typed
+   > `backup_runs`/`backup_run_events`/`restore_drill_runs` evidence + read
+   > projections. Still open: **RTO declaration/test** (no typed RTO
+   > authority; P7-F closeout lists it as a P7-3 gap) and retention
+   > automation (host-owned; WAL-G/pgBackRest host-side is the P7-E3-recorded
+   > recommendation). See [`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
 
 5. **Crash and outage recovery**
    - define API/host/PostgreSQL/Redis/worker/scanner failure behavior;
@@ -239,8 +243,11 @@ P7-M2  profile templates + authoring-time resolution ✅ CLOSED
        (organization-owned exam policy profiles, copy-on-apply into typed
        Exam columns, no runtime profile dependency; see
        docs/audits/P7-M2-PROFILE-TEMPLATES-AND-RESOLUTION.md)
-P7-M   configurable exam modes (product closeout) — FUNCTIONALLY COMPLETE;
-       visual product closeout pending (multimodal visual review round)
+P7-M   configurable exam modes (product closeout) ✅ **CLOSED** (2026-08-13,
+       P7-F multimodal visual review: profile list/create/edit + 5-step exam
+       wizard at 1440/1024/390; 11 screenshots; deterministic overflow
+       measurement — no blocking defect; a final human eyeball pass at a real
+       screen remains recommended, non-blocking)
        (profile management UI + exam creation wizard; two truthful starter
        recipes shipped; Controlled/Strict deferred to their owning subsystems;
        see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)

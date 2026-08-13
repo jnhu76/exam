@@ -27,22 +27,36 @@ shipped earlier.
 
 P7-F itself is complete: every release gate P7-0…P7-6 was audited against
 current master, bounded gaps were repaired, the P7-M multimodal visual review
-was performed, and full release evidence was run. **P7 cannot be declared
-CLOSED** by this closeout for one truthful reason plus recorded human decisions:
+was performed, and the full application verification ran (deployment/restore
+evidence was reused from P7-C/P7-E, not re-run in P7-F). **P7 cannot be
+declared CLOSED** by this closeout for two truthful reasons on Gate P7-3 plus
+recorded human decisions:
 
-1. **Gate P7-3 — retention is NOT operational** (the single blocking gate).
-   Backup *mechanisms* + *evidence* + *verified restore drills* + *RPO/RTO as
-   Admin intent* all exist and pass. But backup **retention/pruning is
-   genuinely not automated** — it is operator discipline with runbook guidance
-   (`backup-and-recovery.md:570,622`; `postgres-enable-pitr.sh:224`), and the
-   accepted P7-E3 decision gates record `backup.retention.manage` as **NO-GO /
-   host-owned**. The original Gate P7-3 bullet "backup automation and retention
-   are operational" is therefore **not literally satisfied**. This is NOT
-   faked as PASS. It is a genuine **release-gate architecture decision** pending
-   human disposition: either (a) accept that retention is permanently
-   host-owned/operator-discipline and reconcile the gate wording, or (b) require
-   product-side retention automation (new work). P7-F did not smuggle in a
-   retention engine.
+1. **Gate P7-3 has TWO unsatisfied bullets** (NOT faked as PASS):
+   - **RTO is not declared or tested.** `backup_operational_policy` carries
+     `desired_rpo_seconds` / `desired_retention_days` /
+     `desired_drill_cadence_days` only — **there is no typed `desired_rto_*`
+     authority anywhere in the product code**, no declared supported RTO
+     value, and no "clean-volume restore completes within the declared RTO"
+     acceptance. Workstream C's own rule ("exact supported values must be
+     decided and tested") is therefore unmet for RTO. RPO is declared (as
+     Admin-owned intent); RTO is **NOT MET**.
+   - **Retention is not operational.** Backup retention/pruning is genuinely
+     not automated — it is operator discipline with runbook guidance
+     (`backup-and-recovery.md:570,622`; `postgres-enable-pitr.sh:224`), and
+     the accepted P7-E3 decision gates record `backup.retention.manage` as
+     **NO-GO / host-owned** for the product control plane. The Gate P7-3
+     bullet "backup automation and retention are operational" is **not
+     literally satisfied**.
+   Both are genuine release-gate architecture decisions pending human
+   disposition. For retention, the options are: (a) accept permanent
+   operator-discipline retention and reconcile the gate wording; (b)
+   product-side retention engine (contradicts P7-E3's NO-GO, least aligned);
+   or **(c) host-side automated retention — cron/systemd + WAL-G/pgBackRest
+   (the P7-E3-recorded recommendation), with Exam observing evidence/status
+   only**. Option (c) is the architecture-aligned way to make Gate P7-3's
+   retention bullet actually hold without giving the browser or Maintainer
+   any execution authority. P7-F did not smuggle in a retention engine.
 2. **ADR-017 revision 4 and ADR-018 remain PROPOSED** (human acceptance pending).
    The runtime *already implements* the rev-4 read-only-observer model, but the
    ADR documents are not silently marked ACCEPTED — that requires an explicit
@@ -64,7 +78,7 @@ gate wording — each is a recorded human decision.
 | P7-0 | **PASS** (after bounded doc reconciliation in this PR) | Doc drift repaired; current-state docs now tell one story. |
 | P7-1 | **PASS** | P7-S2 guarantees intact on master; no new reachable partial state; no general reconciler needed (evidence-based). |
 | P7-2 | **PASS** | Redis = shared rate limit only (ADR-001 decision); lifecycle `off\|optional\|required`; no exam authority. |
-| P7-3 | **NOT PASS — HUMAN_DECISION_REQUIRED** (all bullets except retention pass; the gate reconciles with the accepted host-owned-retention architecture only after a human disposition) | Evidence ledger + verified drills + RPO intent pass; retention bullet is **NOT MET** — host-owned/`NOT_ENFORCED` (not faked). |
+| P7-3 | **NOT PASS — HUMAN_DECISION_REQUIRED** (two bullets not met: **RTO** + **retention**; the rest — evidence ledger, verified drills, RPO intent — pass) | RTO: no declared supported value / no typed authority / no restore-within-RTO acceptance. Retention: host-owned/`NOT_ENFORCED`. Neither is faked. |
 | P7-4 | **PASS** | Typed owners; no generic settings store; secrets env-only; active Exam/Attempt snapshot-frozen. |
 | P7-5 | **PASS** (mediated visual review; minor P3 polish) | `basic_quiz`/`standard_online` coherent; profile↔exam authority intact; no blocking visual defect. |
 | P7-6 | **PASS** (representative closeout) | Admin/Maintainer/Candidate surfaces usable; mobile measured no page-level overflow; UI debt reduction ongoing. |
@@ -160,25 +174,37 @@ operational; clean-host restore drill; post-restore invariant suite.
 
 Reality per bullet:
 
-- **Declared RPO/RTO profile** — met *as Admin-owned intent* (`backup_operational_policy`: desired RPO 5min..7d, retention objective, drill cadence; CAS version, audited; ADR-017 D9 reframe = reliability objective, never binds infrastructure). ✓ (as intent)
+- **Declared RPO/RTO profile** — **split reality.**
+  - **RPO**: declared *as Admin-owned intent* (`backup_operational_policy.desired_rpo_seconds`, 5min..7d; CAS version, audited; ADR-017 D9 reframe = reliability objective, never binds infrastructure). ✓ (as intent)
+  - **RTO**: ❌ **NOT MET.** There is **no `desired_rto_*` column** in `backup_operational_policy` (only `desired_rpo_seconds` / `desired_retention_days` / `desired_drill_cadence_days` — verified against `packages/db/src/schema/pg.ts`), no declared supported RTO value anywhere in product code, and no "clean-volume restore completes within the declared RTO" acceptance. Workstream C's own rule — "Exact supported values must be decided and tested" — is unmet for RTO. The P7-C "Recovery objectives" table (RPO 24h/1h/minutes × RTO 4h/1h/<30m) is explicitly a *planning frame, not a current guarantee*.
 - **Backup automation** — backup *commands* are operational: `scripts/backup/` (logical/physical/cold backup + restore + PITR enable) instrumented with the E2B evidence CLI at natural checkpoints; scheduling is host cron + scripts (operator-owned). ✓ (host-operational)
 - **Clean-host restore drill** — deterministic Docker drills under `tests/deployment/` (`persistence-and-cold-restore.sh`, `logical-backup-restore.sh`, `pitr.sh`, `compose-smoke.sh`, `launchpad-bootstrap.sh`); `restore_drill_runs` evidence (automated vs operator-declared; succeeded/failed orthogonal). ✓
 - **Post-restore invariants** — drills verify attempts/answers/snapshots/grading/Inbox/outbox/role-assignments/settings. ✓
 - **Backup evidence ledger** — `backup_runs`/`backup_run_events` with `backup_runs_success_verified_check` (artifact + readable + verification + durable commit); duplicate/crash/idempotency semantics tested (E2B). ✓
-- **Retention** — ❌ **NOT operational.** `postgres-enable-pitr.sh:224` ("No automatic retention is shipped"); `backup-and-recovery.md:570,622` ("No retention engine… no retention automation today; retention is the operator's responsibility"); P7-C closeout §164 ("Retention is manual"). P7-E3 decision gates record `backup.retention.manage` as **DEFERRED (NO-GO)** — host-owned. The product truthfully renders retention `NOT_ENFORCED`.
+- **Retention** — ❌ **NOT operational.** `postgres-enable-pitr.sh:224` ("No automatic retention is shipped"); `backup-and-recovery.md:570,622` ("No retention engine… no retention automation today; retention is the operator's responsibility"); P7-C closeout §164 ("Retention is manual"). P7-E3 decision gates record `backup.retention.manage` as **DEFERRED (NO-GO)** for the product control plane — host-owned. The product truthfully renders retention `NOT_ENFORCED`.
 
-The invariant behind "retention operational" (backups do not accumulate
-unboundedly) is **not guaranteed by the system** — it depends entirely on the
-host operator. This is a genuine narrowing, not a supersession that preserves
-the invariant.
+The invariants behind these two bullets (a declared, tested RTO; backups not
+accumulating unboundedly) are **not guaranteed by the system** — RTO has no
+typed declaration at all, and retention depends entirely on the host operator.
+This is a genuine gap, not a supersession that preserves the invariants.
 
-Verdict: **NOT PASS — HUMAN_DECISION_REQUIRED** (every bullet except retention
-passes; the gate can only become PASS via an explicit human disposition).
-This is the single reason P7 cannot be CLOSED. Options for the human:
-(a) accept permanent host-owned/operator-discipline retention and reconcile the
-gate wording; (b) schedule product/host retention automation as new work. P7-F
-did not fake PASS and did not build a retention engine to make the checkbox
-green.
+Verdict: **NOT PASS — HUMAN_DECISION_REQUIRED** (two bullets not met: **RTO**
+and **retention**; the gate can only become PASS via explicit human
+dispositions). These are the reasons P7 cannot be CLOSED. Options:
+
+- **RTO**: declare a supported RTO value + typed authority + a restore-within-
+  RTO acceptance (new work), or explicitly narrow the gate to RPO-only and
+  record RTO as deferred.
+- **Retention**: (a) accept permanent operator-discipline retention and
+  reconcile the gate wording; (b) product-side retention engine (least
+  aligned — P7-E3 records `backup.retention.manage` as NO-GO for the product
+  control plane); **(c) host-side automated retention — cron/systemd +
+  WAL-G/pgBackRest (the P7-E3-recorded recommendation), with Exam observing
+  evidence/status only** — the architecture-aligned way to make the bullet
+  hold without giving the browser or Maintainer execution authority.
+
+P7-F did not fake PASS and did not build a retention engine or an RTO field to
+make the checkboxes green.
 
 ### Gate P7-4 — Configuration is controlled
 
@@ -254,8 +280,11 @@ are cosmetic, not closeout defects.
 > recommended, but **no blocking defect remains** and the page-overflow claim
 > is backed by deterministic measurement, not image interpretation.
 
-Verdict: **PASS**. (P7-M closeout may move toward CLOSED; a human visual sign-off
-at a real screen is the last recommended — not blocking — step.)
+Verdict: **PASS**. (The P7-M closeout is now marked **CLOSED** with this
+round's review evidence — see
+`docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md` §"Visual review closeout
+(P7-F round)". A human eyeball pass at a real screen remains recommended and
+non-blocking.)
 
 ### Gate P7-6 — UI / operations closeout
 
@@ -298,8 +327,15 @@ The runtime implements the ADR-017 **rev-4** read-only-observer model; the ADR
 
 - **P0: 0.**
 - **P1: 0.**
-- **P2: 1.**
-  - **P7-3 retention bullet not satisfied.** Retention is host-owned/operator-discipline, truthfully `NOT_ENFORCED`, explicitly NO-GO per P7-E3. Not faked. **HUMAN_DECISION_REQUIRED** — the single blocking gate for P7 closure.
+- **P2: 2** (both are Gate P7-3 bullets — the reasons P7 stays OPEN; both
+  **HUMAN_DECISION_REQUIRED**, neither faked):
+  - **P7-3a — RTO not declared/tested.** No typed `desired_rto_*` authority
+    (verified against `backup_operational_policy` in `packages/db/src/schema/pg.ts`),
+    no declared supported RTO value, no restore-within-RTO acceptance.
+  - **P7-3b — retention not operational.** Host-owned/operator-discipline,
+    truthfully `NOT_ENFORCED`, `backup.retention.manage` NO-GO per P7-E3.
+    Preferred resolution path: host-side automated retention (WAL-G/pgBackRest
+    via cron/systemd), Exam observes evidence only.
 - **P3:**
   - Doc drift (P7-0) — **FIXED** in this PR (current/phase-roadmap/phase3-open-items/implementation-status reconciled).
   - `#286` closed-without-implementation — **HUMAN_DECISION_REQUIRED** (clarify intent; P7-F did not reopen, did not claim isolation, did not redefine Teacher).
@@ -333,9 +369,11 @@ not invent or claim restore evidence it did not execute.
 
 ## Test evidence
 
-**`pnpm verify` — PASS (exit 0), run at HEAD `0785c7f6`** (docs-only changes;
-all suites identical to the green master baseline). Actual current-run
-numbers:
+**`pnpm verify` — PASS (exit 0)** (docs-only changes; all suites identical to
+the green master baseline). Evidence split: local `pnpm verify` ran at HEAD
+`0785c7f6`; **CI (Static checks, Build, API/Package/Web coverage, E2E shard
+1/2 + 2/2, CodeRabbit, ai_code_review) is all-green at HEAD `5d987744`**
+(9/9 checks pass on PR #288). Actual current-run numbers:
 
 | Package | Test Files | Tests |
 | --- | --- | --- |
@@ -361,11 +399,13 @@ numbers:
 - **Build:** 9/9 tasks successful (`turbo build`).
 - Markdown: touched files pass Prettier and markdownlint (repo-wide `lint:md`
   errors are pre-existing in untouched `docs/standards/*` / `README.md`).
-- Deployment/restore drills (`tests/deployment/*`) and WSL Playwright E2E are
-  **unchanged by this docs-only PR**; the P7-C/E/RBAC closeouts (PRs #282/#284)
-  record their last full runs. A full deployment regression + WSL E2E run is
-  recommended in human review alongside `pnpm verify:static` (no restore
-  evidence was invented here).
+- **CI E2E on the PR: PASS — shard 1/2 + shard 2/2** (both blocking E2E shards
+  ran on PR #288 at HEAD `5d987744` and passed; no E2E specs skipped).
+- Deployment/restore drills (`tests/deployment/*`) are **unchanged by this
+  docs-only PR** and were **NOT RE-RUN in P7-F** (pass/fail explicitly not
+  claimed; last full runs recorded by P7-C/E closeouts). A full deployment
+  regression run remains a recommended human-review step (no restore evidence
+  was invented here).
 
 Known limitations: the agent environment had no interactive Google Chrome
 (visual review performed via headless chromium + image analysis + deterministic
@@ -378,7 +418,11 @@ carries pre-existing repo-wide errors.
 - **Controlled / Strict exam profiles** — deferred to owning subsystems (queue admission P7-Q, randomization, device binding, lockdown/IP, identity, continuous monitoring, `timed_sync`/`deadline`/`untimed`).
 - **Phase 3 open product work** — staff invitation, SMTP password reset, account lifecycle UI, scoped Teacher/Proctor/Grader as product roles, custom roles, WYSIWYG submit, ADR-008 Option D generic barrier, i18n page copy.
 - **J6** (Proctor Recovery Center) and **system-generated incidents** — NOT IMPLEMENTED.
-- **Backup retention automation** — host-owned/operator-discipline (P7-3 blocker above).
+- **RTO declaration/test (P7-3a)** — no typed RTO authority; human decision:
+  declare supported RTO + acceptance, or narrow the gate to RPO-only.
+- **Retention automation (P7-3b)** — host-owned/operator-discipline today;
+  preferred path: host-side automated retention (cron/systemd + WAL-G/pgBackRest,
+  per P7-E3), Exam observes evidence only.
 - **#258** flaky refresh-during-exam (not reproduced in 78+ clean runs), **#272** attempt-scoped Actor/Coordinator (deferred design), **#182** structured tag filter, **#64** Postgres test isolation — pre-existing, not P7.
 
 ## ADR status
@@ -394,7 +438,12 @@ this repo's process.
 
 **P7-F COMPLETE — P7 REMAINS OPEN.**
 
-- P7-F: COMPLETE (all gates audited; bounded drift repaired; P7-M visual review performed; full release evidence run).
-- P7: REMAINS OPEN. Remaining blocking gate: **P7-3 retention** (HUMAN_DECISION). Plus human decisions on **ADR-017 rev4 / ADR-018** acceptance and **#286** closure clarification.
+- P7-F: COMPLETE (all gates audited; bounded drift repaired; P7-M visual review
+  performed; full application verification completed — CI incl. both E2E shards
+  green; deployment/restore evidence reused from P7-C/P7-E and **not re-run** in
+  P7-F).
+- P7: REMAINS OPEN. Blocking gate: **P7-3 — two bullets NOT MET (RTO + retention),
+  HUMAN_DECISION_REQUIRED**. Plus human decisions on **ADR-017 rev4 / ADR-018**
+  acceptance and **#286** closure clarification.
 
 **STOP CONDITION: READY FOR HUMAN REVIEW. DO NOT MERGE.**

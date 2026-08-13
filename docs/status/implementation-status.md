@@ -206,10 +206,12 @@ audit, external log shipping. All Phase 4; none started.
   rev 4 + ADR-018 remain PROPOSED pending human acceptance. See the
   **P7-F final readiness closeout**
   ([`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md))
-  for the release-gate verdict (P7-F COMPLETE — P7 REMAINS OPEN on Gate P7-3
-  retention).
-  - **E2A — Operational RBAC Boundary**: Maintainer is the seventh built-in
-    assignable role (ADR-017 D2), preset holds ONLY `system.health.view` +
+  for the release-gate verdict (P7-F COMPLETE — P7 REMAINS OPEN on Gate P7-3,
+  with two unsatisfied bullets: RTO not declared/tested + retention
+  host-owned/`NOT_ENFORCED`).
+  - **E2A — Operational RBAC Boundary**: Maintainer is the **sixth** assignable
+    human role (the **seventh** role preset counting the synthetic,
+    non-assignable System — ADR-017 D2), preset holds ONLY `system.health.view` +
     `system.diagnostics.view` (+ E2B/E3 read views), zero business
     permissions. **Admin ↔ Maintainer mutual exclusion (D14)** enforced
     server-side transactionally under the org advisory lock on every

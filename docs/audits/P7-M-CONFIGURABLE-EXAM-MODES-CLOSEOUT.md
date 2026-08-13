@@ -1,10 +1,12 @@
 # P7-M Configurable Exam Modes Closeout
 
-Status: **FUNCTIONALLY COMPLETE — READY FOR MULTIMODAL VISUAL REVIEW**
+Status: **CLOSED** (2026-08-13 — the pending multimodal visual review round was
+performed by P7-F; see §"Visual review closeout (P7-F round)" below. A final
+human eyeball pass at a real screen remains recommended and non-blocking.)
 
 Baseline: `5641221745a3f03472d4d3c41c230cbdbf87eb07` (origin/master, post-PR-#278 M2 merge)
 Branch: `feat/p7-m-exam-modes-product-closeout`
-Closeout date: 2026-08-11
+Closeout date: 2026-08-11 (functional); visual round closed 2026-08-13 (P7-F)
 
 ---
 
@@ -12,9 +14,11 @@ Closeout date: 2026-08-11
 
 The P7-M configurable-exam-modes product is **FUNCTIONALLY COMPLETE** for the
 currently supported engine semantics. Per the agreed two-round closeout
-protocol, the **multimodal visual review round is still pending** — visual
-hierarchy / spacing / density / responsive / usability will be inspected
-page-by-page with a browser before this closeout may be marked CLOSED.
+protocol, the **multimodal visual review round was performed by P7-F
+(2026-08-13)** — visual hierarchy / spacing / density / responsive / usability
+were inspected with a real (headless) browser across three viewports, no
+blocking defect was found, and this closeout is therefore marked **CLOSED**.
+See §"Visual review closeout (P7-F round)" for the evidence.
 
 - Profile management (list / create / edit / delete) is a real Admin
   surface under the Exam-authoring domain, not a generic settings panel.
@@ -385,8 +389,8 @@ feature exists".
 | No fake Strict profile | ✅ (deferred, not shipped) |
 | No fake Controlled profile | ✅ (deferred, not shipped) |
 | Every shipped starter promise is real | ✅ (truthfulness guard test asserts `basic_quiz` = max_attempts 1) |
-| Responsive enough for supported widths | ⏳ implemented; final visual verification pending multimodal review round |
-| Keyboard/accessibility basics pass | ⏳ implemented (stepper/aria/FieldError); final visual verification pending multimodal review round |
+| Responsive enough for supported widths | ✅ verified (P7-F visual round: 0px page overflow at 390 on all reviewed routes; stepper flex-wraps; tables scroll within cards) |
+| Keyboard/accessibility basics pass | ✅ verified (P7-F visual round: accessible stepper `aria-current="step"`, paired labels, FieldError role=alert, Radix dialogs; no color-only status) |
 | Existing UI authority reused | ✅ |
 | Frontend behavior tests | ✅ (40 new frontend tests incl. wizard-state payload proofs) |
 | API/integration tests | ✅ (existing M1/M2 suites unchanged, green) |
@@ -442,8 +446,37 @@ failures observed during the review round are the documented BUG-FLAKE-001
 host-contention family (issue #280 — different db test each run, all pass in
 isolation, CI green). Final `pnpm verify` result recorded in the PR.
 
-**Known limitations:** multimodal visual review (visual hierarchy / spacing /
-density / responsive / usability) is the pending round before CLOSED.
+**Known limitations:** none blocking. Minor P3 polish recorded by the P7-F
+visual round (low-contrast muted hint text in a few places; the "1/5 步"
+counter is small; starter-recipe selection is a text button until 从起步模板创建
+is opened). A final human eyeball pass at a real screen remains recommended
+and non-blocking.
 
-**P7-M — Configurable Exam Modes — FUNCTIONALLY COMPLETE; visual product closeout pending**
-(CLOSED only after the multimodal visual review round passes.)
+## Visual review closeout (P7-F round, 2026-08-13)
+
+The pending multimodal visual review round was performed by P7-F against the
+dev DB (`exam`) as Admin, using a real (headless) Chromium via the project's
+Playwright + installed chromium build (no interactive Google Chrome was
+available in the agent environment; capture + image analysis + deterministic
+measurement were used):
+
+- **Routes:** `/admin/exam-profiles` (list), `/admin/exam-profiles/new`
+  (create editor), `/admin/exams/new` (5-step wizard, steps 1–2 walked),
+  `/admin/operations`, `/admin/dashboard`.
+- **Viewports:** 1440×900, 1024×768, 390×844. **11 screenshots** captured and
+  analyzed.
+- **Deterministic overflow measurement** (`document.documentElement.scrollWidth
+  − window.innerWidth` at 390px): `0px` on every reviewed route — the wizard
+  stepper flex-wraps correctly; the wider profile-list/dashboard `<table>`s
+  live inside `overflow-x-auto` `DataTableShell` cards and scroll within the
+  card (intended DataTable responsive behavior), not page-level.
+- **Findings:** 0 blocking defects. Desktop (1440) and medium (1024) clean and
+  usable — clear hierarchy, sane spacing/density, provenance badges + 恢复模板值,
+  copy-on-apply hints, inline `FieldError` validation, disabled future steps.
+  Minor P3 polish recorded above (cosmetic, non-blocking).
+- **Outcome:** the visual review passes; this closeout is **CLOSED**. The
+  review was mediated (headless capture + image analysis), so a final human
+  eyeball pass at a real screen is recommended but is **not** a blocker.
+
+**P7-M — Configurable Exam Modes — CLOSED** (2026-08-13; functional
+completeness proven by PR #279, visual round closed by P7-F).
