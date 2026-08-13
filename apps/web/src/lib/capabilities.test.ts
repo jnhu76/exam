@@ -190,6 +190,7 @@ describe("P4-4 capability helper — default landing paths", () => {
     ["Grader", "/admin/grading-queue"],
     ["Proctor", "/admin/proctor"],
     ["Candidate", "/exam/list"],
+    ["Maintainer", "/admin/operations"],
   ] as const)("routes %s to an accessible surface", (role, expectedPath) => {
     expect(defaultLandingPath(user(role))).toBe(expectedPath);
   });
@@ -221,14 +222,15 @@ describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capabil
   // canSeeManagement must NOT short-circuit on a role label (isAdmin). It is an
   // aggregate over the management-surface permission set: the management nav is
   // visible iff the principal's capability set grants ANY of
-  // UserView/AuditLogView/SettingsView/SystemHealthView/CandidateFieldView.
-  // This keeps the gate aligned with the backend per-route requireCapability
-  // gates and avoids anointing a single surrogate permission (directive §3).
+  // UserView/AuditLogView/SettingsView/CandidateFieldView. P7-RBAC-REMEDIATION
+  // F-08: SystemHealthView was removed from this set — it is an OPERATIONAL
+  // capability held by BOTH Admin and Maintainer, so including it leaked the
+  // 管理 nav group to Maintainer. Operational surfaces belong to the 运维 group.
   it("Admin sees management (holds UserView + the full management set)", () => {
     expect(canSeeManagement(user("Admin"))).toBe(true);
   });
 
-  it.each(["Teacher", "Grader", "Proctor", "Candidate"] as const)(
+  it.each(["Teacher", "Grader", "Proctor", "Candidate", "Maintainer"] as const)(
     "%s does NOT see management (holds none of the management-surface perms)",
     (role) => {
       expect(canSeeManagement(user(role))).toBe(false);

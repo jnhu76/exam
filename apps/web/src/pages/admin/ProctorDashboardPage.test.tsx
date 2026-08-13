@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import i18n from "@/i18n";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { permissionsForRole } from "@exam/authz";
 import type { MeResponse, TimeGrantRequest } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
 import { resetPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
@@ -119,13 +120,29 @@ const adminUser: MeResponse = {
   name: "Admin",
   role: "Admin",
   organizationId: "org-1",
-  capabilities: [],
+  // P7-RBAC-REMEDIATION F-09: the extend-time button is now capability-gated
+  // (can(AttemptTimeGrant)), not role-label-gated (isAdmin). The fixture must
+  // carry the Admin preset's capabilities (which include attempt.time.grant),
+  // not an empty array that only worked under the old role-label shortcut.
+  capabilities: [...permissionsForRole("Admin")] as string[],
 };
 
-function renderPage() {
+// F-09 negative fixture: a user WITHOUT attempt.time.grant. The Maintainer
+// preset has zero business permissions, so this user provably lacks the
+// capability while still being an authenticated non-Candidate identity.
+const maintainerUser: MeResponse = {
+  id: "maint-1",
+  username: "maint",
+  name: "Maintainer",
+  role: "Maintainer",
+  organizationId: "org-1",
+  capabilities: [...permissionsForRole("Maintainer")] as string[],
+};
+
+function renderPageWithUser(user: MeResponse) {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1/proctor"]}>
-      <AuthProvider initialUser={adminUser}>
+      <AuthProvider initialUser={user}>
         <Routes>
           <Route
             path="/admin/exams/:id/proctor"
@@ -135,6 +152,10 @@ function renderPage() {
       </AuthProvider>
     </MemoryRouter>,
   );
+}
+
+function renderPage() {
+  return renderPageWithUser(adminUser);
 }
 
 describe("ProctorDashboardPage", () => {
@@ -210,6 +231,76 @@ describe("ProctorDashboardPage", () => {
     expect(
       card?.querySelector("[data-testid='status-badge']"),
     ).toBeInTheDocument();
+  });
+
+  it("does NOT render business action buttons for a user without capabilities (F-09 negative)", async () => {
+    // F-09: UI visibility follows CAPABILITY, not role identity. The
+    // candidate has an in-progress attemptId (so an Admin WOULD see the full
+    // action row), but a user without the business capabilities — here the
+    // Maintainer preset, which has zero business permissions — must not see
+    // 延长时间 / 强制交卷 / 标记违规. The backend 403 boundary is covered by
+    // the route-level capability derivation; this test pins the client
+    // contract and acts as a canary if a business capability is ever added
+    // to the Maintainer preset.
+    apiGet.mockResolvedValue({
+      candidates: [makeCandidate({ attemptId: "att-1" })],
+      total: 1,
+    });
+    renderPageWithUser(maintainerUser);
+    await screen.findByText("张三");
+    expect(
+      screen.queryByRole("button", { name: "延长时间" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "强制交卷" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "标记违规" }),
+    ).not.toBeInTheDocument();
+    // The grant dialog must not open either (no capability to reach it).
+    expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();
+  });
+
+  it("does NOT POST force-submit from the hydrated banner for a user without AttemptForceSubmit", async () => {
+    // Defense-in-depth (CodeRabbit round-4): the banner hydrates from
+    // sessionStorage regardless of capabilities (dismiss must stay available
+    // to clear a stale local command), but its destructive retry must never
+    // POST without the capability. A Maintainer with a stale pending record
+    // sees the banner, yet the retry is a no-op.
+    sessionStorage.setItem(
+      "exam.pendingForceSubmit:org-1:maint-1",
+      JSON.stringify({
+        schemaVersion: 2,
+        organizationId: "org-1",
+        actorId: "maint-1",
+        command: {
+          attemptId: "att-1",
+          operationId: "00000000-0000-4000-8000-000000000abc",
+          reason: "管理员强制交卷",
+          examId: "exam-1",
+          candidateName: "张三",
+        },
+        createdAt: Date.now(),
+      }),
+    );
+    apiGet.mockResolvedValue({
+      candidates: [makeCandidate({ attemptId: "att-1" })],
+      total: 1,
+    });
+    renderPageWithUser(maintainerUser);
+    // The banner hydrates on mount — dismiss stays available.
+    await screen.findByTestId("pending-force-submit-banner");
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "重试未确认强制交卷" }),
+      );
+    });
+    expect(apiPost).not.toHaveBeenCalled();
+    // Dismiss still clears the stale record.
+    fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
+    expect(
+      sessionStorage.getItem("exam.pendingForceSubmit:org-1:maint-1"),
+    ).toBeNull();
   });
 
   // ── Operator time-grant dialog (P1-3 / P1-4) ────────────────────────────

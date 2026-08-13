@@ -412,7 +412,7 @@ describe("OperationsPage policy intent (P7-E3)", () => {
     await renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("运维策略意图")).toBeInTheDocument();
+      expect(screen.getByText("可靠性目标")).toBeInTheDocument();
     });
     // NOT_SATISFIED RPO renders through the StatusBadge authority.
     expect(screen.getByText("未满足")).toBeInTheDocument();
@@ -482,7 +482,7 @@ describe("OperationsPage policy intent (P7-E3)", () => {
     await renderPage("Maintainer");
 
     await waitFor(() => {
-      expect(screen.getByText("运维策略意图")).toBeInTheDocument();
+      expect(screen.getByText("可靠性目标")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("policy-edit-button")).not.toBeInTheDocument();
   });

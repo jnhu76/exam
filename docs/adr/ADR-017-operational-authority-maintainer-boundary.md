@@ -2,15 +2,28 @@
 
 ## Status
 
-* Status: **ACCEPTED** (2026-08-12 — P7-E1 human review completed, PR #281
-  merged)
-* Date: 2026-08-12
-* Revision: 3 (2026-08-12) — revision 2 corrected the model to the **Hybrid
-  Maintainer Model (Option C)**; revision 3 freezes the **Admin ↔ Maintainer
-  mutual-exclusion invariant** (D14) and folds it into the E2A scope. All
-  revisions belong to the same review cycle of PR #281; revision 1's Option
-  B decision is superseded by revision 2. Rev 3 accepted with P7-E1
-  (2026-08-12, PR #281).
+* Status: **ACCEPTED through revision 3** (2026-08-12 — P7-E1 human review
+  completed, PR #281 merged). **Revision 4: PROPOSED** (2026-08-13 —
+  P7-RBAC-ROLE-REALITY-AUDIT remediation, awaiting human review).
+* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed)
+* Revision: 4 (2026-08-13, **PROPOSED**) — narrows/clarifies the
+  **Application Maintainer model** from the revision-2 "viewer/controller"
+  wording to a **read-only operational observability identity** ("Exam gives
+  the Maintainer a window, not a hand"). Revision 4 does NOT change the
+  Admin/Maintainer mutual exclusion (D14), the host execution boundary (D4),
+  the restore/PITR prohibition, Admin business authority (D1), or the System
+  synthetic authority. It corrects the Maintainer framing (D2/D5/D9), states
+  explicitly that **no "Configurer" persona exists**, reframes operational
+  policy as a **reliability objective**, and tightens D5's default stance on
+  Maintainer write capabilities. See **§Revision 4 (PROPOSED)** below for the
+  binding corrections. **Revisions 1–3 remain the accepted authority until
+  revision 4 is accepted by human review; revision 4 governs only after
+  acceptance.**
+* Earlier revisions: revision 2 corrected the model to the **Hybrid
+  Maintainer Model (Option C)**; revision 3 froze the **Admin ↔ Maintainer
+  mutual-exclusion invariant** (D14) and folded it into the E2A scope.
+  Revision 1's Option B decision was superseded by revision 2. Rev 3 accepted
+  with P7-E1 (2026-08-12, PR #281).
 * Decision owners: project
 * Supersedes: none
 * Superseded by: none
@@ -21,6 +34,8 @@
   * ADR-014 — Exam Incident Authority
   * ADR-015 — Proctor Exam Scope Authority
   * ADR-016 — Future Offline-Resilient Client Data and Recovery Model
+  * ADR-018 — Operational Observability Window (future runtime-data contract;
+    added by rev 4 — see §Revision 4)
   * P7-C portable persistence / backup / PostgreSQL DR (closeout)
   * P7-E0 Configuration Reality Audit (verdict: no generic settings subsystem)
 
@@ -37,6 +52,178 @@ LAN/on-premise product. It does **not** authorize any new UI, role, schema,
 route, or infrastructure execution surface in E1. It freezes the authority
 **architecture** the product must grow into, and prohibits specific future
 regressions.
+
+---
+
+## Revision 4 (PROPOSED) — Maintainer Observability Boundary
+
+> **Status: PROPOSED — awaiting human review.** This section narrows and
+> clarifies the revision-2 Application Maintainer model. Where rev-2/3 wording
+> conflicts with rev 4, **rev 4 governs** once accepted. Until then, rev 3
+> remains the accepted contract.
+
+### R4-1. The corrected principle: a window, not a hand
+
+```text
+VIEW / SEARCH / FILTER / CORRELATE / DIAGNOSE   ≠
+MUTATE / EXECUTE / CONFIGURE / RESTART / RESTORE
+```
+
+**Exam gives the Maintainer a window, not a hand.** Future operational data —
+logs, metrics, events, diagnostic materials, backup/recovery evidence, runtime
+state — may all be presented through that window. But the Application
+Maintainer **never** mutates, executes, configures infrastructure, restarts
+services, or restores through the Exam product. Real infrastructure maintenance
+happens **outside** the Exam boundary (Host Operator — see R4-3).
+
+### R4-2. Corrected role model
+
+Revision 2 described the Application Maintainer identity as a
+**"viewer/controller"** (D2). **Revision 4 corrects this:** the application-side
+Maintainer is an **Operational Observer**, not a controller. There is no
+control-plane write authority in the current Maintainer model.
+
+```text
+                          Exam
+                           │
+             ┌─────────────┴─────────────┐
+             │                           │
+           Admin                     Maintainer
+     考试管理员                     系统运维
+   (Exam Administrator)        (System Operations Observer)
+             │                           │
+      manages the Exam            reads runtime evidence
+        product plane             through the Exam window
+             │                           │
+             └─────────────┬─────────────┘
+                           │
+                      Exam boundary
+───────────────────────────┼────────────────────────────────
+                           │
+                    Host Operator
+                  (NOT Exam RBAC)
+                           │
+               SSH / Docker / PostgreSQL
+               WAL / backup / restore / PITR
+               filesystem / secrets / systemd
+```
+
+| Identity | What it is | Authority |
+| --- | --- | --- |
+| **Admin** (考试管理员) | Exam application administrator / business owner | Business plane + application settings + **reliability-objective** authority (desired RPO / retention / drill cadence). Observes operational summary. **Never** infrastructure execution. |
+| **Application Maintainer** (系统运维) | Read-only operational observability identity | **Observation only:** view / search / filter / inspect / correlate / diagnose runtime evidence. **Zero** business permissions, **zero** write permissions. |
+| **System** | Synthetic non-human actor | Produces / evaluates runtime evidence (deadline auto-submit, heartbeat scan, reconcile). Non-login, non-assignable. |
+| **Host Operator / Host Maintainer** | Real infrastructure execution identity | Docker/Compose, PostgreSQL, WAL, backup destination, secrets, restore/PITR, service lifecycle, filesystem. **NOT Exam RBAC** — granted by host/CLI access, independently of any Exam account. |
+| **Configurer** | **DOES NOT EXIST** | There is no separate Configurer persona, and no role named Configurer / Configuration Manager / System Administrator / Ops Admin / Backup Admin / Platform Admin may be invented to solve configuration ownership. |
+
+**No human actor may hold active Admin + Maintainer assignments simultaneously**
+(D14, unchanged). Host access is not an RBAC assignment and is unaffected (D12).
+
+### R4-3. "Configurer" does not exist — configuration is owned, not persona'd
+
+There is **no separate Configurer persona**. Configuration ownership is a
+resource-authority question, classified into three categories:
+
+| Category | Examples | Owner |
+| --- | --- | --- |
+| **A. Exam business configuration** | exam duration, question policy, grading rules, candidate identity fields, branding, organization/application settings | **Admin** |
+| **B. Reliability objectives / desired operational outcomes** | desired RPO, desired retention objective, desired restore-drill cadence | **Admin** (intent only — never binds infrastructure) |
+| **C. Infrastructure / runtime configuration** | cron schedule, `postgres.conf`, backup destination, WAL archive configuration, Docker/Compose, secrets | **Host Operator** — **outside Exam RBAC** |
+
+The Maintainer **may view** relevant status/evidence for category C, but does
+**not own** those settings inside Exam. This is why the product exposes
+category B as an **intent record** (Admin sets the objective; the System
+evaluates whether observed evidence satisfies it) and never as infrastructure
+configuration.
+
+### R4-4. Operational policy = reliability objective (D9 reframe)
+
+`system.ops.policy.*` is **not** infrastructure configuration. It is a
+**Reliability Objective / Desired Operational Outcome**. The mental model:
+
+```text
+Admin:      "I require RPO <= 1h."            (intent / objective)
+Maintainer: "The system currently does / does not meet it."  (observe + compare)
+System:     "Observed evidence says SATISFIED / NOT SATISFIED." (evaluate)
+Host Op:    "I decide how backups are actually scheduled and configured." (execute)
+```
+
+The Admin owns the **intent** (`system.ops.policy.manage`, the sole intent
+owner). The Maintainer **views** the intent and the DESIRED-vs-OBSERVED
+compliance projection (`system.ops.policy.view`). The product renders truth
+(SATISFIED / NOT_SATISFIED / UNKNOWN / NOT_CONFIGURED) and **never** lets a DB
+setting claim to change infrastructure. UI copy should read **可靠性目标**
+(reliability objective), not "运维策略配置" (which is easy to misread as
+infrastructure configuration). Persistence names (`system.ops.policy.*`) are
+**not** renamed in rev 4 — the reframe is semantic/docs only (no migration
+churn); the meaning is made explicit here.
+
+### R4-5. D5 default stance tightened — write capabilities are NOT part of the current Maintainer model
+
+Revision 2 listed `backup.trigger`, `backup.schedule.manage`,
+`backup.retention.manage`, and `service.restart` as "decision-gated" future
+possibilities. **Revision 4 tightens the default stance:** under the
+observability-window model these are **NOT PART OF THE CURRENT APPLICATION
+MAINTAINER MODEL.** No such write capability may be introduced merely because a
+Maintainer role exists. Each requires a **future independent ADR** proving, for
+the specific capability: why it belongs inside Exam rather than host tooling; a
+typed, safe abstraction; no shell / raw path / raw secret exposure;
+idempotency; audit; explicit failure semantics; least privilege; and
+rollback/recovery behavior. **None is implemented now.** Restore/PITR remain
+**permanently host-only** (D4).
+
+The Maintainer permission set is frozen at exactly five **read** capabilities
+(`system.health.view`, `system.diagnostics.view`, `system.backup.view`,
+`system.restore_readiness.view`, `system.ops.policy.view`): business
+permission count = 0, write permission count = 0.
+
+### R4-6. What revision 4 does NOT change
+
+- **D1** — Admin remains the Exam business owner (plus operational
+  **observation** summary + reliability-objective intent). Admin **never**
+  receives infrastructure execution authority.
+- **D4** — restore/PITR/PGDATA/raw-secret/raw-host authority remain
+  permanently excluded from the ordinary browser control plane.
+- **D12** — host authority does not imply or auto-grant an Application
+  Maintainer identity (and vice versa).
+- **D14** — Admin ∩ Maintainer = ∅ at the active-assignment level, enforced
+  transactionally. The reason is now sharper: Admin **manages** the Exam;
+  Maintainer **observes** system operations — one product identity must not
+  silently recombine both personas.
+- The System synthetic actor and its closed, non-login, non-assignable nature.
+- The hybrid model's recognition of a future application-side Maintainer
+  **read-only** preset (implemented E2A, unchanged).
+
+### R4-7. Authority precedence (unchanged)
+
+```text
+human-approved correction in this task
+> ADR-017 revision 4 (this revision, once accepted)
+> ADR-017 revisions 1–3
+> ADR-010 (as amended)
+> code reality
+> old roadmap prose
+```
+
+### R4-8. Related: F-04 (Teacher course-scope) is an explicit deferral
+
+The P7-RBAC-ROLE-REALITY-AUDIT finding **F-04** (Teacher@Course scope declared
+but not enforced — current runtime is org-wide) is **CONFIRMED and EXPLICITLY
+DEFERRED to a dedicated scoped-RBAC milestone**, not silently into P7-F. The
+target model remains Teacher@Course; the gap (no persisted scope carrier, no
+resolver family, no scoped route gates, no LIST filtering) is documented in
+`packages/authz/src/presets.ts` and the remediation report. Durable tracking:
+**issue #286 — Enforce Teacher@Course scoped authority (F-04)**.
+**P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
+Teacher course isolation** until that milestone closes it.
+
+### R4-9. Related: the Observability Window (ADR-018)
+
+The read-only product boundary future runtime data plugs into is defined in
+**ADR-018 — Operational Observability Window** (read-only, redacted,
+domain-separated, bounded, source-aware, truthful; Metrics / Logs / Events /
+Materials taxonomy). ADR-017 rev 4 defines *who* (Maintainer observes);
+ADR-018 defines *what may flow through the window and under what contract*.
 
 ---
 
@@ -85,6 +272,11 @@ them Admin. This revision therefore selects the **Hybrid Maintainer Model**.
   no secret access (read or write).
 
 ### D2. Maintainer is the System Operations / Maintenance Owner — Hybrid model (Option C)
+
+> **Revision 4 (PROPOSED) correction:** the "viewer/controller" wording below
+> is **superseded** by R4-2. The application-side Maintainer is a **read-only
+> Operational Observer**, not a controller. The hybrid (application identity +
+> host identity) structure and the Admin↔Maintainer exclusion are unchanged.
 
 Maintainer authority spans **two separate trust planes**. They may be held by
 the same person in reality, but architecturally they are distinct and must
@@ -161,7 +353,7 @@ execution authority                     NOT product RBAC authority
 | Plane | Owner | Examples |
 | --- | --- | --- |
 | **A. Business authority** | Admin only (Maintainer default none) | users, roles, candidates, courses, questions, exam profiles, exam authoring, exam publish, grading, result publish, business recovery decisions (force-submit / time-grant / misconduct / incident resolve), organization settings |
-| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9) |
+| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, PROPOSED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
 | **C. Infrastructure execution authority** | Host Maintainer (host/CLI) | Docker/Compose, PostgreSQL, WAL archive, filesystem, backup destination, secret store, service lifecycle, restore, PITR, PGDATA, migration/rollback/backfill |
 
 ### D4. Permanently forbidden through normal product UI
@@ -189,6 +381,12 @@ Core principle:
 Restore and PITR remain Host Maintainer + CLI/runbook + host access, forever.
 
 ### D5. Decision-gated operational capabilities
+
+> **Revision 4 (PROPOSED) tightening:** under the observability-window model
+> (R4-5), the capabilities listed below are **NOT part of the current
+> Application Maintainer model**. The "decision-gated" framing is retained only
+> as a high bar — each requires a future independent ADR; none is implemented,
+> and no write capability is granted merely because a Maintainer role exists.
 
 The following are **NOT permanently forbidden**:
 
@@ -243,18 +441,23 @@ the architecture boundary.
 ```text
 VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT
 
-system.diagnostics.view  ≠  email.test.execute
+system.diagnostics.view  ≠  system.email.test
 ```
 
-`POST /email/test` is currently gated by `system.diagnostics.view`
-(`apps/api/src/routes/email.ts:33`) although it is a side-effecting action
-(transmits an email through the SMTP channel). The invariant is violated
-today. This is not ordinary UX debt: it is a **precondition for the
-Maintainer RBAC rollout (P7-E2A)** — when an operational view is granted to
-a non-Admin principal, the action must be split into an independent
-capability (e.g. `system.email.test`, named per the repo permission
-convention) with its own gate and audit. E1 is docs-only; the route is not
-changed in this PR.
+`POST /email/test` is a side-effecting action (transmits an email through the
+SMTP channel). **It is gated by the dedicated `system.email.test`
+(`SystemEmailTest`) capability** (`apps/api/src/routes/email.ts`), granted to
+the **Admin preset only** — it is NOT part of the Maintainer preset, and
+`system.diagnostics.view` never authorizes it. The invariant is enforced in
+the current runtime; the Maintainer receives the five read capabilities
+(`R4-5`) and zero side-effect capabilities.
+
+> History: revisions 1–3 of this ADR recorded the pre-E2A state, where the
+> route was gated by `system.diagnostics.view` (safe only because Admin alone
+> held the view). P7-E2A (rev 4, PROPOSED) resolved it by splitting
+> `system.email.test` out of the diagnostics view. The split is implemented
+> in the runtime and reflected in `packages/authz/src/catalog.ts` +
+> `packages/authz/src/presets.ts`.
 
 ### D8. Diagnostics authority-domain split (future requirement)
 
@@ -274,23 +477,30 @@ attempts/candidates/exams. E1 does not change the route, but the current
 `/system/diagnostics` response must **not** be handed unchanged to a
 Maintainer viewer; E2A must define the semantic split.
 
-### D9. Admin sets objectives; Maintainer decides implementation
+### D9. Admin sets objectives; Maintainer observes compliance
+
+> **Revision 4 (PROPOSED) correction:** under the observability-window model
+> (R4-4/R4-5) the Maintainer **observes** intent and the desired-vs-observed
+> compliance projection; the "execution / control-plane" framing below is
+> **superseded** — execution-side policy authority (`backup.schedule.manage`,
+> `backup.retention.manage`) is future-only (D5), not part of the current
+> Maintainer model.
 
 Operational policy has exactly **one intent owner**. Admin holds
 `system.ops.policy.manage` — the **desired operational objective** (RPO
 target, retention objective, drill objective) — recorded as a **typed,
 audited, domain-owned intent record**. It never binds or rewrites
-infrastructure. Maintainer holds **no** intent capability; its policy
-authority is execution-side only (`backup.schedule.manage`,
-`backup.retention.manage`, D5). The product renders DESIRED vs CURRENT
-CAPABILITY vs STATUS (e.g. `NOT SATISFIED`) and never lets a DB setting
-claim to change infrastructure.
+infrastructure. Maintainer holds **no** intent capability; under the rev-4
+model its policy authority is **observation of intent + compliance
+projection only** (`system.ops.policy.view`). The product renders DESIRED vs
+CURRENT CAPABILITY vs STATUS (e.g. `NOT SATISFIED`) and never lets a DB
+setting claim to change infrastructure.
 
 This is a **core P7-E principle**:
 
 ```text
 Admin:      what the system must achieve   (intent)
-Maintainer: how operations achieve it      (execution/control-plane)
+Maintainer: whether observed evidence meets it (observe + compare)
 System:     whether reality satisfies it   (evidence/status)
 ```
 
@@ -448,8 +658,9 @@ Negative:
   operational reading stays Admin-gated in the meantime; a deployment that
   wants a separate non-business ops viewer must wait for E2A (or use
   host/CLI access).
-- `POST /email/test` remains gated by a view capability until E2A (D7) —
-  safe today because only Admin holds it, but a known invariant violation.
+- (Resolved in E2A / rev 4, PROPOSED) the pre-E2A `POST /email/test` view-capability
+  gate described in D7 history was a known invariant violation; the runtime now
+  gates it on the separate Admin-only `system.email.test` capability.
 - The Admin role remains the highest-value product account; deployments
   must not additionally grant Admin users host access (that coupling would
   defeat the separation by possession).

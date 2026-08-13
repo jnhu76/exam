@@ -130,12 +130,30 @@ see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4
 Frontend navigation and route gating are UX controls; backend capability and
 resource gates remain the security authority.
 
+> **Built-in assignable set has widened since the P4 MVP.** Proctor and Grader
+> are built-in assignable roles (preset-bundled, route-gated), and **P7-E2A
+> (ADR-017) added Maintainer** — the sixth assignable human role (the seventh
+> built-in preset counting the synthetic, non-assignable System actor) — a
+> **read-only Operational Observer** (system health/diagnostics/backup/
+> restore-readiness/ops-policy views; zero business permissions; zero write
+> permissions). Admin ∩ Maintainer = ∅ is enforced server-side (D14).
+> **ADR-017 revision 4 (PROPOSED)** narrows the Maintainer to an observer (not
+> a controller) and **ADR-018 (PROPOSED)** defines the read-only Observability
+> Window contract. Admin remains the Exam business owner (考试管理员) and never
+> holds infrastructure execution authority; the Host Operator (not Exam RBAC)
+> performs real infrastructure maintenance.
+
 ## Non-goals (Phase 3 product work, not implemented)
 
 The following are not implemented in the current MVP authorization model:
 
 - Resource-relationship authorization (M11) beyond the Proctor→Exam slice:
   Teacher→Course, Teacher→Exam, and Grader→Work assignment remain deferred.
+  **P7-RBAC F-04 (2026-08-13) CONFIRMED this gap** — the Teacher runtime is
+  org-wide today (no persisted scope carrier / resolver / scoped gates / LIST
+  filtering); the target remains Teacher@Course. It is **explicitly deferred
+  to a dedicated scoped-RBAC milestone** (closure requirements in
+  [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md) §4).
   The Proctor→Exam slice **is implemented** per ADR-015 (Accepted 2026-08-02,
   PR #245; reality audit
   [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)):

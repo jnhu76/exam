@@ -19,6 +19,18 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
  * Sets `users.role` to the user's current primary active assignment role
  * (or leaves it unchanged if there is no primary active assignment). Returns
  * the role written, or null if no primary active assignment exists.
+ *
+ * P7-RBAC-REMEDIATION F-06 (ACCEPTED, P3 — display-only): when no primary
+ * active assignment exists, `users.role` is left at its previous value. This
+ * is a cosmetic staleness only: the value is a compatibility cache that NO
+ * authorization decision reads (authority is the union of active assignment
+ * presets, resolved per request in `deriveAssignmentAuthority`), and the actor
+ * is locked out (login fails closed with `no_active_assignments` / 401). It is
+ * NOT cleared to a sentinel because `users.role` is `text NOT NULL` and the
+ * user-list response serializes it through `AssignableRoleSchema`; a
+ * non-assignable marker would break that contract. A full "honest display"
+ * fix (list derives the shown role from active assignments) is future IA work;
+ * it is not required before P7-F and never widens authority.
  */
 export async function syncUsersRoleFromPrimary(
   db: Database,

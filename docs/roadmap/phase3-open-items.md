@@ -83,6 +83,23 @@ The archived job plans under `docs/archive/roadmap/` are reference-only.
   assignment runtime (`exam_proctor_assignments` + resolver + Admin API).
 - **WHAT IS MISSING**: Teacher→Course/Exam and Grader→Work scope runtime
   (schema, resolvers, assignment UI, scope enforcement).
+- **P7-RBAC F-04 (2026-08-13) CONFIRMED + EXPLICITLY DEFERRED**: the P7
+  Role/RBAC reality audit
+  ([`P7-RBAC-ROLE-REALITY-AUDIT.md`](../audits/P7-RBAC-ROLE-REALITY-AUDIT.md)
+  finding F-04) confirmed the Teacher runtime is **org-wide today** — the
+  target model remains Teacher@Course, but there is no persisted scope carrier,
+  no course/question resolver family, no scoped route gates, and no LIST
+  filtering yet. This slice is the **dedicated scoped-RBAC milestone** that
+  closes F-04; its closure requirements (scope carrier + migration, resolver
+  family, `requireScopedCapability` on course/question/exam routes, LIST
+  filtering, cross-course enforcement + assignment API/UI, cross-course
+  adversarial tests) are listed in
+  [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md) §4.
+  P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
+  Teacher course isolation until this milestone closes it. Durable tracking:
+  **issue #286 — Enforce Teacher@Course scoped authority (F-04)**. The current
+  org-wide reach is pinned by a characterization test
+  (`apps/api/src/authz/teacherScopeCharacterization.test.ts`).
 - **DEPENDENCIES**: P4 closed; ADR-015 acceptance (✅ recorded).
 - **ACCEPTANCE BOUNDARY**: Scoped staff can be assigned to resources and see only their assigned scope.
 

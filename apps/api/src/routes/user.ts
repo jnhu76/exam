@@ -57,22 +57,25 @@ const userListResponseSchema = z.object({
 const okResponseSchema = z.object({ ok: z.literal(true) });
 
 /**
- * Roles supported in the Phase 1 user-list surface — used to filter the user
- * list to Admin and Candidate. P7-E2A adds Maintainer so an application
- * Maintainer account is created, listed, and managed through this approved
- * path (ADR-017 D2 provisioning rule).
- */
-const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate", "Maintainer"] as const;
-
-/**
- * Fastify plugin that registers user management routes.
+ * Staff-management list contract (GET /users). P7-RBAC-REMEDIATION F-03: the
+ * prior hardcoded `PHASE1_SUPPORTED_ROLES = ["Admin","Candidate","Maintainer"]`
+ * subset made Teacher/Proctor/Grader users invisible in the admin list (created
+ * but unmanageable via the UI), and listing by `users.role` alone let candidate
+ * volume crowd staff out of pagination. The list is now sourced from
+ * `listStaffPaginated` (repository level): staff membership = an ACTIVE
+ * assignment with any of the six assignable roles except Candidate (so
+ * Candidate-primary + staff-secondary users stay visible), OR a stale
+ * staff-valued `users.role` compatibility cache (zero-primary fallback, F-06 —
+ * a staff account never vanishes from management). `users.role` never widens
+ * authority (authority = the union of active assignment presets); `System` is
+ * non-assignable and `SuperAdmin` is not defined, so neither can match.
  *
- * Provides list, create, update, delete, and password-reset endpoints.
- * Gates use capability-based authorization (RBAC-M10-C). All six target
- * permissions (UserView, UserCreate, UserUpdate, UserPasswordReset,
- * UserDelete, and indirectly UserRoleAssign via the assignment surface)
- * are Admin-only in the current permission presets, so the migration from
- * legacy requireRole(["Admin"]) is access-matrix-neutral.
+ * Fastify plugin that registers user management routes (list, create, update,
+ * delete, password-reset). Gates use capability-based authorization
+ * (RBAC-M10-C). All six target permissions (UserView, UserCreate, UserUpdate,
+ * UserPasswordReset, UserDelete, and indirectly UserRoleAssign via the
+ * assignment surface) are Admin-only in the current permission presets, so the
+ * migration from legacy requireRole(["Admin"]) is access-matrix-neutral.
  */
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -90,18 +93,20 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /**
-     * GET /users — list users with pagination (Admin and Candidate roles only).
+     * GET /users — list staff users with pagination (assignment-aware).
      *
-     * Returns paginated user records. Only Admin and Candidate roles
-     * are included, filtered by PHASE1_SUPPORTED_ROLES.
+     * Staff membership (repository-level, BEFORE pagination): an ACTIVE
+     * assignment with any assignable role except Candidate, or a stale
+     * staff-valued `users.role` cache (F-06 zero-primary fallback). The
+     * frontend renders the list as-is — no post-filter, so Candidate-only
+     * users can never crowd staff off a page (F-03).
      */
     async (request) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
-      const { items, total } = await repo.listPaginatedByRoles(
+      const { items, total } = await repo.listStaffPaginated(
         ctx,
-        PHASE1_SUPPORTED_ROLES,
         page,
         pageSize,
       );

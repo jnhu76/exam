@@ -19991,7 +19991,7 @@
             "cookieAuth": []
           }
         ],
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Maintainer"],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -20216,7 +20216,7 @@
             "cookieAuth": []
           }
         ],
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Maintainer"],
         "responses": {
           "200": {
             "description": "Default Response",

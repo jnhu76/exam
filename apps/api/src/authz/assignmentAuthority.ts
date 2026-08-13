@@ -97,7 +97,16 @@ export type AssignmentAuthorityFailureReason =
   | "multiple_primary"
   | "unknown_role"
   | "subject_mismatch"
-  | "db_error";
+  | "db_error"
+  // P7-RBAC-REMEDIATION F-05 (ADR-017 D14, defense-in-depth): an active set
+  // containing BOTH Admin and Maintainer for one actor violates the
+  // Admin↔Maintainer mutual-exclusion invariant. The write-side seam
+  // (`mutateWithAuthorityInvariants`) makes this unreachable through product
+  // paths; this read-side check fails closed if a hand-edited / bypass-written
+  // row set ever produces the combined active set. It is the single chokepoint
+  // both login and the per-request authenticate path traverse, so an
+  // already-issued JWT can no longer load the union authority.
+  | "dual_admin_maintainer";
 
 /** Discriminated result contract. Empty active set is a normal runtime
  *  outcome (not a throw). */
@@ -197,6 +206,21 @@ export function deriveAssignmentAuthority(
     }
     return ai - bi;
   });
+
+  // P7-RBAC-REMEDIATION F-05 / ADR-017 D14 (read-side defense-in-depth): the
+  // Admin↔Maintainer mutual-exclusion invariant is enforced on the write side
+  // by the authority-mutation seam, which makes an active set containing BOTH
+  // Admin and Maintainer unreachable through product paths. This check fails
+  // closed if a hand-edited or bypass-written row set ever produces the
+  // combined active set — the union authority would otherwise grant the full
+  // Admin capability set to a Maintainer account (or vice versa). Only the
+  // {Admin, Maintainer} pair is forbidden; Maintainer may combine with any
+  // other role (D14 scope). Placed in this single chokepoint so BOTH login and
+  // the per-request authenticate path enforce it (the already-issued-JWT window
+  // is no longer exposed).
+  if (roleSet.has("Admin") && roleSet.has("Maintainer")) {
+    return { ok: false, reason: "dual_admin_maintainer" };
+  }
 
   // Permission UNION across every active role's preset. Stable-sorted so the
   // output is deterministic (task §3.2 / §5.5-6).

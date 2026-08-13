@@ -2,6 +2,7 @@ import type { Database } from "../types.js";
 import {
   users,
   userRoleAssignments,
+  ASSIGNABLE_ROLES,
   type AssignableRole,
 } from "../schema/pg.js";
 import {
@@ -11,7 +12,18 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import { UserAlreadyExistsError, type RequestContext } from "@exam/domain";
-import { and, count, eq, exists, inArray, sql } from "drizzle-orm";
+import { and, count, eq, exists, inArray, or, sql } from "drizzle-orm";
+
+/**
+ * Staff roles for the admin user-management list. Derived from the canonical
+ * assignable set minus Candidate — staff membership is assignment-aware
+ * (see {@link listStaffPaginated}), never a `users.role` projection.
+ * `System` is not in ASSIGNABLE_ROLES (synthetic, non-assignable);
+ * `SuperAdmin` is not defined (no ADR) and can never match.
+ */
+const STAFF_ROLES: readonly AssignableRole[] = ASSIGNABLE_ROLES.filter(
+  (r) => r !== "Candidate",
+);
 
 /** Extracts the PostgreSQL constraint name from an error object. */
 function getConstraintName(err: unknown): string | undefined {
@@ -90,12 +102,28 @@ export function createUserRepo(db: Database) {
       return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
     },
     /**
-     * Lists users filtered by roles with pagination, scoped to the tenant.
-     * @returns `{ items, total }` where `total` is the unpaginated count of matching users.
+     * Lists staff users with pagination, scoped to the tenant. The staff
+     * membership filter runs BEFORE pagination (F-03, P7-RBAC-REMEDIATION).
+     *
+     * Staff membership is NOT decided by `users.role` (a compatibility cache
+     * of the primary active assignment). A user is a staff member iff:
+     *   - they hold at least one ACTIVE assignment with a staff role
+     *     (Admin/Teacher/Proctor/Grader/Maintainer), OR
+     *   - their cached `users.role` is a staff role — the stale zero-primary
+     *     fallback (F-06): when no primary active assignment exists the cache
+     *     keeps its last value, so a historical staff account that lost its
+     *     active assignment never vanishes from the management UI.
+     *
+     * Candidate-only users (no staff assignment, cache = Candidate) are
+     * excluded before pagination, so candidate volume can never crowd staff
+     * rows off the page. A user with a staff-secondary assignment (e.g.
+     * primary Candidate + active Teacher) matches the EXISTS branch exactly
+     * once — the correlated subquery cannot duplicate user rows.
+     *
+     * @returns `{ items, total }` where `total` is the unpaginated staff count.
      */
-    async listPaginatedByRoles(
+    async listStaffPaginated(
       ctx: TenantContext | RequestContext,
-      roles: readonly string[],
       page: number,
       pageSize: number,
     ): Promise<{
@@ -104,9 +132,23 @@ export function createUserRepo(db: Database) {
     }> {
       const orgId = resolveOrganizationId(ctx);
       const offset = (page - 1) * pageSize;
+      const staffRoles = STAFF_ROLES;
+      const hasActiveStaffAssignment = exists(
+        db
+          .select({ one: sql`1` })
+          .from(userRoleAssignments)
+          .where(
+            and(
+              eq(userRoleAssignments.organizationId, orgId),
+              eq(userRoleAssignments.userId, users.id),
+              inArray(userRoleAssignments.role, staffRoles),
+              eq(userRoleAssignments.isActive, true),
+            ),
+          ),
+      );
       const where = and(
         eq(users.organizationId, orgId),
-        inArray(users.role, roles as string[]),
+        or(inArray(users.role, staffRoles), hasActiveStaffAssignment),
       );
       const items = (await db
         .select()

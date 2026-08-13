@@ -57,24 +57,20 @@ interface Page<T> {
 }
 
 /**
- * Staff roles an admin can create/assign via this dialog (RBAC-M8/M9).
- * Candidate is excluded here — candidates are managed via the candidate
- * routes (the user list also filters them out). The backend still gates
- * creation on requireRole(["Admin"]) until enforcement (PR #3); the role
- * chosen here is the primary assignment, which syncs users.role.
- * P7-E2A (ADR-017 D2): Maintainer is creatable through the ordinary
- * user-management path (application-side System Operations Owner).
+ * Assignable-role item returned by GET /roles/assignable (RBAC-M8). The
+ * backend @exam/authz ROLE_PRESETS is the SINGLE source of truth for the
+ * assignable role set; this page consumes that authority instead of keeping a
+ * parallel hardcoded closed set. P7-RBAC-REMEDIATION F-01: the prior
+ * EDITABLE_ROLES array duplicated the backend and GET /roles/assignable had
+ * zero frontend consumers — a future role addition would silently diverge the
+ * selector. Candidate is excluded from the staff-creation selector because
+ * candidates are managed via the dedicated candidate flow.
  */
-type EditableRole = "Admin" | "Teacher" | "Proctor" | "Grader" | "Maintainer";
-
-/** Roles available for selection in the user create/edit form. */
-const EDITABLE_ROLES: EditableRole[] = [
-  "Admin",
-  "Teacher",
-  "Proctor",
-  "Grader",
-  "Maintainer",
-];
+interface AssignableRoleItem {
+  key: AssignableRole;
+  label: string;
+  purpose: string;
+}
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
@@ -82,26 +78,58 @@ export function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Selectable staff roles, sourced from the backend assignable-role authority
+  // (GET /roles/assignable). Candidate is filtered out for the staff selector.
+  const [assignableRoles, setAssignableRoles] = useState<AssignableRoleItem[]>(
+    [],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<EditableRole>("Admin");
+  const [role, setRole] = useState<AssignableRole>("Admin");
+  // Edit-only: true when the editing user's current role is NOT in the
+  // assignable catalog (drift / future-compatible state). The dialog then
+  // shows the role read-only and PATCH omits `role` — the save can never
+  // silently flip an unmapped role to Admin (P7 review #6).
+  const [roleLocked, setRoleLocked] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  /** Fetches all non-candidate users from the API. */
+  /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
+  const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
+
+  /**
+   * Resolves a role display label: local i18n `roleLabels` wins; a missing
+   * key falls back to the generic `unknown` label so an unlocalized backend
+   * catalog label can never leak English into the UI (P7 review #5). Catalog
+   * membership still comes from the backend assignable roles; only the
+   * display fallback is generic (fail-visible instead of leaking the key).
+   */
+  function roleLabel(key: string) {
+    return t(`admin.users.roleLabels.${key}`, {
+      defaultValue: t("admin.users.roleLabels.unknown"),
+    });
+  }
+
+  /** Fetches the assignable-role authority and the staff user list. */
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setUsers(
-        (await api.get<Page<UserRow>>("/api/users")).items.filter(
-          (user) => user.role !== "Candidate",
-        ),
-      );
+      const [rolesRes, usersRes] = await Promise.all([
+        api.get<{ items: AssignableRoleItem[] }>("/api/roles/assignable"),
+        api.get<Page<UserRow>>("/api/users"),
+      ]);
+      setAssignableRoles(rolesRes.items);
+      // The server already restricts the list to staff members
+      // (assignment-aware, before pagination — F-03). No client-side role
+      // post-filter here: a Candidate-primary user with a staff secondary
+      // assignment must stay visible, and Candidate-only users can never
+      // crowd staff off the page.
+      setUsers(usersRes.items);
     } catch {
       setError(t("admin.users.loadFailed"));
     } finally {
@@ -116,11 +144,23 @@ export function UsersPage() {
     setUsername(user?.username ?? "");
     setPassword("");
     setName(user?.name ?? "");
-    setRole(
-      user && (EDITABLE_ROLES as readonly string[]).includes(user.role)
-        ? (user.role as EditableRole)
-        : "Admin",
-    );
+    // Create: default Admin is acceptable. Edit: a current role that is not
+    // selectable in the staff dialog (missing from the catalog, or the
+    // Candidate compatibility role of a Candidate-primary + staff-secondary
+    // user) locks the selector instead of silently selecting Admin — saving
+    // would otherwise flip the role (P7 review #6). selectableRoles (not
+    // assignableRoles) is the membership check: the dialog can only ever
+    // offer roles it can actually render as options.
+    if (!user) {
+      setRole("Admin");
+      setRoleLocked(false);
+    } else if (selectableRoles.some((r) => r.key === user.role)) {
+      setRole(user.role);
+      setRoleLocked(false);
+    } else {
+      setRole("Admin");
+      setRoleLocked(true);
+    }
     setFieldErrors({});
     setDialogOpen(true);
   }
@@ -147,8 +187,10 @@ export function UsersPage() {
     setSaving(true);
     try {
       if (editing) {
-        const payload: { name: string; role?: EditableRole } = { name };
-        payload.role = role;
+        const payload: { name: string; role?: AssignableRole } = { name };
+        // A locked (unmapped) current role must never be overwritten by the
+        // default value — omit `role` so the server keeps the original.
+        if (!roleLocked) payload.role = role;
         await api.patch(`/api/users/${editing.id}`, payload);
       } else {
         await api.post("/api/users", { username, password, name, role });
@@ -232,10 +274,7 @@ export function UsersPage() {
                   <DataTableCell role="short-id">{user.username}</DataTableCell>
                   <DataTableCell role="primary-text">{user.name}</DataTableCell>
                   <DataTableCell role="type">
-                    <Badge variant="outline">
-                      {t(`admin.users.roleLabels.${user.role}` as any) ??
-                        user.role}
-                    </Badge>
+                    <Badge variant="outline">{roleLabel(user.role)}</Badge>
                   </DataTableCell>
                   <DataTableCell role="status">
                     <StatusBadge
@@ -341,21 +380,32 @@ export function UsersPage() {
             </Field>
             <Field>
               <Label>{t("admin.users.dialog.role")}</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as EditableRole)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {EDITABLE_ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {t(`admin.users.roleLabels.${r}` as never) ?? r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {roleLocked && editing ? (
+                <p
+                  className="py-2 text-sm text-muted-foreground"
+                  data-testid="locked-role"
+                >
+                  {t("admin.users.dialog.roleLockedHint", {
+                    role: roleLabel(editing.role),
+                  })}
+                </p>
+              ) : (
+                <Select
+                  value={role}
+                  onValueChange={(value) => setRole(value as AssignableRole)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectableRoles.map((r) => (
+                      <SelectItem key={r.key} value={r.key}>
+                        {roleLabel(r.key)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
           </FieldGroup>
           <DialogFooter>

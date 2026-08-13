@@ -342,10 +342,10 @@ const zhCN = {
       emailWorker: "邮件 Worker",
     },
     policy: {
-      section: "运维策略意图",
-      title: "运维策略意图",
+      section: "可靠性目标",
+      title: "可靠性目标",
       intentNote:
-        "此处记录的是管理员期望的运维目标（意图），仅用于对比实际状态；它不会改变任何基础设施配置。",
+        "此处记录的是考试管理员期望的可靠性目标（意图），仅用于对比实际状态；它不会改变任何基础设施配置。",
       desired: "期望",
       observed: "实际",
       status: {
@@ -684,12 +684,13 @@ const zhCN = {
         actions: "操作",
       },
       roleLabels: {
-        Admin: "管理员",
+        Admin: "考试管理员",
         Teacher: "教师",
         Proctor: "监考员",
         Grader: "阅卷员",
         Candidate: "候选人",
-        Maintainer: "维护者",
+        Maintainer: "系统运维",
+        unknown: "未知角色",
       },
       statusLabels: { active: "启用", inactive: "禁用" },
       editLabel: "编辑用户",
@@ -701,7 +702,9 @@ const zhCN = {
         password: "初始密码",
         name: "姓名",
         role: "角色",
-        admin: "管理员",
+        admin: "考试管理员",
+        roleLockedHint:
+          "当前角色「{{role}}」不在可分配角色目录中,保存时将保留原角色,不会被修改。",
       },
       validation: {
         nameRequired: "请输入姓名",

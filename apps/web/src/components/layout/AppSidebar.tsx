@@ -16,6 +16,7 @@ import {
   canSeeSystemDiagnostics,
 } from "@/lib/capabilities";
 import {
+  Activity,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -100,6 +101,18 @@ const groups: NavGroup[] = [
         to: routes.admin.operations,
         icon: Monitor,
         visible: canSeeOperations,
+      },
+      {
+        // P7-RBAC-REMEDIATION F-08: moved out of the management group. This
+        // is an OPERATIONAL surface (SystemDiagnosticsView, held by Admin AND
+        // Maintainer); keeping it under the management group leaked a lone
+        // item to Maintainer and mislabeled diagnostics as business
+        // management. It belongs with the other operational surfaces in the
+        // operations group.
+        labelKey: "nav.items.system",
+        to: routes.admin.system,
+        icon: Activity,
+        visible: canSeeSystemDiagnostics,
       },
     ],
   },
@@ -224,12 +237,9 @@ const managementItems: NavItem[] = [
     visible: (user) =>
       user.capabilities.includes(Permission.CandidateFieldView),
   },
-  {
-    labelKey: "nav.items.system",
-    to: routes.admin.system,
-    icon: Monitor,
-    visible: canSeeSystemDiagnostics,
-  },
+  // P7-RBAC-REMEDIATION F-08: the system-diagnostics item moved to the
+  // operations group above — it is an operational surface, not business
+  // management.
 ];
 
 /** A single navigation link with icon and active state styling.
@@ -311,7 +321,10 @@ export function SidebarContent({
         {visibleGroups.map((group, gi) => (
           <section key={group.labelKey} className="flex flex-col gap-0.5">
             {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
+              <p
+                data-testid="nav-group-label"
+                className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted"
+              >
                 {t(group.labelKey as never)}
               </p>
             )}
@@ -329,7 +342,10 @@ export function SidebarContent({
         {showManagement && (
           <section className="flex flex-col gap-0.5">
             {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
+              <p
+                data-testid="nav-group-label"
+                className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted"
+              >
                 {t("nav.groups.management")}
               </p>
             )}

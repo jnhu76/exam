@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { isAdmin } from "@/lib/capabilities";
+import { can } from "@/lib/capabilities";
+import { Permission } from "@exam/authz";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -512,7 +513,11 @@ export function ProctorDashboardPage() {
     command: PendingForceSubmitCommand,
     options: { fromDialog: boolean },
   ): Promise<void> {
-    if (!user) return;
+    // Defense-in-depth (CodeRabbit round-4): the card buttons are capability-
+    // gated, but the hydrated-command retry path (page-level banner) bypasses
+    // the card. Never POST without the capability; dismiss stays available so
+    // a stale local command can still be cleared.
+    if (!user || !can(user, Permission.AttemptForceSubmit)) return;
     const authority: PendingForceSubmitAuthority = {
       schemaVersion: 2,
       organizationId: user.organizationId,
@@ -656,7 +661,15 @@ export function ProctorDashboardPage() {
    * claim because both APIs compare operationId + revision + leaseId.
    */
   async function handleGrantTime() {
-    if (!extendTarget?.attemptId || !user) return;
+    // Defense-in-depth: the card extend button is capability-gated, but the
+    // dialog retry re-enters here after hydration; never POST without the
+    // capability (CodeRabbit round-4).
+    if (
+      !extendTarget?.attemptId ||
+      !user ||
+      !can(user, Permission.AttemptTimeGrant)
+    )
+      return;
     const orgId = user.organizationId;
     const attemptId = extendTarget.attemptId;
     const coordinator = getPendingGrantCoordinator();
@@ -1092,7 +1105,17 @@ export function ProctorDashboardPage() {
    * page-level banner keeps the recovery surface reachable.
    */
   async function handleFlagMisconduct() {
-    if (!user || !examId || !misconductTarget?.attemptId || flagging) return;
+    // Defense-in-depth: the card flag button and the banner-retry dialog are
+    // capability-gated at the affordance, but the handler re-enters after
+    // hydration; never POST without the capability (CodeRabbit round-4).
+    if (
+      !user ||
+      !examId ||
+      !misconductTarget?.attemptId ||
+      flagging ||
+      !can(user, Permission.AttemptMisconductMark)
+    )
+      return;
     const attemptId = misconductTarget.attemptId;
     // Resolve the frozen command from the state machine. From `draft` we freeze
     // a fresh command from the editable fields; from `indeterminate` /
@@ -1874,105 +1897,115 @@ export function ProctorDashboardPage() {
                 {isLive && candidate.attemptId && (
                   <div className="flex flex-wrap gap-2 mt-1">
                     {(candidate.status === "in_progress" ||
-                      candidate.status === "disrupted") && (
-                      <>
+                      candidate.status === "disrupted") &&
+                      user &&
+                      can(user, Permission.AttemptForceSubmit) && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={forceSubmitting}
+                            onClick={() =>
+                              openForceSubmitDialog(candidate.attemptId!)
+                            }
+                          >
+                            {t("admin.proctorDashboard.card.forceSubmit")}
+                          </Button>
+                          {forceSubmitState.phase === "indeterminate" &&
+                            forceSubmitState.command.attemptId ===
+                              candidate.attemptId && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={forceSubmitting}
+                                onClick={() =>
+                                  dismissForceSubmitIndeterminate()
+                                }
+                              >
+                                {t(
+                                  "admin.proctorDashboard.forceSubmit.dismiss",
+                                )}
+                              </Button>
+                            )}
+                          {forceSubmitTargetAttemptId === candidate.attemptId &&
+                            forceSubmitBlockedReason && (
+                              <span className="text-destructive text-xs self-center">
+                                {forceSubmitBlockedReason}
+                              </span>
+                            )}
+                        </>
+                      )}
+                    {candidate.attemptId &&
+                      user &&
+                      can(user, Permission.AttemptTimeGrant) && (
                         <Button
                           size="sm"
-                          variant="destructive"
-                          disabled={forceSubmitting}
-                          onClick={() =>
-                            openForceSubmitDialog(candidate.attemptId!)
-                          }
+                          variant="outline"
+                          onClick={() => void openGrantDialog(candidate)}
                         >
-                          {t("admin.proctorDashboard.card.forceSubmit")}
+                          {t("admin.proctorDashboard.card.extend")}
                         </Button>
-                        {forceSubmitState.phase === "indeterminate" &&
-                          forceSubmitState.command.attemptId ===
-                            candidate.attemptId && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={forceSubmitting}
-                              onClick={() => dismissForceSubmitIndeterminate()}
-                            >
-                              {t("admin.proctorDashboard.forceSubmit.dismiss")}
-                            </Button>
-                          )}
-                        {forceSubmitTargetAttemptId === candidate.attemptId &&
-                          forceSubmitBlockedReason && (
-                            <span className="text-destructive text-xs self-center">
-                              {forceSubmitBlockedReason}
-                            </span>
-                          )}
-                      </>
-                    )}
-                    {candidate.attemptId && user && isAdmin(user) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void openGrantDialog(candidate)}
-                      >
-                        {t("admin.proctorDashboard.card.extend")}
-                      </Button>
-                    )}
-                    {candidate.attemptId && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          if (!user) return;
-                          // Honor the pending authority (J5-I1C Slice 3): an
-                          // unresolved command for THIS attempt is restored so
-                          // the retry replays the same operationId; one for a
-                          // DIFFERENT attempt blocks the dialog.
-                          const pending = loadPendingMisconduct(
-                            user.organizationId,
-                            user.id,
-                          );
-                          if (pending.kind === "corrupt") {
-                            toast.error(
-                              t(
-                                "admin.proctorDashboard.misconductDialog.corruptCleared",
-                              ),
+                      )}
+                    {candidate.attemptId &&
+                      user &&
+                      can(user, Permission.AttemptMisconductMark) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (!user) return;
+                            // Honor the pending authority (J5-I1C Slice 3): an
+                            // unresolved command for THIS attempt is restored so
+                            // the retry replays the same operationId; one for a
+                            // DIFFERENT attempt blocks the dialog.
+                            const pending = loadPendingMisconduct(
+                              user.organizationId,
+                              user.id,
                             );
-                          }
-                          if (
-                            pending.kind === "authority" &&
-                            pending.authority.command.attemptId !==
-                              candidate.attemptId
-                          ) {
-                            toast.error(
-                              t(
-                                "admin.proctorDashboard.misconductDialog.blockedPending",
-                              ),
-                            );
-                            return;
-                          }
-                          setMisconductTarget(candidate);
-                          if (pending.kind === "authority") {
-                            // Restore the frozen command VERBATIM into the
-                            // indeterminate phase — its outcome was never
-                            // confirmed, so a retry must replay the same
-                            // operationId + severity + notes without drift.
-                            setMisconductState({
-                              phase: "indeterminate",
-                              command: pending.authority.command,
-                            });
-                          } else {
-                            // No shared pending command — create a fresh draft.
-                            setMisconductState({
-                              phase: "draft",
-                              operationId: createContextSafeUuid(),
-                              severity: "warning",
-                              notes: "",
-                            });
-                          }
-                          setMisconductDialogOpen(true);
-                        }}
-                      >
-                        {t("admin.proctorDashboard.card.flag")}
-                      </Button>
-                    )}
+                            if (pending.kind === "corrupt") {
+                              toast.error(
+                                t(
+                                  "admin.proctorDashboard.misconductDialog.corruptCleared",
+                                ),
+                              );
+                            }
+                            if (
+                              pending.kind === "authority" &&
+                              pending.authority.command.attemptId !==
+                                candidate.attemptId
+                            ) {
+                              toast.error(
+                                t(
+                                  "admin.proctorDashboard.misconductDialog.blockedPending",
+                                ),
+                              );
+                              return;
+                            }
+                            setMisconductTarget(candidate);
+                            if (pending.kind === "authority") {
+                              // Restore the frozen command VERBATIM into the
+                              // indeterminate phase — its outcome was never
+                              // confirmed, so a retry must replay the same
+                              // operationId + severity + notes without drift.
+                              setMisconductState({
+                                phase: "indeterminate",
+                                command: pending.authority.command,
+                              });
+                            } else {
+                              // No shared pending command — create a fresh draft.
+                              setMisconductState({
+                                phase: "draft",
+                                operationId: createContextSafeUuid(),
+                                severity: "warning",
+                                notes: "",
+                              });
+                            }
+                            setMisconductDialogOpen(true);
+                          }}
+                        >
+                          {t("admin.proctorDashboard.card.flag")}
+                        </Button>
+                      )}
                   </div>
                 )}
               </CardContent>
