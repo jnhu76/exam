@@ -261,6 +261,48 @@ describe("ProctorDashboardPage", () => {
     expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();
   });
 
+  it("does NOT POST force-submit from the hydrated banner for a user without AttemptForceSubmit", async () => {
+    // Defense-in-depth (CodeRabbit round-4): the banner hydrates from
+    // sessionStorage regardless of capabilities (dismiss must stay available
+    // to clear a stale local command), but its destructive retry must never
+    // POST without the capability. A Maintainer with a stale pending record
+    // sees the banner, yet the retry is a no-op.
+    sessionStorage.setItem(
+      "exam.pendingForceSubmit:org-1:maint-1",
+      JSON.stringify({
+        schemaVersion: 2,
+        organizationId: "org-1",
+        actorId: "maint-1",
+        command: {
+          attemptId: "att-1",
+          operationId: "00000000-0000-4000-8000-000000000abc",
+          reason: "管理员强制交卷",
+          examId: "exam-1",
+          candidateName: "张三",
+        },
+        createdAt: Date.now(),
+      }),
+    );
+    apiGet.mockResolvedValue({
+      candidates: [makeCandidate({ attemptId: "att-1" })],
+      total: 1,
+    });
+    renderPageWithUser(maintainerUser);
+    // The banner hydrates on mount — dismiss stays available.
+    await screen.findByTestId("pending-force-submit-banner");
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "重试未确认强制交卷" }),
+      );
+    });
+    expect(apiPost).not.toHaveBeenCalled();
+    // Dismiss still clears the stale record.
+    fireEvent.click(screen.getByRole("button", { name: "清除未确认命令" }));
+    expect(
+      sessionStorage.getItem("exam.pendingForceSubmit:org-1:maint-1"),
+    ).toBeNull();
+  });
+
   // ── Operator time-grant dialog (P1-3 / P1-4) ────────────────────────────
   //
   // The grant dialog implements a draft → submitting → (indeterminate | done)

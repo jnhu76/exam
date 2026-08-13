@@ -513,7 +513,11 @@ export function ProctorDashboardPage() {
     command: PendingForceSubmitCommand,
     options: { fromDialog: boolean },
   ): Promise<void> {
-    if (!user) return;
+    // Defense-in-depth (CodeRabbit round-4): the card buttons are capability-
+    // gated, but the hydrated-command retry path (page-level banner) bypasses
+    // the card. Never POST without the capability; dismiss stays available so
+    // a stale local command can still be cleared.
+    if (!user || !can(user, Permission.AttemptForceSubmit)) return;
     const authority: PendingForceSubmitAuthority = {
       schemaVersion: 2,
       organizationId: user.organizationId,
@@ -657,7 +661,15 @@ export function ProctorDashboardPage() {
    * claim because both APIs compare operationId + revision + leaseId.
    */
   async function handleGrantTime() {
-    if (!extendTarget?.attemptId || !user) return;
+    // Defense-in-depth: the card extend button is capability-gated, but the
+    // dialog retry re-enters here after hydration; never POST without the
+    // capability (CodeRabbit round-4).
+    if (
+      !extendTarget?.attemptId ||
+      !user ||
+      !can(user, Permission.AttemptTimeGrant)
+    )
+      return;
     const orgId = user.organizationId;
     const attemptId = extendTarget.attemptId;
     const coordinator = getPendingGrantCoordinator();
@@ -1093,7 +1105,17 @@ export function ProctorDashboardPage() {
    * page-level banner keeps the recovery surface reachable.
    */
   async function handleFlagMisconduct() {
-    if (!user || !examId || !misconductTarget?.attemptId || flagging) return;
+    // Defense-in-depth: the card flag button and the banner-retry dialog are
+    // capability-gated at the affordance, but the handler re-enters after
+    // hydration; never POST without the capability (CodeRabbit round-4).
+    if (
+      !user ||
+      !examId ||
+      !misconductTarget?.attemptId ||
+      flagging ||
+      !can(user, Permission.AttemptMisconductMark)
+    )
+      return;
     const attemptId = misconductTarget.attemptId;
     // Resolve the frozen command from the state machine. From `draft` we freeze
     // a fresh command from the editable fields; from `indeterminate` /
