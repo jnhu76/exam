@@ -477,7 +477,7 @@ attempts/candidates/exams. E1 does not change the route, but the current
 `/system/diagnostics` response must **not** be handed unchanged to a
 Maintainer viewer; E2A must define the semantic split.
 
-### D9. Admin sets objectives; Maintainer decides implementation
+### D9. Admin sets objectives; Maintainer observes compliance
 
 > **Revision 4 (PROPOSED) correction:** under the observability-window model
 > (R4-4/R4-5) the Maintainer **observes** intent and the desired-vs-observed
