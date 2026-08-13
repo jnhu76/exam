@@ -15,10 +15,11 @@ WORKTREE   : clean at start
 ```
 
 P7 work already merged to master before P7-F: PR #265 (Redis shared rate limit,
-P7-D2/D3), #269 (P7-S2 runtime authority hardening), #276 (P7-E0 config audit),
-#277 (P7-M1 policy authority), #279 (P7-M configurable exam modes), #281
-(P7-E1 + ADR-017 rev 3), #282 (P7-E operational control plane), #284 (P7-RBAC
-role-reality remediation). P7-C portable backup/DR shipped earlier.
+P7-D2/D3), PR #269 (P7-S2 runtime authority hardening), PR #276 (P7-E0 config
+audit), PR #277 (P7-M1 policy authority), PR #279 (P7-M configurable exam
+modes), PR #281 (P7-E1 + ADR-017 rev 3), PR #282 (P7-E operational control
+plane), PR #284 (P7-RBAC role-reality remediation). P7-C portable backup/DR
+shipped earlier.
 
 ## Executive verdict
 
@@ -63,7 +64,7 @@ gate wording — each is a recorded human decision.
 | P7-0 | **PASS** (after bounded doc reconciliation in this PR) | Doc drift repaired; current-state docs now tell one story. |
 | P7-1 | **PASS** | P7-S2 guarantees intact on master; no new reachable partial state; no general reconciler needed (evidence-based). |
 | P7-2 | **PASS** | Redis = shared rate limit only (ADR-001 decision); lifecycle `off\|optional\|required`; no exam authority. |
-| P7-3 | **PASS_WITH_ARCHITECTURE_RECONCILIATION — retention bullet NOT met (HUMAN_DECISION)** | Evidence ledger + verified drills + RPO intent pass; retention is host-owned/NOT_ENFORCED (not faked). |
+| P7-3 | **NOT PASS — HUMAN_DECISION_REQUIRED** (all bullets except retention pass; the gate reconciles with the accepted host-owned-retention architecture only after a human disposition) | Evidence ledger + verified drills + RPO intent pass; retention bullet is **NOT MET** — host-owned/`NOT_ENFORCED` (not faked). |
 | P7-4 | **PASS** | Typed owners; no generic settings store; secrets env-only; active Exam/Attempt snapshot-frozen. |
 | P7-5 | **PASS** (mediated visual review; minor P3 polish) | `basic_quiz`/`standard_online` coherent; profile↔exam authority intact; no blocking visual defect. |
 | P7-6 | **PASS** (representative closeout) | Admin/Maintainer/Candidate surfaces usable; mobile measured no page-level overflow; UI debt reduction ongoing. |
@@ -171,12 +172,13 @@ unboundedly) is **not guaranteed by the system** — it depends entirely on the
 host operator. This is a genuine narrowing, not a supersession that preserves
 the invariant.
 
-Verdict: **PASS_WITH_ARCHITECTURE_RECONCILIATION — retention bullet NOT met
-(HUMAN_DECISION_REQUIRED).** This is the single reason P7 cannot be CLOSED.
-Options for the human: (a) accept permanent host-owned/operator-discipline
-retention and reconcile the gate wording; (b) schedule product/host retention
-automation as new work. P7-F did not fake PASS and did not build a retention
-engine to make the checkbox green.
+Verdict: **NOT PASS — HUMAN_DECISION_REQUIRED** (every bullet except retention
+passes; the gate can only become PASS via an explicit human disposition).
+This is the single reason P7 cannot be CLOSED. Options for the human:
+(a) accept permanent host-owned/operator-discipline retention and reconcile the
+gate wording; (b) schedule product/host retention automation as new work. P7-F
+did not fake PASS and did not build a retention engine to make the checkbox
+green.
 
 ### Gate P7-4 — Configuration is controlled
 
@@ -317,17 +319,58 @@ The runtime implements the ADR-017 **rev-4** read-only-observer model; the ADR
 
 ## Deployment / restore evidence
 
+**Status: NOT RE-RUN in P7-F — pass/fail explicitly not claimed.**
+
 P7-C deterministic Docker drills (`tests/deployment/`: compose-smoke,
 launchpad-bootstrap, persistence-and-cold-restore, logical-backup-restore,
-pitr) are the restore authority and are unchanged by P7-F (the scripts they
-invoke gained optional evidence hooks in P7-E2B; pass/fail contract untouched).
-A full deployment regression run is recommended in human review alongside
-`pnpm verify:static`. P7-F did not invent restore evidence.
+pitr) are the restore authority and are **unchanged by P7-F** (docs-only
+branch; the scripts they invoke gained optional evidence hooks in P7-E2B;
+pass/fail contract untouched). Their last full passing runs are recorded by
+the P7-C closeout and the P7-E round-3 verification; the drill pass/fail
+contract was not modified by any P7-F file. A full deployment regression run
+(plus WSL Playwright E2E) is a recommended human-review step, and P7-F did
+not invent or claim restore evidence it did not execute.
 
 ## Test evidence
 
-(actual current-run numbers recorded in the PR body after the full gate run;
-see §"Verification" of the final agent report.)
+**`pnpm verify` — PASS (exit 0), run at HEAD `0785c7f6`** (docs-only changes;
+all suites identical to the green master baseline). Actual current-run
+numbers:
+
+| Package | Test Files | Tests |
+| --- | --- | --- |
+| @exam/api | 163 | 2190 passed (7 skipped) |
+| @exam/web | 116 | 1636 passed |
+| @exam/exam-engine | 30 | 596 passed |
+| @exam/db | 42 | 566 passed |
+| @exam/contracts | 14 | 348 passed |
+| @exam/authz | 10 | 79 passed |
+| @exam/domain | 6 | 59 passed |
+| @exam/import-export | 1 | 17 passed |
+| @exam/auth | 2 | 13 passed |
+| **Total** | **384 files** | **5504 tests, 0 failed** |
+
+- Static gates inside `verify:static` (format / lint / lint:copy / lint:arch /
+  db-config / db-journal / env-contract / repo-contract / ui-gates / eslint /
+  typecheck / openapi check / e2e-runner / test:db-journal / test:stale-ui-docs):
+  **PASS** (the `&&` chain ran to completion; `test:db-journal` 18/18,
+  `test:stale-ui-docs` 7/7).
+- **Coverage (v8, % Stmts):** authz 100 · import-export 100 · contracts 96.57 ·
+  auth 92.59 · api 84.25 · exam-engine 84.39 · web 80.98 · db 80.82 ·
+  domain 69.73.
+- **Build:** 9/9 tasks successful (`turbo build`).
+- Markdown: touched files pass Prettier and markdownlint (repo-wide `lint:md`
+  errors are pre-existing in untouched `docs/standards/*` / `README.md`).
+- Deployment/restore drills (`tests/deployment/*`) and WSL Playwright E2E are
+  **unchanged by this docs-only PR**; the P7-C/E/RBAC closeouts (PRs #282/#284)
+  record their last full runs. A full deployment regression + WSL E2E run is
+  recommended in human review alongside `pnpm verify:static` (no restore
+  evidence was invented here).
+
+Known limitations: the agent environment had no interactive Google Chrome
+(visual review performed via headless chromium + image analysis + deterministic
+overflow measurement — see §"Visual review"); `lint:md` is non-blocking and
+carries pre-existing repo-wide errors.
 
 ## Deferred / non-blocking
 
