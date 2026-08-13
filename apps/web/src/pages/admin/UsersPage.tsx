@@ -144,12 +144,16 @@ export function UsersPage() {
     setPassword("");
     setName(user?.name ?? "");
     // Create: default Admin is acceptable. Edit: a current role that is not
-    // in the assignable catalog locks the selector instead of silently
-    // selecting Admin — saving would otherwise flip the role (P7 review #6).
+    // selectable in the staff dialog (missing from the catalog, or the
+    // Candidate compatibility role of a Candidate-primary + staff-secondary
+    // user) locks the selector instead of silently selecting Admin — saving
+    // would otherwise flip the role (P7 review #6). selectableRoles (not
+    // assignableRoles) is the membership check: the dialog can only ever
+    // offer roles it can actually render as options.
     if (!user) {
       setRole("Admin");
       setRoleLocked(false);
-    } else if (assignableRoles.some((r) => r.key === user.role)) {
+    } else if (selectableRoles.some((r) => r.key === user.role)) {
       setRole(user.role);
       setRoleLocked(false);
     } else {

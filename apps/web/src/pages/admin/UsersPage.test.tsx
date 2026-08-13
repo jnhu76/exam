@@ -399,6 +399,47 @@ describe("UsersPage", () => {
     expect(apiPatch.mock.calls[0]![1]).not.toHaveProperty("role");
   });
 
+  it("edit dialog locks the role for a Candidate-primary + staff-secondary user (F-03 safe path)", async () => {
+    // The user is a staff member via a secondary assignment, so the server
+    // returns them in the staff list with the compatibility role "Candidate".
+    // "Candidate" is NOT selectable in the staff dialog → the role must be
+    // read-only and PATCH must omit `role` (no silent flip, no unmappable
+    // Select value).
+    apiGet.mockResolvedValue({
+      items: [
+        ...mockUsers,
+        {
+          id: "u11",
+          username: "cand-teacher2",
+          name: "Cand+Teacher",
+          role: "Candidate",
+          isActive: true,
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    const editButtons = await screen.findAllByLabelText("编辑用户");
+    await user.click(editButtons[1]!);
+    const dialog = await screen.findByRole("dialog");
+    expect(screen.getByTestId("locked-role")).toHaveTextContent("候选人");
+    const nameInput = getDialogInputs(dialog)[0]!;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(apiPatch).toHaveBeenCalledWith("/api/users/u11", {
+      name: "Renamed",
+    });
+    expect(apiPatch.mock.calls[0]![1]).not.toHaveProperty("role");
+  });
+
   it("role label falls back to the backend catalog label when the local i18n key is missing", async () => {
     // Backend returns a role the frontend locale has no `roleLabels` entry
     // for; the UI must render the API-provided label, not the i18n key path.
