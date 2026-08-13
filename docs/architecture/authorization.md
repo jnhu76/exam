@@ -132,7 +132,8 @@ resource gates remain the security authority.
 
 > **Built-in assignable set has widened since the P4 MVP.** Proctor and Grader
 > are built-in assignable roles (preset-bundled, route-gated), and **P7-E2A
-> (ADR-017) added Maintainer** as the seventh built-in assignable role — a
+> (ADR-017) added Maintainer** — the sixth assignable human role (the seventh
+> built-in preset counting the synthetic, non-assignable System actor) — a
 > **read-only Operational Observer** (system health/diagnostics/backup/
 > restore-readiness/ops-policy views; zero business permissions; zero write
 > permissions). Admin ∩ Maintainer = ∅ is enforced server-side (D14).

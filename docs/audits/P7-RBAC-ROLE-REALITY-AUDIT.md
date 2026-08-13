@@ -117,22 +117,22 @@ Legend: ✓ granted · — not granted · (sc) scoped-by-design note
 
 | Capability domain | Admin | Maintainer | Teacher | Proctor | Grader | Candidate | System |
 |---|---|---|---|---|---|---|---|
-| user.* (view/create/update/delete/role.assign/password.reset) | ✓ | — | — | — | — | — | — |
-| organization.* / settings.* | ✓ | — | org.view | — | — | — | — |
-| audit_log.view | ✓ | — | — | — | — | — | — |
-| candidate.* / candidate_field.* | ✓ | — | candidate.view (sc) | — | — | — | — |
-| course.* / question.* | ✓ | — | ✓ (sc) | — | — | — | — |
-| exam.* lifecycle (create/update/publish/close/cancel/archive/delete/extend/unpublish) | ✓ | — | subset (sc) | — | — | — | — |
-| exam.result.publish | ✓ | — | ✓ (sc) | — | — | — | — |
-| exam.enrollment.manage | ✓ | — | ✓ (sc) | — | — | — | — |
-| exam.take / attempt.own / score.own | ✓ | — | — | — | — | ✓ | — |
-| exam_room / attempt.status / attempt.timeline | ✓ | — | — | ✓ | — | — | — |
-| attempt.force_submit / time.grant / misconduct | ✓ | — | — | — | — | — | — |
-| attempt.export | ✓ | — | — | — | — | — | — |
-| grading.queue/detail/answer/score.write | ✓ | — | — | — | ✓ | — | — |
-| grading.finalize / identity.view | ✓ | — | — | — | — | — | — |
-| score.all.view / score.export | ✓ | — | score.all (sc) | — | — | — | — |
-| incident.view/create/investigate | ✓ | — | — | ✓ | — | — | — |
+| `user.*` (view/create/update/delete/role.assign/password.reset) | ✓ | — | — | — | — | — | — |
+| `organization.*` / `settings.*` | ✓ | — | org.view | — | — | — | — |
+| `audit_log.view` | ✓ | — | — | — | — | — | — |
+| `candidate.*` / `candidate_field.*` | ✓ | — | candidate.view (sc) | — | — | — | — |
+| `course.*` / `question.*` | ✓ | — | ✓ (sc) | — | — | — | — |
+| `exam.*` lifecycle (create/update/publish/close/cancel/archive/delete/extend/unpublish) | ✓ | — | subset (sc) | — | — | — | — |
+| `exam.result.publish` | ✓ | — | ✓ (sc) | — | — | — | — |
+| `exam.enrollment.manage` | ✓ | — | ✓ (sc) | — | — | — | — |
+| `exam.take` / `attempt.own` / `score.own` | ✓ | — | — | — | — | ✓ | — |
+| `exam_room` / `attempt.status` / `attempt.timeline` | ✓ | — | — | ✓ | — | — | — |
+| `attempt.force_submit` / `time.grant` / `misconduct` | ✓ | — | — | — | — | — | — |
+| `attempt.export` | ✓ | — | — | — | — | — | — |
+| `grading.queue`/`detail`/`answer`/`score.write` | ✓ | — | — | — | ✓ | — | — |
+| `grading.finalize` / `identity.view` | ✓ | — | — | — | — | — | — |
+| `score.all.view` / `score.export` | ✓ | — | score.all (sc) | — | — | — | — |
+| `incident.view`/`create`/`investigate` | ✓ | — | — | ✓ | — | — | — |
 | incident.resolve | ✓ | — | — | — | — | — | — |
 | incident.recovery.view | ✓ | — | — | — | — | — | — |
 | exam.proctor_assignment.* | ✓ | — | — | — | — | — | — |
@@ -557,7 +557,7 @@ alongside P7-F work.
 | R1 — Role catalog authority cleanup | Frontend consumes `GET /roles/assignable`; delete `EDITABLE_ROLES`; label source from API | `apps/web/src/pages/admin/UsersPage.tsx`, contracts | low | web UsersPage test with mocked assignable-roles API |
 | R2 — OpenAPI/contract alignment | Correct x-role on /system/health + /system/diagnostics; add Maintainer-parity structural assertion; optionally derive x-role from preset membership | `apps/api/src/routes/system.ts`, `apps/api/src/openapi/openapi.structural.test.ts` | low | structural spec test |
 | R3 — Assignment-based user list | List users by active assignments (or full assignable set); align frontend filter; reconcile stale `users.role` display | `apps/api/src/routes/user.ts`, `packages/db/src/repository/userRepo.ts`, `UsersPage.tsx` | medium (repo query change) | user list API tests + web tests |
-| R4 — Teacher scope disposition | Either course-scope resolver for Teacher routes or explicit org-scope documentation | `apps/api/src/routes/course.ts|question.ts|exam.ts`, docs | medium-high if enforced | permission-matrix scope tests |
+| R4 — Teacher scope disposition | Either course-scope resolver for Teacher routes or explicit org-scope documentation | `apps/api/src/routes/course.ts`, `question.ts`, `exam.ts`, docs | medium-high if enforced | permission-matrix scope tests |
 | R5 — Lifecycle/audit hardening | `failClosedOnDualRole` on authenticate; optional users.role CHECK; stale-comment fix | `apps/api/src/plugins/auth.ts`, schema, `system.ts` | low | auth fail-closed tests |
 | R6 — Maintainer IA polish | Move "系统监控" out of the management group for non-Admin; switch extend-time button to `can()` | `AppSidebar.tsx`, `ProctorDashboardPage.tsx` | low | layout tests |
 
@@ -607,6 +607,13 @@ pnpm --filter @exam/db test      # 42 files, 566 tests — PASS
 pnpm --filter @exam/api test     # 162 files, 2173 tests (7 skipped) — PASS
 pnpm --filter @exam/web test     # 116 files, 1627 tests — PASS
 ```
+
+> **Historical audit artifact.** This document is the baseline evidence
+> collected at the audit SHA (8a2c9edf); it is NOT an implementation
+> completion report. Fix evidence (modified files, regression tests,
+> coverage, `pnpm verify`, WSL E2E, review dispositions) lives in
+> [`P7-RBAC-ROLE-REMEDIATION.md`](./P7-RBAC-ROLE-REMEDIATION.md) (Issue #283
+> disposition + PR #284 review remediation).
 
 Key role/RBAC suites observed green: `operationalBoundary.test.ts` (Maintainer
 boundary, D7/D8/D14 at HTTP), `adminMaintainerExclusion.test.ts` (write-skew races),

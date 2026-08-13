@@ -16,8 +16,9 @@
   explicitly that **no "Configurer" persona exists**, reframes operational
   policy as a **reliability objective**, and tightens D5's default stance on
   Maintainer write capabilities. See **§Revision 4 (PROPOSED)** below for the
-  binding corrections; where rev-2/3 wording conflicts with rev 4, **rev 4
-  governs** pending human acceptance.
+  binding corrections. **Revisions 1–3 remain the accepted authority until
+  revision 4 is accepted by human review; revision 4 governs only after
+  acceptance.**
 * Earlier revisions: revision 2 corrected the model to the **Hybrid
   Maintainer Model (Option C)**; revision 3 froze the **Admin ↔ Maintainer
   mutual-exclusion invariant** (D14) and folded it into the E2A scope.
@@ -211,9 +212,10 @@ but not enforced — current runtime is org-wide) is **CONFIRMED and EXPLICITLY
 DEFERRED to a dedicated scoped-RBAC milestone**, not silently into P7-F. The
 target model remains Teacher@Course; the gap (no persisted scope carrier, no
 resolver family, no scoped route gates, no LIST filtering) is documented in
-`packages/authz/src/presets.ts` and the remediation report. **P7-F is not
-globally blocked by F-04, but P7-F MUST NOT claim or depend on Teacher course
-isolation** until that milestone closes it.
+`packages/authz/src/presets.ts` and the remediation report. Durable tracking:
+**issue #286 — Enforce Teacher@Course scoped authority (F-04)**.
+**P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
+Teacher course isolation** until that milestone closes it.
 
 ### R4-9. Related: the Observability Window (ADR-018)
 
@@ -351,7 +353,7 @@ execution authority                     NOT product RBAC authority
 | Plane | Owner | Examples |
 | --- | --- | --- |
 | **A. Business authority** | Admin only (Maintainer default none) | users, roles, candidates, courses, questions, exam profiles, exam authoring, exam publish, grading, result publish, business recovery decisions (force-submit / time-grant / misconduct / incident resolve), organization settings |
-| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9) |
+| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, PROPOSED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
 | **C. Infrastructure execution authority** | Host Maintainer (host/CLI) | Docker/Compose, PostgreSQL, WAL archive, filesystem, backup destination, secret store, service lifecycle, restore, PITR, PGDATA, migration/rollback/backfill |
 
 ### D4. Permanently forbidden through normal product UI
@@ -439,18 +441,23 @@ the architecture boundary.
 ```text
 VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT
 
-system.diagnostics.view  ≠  email.test.execute
+system.diagnostics.view  ≠  system.email.test
 ```
 
-`POST /email/test` is currently gated by `system.diagnostics.view`
-(`apps/api/src/routes/email.ts:33`) although it is a side-effecting action
-(transmits an email through the SMTP channel). The invariant is violated
-today. This is not ordinary UX debt: it is a **precondition for the
-Maintainer RBAC rollout (P7-E2A)** — when an operational view is granted to
-a non-Admin principal, the action must be split into an independent
-capability (e.g. `system.email.test`, named per the repo permission
-convention) with its own gate and audit. E1 is docs-only; the route is not
-changed in this PR.
+`POST /email/test` is a side-effecting action (transmits an email through the
+SMTP channel). **It is gated by the dedicated `system.email.test`
+(`SystemEmailTest`) capability** (`apps/api/src/routes/email.ts`), granted to
+the **Admin preset only** — it is NOT part of the Maintainer preset, and
+`system.diagnostics.view` never authorizes it. The invariant is enforced in
+the current runtime; the Maintainer receives the five read capabilities
+(`R4-5`) and zero side-effect capabilities.
+
+> History: revisions 1–3 of this ADR recorded the pre-E2A state, where the
+> route was gated by `system.diagnostics.view` (safe only because Admin alone
+> held the view). P7-E2A (rev 4, PROPOSED) resolved it by splitting
+> `system.email.test` out of the diagnostics view. The split is implemented
+> in the runtime and reflected in `packages/authz/src/catalog.ts` +
+> `packages/authz/src/presets.ts`.
 
 ### D8. Diagnostics authority-domain split (future requirement)
 
@@ -472,21 +479,28 @@ Maintainer viewer; E2A must define the semantic split.
 
 ### D9. Admin sets objectives; Maintainer decides implementation
 
+> **Revision 4 (PROPOSED) correction:** under the observability-window model
+> (R4-4/R4-5) the Maintainer **observes** intent and the desired-vs-observed
+> compliance projection; the "execution / control-plane" framing below is
+> **superseded** — execution-side policy authority (`backup.schedule.manage`,
+> `backup.retention.manage`) is future-only (D5), not part of the current
+> Maintainer model.
+
 Operational policy has exactly **one intent owner**. Admin holds
 `system.ops.policy.manage` — the **desired operational objective** (RPO
 target, retention objective, drill objective) — recorded as a **typed,
 audited, domain-owned intent record**. It never binds or rewrites
-infrastructure. Maintainer holds **no** intent capability; its policy
-authority is execution-side only (`backup.schedule.manage`,
-`backup.retention.manage`, D5). The product renders DESIRED vs CURRENT
-CAPABILITY vs STATUS (e.g. `NOT SATISFIED`) and never lets a DB setting
-claim to change infrastructure.
+infrastructure. Maintainer holds **no** intent capability; under the rev-4
+model its policy authority is **observation of intent + compliance
+projection only** (`system.ops.policy.view`). The product renders DESIRED vs
+CURRENT CAPABILITY vs STATUS (e.g. `NOT SATISFIED`) and never lets a DB
+setting claim to change infrastructure.
 
 This is a **core P7-E principle**:
 
 ```text
 Admin:      what the system must achieve   (intent)
-Maintainer: how operations achieve it      (execution/control-plane)
+Maintainer: whether observed evidence meets it (observe + compare)
 System:     whether reality satisfies it   (evidence/status)
 ```
 
@@ -644,8 +658,9 @@ Negative:
   operational reading stays Admin-gated in the meantime; a deployment that
   wants a separate non-business ops viewer must wait for E2A (or use
   host/CLI access).
-- `POST /email/test` remains gated by a view capability until E2A (D7) —
-  safe today because only Admin holds it, but a known invariant violation.
+- (Resolved in E2A / rev 4, PROPOSED) the pre-E2A `POST /email/test` view-capability
+  gate described in D7 history was a known invariant violation; the runtime now
+  gates it on the separate Admin-only `system.email.test` capability.
 - The Admin role remains the highest-value product account; deployments
   must not additionally grant Admin users host access (that coupling would
   defeat the separation by possession).

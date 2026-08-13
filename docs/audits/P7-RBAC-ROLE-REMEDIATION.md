@@ -14,8 +14,8 @@ Date:          2026-08-13
 
 Authority precedence (applied):
   human-approved correction in this task
-  > ADR-017 revision 4 (PROPOSED)
-  > ADR-017 revisions 1–3 (ACCEPTED)
+  > ADR-017 revisions 1–3 (ACCEPTED — authoritative until rev 4 is accepted)
+  > ADR-017 revision 4 (PROPOSED — governs only after human acceptance)
   > ADR-010 (as amended)
   > code reality
   > old roadmap prose
@@ -102,7 +102,7 @@ button now. Per-source ADR required (D7).
 | --- | --- | --- | --- | --- |
 | **F-01** | Frontend role-catalog duplicated (`EDITABLE_ROLES`); `/roles/assignable` unused | P2 | **FIXED** | `UsersPage.tsx` now fetches `GET /roles/assignable` and derives the selector from it; `EDITABLE_ROLES` deleted. Tests: `UsersPage.test.tsx` (catalog-authority test added — selector reflects exactly what the API returns). |
 | **F-02** | OpenAPI `x-role` drift on `/system/health` + `/system/diagnostics` | P2 | **FIXED** | `system.ts` x-role corrected to `["Admin","Maintainer"]` on both. Structural guard added: `openapi.structural.test.ts` asserts Maintainer parity for all 5 Maintainer-readable routes. |
-| **F-03** | User list role-filtered to `["Admin","Candidate","Maintainer"]`; Teacher/Proctor/Grader invisible | P2 | **FIXED** | `user.ts` filter sourced from `AssignableRoleSchema.options` (full set); `PHASE1_SUPPORTED_ROLES` removed. Test: `user.test.ts` updated to prove Teacher now visible + SuperAdmin excluded. |
+| **F-03** | User list role-filtered to `["Admin","Candidate","Maintainer"]`; Teacher/Proctor/Grader invisible; Candidate volume could crowd staff out of pagination | P2 | **FIXED** | `GET /users` now uses assignment-aware **staff** filtering in the repository, BEFORE pagination: staff membership = an ACTIVE assignment with any of the six assignable roles except Candidate, OR a stale staff-valued `users.role` cache (zero-primary fallback, F-06). Candidate-only users never enter the staff list nor its `total`/`totalPages`; Candidate-primary + staff-secondary users stay visible exactly once. The frontend renders the list as-is (no post-filter). Tests: `user.test.ts` — legacy-role exclusion + 4 adversarial cases (Candidate crowd-out / dual-role visibility / Candidate-only absence / Proctor+Grader+Maintainer+stale-role visibility). |
 | **F-04** | Teacher `defaultScope: Course` declared but not enforced (org-wide reach) | P2 | **CONFIRMED / EXPLICITLY DEFERRED** to a dedicated scoped-RBAC milestone | Target model remains Teacher@Course. Misleading preset comments corrected (target vs current org-wide reality vs missing infra). Characterization test `teacherScopeCharacterization.test.ts` proves the current org-wide LIST/detail reach. **P7-F is NOT globally blocked, but P7-F MUST NOT claim or depend on Teacher course isolation** until the milestone closes F-04. Closure requirements listed in §4. |
 | **F-05** | Dual Admin+Maintainer not re-checked on the per-request (already-issued-JWT) path | P3 | **FIXED (defense-in-depth)** | D14 now enforced in `deriveAssignmentAuthority` (the single chokepoint login + authenticate traverse). New reason `dual_admin_maintainer`. Login audit relocated to the `!ok` branch. Tests: 5 kernel cases + an "already-issued JWT denied on next request" runtime test. |
 | **F-06** | `users.role` goes stale when the last active primary is removed | P3 | **ACCEPTED (documented)** | Cosmetic only; never authorizes (assignments are the source). `users.role` is `NOT NULL` and list-serialized via `AssignableRoleSchema`, so a clean "clear" needs a list-schema change — out of scope for a P3. Documented precisely in `roleSync.ts`. |
@@ -143,7 +143,9 @@ future milestone that closes F-04 must deliver:
   resources → denied course-B resources).
 
 P7-F is **not globally blocked** by F-04, but any P7-F work that requires
-Teacher@Course enforcement is blocked until this milestone closes it.
+Teacher@Course enforcement is blocked until this milestone closes it. Durable
+tracking: **issue #286 — Enforce Teacher@Course scoped authority (F-04)**
+(closure requirements above + dependency rule).
 
 ---
 
@@ -204,25 +206,57 @@ console was introduced. The Maintainer window is a view, not a control console
 
 ---
 
-## 9. Tests
+## 9. Tests — completion evidence
 
 ```text
-authz:      10 files, 79 tests   — PASS
-db:         42 files, 566 tests  — PASS
-api:        163 files, 2186 tests (7 skipped) — PASS
-web:        116 files, 1630 tests — PASS
-typecheck:  17/17 tasks          — PASS
-lint:       copy/arch/ui guards  — PASS
-e2e (WSL):  see PR check / run-wsl.sh result
+Baseline SHA:     8a2c9edf6787382f73c0b03e4e05d7afa600e569 (master)
+Start head SHA:   0e98ff943a20a82a192288ec273a1cf8e2c90362 (PR #284 head at review start)
+Final head SHA:   <final> (fix/p7-rbac-admin-authority-maintainer-observability)
+Date:             2026-08-13 (review-remediation round)
+```
+
+```text
+authz:      10 files, 79 tests    — PASS
+db:         42 files, 566 tests   — PASS
+api:        163 files, 2190 tests (7 skipped) — PASS
+web:        116 files, 1634 tests — PASS
+typecheck:  17/17 tasks           — PASS
+lint:       format / code-quality / copy / arch / ui-guards / eslint — PASS
+build:      9/9 tasks             — PASS
+coverage (v8): authz 100.00 stmts · db 80.82 · api 84.25 · web 80.98
+e2e (WSL run-wsl.sh, 2 shards):   — PASS (exit 0; shard-0 + shard-1 passed, 0 failed)
+pnpm verify:                      — PASS (run at final head)
 ```
 
 New/updated tests added: F-01 catalog authority (`UsersPage.test.tsx`), F-02
 Maintainer-parity structural (`openapi.structural.test.ts`), F-03 list
-visibility (`user.test.ts`), F-04 org-wide characterization
-(`teacherScopeCharacterization.test.ts`), F-05 dual-role kernel + JWT-window
-runtime (`assignmentAuthority.test.ts`, `operationalBoundary.test.ts`), F-08
-nav IA (`capabilities.test.ts`, E2E `operations.spec.ts`), F-09 capability
-gate (`ProctorDashboardPage.test.tsx`).
+visibility + **4 adversarial staff-list cases** (Candidate crowd-out,
+Candidate-primary + Teacher-secondary exactly-once, Candidate-only absence,
+Proctor+Grader+Maintainer+stale-role — `user.test.ts`), F-04 org-wide
+characterization (claim limited to the tested course endpoints —
+`teacherScopeCharacterization.test.ts`), F-05 dual-role kernel + JWT-window
+runtime (`assignmentAuthority.test.ts`, `operationalBoundary.test.ts`),
+F-08 nav IA (`capabilities.test.ts`, E2E `operations.spec.ts`), F-09
+capability gate positive + **negative** (button absent without
+`AttemptTimeGrant` — `ProctorDashboardPage.test.tsx`), edit-role no-silent-
+Admin-fallback + i18n role-label fallback (`UsersPage.test.tsx`), exact
+zero-primary precedence assertion (`assignmentAuthority.test.ts`).
+
+Known limitations (accepted, unchanged by this round): F-06 stale
+`users.role` display for zero-primary accounts (staff list keeps them visible
+via the cache fallback; honest display is future IA work), F-10 duplicated
+role enums (structural, fail-loud on drift), F-11 no `users.role` DB CHECK
+(fail-closed design).
+
+Review dispositions (PR #284 review threads + issue #285): all 8 valid
+findings fixed (role-Admin fallback, F-03 pagination/assignment-aware
+staff list, i18n fallback, precedence assertion, characterization claim,
+AppSidebar comments, ADR-017 D7/authority-precedence wording, count errors,
+presets comments, MD037/MD056, completion evidence); 7 issue-#285 findings
+rejected as false positives with repository evidence (see issue #285).
+
+Deferred items: F-04 → issue #286; ADR-017 rev 4 (PROPOSED); ADR-018
+(PROPOSED).
 
 ---
 
@@ -231,10 +265,11 @@ gate (`ProctorDashboardPage.test.tsx`).
 ```text
 P0: 0
 P1: 0
-P2: 4 remediated — F-01 FIXED · F-02 FIXED · F-03 FIXED ·
-                   F-04 CONFIRMED/EXPLICITLY DEFERRED (scoped-RBAC milestone)
+P2: 3 FIXED + 1 EXPLICITLY DEFERRED — F-01 FIXED · F-02 FIXED · F-03 FIXED ·
+    F-04 CONFIRMED / EXPLICITLY DEFERRED to the scoped-RBAC milestone
+    (NOT completed in this PR — tracked in issue #286)
 P3: 7 remediated — F-05 FIXED · F-06 ACCEPTED · F-07 FIXED · F-08 FIXED ·
-                   F-09 FIXED · F-10 ACCEPTED · F-11 ACCEPTED
+    F-09 FIXED · F-10 ACCEPTED · F-11 ACCEPTED
 
 P7-F STATUS: READY FOR HUMAN REVIEW
 ```

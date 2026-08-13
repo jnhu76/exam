@@ -96,8 +96,9 @@ The archived job plans under `docs/archive/roadmap/` are reference-only.
   adversarial tests) are listed in
   [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md) §4.
   P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
-  Teacher course isolation until this milestone closes it. The current org-wide
-  reach is pinned by a characterization test
+  Teacher course isolation until this milestone closes it. Durable tracking:
+  **issue #286 — Enforce Teacher@Course scoped authority (F-04)**. The current
+  org-wide reach is pinned by a characterization test
   (`apps/api/src/authz/teacherScopeCharacterization.test.ts`).
 - **DEPENDENCIES**: P4 closed; ADR-015 acceptance (✅ recorded).
 - **ACCEPTANCE BOUNDARY**: Scoped staff can be assigned to resources and see only their assigned scope.
