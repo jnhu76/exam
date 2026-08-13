@@ -80,13 +80,17 @@ final-answer submit barrier; both remain open for all supported answer types.
 ## Current planning focus — P7
 
 The project is moving from isolated feature completion to system-level
-readiness. P7 is partially implemented: the **P7-D1 decision gate is
-ACCEPTED** (2026-08-08) and the first adopted responsibility — **Redis-backed
-shared rate limiting** (P7-D2/D3) — shipped on `master` via PR #265
-(ADR-001 "Post-MVP Decision (P7)"). The remaining P7 workstreams
-(state-machine/authority closeout, backup/restore, outage recovery,
-configuration control plane, exam policy profiles, UI/ops closeout) are open.
-P7 does not redefine M11; M11 remains resource-relationship authorization.
+readiness. P7 is mostly shipped: **P7-S2** (state/authority closeout, PR
+#269), **P7-C** (portable backup/DR), **P7-E** (operational control plane,
+PR #282), **P7-M** (exam policy profiles, PRs #277/#279, **CLOSED**
+2026-08-13), and the **RBAC role-reality remediation** (PR #284) are all on
+master; the **P7-F final-readiness closeout is COMPLETE — P7 remains OPEN**
+on Gate P7-3's two bullets (**RTO not declared/tested** + **retention
+host-owned/`NOT_ENFORCED`**), plus ADR-017 rev4/ADR-018 acceptance and #286
+clarification pending human decision. P7 does not redefine M11; M11 remains
+resource-relationship authorization. (Per-workstream statuses below are
+current as of 2026-08-13; see
+[`P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).)
 
 ### P7 workstreams
 
@@ -96,7 +100,8 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    - update stale state-and-authority documentation;
    - remove completed `text_response` work from open lists.
 
-2. **State-machine and authority closeout**
+2. **State-machine and authority closeout** ✅ CLOSED (P7-S2, PR #269; Gate
+   P7-1 PASS per the P7-F closeout — no general reconciler, evidence-based)
    - map every lifecycle/sub-process state and transition owner;
    - audit direct status writes, concurrency, idempotency, and crash points;
    - define startup reconciliation for recoverable partial work.
@@ -110,7 +115,8 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    - further Redis responsibilities (admission queue, presence, Pub/Sub/Streams,
      worker use) remain decision-gated on explicit durability/failure contracts.
 
-4. **Backup and restore**
+4. **Backup and restore** ✅ core SHIPPED (P7-C: C1–C3 + deterministic
+   drills; P7-E evidence ledger via PR #282) — see the status note below
    - define supported RPO/RTO profiles;
    - automate PostgreSQL/files/settings backup and retention;
    - add validation, clean-host restore, and restore drills;
@@ -129,12 +135,15 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > automation (host-owned; WAL-G/pgBackRest host-side is the P7-E3-recorded
    > recommendation). See [`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
 
-5. **Crash and outage recovery**
+5. **Crash and outage recovery** 🟡 largely SHIPPED (durable interruption
+   episodes + J3/J4/J5 recovery workflows; a general startup reconciler is
+   deliberately not built — Gate P7-1 PASS, evidence-based formulation)
    - define API/host/PostgreSQL/Redis/worker/scanner failure behavior;
    - make committed operations safely repeatable;
    - reconcile stuck grading, notifications, workers, interruptions, and jobs.
 
-6. **Configuration control plane**
+6. **Configuration control plane** ✅ COMPLETE (P7-E, PR #282; RBAC
+   remediation PR #284) — see the status notes below
    - keep bootstrap endpoints and secrets in deployment/secret configuration;
    - move safe business and operational settings into versioned audited storage;
    - expose effective values, source layer, validation, restart requirement,
@@ -193,14 +202,17 @@ P7 does not redefine M11; M11 remains resource-relationship authorization.
    > capabilities (backup.trigger etc.) stay host-owned pending their own
    > recorded decisions.
 
-7. **Configurable exam profiles**
+7. **Configurable exam profiles** ✅ CLOSED (P7-M1/M2/M, PRs #277/#279;
+   `basic_quiz`/`standard_online` shipped; Controlled/Strict deferred)
    - model timing, admission, session/device, navigation, interruption,
      submission, randomization, result, monitoring, and audit as orthogonal
      policies;
    - provide minimal, standard, controlled, and strict templates over one engine;
    - reject conflicting combinations before publish.
 
-8. **UI and operations closeout**
+8. **UI and operations closeout** 🟡 ongoing — exam-profile UI + wizard
+   CLOSED with P7-M (visual review performed by P7-F); remaining surfaces
+   tracked in [`docs/roadmap/ui-open-items.md`](ui-open-items.md)
    - system status, settings, backup, recovery, and exam-profile workflows;
    - continue typography/StatsCard/PageSection/component-authority migration;
    - responsive/mobile and accessibility closeout.
@@ -271,10 +283,10 @@ P7-E3  ✅ SHIPPED (PR #282) — operational policy intent (backup_operational_p
        No generic settings slice (P7-E0 verdict honored; the former "future E1
        settings" item is closed as not-justified). Email worker/runtime settings
        remain env + restart-required.
-P7-F   ✅ closeout pass (this branch) — final system-readiness / release-gate
-       closeout; verdict P7-F COMPLETE, P7 REMAINS OPEN on Gate P7-3 retention
-       + ADR-017 rev4/ADR-018 acceptance + #286 clarification
-       (docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
+P7-F   ✅ closeout pass (PR #288) — final system-readiness / release-gate
+       closeout; verdict P7-F COMPLETE, P7 REMAINS OPEN on Gate P7-3's two
+       bullets (RTO + retention) + ADR-017 rev4/ADR-018 acceptance + #286
+       clarification (docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
 UI pilot → controlled family-by-family UI closeout (ongoing; ui-open-items.md)
 ```
 

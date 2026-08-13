@@ -75,7 +75,7 @@ gate wording — each is a recorded human decision.
 
 | Gate | Verdict | One-line reality |
 | --- | --- | --- |
-| P7-0 | **PASS** (after bounded doc reconciliation in this PR) | Doc drift repaired; current-state docs now tell one story. |
+| P7-0 | **PASS** (after bounded doc reconciliation in this PR) | Doc drift repaired; current-state docs now tell one story — incl. a Current-status overlay + per-workstream status rows added to the canonical `P7-system-readiness-and-exam-modes.md`. |
 | P7-1 | **PASS** | P7-S2 guarantees intact on master; no new reachable partial state; no general reconciler needed (evidence-based). |
 | P7-2 | **PASS** | Redis = shared rate limit only (ADR-001 decision); lifecycle `off\|optional\|required`; no exam authority. |
 | P7-3 | **NOT PASS — HUMAN_DECISION_REQUIRED** (two bullets not met: **RTO** + **retention**; the rest — evidence ledger, verified drills, RPO intent — pass) | RTO: no declared supported value / no typed authority / no restore-within-RTO acceptance. Retention: host-owned/`NOT_ENFORCED`. Neither is faked. |
@@ -337,7 +337,7 @@ The runtime implements the ADR-017 **rev-4** read-only-observer model; the ADR
     Preferred resolution path: host-side automated retention (WAL-G/pgBackRest
     via cron/systemd), Exam observes evidence only.
 - **P3:**
-  - Doc drift (P7-0) — **FIXED** in this PR (current/phase-roadmap/phase3-open-items/implementation-status reconciled).
+  - Doc drift (P7-0) — **FIXED** in this PR (current/phase-roadmap/phase3-open-items/implementation-status + canonical `P7-system-readiness-and-exam-modes.md` reconciled — the latter gained a Current-status overlay and per-workstream status rows).
   - `#286` closed-without-implementation — **HUMAN_DECISION_REQUIRED** (clarify intent; P7-F did not reopen, did not claim isolation, did not redefine Teacher).
   - ADR-017 rev4 / ADR-018 PROPOSED — **HUMAN_DECISION_REQUIRED** (accept or revise).
   - Minor P7-M UI polish (low-contrast hints, small step counter, starter-button styling) — recorded, non-blocking; not absorbed into P7-F.
@@ -372,8 +372,9 @@ not invent or claim restore evidence it did not execute.
 **`pnpm verify` — PASS (exit 0)** (docs-only changes; all suites identical to
 the green master baseline). Evidence split: local `pnpm verify` ran at HEAD
 `0785c7f6`; **CI (Static checks, Build, API/Package/Web coverage, E2E shard
-1/2 + 2/2, CodeRabbit, ai_code_review) is all-green at HEAD `5d987744`**
-(9/9 checks pass on PR #288). Actual current-run numbers:
+1/2 + 2/2, CodeRabbit, ai_code_review) is all-green at HEAD `f55a9e4b`**
+(9/9 checks pass on PR #288; the same gate set was green at `5d987744`
+before the review-remediation commits). Actual current-run numbers:
 
 | Package | Test Files | Tests |
 | --- | --- | --- |
@@ -400,7 +401,7 @@ the green master baseline). Evidence split: local `pnpm verify` ran at HEAD
 - Markdown: touched files pass Prettier and markdownlint (repo-wide `lint:md`
   errors are pre-existing in untouched `docs/standards/*` / `README.md`).
 - **CI E2E on the PR: PASS — shard 1/2 + shard 2/2** (both blocking E2E shards
-  ran on PR #288 at HEAD `5d987744` and passed; no E2E specs skipped).
+  ran on PR #288 at HEAD `f55a9e4b` and passed; no E2E specs skipped).
 - Deployment/restore drills (`tests/deployment/*`) are **unchanged by this
   docs-only PR** and were **NOT RE-RUN in P7-F** (pass/fail explicitly not
   claimed; last full runs recorded by P7-C/E closeouts). A full deployment
