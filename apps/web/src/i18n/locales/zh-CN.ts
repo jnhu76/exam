@@ -690,6 +690,7 @@ const zhCN = {
         Grader: "阅卷员",
         Candidate: "候选人",
         Maintainer: "系统运维",
+        unknown: "未知角色",
       },
       statusLabels: { active: "启用", inactive: "禁用" },
       editLabel: "编辑用户",

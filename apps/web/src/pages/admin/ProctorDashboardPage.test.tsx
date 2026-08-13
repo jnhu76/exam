@@ -233,12 +233,15 @@ describe("ProctorDashboardPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("does NOT render the extend-time button for a user without AttemptTimeGrant (F-09 negative)", async () => {
+  it("does NOT render business action buttons for a user without capabilities (F-09 negative)", async () => {
     // F-09: UI visibility follows CAPABILITY, not role identity. The
-    // candidate has an attemptId, but a user without attempt.time.grant
-    // (here: the Maintainer preset, which has zero business permissions)
-    // must not see 延长时间. The backend 403 boundary is covered by
-    // operationalBoundary.test.ts; this test pins the client contract.
+    // candidate has an in-progress attemptId (so an Admin WOULD see the full
+    // action row), but a user without the business capabilities — here the
+    // Maintainer preset, which has zero business permissions — must not see
+    // 延长时间 / 强制交卷 / 标记违规. The backend 403 boundary is covered by
+    // the route-level capability derivation; this test pins the client
+    // contract and acts as a canary if a business capability is ever added
+    // to the Maintainer preset.
     apiGet.mockResolvedValue({
       candidates: [makeCandidate({ attemptId: "att-1" })],
       total: 1,
@@ -247,6 +250,12 @@ describe("ProctorDashboardPage", () => {
     await screen.findByText("张三");
     expect(
       screen.queryByRole("button", { name: "延长时间" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "强制交卷" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "标记违规" }),
     ).not.toBeInTheDocument();
     // The grant dialog must not open either (no capability to reach it).
     expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();

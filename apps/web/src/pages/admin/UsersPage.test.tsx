@@ -440,9 +440,10 @@ describe("UsersPage", () => {
     expect(apiPatch.mock.calls[0]![1]).not.toHaveProperty("role");
   });
 
-  it("role label falls back to the backend catalog label when the local i18n key is missing", async () => {
+  it("role label falls back to the generic Chinese label when the local i18n key is missing", async () => {
     // Backend returns a role the frontend locale has no `roleLabels` entry
-    // for; the UI must render the API-provided label, not the i18n key path.
+    // for; the UI must render the generic `unknown` label (zh-CN), never the
+    // API-provided English label or the raw i18n key path.
     apiGet.mockImplementation(async (url: string) =>
       url === "/api/roles/assignable"
         ? {
@@ -474,7 +475,7 @@ describe("UsersPage", () => {
     );
     renderPage();
     await screen.findByText("aud1");
-    expect(screen.getByText("Auditor 审计员")).toBeInTheDocument();
+    expect(screen.getByText("未知角色")).toBeInTheDocument();
     expect(
       screen.queryByText(/admin\.users\.roleLabels\./),
     ).not.toBeInTheDocument();

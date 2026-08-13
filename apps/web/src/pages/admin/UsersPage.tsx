@@ -103,13 +103,14 @@ export function UsersPage() {
 
   /**
    * Resolves a role display label: local i18n `roleLabels` wins; a missing
-   * key falls back to the backend assignable-catalog label, then to the raw
-   * role key (i18next returns the key string for missing keys, so the old
-   * `??` fallback never fired — P7 review #5).
+   * key falls back to the generic `unknown` label so an unlocalized backend
+   * catalog label can never leak English into the UI (P7 review #5). Catalog
+   * membership still comes from the backend assignable roles; only the
+   * display fallback is generic (fail-visible instead of leaking the key).
    */
   function roleLabel(key: string) {
     return t(`admin.users.roleLabels.${key}`, {
-      defaultValue: assignableRoles.find((r) => r.key === key)?.label ?? key,
+      defaultValue: t("admin.users.roleLabels.unknown"),
     });
   }
 
