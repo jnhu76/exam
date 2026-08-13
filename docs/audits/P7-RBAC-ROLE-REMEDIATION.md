@@ -211,7 +211,7 @@ console was introduced. The Maintainer window is a view, not a control console
 ```text
 Baseline SHA:     8a2c9edf6787382f73c0b03e4e05d7afa600e569 (master)
 Start head SHA:   0e98ff943a20a82a192288ec273a1cf8e2c90362 (PR #284 head at review start)
-Final head SHA:   <final> (fix/p7-rbac-admin-authority-maintainer-observability)
+Final head SHA:   db744db832bd3499bc526c58ee9871dd563e04bf (fix/p7-rbac-admin-authority-maintainer-observability)
 Date:             2026-08-13 (review-remediation round)
 ```
 
