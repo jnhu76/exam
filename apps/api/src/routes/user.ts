@@ -57,12 +57,18 @@ const userListResponseSchema = z.object({
 const okResponseSchema = z.object({ ok: z.literal(true) });
 
 /**
- * Roles supported in the Phase 1 user-list surface — used to filter the user
- * list to Admin and Candidate. P7-E2A adds Maintainer so an application
- * Maintainer account is created, listed, and managed through this approved
- * path (ADR-017 D2 provisioning rule).
+ * Roles surfaced in the user-management list (GET /users). Sourced from the
+ * canonical assignable-role contract so the list never silently hides a valid
+ * assignable role. P7-RBAC-REMEDIATION F-03: the prior hardcoded
+ * `PHASE1_SUPPORTED_ROLES = ["Admin","Candidate","Maintainer"]` subset made
+ * Teacher/Proctor/Grader users invisible in the admin list (created but
+ * unmanageable via the UI). `System` is excluded by AssignableRoleSchema
+ * (synthetic, non-assignable); the frontend separately filters Candidate out
+ * of the staff table (candidates are managed via the dedicated candidate
+ * flow). `users.role` is a compatibility cache — listing by it never widens
+ * authority (authority = the union of active assignment presets).
  */
-const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate", "Maintainer"] as const;
+const LISTABLE_ROLES: readonly string[] = AssignableRoleSchema.options;
 
 /**
  * Fastify plugin that registers user management routes.
@@ -90,10 +96,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /**
-     * GET /users — list users with pagination (Admin and Candidate roles only).
+     * GET /users — list users with pagination (full assignable role set).
      *
-     * Returns paginated user records. Only Admin and Candidate roles
-     * are included, filtered by PHASE1_SUPPORTED_ROLES.
+     * Returns paginated user records for every assignable role (Admin,
+     * Teacher, Proctor, Grader, Candidate, Maintainer), filtered by
+     * LISTABLE_ROLES (sourced from AssignableRoleSchema). The frontend
+     * filters Candidate out of the staff table.
      */
     async (request) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
@@ -101,7 +109,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createUserRepo(fastify.db);
       const { items, total } = await repo.listPaginatedByRoles(
         ctx,
-        PHASE1_SUPPORTED_ROLES,
+        LISTABLE_ROLES,
         page,
         pageSize,
       );

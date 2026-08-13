@@ -235,6 +235,44 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             .code(401)
             .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
         }
+        if (authority.reason === "dual_admin_maintainer") {
+          // P7-RBAC-REMEDIATION F-05 / ADR-017 D14: the authority kernel
+          // (`deriveAssignmentAuthority`) now rejects an active set containing
+          // BOTH Admin and Maintainer — the write-side seam makes this
+          // unreachable through the product, but a hand-edited / bypass-written
+          // row set must still fail closed at login (the union authority would
+          // otherwise grant the full Admin capability set to a Maintainer
+          // account). The response stays generic so it does not leak the reason.
+          const excludedCtx: RequestContext = {
+            actorId: user.id,
+            organizationId: user.organizationId,
+            targetOrganizationId: user.organizationId,
+            role: user.role as Role,
+            permissions: [],
+            sessionId: "anonymous",
+          };
+          recordBestEffortAudit(fastify, request, excludedCtx, {
+            action: "login.failure",
+            targetType: "login",
+            targetId: user.id,
+            metadata: { reason: "admin_maintainer_exclusion" },
+          });
+          fastify.log.error(
+            {
+              event: "security.authentication",
+              outcome: "denied",
+              reason: "admin_maintainer_exclusion",
+              organizationKnown: true,
+              organizationId: org.id,
+              actorId: user.id,
+              requestId: request.id,
+            },
+            "Login denied: account holds both Admin and Maintainer assignments (D14 invariant violated in committed state)",
+          );
+          return reply
+            .code(401)
+            .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
+        }
         fastify.log.error(
           {
             event: "security.authentication",
@@ -254,48 +292,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const primaryRole = authority.authority.primaryRole;
       const activeRoles = authority.authority.activeRoles;
-
-      // P7-E2A (ADR-017 D14) read-side guard: the write-side invariant
-      // (`mutateWithAuthorityInvariants` / `mutateWithEffectiveAdminPostcondition`)
-      // must make this unreachable, but a hand-edited (or future
-      // bypass-written) row set of active Admin + active Maintainer for one
-      // actor must fail closed at login — the union authority would otherwise
-      // grant the full Admin capability set to a Maintainer account. The
-      // response stays generic so it does not leak the reason to the client.
-      if (
-        (activeRoles as readonly string[]).includes("Admin") &&
-        (activeRoles as readonly string[]).includes("Maintainer")
-      ) {
-        const excludedCtx: RequestContext = {
-          actorId: user.id,
-          organizationId: user.organizationId,
-          targetOrganizationId: user.organizationId,
-          role: primaryRole as Role,
-          permissions: [],
-          sessionId: "anonymous",
-        };
-        recordBestEffortAudit(fastify, request, excludedCtx, {
-          action: "login.failure",
-          targetType: "login",
-          targetId: user.id,
-          metadata: { reason: "admin_maintainer_exclusion" },
-        });
-        fastify.log.error(
-          {
-            event: "security.authentication",
-            outcome: "denied",
-            reason: "admin_maintainer_exclusion",
-            organizationKnown: true,
-            organizationId: org.id,
-            actorId: user.id,
-            requestId: request.id,
-          },
-          "Login denied: account holds both Admin and Maintainer assignments (D14 invariant violated in committed state)",
-        );
-        return reply
-          .code(401)
-          .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
-      }
+      // P7-RBAC-REMEDIATION F-05: the D14 Admin↔Maintainer exclusion is now
+      // enforced in the authority kernel (`deriveAssignmentAuthority`), which
+      // both this login path and the per-request `authenticate` decorator
+      // traverse. An active {Admin, Maintainer} set therefore returns
+      // `{ ok:false, reason:"dual_admin_maintainer" }` above (401 here, 503 on
+      // the authenticated-request path) — it can no longer reach this branch.
 
       // RBAC runtime activation: only the 6 assignable human roles
       // (Admin/Maintainer/Teacher/Proctor/Grader/Candidate) may log in. System

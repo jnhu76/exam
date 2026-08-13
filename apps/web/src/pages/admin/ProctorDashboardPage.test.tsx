@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import i18n from "@/i18n";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { permissionsForRole } from "@exam/authz";
 import type { MeResponse, TimeGrantRequest } from "@exam/contracts";
 import { ProctorDashboardPage } from "./ProctorDashboardPage";
 import { resetPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
@@ -119,7 +120,11 @@ const adminUser: MeResponse = {
   name: "Admin",
   role: "Admin",
   organizationId: "org-1",
-  capabilities: [],
+  // P7-RBAC-REMEDIATION F-09: the extend-time button is now capability-gated
+  // (can(AttemptTimeGrant)), not role-label-gated (isAdmin). The fixture must
+  // carry the Admin preset's capabilities (which include attempt.time.grant),
+  // not an empty array that only worked under the old role-label shortcut.
+  capabilities: [...permissionsForRole("Admin")] as string[],
 };
 
 function renderPage() {

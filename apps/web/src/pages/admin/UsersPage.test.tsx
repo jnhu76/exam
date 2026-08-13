@@ -36,6 +36,43 @@ const mockUsers = [
   },
 ];
 
+/**
+ * Assignable-role authority returned by GET /roles/assignable (F-01: the
+ * selector is driven by the backend, not a frontend hardcoded closed set).
+ */
+const mockAssignableRoles = [
+  { key: "Admin", label: "Admin", purpose: "Exam administrator" },
+  { key: "Teacher", label: "Teacher", purpose: "Course/exam authoring" },
+  { key: "Proctor", label: "Proctor", purpose: "Exam-room runtime" },
+  { key: "Grader", label: "Grader", purpose: "Manual scoring" },
+  { key: "Candidate", label: "Candidate", purpose: "Examinee" },
+  {
+    key: "Maintainer",
+    label: "Maintainer",
+    purpose: "System operations observer",
+  },
+];
+
+/** Routes api.get by URL: /api/roles/assignable vs the users list. */
+function mockApiGet(usersOverride?: {
+  items: unknown[];
+  total: number;
+  totalPages: number;
+}) {
+  apiGet.mockImplementation(async (url: string) => {
+    if (url === "/api/roles/assignable") return { items: mockAssignableRoles };
+    return (
+      usersOverride ?? {
+        items: mockUsers,
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      }
+    );
+  });
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/admin/users"]}>
@@ -69,13 +106,7 @@ describe("UsersPage", () => {
     apiGet.mockReset();
     apiPost.mockReset();
     apiPatch.mockReset();
-    apiGet.mockResolvedValue({
-      items: mockUsers,
-      total: 1,
-      page: 1,
-      pageSize: 20,
-      totalPages: 1,
-    });
+    mockApiGet();
     apiPost.mockResolvedValue({ id: "u4" });
     apiPatch.mockResolvedValue({ ok: true });
   });
@@ -88,7 +119,7 @@ describe("UsersPage", () => {
   it("renders user list with Admin role", async () => {
     renderPage();
     expect(await screen.findByText("admin1")).toBeInTheDocument();
-    expect(screen.getByText("管理员")).toBeInTheDocument();
+    expect(screen.getByText("考试管理员")).toBeInTheDocument();
   });
 
   it("renders add user button", async () => {
@@ -98,27 +129,62 @@ describe("UsersPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("create dialog shows the RBAC-M9 staff role options (Admin/Teacher/Proctor/Grader)", async () => {
+  it("create dialog shows the staff role options sourced from /roles/assignable (F-01)", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /新增用户/ }));
     const dialog = await screen.findByRole("dialog");
     const trigger = within(dialog).getByRole("combobox");
     await user.click(trigger);
-    // The 4 staff roles are selectable (widened from Admin-only in RBAC-M9).
+    // The selector is driven by GET /roles/assignable (the backend
+    // @exam/authz ROLE_PRESETS authority), not a frontend hardcoded set.
     expect(
-      await screen.findByRole("option", { name: "管理员" }),
+      await screen.findByRole("option", { name: "考试管理员" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "教师" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "监考员" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "阅卷员" })).toBeInTheDocument();
-    // Candidate is NOT offered (managed via candidate routes); SuperAdmin is
-    // never defined (no ADR).
+    expect(
+      screen.getByRole("option", { name: "系统运维" }),
+    ).toBeInTheDocument();
+    // Candidate is NOT offered (managed via candidate routes); System is never
+    // assignable; SuperAdmin is never defined (no ADR).
     expect(
       screen.queryByRole("option", { name: "候选人" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: "超级管理员" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("role selector reflects exactly what /roles/assignable returns (F-01 catalog authority)", async () => {
+    // If the backend assignable authority returns only [Admin, Teacher], the
+    // selector must show only those — proving it is not a hardcoded set.
+    apiGet.mockImplementation(async (url: string) =>
+      url === "/api/roles/assignable"
+        ? {
+            items: [
+              { key: "Admin", label: "Admin", purpose: "x" },
+              { key: "Teacher", label: "Teacher", purpose: "x" },
+            ],
+          }
+        : { items: mockUsers, total: 1, page: 1, pageSize: 20, totalPages: 1 },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /新增用户/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("combobox"));
+    expect(
+      await screen.findByRole("option", { name: "考试管理员" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "教师" })).toBeInTheDocument();
+    // The selector does NOT offer roles the backend did not return.
+    expect(
+      screen.queryByRole("option", { name: "监考员" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "系统运维" }),
     ).not.toBeInTheDocument();
   });
 

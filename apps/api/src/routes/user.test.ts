@@ -18,6 +18,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
+import { AssignableRoleSchema } from "@exam/contracts";
 import * as adminInvariantModule from "../authz/adminInvariant.js";
 import * as userRoleAssignmentRepoModule from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 
@@ -236,7 +237,7 @@ describe("user routes", () => {
     });
   });
 
-  it("GET /api/users excludes legacy-role rows from items and total via repo-level filter", async () => {
+  it("GET /api/users excludes legacy-role rows and includes the full assignable set via repo-level filter (F-03)", async () => {
     const legacyCtx = await buildTestApp(userRoutes);
     try {
       const beforeRes = await legacyCtx.app.inject({
@@ -247,7 +248,7 @@ describe("user routes", () => {
       expect(beforeRes.statusCode).toBe(200);
       const beforeBody = beforeRes.json();
 
-      await createFutureRoleUserForTest(
+      const teacher = await createFutureRoleUserForTest(
         legacyCtx.db,
         legacyCtx.org.id,
         "Teacher",
@@ -269,12 +270,29 @@ describe("user routes", () => {
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
+      const assignable = AssignableRoleSchema.options as readonly string[];
+      // F-03: the list is sourced from the full assignable contract, so every
+      // listed user is in the assignable set (legacy/non-assignable roles like
+      // SuperAdmin are excluded at the repo level).
       expect(
-        body.items.every(
-          (u: { role: string }) => u.role === "Admin" || u.role === "Candidate",
+        body.items.every((u: { role: string }) => assignable.includes(u.role)),
+      ).toBe(true);
+      // The legacy SuperAdmin row is excluded.
+      expect(
+        body.items.some((u: { username: string }) =>
+          u.username.includes("legacy-superadmin-list"),
+        ),
+      ).toBe(false);
+      // F-03: the assignable Teacher is now VISIBLE (previously hidden by the
+      // ["Admin","Candidate","Maintainer"] subset filter).
+      expect(
+        body.items.some(
+          (u: { username: string }) => u.username === teacher.user.username,
         ),
       ).toBe(true);
-      expect(body.total).toBe(beforeBody.total);
+      // One assignable user (Teacher) was added and is visible; SuperAdmin is
+      // excluded → total grows by exactly 1.
+      expect(body.total).toBe(beforeBody.total + 1);
       expect(body.totalPages).toBe(
         body.total === 0 ? 0 : Math.ceil(body.total / body.pageSize),
       );

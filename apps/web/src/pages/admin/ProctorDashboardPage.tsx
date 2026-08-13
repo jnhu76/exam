@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { isAdmin } from "@/lib/capabilities";
+import { can } from "@/lib/capabilities";
+import { Permission } from "@exam/authz";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -1906,15 +1907,17 @@ export function ProctorDashboardPage() {
                           )}
                       </>
                     )}
-                    {candidate.attemptId && user && isAdmin(user) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void openGrantDialog(candidate)}
-                      >
-                        {t("admin.proctorDashboard.card.extend")}
-                      </Button>
-                    )}
+                    {candidate.attemptId &&
+                      user &&
+                      can(user, Permission.AttemptTimeGrant) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void openGrantDialog(candidate)}
+                        >
+                          {t("admin.proctorDashboard.card.extend")}
+                        </Button>
+                      )}
                     {candidate.attemptId && (
                       <Button
                         size="sm"

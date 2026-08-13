@@ -158,6 +158,19 @@ test.describe("P7-E2C operations surface", () => {
         .locator('[data-slot="sidebar-nav-item"]')
         .filter({ hasText: "运维总览" }),
     ).toHaveCount(1);
+    // F-08: the Admin-only "管理" group heading is NOT shown to Maintainer
+    // (operational surfaces live under "运维"; the 管理 group is the
+    // business-management surface). 系统监控 moved into 运维 and remains visible.
+    await expect(
+      page
+        .locator('[data-testid="nav-group-label"]')
+        .filter({ hasText: "管理" }),
+    ).toHaveCount(0);
+    await expect(
+      page
+        .locator('[data-slot="sidebar-nav-item"]')
+        .filter({ hasText: "系统监控" }),
+    ).toHaveCount(1);
 
     // Direct business route is denied (frontend 403 page; backend also 403s).
     await page.goto("/admin/users");

@@ -148,6 +148,53 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       await ctx.db.delete(schema.users).where(eq(schema.users.id, user.id));
     });
 
+    it("an already-issued JWT is denied on the next request once the account becomes dual-role (F-05 JWT window)", async () => {
+      // F-05: the write-side seam makes dual Admin+Maintainer unreachable through
+      // the product, but a hand-edited row set must fail closed on the PER-REQUEST
+      // authenticate path too — not only at login. An Admin session issued BEFORE
+      // the dual state must not load the union authority on its next request.
+      const { user, token } = await createAssignedUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Admin",
+        "dual-jwt",
+      );
+      const authed = (url: string) =>
+        ctx.app.inject({
+          method: "GET",
+          url,
+          cookies: { "auth-token": token },
+        });
+
+      // 1. The Admin session works before the dual state.
+      expect((await authed("/api/system/health")).statusCode).toBe(200);
+
+      // 2. Hand-insert an active Maintainer assignment → dual state (bypasses
+      //    the mutation seam, the only way to produce it).
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        userId: user.id,
+        role: "Maintainer",
+        isPrimary: false,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 3. The same session is now denied on the per-request path: the kernel
+      //    returns dual_admin_maintainer → authenticate fails closed. It never
+      //    loads the union authority, so the Admin-only route is not reachable.
+      const denied = await authed("/api/system/health");
+      expect(denied.statusCode).toBe(503);
+
+      // Clean up the deliberately-created violation.
+      await ctx.db
+        .delete(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.userId, user.id));
+      await ctx.db.delete(schema.users).where(eq(schema.users.id, user.id));
+    });
+
     it("Maintainer NEVER receives business-integrity diagnostics (D8)", async () => {
       const res = await asMaintainer("GET", "/api/system/diagnostics");
       expect(res.statusCode).toBe(200);

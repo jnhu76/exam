@@ -82,16 +82,24 @@ export function canAccessExamRuntime(
  *
  * NOTE: CandidateView is intentionally excluded. Teacher also holds CandidateView
  * (scoped to course assignment per the preset comment), but the management
- * section is the Admin-only surface (users/audit/settings/system/candidateFields).
+ * section is the Admin-only surface (users/audit/settings/candidateFields).
  * CandidateView is shared, so including it would over-grant the management nav
- * to Teacher. The Admin-only management perms are the five below; CandidateView
+ * to Teacher. The Admin-only management perms are the four below; CandidateView
  * alone does not gate the management section.
+ *
+ * P7-RBAC-REMEDIATION F-08: SystemHealthView was previously included here, but
+ * it is an OPERATIONAL capability held by BOTH Admin and Maintainer. Including
+ * it over-granted the "管理" nav group to Maintainer (it leaked a lone
+ * "系统监控" item into the management section). Operational surfaces belong to
+ * the "运维" group (canSeeOperations); the management group is the Admin-only
+ * business-management surface. SystemDiagnosticsView was never listed (the
+ * stray item entered only because SystemHealthView gated the group AND
+ * SystemDiagnosticsView gated the item).
  */
 const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
   Permission.UserView,
   Permission.AuditLogView,
   Permission.SettingsView,
-  Permission.SystemHealthView,
   Permission.CandidateFieldView,
 ] as const;
 

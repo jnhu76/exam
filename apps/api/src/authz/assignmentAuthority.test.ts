@@ -206,6 +206,85 @@ describe("deriveAssignmentAuthority — pure kernel", () => {
       expect(r).toEqual({ ok: false, reason: "unknown_role" });
     });
 
+    it("fails closed on dual active Admin + Maintainer (dual_admin_maintainer — D14 read-side, F-05)", () => {
+      // The write-side seam makes this unreachable through the product; a
+      // hand-edited / bypass-written row set must still fail closed in the
+      // kernel (the single chokepoint login + authenticate traverse) — the
+      // union authority would otherwise grant the full Admin set to a
+      // Maintainer account. Primary Admin + secondary active Maintainer.
+      const r = deriveAssignmentAuthority(
+        [
+          row({ role: Role.Admin, isPrimary: true }),
+          row({ role: Role.Maintainer, isPrimary: false }),
+        ],
+        ORG,
+        USER,
+      );
+      expect(r).toEqual({ ok: false, reason: "dual_admin_maintainer" });
+    });
+
+    it("fails closed on dual active Admin + Maintainer regardless of which is primary (F-05)", () => {
+      // Primary Maintainer + secondary active Admin — same forbidden pair.
+      const r = deriveAssignmentAuthority(
+        [
+          row({ role: Role.Maintainer, isPrimary: true }),
+          row({ role: Role.Admin, isPrimary: false }),
+        ],
+        ORG,
+        USER,
+      );
+      expect(r).toEqual({ ok: false, reason: "dual_admin_maintainer" });
+    });
+
+    it("fails closed on dual active Admin + Maintainer when both are secondary (zero_primary_with_active fires first)", () => {
+      // Edge: with neither primary, the zero-primary check fires before the
+      // D14 check. The pair is still rejected (never ok) — this pins the
+      // precedence so a future reorder cannot accidentally admit the pair.
+      const r = deriveAssignmentAuthority(
+        [
+          row({ role: Role.Admin, isPrimary: false }),
+          row({ role: Role.Maintainer, isPrimary: false }),
+        ],
+        ORG,
+        USER,
+      );
+      expect(r.ok).toBe(false);
+    });
+
+    it("does NOT reject Admin alone or Maintainer alone (F-05 scope)", () => {
+      // The D14 check forbids ONLY the {Admin, Maintainer} pair — each role
+      // alone must still derive normally.
+      const admin = deriveAssignmentAuthority(
+        [row({ role: Role.Admin, isPrimary: true })],
+        ORG,
+        USER,
+      );
+      expect(admin.ok).toBe(true);
+      const maintainer = deriveAssignmentAuthority(
+        [row({ role: Role.Maintainer, isPrimary: true })],
+        ORG,
+        USER,
+      );
+      expect(maintainer.ok).toBe(true);
+    });
+
+    it("does NOT reject Maintainer combined with a non-Admin role (D14 scope — F-05)", () => {
+      // Only Admin ∩ Maintainer is forbidden (D14). Maintainer + Teacher is an
+      // allowed union (the designed union model) and must derive successfully.
+      const r = deriveAssignmentAuthority(
+        [
+          row({ role: Role.Maintainer, isPrimary: true }),
+          row({ role: Role.Teacher, isPrimary: false }),
+        ],
+        ORG,
+        USER,
+      );
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // activeRoles is stable-sorted by canonical ROLE_ORDER (Teacher < Maintainer).
+      expect(r.authority.activeRoles).toEqual([Role.Teacher, Role.Maintainer]);
+    });
+
     it("fails closed on a cross-org row (subject_mismatch)", () => {
       // E11 / task §3.5: a row for a different org must never contribute.
       const r = deriveAssignmentAuthority(

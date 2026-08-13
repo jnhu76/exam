@@ -57,24 +57,20 @@ interface Page<T> {
 }
 
 /**
- * Staff roles an admin can create/assign via this dialog (RBAC-M8/M9).
- * Candidate is excluded here — candidates are managed via the candidate
- * routes (the user list also filters them out). The backend still gates
- * creation on requireRole(["Admin"]) until enforcement (PR #3); the role
- * chosen here is the primary assignment, which syncs users.role.
- * P7-E2A (ADR-017 D2): Maintainer is creatable through the ordinary
- * user-management path (application-side System Operations Owner).
+ * Assignable-role item returned by GET /roles/assignable (RBAC-M8). The
+ * backend @exam/authz ROLE_PRESETS is the SINGLE source of truth for the
+ * assignable role set; this page consumes that authority instead of keeping a
+ * parallel hardcoded closed set. P7-RBAC-REMEDIATION F-01: the prior
+ * EDITABLE_ROLES array duplicated the backend and GET /roles/assignable had
+ * zero frontend consumers — a future role addition would silently diverge the
+ * selector. Candidate is excluded from the staff-creation selector because
+ * candidates are managed via the dedicated candidate flow.
  */
-type EditableRole = "Admin" | "Teacher" | "Proctor" | "Grader" | "Maintainer";
-
-/** Roles available for selection in the user create/edit form. */
-const EDITABLE_ROLES: EditableRole[] = [
-  "Admin",
-  "Teacher",
-  "Proctor",
-  "Grader",
-  "Maintainer",
-];
+interface AssignableRoleItem {
+  key: AssignableRole;
+  label: string;
+  purpose: string;
+}
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
@@ -82,26 +78,35 @@ export function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Selectable staff roles, sourced from the backend assignable-role authority
+  // (GET /roles/assignable). Candidate is filtered out for the staff selector.
+  const [assignableRoles, setAssignableRoles] = useState<AssignableRoleItem[]>(
+    [],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<EditableRole>("Admin");
+  const [role, setRole] = useState<AssignableRole>("Admin");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  /** Fetches all non-candidate users from the API. */
+  /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
+  const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
+
+  /** Fetches the assignable-role authority and all non-candidate users. */
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setUsers(
-        (await api.get<Page<UserRow>>("/api/users")).items.filter(
-          (user) => user.role !== "Candidate",
-        ),
-      );
+      const [rolesRes, usersRes] = await Promise.all([
+        api.get<{ items: AssignableRoleItem[] }>("/api/roles/assignable"),
+        api.get<Page<UserRow>>("/api/users"),
+      ]);
+      setAssignableRoles(rolesRes.items);
+      setUsers(usersRes.items.filter((user) => user.role !== "Candidate"));
     } catch {
       setError(t("admin.users.loadFailed"));
     } finally {
@@ -117,8 +122,8 @@ export function UsersPage() {
     setPassword("");
     setName(user?.name ?? "");
     setRole(
-      user && (EDITABLE_ROLES as readonly string[]).includes(user.role)
-        ? (user.role as EditableRole)
+      user && assignableRoles.some((r) => r.key === user.role)
+        ? user.role
         : "Admin",
     );
     setFieldErrors({});
@@ -147,7 +152,7 @@ export function UsersPage() {
     setSaving(true);
     try {
       if (editing) {
-        const payload: { name: string; role?: EditableRole } = { name };
+        const payload: { name: string; role?: AssignableRole } = { name };
         payload.role = role;
         await api.patch(`/api/users/${editing.id}`, payload);
       } else {
@@ -343,15 +348,15 @@ export function UsersPage() {
               <Label>{t("admin.users.dialog.role")}</Label>
               <Select
                 value={role}
-                onValueChange={(value) => setRole(value as EditableRole)}
+                onValueChange={(value) => setRole(value as AssignableRole)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {EDITABLE_ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {t(`admin.users.roleLabels.${r}` as never) ?? r}
+                  {selectableRoles.map((r) => (
+                    <SelectItem key={r.key} value={r.key}>
+                      {t(`admin.users.roleLabels.${r.key}` as never) ?? r.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

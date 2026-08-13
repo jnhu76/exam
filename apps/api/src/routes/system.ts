@@ -305,7 +305,9 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     ],
     schema: {
       security: cookieAuth,
-      "x-role": ["Admin"],
+      // P7-RBAC-REMEDIATION F-02: runtime gate SystemHealthView is held by BOTH
+      // Admin and Maintainer presets; OpenAPI x-role must agree (was Admin-only).
+      "x-role": ["Admin", "Maintainer"],
       response: { 200: SystemHealthResponseSchema },
     },
     handler: async () => {
@@ -377,7 +379,11 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     ],
     schema: {
       security: cookieAuth,
-      "x-role": ["Admin"],
+      // P7-RBAC-REMEDIATION F-02: runtime gate SystemDiagnosticsView is held by
+      // BOTH Admin and Maintainer presets; OpenAPI x-role must agree (was
+      // Admin-only). The business-integrity `integrity` block is still
+      // Admin-only — gated server-side by SystemBusinessIntegrityView (D8).
+      "x-role": ["Admin", "Maintainer"],
       response: { 200: DiagnosticsResponseSchema },
     },
     handler: async (request) => {
@@ -743,9 +749,13 @@ function toRestoreDrillWire(r: RestoreDrillRow) {
 
 /**
  * P7-E2A (ADR-017 D8) — builds the OPERATIONAL diagnostics payload (the
- * diagnostics response minus the business-integrity `integrity` block).
- * Shared by GET /system/diagnostics (full response, Admin) and
- * GET /system/operational-diagnostics (operational projection, Maintainer).
+ * diagnostics response minus the business-integrity `integrity` block). It is
+ * the shared base of GET /system/diagnostics: every caller (Admin + Maintainer)
+ * receives this operational projection; Admin additionally receives the
+ * `integrity` block (field-level projection, gated server-side by
+ * SystemBusinessIntegrityView). There is NO separate /system/operational-
+ * diagnostics route — the D8 authority-domain split is implemented as a
+ * field-level projection inside GET /system/diagnostics, not a second route.
  */
 async function buildOperationalDiagnostics(
   fastify: FastifyInstance,

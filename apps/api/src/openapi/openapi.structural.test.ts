@@ -402,6 +402,30 @@ describe("OpenAPI structural baseline — security & x-role metadata", () => {
       expect(item?.[method]?.["x-role"]).toEqual(["Admin"]);
     },
   );
+
+  // P7-RBAC-REMEDIATION F-02: every route whose runtime gate is in the
+  // Maintainer preset MUST declare x-role including "Maintainer", so OpenAPI
+  // metadata cannot drift from the runtime capability authority (previously
+  // /system/health and /system/diagnostics were documented Admin-only while
+  // Maintainer was authorized at runtime).
+  it.each([
+    ["get", "/api/system/health"],
+    ["get", "/api/system/diagnostics"],
+    ["get", "/api/system/backups"],
+    ["get", "/api/system/restore-readiness"],
+    ["get", "/api/system/ops-policy"],
+  ] as const)(
+    "%s %s documents Maintainer parity (F-02)",
+    async (method, path) => {
+      const s = await spec();
+      const item = (s.paths as Record<string, unknown>)[path] as
+        | Record<string, { "x-role"?: string[] }>
+        | undefined;
+      expect(item?.[method]?.["x-role"]).toEqual(
+        expect.arrayContaining(["Admin", "Maintainer"]),
+      );
+    },
+  );
 });
 
 // ─── Protected routes have 401 ───────────────────────────────────────

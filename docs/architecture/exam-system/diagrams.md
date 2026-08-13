@@ -38,8 +38,8 @@ C4Context
 ```
 
 **Authority**: `apps/api/src/server.ts`, `packages/authz/src/presets.ts`, `apps/api/src/workers/emailDeliveryWorker.ts`
-**Evidence**: Admin/Teacher/Proctor/Grader/Candidate are the 5 role presets. SMTP is the only external system dependency (async via email worker).
-**Known limitations**: Teacher/Proctor/Grader are Phase 3 roles (capability infrastructure exists; product role UI is incomplete). Email delivery is the only async external dependency. No CDN, no cloud services, no external APIs.
+**Evidence**: Admin/Teacher/Proctor/Grader/Candidate/Maintainer are the 6 built-in role presets (Maintainer added by P7-E2A — read-only Operational Observer; ADR-017). SMTP is the only external system dependency (async via email worker).
+**Known limitations**: Teacher/Proctor/Grader are Phase 3 roles (capability infrastructure exists; product role UI is incomplete). Teacher course-scope is NOT enforced — see P7-RBAC F-04. Email delivery is the only async external dependency. No CDN, no cloud services, no external APIs.
 
 ---
 
