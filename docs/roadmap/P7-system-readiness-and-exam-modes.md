@@ -1,18 +1,29 @@
 # P7 — System Readiness and Configurable Exam Modes
 
-> **Current status (2026-08-13, P7-F):**
+> **Current status (2026-08-13):**
 > **P7-F COMPLETE — P7 REMAINS OPEN.**
-> P7-S2 / P7-C / P7-E / P7-M / RBAC remediation are shipped; P7-M is
-> **CLOSED** (2026-08-13, after the P7-F multimodal visual review).
-> Gate P7-3 remains **NOT PASS** on two bullets:
-> 1. **RTO not declared/tested** (no typed authority, no declared value, no
->    restore-within-RTO acceptance);
-> 2. **retention not operational** (host-owned, truthfully `NOT_ENFORCED`).
 >
-> The workstream descriptions below retain planning/design context. Where
-> their execution status conflicts with this block, this block and
-> [`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md)
-> are authoritative.
+> Shipped/closed:
+> - P7-D2/D3 Redis shared rate limit
+> - P7-S2 state/authority hardening
+> - P7-C portable backup/DR
+> - P7-E Operational Control Plane
+> - P7-M Configurable Exam Modes
+> - P7 RBAC remediation
+> - P7-F readiness closeout
+>
+> Remaining P7 release-gate gaps:
+> - P7-3a RTO not declared/tested
+> - P7-3b retention not operational
+>
+> ADR-017 rev4 / ADR-018 and Teacher@Course disposition remain recorded
+> human decisions.
+>
+> Older workstream sections below retain historical planning/design
+> context. Where an old execution-status statement conflicts with this
+> block or
+> [`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md),
+> the current-status block is authoritative.
 
 > Status: ACCEPTED FOR PLANNING (2026-07-31, docs-only PR)
 > Implementation status: **superseded by the "Current status" overlay above**
