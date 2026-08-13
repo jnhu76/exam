@@ -1,9 +1,35 @@
 # P7 — System Readiness and Configurable Exam Modes
 
+> **Current status (2026-08-13):**
+> **P7-F COMPLETE — P7 REMAINS OPEN.**
+>
+> Shipped/closed:
+> - P7-D2/D3 Redis shared rate limit
+> - P7-S2 state/authority hardening
+> - P7-C portable backup/DR
+> - P7-E Operational Control Plane
+> - P7-M Configurable Exam Modes
+> - P7 RBAC remediation
+> - P7-F readiness closeout
+>
+> Remaining P7 release-gate gaps:
+> - P7-3a RTO not declared/tested
+> - P7-3b retention not operational
+>
+> ADR-017 rev4 / ADR-018 and Teacher@Course disposition remain recorded
+> human decisions.
+>
+> Older workstream sections below retain historical planning/design
+> context. Where an old execution-status statement conflicts with this
+> block or
+> [`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md),
+> the current-status block is authoritative.
+
 > Status: ACCEPTED FOR PLANNING (2026-07-31, docs-only PR)
-> Implementation status: PARTIALLY IMPLEMENTED (P7-D1 decision gate ACCEPTED
-> 2026-08-08; P7-D2/D3 — Redis lifecycle hardening + shared rate limit —
-> shipped on master via PR #265; see ADR-001 "Post-MVP Decision (P7)")
+> Implementation status: **superseded by the "Current status" overlay above**
+> (2026-08-13). Historical: PARTIALLY IMPLEMENTED — P7-D1 decision gate
+> ACCEPTED 2026-08-08; P7-D2/D3 — Redis lifecycle hardening + shared rate
+> limit — shipped on master via PR #265 (see ADR-001 "Post-MVP Decision (P7)")
 > Phase: Phase 3 hardening, after P6 MVP closeout
 > Scope: single-deployment, single-organization, LAN/on-premise
 > Does not redefine M11; M11 remains resource-relationship authorization
@@ -76,10 +102,13 @@ not re-enumerated here (they drift independently):
 - **Recovery/operations job tracker:** [`docs/roadmap/recovery-operations-jobs.md`](../roadmap/recovery-operations-jobs.md)
   (J6 Proctor Recovery Center, system-generated incidents, startup
   reconciliation — the J1–J5 closures are recorded there).
-- **P7 workstreams:** the remaining open items in this program are the
-  state-machine/authority closeout, backup/restore, outage recovery,
-  configuration control plane, exam policy profiles, and UI/ops closeout
-  (Workstreams A and C–H below).
+- **P7 workstreams:** shipped since this inventory was written —
+  state-machine/authority closeout (P7-S2, PR #269), portable backup/DR
+  (P7-C, 2026-08-10), operational control plane (P7-E, PR #282), exam policy
+  profiles (P7-M1/M2/M, PRs #277/#279, **CLOSED** 2026-08-13), RBAC
+  remediation (PR #284). Still open: **RTO declaration/test** and
+  **retention automation** (Gate P7-3 bullets; see the Current status overlay
+  and the P7-F closeout).
 
 Redis status as of the P7-D1 decision: the shared rate limiter uses Redis
 when the runtime is `ready` (P7-D2/D3, PR #265); admission queue, presence,
@@ -156,6 +185,11 @@ selects defaults; the engine executes frozen policies. Avoid mode-specific
 duplicate code paths.
 
 ## 4. Workstream A — State-machine and authority closeout
+
+> **Status (2026-08-13): CLOSED.** The state/authority closeout shipped on
+> master (P7-S2, PR #269); Gate P7-1 is PASS per the P7-F closeout (no
+> general reconciler — evidence-based formulation). The scope below is the
+> audit record.
 
 ### Goal
 
@@ -290,9 +324,13 @@ accepted ADR.
 > `persistence-and-cold-restore.sh`, `logical-backup-restore.sh`,
 > `pitr.sh`). Scope discipline:
 > NO Admin restore button, NO retention engine, NO Desktop recoveryEpoch,
-> NO schema change for history-replacement marking (see ADR-016). A
-> future P7-E control plane (RPO/RTO profiles, retention automation,
-> Admin backup visibility) is NOT started.
+> NO schema change for history-replacement marking (see ADR-016). The
+> former "future P7-E control plane" SHIPPED as the operational control
+> plane (PR #282: E2A Maintainer RBAC boundary, E2B backup evidence ledger,
+> E2C operations views, E3 operational policy intent — RPO-only). Still
+> open (Gate P7-3): **RTO declaration/test** and **retention automation**
+> (host-side cron/systemd + WAL-G/pgBackRest is the P7-E3-recorded
+> recommendation).
 
 ### Current gap (post-rebuild)
 
@@ -304,6 +342,14 @@ work is explicitly P7-E control-plane territory:
 - backup of files/settings beyond the PostgreSQL authority (attachments,
   exports, organization settings are in-DB today; a separate
   files/settings backup is future).
+
+> **Status (2026-08-13):** the P7-E control plane SHIPPED via PR #282 —
+> backup evidence ledger (`backup_runs`/`backup_run_events`/
+> `restore_drill_runs`), operations views, and RPO-only policy intent
+> (`desiredRpoSeconds`; **no typed RTO authority**). Still open:
+> **RTO declaration/test** (P7-3a) and **retention automation** (P7-3b;
+> host-side cron/systemd + WAL-G/pgBackRest is the P7-E3-recorded
+> recommendation).
 
 ### Recovery objectives
 
@@ -350,6 +396,12 @@ frame, not a current guarantee.
 - restore drills produce durable evidence and alerts.
 
 ## 7. Workstream D — Crash and outage recovery
+
+> **Status (2026-08-13):** recovery runtime shipped — durable interruption
+> episodes, J3/J4/J5 recovery workflows, and the state/authority closeout
+> (P7-S2, PR #269). A general startup reconciler is deliberately NOT built;
+> Gate P7-1 is PASS on the evidence-based formulation (P7-F closeout). The
+> matrix below is the failure-behavior design record.
 
 ### Failure matrix
 
@@ -525,6 +577,12 @@ scheduler, retention engine, restore surface, or settings import/export
 
 ## 9. Workstream F — Exam policy profiles
 
+> **Status (2026-08-13): SHIPPED — CLOSED (P7-M1/M2/M, PRs #277/#279).**
+> Two truthful starter recipes (`basic_quiz`, `standard_online`) ship over
+> one engine; `Controlled`/`Strict` are deferred to their owning subsystems
+> (truthfulness gate). See the P7-M closeout. The dimensions below are the
+> design record.
+
 ### Policy dimensions
 
 | Dimension | Example values |
@@ -605,6 +663,12 @@ not change a published exam or active attempt.
 
 ## 10. Workstream G — UI and operator experience
 
+> **Status (2026-08-13):** the exam-profile UI (list/create/edit) and the
+> 5-step exam wizard shipped and CLOSED with P7-M (multimodal visual review
+> performed by P7-F, 0px page overflow measured, no blocking defect). The
+> remaining surfaces below (status/settings/recovery centers) remain
+> governed by [`docs/roadmap/ui-open-items.md`](ui-open-items.md).
+
 ### Required new surfaces
 
 #### System status center
@@ -660,8 +724,8 @@ Continue [`docs/roadmap/ui-open-items.md`](ui-open-items.md):
 ## 11. Execution order
 
 ```text
-P7-R0  Reality + documentation reconciliation
-  ├─ P7-S1  State-machine and authority audit
+P7-R0  Reality + documentation reconciliation ✅ (P7-F reconciliation 2026-08-13)
+  ├─ P7-S1  State-machine and authority audit ✅ CLOSED (P7-S2, PR #269)
   └─ P7-D1  Redis adoption decision gate (measure → triggers → ADR-001 update)
 
 P7-S1
@@ -683,16 +747,18 @@ P7-C  Portable persistence, backup, PostgreSQL DR ✅ REBUILT & SHIPPED
   (C0 reality audit closed → C1 portable + cold + Launchpad → C2 logical →
   C3 physical + PITR; deterministic drills; ADR-016 boundary). The
   pre-rebuild C1=config-taxonomy / C2=settings-service / C3=settings-UI
-  framing is superseded; those config-control-plane items now live under
-  Workstream E and are NOT started.
-  → P7-E  RPO/RTO profiles, retention automation, Admin backup surface
-         (control plane; not started)
-  → P7-M1  Exam policy schema + conflict validator
-  → P7-M2  Profile templates + snapshot resolution
-  → P7-M   Configurable exam modes (product closeout) — functional
-         implementation complete; visual product closeout pending
-         (profile management UI + exam creation wizard + truthful starter
-         recipes; multimodal visual review round pending before CLOSED; see
+  framing is superseded; those config-control-plane items shipped under
+  Workstream E (PR #282).
+  → P7-E  Operational control plane ✅ SHIPPED (PR #282: E2A Maintainer
+         RBAC boundary + mutual exclusion, E2B backup evidence ledger, E2C
+         operations views, E3 operational policy intent — RPO-only, no
+         typed RTO authority). RTO + retention automation remain OPEN
+         (Gate P7-3).
+  → P7-M1  Exam policy schema + conflict validator ✅ SHIPPED
+  → P7-M2  Profile templates + snapshot resolution ✅ SHIPPED
+  → P7-M   Configurable exam modes ✅ CLOSED (2026-08-13, P7-F multimodal
+         visual review: profile management UI + exam creation wizard +
+         truthful starter recipes; no blocking defect; see
          docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
 
 P7-U1  UI pilot migration
@@ -706,6 +772,11 @@ accepted. Admin settings UI must not begin before configuration layering and
 snapshot semantics are accepted.
 
 ## 12. P7 release gates
+
+> **Current verdicts (2026-08-13, P7-F closeout):** P7-0 PASS · P7-1 PASS ·
+> P7-2 PASS · **P7-3 NOT PASS — HUMAN_DECISION_REQUIRED (two bullets: RTO +
+> retention)** · P7-4 PASS · P7-5 PASS · P7-6 PASS. The gate definitions
+> below are the contract; the P7-F closeout holds the evidence matrix.
 
 ### Gate P7-0 — Truthful plan
 
@@ -745,6 +816,13 @@ If P7-D1 concluded that no Redis adoption is warranted:
 - clean-host restore drill passes;
 - post-restore invariant suite passes.
 
+> **Status (2026-08-13): NOT PASS — HUMAN_DECISION_REQUIRED.** Evidence
+> ledger, verified drills, and RPO intent (`desiredRpoSeconds`) pass; two
+> bullets are not met: **RTO** (no typed authority / declared value /
+> restore-within-RTO acceptance) and **retention** (host-owned,
+> `NOT_ENFORCED`; host-side cron/systemd + WAL-G/pgBackRest is the
+> P7-E3-recorded recommendation). See the P7-F closeout.
+
 ### Gate P7-4 — Configuration is controlled
 
 - business settings are database-backed, versioned, audited, and rollbackable;
@@ -770,8 +848,9 @@ If P7-D1 concluded that no Redis adoption is warranted:
 > E2E-proof bullet therefore applies to the shipped minimal/standard-
 > equivalent recipes (`basic_quiz`, `standard_online`); the Controlled/Strict
 > classes are re-validated against this gate when their owning subsystems
-> land. The multimodal visual review round is the remaining P7-M closeout
-> item before CLOSED.
+> land. The multimodal visual review round was performed by P7-F
+> (2026-08-13) — P7-M closeout is **CLOSED** (no blocking defect; see the
+> closeout's "Visual review closeout (P7-F round)" section).
 
 ### Gate P7-6 — UI closeout
 
