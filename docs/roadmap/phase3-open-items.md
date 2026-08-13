@@ -21,19 +21,26 @@ P4 (RBAC MVP role switch) ✅ CLOSED
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
   → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
   → P6 (MVP ready closeout) ✅ CLOSED (2026-07-26, PR #215)
-  → P7 (system readiness + configurable exam modes) 🟡 IN PROGRESS (P7-D1
-    decision accepted 2026-08-08; shared rate limit shipped via PR #265;
-    state/backup/config/UI workstreams open)
+  → P7 (system readiness + configurable exam modes) 🟡 IN PROGRESS — most
+    workstreams shipped: shared rate limit (PR #265), state/authority (P7-S2,
+    PR #269), portable backup/DR (P7-C), operational control plane (P7-E,
+    PR #282), exam modes (P7-M, PRs #277/#279), RBAC remediation (PR #284).
+    P7-F closeout: P7-F COMPLETE — P7 REMAINS OPEN (Gate P7-3 retention is the
+    blocking gate; ADR-017 rev4/ADR-018 + #286 pending human decision).
 ```
 
 The former P2-1 Exam Authoring UI Flow was removed from the active Phase 3 plan
 by scope decision; the plain-text `text_response` authoring loop was later
 implemented and closed (PRs #237/#238, 2026-07-31).
 
-P7 is partially implemented — system readiness, Redis adoption (decision
-accepted; shared rate limit shipped), backup/recovery, outage recovery,
-configuration control plane, exam modes, and UI closeout. See
-[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md)
+P7 is mostly shipped — Redis adoption (decision accepted; shared rate limit
+shipped), backup/recovery + DR drills (P7-C), the operational control plane
+(P7-E), configurable exam modes (P7-M), and the RBAC role-reality remediation
+are all on master. The **P7-F final readiness / release-gate closeout**
+verdict is **P7-F COMPLETE — P7 REMAINS OPEN** (Gate P7-3 retention is the one
+blocking gate). See
+[`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md),
+[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md),
 and [`docs/status/implementation-status.md`](../status/implementation-status.md).
 P7 does not redefine M11. Identity lifecycle remains separate future work.
 
@@ -96,10 +103,16 @@ The archived job plans under `docs/archive/roadmap/` are reference-only.
   adversarial tests) are listed in
   [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md) §4.
   P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
-  Teacher course isolation until this milestone closes it. Durable tracking:
-  **issue #286 — Enforce Teacher@Course scoped authority (F-04)**. The current
+  Teacher course isolation until this milestone closes it. The current
   org-wide reach is pinned by a characterization test
-  (`apps/api/src/authz/teacherScopeCharacterization.test.ts`).
+  (`apps/api/src/authz/teacherScopeCharacterization.test.ts`). **Tracker note
+  (2026-08-13): issue #286 was closed by the repository owner without
+  implementation and without a recorded rationale; no Teacher@Course work was
+  done and the runtime remains org-wide. P7-F did not reopen it, did not claim
+  Teacher course isolation, and did not redefine Teacher as permanently
+  org-scoped — the owner's intent (accept org-wide / reopen / re-track)
+  is a pending human decision recorded in
+  [`P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).**
 - **DEPENDENCIES**: P4 closed; ADR-015 acceptance (✅ recorded).
 - **ACCEPTANCE BOUNDARY**: Scoped staff can be assigned to resources and see only their assigned scope.
 

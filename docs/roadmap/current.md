@@ -12,7 +12,7 @@
 | Phase 1 — Minimal Deliverable | ✅ COMPLETE | Admin + Candidate reliable exam loop. |
 | Phase 2 — Exam Operation | ✅ GATE ITEMS IMPLEMENTED | `timed_sync` / `deadline` / `untimed` and queue admission remain open. |
 | Phase 3 — Collaboration / Permissions | 🟡 PARTIALLY IMPLEMENTED | MVP role model and implemented product subset are closed; broader Phase 3 work remains. |
-| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). **P7-E Operational Control Plane FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW** (E2A Maintainer RBAC boundary + mutual exclusion, E2B backup evidence ledger, E2C operations views, E3 operational policy intent; see [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)). **P7-RBAC role-reality remediation READY FOR HUMAN REVIEW** — the post-P7-E audit ([`P7-RBAC-ROLE-REALITY-AUDIT.md`](../audits/P7-RBAC-ROLE-REALITY-AUDIT.md)) found 0 P0/P1; this PR remediates F-01/F-02/F-03/F-05/F-07/F-08/F-09, accepts F-06/F-10/F-11, and explicitly defers F-04 (Teacher course-scope) to a dedicated scoped-RBAC milestone; **ADR-017 revision 4 (PROPOSED)** narrows the Maintainer to a read-only Operational Observer and adds **ADR-018 (Observability Window, PROPOSED)** — see [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md). State-machine, exam-modes, and UI workstreams remain open. |
+| P7 — System Readiness and Exam Modes | 🟡 IN PROGRESS | P7-D1 Redis decision accepted + shared rate limit shipped (PR #265). P7-C portable persistence + backup + PostgreSQL DR rebuilt & shipped (C1/C2/C3 + drills). **P7-E Operational Control Plane FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW** (E2A Maintainer RBAC boundary + mutual exclusion, E2B backup evidence ledger, E2C operations views, E3 operational policy intent; see [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)). **P7-RBAC role-reality remediation MERGED (PR #284, 2026-08-13)** — the post-P7-E audit ([`P7-RBAC-ROLE-REALITY-AUDIT.md`](../audits/P7-RBAC-ROLE-REALITY-AUDIT.md)) found 0 P0/P1; PR #284 remediates F-01/F-02/F-03/F-05/F-07/F-08/F-09, accepts F-06/F-10/F-11, and explicitly defers F-04 (Teacher course-scope) to a dedicated scoped-RBAC milestone; **ADR-017 revision 4 (PROPOSED)** narrows the Maintainer to a read-only Operational Observer and adds **ADR-018 (Observability Window, PROPOSED)** — both remain PROPOSED pending human acceptance (the runtime already implements the rev-4 model); see [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md). **P7-F final readiness / release-gate closeout** is the active closeout pass — see [`P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md); verdict: P7-F COMPLETE, **P7 remains OPEN** (Gate P7-3 retention is the one blocking gate; ADR-017 rev4/ADR-018 acceptance and #286 closure-clarification are pending human decisions). The state-machine closeout (P7-S2, PR #269) and exam-modes product (P7-M, functionally complete) have shipped; broader Phase 3 product work remains open. |
 | Phase 4 — Platformization | ⬜ NOT STARTED | pass-to-proceed, service tokens, webhooks, optional multiTenant. |
 
 See [`docs/status/implementation-status.md`](../status/implementation-status.md)
@@ -235,33 +235,31 @@ P7-M   configurable exam modes (product closeout) — FUNCTIONALLY COMPLETE;
        (profile management UI + exam creation wizard; two truthful starter
        recipes shipped; Controlled/Strict deferred to their owning subsystems;
        see docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md)
-Future P7-E2  (E1 accepted 2026-08-12 — next workstream, not started)
-       — authority-first sequence
-       (ADR-017 D13; may merge into one or more PRs):
+P7-E2  ✅ SHIPPED (PR #282, 2026-08-12) — authority-first sequence delivered:
          E2A Operational RBAC Boundary — Maintainer observation capability
-             bundle (amends ADR-010 role preset set; zero business perms);
-             split action-under-view capabilities (email-test invariant);
-             diagnostics domain split; Admin ↔ Maintainer mutual exclusion
-             (server-side invariant, ADR-017 D14); no Admin visibility
-             regression during migration
-         E2B Backup Evidence Ledger — typed backup_run/restore_drill
-             evidence written by the existing P7-C scripts at their natural
-             checkpoints, truthful verification evidence, read projections
-         E2C Admin/Maintainer Operational Views — VIEWS ONLY
-             (business-owner summary vs detailed ops view)
-       NO scheduler, NO retention engine, NO restore surface, NO Maintainer
-       role seed in E1; backup.trigger etc. stay decision-gated (host-owned
-       today); operational-policy intent has ONE owner (Admin,
-       system.ops.policy.manage — E3).
-Future P7-E3  operational policy records + editable policy UI — Admin
-       records desired RPO/retention/drill cadence (intent, non-binding);
-       includes the former "future E1 settings" item (renamed to avoid E1
-       numbering conflict) — only if a confirmed Admin-editable
-       operational-settings requirement emerges, identify ONE coherent
-       first slice. Email worker/retry is a candidate under that gate;
-       backup automation/status is the separate E2B operational capability
-       above, not a settings slice.
-UI pilot → controlled family-by-family UI closeout
+             bundle (5 read caps, zero business perms); split action-under-view
+             capabilities (email-test invariant); diagnostics domain split;
+             Admin ↔ Maintainer mutual exclusion (server-side, ADR-017 D14).
+         E2B Backup Evidence Ledger — typed backup_runs/backup_run_events/
+             restore_drill_runs evidence written by the P7-C scripts at their
+             natural checkpoints, truthful verification evidence, read
+             projections.
+         E2C Admin/Maintainer Operational Views — VIEWS ONLY (business-owner
+             summary vs detailed ops view).
+       NO scheduler, NO retention engine, NO restore surface; backup.trigger /
+       schedule / retention / service.restart are DEFERRED (NO-GO), host-owned
+       (P7-E3-DECISION-GATES.md); operational-policy intent has ONE owner
+       (Admin, system.ops.policy.manage).
+P7-E3  ✅ SHIPPED (PR #282) — operational policy intent (backup_operational_policy:
+       desired RPO/retention/drill cadence; CAS version, audited, non-binding).
+       No generic settings slice (P7-E0 verdict honored; the former "future E1
+       settings" item is closed as not-justified). Email worker/runtime settings
+       remain env + restart-required.
+P7-F   ✅ closeout pass (this branch) — final system-readiness / release-gate
+       closeout; verdict P7-F COMPLETE, P7 REMAINS OPEN on Gate P7-3 retention
+       + ADR-017 rev4/ADR-018 acceptance + #286 clarification
+       (docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
+UI pilot → controlled family-by-family UI closeout (ongoing; ui-open-items.md)
 ```
 
 Redis adoption is conditional on an accepted P7-D1 / ADR-001 decision — the

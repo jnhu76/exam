@@ -244,7 +244,7 @@ Identity lifecycle remains separate future work.
 | P3 | P4 closed | ✅ CLOSED |
 | P5-N1 | P4 + P5-0 + P3 closed | ✅ CLOSED |
 | P6 | Preceding MVP blockers closed | ✅ CLOSED |
-| P7 | P6 closed; current-tree reality audit | 🟡 IN PROGRESS — P7-D1 decision accepted (2026-08-08); shared rate limit shipped (PR #265); state/backup/config/UI workstreams open |
+| P7 | P6 closed; current-tree reality audit | 🟡 IN PROGRESS — most workstreams shipped: Redis shared rate limit (PR #265), state/authority hardening P7-S2 (PR #269), portable backup/DR P7-C, operational control plane P7-E (PR #282), configurable exam modes P7-M (PRs #277/#279), RBAC remediation (PR #284). **P7-F closeout verdict: P7-F COMPLETE — P7 REMAINS OPEN** (Gate P7-3 retention is the one blocking gate; ADR-017 rev4/ADR-018 acceptance + #286 clarification pending human decision). See `docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`. |
 
 ### Out of scope
 
@@ -298,12 +298,19 @@ Redis capability study:
 **PARTIALLY IMPLEMENTED.** The P7-D1 Redis adoption decision gate is ACCEPTED
 (2026-08-08) and the first adopted responsibility — Redis-backed shared rate
 limiting — shipped on `master` (PR #265, P7-D2/D3; ADR-001 "Post-MVP Decision
-(P7)"). The remaining workstreams (state-machine/authority closeout,
-backup/restore, outage recovery, configuration control plane, exam policy
-profiles, UI/ops closeout) are open. No P7 implementation capability may be
-marked complete merely because an environment variable, Redis connection, CLI
-note, or API stub exists — the runtime and real Admin/operator surfaces must
-consume the capability.
+(P7)"). The remaining P7 workstreams have since shipped or closed: state-machine
+/ authority closeout (P7-S2, PR #269), portable backup/DR (P7-C), the operational
+control plane (P7-E0/E1/E2A-E3, PRs #276/#281/#282), configurable exam modes
+(P7-M1/M2/M, PRs #277/#279), and the RBAC role-reality remediation (PR #284).
+**The P7-F final readiness / release-gate closeout** audited all release gates
+against current master: **P7-F COMPLETE — P7 REMAINS OPEN**, with Gate P7-3
+(backup retention is host-owned, truthfully NOT_ENFORCED) as the single blocking
+gate, plus ADR-017 rev4 / ADR-018 acceptance and #286 (Teacher@Course)
+clarification pending human decision. See
+[`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
+No P7 implementation capability may be marked complete merely because an
+environment variable, Redis connection, CLI note, or API stub exists — the
+runtime and real Admin/operator surfaces must consume the capability.
 
 ### In scope
 

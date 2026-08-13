@@ -198,9 +198,16 @@ audit, external log shipping. All Phase 4; none started.
 
 ## Known limitations
 
-- **Operational Control Plane (P7-E) is FUNCTIONALLY COMPLETE — READY FOR
-  HUMAN REVIEW** (branch `feat/p7-e-operational-control-plane`; E2A/E2B/E2C/E3
-  implemented; see [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
+- **Operational Control Plane (P7-E) is COMPLETE — on master** (merged via
+  PR #282, 2026-08-12; E2A/E2B/E2C/E3 implemented; see
+  [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
+  The post-P7-E RBAC role-reality remediation (PR #284, 2026-08-13) further
+  corrected the Admin authority + Maintainer observability boundary; ADR-017
+  rev 4 + ADR-018 remain PROPOSED pending human acceptance. See the
+  **P7-F final readiness closeout**
+  ([`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md))
+  for the release-gate verdict (P7-F COMPLETE — P7 REMAINS OPEN on Gate P7-3
+  retention).
   - **E2A — Operational RBAC Boundary**: Maintainer is the seventh built-in
     assignable role (ADR-017 D2), preset holds ONLY `system.health.view` +
     `system.diagnostics.view` (+ E2B/E3 read views), zero business
