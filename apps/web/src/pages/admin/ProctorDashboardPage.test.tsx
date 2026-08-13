@@ -127,10 +127,22 @@ const adminUser: MeResponse = {
   capabilities: [...permissionsForRole("Admin")] as string[],
 };
 
-function renderPage() {
+// F-09 negative fixture: a user WITHOUT attempt.time.grant. The Maintainer
+// preset has zero business permissions, so this user provably lacks the
+// capability while still being an authenticated non-Candidate identity.
+const maintainerUser: MeResponse = {
+  id: "maint-1",
+  username: "maint",
+  name: "Maintainer",
+  role: "Maintainer",
+  organizationId: "org-1",
+  capabilities: [...permissionsForRole("Maintainer")] as string[],
+};
+
+function renderPageWithUser(user: MeResponse) {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1/proctor"]}>
-      <AuthProvider initialUser={adminUser}>
+      <AuthProvider initialUser={user}>
         <Routes>
           <Route
             path="/admin/exams/:id/proctor"
@@ -140,6 +152,10 @@ function renderPage() {
       </AuthProvider>
     </MemoryRouter>,
   );
+}
+
+function renderPage() {
+  return renderPageWithUser(adminUser);
 }
 
 describe("ProctorDashboardPage", () => {
@@ -215,6 +231,25 @@ describe("ProctorDashboardPage", () => {
     expect(
       card?.querySelector("[data-testid='status-badge']"),
     ).toBeInTheDocument();
+  });
+
+  it("does NOT render the extend-time button for a user without AttemptTimeGrant (F-09 negative)", async () => {
+    // F-09: UI visibility follows CAPABILITY, not role identity. The
+    // candidate has an attemptId, but a user without attempt.time.grant
+    // (here: the Maintainer preset, which has zero business permissions)
+    // must not see 延长时间. The backend 403 boundary is covered by
+    // operationalBoundary.test.ts; this test pins the client contract.
+    apiGet.mockResolvedValue({
+      candidates: [makeCandidate({ attemptId: "att-1" })],
+      total: 1,
+    });
+    renderPageWithUser(maintainerUser);
+    await screen.findByText("张三");
+    expect(
+      screen.queryByRole("button", { name: "延长时间" }),
+    ).not.toBeInTheDocument();
+    // The grant dialog must not open either (no capability to reach it).
+    expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();
   });
 
   // ── Operator time-grant dialog (P1-3 / P1-4) ────────────────────────────

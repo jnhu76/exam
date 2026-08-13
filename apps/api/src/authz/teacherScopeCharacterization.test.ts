@@ -11,17 +11,23 @@ import {
  * F-04 — Teacher course-scope CURRENT-REALITY characterization.
  *
  * TARGET model:     Teacher@Course — authority narrowed to assigned courses.
- * CURRENT reality:  org-wide effective reach. A Teacher can list and read
- *                   EVERY org course/question/exam; the flat requireCapability
+ * CURRENT reality (as PROVEN by the tests in this file): org-wide effective
+ *                   reach for COURSE LIST + COURSE DETAIL. A Teacher can list
+ *                   and read EVERY org course; the flat requireCapability
  *                   gate checks only the capability, never an assigned-course
  *                   scope (none is persisted; no scope resolver exists).
  *
- * These tests PROVE the current org-wide behavior so it is explicit and cannot
- * regress silently. They deliberately DO NOT assert the desired Teacher@Course
- * narrowing — that is an unimplemented, explicitly-deferred scope-bundle
- * milestone (see packages/authz/src/presets.ts Teacher section + the
- * remediation report). P7-F is not blocked by F-04, but P7-F MUST NOT claim or
- * depend on Teacher course isolation until that milestone closes it.
+ * The characterization scope is deliberately limited to the endpoints
+ * actually exercised here (course list/detail). Question/exam Teacher reach
+ * is documented by audit evidence and presets documentation, not claimed by
+ * these tests — tests must say only what they prove.
+ *
+ * These tests PROVE the current org-wide course behavior so it is explicit
+ * and cannot regress silently. They deliberately DO NOT assert the desired
+ * Teacher@Course narrowing — that is an unimplemented, explicitly-deferred
+ * scope-bundle milestone (see packages/authz/src/presets.ts Teacher section +
+ * the remediation report). P7-F is not blocked by F-04, but P7-F MUST NOT
+ * claim or depend on Teacher course isolation until that milestone closes it.
  */
 describe("F-04 Teacher course-scope — current org-wide reach (NOT the desired model)", () => {
   let ctx: TestContext;

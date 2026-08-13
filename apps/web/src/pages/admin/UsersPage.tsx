@@ -89,6 +89,11 @@ export function UsersPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<AssignableRole>("Admin");
+  // Edit-only: true when the editing user's current role is NOT in the
+  // assignable catalog (drift / future-compatible state). The dialog then
+  // shows the role read-only and PATCH omits `role` — the save can never
+  // silently flip an unmapped role to Admin (P7 review #6).
+  const [roleLocked, setRoleLocked] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -96,7 +101,19 @@ export function UsersPage() {
   /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
   const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
 
-  /** Fetches the assignable-role authority and all non-candidate users. */
+  /**
+   * Resolves a role display label: local i18n `roleLabels` wins; a missing
+   * key falls back to the backend assignable-catalog label, then to the raw
+   * role key (i18next returns the key string for missing keys, so the old
+   * `??` fallback never fired — P7 review #5).
+   */
+  function roleLabel(key: string) {
+    return t(`admin.users.roleLabels.${key}`, {
+      defaultValue: assignableRoles.find((r) => r.key === key)?.label ?? key,
+    });
+  }
+
+  /** Fetches the assignable-role authority and the staff user list. */
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -106,7 +123,12 @@ export function UsersPage() {
         api.get<Page<UserRow>>("/api/users"),
       ]);
       setAssignableRoles(rolesRes.items);
-      setUsers(usersRes.items.filter((user) => user.role !== "Candidate"));
+      // The server already restricts the list to staff members
+      // (assignment-aware, before pagination — F-03). No client-side role
+      // post-filter here: a Candidate-primary user with a staff secondary
+      // assignment must stay visible, and Candidate-only users can never
+      // crowd staff off the page.
+      setUsers(usersRes.items);
     } catch {
       setError(t("admin.users.loadFailed"));
     } finally {
@@ -121,11 +143,19 @@ export function UsersPage() {
     setUsername(user?.username ?? "");
     setPassword("");
     setName(user?.name ?? "");
-    setRole(
-      user && assignableRoles.some((r) => r.key === user.role)
-        ? user.role
-        : "Admin",
-    );
+    // Create: default Admin is acceptable. Edit: a current role that is not
+    // in the assignable catalog locks the selector instead of silently
+    // selecting Admin — saving would otherwise flip the role (P7 review #6).
+    if (!user) {
+      setRole("Admin");
+      setRoleLocked(false);
+    } else if (assignableRoles.some((r) => r.key === user.role)) {
+      setRole(user.role);
+      setRoleLocked(false);
+    } else {
+      setRole("Admin");
+      setRoleLocked(true);
+    }
     setFieldErrors({});
     setDialogOpen(true);
   }
@@ -153,7 +183,9 @@ export function UsersPage() {
     try {
       if (editing) {
         const payload: { name: string; role?: AssignableRole } = { name };
-        payload.role = role;
+        // A locked (unmapped) current role must never be overwritten by the
+        // default value — omit `role` so the server keeps the original.
+        if (!roleLocked) payload.role = role;
         await api.patch(`/api/users/${editing.id}`, payload);
       } else {
         await api.post("/api/users", { username, password, name, role });
@@ -237,10 +269,7 @@ export function UsersPage() {
                   <DataTableCell role="short-id">{user.username}</DataTableCell>
                   <DataTableCell role="primary-text">{user.name}</DataTableCell>
                   <DataTableCell role="type">
-                    <Badge variant="outline">
-                      {t(`admin.users.roleLabels.${user.role}` as any) ??
-                        user.role}
-                    </Badge>
+                    <Badge variant="outline">{roleLabel(user.role)}</Badge>
                   </DataTableCell>
                   <DataTableCell role="status">
                     <StatusBadge
@@ -346,21 +375,32 @@ export function UsersPage() {
             </Field>
             <Field>
               <Label>{t("admin.users.dialog.role")}</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as AssignableRole)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectableRoles.map((r) => (
-                    <SelectItem key={r.key} value={r.key}>
-                      {t(`admin.users.roleLabels.${r.key}` as never) ?? r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {roleLocked && editing ? (
+                <p
+                  className="py-2 text-sm text-muted-foreground"
+                  data-testid="locked-role"
+                >
+                  {t("admin.users.dialog.roleLockedHint", {
+                    role: roleLabel(editing.role),
+                  })}
+                </p>
+              ) : (
+                <Select
+                  value={role}
+                  onValueChange={(value) => setRole(value as AssignableRole)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectableRoles.map((r) => (
+                      <SelectItem key={r.key} value={r.key}>
+                        {roleLabel(r.key)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
           </FieldGroup>
           <DialogFooter>

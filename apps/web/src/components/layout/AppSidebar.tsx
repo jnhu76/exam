@@ -103,11 +103,12 @@ const groups: NavGroup[] = [
         visible: canSeeOperations,
       },
       {
-        // P7-RBAC-REMEDIATION F-08: moved out of the management group. This is
-        // an OPERATIONAL surface (SystemDiagnosticsView, held by Admin AND
-        // Maintainer); keeping it under 管理 leaked a lone item to Maintainer
-        // and mislabeled diagnostics as business management. It belongs with
-        // the other operational surfaces in the 运维 group.
+        // P7-RBAC-REMEDIATION F-08: moved out of the management group. This
+        // is an OPERATIONAL surface (SystemDiagnosticsView, held by Admin AND
+        // Maintainer); keeping it under the management group leaked a lone
+        // item to Maintainer and mislabeled diagnostics as business
+        // management. It belongs with the other operational surfaces in the
+        // operations group.
         labelKey: "nav.items.system",
         to: routes.admin.system,
         icon: Activity,
@@ -236,8 +237,8 @@ const managementItems: NavItem[] = [
     visible: (user) =>
       user.capabilities.includes(Permission.CandidateFieldView),
   },
-  // P7-RBAC-REMEDIATION F-08: the "系统监控" (system diagnostics) item moved to
-  // the operations group above — it is an operational surface, not business
+  // P7-RBAC-REMEDIATION F-08: the system-diagnostics item moved to the
+  // operations group above — it is an operational surface, not business
   // management.
 ];
 

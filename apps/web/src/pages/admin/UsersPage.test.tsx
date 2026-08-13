@@ -324,7 +324,126 @@ describe("UsersPage", () => {
     expect(await screen.findByText("暂无用户")).toBeInTheDocument();
   });
 
-  it("filters out Candidate role from display", async () => {
+  it("renders exactly what the server returns — no client-side role post-filter (F-03)", async () => {
+    // The server applies the staff filter BEFORE pagination. The client must
+    // not re-filter by `users.role`: a Candidate-primary user with a staff
+    // secondary assignment (compatibility role "Candidate") must stay visible.
+    apiGet.mockResolvedValue({
+      items: [
+        ...mockUsers,
+        {
+          id: "u6",
+          username: "cand-teacher",
+          name: "Candidate+Teacher",
+          role: "Candidate",
+          isActive: true,
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    });
+    renderPage();
+    expect(await screen.findByText("admin1")).toBeInTheDocument();
+    expect(screen.getByText("cand-teacher")).toBeInTheDocument();
+  });
+
+  it("edit dialog never silently falls back to Admin when the current role is not in the assignable catalog (P7 review #6)", async () => {
+    // Catalog drift / future-compatible state: the editing user's current
+    // role (Maintainer) is missing from GET /roles/assignable.
+    apiGet.mockImplementation(async (url: string) =>
+      url === "/api/roles/assignable"
+        ? {
+            items: [
+              { key: "Admin", label: "Admin", purpose: "x" },
+              { key: "Teacher", label: "Teacher", purpose: "x" },
+              { key: "Candidate", label: "Candidate", purpose: "x" },
+            ],
+          }
+        : {
+            items: [
+              {
+                id: "u9",
+                username: "maint1",
+                name: "Maint One",
+                role: "Maintainer",
+                isActive: true,
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 20,
+            totalPages: 1,
+          },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const editButtons = await screen.findAllByLabelText("编辑用户");
+    await user.click(editButtons[0]!);
+    const dialog = await screen.findByRole("dialog");
+    // Read-only hint shows the ORIGINAL role (its zh label), not a silently
+    // selected Admin.
+    expect(screen.getByTestId("locked-role")).toHaveTextContent("系统运维");
+    const nameInput = getDialogInputs(dialog)[0]!;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Updated Name");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    // PATCH omits `role` entirely — the save cannot flip the user to Admin.
+    expect(apiPatch).toHaveBeenCalledWith("/api/users/u9", {
+      name: "Updated Name",
+    });
+    expect(apiPatch.mock.calls[0]![1]).not.toHaveProperty("role");
+  });
+
+  it("role label falls back to the backend catalog label when the local i18n key is missing", async () => {
+    // Backend returns a role the frontend locale has no `roleLabels` entry
+    // for; the UI must render the API-provided label, not the i18n key path.
+    apiGet.mockImplementation(async (url: string) =>
+      url === "/api/roles/assignable"
+        ? {
+            items: [
+              {
+                key: "Auditor",
+                label: "Auditor 审计员",
+                purpose: "future role",
+              },
+              { key: "Admin", label: "Admin", purpose: "x" },
+              { key: "Candidate", label: "Candidate", purpose: "x" },
+            ],
+          }
+        : {
+            items: [
+              {
+                id: "u10",
+                username: "aud1",
+                name: "Aud One",
+                role: "Auditor",
+                isActive: true,
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 20,
+            totalPages: 1,
+          },
+    );
+    renderPage();
+    await screen.findByText("aud1");
+    expect(screen.getByText("Auditor 审计员")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/admin\.users\.roleLabels\./),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a Candidate-only row exactly as the server returns it (server-side staff filter is the contract)", async () => {
+    // The server owns staff membership; the client renders the page as-is.
+    // A Candidate-only row would only reach this page if the server filter
+    // regressed — displaying it (instead of silently hiding it) makes that
+    // regression visible rather than masked by a client-side post-filter.
     apiGet.mockResolvedValue({
       items: [
         ...mockUsers,
@@ -343,6 +462,6 @@ describe("UsersPage", () => {
     });
     renderPage();
     await screen.findByText("admin1");
-    expect(screen.queryByText("cand1")).not.toBeInTheDocument();
+    expect(screen.getByText("cand1")).toBeInTheDocument();
   });
 });

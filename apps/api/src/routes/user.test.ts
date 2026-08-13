@@ -10,15 +10,16 @@ import {
 import userRoutes from "./user.js";
 import {
   buildTestApp,
+  createAssignedUserForTest,
   createFutureRoleUserForTest,
   createUnassignedUserForTest,
 } from "./testHelpers.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
-import { AssignableRoleSchema } from "@exam/contracts";
+import { AssignableRoleSchema, type AssignableRole } from "@exam/contracts";
 import * as adminInvariantModule from "../authz/adminInvariant.js";
 import * as userRoleAssignmentRepoModule from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 
@@ -299,6 +300,229 @@ describe("user routes", () => {
     } finally {
       await legacyCtx.cleanup();
     }
+  });
+
+  describe("F-03 staff-list pagination (assignment-aware, adversarial)", () => {
+    /** GET /api/users?page&pageSize as the org Admin, returning the body. */
+    async function fetchStaffPage(
+      appCtx: Awaited<ReturnType<typeof buildTestApp>>,
+      page: number,
+      pageSize: number,
+    ) {
+      const res = await appCtx.app.inject({
+        method: "GET",
+        url: `/api/users?page=${page}&pageSize=${pageSize}`,
+        cookies: { "auth-token": appCtx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as {
+        items: Array<{ id: string; username: string; role: string }>;
+        total: number;
+        totalPages: number;
+      };
+    }
+
+    /**
+     * Creates a user with TWO active assignments: primary role + a secondary
+     * staff role. `users.role` (the compatibility cache) stays at the primary
+     * value, exactly the state the multi-role union model produces.
+     */
+    async function createDualRoleUserForTest(
+      db: Database,
+      orgId: string,
+      primaryRole: AssignableRole,
+      secondaryRole: AssignableRole,
+      usernamePrefix: string,
+    ) {
+      const userId = crypto.randomUUID();
+      const now = new Date();
+      await db.insert(schema.users).values({
+        id: userId,
+        organizationId: orgId,
+        username: `${usernamePrefix}-${Date.now()}-${userId.slice(0, 6)}`,
+        passwordHash: await hashPassword("password123"),
+        name: `${primaryRole}+${secondaryRole} Test User`,
+        role: primaryRole,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.insert(schema.userRoleAssignments).values([
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          userId,
+          role: primaryRole,
+          isPrimary: true,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          userId,
+          role: secondaryRole,
+          isPrimary: false,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      const rows = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+      return { user: rows[0]! };
+    }
+
+    // 20s timeout: this case intentionally inserts 25 users + issues 2
+    // paginated requests; under coverage instrumentation the work exceeds the
+    // 5s default (observed in the api coverage run), while staying far below
+    // the package hook limits.
+    it("Case A: staff stay on page 1 even when Candidate-only users exceed pageSize (crowd-out)", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const before = await fetchStaffPage(legacyCtx, 1, 20);
+        // Candidate-only users outnumber the default pageSize (20): under the
+        // old `users.role`-based pagination they filled page 1 and the Teacher
+        // row after them was unreachable. Staff filtering must run BEFORE
+        // pagination so candidates can never crowd staff out.
+        for (let i = 0; i < 25; i++) {
+          await createAssignedUserForTest(
+            legacyCtx.db,
+            legacyCtx.org.id,
+            "Candidate",
+            `crowd-candidate-${i}`,
+          );
+        }
+        const teacher = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Teacher",
+          "crowd-teacher",
+        );
+        const after = await fetchStaffPage(legacyCtx, 1, 20);
+        expect(
+          after.items.some(
+            (u: { username: string }) => u.username === teacher.user.username,
+          ),
+        ).toBe(true);
+        // total/totalPages describe the staff-filtered set only: 25 candidates
+        // contribute nothing.
+        expect(after.total).toBe(before.total + 1);
+        expect(after.totalPages).toBe(Math.ceil(after.total / 20));
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    }, 20000);
+
+    it("Case B: Candidate-primary + active Teacher-secondary is visible exactly once", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const before = await fetchStaffPage(legacyCtx, 1, 50);
+        const dual = await createDualRoleUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Candidate",
+          "Teacher",
+          "dual-cand-teacher",
+        );
+        const after = await fetchStaffPage(legacyCtx, 1, 50);
+        const matches = after.items.filter(
+          (u) => u.username === dual.user.username,
+        );
+        expect(matches).toHaveLength(1);
+        expect(after.total).toBe(before.total + 1);
+        // Effective authority is the union of ACTIVE assignments — the dual
+        // user holds both rows, so authority is unchanged by the list query.
+        const active = await legacyCtx.db
+          .select()
+          .from(schema.userRoleAssignments)
+          .where(
+            and(
+              eq(schema.userRoleAssignments.userId, dual.user.id),
+              eq(schema.userRoleAssignments.isActive, true),
+            ),
+          );
+        expect(active.map((a) => a.role).sort()).toEqual([
+          "Candidate",
+          "Teacher",
+        ]);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
+
+    it("Case C: Candidate-only users are absent from the staff list", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const before = await fetchStaffPage(legacyCtx, 1, 50);
+        const candidates: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          const created = await createAssignedUserForTest(
+            legacyCtx.db,
+            legacyCtx.org.id,
+            "Candidate",
+            `candidate-only-${i}`,
+          );
+          candidates.push(created.user.username);
+        }
+        const after = await fetchStaffPage(legacyCtx, 1, 50);
+        for (const username of candidates) {
+          expect(after.items.some((u) => u.username === username)).toBe(false);
+        }
+        expect(after.total).toBe(before.total);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
+
+    it("Case D: Proctor / Grader / Maintainer and stale-role staff accounts stay visible", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const before = await fetchStaffPage(legacyCtx, 1, 50);
+        const proctor = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Proctor",
+          "staff-proctor",
+        );
+        const grader = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Grader",
+          "staff-grader",
+        );
+        const maintainer = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Maintainer",
+          "staff-maintainer",
+        );
+        // F-06 zero-primary fallback: the cache keeps a staff value after the
+        // active assignment is gone; the account must NOT vanish from the
+        // management UI (an Admin must still be able to fix it).
+        const stale = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Teacher",
+          "stale-teacher",
+          { isActive: false },
+        );
+        const after = await fetchStaffPage(legacyCtx, 1, 50);
+        const usernames = after.items.map((u) => u.username);
+        for (const created of [proctor, grader, maintainer, stale]) {
+          expect(usernames).toContain(created.user.username);
+        }
+        expect(after.total).toBe(before.total + 4);
+        // No duplicate rows for any single user.
+        const ids = after.items.map((u) => u.id);
+        expect(new Set(ids).size).toBe(ids.length);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
   });
 
   it("PATCH /api/users/:id rejects self-disable with VALIDATION_ERROR + reason CANNOT_DISABLE_SELF", async () => {

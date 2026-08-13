@@ -248,7 +248,7 @@ describe("deriveAssignmentAuthority — pure kernel", () => {
         ORG,
         USER,
       );
-      expect(r.ok).toBe(false);
+      expect(r).toEqual({ ok: false, reason: "zero_primary_with_active" });
     });
 
     it("does NOT reject Admin alone or Maintainer alone (F-05 scope)", () => {

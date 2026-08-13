@@ -702,6 +702,8 @@ const zhCN = {
         name: "姓名",
         role: "角色",
         admin: "考试管理员",
+        roleLockedHint:
+          "当前角色「{{role}}」不在可分配角色目录中,保存时将保留原角色,不会被修改。",
       },
       validation: {
         nameRequired: "请输入姓名",

@@ -23,7 +23,6 @@ import {
   createAuditLogRepo,
   type AuditLogListFilter,
 } from "@exam/db/src/repository/auditLogRepo.js";
-import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { DEFAULT_CONTROL_FLAGS } from "./attempts/attempts.testHelpers.js";
@@ -1166,14 +1165,17 @@ describe("permission boundary", () => {
     }
 
     it("POST /users denied — no new user row, no new assignment, no audit", async () => {
-      const userRepo = createUserRepo(ctx.db);
       const auditRepo = createAuditLogRepo(ctx.db);
-      const beforeCount = await userRepo.listPaginatedByRoles(
-        adminCtx(),
-        ["Admin", "Candidate"],
-        1,
-        1000,
-      );
+      // Total user-row count for the org (all roles) — "no new user row"
+      // must hold regardless of role.
+      const countAllUsers = async () => {
+        const rows = await ctx.db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.organizationId, ctx.org.id));
+        return rows.length;
+      };
+      const beforeCount = await countAllUsers();
       const auditBefore = await auditRepo.listPaginatedFiltered(
         adminCtx(),
         1,
@@ -1194,13 +1196,7 @@ describe("permission boundary", () => {
       });
       expect(res.statusCode).toBe(403);
 
-      const afterCount = await userRepo.listPaginatedByRoles(
-        adminCtx(),
-        ["Admin", "Candidate"],
-        1,
-        1000,
-      );
-      expect(afterCount.total).toBe(beforeCount.total);
+      expect(await countAllUsers()).toBe(beforeCount);
       await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.create",
       });

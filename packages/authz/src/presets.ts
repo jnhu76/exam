@@ -6,10 +6,14 @@
  * resource is a SEPARATE enforcement layer, NOT applied here:
  *   - Proctor@exam: ENFORCED (exam_proctor_assignments + ProctorAssignmentGate
  *     on scoped proctor routes).
- *   - Teacher@course / Grader@exam: TARGET ONLY, NOT enforced today (F-04) —
- *     see the Teacher section comment below. A dedicated scoped-RBAC milestone
- *     owns the scope carrier, resolver family, scoped route gates, and LIST
- *     filtering.
+ *   - Teacher@course: TARGET ONLY, NOT enforced today — the F-04 finding
+ *     (P7-RBAC-ROLE-REALITY-AUDIT); see the Teacher section comment below.
+ *   - Grader@exam: SEPARATE deferred scope status (NOT F-04). The grading
+ *     queue LIST is org-wide today (`GradingQueueView` flat gate); detail
+ *     reads are attempt-scoped by the existing attempt resolver, but there is
+ *     no Grader↔Exam assignment scope carrier. Tracked with the same
+ *     dedicated scoped-RBAC milestone that owns the scope carrier, resolver
+ *     family, scoped route gates, and LIST filtering.
  *
  * Boundary invariants encoded here (ADR §7 review checklist):
  *  - Admin is a compatibility superset (no Candidate-own, no System-only).
@@ -169,21 +173,25 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
 //                         - assignment API + UI + create/update cross-course tests
 //   The `⚠️ target course-scoped` markers below name the INTENDED narrowing, NOT
 //   an enforced one. They MUST NOT be read as "narrowed at runtime today."
+//   Marker boundary rule: a marker is applied to every permission whose
+//   resource lives under a course (candidate visibility for course enrollment,
+//   course, question, exam, enrollment, result, score). Organization-level
+//   permissions (OrganizationView) are NOT course resources and stay unmarked.
 //   P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
 //   Teacher course isolation until the scope-bundle milestone closes it.
 
 const TEACHER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.OrganizationView,
   Permission.CandidateView, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.CourseView,
+  Permission.CourseView, // ⚠️ target course-scoped (F-04: NOT enforced today)
   Permission.CourseCreate, // ⚠️ target course-scoped (F-04: NOT enforced today)
   Permission.CourseUpdate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.QuestionView,
-  Permission.QuestionCreate,
-  Permission.QuestionUpdate,
-  Permission.QuestionDelete,
-  Permission.QuestionImport,
-  Permission.ExamView,
+  Permission.QuestionView, // ⚠️ target course-scoped (F-04: NOT enforced today)
+  Permission.QuestionCreate, // ⚠️ target course-scoped (F-04: NOT enforced today)
+  Permission.QuestionUpdate, // ⚠️ target course-scoped (F-04: NOT enforced today)
+  Permission.QuestionDelete, // ⚠️ target course-scoped (F-04: NOT enforced today)
+  Permission.QuestionImport, // ⚠️ target course-scoped (F-04: NOT enforced today)
+  Permission.ExamView, // ⚠️ target course-scoped (F-04: NOT enforced today)
   Permission.ExamCreate, // ⚠️ target course-scoped (F-04: NOT enforced today)
   Permission.ExamUpdate, // ⚠️ target course-scoped (F-04: NOT enforced today)
   Permission.ExamPublish, // ⚠️ target course-scoped (F-04: NOT enforced today)
