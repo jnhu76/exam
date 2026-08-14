@@ -206,7 +206,7 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
   The post-P7-E RBAC role-reality remediation (PR #284, 2026-08-13) further
   corrected the Admin authority + Maintainer observability boundary; ADR-017
-  rev 4 + ADR-018 remain PROPOSED pending human acceptance. See the
+  rev 4 + ADR-018 were accepted by the P7 final program closeout. See the
   **P7-F final readiness closeout**
   ([`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md))
   for the release-gate history and the **final program closeout**
@@ -215,14 +215,18 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   retention mechanism (P7-CLOSE, PR #290: typed nullable RTO authority 30s..48h
   measured via automated restore-drill evidence, retention evidence ledger +
   readiness endpoint + host pgBackRest script — execution stays host-only per
-  ADR-017 D4) is implemented; **Gate P7-3 is PASS under the revised software /
-  deployment-site acceptance semantics**: the deterministic clean-volume
-  restore drill was executed 2026-08-14 (twice, both PASS; measured total
-  drill duration 87 s ≤ declared RTO 3600 s) with the post-restore invariant
-  suite green, and real scheduled retention + production-volume restore
-  acceptance is an explicit deployment-site runbook obligation
+  ADR-017 D4) is implemented; **Gate P7-3 is PASS as the Product / Software
+  Readiness Gate**: the deterministic clean-volume restore drill executed
+  2026-08-14 records its measured duration (18 000 ms) as automated drill
+  evidence, and the product's own ops-policy projection evaluated it against
+  the declared RTO (3600 s) as **SATISFIED**, with the post-restore invariant
+  suite green. Deployment Readiness (real scheduled retention +
+  production-volume restore acceptance) is an explicit deployment-site runbook
+  obligation
   ([`docs/deployment/backup-and-recovery.md`](../deployment/backup-and-recovery.md)).
-  ADR-017 revision 4 and ADR-018 are **ACCEPTED**. Deferred capabilities are
+  ADR-017 revision 4 and ADR-018 are **ACCEPTED** (the PR #314 merge is the
+  human acceptance event — an AI-written verdict alone is not acceptance).
+  Deferred capabilities are
   Issue-tracked (index: [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md)).
   - **E2A — Operational RBAC Boundary**: Maintainer is the **sixth** assignable
     human role (the **seventh** role preset counting the synthetic,

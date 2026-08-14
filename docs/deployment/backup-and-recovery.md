@@ -767,15 +767,40 @@ by an Admin through the API.
 
 ## 12. Deployment-site acceptance (operational runbook obligations)
 
-> **Recorded by the P7 final program closeout (2026-08-14).** Gate P7-3 is
-> PASS on **software acceptance**: the product mechanism (typed RTO/RPO
-> authority, retention evidence ledger, readiness endpoints, host-side
-> scripts) is implemented and tested, and the deterministic clean-volume
-> restore drill (`tests/deployment/logical-backup-restore.sh`) was executed
-> 2026-08-14 twice with both runs PASS and a measured total drill duration of
-> **87 s ≤ the declared RTO of 3600 s (1 h)**. The gate's operational
-> acceptance on the **production volume** is a deployment-site obligation,
-> not an unfinished product feature. This section is that obligation.
+> **Recorded by the P7 final program closeout (2026-08-14).** Gate P7-3 is a
+> **Product / Software Readiness Gate**, and it is PASS: typed RPO/RTO
+> authority, backup/restore/retention mechanisms, deterministic clean-volume
+> restore proof with post-restore invariants, and a representative restore
+> duration within the reference acceptance RTO. The deterministic
+> clean-volume restore drill (`tests/deployment/logical-backup-restore.sh`)
+> records its measured duration as **automated drill evidence**, and the
+> product itself evaluated that evidence against the declared RTO of
+> **3600 s**, returning `compliance.rto.status = SATISFIED` (executed
+> 2026-08-14; the evidence chain is in the closeout §Gate P7-3 acceptance
+> record). **Deployment Readiness is a separate operational acceptance**:
+> the obligations below are deployment-site obligations, not an unfinished
+> product feature. This section is that obligation.
+
+### Gate P7-3 semantics (frozen by the final program closeout)
+
+```text
+Gate P7-3 = Product / Software Readiness Gate
+
+PASS requires:
+- typed RPO/RTO authority
+- backup / restore / retention mechanisms
+- deterministic clean-volume restore proof
+- post-restore invariants
+- representative restore duration <= reference acceptance RTO
+
+Deployment Readiness = separate operational acceptance
+
+A concrete deployment may claim RTO/retention compliance only after:
+- configuring its actual RPO/RTO
+- a real pgBackRest retention run
+- a production-volume restore drill
+- recorded evidence
+```
 
 The deployment operator must, at install time and periodically thereafter:
 
@@ -805,6 +830,7 @@ The deployment operator must, at install time and periodically thereafter:
    Admin, `admin.bootstrap` audit rows, attempt/answer/snapshot presence, and
    the deployment's own marker checks (see §7/§8 and the drill suites).
 
-The deterministic `tests/deployment/` suite (`pnpm test:deployment`) remains
-the product-side proof; the obligations above are the deployment-side proof.
-Both are required for the full Gate P7-3 acceptance contract.
+The deterministic `tests/deployment/` suite (`pnpm test:deployment`) is the
+product-side proof that closes Gate P7-3. Deployment-side proof is
+**additionally required** before a concrete deployment may claim operational
+RTO/retention compliance — that is what the obligations above are for.

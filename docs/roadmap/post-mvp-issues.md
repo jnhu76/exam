@@ -11,9 +11,12 @@
 
 - #291 Additional exam timing modes (`timed_sync`, `deadline`, `untimed`)
 - #292 Operational admission queue (`requireQueue`; Redis-backed execution decision-gated)
-- #293 Controlled / Strict high-assurance exam profiles (queue admission, session/device binding, stronger identity)
+- #293 Controlled / Strict high-assurance exam readiness (**umbrella tracker**; children: #315 device/session binding, #316 secondary identity verification, #317 continuous monitoring policy/runtime)
+- #315 Device/session binding runtime (Controlled/Strict; child of #293)
+- #316 Secondary identity verification (Controlled/Strict; child of #293)
+- #317 Continuous monitoring policy/runtime (Controlled/Strict; child of #293)
 - #294 Question / option randomization
-- #295 Managed desktop lockdown client (Electron)
+- #295 Managed desktop / lockdown runtime adoption (**DECISION_GATED** — real deployment requirement → ADR-004 review → GO/NO-GO; implementation issue only after GO)
 
 ## Phase 3 Collaboration / Permissions
 
@@ -55,3 +58,10 @@ Redis responsibilities beyond the shared rate limiter (admission-queue
 execution, presence, Streams / Pub/Sub / generic workers) are
 **DECISION_GATED**: each requires its own accepted ADR-001 decision with a
 measured trigger before implementation.
+
+## Decision-gated (Issue tracks the gate)
+
+- #295 Managed desktop / lockdown runtime adoption — **DECISION_GATED** per
+  ADR-004 (Deferred): a real deployment requirement must trigger the adoption
+  review (ADR-004 amendment + platform/security constraints) before a
+  GO/NO-GO; an implementation Issue is created only after GO.

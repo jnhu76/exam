@@ -20,7 +20,7 @@
 > | Presence (P7-P1) | DECISION_GATED | ADR-001 |
 > | Portable backup/DR (P7-C0–C3) | CLOSED_IMPLEMENTED | — |
 > | Operational control plane (P7-E0–E3) | CLOSED_IMPLEMENTED | — |
-> | Configurable exam modes (P7-M1/M2/M) | CLOSED_IMPLEMENTED | Controlled/Strict → #293/#292/#294/#295 |
+> | Configurable exam modes (P7-M1/M2/M) | CLOSED_IMPLEMENTED | Controlled/Strict → umbrella #293 (children #315–#317) + #292/#291; #295 decision-gated |
 > | UI pilot / family closeout (P7-U1/U2+) | DEFERRED_TO_ISSUE | #305/#306/#307/#308 |
 > | Final readiness closeout (P7-F) | CLOSED_IMPLEMENTED | superseded by the final closeout |
 > | RTO + retention (P7-CLOSE) | CLOSED_IMPLEMENTED | deployment-site acceptance = runbook obligation |
@@ -590,7 +590,8 @@ scheduler, retention engine, restore surface, or settings import/export
 > **Status (2026-08-13): SHIPPED — CLOSED (P7-M1/M2/M, PRs #277/#279).**
 > Two truthful starter recipes (`basic_quiz`, `standard_online`) ship over
 > one engine; `Controlled`/`Strict` are deferred to their owning subsystems
-> (truthfulness gate) and tracked by Issues #293/#292/#294/#295. See the
+> (truthfulness gate) and tracked by the umbrella Issue #293 (children
+> #315/#316/#317) + #292/#291; #295 decision-gated. See the
 > P7-M closeout. The dimensions below are the design record.
 
 ### Policy dimensions
@@ -828,15 +829,17 @@ If P7-D1 concluded that no Redis adoption is warranted:
 - clean-host restore drill passes;
 - post-restore invariant suite passes.
 
-> **Status (2026-08-14): PASS (revised semantics).** Evidence ledger, verified
-> drills, RPO intent (`desiredRpoSeconds`), the typed RTO authority
-> (`desiredRtoSeconds`), and the retention mechanism (host-side cron/systemd +
-> WAL-G/pgBackRest script + evidence ledger) are implemented and tested; the
-> deterministic clean-volume restore drill was executed 2026-08-14 (twice,
-> PASS; measured 87 s ≤ declared RTO 3600 s). The gate's operational-acceptance
-> clause is an explicit deployment-site runbook obligation (real pgBackRest
-> retention + production-volume restore on the deployment), not an unfinished
-> product feature. See the final closeout (§Gate P7-3 acceptance record).
+> **Status (2026-08-14): PASS (Product / Software Readiness Gate).** Evidence
+> ledger, verified drills, RPO intent (`desiredRpoSeconds`), the typed RTO
+> authority (`desiredRtoSeconds`), and the retention mechanism (host-side
+> cron/systemd + WAL-G/pgBackRest script + evidence ledger) are implemented and
+> tested; the deterministic clean-volume restore drill executed 2026-08-14
+> records its measured duration (18 000 ms) as automated drill evidence, and
+> the product's own ops-policy projection evaluated it against the declared
+> RTO 3600 s as **SATISFIED**. Deployment Readiness (real pgBackRest retention
+> + production-volume restore on the deployment) is a separate, explicit
+> deployment-site runbook obligation — not an unfinished product feature. See
+> the final closeout (§Gate P7-3 acceptance record).
 
 ### Gate P7-4 — Configuration is controlled
 
@@ -863,7 +866,8 @@ If P7-D1 concluded that no Redis adoption is warranted:
 > E2E-proof bullet therefore applies to the shipped minimal/standard-
 > equivalent recipes (`basic_quiz`, `standard_online`); the Controlled/Strict
 > classes are re-validated against this gate when their owning subsystems
-> land — tracked by Issues #293/#292/#294/#295. The multimodal visual review
+> land — tracked by umbrella #293 (children #315–#317) + #292/#291; #295
+> decision-gated. The multimodal visual review
 > round was performed by P7-F (2026-08-13) — P7-M closeout is **CLOSED** (no
 > blocking defect; see the closeout's "Visual review closeout (P7-F round)"
 > section).

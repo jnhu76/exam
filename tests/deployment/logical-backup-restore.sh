@@ -85,6 +85,11 @@ write_probe "${PROJECT}" logical_probe markers A "state-A-${RUN_TS}"
 STATE_A="$(capture_state)"
 echo "  State A: ${STATE_A}"
 
+# The restore drill is timed from the start of the backup through restore,
+# restart, and invariant verification — the measured span is recorded as
+# automated drill evidence so the product's own RTO projection can evaluate it.
+DRILL_START_MS="$(( $(date +%s) * 1000 ))"
+
 echo "--- logical backup of State A (online; API stays up) ---"
 bash "${BACKUP_SH}" "${PROJECT}" "${BACKUP_DUMP}" 2>&1 | sed 's/^/    /'
 if [ ! -s "${BACKUP_DUMP}" ]; then
@@ -135,6 +140,61 @@ if [ -z "${RESTORED_HASH}" ]; then
   exit 1
 fi
 echo "  PASS: restored Admin row present with password hash."
+
+DRILL_END_MS="$(( $(date +%s) * 1000 ))"
+DRILL_DURATION_MS=$((DRILL_END_MS - DRILL_START_MS))
+echo "  measured restore-drill duration: ${DRILL_DURATION_MS} ms"
+
+echo "--- RTO acceptance: record automated drill evidence; product evaluates it ---"
+APP_C="$(app_container "${PROJECT}")"
+docker exec "${APP_C}" node dist/scripts/backup-evidence.js drill \
+  --operation-id "logical-restore:${RUN_TS}" --backup-type logical \
+  --result succeeded --source automated --duration-ms "${DRILL_DURATION_MS}" \
+  2>&1 | sed 's/^/    /'
+
+# Declare RTO 3600 s (typed operational-policy intent) as the restored Admin,
+# then query the product's own compliance projection: it must read the
+# automated drill evidence just recorded and return SATISFIED.
+docker exec -e ADMIN_USER="${ADMIN_USER}" -e ADMIN_PASS="${ADMIN_PASS}" \
+  -e DRILL_DURATION_MS="${DRILL_DURATION_MS}" "${APP_C}" node -e '
+  const base = "http://127.0.0.1:3000/api";
+  const fail = (m) => { console.error("  FAIL: " + m); process.exit(1); };
+  (async () => {
+    const login = await fetch(base + "/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+      body: JSON.stringify({ username: process.env.ADMIN_USER, password: process.env.ADMIN_PASS }),
+    });
+    if (!login.ok) return fail("admin login HTTP " + login.status);
+    const cookie = (login.headers.get("set-cookie") || "").split(";")[0];
+    if (!cookie.startsWith("auth-token=")) return fail("no auth-token cookie on login response");
+    const put = await fetch(base + "/system/ops-policy", {
+      method: "PUT",
+      headers: { "content-type": "application/json", origin: "http://localhost:3000", cookie },
+      body: JSON.stringify({
+        desiredRpoSeconds: 3600,
+        desiredRtoSeconds: 3600,
+        desiredRetentionDays: 30,
+        desiredDrillCadenceDays: 30,
+        version: 0,
+        reason: "P7-3 RTO acceptance drill (deterministic deployment suite)",
+      }),
+    });
+    if (!put.ok) return fail("ops-policy PUT HTTP " + put.status + ": " + (await put.text()));
+    const get = await fetch(base + "/system/ops-policy", { headers: { cookie } });
+    if (!get.ok) return fail("ops-policy GET HTTP " + get.status);
+    const body = await get.json();
+    const rto = body.compliance.rto;
+    console.log("    compliance.rto: desired=" + rto.desired + " observed=" + rto.observed + " status=" + rto.status);
+    console.log("    detail: " + rto.observedDetail);
+    if (rto.desired !== "3600s") return fail("rto.desired != 3600s (got " + rto.desired + ")");
+    if (rto.observed !== process.env.DRILL_DURATION_MS + "ms") {
+      return fail("rto.observed != recorded drill duration " + process.env.DRILL_DURATION_MS + "ms (got " + rto.observed + ")");
+    }
+    if (rto.status !== "SATISFIED") return fail("rto.status != SATISFIED");
+    console.log("  PASS: product-evaluated RTO compliance SATISFIED against declared RTO 3600s");
+  })().catch((e) => fail(String((e && e.stack) || e)));
+'
 
 echo ""
 echo "=== LOGICAL BACKUP / CLEAN-RESTORE SUITE: ALL CHECKS PASSED ==="

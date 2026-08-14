@@ -17,10 +17,11 @@ P7 — CLOSED (2026-08-14)
 ## Baseline
 
 ```text
-BASE_SHA : d7dbebf1b8fe13909c7bcd0ca371398eea5552cc  (origin/master, PR #290 merged)
-FINAL_SHA: d7ec9af4a466a09105be8b2d5e335b77b45d45d9  (commit carrying the full closeout)
-DATE     : 2026-08-14
-BRANCH   : feat/p7-final-program-closeout
+BASE_SHA  : d7dbebf1b8fe13909c7bcd0ca371398eea5552cc  (origin/master, PR #290 merged)
+MERGE_SHA : recorded on master after PR #314 merges (a commit cannot
+            self-reference its own hash; no content SHA is pinned here)
+DATE      : 2026-08-14
+BRANCH    : feat/p7-final-program-closeout
 ```
 
 ## What P7 delivered
@@ -96,9 +97,9 @@ system:
 | P7-0 — Truthful plan | ✅ PASS | Roadmap/status/closeout documents reconcile with master; M11 meaning preserved; `text_response` no longer listed as open; this closeout completes the reconciliation (P7-R0). |
 | P7-1 — Recoverable authority | ✅ PASS | P7-S2 (PR #269): one command owner per irreversible transition, idempotency + crash matrices; general startup reconciler deliberately not built (evidence-based); targeted reconciliation exists (heartbeat scanner, email abandoned-lock recovery). |
 | P7-2 — Redis decision recorded; approved responsibilities real | ✅ PASS | P7-D1 decision ACCEPTED in ADR-001 (2026-08-08); shared rate limiter (P7-D2/D3, PR #265) has a real business caller, failure policy, and tests; further responsibilities remain decision-gated. |
-| P7-3 — Restore is proven | ✅ PASS (revised semantics — see §Gate P7-3 acceptance record) | Software acceptance PASS: typed RPO/RTO authority, retention mechanism + evidence ledger + host automation path, deterministic clean-volume restore drill **executed 2026-08-14 (twice, both PASS)** with measured total drill duration **87 s ≤ declared RTO 3600 s**, post-restore invariant suite green. Deployment-site acceptance (real pgBackRest retention on the production volume) is an explicit operational runbook obligation, not an unfinished feature. |
+| P7-3 — Restore is proven | ✅ PASS (revised semantics — see §Gate P7-3 acceptance record) | Product/Software Readiness Gate PASS: typed RPO/RTO authority, retention mechanism + evidence ledger + host automation path, deterministic clean-volume restore drill **executed 2026-08-14** with the product's own compliance projection evaluating the recorded automated drill evidence against the declared RTO 3600 s and returning **SATISFIED** (measured 18 000 ms), post-restore invariant suite green. Deployment Readiness (real pgBackRest retention on the production volume) is an explicit deployment-site runbook obligation, not an unfinished feature. |
 | P7-4 — Configuration is controlled | ✅ PASS | P7-E0 audit (no generic settings subsystem justified) + P7-E (E2A/E2B/E2C/E3): typed/versioned/audited operational policy intent; secrets env/Compose-only; snapshots freeze active exam behavior. |
-| P7-5 — Exam profiles are coherent | ✅ PASS | P7-M (PRs #277/#279): `basic_quiz`/`standard_online` resolve to one policy schema; conflict validation before publish; profile edits do not mutate published exams; API + browser E2E proof; Controlled/Strict excluded from the gate until their owning subsystems land (issues #293/#292/#294/#295). |
+| P7-5 — Exam profiles are coherent | ✅ PASS | P7-M (PRs #277/#279): `basic_quiz`/`standard_online` resolve to one policy schema; conflict validation before publish; profile edits do not mutate published exams; API + browser E2E proof; Controlled/Strict excluded from the gate until their owning subsystems land (umbrella #293 + children #315/#316/#317; dependencies #292/#291; #295 decision-gated). |
 | P7-6 — UI closeout | ✅ PASS | Exam-profile UI + wizard closed with P7-M (visual review by P7-F); operations/backup/restore-readiness surfaces shipped with P7-E; residual UI migration debt is issue-owned (#305–#308) and no longer part of P7's completion path. |
 
 **No gate is `pending`, `NOT PASS`, or `HUMAN_DECISION_REQUIRED` in the final
@@ -120,22 +121,32 @@ obligation.
 
 | Item | Value |
 | --- | --- |
-| Declared RTO | **3600 s (1 h)** — the "Standard operation" profile from the P7 planning frame (RPO 1h / RTO 1h). Recorded as `desired_rto_seconds = 3600` capability of the typed authority (range 30 s..48 h). |
+| Declared RTO | **3600 s (1 h)** — written into the product as `desired_rto_seconds = 3600` via `PUT /system/ops-policy` (typed authority, range 30 s..48 h) by the restored Admin inside the acceptance deployment. |
 | Test dataset / representative volume | Deterministic isolated deployment: fresh `EXAM_DATA_ROOT`, first-Admin bootstrap, State-A marker + business invariants (orgs=1, admins=1, admin.bootstrap audit=1) — the repository's canonical representative volume (small; production-volume sizing is deployment-site). |
 | Restore method | C2 logical: online `pg_dump -Fc` (State A) → mutate source to State B → stop API/worker → clean-target restore (`DROP DATABASE` + `template0` + `pg_restore --no-owner --exit-on-error`) → restart API. |
-| Restore start / end timestamps | Run 2 (timed): start epoch `1786692494` (2026-08-14), end epoch `1786692581`. |
-| Measured duration | **87 s total drill wall time** (deployment boot + bootstrap + backup + restore + restart + invariant verification). The restore step itself is a subset; the total is a conservative upper bound. |
-| Measured ≤ declared RTO | ✅ 87 s ≤ 3600 s (both executed runs PASS; run 1 and run 2 identical outcomes). |
+| Measured duration | **18 s (18 000 ms)** restore-drill span (backup → mutate → restore → restart → invariant verification), measured by the deterministic drill and recorded as **automated drill evidence** (`backup-evidence.js drill --source automated --result succeeded --duration-ms 18000`). |
+| Product-evaluated acceptance | The product's own compliance projection (`GET /system/ops-policy`) evaluated the recorded automated drill evidence against the declared RTO: **`compliance.rto: desired=3600s, observed=18000ms, status=SATISFIED`**. The product itself returned SATISFIED — no external hand-comparison of the numbers. |
 | Post-restore invariants | ✅ Marker A present, marker B ABSENT (exact logical replacement); orgs=1 / admins=1 / audit=1 restored; restored Admin row present with password hash. |
 | Retention policy actually used | Not executable in this environment: pgBackRest is **not installed** here and no production pgBackRest repository exists. The host-side mechanism (`scripts/backup/pgbackrest-retain.sh`, evidence ledger, success↔verified invariant, retention-readiness endpoint) is implemented and tested; **execution is a deployment-site obligation**. |
 | Retention evidence | Mechanism-level evidence: `retention_runs` ledger + `GET /system/retention-readiness` + CLI instrumentation, covered by the API/db test suites (green). Real scheduled-run evidence must be produced at the deployment site. |
-| Limitations of the environment | (1) No pgBackRest on the host → no real `expire` run; (2) test volume is small → the 87 s figure is representative of the deterministic volume, not a production-sized guarantee; (3) restore drills were executed twice (both PASS) against throwaway Compose projects; no human/dev database was touched. |
+| Limitations of the environment | (1) No pgBackRest on the host → no real `expire` run; (2) test volume is small → the 18 s figure is representative of the deterministic volume, not a production-sized guarantee; (3) the drill ran against a throwaway Compose project; no human/dev database was touched. |
 
-### Verdict — software acceptance vs deployment-site acceptance
+**The product itself evaluated the executed restore evidence against the
+declared RTO and returned SATISFIED.** The acceptance chain —
+`PUT /system/ops-policy` (`desired_rto_seconds=3600`) → automated drill
+evidence (`durationMs=18000`, `source=automated`, `result=succeeded`) →
+`GET /system/ops-policy` (`compliance.rto.status=SATISFIED`) — runs
+end-to-end inside the deterministic suite
+(`tests/deployment/logical-backup-restore.sh`), which asserts the SATISFIED
+result on every run, not only in this closeout.
+
+### Verdict — Product/Software Readiness vs Deployment Readiness
 
 ```text
-software acceptance    = PASS      (this closeout; evidence above)
-deployment-site acceptance = external operator responsibility (runbook)
+Gate P7-3 (Product / Software Readiness Gate) = PASS   (this closeout;
+                                                         evidence above)
+Deployment Readiness (operational acceptance) = external operator
+                                                 responsibility (runbook §12)
 ```
 
 P7's supported product boundary is: the product records **evidence**, never
@@ -144,7 +155,8 @@ boundary, "restore is proven" splits into:
 
 1. **Software acceptance (product responsibility) — PASS.** Typed RTO/RPO
    authority, retention mechanism + evidence surface, and a deterministic
-   clean-volume restore drill whose measured duration satisfies a declared RTO
+   clean-volume restore drill whose measured duration the product itself
+   evaluated against the declared RTO (`compliance.rto.status = SATISFIED`)
    with the post-restore invariant suite green. This is the product's side of
    the contract and it is now evidenced by real execution, not only unit tests.
 2. **Deployment-site acceptance (deployment responsibility) — a runbook
@@ -157,10 +169,11 @@ boundary, "restore is proven" splits into:
    §Deployment-site acceptance and does not block P7 closure.
 
 Gate P7-3's semantics are **explicitly revised by this human-reviewable
-decision document**: the gate's operational-acceptance clause is
-deployment-site scope by design. The repository no longer says both "P7 CLOSED"
-and "P7-3 NOT PASS"; it says "P7-3 PASS (software acceptance evidenced;
-deployment-site acceptance = runbook obligation)".
+decision document**: the gate is a Product/Software Readiness Gate and its
+operational-acceptance clause is deployment-site scope by design. The
+repository no longer says both "P7 CLOSED" and "P7-3 NOT PASS"; it says
+"P7-3 PASS (Product/Software Readiness Gate evidenced; Deployment Readiness =
+runbook obligation)".
 
 ## Workstream disposition matrix
 
@@ -218,9 +231,9 @@ checkbox.
 | --- | --- | --- |
 | `timed_sync` / `deadline` / `untimed` timing modes | Product feature beyond the `timed_window` gate subset | Issue #291 |
 | Operational admission queue (`requireQueue`) | Needs its own admission state machine; Redis backing decision-gated (ADR-001) | Issue #292 |
-| Controlled / Strict high-assurance exam profiles | Depend on admission/device/identity subsystems that do not exist yet; truthfulness gate forbids faking them | Issue #293 |
+| Controlled / Strict high-assurance exam profiles | Depend on admission/device/identity subsystems that do not exist yet; truthfulness gate forbids faking them | Issue #293 (**umbrella tracker**; children #315 device/session binding, #316 secondary identity verification, #317 continuous monitoring) |
 | Question/option randomization | Orthogonal policy dimension, independently closable | Issue #294 |
-| Managed desktop lockdown client | Separate platform workstream (ADR-004) | Issue #295 |
+| Managed desktop lockdown client | Separate platform workstream (ADR-004) | Issue #295 (**DECISION_GATED** — adoption gate: real deployment requirement → ADR-004 review → GO/NO-GO; implementation issue only after GO) |
 | Teacher@Course scoped authority | F-04 confirmed + explicitly deferred to the scoped-RBAC milestone; P7 makes no isolation claim | Issue #286 (reopened) |
 | Grader@Exam scoped authority + assignment flow | M11 Grader slice; needs scope carrier + resolver + UI | Issue #296 |
 | Staff invitation / SMTP password reset / account lifecycle | Phase 3 identity lifecycle, never started | Issue #297 |
@@ -275,9 +288,19 @@ single `mode` enum collapse         — rejected (policy profiles over one engin
 | ADR-018 (Operational Observability Window) | **ACCEPTED** | Accepted by this closeout; the current `/system/*` surfaces already realize the window contract (read-only, redacted, domain-separated, bounded, source-aware, truthful). |
 | ADR-008, ADR-013, ADR-014, ADR-015, ADR-016 | ACCEPTED (unchanged) | No P7 item changes them; ADR-008 Option D is issue #302. |
 
+> **Human acceptance event.** The ACCEPTED verdicts above are *proposed* by
+> this closeout document; they become effective when a human merges PR #314
+> onto master. The PR branch is the proposed final closure — human review →
+> merge is the acceptance event. An AI-written verdict alone is not
+> acceptance.
+
 ## Issue reconciliation
 
-- **Issues created (23):** #291–#313 (see Deferred-work matrix).
+- **Issues created (26):** #291–#313 plus the #293 children #315 (device/session
+  binding), #316 (secondary identity verification), #317 (continuous
+  monitoring policy/runtime) — see Deferred-work matrix. #293 is the
+  Controlled/Strict **umbrella tracker** and #295 is a **DECISION_GATED**
+  adoption gate (per ADR-004), not scheduled implementation work.
 - **Issue reopened (1):** #286 — Teacher@Course scoped authority (F-04),
   reopened as the durable scoped-RBAC tracker with a recorded closure
   clarification; P7 closure makes no Teacher-isolation claim.
@@ -328,7 +351,10 @@ superseded by this document:
 Executed as part of this closeout:
 
 ```text
-restore drill (logical-backup-restore.sh)  : run twice, both PASS (87 s measured)
+restore drill (logical-backup-restore.sh)  : PASS — product-evaluated RTO
+                                             acceptance: declared 3600 s,
+                                             observed 18 000 ms (automated
+                                             drill evidence), SATISFIED
 pnpm verify (full)                         : PASS (exit 0) — static gates
                                              (format/lint/code-quality/copy/arch/
                                              eslint/typecheck/openapi) green;
@@ -336,5 +362,8 @@ pnpm verify (full)                         : PASS (exit 0) — static gates
 ```
 
 The full static gates and the test suites are green on the closeout commit
-(`d7ec9af4`); no code changed in this closeout — the changeset is
-documentation + Issue governance only.
+(the PR #314 head; verified by CI and `pnpm verify`); the changeset is
+documentation + Issue governance + one deterministic deployment-test extension
+(the drill now records automated drill evidence and asserts the
+product-evaluated RTO acceptance on every run). `pnpm test:deployment` remains
+the executable product-side proof.

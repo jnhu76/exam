@@ -22,12 +22,15 @@ for the implemented/limited breakdown and
 
 ## Recently closed
 
-- **P7 — CLOSED (2026-08-14).** Final program closeout: Gate P7-3 software
-  acceptance PASS (real deterministic restore drill executed twice, measured
-  87 s ≤ declared RTO 3600 s; deployment-site retention/restore acceptance is
-  an explicit runbook obligation), ADR-017 rev 4 + ADR-018 ACCEPTED, all
-  deferred capabilities migrated to Issues (#291–#313), #286 reopened as the
-  Teacher@Course tracker. Evidence:
+- **P7 — CLOSED (2026-08-14).** Final program closeout: Gate P7-3 PASS as the
+  Product/Software Readiness Gate (deterministic restore drill executed
+  2026-08-14; the product's own ops-policy projection evaluated the recorded
+  automated drill evidence against the declared RTO 3600 s as **SATISFIED**,
+  observed 18 000 ms; deployment-site retention/restore acceptance is an
+  explicit runbook obligation), ADR-017 rev 4 + ADR-018 ACCEPTED, all
+  deferred capabilities migrated to Issues (#291–#313 + #293 umbrella children
+  #315–#317; #295 decision-gated), #286 reopened as the Teacher@Course
+  tracker. Evidence:
   [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md).
 - **P7-CLOSE — RTO + retention mechanism (2026-08-13, PR #290).** Typed RTO
   authority + retention evidence ledger + host-side pgBackRest script;
@@ -35,7 +38,8 @@ for the implemented/limited breakdown and
 - **P7-F — final readiness closeout (2026-08-13, PR #288).** Verdict at the
   time: P7-F COMPLETE, P7 OPEN on Gate P7-3; superseded by the final closeout.
 - **P7-M — configurable exam modes (2026-08-13, PRs #277/#279).** Profiles +
-  wizard; Controlled/Strict deferred to Issues #293/#292/#294/#295.
+  wizard; Controlled/Strict deferred to umbrella #293 (children #315–#317) +
+  #292/#291; #295 decision-gated.
 - **P7-E — operational control plane (2026-08-12, PR #282).** Maintainer
   boundary, evidence ledger, operations views, policy intent.
 - **P7-C — portable backup/DR (2026-08-10, PRs #270/#274).** Cold/logical/
@@ -64,8 +68,9 @@ P7 is closed. The planning model is now **Issues-first**:
 
 - Gate 0.5: **PASS** (route/capability conformance baseline, re-verified).
 - P6 MVP closeout: **CLOSED** for the supported deployment subset.
-- P7 gates P7-0 … P7-6: **all PASS** (P7-3 under the revised software /
-  deployment-site acceptance semantics) — see the final closeout.
+- P7 gates P7-0 … P7-6: **all PASS** (P7-3 as the Product / Software
+  Readiness Gate; Deployment Readiness is a separate runbook obligation) — see
+  the final closeout.
 
 ## Out of scope until Phase 4
 
