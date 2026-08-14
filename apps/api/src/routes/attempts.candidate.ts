@@ -383,13 +383,14 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             windowStartAt: exam.openAt.toISOString(),
             windowEndAt: exam.closeAt.toISOString(),
             durationMinutes: exam.durationMinutes,
-            // Snapshot is authoritative once the exam is published; a draft
-            // has no snapshot yet, so fall back to the authored question ids
-            // (a draft's candidate card must not claim 0 questions).
+            // Snapshot authority boundary: a draft has no frozen snapshot yet,
+            // so its authored question ids are the current authoring state; any
+            // non-draft state must report the frozen snapshot length — even
+            // when the snapshot is empty or inconsistent (no silent fallback).
             totalQuestions:
-              exam.questionSnapshot.length > 0
-                ? exam.questionSnapshot.length
-                : exam.questionIds.length,
+              exam.status === "draft"
+                ? exam.questionIds.length
+                : exam.questionSnapshot.length,
             passingScore: exam.passingScore,
             totalScore: exam.totalScore,
             attemptsUsed: enrollment.attemptCount,

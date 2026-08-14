@@ -317,7 +317,7 @@ export function SidebarContent({
 
   return (
     <>
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
         {visibleGroups.map((group, gi) => (
           <section key={group.labelKey} className="flex flex-col gap-0.5">
             {!collapsed && (
@@ -362,9 +362,9 @@ export function SidebarContent({
         )}
       </nav>
 
-      <Separator className="bg-sidebar-border" />
+      <Separator className="shrink-0 bg-sidebar-border" />
 
-      <div className="p-2">
+      <div className="shrink-0 p-2">
         <div
           className={cn(
             "flex items-center gap-2",
@@ -419,13 +419,19 @@ export function AppSidebar({
     <aside
       data-testid="app-sidebar"
       className={cn(
-        "hidden min-h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] lg:flex",
+        // Viewport-constrained desktop sidebar (MVP-P2-04): sticky + h-screen
+        // keeps the aside attached to the viewport while the main page
+        // scrolls; self-start prevents the row flex parent from stretching it
+        // to the full page height (which previously pushed 管理/logout below
+        // the fold and made the whole page scroll). min-h-0 lets the nav
+        // region shrink so overflow-y-auto engages as a real scroll region.
+        "sticky top-0 hidden h-screen min-h-0 shrink-0 self-start flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] lg:flex",
         collapsed ? "w-14" : "w-[232px]",
       )}
     >
       <div
         className={cn(
-          "border-b border-sidebar-border px-2",
+          "shrink-0 border-b border-sidebar-border px-2",
           collapsed
             ? "flex min-h-24 flex-col items-center justify-center gap-2 py-2"
             : "flex min-h-14 items-center gap-2",

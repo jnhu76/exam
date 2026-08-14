@@ -150,7 +150,7 @@ export function AdminLayout() {
         onLogout={() => void logout()}
       />
       <div className="min-w-0 flex-1">
-        <header className="flex h-14 items-center gap-3 border-b bg-card px-4 lg:px-6">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card px-4 shadow-xs lg:px-6">
           <Button
             ref={triggerRef}
             type="button"
