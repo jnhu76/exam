@@ -2,9 +2,12 @@
 
 ## Status
 
-* Status: **PROPOSED** (2026-08-13 — P7-RBAC-ROLE-REALITY-AUDIT remediation,
-  awaiting human review)
-* Date: 2026-08-13
+* Status: **ACCEPTED** (2026-08-14 — P7 final program closeout,
+  [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
+  proposed 2026-08-13 with ADR-017 rev 4, accepted after the runtime boundary
+  check in that closeout — the current `/system/*` surfaces already realize
+  the window contract)
+* Date: 2026-08-13 (proposed); 2026-08-14 (accepted)
 * Decision owners: project
 * Supersedes: none
 * Superseded by: none

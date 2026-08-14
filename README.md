@@ -7,13 +7,20 @@ LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, support
 > answer save protocol, deadline auto-submit, manual grading, result
 > publishing, monitoring/diagnostics, export/audit) with `timed_window` the
 > only timing mode. Phase 3 authorization infrastructure and the
-> Admin/Teacher/Candidate MVP role switch (P4) are closed; Phase 3 product
-> work (scoped Teacher/Proctor/Grader role bundles, staff invitation, SMTP
-> reset, account lifecycle UI, WYSIWYG submit) remains open.
+> Admin/Teacher/Candidate MVP role switch (P4) are closed, and the P7 system
+> readiness program (state/authority hardening, portable backup/DR,
+> operational control plane, configurable exam modes, RBAC remediation) is
+> **CLOSED** (2026-08-14). Remaining Phase 3 product work (scoped
+> Teacher/Proctor/Grader role bundles, staff invitation, SMTP reset, account
+> lifecycle UI, rich-text/WYSIWYG authoring and answering — Issue #301 —
+> and the generic final-answer submit barrier — Issue #302) and all Phase 4
+> platformization are tracked
+> as GitHub Issues — see [`docs/roadmap/post-mvp-issues.md`](docs/roadmap/post-mvp-issues.md)
+> for the index.
 > Tenant schema, role enums, and `organizationId` boundaries are retained for
 > forward compatibility. MultiTenant product paths, SuperAdmin UI, tenant
 > switcher, organizationSlug login, API keys, service tokens, webhooks, and
-> CAS/OAuth are deferred to later phases.
+> CAS/OAuth are deferred to Phase 4 (Issues #309–#313).
 
 ## Quick Start
 

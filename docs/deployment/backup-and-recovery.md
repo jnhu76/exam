@@ -575,11 +575,15 @@ for the boundary.
   same-history). Any offline-client recovery-epoch concern is a future
   Phase 4 concern; no schema change is introduced here.
 
-### 8.5 Retention (operator-owned; no automation shipped)
+### 8.5 Retention (operator-owned; host-side automation available)
 
-> **P7-C3 does NOT ship automatic PITR retention/pruning.** Retention is
-> operator discipline. Future retention automation belongs in later
-> operations / P7-E work, or a mature PostgreSQL backup system (§8.7).
+> **The product does NOT ship a product-side retention scheduler.** Retention
+> execution is operator discipline and stays host-owned: the host-side
+> automation path `scripts/backup/pgbackrest-retain.sh` (shipped with
+> P7-CLOSE; cron/systemd-owned) runs `pgbackrest expire` and records evidence
+> through the retention CLI (`backup-evidence.js retention`) — operators must
+> schedule it. The product records **evidence** of retention, never enforces
+> it.
 
 A base backup can only recover **forward** from its own history. A common
 but **incorrect** rule is: *"For an N-day PITR window, retain only the most
@@ -619,8 +623,13 @@ Do NOT delete:
 - any WAL segment between the retained base backup and the current end of
   the PITR window — a single missing segment breaks the chain.
 
-There is no retention automation today; retention is the operator's
-discipline. P7-E may add a control plane; it is NOT started.
+Retention execution is operator discipline; the product records **evidence**
+of it. The host-side automation path is
+[`scripts/backup/pgbackrest-retain.sh`](../../scripts/backup/pgbackrest-retain.sh)
+with evidence recorded through the retention CLI
+(`backup-evidence.js retention`), a `retention_runs` ledger, and the
+`GET /system/retention-readiness` endpoint. See §12 for the deployment-site
+acceptance obligations.
 
 ### 8.6 Verification evidence
 
@@ -759,3 +768,79 @@ docker compose exec app \
 
 This script can ONLY reset Admin passwords. Candidate passwords are reset
 by an Admin through the API.
+
+## 12. Deployment-site acceptance (operational runbook obligations)
+
+> **Recorded by the P7 final program closeout (2026-08-14).** Gate P7-3 is a
+> **Product / Software Readiness Gate**, and it is PASS: typed RPO/RTO
+> authority, backup/restore/retention mechanisms, deterministic clean-volume
+> restore proof with post-restore invariants, and a representative restore
+> duration within the reference acceptance RTO. The deterministic
+> clean-volume restore drill (`tests/deployment/logical-backup-restore.sh`)
+> records its measured duration as **automated drill evidence**, and the
+> product itself evaluated that evidence against the declared RTO of
+> **3600 s**, returning `compliance.rto.status = SATISFIED` (executed
+> 2026-08-14; the evidence chain is in the closeout §Gate P7-3 acceptance
+> record). **Deployment Readiness is a separate operational acceptance**:
+> the obligations below are deployment-site obligations, not an unfinished
+> product feature. This section is that obligation.
+
+### Gate P7-3 semantics (frozen by the final program closeout)
+
+```text
+Gate P7-3 = Product / Software Readiness Gate
+
+PASS requires:
+- typed RPO/RTO authority
+- backup / restore / retention mechanisms
+- deterministic clean-volume restore proof
+- post-restore invariants
+- representative restore duration <= reference acceptance RTO
+
+Deployment Readiness = separate operational acceptance
+
+A concrete deployment may claim RTO/retention compliance only after:
+- configuring its actual RPO/RTO
+- a real pgBackRest retention run
+- a production-volume restore drill
+- recorded evidence
+```
+
+The deployment operator must, at install time and periodically thereafter:
+
+1. **Declare RTO/RPO in the product.** Set the operational policy intent
+   (Admin, Operations page — `backup_operational_policy.desired_rto_seconds`
+   / `desired_rpo_seconds`, or leave RTO NULL for NOT_CONFIGURED). The
+   declared RTO must be realistic for the deployment's volume and restore
+   method.
+2. **Install and configure pgBackRest on the host** (the architecture-aligned
+   path, P7-F option c / P7-E3). Configure `repo*-retention-*` knobs
+   (full/diff/archive retention) in `pgbackrest.conf` to match the declared
+   RPO/RTO window.
+3. **Schedule retention execution** via cron/systemd:
+   `scripts/backup/pgbackrest-retain.sh` (runs `pgbackrest expire` and records
+   evidence via the retention CLI). The evidence ledger `retention_runs` then
+   shows `result=succeeded` with `verification_status=verified` for each real
+   run; the `GET /system/retention-readiness` projection reflects it. Never
+   fabricate evidence — the CLI guards `--result succeeded` to require
+   `--verification-status verified`, and the DB CHECK enforces the invariant.
+4. **Schedule recurring restore drills** on the production volume
+   (logical `postgres-logical-restore.sh` or physical/PITR
+   `postgres-restore-pitr` path), measure each restore's duration, and record
+   the drill via `backup-evidence.js drill` with the explicit source:
+   - automated proof: `--source automated --result succeeded --duration-ms
+     <measured>` — the only evidence that can prove RTO;
+   - operator-declared: `--source operator_declared ...` — recorded for drill
+     cadence/history only, never as RTO proof.
+   The product's RTO compliance row becomes SATISFIED **only** from
+   automated-source, successful drill evidence whose measured duration is
+   within the declared objective; operator-declared evidence never satisfies
+   RTO.
+5. **Verify post-restore invariants** after every drill: org count, active
+   Admin, `admin.bootstrap` audit rows, attempt/answer/snapshot presence, and
+   the deployment's own marker checks (see §7/§8 and the drill suites).
+
+The deterministic `tests/deployment/` suite (`pnpm test:deployment`) is the
+product-side proof that closes Gate P7-3. Deployment-side proof is
+**additionally required** before a concrete deployment may claim operational
+RTO/retention compliance — that is what the obligations above are for.

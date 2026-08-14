@@ -2,7 +2,10 @@
 
 <!-- markdownlint-disable MD024 -->
 
-> Status: ACTIVE — J1 CLOSED; J2 CLOSED (ADR-014 ACCEPTED);
+> Status: **HISTORICAL — not an executable backlog.** Remaining executable
+> work is Issue-owned ([`post-mvp-issues.md`](post-mvp-issues.md)); closed
+> milestone documents are not an executable backlog (P7 final program
+> closeout rule). Recorded job dispositions: J1 CLOSED; J2 CLOSED (ADR-014 ACCEPTED);
 > J3 REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS **CLOSED** (PR #242 merged);
 > **J4-R0 CLOSED** — Proctor-to-Exam Scope Authority Contract
 > (ADR-015 **Accepted** 2026-08-02, PR #245;
@@ -51,9 +54,17 @@
 > **J5 CLOSED** — closeout: `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`.
 > Issue #263 (cross-tab force-submit authority) is a recorded P2 follow-up,
 > deliberately NOT built per the mission scope.
-> J6/J7 NOT STARTED.
+> **J6 (Proctor Recovery Center) is DEFERRED_TO_ISSUE — Issue #303** (the
+> Proctor product activation milestone). **J7 (audit/recovery closeout) is
+> SUPERSEDED / DISPOSITIONED** — every acceptance family has exactly one
+> final disposition (§9 disposition matrix). The earlier blanket claim that
+> J7's remaining acceptance was "absorbed into #303 and #304" is withdrawn:
+> #304 owns only system-generated incidents, not the rest of J7. Startup
+> reconciliation is CLOSED_BY_DECISION (no general reconciler; Gate P7-1
+> PASS — see
+> [`P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md)).
 >
-> Updated: 2026-08-08
+> Updated: 2026-08-14 (P7 final program closeout)
 >
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
@@ -120,8 +131,8 @@ REC-I6-R0 Incident Authority Contract
 | J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **CLOSED** — Proctor-to-Exam scope authority design contract accepted in ADR-015 (ACCEPTED 2026-08-02, PR #245) | J2; existing RBAC baseline |
 | J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **CLOSED** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Closeout: `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`. | J4-R0 accepted |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | **CLOSED (2026-08-08)** — Admin can inspect and operate the live recovery workflow through UI. Closeout: `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md` | J1, J3, J4-I1 |
-| J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
-| J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | Real incident scenarios, crash recovery, audit, and E2E are closed | J1–J6 |
+| J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | **DEFERRED_TO_ISSUE — Issue #303** | J3, J4, reusable J5 components |
+| J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | **SUPERSEDED / DISPOSITIONED** — every acceptance family dispositioned in §9; no executable J7 backlog remains | J1–J6 |
 | Gate | `RECOVERY-AUTHORITY-GATE` | Recovery authority and operator workflows are safe enough to build shared infrastructure around | J1–J7 |
 | J8 | `P7-D1-REDIS-ADOPTION-DECISION` | Measured adopt/decline decision under ADR-001 | Recovery Authority Gate |
 
@@ -893,6 +904,30 @@ Do not block J6 on Redis presence or Pub/Sub.
 
 ## 9. J7 — REC-OPS Audit and Recovery Closeout
 
+> **J7 is SUPERSEDED / DISPOSITIONED (P7 final program closeout, 2026-08-14).**
+> The planning sections below are historical. Every J7 acceptance family
+> received exactly one final disposition; **no J7 checkbox remains executable
+> from this document**. The earlier blanket claim that J7's remaining
+> acceptance was "absorbed into #303 and #304" was inaccurate and is
+> withdrawn — #304 owns only system-generated incidents.
+>
+> | J7 acceptance family | Final disposition |
+> | --- | --- |
+> | Candidate self recovery (Scenario A) | CLOSED — REC-I3 / P7-S2 (candidate self-service restore; heartbeat/disruption authority) |
+> | Time grant (Scenario B) | CLOSED — J5 / P7-S2 (receipt-backed durable grant; ledger + incident link) |
+> | Force-submit (Scenario C) | CLOSED — J5 (Slice 2: operationId-keyed durable command, receipt replay, exact-23505 fresh-transaction recovery) |
+> | Misconduct (Scenario D) | CLOSED — J5 (Slice 3: durable misconduct command, concurrency matrices A–E, failure atomicity) |
+> | Crash/retry atomicity (Scenario E) | CLOSED — P7-S2 (six-flow crash matrix, all ATOMIC_ROLLBACK; retry-safe by operationId) |
+> | Startup reconciliation | CLOSED_BY_DECISION — P7-S2 (no general startup reconciler; Gate P7-1 PASS) |
+> | Admin recovery UI / route races / audit closeout (Scenario G + Audit) | CLOSED — J5 (I1C1/I1D: stale-version 409, same-tab retry identity, reload-authoritative, audit-timeline E2E) |
+> | PostgreSQL outage (Scenario F) | CLOSED — P7-S2 crash matrix (mid-command DB failure = uncommitted-transaction atomic rollback, retry-safe) + J5-I1D network-indeterminate failure-path E2E; no literal DB-stop drill exists — the required properties are evidenced at the transaction/UI level |
+> | Proctor Recovery Center | DEFERRED_TO_ISSUE — Issue #303 |
+> | System incidents | DEFERRED_TO_ISSUE — Issue #304 (a specific owner, not a catch-all for the rest of J7) |
+>
+> Remaining executable work is Issue-owned (see
+> [`post-mvp-issues.md`](post-mvp-issues.md)); do not re-activate J7 from
+> this historical plan.
+
 ## Purpose
 
 Prove the recovery system under real operational scenarios, retries, races, and
@@ -1223,8 +1258,10 @@ PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
           (PR #262 merged); J5-I1C Slice 3 (misconduct backend) CLOSED;
           J5-I1C1 (operations UI) CLOSED (2026-08-08) + J5-I1D (E2E) CLOSED
           (2026-08-08))
-PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
-PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
+PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — **DEFERRED_TO_ISSUE #303** (P7 final closeout 2026-08-14)
+PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — **SUPERSEDED / DISPOSITIONED**
+      (every acceptance family disposed in §9; #303/#304 own only their
+      named slices — they are not J7's catch-all)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 ```
 

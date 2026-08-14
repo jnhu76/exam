@@ -1,8 +1,9 @@
 # Implementation Status
 
 > Answers only: **what is implemented now**, **what is partially implemented**,
-> and **what is currently limited**. For future work, see
-> [`docs/roadmap/`](../roadmap/). For the phase scope authority, see
+> and **what is currently limited**. For future work, see the GitHub Issues
+> index [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md). For
+> the phase scope authority, see
 > [`docs/roadmap/phase-roadmap.md`](../roadmap/phase-roadmap.md).
 
 ## Phase 1 — Minimal Deliverable Exam System: ✅ COMPLETE
@@ -26,8 +27,8 @@ Single-tenant, Admin + Candidate reliable exam loop:
 ## Phase 2 — Exam Operation: ✅ GATE ITEMS IMPLEMENTED
 
 Core exam loop items are implemented and verified. The remaining items
-(`timed_sync` / `untimed` timing modes, queue admission) are deferred to
-Phase 2+ hardening.
+(`timed_sync` / `deadline` / `untimed` timing modes, queue admission) are not
+implemented — Issues #291/#292.
 
 ### Implemented
 
@@ -137,7 +138,8 @@ for the notification/email architecture.
 
 ### Not implemented (Phase 3 product work)
 
-See [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md):
+See [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md) — the
+GitHub Issues index (each item links to its Issue):
 
 - Scoped Teacher / Proctor / Grader role bundles **as product roles**
   (presets exist; assignment UI and product flows do not).
@@ -188,13 +190,14 @@ notification onto the now-stable result-publication transaction (P5-N1).
   (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
   rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit
   barrier (Option D follow-up; answer-type-independent).
-- Email template engine + backend i18n remain NOT STARTED.
+- Email template engine + backend i18n — not implemented (Issue #300).
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
 
 Pass-to-proceed API, service tokens / API keys, webhooks, optional multiTenant,
 SuperAdmin, tenant hierarchy/switcher, organizationSlug login, cross-tenant
-audit, external log shipping. All Phase 4; none started.
+audit, external log shipping. All Phase 4; none started — Issue-tracked
+(#309–#313).
 
 ## Known limitations
 
@@ -203,23 +206,28 @@ audit, external log shipping. All Phase 4; none started.
   [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
   The post-P7-E RBAC role-reality remediation (PR #284, 2026-08-13) further
   corrected the Admin authority + Maintainer observability boundary; ADR-017
-  rev 4 + ADR-018 remain PROPOSED pending human acceptance. See the
+  rev 4 + ADR-018 were accepted by the P7 final program closeout. See the
   **P7-F final readiness closeout**
   ([`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md))
-  for the release-gate verdict (P7-F COMPLETE — P7 REMAINS OPEN on Gate P7-3,
-  with two unsatisfied bullets: RTO not declared/tested + retention
-  host-owned/`NOT_ENFORCED`). **P7-CLOSE** (branch
-  `feat/p7-close-rto-retention-final`) now implements both bullets — typed
-  nullable RTO authority (30s..48h) measured via automated restore-drill
-  evidence, plus a retention evidence ledger + readiness endpoint + host
-  pgBackRest script (P7-F option c; execution stays host-only per ADR-017 D4).
-  The full static + unit/integration verification is green; the gate verdict
-  flip to PASS **requires operational acceptance first** — a real automated
-  restore drill (measured duration ≤ declared RTO) and a real scheduled
-  retention run (verified evidence) on a real volume — before the human can
-  sign off. ADR-017 rev 4 / ADR-018 acceptance follows the same prerequisite.
-  Status: `IMPLEMENTED — OPERATIONAL_ACCEPTANCE_PENDING`. See
-  [`docs/audits/P7-CLOSE-RTO-RETENTION-CLOSEOUT.md`](../audits/P7-CLOSE-RTO-RETENTION-CLOSEOUT.md).
+  for the release-gate history and the **final program closeout**
+  ([`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md))
+  for the final gate matrix. **P7 is CLOSED (2026-08-14).** The RTO +
+  retention mechanism (P7-CLOSE, PR #290: typed nullable RTO authority 30s..48h
+  measured via automated restore-drill evidence, retention evidence ledger +
+  readiness endpoint + host pgBackRest script — execution stays host-only per
+  ADR-017 D4) is implemented; **Gate P7-3 is PASS as the Product / Software
+  Readiness Gate**: the deterministic clean-volume restore drill executed
+  2026-08-14 records its measured duration (18 000 ms) as automated drill
+  evidence, and the product's own ops-policy projection evaluated it against
+  the declared RTO (3600 s) as **SATISFIED**, with the post-restore invariant
+  suite green. Deployment Readiness (real scheduled retention +
+  production-volume restore acceptance) is an explicit deployment-site runbook
+  obligation
+  ([`docs/deployment/backup-and-recovery.md`](../deployment/backup-and-recovery.md)).
+  ADR-017 revision 4 and ADR-018 are **ACCEPTED** (the PR #314 merge is the
+  human acceptance event — an AI-written verdict alone is not acceptance).
+  Deferred capabilities are
+  Issue-tracked (index: [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md)).
   - **E2A — Operational RBAC Boundary**: Maintainer is the **sixth** assignable
     human role (the **seventh** role preset counting the synthetic,
     non-assignable System — ADR-017 D2), preset holds ONLY `system.health.view` +
@@ -318,7 +326,7 @@ audit, external log shipping. All Phase 4; none started.
   [`docs/roadmap/j5-r0-admin-recovery-center-contract.md`](../roadmap/j5-r0-admin-recovery-center-contract.md)),
   J5-I1A (read models) is CLOSED, and J5-I1B (admin recovery center UI)
   is CLOSED.
-  System-generated incidents remain NOT IMPLEMENTED and deferred.
+  System-generated incidents — not implemented (Issue #304).
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the

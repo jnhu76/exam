@@ -1,5 +1,14 @@
 # P7-F Final System Readiness Closeout
 
+> **Superseded (2026-08-14):** this document's verdict — "P7-F COMPLETE —
+> P7 REMAINS OPEN", Gate P7-3 `NOT PASS — HUMAN_DECISION_REQUIRED`, and the
+> pending ADR-017 rev4 / ADR-018 / #286 items — was true on 2026-08-13 and is
+> **historical evidence**. The final authority is
+> [`P7-FINAL-PROGRAM-CLOSEOUT.md`](P7-FINAL-PROGRAM-CLOSEOUT.md): P7 is
+> CLOSED, Gate P7-3 is PASS under the revised software / deployment-site
+> acceptance semantics, ADR-017 rev 4 + ADR-018 are ACCEPTED, and #286 is
+> reopened as the Teacher@Course tracker.
+>
 > **P7-F = Final System Readiness / Release-Gate Closeout.** This is the
 > evidence-driven closeout of the P7 program against release gates P7-0…P7-6.
 > It is an **audit + bounded-repair job**, not a feature acquisition phase.

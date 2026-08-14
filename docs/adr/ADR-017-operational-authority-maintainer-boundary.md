@@ -2,11 +2,16 @@
 
 ## Status
 
-* Status: **ACCEPTED through revision 3** (2026-08-12 — P7-E1 human review
-  completed, PR #281 merged). **Revision 4: PROPOSED** (2026-08-13 —
-  P7-RBAC-ROLE-REALITY-AUDIT remediation, awaiting human review).
-* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed)
-* Revision: 4 (2026-08-13, **PROPOSED**) — narrows/clarifies the
+* Status: **ACCEPTED through revision 4** (2026-08-14 — P7 final program
+  closeout, [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
+  the runtime already implements the rev-4 model — verified in that closeout).
+  Revision 4 was proposed 2026-08-13 (P7-RBAC-ROLE-REALITY-AUDIT remediation)
+  and accepted by the P7 final program closeout after the code/runtime
+  boundary check (Maintainer = read-only Operational Observer; zero business
+  and zero write permissions; Admin ↔ Maintainer mutual exclusion D14
+  enforced on every assignment path).
+* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed); 2026-08-14 (rev 4 accepted)
+* Revision: 4 (2026-08-14, **ACCEPTED**) — narrows/clarifies the
   **Application Maintainer model** from the revision-2 "viewer/controller"
   wording to a **read-only operational observability identity** ("Exam gives
   the Maintainer a window, not a hand"). Revision 4 does NOT change the
@@ -15,10 +20,9 @@
   synthetic authority. It corrects the Maintainer framing (D2/D5/D9), states
   explicitly that **no "Configurer" persona exists**, reframes operational
   policy as a **reliability objective**, and tightens D5's default stance on
-  Maintainer write capabilities. See **§Revision 4 (PROPOSED)** below for the
-  binding corrections. **Revisions 1–3 remain the accepted authority until
-  revision 4 is accepted by human review; revision 4 governs only after
-  acceptance.**
+  Maintainer write capabilities. See **§Revision 4** below for the binding
+  corrections. **Revision 4 is the governing contract since acceptance
+  (2026-08-14).**
 * Earlier revisions: revision 2 corrected the model to the **Hybrid
   Maintainer Model (Option C)**; revision 3 froze the **Admin ↔ Maintainer
   mutual-exclusion invariant** (D14) and folded it into the E2A scope.
@@ -55,12 +59,11 @@ regressions.
 
 ---
 
-## Revision 4 (PROPOSED) — Maintainer Observability Boundary
+## Revision 4 (ACCEPTED) — Maintainer Observability Boundary
 
-> **Status: PROPOSED — awaiting human review.** This section narrows and
-> clarifies the revision-2 Application Maintainer model. Where rev-2/3 wording
-> conflicts with rev 4, **rev 4 governs** once accepted. Until then, rev 3
-> remains the accepted contract.
+> **Status: ACCEPTED (2026-08-14 — P7 final program closeout).** This section
+> narrows and clarifies the revision-2 Application Maintainer model. Where
+> rev-2/3 wording conflicts with rev 4, **rev 4 governs**.
 
 ### R4-1. The corrected principle: a window, not a hand
 
@@ -198,7 +201,7 @@ permission count = 0, write permission count = 0.
 
 ```text
 human-approved correction in this task
-> ADR-017 revision 4 (this revision, once accepted)
+> ADR-017 revision 4 (governing since acceptance)
 > ADR-017 revisions 1–3
 > ADR-010 (as amended)
 > code reality
@@ -273,7 +276,7 @@ them Admin. This revision therefore selects the **Hybrid Maintainer Model**.
 
 ### D2. Maintainer is the System Operations / Maintenance Owner — Hybrid model (Option C)
 
-> **Revision 4 (PROPOSED) correction:** the "viewer/controller" wording below
+> **Revision 4 (ACCEPTED) correction:** the "viewer/controller" wording below
 > is **superseded** by R4-2. The application-side Maintainer is a **read-only
 > Operational Observer**, not a controller. The hybrid (application identity +
 > host identity) structure and the Admin↔Maintainer exclusion are unchanged.
@@ -353,7 +356,7 @@ execution authority                     NOT product RBAC authority
 | Plane | Owner | Examples |
 | --- | --- | --- |
 | **A. Business authority** | Admin only (Maintainer default none) | users, roles, candidates, courses, questions, exam profiles, exam authoring, exam publish, grading, result publish, business recovery decisions (force-submit / time-grant / misconduct / incident resolve), organization settings |
-| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, PROPOSED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
+| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, ACCEPTED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
 | **C. Infrastructure execution authority** | Host Maintainer (host/CLI) | Docker/Compose, PostgreSQL, WAL archive, filesystem, backup destination, secret store, service lifecycle, restore, PITR, PGDATA, migration/rollback/backfill |
 
 ### D4. Permanently forbidden through normal product UI
@@ -382,7 +385,7 @@ Restore and PITR remain Host Maintainer + CLI/runbook + host access, forever.
 
 ### D5. Decision-gated operational capabilities
 
-> **Revision 4 (PROPOSED) tightening:** under the observability-window model
+> **Revision 4 (ACCEPTED) tightening:** under the observability-window model
 > (R4-5), the capabilities listed below are **NOT part of the current
 > Application Maintainer model**. The "decision-gated" framing is retained only
 > as a high bar — each requires a future independent ADR; none is implemented,
@@ -454,7 +457,7 @@ the current runtime; the Maintainer receives the five read capabilities
 
 > History: revisions 1–3 of this ADR recorded the pre-E2A state, where the
 > route was gated by `system.diagnostics.view` (safe only because Admin alone
-> held the view). P7-E2A (rev 4, PROPOSED) resolved it by splitting
+> held the view). P7-E2A (rev 4, ACCEPTED) resolved it by splitting
 > `system.email.test` out of the diagnostics view. The split is implemented
 > in the runtime and reflected in `packages/authz/src/catalog.ts` +
 > `packages/authz/src/presets.ts`.
@@ -479,7 +482,7 @@ Maintainer viewer; E2A must define the semantic split.
 
 ### D9. Admin sets objectives; Maintainer observes compliance
 
-> **Revision 4 (PROPOSED) correction:** under the observability-window model
+> **Revision 4 (ACCEPTED) correction:** under the observability-window model
 > (R4-4/R4-5) the Maintainer **observes** intent and the desired-vs-observed
 > compliance projection; the "execution / control-plane" framing below is
 > **superseded** — execution-side policy authority (`backup.schedule.manage`,
@@ -658,7 +661,7 @@ Negative:
   operational reading stays Admin-gated in the meantime; a deployment that
   wants a separate non-business ops viewer must wait for E2A (or use
   host/CLI access).
-- (Resolved in E2A / rev 4, PROPOSED) the pre-E2A `POST /email/test` view-capability
+- (Resolved in E2A / rev 4, ACCEPTED) the pre-E2A `POST /email/test` view-capability
   gate described in D7 history was a known invariant violation; the runtime now
   gates it on the separate Admin-only `system.email.test` capability.
 - The Admin role remains the highest-value product account; deployments
