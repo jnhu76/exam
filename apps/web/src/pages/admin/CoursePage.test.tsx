@@ -117,6 +117,25 @@ describe("CoursePage", () => {
     expect(within(dialog).getByLabelText(/课程代码/)).toHaveValue("");
   });
 
+  it("exposes required state and hides the visual asterisk from AT", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "新增课程" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText(/课程名称/)).toBeRequired();
+    expect(within(dialog).getByLabelText(/课程代码/)).toBeRequired();
+    const nameLabel = within(dialog).getByText("课程名称").closest("label")!;
+    const codeLabel = within(dialog).getByText("课程代码").closest("label")!;
+    expect(within(nameLabel).getByText("*")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(within(codeLabel).getByText("*")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
   it("shows validation errors for empty fields", async () => {
     const user = userEvent.setup();
     renderPage();

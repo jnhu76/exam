@@ -328,10 +328,13 @@ export function CoursePage() {
               <Field>
                 <Label htmlFor="course-name">
                   {t("admin.courses.dialog.name")}
-                  <span className="ml-1 text-destructive">*</span>
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="course-name"
+                  required
                   value={formName}
                   onChange={(e) => {
                     setFormName(e.target.value);
@@ -345,10 +348,13 @@ export function CoursePage() {
               <Field>
                 <Label htmlFor="course-code">
                   {t("admin.courses.dialog.code")}
-                  <span className="ml-1 text-destructive">*</span>
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="course-code"
+                  required
                   value={formCode}
                   onChange={(e) => {
                     setFormCode(e.target.value);
