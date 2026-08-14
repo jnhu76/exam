@@ -1,72 +1,45 @@
 # UI Open Items
 
-> Unfinished frontend visual-authority migration work. The authority (recipes,
-> components, lint) exists; migration coverage does not. For the as-built UI
-> system, see [`docs/standards/ui-system.md`](../standards/ui-system.md); for
-> the frontend architecture, see [`docs/architecture/frontend.md`](../architecture/frontend.md).
+> **Status: superseded as an executable backlog (2026-08-14).** The unfinished
+> frontend visual-authority migration work is now tracked by GitHub Issues —
+> see [`post-mvp-issues.md`](post-mvp-issues.md) (UI section). For the as-built
+> UI system, see [`docs/standards/ui-system.md`](../standards/ui-system.md);
+> for the frontend architecture, see
+> [`docs/architecture/frontend.md`](../architecture/frontend.md).
 
-These items are blocked on representative page migration (UI-PILOT-1) and
-controlled family-by-family migration (UI-MIGRATE-N). A lint rule cannot be
-activated for a role until proven migration exists — otherwise the rule creates
-violations with no migrated target.
+| Workstream | Issue | Notes |
+| --- | --- | --- |
+| UI design-system migration completion (typography recipes, StatsCard, PageSection, component collisions, Card shadow decision, authority lint, remaining admin form/modal i18n copy) | #305 | Covers the former items 1–6 below; sequencing preserves UI-PILOT-1 → UI-MIGRATE-N. |
+| Responsive + mobile closeout (390px baseline) | #306 | — |
+| Accessibility closeout (product-wide baseline) | #307 | Builds on the J5-I1D a11y closeout. |
+| Long-text answer + metadata/definition-list components (+ `ConnectionIndicator` fate) | #308 | Former item 7 (unowned roles). |
 
-## 1. Broader typography recipe migration (~20+ sites unmigrated)
+## Historical inventory (superseded — see issues above)
 
-- **Authority exists:** `type-body`, `type-secondary`, `type-metadata`,
-  `type-reading`, `type-long-response`, `type-numeric`, `type-code` recipes.
-- **Migration incomplete:** most call sites still use raw primitives (`text-sm`,
-  `text-xs`, `font-medium`, `text-lg`). Only ~18 semantic recipe uses exist in
-  business scope today. `type-numeric`/`type-code` have zero migrated consumers.
-- **Not activatable as lint:** a broad recipe-bypass rule has unacceptable
-  false-positive risk until pages migrate. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
+The former items are retained here only as the migration inventory that the
+issues were built from:
 
-## 2. StatsCard metric migration (STAT-CARD-DRIFT)
-
-- **Authority exists:** `StatsCard` (+ `type-metric`); today `StatsCard` selects
-  `surface-content` and is deliberately flat.
-- **Migration incomplete:** ~20 metric bypasses across 5 pages
-  (`ScoreListPage`, `ExamDetailPage`, `SystemDiagnosticsPage`,
-  `AttemptDetailPage`, `ResultPage`) use raw `text-{2xl,3xl,4xl,5xl} font-bold`
-  instead of `StatsCard`. `StatsCard` has only 1 business consumer.
-- **Blocked on:** UI-MIGRATE-N.
-
-## 3. PageSection adoption (SHELL-ADOPTION-DRIFT)
-
-- **Authority exists:** `PageSection` (content container).
-- **Migration incomplete:** ~38 `<CardHeader>` bypasses across ≥10 business files
-  hand-roll `<Card><CardHeader><CardTitle>` as titled content containers instead
-  of `PageSection`. `PageSection` has only 2 consumers.
-- **Blocked on:** UI-PILOT-1 / UI-MIGRATE-N.
-
-## 4. Component collision reconciliation (validate at pilot)
-
-- **FormSection vs PageSection:** both render a titled bordered block over
-  `surface-content`; the distinction is semantic (read-only content vs editable
-  form grouping). Re-validate at UI-PILOT-1; merge if anatomies cannot be kept distinct.
-- **ListToolbar vs DataToolbar:** provisional boundary (ListToolbar = search-first
-  list surface at `lg`; DataToolbar = free-children tabular toolbar at `sm`). Too
-  subtle to be a reliable authority boundary; re-evaluate at UI-PILOT-1 and merge
-  if anatomies cannot be kept distinct.
-
-## 5. shadcn `Card` primitive default-shadow reconciliation
-
-- The `Card` primitive (`components/ui/card.tsx`) still carries `shadow-sm` by
-  default and lives in excluded lint scope. Whether `Card` stays shadowed or goes
-  flat as the content-surface primitive is **unresolved forward debt** affecting
-  every `Card` consumer.
-
-## 6. Component-authority bypass lint (umbrella rule)
-
-- `exam-ui/no-authority-bypass` (the umbrella component-bypass rule) is **not
-  implemented** — per-role migration coverage is not yet sufficient. The 5 active
-  `exam-ui/*` rules are the only wired enforcement; broader component-authority
-  bypasses (PageSection, StatsCard) are review-enforced only.
-
-## 7. Unowned roles
-
-- **metadata / definition list (label:value):** currently inline grids; no
-  component authority.
-- **read-only long-text answer panel:** currently inline (`GradingDetailPage`);
-  no component yet.
-- **`ConnectionIndicator`:** orphan (0 consumers); if a connection-status role is
-  needed, rebuild against `statusMeta`, not as-is.
+1. **Broader typography recipe migration (~20+ sites unmigrated)** → #305 —
+   `type-body`, `type-secondary`, `type-metadata`, `type-reading`,
+   `type-long-response`, `type-numeric`, `type-code` recipes exist; most call
+   sites still use raw primitives. Not activatable as lint until migration
+   exists (UI-PILOT-1 / UI-MIGRATE-N).
+2. **StatsCard metric migration (STAT-CARD-DRIFT)** → #305 — ~20 metric
+   bypasses across 5 pages (`ScoreListPage`, `ExamDetailPage`,
+   `SystemDiagnosticsPage`, `AttemptDetailPage`, `ResultPage`) use raw
+   `text-{2xl,3xl,4xl,5xl} font-bold` instead of `StatsCard`.
+3. **PageSection adoption (SHELL-ADOPTION-DRIFT)** → #305 — ~38 `<CardHeader>`
+   bypasses across ≥10 business files hand-roll
+   `<Card><CardHeader><CardTitle>` instead of `PageSection`.
+4. **Component collision reconciliation** → #305 — FormSection vs PageSection;
+   ListToolbar vs DataToolbar (re-validate at UI-PILOT-1; merge if anatomies
+   cannot be kept distinct).
+5. **shadcn `Card` primitive default-shadow reconciliation** → #305 — whether
+   `Card` stays shadowed or goes flat as the content-surface primitive is
+   unresolved forward debt.
+6. **Component-authority bypass lint (umbrella rule)** → #305 —
+   `exam-ui/no-authority-bypass` is not implemented; the 5 active `exam-ui/*`
+   rules are the only wired enforcement.
+7. **Unowned roles** → #308 — metadata/definition list (inline grids), read-only
+   long-text answer panel (inline on `GradingDetailPage`), `ConnectionIndicator`
+   (orphan; rebuild against `statusMeta` if the role is ever needed).

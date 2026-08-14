@@ -1,5 +1,11 @@
 # P7 RBAC Role / Authority Remediation
 
+> **Superseded (2026-08-14):** the "READY FOR HUMAN REVIEW" status below was
+> superseded by P7-F (2026-08-13) and finally by the
+> [`P7-FINAL-PROGRAM-CLOSEOUT.md`](P7-FINAL-PROGRAM-CLOSEOUT.md) (P7 CLOSED;
+> ADR-017 rev 4 ACCEPTED; F-04 durably tracked by issue #286, reopened). The
+> remediation record remains accurate.
+
 Post-P7-E Admin-authority and Maintainer-observability-boundary remediation,
 driven by [`docs/audits/P7-RBAC-ROLE-REALITY-AUDIT.md`](./P7-RBAC-ROLE-REALITY-AUDIT.md)
 (Issue #283).

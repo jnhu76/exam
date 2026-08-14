@@ -1,5 +1,11 @@
 # P7-C — Portable Persistence, Backup & PostgreSQL Disaster Recovery (Closeout)
 
+> **Superseded (2026-08-14):** the "READY FOR HUMAN REVIEW" status below was
+> superseded by P7-F (2026-08-13) and finally by the
+> [`P7-FINAL-PROGRAM-CLOSEOUT.md`](P7-FINAL-PROGRAM-CLOSEOUT.md) (P7 CLOSED;
+> Gate P7-3 PASS under the revised software / deployment-site acceptance
+> semantics). The drill/mechanism record remains accurate.
+
 **Status:** READY FOR HUMAN REVIEW
 **Program:** P7-C REBUILD (portable persistence / backup / PostgreSQL DR)
 **Baseline (`origin/master`):** `2a1a9eb30fc40a10d119571d4ad3befb5b52e26e`

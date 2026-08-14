@@ -51,9 +51,14 @@
 > **J5 CLOSED** — closeout: `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`.
 > Issue #263 (cross-tab force-submit authority) is a recorded P2 follow-up,
 > deliberately NOT built per the mission scope.
-> J6/J7 NOT STARTED.
+> **J6 (Proctor Recovery Center) is DEFERRED_TO_ISSUE — Issue #303** (the
+> Proctor product activation milestone). **J7 (audit/recovery closeout) is
+> SUPERSEDED** — its remaining scenario/verification acceptance is absorbed
+> into the Issue-level acceptance of #303 and #304. Startup reconciliation is
+> CLOSED_BY_DECISION (no general reconciler; Gate P7-1 PASS — see
+> [`P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md)).
 >
-> Updated: 2026-08-08
+> Updated: 2026-08-14 (P7 final program closeout)
 >
 > Context: J3 (REC-I6-I1) is closed on master via PR #242 (merge commit
 > `5b653c13`, 2026-08-01). This document defines the recommended work order for
@@ -120,8 +125,8 @@ REC-I6-R0 Incident Authority Contract
 | J4-R0 | `M11-PROCTOR-EXAM-SCOPE-CONTRACT` | **CLOSED** — Proctor-to-Exam scope authority design contract accepted in ADR-015 (ACCEPTED 2026-08-02, PR #245) | J2; existing RBAC baseline |
 | J4-I1 | `M11-PROCTOR-EXAM-ASSIGNMENTS` | **CLOSED** — Proctor-to-Exam runtime: assignment persistence, commands, resolver, API, and resource-scope enforcement per ADR-015 §23 (A→B→C→D). Closeout: `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`. | J4-R0 accepted |
 | J5 | `REC-OPS-ADMIN-RECOVERY-CENTER` | **CLOSED (2026-08-08)** — Admin can inspect and operate the live recovery workflow through UI. Closeout: `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md` | J1, J3, J4-I1 |
-| J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | Proctor UI is activated with resource-scoped permissions | J3, J4, reusable J5 components |
-| J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | Real incident scenarios, crash recovery, audit, and E2E are closed | J1–J6 |
+| J6 | `REC-OPS-PROCTOR-RECOVERY-CENTER` | **DEFERRED_TO_ISSUE — Issue #303** | J3, J4, reusable J5 components |
+| J7 | `REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT` | **SUPERSEDED** — remaining acceptance absorbed into #303/#304 | J1–J6 |
 | Gate | `RECOVERY-AUTHORITY-GATE` | Recovery authority and operator workflows are safe enough to build shared infrastructure around | J1–J7 |
 | J8 | `P7-D1-REDIS-ADOPTION-DECISION` | Measured adopt/decline decision under ADR-001 | Recovery Authority Gate |
 
@@ -1223,8 +1228,8 @@ PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
           (PR #262 merged); J5-I1C Slice 3 (misconduct backend) CLOSED;
           J5-I1C1 (operations UI) CLOSED (2026-08-08) + J5-I1D (E2E) CLOSED
           (2026-08-08))
-PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — PLANNED (NOT STARTED)
-PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — PLANNED (NOT STARTED)
+PR-6  REC-OPS-PROCTOR-RECOVERY-CENTER — **DEFERRED_TO_ISSUE #303** (P7 final closeout 2026-08-14)
+PR-7  REC-OPS-AUDIT-AND-RECOVERY-CLOSEOUT — **SUPERSEDED** (absorbed into #303/#304)
 PR-8  P7-D1-REDIS-ADOPTION-DECISION — DECISION-GATED
 ```
 

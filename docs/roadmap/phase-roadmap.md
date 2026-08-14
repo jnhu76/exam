@@ -93,7 +93,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 ### Status
 
-**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The remaining timing modes (`timed_sync`, `deadline`, `untimed`) and queue admission are deferred to Phase 2+ / P7 hardening.
+**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The remaining timing modes (`timed_sync`, `deadline`, `untimed`) and queue admission are deferred to Issues (#291, #292).
 
 **i18n foundation complete (J1–J10).** All user-visible Chinese in production source goes through `t()` via `apps/web/src/i18n/locales/zh-CN.ts`. Full production source hardcoded copy gate enforced via `pnpm lint:copy`. See `docs/standards/i18n-copy-policy.md`.
 
@@ -119,10 +119,10 @@ Add real exam operation capabilities around the core exam loop without turning t
 - ✅ Proctor monitoring (candidate status + event timeline).
 - ✅ Permission boundary (candidate cannot access admin / monitoring APIs).
 
-### In scope — Deferred
+### In scope — Deferred (Issue-tracked)
 
-- `timed_sync`, `deadline`, and `untimed` timing modes (only `timed_window` is implemented).
-- Queue admission (`requireQueue` code exists but is not operationally wired).
+- `timed_sync`, `deadline`, and `untimed` timing modes (only `timed_window` is implemented) — **Issue #291**.
+- Queue admission (`requireQueue` code exists but is not operationally wired) — **Issue #292**.
 
 ### Out of scope
 
@@ -141,8 +141,8 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 - ✅ Operational staff can recover disrupted attempts through a documented UI flow.
 - ✅ Force submit, extend time, and misconduct marking are audited.
-- ⏳ Non-`timed_window` timing modes have documented lifecycle behavior and executable profiles.
-- ⏳ Queue admission is observable, recoverable, and restart-safe.
+- ⏳ Non-`timed_window` timing modes have documented lifecycle behavior and executable profiles — **Issue #291**.
+- ⏳ Queue admission is observable, recoverable, and restart-safe — **Issue #292**.
 - ✅ Exam and attempt timelines support incident diagnosis.
 - ✅ Larger exports have job logs and failure evidence.
 
@@ -170,18 +170,19 @@ Add real exam operation capabilities around the core exam loop without turning t
 The original boundary is historical. Plain-text `text_response` authoring,
 answering, frozen grading basis, Grading Queue discovery, manual grading, and
 result flow were subsequently implemented and closed on 2026-07-31. Fill-blank
-reality and rich-text/WYSIWYG remain open and must not be conflated with the
-completed plain-text workflow.
+is an implemented auto-graded objective question type (exact/keyword matching,
+with E2E coverage). Rich-text/WYSIWYG answering remains open (Issue #301) and
+must not be conflated with the completed plain-text workflow.
 
 ### Explicitly deferred items
 
 - Collaboration and scoped staff roles move to Phase 3.
 - Platform integration moves to Phase 4.
 - Optional multiTenant remains Phase 4.
-- fill-blank completion, rich-text/WYSIWYG answering, and the generic ADR-008
+- rich-text/WYSIWYG answering (**Issue #301**) and the generic ADR-008
   final-answer submit barrier (Option D — submit carries a final-answer payload
-  / version barrier for all supported answer types, not only rich text) remain
-  Phase 3/P7 work.
+  / version barrier for all supported answer types, not only rich text;
+  **Issue #302**) remain Phase 3 product work.
 
 ## Phase 3: Collaboration, Permissions, and Account Lifecycle
 
@@ -191,37 +192,41 @@ Add multi-user collaboration, scoped authorization, and account lifecycle manage
 
 ### Status
 
-**Phase 3 is PARTIALLY IMPLEMENTED.** The MVP role/notification/release-ready
+**Phase 3 is PARTIALLY IMPLEMENTED (MVP subset delivered; the rest is
+Issue-tracked).** The MVP role/notification/release-ready
 sequence P4 → P5-0 → P3 → P5-N1 → P6 is closed. The plain-text
-`text_response` product loop is also closed. Resource-scoped authorization,
+`text_response` product loop is also closed. The P7 hardening program
+(state/authority, backup/DR, operational control plane, exam modes, RBAC
+remediation) is **CLOSED (2026-08-14)**. Resource-scoped authorization,
 identity lifecycle, additional notifications, rich-text/WYSIWYG answering, the
-generic final-answer submit barrier, and other product work remain open.
+generic final-answer submit barrier, and other product work remain open and are
+tracked by GitHub Issues (index: [`post-mvp-issues.md`](post-mvp-issues.md)).
 
 ### In scope
 
-- Permission registry.
-- Built-in role bundles.
-- Scoped role assignment.
-- Teacher-like roles built from permission + scope.
-- Course / Exam / CandidateGroup scopes.
-- Teacher isolation as scoped authorization, not multiTenant.
-- Proctor / Grader / ContentManager role bundles.
-- Staff invitation.
-- SMTP email management.
-- Email password reset.
-- Invitation token lifecycle.
-- User activation / deactivation.
-- Permission audit.
-- Audit log search / export UI.
-- Fill-blank answer protocol, auto-grading, result flow, and E2E closeout.
+Implemented items are marked ✅; open items are Issue-tracked:
+
+- ✅ Permission catalog + role presets + assignment-backed runtime authority.
+- ✅ Built-in role bundles (Admin/Teacher/Proctor/Grader/Candidate/Maintainer presets; Proctor→Exam assignment runtime per ADR-015).
+- ⏳ Scoped role assignment UI + Teacher-like scoped product activation — **Issues #286/#296**.
+- ⏳ Course / Exam / CandidateGroup scopes — **Issue #286** (Teacher@Course).
+- ✅ Proctor / Grader / ContentManager role bundles (presets exist; product activation open — **#296**).
+- ⏳ Staff invitation — **Issue #297**.
+- ⏳ SMTP email management — **Issue #297**.
+- ⏳ Email password reset — **Issue #297**.
+- ⏳ Invitation token lifecycle — **Issue #297**.
+- ⏳ User activation / deactivation — **Issue #297**.
+- ⏳ Permission audit — **Issue #298**.
+- ⏳ Audit log search / export UI — **Issue #298**.
+- ✅ Fill-blank answer protocol, auto-grading, result flow, and E2E closeout (auto-graded exact/keyword matching).
 - ✅ Plain-text `text_response` authoring, optional reference answer, candidate answering, snapshot freeze, grading-queue discovery, manual grading, and result flow.
-- Rich-text/WYSIWYG authoring and answering protocol, including attachment/formula policy if adopted.
-- Generic final-answer submit barrier (Option D, ADR-008 — `/submit` carries a final-answer payload or version/hash barrier so the UI answer at submit-click time is the grading authority). Answer-type-independent; applies to all supported answer types.
-- Remaining i18n page-level copy migration.
-- In-app notification Inbox for selected operational events (architecture: ADR-011).
-- Asynchronous PostgreSQL-outbox Email delivery with a resident, observable worker (architecture: ADR-011).
-- First operational notification integration for result publication (`result_published`).
-- Additional operational notification types through explicit P5-N2+ migrations.
+- ⏳ Rich-text/WYSIWYG authoring and answering protocol, including attachment/formula policy if adopted — **Issue #301**.
+- ⏳ Generic final-answer submit barrier (Option D, ADR-008 — `/submit` carries a final-answer payload or version/hash barrier so the UI answer at submit-click time is the grading authority). Answer-type-independent; applies to all supported answer types — **Issue #302**.
+- ⏳ Remaining i18n page-level copy migration — folded into **Issue #305**.
+- ✅ In-app notification Inbox for selected operational events (architecture: ADR-011).
+- ✅ Asynchronous PostgreSQL-outbox Email delivery with a resident, observable worker (architecture: ADR-011).
+- ✅ First operational notification integration for result publication (`result_published`).
+- ⏳ Additional operational notification types through explicit P5-N2+ migrations — **Issue #299**.
 
 ### Architecture authority
 
@@ -244,7 +249,7 @@ Identity lifecycle remains separate future work.
 | P3 | P4 closed | ✅ CLOSED |
 | P5-N1 | P4 + P5-0 + P3 closed | ✅ CLOSED |
 | P6 | Preceding MVP blockers closed | ✅ CLOSED |
-| P7 | P6 closed; current-tree reality audit | 🟡 IN PROGRESS — most workstreams shipped: Redis shared rate limit (PR #265), state/authority hardening P7-S2 (PR #269), portable backup/DR P7-C, operational control plane P7-E (PR #282), configurable exam modes P7-M (PRs #277/#279), RBAC remediation (PR #284). **P7-F closeout verdict: P7-F COMPLETE — P7 REMAINS OPEN** (Gate P7-3 has **two unsatisfied bullets — RTO not declared/tested + retention host-owned/`NOT_ENFORCED`**; ADR-017 rev4/ADR-018 acceptance + #286 clarification pending human decision). See `docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`. |
+| P7 | P6 closed; current-tree reality audit | ✅ **CLOSED (2026-08-14)** — all workstreams shipped (Redis shared rate limit PR #265, state/authority P7-S2 PR #269, portable backup/DR P7-C, operational control plane P7-E PR #282, configurable exam modes P7-M PRs #277/#279, RBAC remediation PR #284, RTO+retention P7-CLOSE PR #290); final program closeout: [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md). Deferred capabilities are Issue-tracked (index: [`post-mvp-issues.md`](post-mvp-issues.md)). |
 
 ### Out of scope
 
@@ -295,23 +300,21 @@ Redis capability study:
 
 ### Status
 
-**PARTIALLY IMPLEMENTED.** The P7-D1 Redis adoption decision gate is ACCEPTED
+**CLOSED (2026-08-14).** The P7-D1 Redis adoption decision gate is ACCEPTED
 (2026-08-08) and the first adopted responsibility — Redis-backed shared rate
 limiting — shipped on `master` (PR #265, P7-D2/D3; ADR-001 "Post-MVP Decision
-(P7)"). The remaining P7 workstreams have since shipped or closed: state-machine
-/ authority closeout (P7-S2, PR #269), portable backup/DR (P7-C), the operational
-control plane (P7-E0/E1/E2A-E3, PRs #276/#281/#282), configurable exam modes
-(P7-M1/M2/M, PRs #277/#279), and the RBAC role-reality remediation (PR #284).
-**The P7-F final readiness / release-gate closeout** audited all release gates
-against current master: **P7-F COMPLETE — P7 REMAINS OPEN**, with Gate P7-3
-having **two unsatisfied bullets** (RTO not declared/tested — no typed
-authority — and backup retention host-owned, truthfully `NOT_ENFORCED`), plus
-ADR-017 rev4 / ADR-018 acceptance and #286 (Teacher@Course) clarification
-pending human decision. See
-[`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md).
-No P7 implementation capability may be marked complete merely because an
-environment variable, Redis connection, CLI note, or API stub exists — the
-runtime and real Admin/operator surfaces must consume the capability.
+(P7)"). All remaining workstreams shipped or closed: state-machine / authority
+closeout (P7-S2, PR #269), portable backup/DR (P7-C), the operational control
+plane (P7-E0/E1/E2A-E3, PRs #276/#281/#282), configurable exam modes
+(P7-M1/M2/M, PRs #277/#279), the RBAC role-reality remediation (PR #284), and
+the RTO + retention mechanism (P7-CLOSE, PR #290). **The final program
+closeout** ([`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md))
+resolves all release gates (P7-0 … P7-6 PASS), accepts ADR-017 revision 4 and
+ADR-018, and migrates every deferred capability to GitHub Issues (index:
+[`post-mvp-issues.md`](post-mvp-issues.md)). Nothing in this section is an
+open execution checklist; it is the historical program record. Anything not
+done by P7 is **not part of P7 closure** and is tracked by its Issue
+(#286/#291–#313).
 
 ### In scope
 

@@ -1,5 +1,16 @@
 # P7-CLOSE — RTO + Retention Gate P7-3 Closeout
 
+> **Superseded (2026-08-14):** this document's verdict — "IMPLEMENTED —
+> OPERATIONAL_ACCEPTANCE_PENDING (NOT PASS)" — was true on 2026-08-13 and is
+> **historical evidence**. The operational acceptance it awaited was resolved
+> by the P7 final program closeout
+> ([`P7-FINAL-PROGRAM-CLOSEOUT.md`](P7-FINAL-PROGRAM-CLOSEOUT.md) §Gate P7-3
+> acceptance record): software acceptance PASS (deterministic clean-volume
+> restore drill executed 2026-08-14, measured 87 s ≤ declared RTO 3600 s;
+> post-restore invariants green), deployment-site acceptance = runbook
+> obligation (§12 of `docs/deployment/backup-and-recovery.md`). The mechanism
+> descriptions in this document remain accurate.
+
 > **P7-CLOSE = close the two Gate P7-3 bullets** that the P7-F final readiness
 > closeout (`P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`) truthfully left as
 > `NOT PASS — HUMAN_DECISION_REQUIRED`: **RTO not declared/tested** and

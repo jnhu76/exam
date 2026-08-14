@@ -2,11 +2,16 @@
 
 ## Status
 
-* Status: **ACCEPTED through revision 3** (2026-08-12 — P7-E1 human review
-  completed, PR #281 merged). **Revision 4: PROPOSED** (2026-08-13 —
-  P7-RBAC-ROLE-REALITY-AUDIT remediation, awaiting human review).
-* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed)
-* Revision: 4 (2026-08-13, **PROPOSED**) — narrows/clarifies the
+* Status: **ACCEPTED through revision 4** (2026-08-14 — P7 final program
+  closeout, [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
+  the runtime already implements the rev-4 model — verified in that closeout).
+  Revision 4 was proposed 2026-08-13 (P7-RBAC-ROLE-REALITY-AUDIT remediation)
+  and accepted by the P7 final program closeout after the code/runtime
+  boundary check (Maintainer = read-only Operational Observer; zero business
+  and zero write permissions; Admin ↔ Maintainer mutual exclusion D14
+  enforced on every assignment path).
+* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed); 2026-08-14 (rev 4 accepted)
+* Revision: 4 (2026-08-14, **ACCEPTED**) — narrows/clarifies the
   **Application Maintainer model** from the revision-2 "viewer/controller"
   wording to a **read-only operational observability identity** ("Exam gives
   the Maintainer a window, not a hand"). Revision 4 does NOT change the
@@ -15,10 +20,9 @@
   synthetic authority. It corrects the Maintainer framing (D2/D5/D9), states
   explicitly that **no "Configurer" persona exists**, reframes operational
   policy as a **reliability objective**, and tightens D5's default stance on
-  Maintainer write capabilities. See **§Revision 4 (PROPOSED)** below for the
-  binding corrections. **Revisions 1–3 remain the accepted authority until
-  revision 4 is accepted by human review; revision 4 governs only after
-  acceptance.**
+  Maintainer write capabilities. See **§Revision 4** below for the binding
+  corrections. **Revision 4 is the governing contract since acceptance
+  (2026-08-14).**
 * Earlier revisions: revision 2 corrected the model to the **Hybrid
   Maintainer Model (Option C)**; revision 3 froze the **Admin ↔ Maintainer
   mutual-exclusion invariant** (D14) and folded it into the E2A scope.
@@ -55,12 +59,11 @@ regressions.
 
 ---
 
-## Revision 4 (PROPOSED) — Maintainer Observability Boundary
+## Revision 4 (ACCEPTED) — Maintainer Observability Boundary
 
-> **Status: PROPOSED — awaiting human review.** This section narrows and
-> clarifies the revision-2 Application Maintainer model. Where rev-2/3 wording
-> conflicts with rev 4, **rev 4 governs** once accepted. Until then, rev 3
-> remains the accepted contract.
+> **Status: ACCEPTED (2026-08-14 — P7 final program closeout).** This section
+> narrows and clarifies the revision-2 Application Maintainer model. Where
+> rev-2/3 wording conflicts with rev 4, **rev 4 governs**.
 
 ### R4-1. The corrected principle: a window, not a hand
 

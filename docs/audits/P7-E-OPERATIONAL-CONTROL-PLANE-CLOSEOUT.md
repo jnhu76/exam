@@ -1,5 +1,11 @@
 # P7-E — Operational Control Plane Closeout
 
+> **Superseded (2026-08-14):** the "READY FOR HUMAN REVIEW" status below was
+> superseded by P7-F (2026-08-13) and finally by the
+> [`P7-FINAL-PROGRAM-CLOSEOUT.md`](P7-FINAL-PROGRAM-CLOSEOUT.md) (P7 CLOSED;
+> ADR-017 rev 4 + ADR-018 ACCEPTED). The implementation record remains
+> accurate.
+
 **Status:** FUNCTIONALLY COMPLETE — READY FOR HUMAN REVIEW (round 3 hardened)
 **Program:** P7-E — Operational Control Plane
 **Date:** 2026-08-12
