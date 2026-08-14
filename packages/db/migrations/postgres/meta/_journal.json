@@ -232,6 +232,18 @@
       "when": 1788700000000,
       "tag": "0032_daily_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "when": 1788800000000,
+      "tag": "0033_rto_retention_p7_close"
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788810000000,
+      "tag": "0034_retention_success_verified_invariant",
+      "breakpoints": true
     }
   ]
 }

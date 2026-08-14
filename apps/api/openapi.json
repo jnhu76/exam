@@ -21082,6 +21082,12 @@
                           "minimum": 300,
                           "maximum": 604800
                         },
+                        "desiredRtoSeconds": {
+                          "type": "integer",
+                          "minimum": 30,
+                          "maximum": 172800,
+                          "nullable": true
+                        },
                         "desiredRetentionDays": {
                           "type": "integer",
                           "minimum": 1,
@@ -21110,6 +21116,7 @@
                       },
                       "required": [
                         "desiredRpoSeconds",
+                        "desiredRtoSeconds",
                         "desiredRetentionDays",
                         "desiredDrillCadenceDays",
                         "version",
@@ -21124,6 +21131,40 @@
                       "type": "object",
                       "properties": {
                         "rpo": {
+                          "type": "object",
+                          "properties": {
+                            "desired": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "observed": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "SATISFIED",
+                                "NOT_SATISFIED",
+                                "UNKNOWN",
+                                "NOT_CONFIGURED",
+                                "NOT_ENFORCED"
+                              ]
+                            },
+                            "observedDetail": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "desired",
+                            "observed",
+                            "status",
+                            "observedDetail"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "rto": {
                           "type": "object",
                           "properties": {
                             "desired": {
@@ -21226,7 +21267,7 @@
                           "additionalProperties": false
                         }
                       },
-                      "required": ["rpo", "retention", "drill"],
+                      "required": ["rpo", "rto", "retention", "drill"],
                       "additionalProperties": false
                     }
                   },
@@ -21303,6 +21344,12 @@
                     "minimum": 300,
                     "maximum": 604800
                   },
+                  "desiredRtoSeconds": {
+                    "type": "integer",
+                    "minimum": 30,
+                    "maximum": 172800,
+                    "nullable": true
+                  },
                   "desiredRetentionDays": {
                     "type": "integer",
                     "minimum": 1,
@@ -21357,6 +21404,12 @@
                           "minimum": 300,
                           "maximum": 604800
                         },
+                        "desiredRtoSeconds": {
+                          "type": "integer",
+                          "minimum": 30,
+                          "maximum": 172800,
+                          "nullable": true
+                        },
                         "desiredRetentionDays": {
                           "type": "integer",
                           "minimum": 1,
@@ -21385,6 +21438,7 @@
                       },
                       "required": [
                         "desiredRpoSeconds",
+                        "desiredRtoSeconds",
                         "desiredRetentionDays",
                         "desiredDrillCadenceDays",
                         "version",
@@ -21399,6 +21453,40 @@
                       "type": "object",
                       "properties": {
                         "rpo": {
+                          "type": "object",
+                          "properties": {
+                            "desired": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "observed": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "SATISFIED",
+                                "NOT_SATISFIED",
+                                "UNKNOWN",
+                                "NOT_CONFIGURED",
+                                "NOT_ENFORCED"
+                              ]
+                            },
+                            "observedDetail": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "desired",
+                            "observed",
+                            "status",
+                            "observedDetail"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "rto": {
                           "type": "object",
                           "properties": {
                             "desired": {
@@ -21501,7 +21589,7 @@
                           "additionalProperties": false
                         }
                       },
-                      "required": ["rpo", "retention", "drill"],
+                      "required": ["rpo", "rto", "retention", "drill"],
                       "additionalProperties": false
                     }
                   },
@@ -21760,6 +21848,312 @@
                     "latestDrill",
                     "latestSuccessfulDrill",
                     "drillHistory"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/retention-readiness": {
+      "get": {
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Maintainer"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "latestRetention": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "tool": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "completedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "prunedBackups": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "prunedWalArchives": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "retentionObjective": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "verificationStatus": {
+                          "type": "string",
+                          "enum": ["verified", "failed", "pending"],
+                          "nullable": true
+                        },
+                        "verificationDetail": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "failureReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "executorType": {
+                          "type": "string",
+                          "enum": ["host_script", "deployment_drill"]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "operationId",
+                        "tool",
+                        "result",
+                        "startedAt",
+                        "completedAt",
+                        "prunedBackups",
+                        "prunedWalArchives",
+                        "retentionObjective",
+                        "verificationStatus",
+                        "verificationDetail",
+                        "failureReason",
+                        "executorType"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "latestSuccessfulRetention": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "tool": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "completedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "prunedBackups": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "prunedWalArchives": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "retentionObjective": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "verificationStatus": {
+                          "type": "string",
+                          "enum": ["verified", "failed", "pending"],
+                          "nullable": true
+                        },
+                        "verificationDetail": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "failureReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "executorType": {
+                          "type": "string",
+                          "enum": ["host_script", "deployment_drill"]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "operationId",
+                        "tool",
+                        "result",
+                        "startedAt",
+                        "completedAt",
+                        "prunedBackups",
+                        "prunedWalArchives",
+                        "retentionObjective",
+                        "verificationStatus",
+                        "verificationDetail",
+                        "failureReason",
+                        "executorType"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "retentionHistory": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "operationId": {
+                            "type": "string"
+                          },
+                          "tool": {
+                            "type": "string"
+                          },
+                          "result": {
+                            "type": "string",
+                            "enum": ["succeeded", "failed"]
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "prunedBackups": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "prunedWalArchives": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "retentionObjective": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "verificationStatus": {
+                            "type": "string",
+                            "enum": ["verified", "failed", "pending"],
+                            "nullable": true
+                          },
+                          "verificationDetail": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "failureReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "executorType": {
+                            "type": "string",
+                            "enum": ["host_script", "deployment_drill"]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "operationId",
+                          "tool",
+                          "result",
+                          "startedAt",
+                          "completedAt",
+                          "prunedBackups",
+                          "prunedWalArchives",
+                          "retentionObjective",
+                          "verificationStatus",
+                          "verificationDetail",
+                          "failureReason",
+                          "executorType"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "latestRetention",
+                    "latestSuccessfulRetention",
+                    "retentionHistory"
                   ],
                   "additionalProperties": false
                 }

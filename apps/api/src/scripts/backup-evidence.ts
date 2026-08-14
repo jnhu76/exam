@@ -22,6 +22,11 @@
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
  *     drill --operation-id logical-restore:2026-08-12 --backup-type logical \
  *       --result succeeded --source automated --duration-ms 42000
+ *   docker compose exec -T app node dist/scripts/backup-evidence.js \
+ *     retention --operation-id retention:2026-08-13T10 --tool pgbackrest \
+ *       --result succeeded --objective "keep 2 full + 7d WAL" \
+ *       --pruned-backups 3 --pruned-wal-archives 1247 \
+ *       --verification-status verified
  *
  * SUCCESS semantics (ADR-017 D10): `complete` records a verified success;
  * the CLI refuses to record success without verification evidence — use
@@ -31,6 +36,7 @@
 
 import { createDatabase } from "@exam/db";
 import { createBackupEvidenceRepo } from "@exam/db/src/repository/backupEvidenceRepo.js";
+import { createRetentionEvidenceRepo } from "@exam/db/src/repository/retentionEvidenceRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
@@ -168,6 +174,70 @@ export function decideEvidenceDbAccess(
 }
 
 /**
+ * Success ↔ verified invariant for retention evidence (P7-CLOSE review P1-2),
+ * as a pure decision. `result` and `verificationStatus` are parsed as
+ * independent CLI flags, so this guards the cross-field rule: a successful
+ * retention run REQUIRES verified repository/chain evidence. The DB CHECK
+ * constraint is the ultimate authority; this returns a clear operator reason
+ * instead of a raw 23505. Exported for unit testing.
+ */
+export interface RetentionSuccessInput {
+  result: "succeeded" | "failed";
+  verificationStatus: "verified" | "failed" | "pending" | null;
+}
+export type RetentionSuccessDecision =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+export function validateRetentionSuccessInvariant(
+  input: RetentionSuccessInput,
+): RetentionSuccessDecision {
+  if (input.result === "succeeded" && input.verificationStatus !== "verified") {
+    return {
+      ok: false,
+      reason:
+        "successful retention requires verified evidence: pass " +
+        "--verification-status verified (use --result failed for any " +
+        "non-verified outcome)",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Automated-drill duration invariant (P7-CLOSE review P2-3), as a pure
+ * decision. An AUTOMATED succeeded drill is the only evidence that can prove
+ * RTO, and RTO is measured from its duration — so a duration is REQUIRED on
+ * exactly that shape. Operator-declared successes and all failures are exempt
+ * (a declared success is not RTO proof; a failed drill has no restore
+ * duration). Exported for unit testing.
+ */
+export interface AutomatedDrillDurationInput {
+  source: "automated" | "operator_declared";
+  result: "succeeded" | "failed";
+  durationMs: number | undefined;
+}
+
+export function validateAutomatedDrillDurationInvariant(
+  input: AutomatedDrillDurationInput,
+): { ok: true } | { ok: false; reason: string } {
+  if (
+    input.source === "automated" &&
+    input.result === "succeeded" &&
+    input.durationMs === undefined
+  ) {
+    return {
+      ok: false,
+      reason:
+        "an automated succeeded restore drill requires --duration-ms " +
+        "(it is the RTO measurement); re-run the timed drill or use " +
+        "--source operator_declared for a non-timed declaration",
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Resolves the single-tenant organization anchor (Phase 1 default org). The
  * evidence ledger is org-scoped like every business table.
  */
@@ -230,7 +300,7 @@ async function main(): Promise<void> {
     const [command, ...rest] = process.argv.slice(2);
     if (!command) {
       fail(
-        "subcommand required: start | complete | fail | drill (see file header for usage)",
+        "subcommand required: start | complete | fail | drill | retention (see file header for usage)",
       );
     }
     const args = parseArgs(rest);
@@ -435,6 +505,15 @@ async function main(): Promise<void> {
         const durationMs = args["duration-ms"]
           ? parsePositiveInt(args["duration-ms"], "duration-ms")
           : undefined;
+        // An automated SUCCESS drill is the only evidence that can prove RTO,
+        // and RTO is measured from its duration — so a duration is REQUIRED on
+        // that exact shape (see validateAutomatedDrillDurationInvariant).
+        const drillDurationCheck = validateAutomatedDrillDurationInvariant({
+          source,
+          result,
+          durationMs,
+        });
+        if (!drillDurationCheck.ok) fail(drillDurationCheck.reason);
         const drill = await repo.recordDrill(ctx, {
           operationId,
           backupType,
@@ -447,6 +526,64 @@ async function main(): Promise<void> {
         });
         process.stdout.write(
           `recorded ${source} restore drill ${drill.operationId}: ${drill.result}\n`,
+        );
+        break;
+      }
+      case "retention": {
+        // Host-side retention evidence (P7-CLOSE P7-3b). Records the outcome
+        // of an automated retention/expire operation executed by the Host
+        // Operator outside Exam RBAC. Success means: retention operation
+        // succeeded AND repository/chain verification succeeded — not merely
+        // that a delete command returned zero.
+        const operationId = required(args, "operation-id");
+        const tool = required(args, "tool");
+        const result = assertOneOf(
+          required(args, "result"),
+          ["succeeded", "failed"] as const,
+          "result",
+        );
+        const verificationStatus = args["verification-status"]
+          ? assertOneOf(
+              args["verification-status"],
+              ["verified", "failed", "pending"] as const,
+              "verification-status",
+            )
+          : null;
+        // Success ↔ verified invariant: a successful retention run REQUIRES
+        // verified repository/chain evidence (see
+        // validateRetentionSuccessInvariant). The CLI parses `result` and
+        // `verification-status` as independent flags; the DB CHECK constraint is
+        // the ultimate authority, this gives a clear operator error first.
+        const retentionCheck = validateRetentionSuccessInvariant({
+          result,
+          verificationStatus,
+        });
+        if (!retentionCheck.ok) fail(retentionCheck.reason);
+        const retentionRepo = createRetentionEvidenceRepo(conn.db);
+        const run = await retentionRepo.recordRetentionRun(ctx, {
+          operationId,
+          tool,
+          result,
+          startedAt: now,
+          completedAt: now,
+          prunedBackups: args["pruned-backups"]
+            ? parsePositiveInt(args["pruned-backups"], "pruned-backups")
+            : null,
+          prunedWalArchives: args["pruned-wal-archives"]
+            ? parsePositiveInt(
+                args["pruned-wal-archives"],
+                "pruned-wal-archives",
+              )
+            : null,
+          retentionObjective: args.objective ?? null,
+          verificationStatus,
+          verificationDetail: args["verification-detail"] ?? null,
+          failureReason: args.reason ?? null,
+          executorType: assertExecutor(args.executor ?? "host_script"),
+          now,
+        });
+        process.stdout.write(
+          `recorded retention ${run.operationId}: ${run.result} (tool=${run.tool})\n`,
         );
         break;
       }

@@ -312,7 +312,8 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .strict(),
   ),
   // P7-E3 (ADR-017 D9): Admin's operational policy INTENT change — atomic
-  // with the write, carrying the desired values + reason.
+  // with the write, carrying the desired values + reason. P7-CLOSE added
+  // desiredRtoSeconds (nullable: NULL = RTO objective not configured).
   [AuditAction.OpsPolicyUpdated]: definition(
     "active",
     "atomic",
@@ -321,6 +322,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         desiredRpoSeconds: z.number().int(),
+        desiredRtoSeconds: z.number().int().nullable(),
         desiredRetentionDays: z.number().int(),
         desiredDrillCadenceDays: z.number().int(),
         reason: shortText,

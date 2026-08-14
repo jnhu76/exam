@@ -305,6 +305,47 @@ export type RestoreReadinessResponse = z.infer<
   typeof RestoreReadinessResponseSchema
 >;
 
+// ── Host-side retention evidence (P7-CLOSE P7-3b) ───────────────
+
+/**
+ * A host-side retention evidence record. Success means: retention operation
+ * succeeded AND repository/chain verification succeeded — not merely that a
+ * delete command returned zero. Exam never performs retention; this is
+ * evidence only (ADR-017 D4).
+ */
+export const RetentionRunSchema = z.object({
+  id: z.string().uuid(),
+  operationId: z.string(),
+  tool: z.string(),
+  result: z.enum(["succeeded", "failed"]),
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+  prunedBackups: z.number().int().min(0).nullable(),
+  prunedWalArchives: z.number().int().min(0).nullable(),
+  retentionObjective: z.string().nullable(),
+  verificationStatus: z.enum(["verified", "failed", "pending"]).nullable(),
+  verificationDetail: z.string().nullable(),
+  failureReason: z.string().nullable(),
+  executorType: z.enum(["host_script", "deployment_drill"]),
+});
+
+/** Type for a retention evidence record. */
+export type RetentionRun = z.infer<typeof RetentionRunSchema>;
+
+/**
+ * Response schema for GET /system/retention-readiness (Admin + Maintainer).
+ */
+export const RetentionReadinessResponseSchema = z.object({
+  latestRetention: RetentionRunSchema.nullable(),
+  latestSuccessfulRetention: RetentionRunSchema.nullable(),
+  retentionHistory: z.array(RetentionRunSchema),
+});
+
+/** Type for the retention-readiness response. */
+export type RetentionReadinessResponse = z.infer<
+  typeof RetentionReadinessResponseSchema
+>;
+
 // ── Operational policy intent (P7-E3, ADR-017 D9) ─────────────────
 
 /**
@@ -313,6 +354,7 @@ export type RestoreReadinessResponse = z.infer<
  * (the DB CHECK constraints mirror these bounds).
  */
 export const OpsPolicyRpoSecondsRange = { min: 300, max: 604800 } as const; // 5 min .. 7 days
+export const OpsPolicyRtoSecondsRange = { min: 30, max: 172800 } as const; // 30s .. 48h
 export const OpsPolicyRetentionDaysRange = { min: 1, max: 3650 } as const;
 export const OpsPolicyDrillCadenceDaysRange = { min: 1, max: 365 } as const;
 
@@ -327,6 +369,12 @@ export const OperationalPolicySchema = z.object({
     .int()
     .min(OpsPolicyRpoSecondsRange.min)
     .max(OpsPolicyRpoSecondsRange.max),
+  desiredRtoSeconds: z
+    .number()
+    .int()
+    .min(OpsPolicyRtoSecondsRange.min)
+    .max(OpsPolicyRtoSecondsRange.max)
+    .nullable(),
   desiredRetentionDays: z
     .number()
     .int()
@@ -378,6 +426,13 @@ export type ComplianceItem = z.infer<typeof ComplianceItemSchema>;
 /**
  * Request schema for PUT /system/ops-policy (Admin intent owner). The client
  * must send the version it read (CAS); mismatch → 409 VERSION_CONFLICT.
+ *
+ * `desiredRtoSeconds` is `.nullable().optional()`: the UI sends an explicit
+ * `null` when the Admin clears the RTO objective (NOT_CONFIGURED), and may
+ * omit it entirely. `.optional()` alone would reject `null` (it allows only
+ * `undefined`), which made a blank-RTO save return 400 — the DB column, the
+ * response schema, and the repo all already treat NULL as a first-class
+ * NOT_CONFIGURED state, so the request contract must accept `null` too.
  */
 export const UpsertOpsPolicyRequestSchema = z.object({
   desiredRpoSeconds: z
@@ -385,6 +440,13 @@ export const UpsertOpsPolicyRequestSchema = z.object({
     .int()
     .min(OpsPolicyRpoSecondsRange.min)
     .max(OpsPolicyRpoSecondsRange.max),
+  desiredRtoSeconds: z
+    .number()
+    .int()
+    .min(OpsPolicyRtoSecondsRange.min)
+    .max(OpsPolicyRtoSecondsRange.max)
+    .nullable()
+    .optional(),
   desiredRetentionDays: z
     .number()
     .int()
@@ -415,6 +477,7 @@ export const OpsPolicyResponseSchema = z.object({
   policy: OperationalPolicySchema.nullable(),
   compliance: z.object({
     rpo: ComplianceItemSchema,
+    rto: ComplianceItemSchema,
     retention: ComplianceItemSchema,
     drill: ComplianceItemSchema,
   }),
