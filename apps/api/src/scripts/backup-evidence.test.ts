@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decideEvidenceDbAccess } from "./backup-evidence.js";
+import {
+  decideEvidenceDbAccess,
+  validateRetentionSuccessInvariant,
+  validateAutomatedDrillDurationInvariant,
+} from "./backup-evidence.js";
 
 const base = {
   appMode: "development",
@@ -59,5 +63,94 @@ describe("decideEvidenceDbAccess (connected-DB identity guard)", () => {
         allowUnsafeTestDb: true,
       }),
     ).toEqual({ allowed: true, bypassed: false });
+  });
+});
+
+describe("validateRetentionSuccessInvariant (success ↔ verified)", () => {
+  it("accepts succeeded + verified", () => {
+    expect(
+      validateRetentionSuccessInvariant({
+        result: "succeeded",
+        verificationStatus: "verified",
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("rejects succeeded with NO verification flag (the gap that used to record a fake success)", () => {
+    const d = validateRetentionSuccessInvariant({
+      result: "succeeded",
+      verificationStatus: null,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.reason).toContain("--verification-status verified");
+  });
+
+  it("rejects succeeded + failed verification (the contradictory shape)", () => {
+    const d = validateRetentionSuccessInvariant({
+      result: "succeeded",
+      verificationStatus: "failed",
+    });
+    expect(d.ok).toBe(false);
+  });
+
+  it("rejects succeeded + pending verification", () => {
+    const d = validateRetentionSuccessInvariant({
+      result: "succeeded",
+      verificationStatus: "pending",
+    });
+    expect(d.ok).toBe(false);
+  });
+
+  it("accepts failed with any/no verification (failed needs no verified evidence)", () => {
+    for (const verificationStatus of ["failed", "pending", null] as const) {
+      expect(
+        validateRetentionSuccessInvariant({
+          result: "failed",
+          verificationStatus,
+        }),
+      ).toEqual({ ok: true });
+    }
+  });
+});
+
+describe("validateAutomatedDrillDurationInvariant (automated success → duration)", () => {
+  it("rejects an automated succeeded drill with no duration (RTO would be unmeasurable)", () => {
+    const d = validateAutomatedDrillDurationInvariant({
+      source: "automated",
+      result: "succeeded",
+      durationMs: undefined,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.reason).toContain("--duration-ms");
+  });
+
+  it("accepts an automated succeeded drill WITH a duration", () => {
+    expect(
+      validateAutomatedDrillDurationInvariant({
+        source: "automated",
+        result: "succeeded",
+        durationMs: 42_000,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("accepts an automated FAILED drill with no duration (failures carry no restore duration)", () => {
+    expect(
+      validateAutomatedDrillDurationInvariant({
+        source: "automated",
+        result: "failed",
+        durationMs: undefined,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("accepts an operator-declared success with no duration (declared success is not RTO proof)", () => {
+    expect(
+      validateAutomatedDrillDurationInvariant({
+        source: "operator_declared",
+        result: "succeeded",
+        durationMs: undefined,
+      }),
+    ).toEqual({ ok: true });
   });
 });

@@ -663,11 +663,19 @@ async function buildOpsPolicyProjection(
   const ctx = getRequestContext(request);
   const evidence = createBackupEvidenceRepo(fastify.db);
   const now = fastify.now();
-  const [latestVerified, latestSuccess, drills] = await Promise.all([
-    evidence.latestSucceededRun(ctx),
-    evidence.latestSucceededDrill(ctx),
-    evidence.listDrills(ctx, 20),
-  ]);
+  // `latestAutomatedSuccess` is RTO evidence — the ONLY shape that can prove
+  // RTO is an AUTOMATED succeeded drill (operator-declared is not proof). It is
+  // unbounded and ordered by COMPLETION time: a long run of recent failures (or
+  // operator-declared successes) must not hide an older automated success, and
+  // the recency/duration authority is completedAt. This replaces a bounded
+  // `listDrills(20).find(...)` that could return UNKNOWN even when a valid
+  // automated success existed just outside the window (P7-CLOSE review P2-3).
+  const [latestVerified, latestSuccess, latestAutomatedSuccess] =
+    await Promise.all([
+      evidence.latestSucceededRun(ctx),
+      evidence.latestSucceededDrill(ctx),
+      evidence.latestSucceededDrill(ctx, "automated"),
+    ]);
 
   const policyWire = policy
     ? {
@@ -706,23 +714,28 @@ async function buildOpsPolicyProjection(
     rpoDetail = `last verified backup age ${Math.round(rpoObservedSeconds)}s > desired ${policy.desiredRpoSeconds}s`;
   }
 
-  // ── RTO (observed via restore drill evidence) ──
+  // ── RTO (observed via automated restore-drill evidence only) ──
+  // RTO is proved ONLY by an AUTOMATED succeeded drill; operator-declared
+  // drills never satisfy it. The drill's `durationMs` is the measurement — an
+  // automated success without a duration cannot prove RTO and renders UNKNOWN
+  // (the recording CLI now rejects that shape, but legacy rows may lack it).
   let rtoStatus: ComplianceStatus;
   let rtoDetail: string | null;
-  const automatedDrill = drills.find(
-    (d) => d.source === "automated" && d.result === "succeeded",
-  );
-  const rtoObservedMs = automatedDrill?.durationMs ?? null;
+  const rtoObservedMs = latestAutomatedSuccess?.durationMs ?? null;
   if (!policy) {
     rtoStatus = "NOT_CONFIGURED";
     rtoDetail = "no operational policy intent recorded";
   } else if (policy.desiredRtoSeconds === null) {
     rtoStatus = "NOT_CONFIGURED";
     rtoDetail = "desired RTO not configured — no RTO objective set";
-  } else if (rtoObservedMs === null) {
+  } else if (latestAutomatedSuccess === null) {
     rtoStatus = "UNKNOWN";
     rtoDetail =
       "no qualifying automated drill evidence — RTO cannot be measured (operator-declared drills do not satisfy RTO)";
+  } else if (rtoObservedMs === null) {
+    rtoStatus = "UNKNOWN";
+    rtoDetail =
+      "latest automated drill recorded no duration — RTO cannot be measured";
   } else if (rtoObservedMs <= policy.desiredRtoSeconds * 1000) {
     rtoStatus = "SATISFIED";
     rtoDetail = `latest automated restore duration ${rtoObservedMs}ms <= desired ${policy.desiredRtoSeconds}s (${rtoObservedMs / 1000}s)`;

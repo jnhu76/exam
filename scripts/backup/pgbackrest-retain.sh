@@ -107,23 +107,51 @@ if [ "${VERIFY_EXIT}" -ne 0 ]; then
   echo "  ${VERIFICATION_DETAIL}" >&2
 fi
 
-# ── Step 3: Count remaining backups for evidence summary ──
-BACKUP_COUNT=0
+# ── Step 3: Read ACTUAL retention config + remaining backups for evidence ──
+# The recorded objective must reflect the configured retention knobs AND the
+# observed remaining backups. A fixed "config-driven" string would prove only
+# "expire returned 0" — not that backup/WAL growth is actually bounded, which
+# is the retention invariant this evidence exists to support. The policy lives
+# in pgbackrest.conf (repo-retention-*); the remaining counts after expire are
+# the direct observable that retention is in effect.
 INFO_OUTPUT="$(docker exec "${DB_CONTAINER}" \
   pgbackrest --stanza="${STANZA}" info --output=json 2>&1)" || true
+FULL_COUNT=0
+DIFF_COUNT=0
 if command -v jq >/dev/null 2>&1; then
-  BACKUP_COUNT=$(echo "${INFO_OUTPUT}" | jq '[.[] | .backup[]?] | length' 2>/dev/null) || BACKUP_COUNT=0
+  FULL_COUNT=$(echo "${INFO_OUTPUT}" \
+    | jq '[.[] | .backup[]? | select(.type=="full")] | length' 2>/dev/null) || FULL_COUNT=0
+  DIFF_COUNT=$(echo "${INFO_OUTPUT}" \
+    | jq '[.[] | .backup[]? | select(.type=="diff" or .type=="incr")] | length' 2>/dev/null) || DIFF_COUNT=0
+fi
+BACKUP_COUNT=$((FULL_COUNT + DIFF_COUNT))
+
+# Best-effort: read the configured retention knobs from pgbackrest.conf. The
+# conf path defaults to the pgBackRest standard and is overridable via
+# PGBACKREST_CONF. Unreadable conf (permission/path) is non-fatal — the
+# remaining counts still evidence retention in effect.
+PGBACKREST_CONF="${PGBACKREST_CONF:-/etc/pgbackrest/pgbackrest.conf}"
+RETENTION_KNOBS=""
+CONF_TEXT=""
+CONF_TEXT="$(docker exec "${DB_CONTAINER}" cat "${PGBACKREST_CONF}" 2>/dev/null)" \
+  || CONF_TEXT=""
+if [ -n "${CONF_TEXT}" ]; then
+  mapfile -t KNOB_LINES < <(printf '%s\n' "${CONF_TEXT}" \
+    | grep -oiE '^[[:space:]]*repo[-_]retention[-_](full|diff|archive(_type)?)[[:space:]]*=.*' \
+    | sed -E 's/[[:space:]]+/ /g; s/^[[:space:]]*//')
+  if [ "${#KNOB_LINES[@]}" -gt 0 ]; then
+    RETENTION_KNOBS="$(printf '%s; ' "${KNOB_LINES[@]}")"
+    RETENTION_KNOBS="${RETENTION_KNOBS%; }" # strip trailing "; "
+  fi
 fi
 
-# ── Step 4: Read retention config for evidence ──
-RETENTION_OBJECTIVE="pgbackrest expire (config-driven)"
-# Attempt to read the retention settings from pgbackrest.conf for the
-# evidence record. This is informational — the actual policy is the
-# pgbackrest.conf, not this script.
-CONF_OUTPUT="$(docker exec "${DB_CONTAINER}" \
-  pgbackrest --stanza="${STANZA}" info --output=text 2>&1)" || true
+if [ -n "${RETENTION_KNOBS}" ]; then
+  RETENTION_OBJECTIVE="${RETENTION_KNOBS} (pgbackrest.conf); ${FULL_COUNT} full, ${DIFF_COUNT} diff remaining after expire"
+else
+  RETENTION_OBJECTIVE="pgbackrest expire; ${FULL_COUNT} full, ${DIFF_COUNT} diff remaining after expire (retention knobs in pgbackrest.conf, unreadable here)"
+fi
 
-# ── Step 5: Determine result ──
+# ── Step 4: Determine result ──
 RESULT="succeeded"
 REASON=""
 if [ "${VERIFICATION_STATUS}" = "failed" ]; then
@@ -131,22 +159,27 @@ if [ "${VERIFICATION_STATUS}" = "failed" ]; then
   REASON="${VERIFICATION_DETAIL}"
 fi
 
-# ── Step 6: Record evidence ──
-EXTRA_ARGS=""
+# ── Step 5: Record evidence ──
+# Bash array, not a flat "${EXTRA_ARGS}" string: a reason containing spaces
+# must reach the CLI as a single --reason value, not be word-split into
+# flags/operands. Each element is a separate argv entry under the host shell
+# before docker exec forwards them to node.
+EVIDENCE_ARGS=(
+  retention
+  --operation-id "${OPERATION_ID}"
+  --tool pgbackrest
+  --result "${RESULT}"
+  --objective "${RETENTION_OBJECTIVE}"
+  --verification-status "${VERIFICATION_STATUS}"
+  --verification-detail "${VERIFICATION_DETAIL}"
+  --executor host_script
+)
 if [ -n "${REASON}" ]; then
-  EXTRA_ARGS="--reason ${REASON}"
+  EVIDENCE_ARGS+=(--reason "${REASON}")
 fi
 
 docker exec "${APP_CONTAINER}" \
-  node dist/scripts/backup-evidence.js retention \
-    --operation-id "${OPERATION_ID}" \
-    --tool pgbackrest \
-    --result "${RESULT}" \
-    --objective "${RETENTION_OBJECTIVE}" \
-    --verification-status "${VERIFICATION_STATUS}" \
-    --verification-detail "${VERIFICATION_DETAIL}" \
-    --executor host_script \
-    ${EXTRA_ARGS}
+  node dist/scripts/backup-evidence.js "${EVIDENCE_ARGS[@]}"
 
 echo "  completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "  result: ${RESULT}"

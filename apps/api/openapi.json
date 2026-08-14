@@ -21347,7 +21347,8 @@
                   "desiredRtoSeconds": {
                     "type": "integer",
                     "minimum": 30,
-                    "maximum": 172800
+                    "maximum": 172800,
+                    "nullable": true
                   },
                   "desiredRetentionDays": {
                     "type": "integer",

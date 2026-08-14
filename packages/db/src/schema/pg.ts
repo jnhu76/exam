@@ -1500,6 +1500,20 @@ export const retentionRuns = pgTable(
       "retention_runs_verification_check",
       sql`${table.verificationStatus} IS NULL OR (${table.verificationStatus} IN ('verified', 'failed', 'pending'))`,
     ),
+    // Success ↔ verified cross-field invariant: a retention run may be recorded
+    // as `succeeded` ONLY when the repository/chain verification is `verified`
+    // AND it has a completion time. This closes the gap where `result` and
+    // `verification_status` were parsed independently — `succeeded` +
+    // `verification_status = failed` would otherwise render as
+    // latestSuccessfulRetention, contradicting the table's own docstring
+    // ("success = retention succeeded AND verification succeeded"). The DB is
+    // the ultimate authority; the CLI and repo mirror this. NULL-safe:
+    // `IS NOT DISTINCT FROM 'verified'` (not `=`) so a forged `succeeded` row
+    // cannot skip the requirement via a NULL verification_status.
+    check(
+      "retention_runs_success_verified_check",
+      sql`${table.result} <> 'succeeded' OR (${table.verificationStatus} IS NOT DISTINCT FROM 'verified' AND ${table.completedAt} IS NOT NULL)`,
+    ),
   ],
 );
 

@@ -426,6 +426,13 @@ export type ComplianceItem = z.infer<typeof ComplianceItemSchema>;
 /**
  * Request schema for PUT /system/ops-policy (Admin intent owner). The client
  * must send the version it read (CAS); mismatch → 409 VERSION_CONFLICT.
+ *
+ * `desiredRtoSeconds` is `.nullable().optional()`: the UI sends an explicit
+ * `null` when the Admin clears the RTO objective (NOT_CONFIGURED), and may
+ * omit it entirely. `.optional()` alone would reject `null` (it allows only
+ * `undefined`), which made a blank-RTO save return 400 — the DB column, the
+ * response schema, and the repo all already treat NULL as a first-class
+ * NOT_CONFIGURED state, so the request contract must accept `null` too.
  */
 export const UpsertOpsPolicyRequestSchema = z.object({
   desiredRpoSeconds: z
@@ -438,6 +445,7 @@ export const UpsertOpsPolicyRequestSchema = z.object({
     .int()
     .min(OpsPolicyRtoSecondsRange.min)
     .max(OpsPolicyRtoSecondsRange.max)
+    .nullable()
     .optional(),
   desiredRetentionDays: z
     .number()

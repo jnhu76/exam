@@ -320,6 +320,12 @@ import {
   describe as describe3,
   expect as expect3,
 } from "vitest";
+import {
+  afterAll as afterAll4,
+  beforeAll as beforeAll4,
+  describe as describe4,
+  expect as expect4,
+} from "vitest";
 import type { FastifyPluginAsync } from "fastify";
 import { eq } from "drizzle-orm";
 import { auditLogs } from "@exam/db/src/schema/pg.js";
@@ -678,6 +684,133 @@ describe3(
       expect3(body.compliance.drill.observedDetail as string).toContain(
         "operator_declared",
       );
+    });
+  },
+);
+
+// ───────────────────────── RTO null contract + measurement (P7-CLOSE review) ─────────────────────────
+
+describe4(
+  "P7-CLOSE ops-policy RTO (null contract + automated-drill measurement)",
+  () => {
+    let appCtx: TestContext;
+    let cleanup4: () => Promise<void>;
+    let adminToken4: string;
+    let orgId4: string;
+
+    beforeAll4(async () => {
+      const built = await buildTestApp(systemRoutes as FastifyPluginAsync, {
+        prefix: "/api",
+      });
+      appCtx = built;
+      cleanup4 = built.cleanup;
+      orgId4 = randomUUID();
+      await built.db.insert(organizations).values({
+        id: orgId4,
+        name: "RTO Org",
+        displayName: "RTO Org",
+        slug: `rto-${orgId4.slice(0, 8)}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const admin = await createAssignedUserForTest(
+        built.db,
+        orgId4,
+        "Admin",
+        "rto-admin",
+      );
+      adminToken4 = admin.token;
+      const ctx = {
+        organizationId: orgId4,
+        actorId: admin.user.id,
+        role: "Admin" as const,
+        permissions: [],
+      };
+      // An AUTOMATED succeeded restore drill with a 60s duration — the only
+      // shape that proves RTO. The projection measures RTO against this.
+      await createBackupEvidenceRepo(built.db).recordDrill(ctx, {
+        operationId: "logical-restore:rto-measured",
+        backupType: "logical",
+        result: "succeeded",
+        source: "automated",
+        startedAt: new Date(Date.now() - 60_000),
+        completedAt: new Date(),
+        durationMs: 60_000,
+      });
+    });
+
+    afterAll4(async () => {
+      await cleanup4();
+    });
+
+    async function putPolicy(payload: Record<string, unknown>) {
+      return appCtx.app.inject({
+        method: "PUT",
+        url: "/api/system/ops-policy",
+        payload,
+        cookies: { "auth-token": adminToken4 },
+      });
+    }
+
+    it("PUT desiredRtoSeconds: null → 200, NOT_CONFIGURED (UI clears RTO — the e2e 400 root cause)", async () => {
+      // The UI sends an explicit null when the Admin leaves RTO blank; the
+      // request schema must accept null (previously .optional() rejected it).
+      const res = await putPolicy({
+        desiredRpoSeconds: 3600,
+        desiredRtoSeconds: null,
+        desiredRetentionDays: 30,
+        desiredDrillCadenceDays: 7,
+        version: 0,
+        reason: "no rto objective",
+      });
+      expect4(res.statusCode).toBe(200);
+      const body = res.json();
+      expect4(body.policy.desiredRtoSeconds).toBeNull();
+      expect4(body.compliance.rto.status).toBe("NOT_CONFIGURED");
+    });
+
+    it("PUT omitting desiredRtoSeconds → 200, NOT_CONFIGURED (undefined also accepted)", async () => {
+      const res = await putPolicy({
+        desiredRpoSeconds: 3600,
+        desiredRetentionDays: 30,
+        desiredDrillCadenceDays: 7,
+        version: 1,
+        reason: "omitted rto",
+      });
+      expect4(res.statusCode).toBe(200);
+      const body = res.json();
+      expect4(body.policy.desiredRtoSeconds).toBeNull();
+      expect4(body.compliance.rto.status).toBe("NOT_CONFIGURED");
+    });
+
+    it("RTO measured from the automated drill — duration (60s) ≤ desired (120s) → SATISFIED", async () => {
+      const res = await putPolicy({
+        desiredRpoSeconds: 3600,
+        desiredRtoSeconds: 120,
+        desiredRetentionDays: 30,
+        desiredDrillCadenceDays: 7,
+        version: 2,
+        reason: "120s rto",
+      });
+      expect4(res.statusCode).toBe(200);
+      const body = res.json();
+      expect4(body.policy.desiredRtoSeconds).toBe(120);
+      expect4(body.compliance.rto.status).toBe("SATISFIED");
+      expect4(body.compliance.rto.observed).toBe("60000ms");
+    });
+
+    it("RTO measured from the automated drill — duration (60s) > desired (30s) → NOT_SATISFIED", async () => {
+      const res = await putPolicy({
+        desiredRpoSeconds: 3600,
+        desiredRtoSeconds: 30,
+        desiredRetentionDays: 30,
+        desiredDrillCadenceDays: 7,
+        version: 3,
+        reason: "30s rto (floor)",
+      });
+      expect4(res.statusCode).toBe(200);
+      const body = res.json();
+      expect4(body.compliance.rto.status).toBe("NOT_SATISFIED");
     });
   },
 );

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database, TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { retentionRuns } from "../schema/pg.js";
@@ -72,18 +72,35 @@ export function createRetentionEvidenceRepo(db: Database) {
     return rows[0] ? retentionRow(rows[0]) : null;
   }
 
-  /** Reads the latest SUCCEEDED retention run. */
+  /**
+   * Reads the latest SUCCEEDED retention run — success = retention succeeded
+   * AND verification `verified`, matching the table's success↔verified
+   * invariant and its docstring. Unbounded and ordered by COMPLETION time: a
+   * long run of recent failures (or unverified runs) must not hide an older
+   * verified success, and the recency authority is when the run completed, not
+   * when it started. Mirrors the proven `latestSucceededDrill` /
+   * `latestSucceededRun` selection (P7-E review P2-2).
+   */
   async function latestSucceededRetention(
     ctx: TenantContext | RequestContext,
   ): Promise<RetentionRunRow | null> {
     const rows = await db
       .select()
       .from(retentionRuns)
-      .where(eq(retentionRuns.organizationId, ctx.organizationId))
-      .orderBy(desc(retentionRuns.startedAt))
-      .limit(20);
-    const succeeded = rows.find((r) => r.result === "succeeded");
-    return succeeded ? retentionRow(succeeded) : null;
+      .where(
+        and(
+          eq(retentionRuns.organizationId, ctx.organizationId),
+          eq(retentionRuns.result, "succeeded"),
+          eq(retentionRuns.verificationStatus, "verified"),
+        ),
+      )
+      .orderBy(
+        sql`${retentionRuns.completedAt} DESC NULLS LAST`,
+        desc(retentionRuns.startedAt),
+        desc(retentionRuns.id),
+      )
+      .limit(1);
+    return rows[0] ? retentionRow(rows[0]) : null;
   }
 
   /** Lists recent retention runs (newest first). */

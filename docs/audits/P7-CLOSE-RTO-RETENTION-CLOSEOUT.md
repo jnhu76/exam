@@ -89,6 +89,48 @@ threw a raw `ZodError` *inside* `executeInTransaction`, rolling back the policy
 write. Fix: add `desiredRtoSeconds: z.number().int().nullable()` to the audit
 schema. (Saved as a reusable gotcha in agent memory.)
 
+## Review remediation (round 1)
+
+The first human review of this changeset (REQUEST CHANGES) flagged two
+evidence-truthfulness blockers and two evidence-quality issues. All are fixed
+in this same changeset before merge:
+
+- **RTO null contract mismatch (P1):** the UI sends an explicit
+  `desiredRtoSeconds: null` when the Admin clears the RTO objective, but the
+  PUT request schema was `.optional()` (allows `undefined`, not `null`), so a
+  blank-RTO save returned 400 and (after migration) any Admin editing another
+  field with a NULL RTO could not save. Fix: `.nullable().optional()` — `null`
+  is the first-class NOT_CONFIGURED value the DB column, response schema, and
+  repo already accept. The web unit test had frozen the bug in place by mocking
+  the HTTP layer past the API schema; an API integration test now covers the
+  `null` → 200 → `compliance.rto.status = NOT_CONFIGURED` path.
+- **Retention success ↔ verified invariant (P1):** `result` and
+  `verification_status` were parsed as independent fields, so
+  `result='succeeded'` + `verification_status='failed'` could be stored and then
+  rendered as `latestSuccessfulRetention` — contradicting the table docstring.
+  Fix closes the gap at three layers: a DB CHECK
+  (`retention_runs_success_verified_check`, migration `0034`), a CLI guard
+  (`--result succeeded` requires `--verification-status verified`), and the repo
+  query (`latestSucceededRetention` now requires `verified`, is unbounded, and
+  orders by `completedAt`).
+- **RTO evidence selection (P2):** RTO was measured from a bounded
+  `listDrills(20).find(automated+succeeded)` that could return UNKNOWN while a
+  valid automated success sat just outside the window — regressing the
+  `completedAt`-authority, unbounded selection the backup repo already proved
+  out. Fix: use `latestSucceededDrill(ctx, "automated")`; an automated success
+  with no `durationMs` renders UNKNOWN (and the CLI now rejects recording that
+  shape).
+- **Retention script evidence quality (P2):** the host script recorded a fixed
+  `"pgbackrest expire (config-driven)"` objective and captured a `CONF_OUTPUT`
+  it never used, so the evidence proved only "expire returned 0", not that
+  growth is bounded. Fix: read the actual `repo-retention-*` knobs from
+  pgbackrest.conf (best-effort) plus the observed remaining full/diff counts
+  after expire, and pass the evidence args via a bash array (no word-splitting
+  on a multi-word reason).
+
+These remediations do not change the Gate P7-3 verdict below — they strengthen
+the evidence truthfulness the verdict rests on.
+
 ## Verification evidence
 
 ```text
@@ -107,27 +149,54 @@ pnpm verify (full)                   : GREEN (static + coverage + build)
 > P7-CLOSE (no P7-CLOSE change touches timing/concurrency behavior). The final
 > `pnpm verify` run was green.
 
-## Gate P7-3 verdict — RECOMMENDATION (human sign-off required)
+## Gate P7-3 verdict — IMPLEMENTED, operational acceptance pending
 
-P7-CLOSE substantively satisfies both Gate P7-3 bullets that P7-F left open:
+**Status: `IMPLEMENTED — OPERATIONAL_ACCEPTANCE_PENDING` (NOT PASS).**
+
+P7-CLOSE implements the *mechanism* for both Gate P7-3 bullets P7-F left open —
+the typed authority, the evidence ledger + its success↔verified invariant, the
+truthful DESIRED/OBSERVED/STATUS projection, and the host-side automation path.
+Implementing the mechanism is not the same as the gate being PASS. P7-F defines
+Gate P7-3 as: declared RPO/RTO profile **+** backup automation + retention
+operational **+** clean-host restore drill **+** post-restore invariant suite,
+**with clean-volume restore completing within the declared RTO**. That last
+clause is an operational acceptance on a real volume, which code-level
+verification cannot discharge. Per P7-F's own principle — "a smaller truthful
+product is better than a falsely complete one" — this document does **not**
+claim the two bullets are *satisfied* and does **not** recommend PASS yet.
 
 | Bullet | P7-F status | P7-CLOSE status |
 | --- | --- | --- |
-| RTO declared and tested | NOT MET | **Implemented**: typed nullable authority (30s..48h), declared range, measured via automated restore-drill evidence |
-| Backup automation + retention operational | NOT MET (host-owned/`NOT_ENFORCED`) | **Implemented via option (c)**: retention evidence ledger + readiness endpoint + host pgBackRest script; execution stays host-only (ADR-017 D4) |
+| RTO declared and tested | NOT MET | **Implemented (acceptance pending)**: typed nullable authority (30s..48h), declared range, measured via automated restore-drill evidence. Pending: a real automated restore drill whose measured duration ≤ declared RTO on a real volume. |
+| Backup automation + retention operational | NOT MET (host-owned/`NOT_ENFORCED`) | **Implemented via option (c) (acceptance pending)**: retention evidence ledger + success↔verified invariant + readiness endpoint + host pgBackRest script; execution stays host-only (ADR-017 D4). Pending: a real scheduled retention run whose recorded objective reflects the actual pgBackRest config and whose evidence is `verified`. |
 
-**Recommendation:** with this changeset, Gate P7-3's two open bullets are
-satisfied on the architecture-aligned path P7-F specified. Flipping the gate to
-**PASS** (and ADR-017 rev 4 / ADR-018 to **ACCEPTED**) is a **human decision** —
-this document supplies the evidence, it does not declare the verdict.
+**What would move Gate P7-3 to PASS (the human's operational acceptance):**
+
+```text
+host scheduled retention (cron/systemd)
+        ↓
+pgBackRest expire (real repo-retention-* config in effect)
+        ↓
+verify actual retention config + repository integrity
+        ↓
+evidence written (result=succeeded ↔ verification=verified)
+        ↓
+clean-volume restore drill
+        ↓
+post-restore invariant suite
+        ↓
+measured restore duration ≤ declared RTO
+```
+
+Only then do ADR-017 rev 4 / ADR-018 move to ACCEPTED and Gate P7-3 to PASS. This
+PR supplies the mechanism and the truthful evidence surface; it deliberately
+leaves the verdict to that operational acceptance.
 
 ### Remaining (out of P7-CLOSE scope)
 
 - **ADR-017 rev 4 / ADR-018 acceptance**: both remain `PROPOSED — awaiting human
-  review`; flip to ACCEPTED is the human's call after reviewing this evidence.
-- **E2E + deployment drills**: the unit/integration/static verification above is
-  green; a full deployment drill (host cron + pgBackRest end-to-end, restore-
-  within-RTO acceptance on a real volume) is the next acceptance step if the
-  human wants operational (not just code-level) proof.
+  review`; flip to ACCEPTED follows a real Gate P7-3 PASS, not this changeset.
+- **Operational deployment drill**: the unit/integration/static verification
+  above is green; the end-to-end host drill above is the next acceptance step.
 - **#286 Teacher@Course scoped authority**: already CLOSED as explicitly deferred
   (PR #284); Phase 3+ scope-narrowing, unrelated to Gate P7-3.

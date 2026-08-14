@@ -174,6 +174,70 @@ export function decideEvidenceDbAccess(
 }
 
 /**
+ * Success ↔ verified invariant for retention evidence (P7-CLOSE review P1-2),
+ * as a pure decision. `result` and `verificationStatus` are parsed as
+ * independent CLI flags, so this guards the cross-field rule: a successful
+ * retention run REQUIRES verified repository/chain evidence. The DB CHECK
+ * constraint is the ultimate authority; this returns a clear operator reason
+ * instead of a raw 23505. Exported for unit testing.
+ */
+export interface RetentionSuccessInput {
+  result: "succeeded" | "failed";
+  verificationStatus: "verified" | "failed" | "pending" | null;
+}
+export type RetentionSuccessDecision =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+export function validateRetentionSuccessInvariant(
+  input: RetentionSuccessInput,
+): RetentionSuccessDecision {
+  if (input.result === "succeeded" && input.verificationStatus !== "verified") {
+    return {
+      ok: false,
+      reason:
+        "successful retention requires verified evidence: pass " +
+        "--verification-status verified (use --result failed for any " +
+        "non-verified outcome)",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Automated-drill duration invariant (P7-CLOSE review P2-3), as a pure
+ * decision. An AUTOMATED succeeded drill is the only evidence that can prove
+ * RTO, and RTO is measured from its duration — so a duration is REQUIRED on
+ * exactly that shape. Operator-declared successes and all failures are exempt
+ * (a declared success is not RTO proof; a failed drill has no restore
+ * duration). Exported for unit testing.
+ */
+export interface AutomatedDrillDurationInput {
+  source: "automated" | "operator_declared";
+  result: "succeeded" | "failed";
+  durationMs: number | undefined;
+}
+
+export function validateAutomatedDrillDurationInvariant(
+  input: AutomatedDrillDurationInput,
+): { ok: true } | { ok: false; reason: string } {
+  if (
+    input.source === "automated" &&
+    input.result === "succeeded" &&
+    input.durationMs === undefined
+  ) {
+    return {
+      ok: false,
+      reason:
+        "an automated succeeded restore drill requires --duration-ms " +
+        "(it is the RTO measurement); re-run the timed drill or use " +
+        "--source operator_declared for a non-timed declaration",
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Resolves the single-tenant organization anchor (Phase 1 default org). The
  * evidence ledger is org-scoped like every business table.
  */
@@ -441,6 +505,15 @@ async function main(): Promise<void> {
         const durationMs = args["duration-ms"]
           ? parsePositiveInt(args["duration-ms"], "duration-ms")
           : undefined;
+        // An automated SUCCESS drill is the only evidence that can prove RTO,
+        // and RTO is measured from its duration — so a duration is REQUIRED on
+        // that exact shape (see validateAutomatedDrillDurationInvariant).
+        const drillDurationCheck = validateAutomatedDrillDurationInvariant({
+          source,
+          result,
+          durationMs,
+        });
+        if (!drillDurationCheck.ok) fail(drillDurationCheck.reason);
         const drill = await repo.recordDrill(ctx, {
           operationId,
           backupType,
@@ -476,6 +549,16 @@ async function main(): Promise<void> {
               "verification-status",
             )
           : null;
+        // Success ↔ verified invariant: a successful retention run REQUIRES
+        // verified repository/chain evidence (see
+        // validateRetentionSuccessInvariant). The CLI parses `result` and
+        // `verification-status` as independent flags; the DB CHECK constraint is
+        // the ultimate authority, this gives a clear operator error first.
+        const retentionCheck = validateRetentionSuccessInvariant({
+          result,
+          verificationStatus,
+        });
+        if (!retentionCheck.ok) fail(retentionCheck.reason);
         const retentionRepo = createRetentionEvidenceRepo(conn.db);
         const run = await retentionRepo.recordRetentionRun(ctx, {
           operationId,
