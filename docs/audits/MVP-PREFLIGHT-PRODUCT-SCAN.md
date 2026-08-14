@@ -9,7 +9,10 @@
 
 ```text
 BASE_SHA   2ede3303b873065af40ff82d05851586d4548e65
-FINAL_SHA  7790c27a (PR #318 head)
+VERIFIED_CODE_SHA  64cba7633c80e00b5b13a52a18ee58a980673c23
+            (the exact code+tests commit on which the verification in §G was
+            executed; the later docs commit that writes this SHA advances the
+            PR head but does not invalidate VERIFIED_CODE_SHA)
 branch     fix/mvp-preflight-product-scan
 date       2026-08-14
 ```
@@ -74,9 +77,9 @@ Mobile sweep (390 x 844): login, candidate list/start/take/submit dialog,
 | MVP-P1-01 | P1 | Admin | Exam wizard step 3 | Default 及格分 60; after adding 2 questions (auto 总分 8) the step is born in error "及格分不能超过总分" and 下一步 is blocked before any user interaction. Existing E2E works around it (`passingScore-input` filled with "5"). | `wizardState.ts` defaults `passingScore: 60`; auto-calculated totals below 60 are common with a few questions; validation blocks while the untouched default is invalid. | FIXED |
 | MVP-P1-02 | P1 | Candidate | Result page 正确答案 column | Objective-only exam result shows "主观题" in the correct-answer cell of every row (e.g. a 单选题 row with 正确答案 = 主观题). | RBAC-M10-E strips `standardAnswer` from the candidate DTO; `ResultPage` inferred "manual question" from `standardAnswer == null`, so every stripped question rendered the manual marker. | FIXED |
 | MVP-P2-01 | P2 | Admin | Exam detail 考试配置 | Raw enum values rendered: 时间模式：timed_window / 重考策略：unlimited / 分数策略：highest, while the wizard and other surfaces use localized labels (不限次数 / 取最高分). | `ExamDetailPage` printed `exam.timingMode/retakePolicy/scoreStrategy` verbatim. | FIXED |
-| MVP-P2-02 | P2 | Candidate | Exam list draft card | Enrolled draft exam shows 题目数: 0 although the exam has 2 questions (admin list shows 2). | Summary uses `exam.questionSnapshot.length`; drafts have no snapshot yet (snapshot freezes at publish). | FIXED |
+| MVP-P2-02 | P2 | Candidate | Exam list draft card | Enrolled draft exam shows 题目数: 0 although the exam has 2 questions (admin list shows 2). | Summary used `exam.questionSnapshot.length`; drafts have no snapshot yet (snapshot freezes at publish). | FIXED |
 | MVP-P2-03 | P2 | Admin | Course create dialog | 课程名称/课程代码 have no required marker; the candidate dialog marks required fields with `*`. | `CoursePage` labels omitted the required marker. | FIXED |
-| MVP-P2-04 | P2 | Admin | Admin shell sidebar | At 1440x900 the 管理 section (导入日志/审计日志/平台设置/考生字段) and 退出 sit below the fold; the whole page scrolls and the topbar scrolls away. | `AdminLayout`/`AppSidebar` use `min-h-screen`; the nav's `overflow-y-auto` never engages because the aside grows with the page. | NEW_ISSUE_REQUIRED |
+| MVP-P2-04 | P2 | Admin | Admin shell sidebar + topbar | At 1440x900 the 管理 section (导入日志/审计日志/平台设置/考生字段) and 退出 sit below the fold; the whole page scrolls and the topbar scrolls away. | `AdminLayout`/`AppSidebar` used `min-h-screen`; the nav's `overflow-y-auto` never engages because the aside grows with the page. | FIXED |
 | MVP-P2-05 | P2 | Candidate | Exam list "不可用" card | An enrolled-but-draft exam appears as a 不可用 card with no explanation. Enroll-before-publish is the documented flow, so this state is common. | Deliberate state-machine mapping (`deriveCandidateExamState`); copy lacks guidance. | NEW_ISSUE_REQUIRED |
 | MVP-P2-06 | P2 | Admin | Publish action | 发布考试 publishes with a single click and no confirmation (publish-results does confirm). | Existing tested behavior; publish is reversible via 撤回发布. | NOT_A_DEFECT |
 | MVP-P2-07 | P2 | Both | Mobile tables | Admin tables are wider than 390px but scroll inside `overflow-x-auto` wrappers; no page-level horizontal overflow. | Standard responsive pattern. | NOT_A_DEFECT |
@@ -148,15 +151,27 @@ unknown enums.
 **Tests:** `ExamDetailPage.test.tsx` updated to assert 定时窗口 and the
 absence of raw `timed_window`.
 
-### E4. MVP-P2-02 — draft question count (FIXED)
+### E4. MVP-P2-02 — draft question count (FIXED, review closeout)
 
-**Fix:** the candidate exam summary falls back to `exam.questionIds.length`
-when the snapshot is empty (draft):
-`apps/api/src/routes/attempts.candidate.ts`.
+**Fix:** the candidate exam summary reports the authored question count for
+drafts and the frozen snapshot count for every non-draft state:
 
-**Tests:** `apps/api/src/routes/attempts/candidate-start.test.ts` — new
-"reports the authored question count for a draft exam" (draft + enrollment →
-`totalQuestions` 1, `availabilityStatus` unavailable).
+```text
+draft                                  → exam.questionIds.length
+published/open/closed/archived/...     → exam.questionSnapshot.length
+```
+
+`apps/api/src/routes/attempts.candidate.ts` — the snapshot is authoritative
+once an exam leaves draft; an empty or inconsistent frozen snapshot is
+reported as-is (fail closed), never masked by falling back to authored ids.
+
+**Tests:** `apps/api/src/routes/attempts/candidate-start.test.ts` —
+snapshot-authority cases A/B/C:
+A. draft, 2 authored ids, empty snapshot → `totalQuestions` 2;
+B. published, 2 authored ids, empty snapshot → `totalQuestions` 0 (no
+   silent fallback for a broken published snapshot);
+C. published, 2 authored ids, 1-question snapshot → `totalQuestions` 1
+   (frozen snapshot wins).
 
 ### E5. MVP-P2-03 — course dialog required markers (FIXED)
 
@@ -167,15 +182,45 @@ candidate dialog uses (`apps/web/src/pages/admin/CoursePage.tsx`).
 **Tests:** `CoursePage.test.tsx` label matchers updated for the new accessible
 names (regex match); 18/18 pass.
 
+### E6. MVP-P2-04 — admin sidebar viewport scrolling + sticky topbar (FIXED)
+
+**Fix:** the shared admin shell no longer grows the sidebar with the page.
+`AppSidebar`'s aside is now a viewport-attached flex item
+(`sticky top-0 h-screen min-h-0 self-start`) with `shrink-0` header/footer;
+the nav region keeps `flex-1` and gains `min-h-0`, so `overflow-y-auto`
+engages as a real internal scroll region (`apps/web/src/components/layout/
+AppSidebar.tsx`). The Admin topbar is `sticky top-0 z-40` with the opaque
+`bg-card` surface (below the z-50 dialog/sheet and z-[52] dropdown/popover
+overlays) and the documented `shadow-xs` elevation owner
+(`apps/web/src/components/layout/AdminLayout.tsx`, per
+`docs/architecture/frontend.md`). The mobile Sheet drawer reuses the same
+`SidebarContent` unchanged — it now also gets internal nav scrolling with the
+logout footer pinned.
+
+**Tests:**
+- `apps/web/src/components/layout/layout.test.tsx` — viewport-scrolling
+  contract: aside carries `sticky top-0 h-screen min-h-0 self-start`; nav
+  carries `flex-1 min-h-0 overflow-y-auto`; header/footer `shrink-0`; topbar
+  is `sticky top-0 z-40 bg-card`.
+- `apps/e2e/e2e/admin-shell-viewport.spec.ts` — real-browser geometry
+  assertions (no screenshots): at 1440x900 / 1280x720 (expanded) the sidebar
+  top == viewport top and sidebar height == viewport height; nav scrolls
+  independently; 管理 items are revealed by scrolling the nav with the
+  document at scrollY 0; logout is reachable without scrolling the document;
+  scrolling the main page leaves sidebar + topbar pinned. At 1024x768 the
+  collapsed rail keeps the same attachment contract. At 390x844 the Sheet
+  drawer open/scroll/navigate/close/focus-restore/logout regression passes.
+
+**Evidence (before):** 1440x900 admin — 管理 section + 退出 below the fold,
+whole page scrolls, topbar scrolls away. **(after):** sidebar fills the
+viewport with its own nav scroll, logout reachable at scrollY 0, topbar stays
+pinned while main content scrolls (verified programmatically at 1440x900,
+1280x720, 1024x768, 390x844).
+
 ## F. Deferred observations
 
 Post-MVP / follow-up items recorded as Issues, not part of MVP readiness:
 
-- **Admin shell scrolling (MVP-P2-04):** sticky topbar + viewport-height
-  sidebar with internal nav scroll would match the documented shell design
-  (frontend.md) and remove the below-fold 管理 section at 1440x900. Changing
-  the shared shell affects every admin page; deliberately not part of this
-  preflight.
 - **"不可用" draft card copy (MVP-P2-05):** enrolled-but-draft exams appear
   on the candidate list without explanation. Candidate-facing copy for
   unavailable exams (e.g. "考试尚未开放") is a product decision.
@@ -185,24 +230,42 @@ Post-MVP / follow-up items recorded as Issues, not part of MVP readiness:
 
 ## G. Verification
 
+All verification below was executed on `VERIFIED_CODE_SHA` (see §A).
+
 ```text
-pnpm verify:static                      PASS (after prettier + openapi regen)
-pnpm --filter @exam/web test ExamCreatePage   18/18 PASS
-pnpm --filter @exam/web test ResultPage       12/12 PASS
-pnpm --filter @exam/web test ExamDetailPage   36/36 PASS (2 files)
-pnpm --filter @exam/web test CoursePage       18/18 PASS
-pnpm --filter @exam/api test scores           23/23 PASS
-pnpm --filter @exam/api test candidate-start  13/13 PASS
-pnpm test                              (full suite — see PR)
-pnpm build                             (see PR)
-E2E suite (candidate-happy-path, submit-flush, disconnect-restore,
-          admin-flow, result-publishing, exam-wizard-product, …)
-                                        (see PR)
+pnpm verify:static                      PASS (incl. prettier, eslint, arch,
+                                        copy guards, openapi, e2e-runner)
+pnpm test                               PASS — 2214 passed / 7 skipped
+                                        (164 files, 16 tasks)
+pnpm build                              PASS (9 tasks)
+pnpm verify                             PASS (full coverage chain; one
+                                        @exam/db coverage run hit the
+                                        documented BUG-FLAKE-002 cross-package
+                                        turbo contention and passed on rerun
+                                        and standalone — see
+                                        docs/standards/test-flakes.md)
+pnpm --filter @exam/api test candidate-start  15/15 PASS (snapshot
+                                        authority cases A/B/C included)
+pnpm --filter @exam/web test layout responsive-shell  67/67 PASS
+E2E (scripts/e2e/run-wsl.sh):
+  required subset (candidate-happy-path, admin-flow, exam-wizard-product,
+  admin-shell-viewport)                 15/15 PASS
+  full suite (2 shards)                 122 PASS / 0 FAIL / 0 FLAKY
 ```
 
 Live re-render of every fixed state was confirmed against the running dev
 stack (result page "—", draft card 题目数 2, wizard 及格分 3→5, detail labels
-定时窗口/通过后停止/取最高分, course dialog asterisks).
+定时窗口/通过后停止/取最高分, course dialog asterisks), plus the admin shell
+viewport behavior at 1440x900 / 1280x720 / 1024x768 / 390x844 via the
+`admin-shell-viewport` spec.
+
+> **E2E test-adjacent fix (PR review closeout):** `admin-flow.spec.ts`
+> pagination poll used `loadMore.isEnabled()`, which waits for element
+> attachment (locator timeout) once 加载更多 unmounts after the final
+> candidates page loads, blowing the poll's 5s deadline. Exposed when the
+> persistent local `exam_e2e` DB accumulated >50 candidates (target on page 2).
+> Fixed with a `count()` short-circuit (detached button reports false
+> instantly). CI uses a fresh DB per run, so it never observed this.
 
 ## H. Verdict
 
