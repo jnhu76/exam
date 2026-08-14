@@ -61,7 +61,7 @@ When documents conflict, higher precedence wins:
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-015-proctor-exam-scope-authority.md`](adr/ADR-015-proctor-exam-scope-authority.md) | 15 formal ADRs (ADR-001 … ADR-015) |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-018-operational-observability-window.md`](adr/ADR-018-operational-observability-window.md) | 18 formal ADRs (ADR-001 … ADR-018) |
 
 Recovery authority:
 

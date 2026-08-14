@@ -575,11 +575,15 @@ for the boundary.
   same-history). Any offline-client recovery-epoch concern is a future
   Phase 4 concern; no schema change is introduced here.
 
-### 8.5 Retention (operator-owned; no automation shipped)
+### 8.5 Retention (operator-owned; host-side automation available)
 
-> **P7-C3 does NOT ship automatic PITR retention/pruning.** Retention is
-> operator discipline. Future retention automation belongs in later
-> operations / P7-E work, or a mature PostgreSQL backup system (§8.7).
+> **The product does NOT ship a product-side retention scheduler.** Retention
+> execution is operator discipline and stays host-owned: the host-side
+> automation path `scripts/backup/pgbackrest-retain.sh` (shipped with
+> P7-CLOSE; cron/systemd-owned) runs `pgbackrest expire` and records evidence
+> through the retention CLI (`backup-evidence.js retention`) — operators must
+> schedule it. The product records **evidence** of retention, never enforces
+> it.
 
 A base backup can only recover **forward** from its own history. A common
 but **incorrect** rule is: *"For an N-day PITR window, retain only the most
@@ -823,9 +827,15 @@ The deployment operator must, at install time and periodically thereafter:
 4. **Schedule recurring restore drills** on the production volume
    (logical `postgres-logical-restore.sh` or physical/PITR
    `postgres-restore-pitr` path), measure each restore's duration, and record
-   the drill via `backup-evidence.js drill --result succeeded --duration-ms
-   <measured>`. The product's RTO compliance row becomes SATISFIED only from
-   automated drill evidence within the declared objective.
+   the drill via `backup-evidence.js drill` with the explicit source:
+   - automated proof: `--source automated --result succeeded --duration-ms
+     <measured>` — the only evidence that can prove RTO;
+   - operator-declared: `--source operator_declared ...` — recorded for drill
+     cadence/history only, never as RTO proof.
+   The product's RTO compliance row becomes SATISFIED **only** from
+   automated-source, successful drill evidence whose measured duration is
+   within the declared objective; operator-declared evidence never satisfies
+   RTO.
 5. **Verify post-restore invariants** after every drill: org count, active
    Admin, `admin.bootstrap` audit rows, attempt/answer/snapshot presence, and
    the deployment's own marker checks (see §7/§8 and the drill suites).

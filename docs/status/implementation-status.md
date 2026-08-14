@@ -27,8 +27,8 @@ Single-tenant, Admin + Candidate reliable exam loop:
 ## Phase 2 — Exam Operation: ✅ GATE ITEMS IMPLEMENTED
 
 Core exam loop items are implemented and verified. The remaining items
-(`timed_sync` / `untimed` timing modes, queue admission) are not implemented
-— Issues #291/#292.
+(`timed_sync` / `deadline` / `untimed` timing modes, queue admission) are not
+implemented — Issues #291/#292.
 
 ### Implemented
 

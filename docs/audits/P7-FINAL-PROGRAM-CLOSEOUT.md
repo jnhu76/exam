@@ -121,7 +121,7 @@ obligation.
 
 | Item | Value |
 | --- | --- |
-| Declared RTO | **3600 s (1 h)** — written into the product as `desired_rto_seconds = 3600` via `PUT /system/ops-policy` (typed authority, range 30 s..48 h) by the restored Admin inside the acceptance deployment. |
+| Declared RTO | **3600 s (1 h)** — written into the product as `desired_rto_seconds = 3600` via `PUT /system/ops-policy` (typed authority, range 30 s..48 h) by the bootstrapped Admin **before the backup starts**, so the declared objective itself is part of State A and must survive the clean restore. |
 | Test dataset / representative volume | Deterministic isolated deployment: fresh `EXAM_DATA_ROOT`, first-Admin bootstrap, State-A marker + business invariants (orgs=1, admins=1, admin.bootstrap audit=1) — the repository's canonical representative volume (small; production-volume sizing is deployment-site). |
 | Restore method | C2 logical: online `pg_dump -Fc` (State A) → mutate source to State B → stop API/worker → clean-target restore (`DROP DATABASE` + `template0` + `pg_restore --no-owner --exit-on-error`) → restart API. |
 | Measured duration | **18 s (18 000 ms)** restore-drill span (backup → mutate → restore → restart → invariant verification), measured by the deterministic drill and recorded as **automated drill evidence** (`backup-evidence.js drill --source automated --result succeeded --duration-ms 18000`). |
@@ -133,12 +133,16 @@ obligation.
 
 **The product itself evaluated the executed restore evidence against the
 declared RTO and returned SATISFIED.** The acceptance chain —
-`PUT /system/ops-policy` (`desired_rto_seconds=3600`) → automated drill
-evidence (`durationMs=18000`, `source=automated`, `result=succeeded`) →
-`GET /system/ops-policy` (`compliance.rto.status=SATISFIED`) — runs
-end-to-end inside the deterministic suite
-(`tests/deployment/logical-backup-restore.sh`), which asserts the SATISFIED
-result on every run, not only in this closeout.
+`PUT /system/ops-policy` (`desired_rto_seconds=3600`) written **before the
+drill starts** → automated drill evidence (`durationMs=18000`,
+`source=automated`, `result=succeeded`) → `GET /system/ops-policy`
+(`compliance.rto.status=SATISFIED`) — runs end-to-end inside the
+deterministic suite (`tests/deployment/logical-backup-restore.sh`), which
+asserts the SATISFIED result on every run, not only in this closeout. The
+objective is declared first (the projection truthfully reads UNKNOWN before
+any drill evidence exists), and the backup therefore carries the declared
+policy as part of State A: the post-restore `GET` that returns SATISFIED
+also proves the objective itself survived the clean restore.
 
 ### Verdict — Product/Software Readiness vs Deployment Readiness
 
@@ -364,6 +368,30 @@ pnpm verify (full)                         : PASS (exit 0) — static gates
 The full static gates and the test suites are green on the closeout commit
 (the PR #314 head; verified by CI and `pnpm verify`); the changeset is
 documentation + Issue governance + one deterministic deployment-test extension
-(the drill now records automated drill evidence and asserts the
-product-evaluated RTO acceptance on every run). `pnpm test:deployment` remains
-the executable product-side proof.
+(the drill now declares the RTO objective before the backup, waits for app
+readiness after restore, and asserts the product-evaluated UNKNOWN →
+SATISFIED acceptance arc on every run). `pnpm test:deployment` remains the
+executable product-side proof.
+
+**Modified files (21):**
+
+- `README.md`, `docs/README.md` — P7 closure + ADR index (18 formal ADRs).
+- ADRs: `docs/adr/ADR-017-operational-authority-maintainer-boundary.md`
+  (rev 4 ACCEPTED/governing), `docs/adr/ADR-018-operational-observability-
+  window.md` (ACCEPTED), `docs/adr/README.md` (index).
+- `docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md` (new — final authority).
+- Supersession pointers: `P7-C-PORTABLE-BACKUP-RECOVERY-CLOSEOUT.md`,
+  `P7-CLOSE-RTO-RETENTION-CLOSEOUT.md`, `P7-E-OPERATIONAL-CONTROL-PLANE-
+  CLOSEOUT.md`, `P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`,
+  `P7-RBAC-ROLE-REMEDIATION.md`.
+- Roadmaps: `docs/roadmap/P7-system-readiness-and-exam-modes.md`,
+  `current.md`, `phase-roadmap.md`, `phase3-open-items.md`,
+  `post-mvp-issues.md` (new — Issues index), `recovery-operations-jobs.md`
+  (HISTORICAL header; J7 per-acceptance disposition matrix),
+  `ui-open-items.md`.
+- `docs/status/implementation-status.md`, `docs/deployment/backup-and-
+  recovery.md` (§12 deployment-site obligations).
+- `tests/deployment/logical-backup-restore.sh` — the one code change.
+
+**New tests: none.** No test files were added; the deterministic deployment
+suite above was extended.

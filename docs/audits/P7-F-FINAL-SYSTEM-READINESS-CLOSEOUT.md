@@ -8,7 +8,7 @@
 > CLOSED, Gate P7-3 is PASS under the revised software / deployment-site
 > acceptance semantics, ADR-017 rev 4 + ADR-018 are ACCEPTED, and #286 is
 > reopened as the Teacher@Course tracker.
-
+>
 > **P7-F = Final System Readiness / Release-Gate Closeout.** This is the
 > evidence-driven closeout of the P7 program against release gates P7-0…P7-6.
 > It is an **audit + bounded-repair job**, not a feature acquisition phase.

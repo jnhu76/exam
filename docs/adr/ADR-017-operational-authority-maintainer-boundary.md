@@ -201,7 +201,7 @@ permission count = 0, write permission count = 0.
 
 ```text
 human-approved correction in this task
-> ADR-017 revision 4 (this revision, once accepted)
+> ADR-017 revision 4 (governing since acceptance)
 > ADR-017 revisions 1–3
 > ADR-010 (as amended)
 > code reality
@@ -276,7 +276,7 @@ them Admin. This revision therefore selects the **Hybrid Maintainer Model**.
 
 ### D2. Maintainer is the System Operations / Maintenance Owner — Hybrid model (Option C)
 
-> **Revision 4 (PROPOSED) correction:** the "viewer/controller" wording below
+> **Revision 4 (ACCEPTED) correction:** the "viewer/controller" wording below
 > is **superseded** by R4-2. The application-side Maintainer is a **read-only
 > Operational Observer**, not a controller. The hybrid (application identity +
 > host identity) structure and the Admin↔Maintainer exclusion are unchanged.
@@ -356,7 +356,7 @@ execution authority                     NOT product RBAC authority
 | Plane | Owner | Examples |
 | --- | --- | --- |
 | **A. Business authority** | Admin only (Maintainer default none) | users, roles, candidates, courses, questions, exam profiles, exam authoring, exam publish, grading, result publish, business recovery decisions (force-submit / time-grant / misconduct / incident resolve), organization settings |
-| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, PROPOSED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
+| **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, ACCEPTED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
 | **C. Infrastructure execution authority** | Host Maintainer (host/CLI) | Docker/Compose, PostgreSQL, WAL archive, filesystem, backup destination, secret store, service lifecycle, restore, PITR, PGDATA, migration/rollback/backfill |
 
 ### D4. Permanently forbidden through normal product UI
@@ -385,7 +385,7 @@ Restore and PITR remain Host Maintainer + CLI/runbook + host access, forever.
 
 ### D5. Decision-gated operational capabilities
 
-> **Revision 4 (PROPOSED) tightening:** under the observability-window model
+> **Revision 4 (ACCEPTED) tightening:** under the observability-window model
 > (R4-5), the capabilities listed below are **NOT part of the current
 > Application Maintainer model**. The "decision-gated" framing is retained only
 > as a high bar — each requires a future independent ADR; none is implemented,
@@ -457,7 +457,7 @@ the current runtime; the Maintainer receives the five read capabilities
 
 > History: revisions 1–3 of this ADR recorded the pre-E2A state, where the
 > route was gated by `system.diagnostics.view` (safe only because Admin alone
-> held the view). P7-E2A (rev 4, PROPOSED) resolved it by splitting
+> held the view). P7-E2A (rev 4, ACCEPTED) resolved it by splitting
 > `system.email.test` out of the diagnostics view. The split is implemented
 > in the runtime and reflected in `packages/authz/src/catalog.ts` +
 > `packages/authz/src/presets.ts`.
@@ -482,7 +482,7 @@ Maintainer viewer; E2A must define the semantic split.
 
 ### D9. Admin sets objectives; Maintainer observes compliance
 
-> **Revision 4 (PROPOSED) correction:** under the observability-window model
+> **Revision 4 (ACCEPTED) correction:** under the observability-window model
 > (R4-4/R4-5) the Maintainer **observes** intent and the desired-vs-observed
 > compliance projection; the "execution / control-plane" framing below is
 > **superseded** — execution-side policy authority (`backup.schedule.manage`,
@@ -661,7 +661,7 @@ Negative:
   operational reading stays Admin-gated in the meantime; a deployment that
   wants a separate non-business ops viewer must wait for E2A (or use
   host/CLI access).
-- (Resolved in E2A / rev 4, PROPOSED) the pre-E2A `POST /email/test` view-capability
+- (Resolved in E2A / rev 4, ACCEPTED) the pre-E2A `POST /email/test` view-capability
   gate described in D7 history was a known invariant violation; the runtime now
   gates it on the separate Admin-only `system.email.test` capability.
 - The Admin role remains the highest-value product account; deployments

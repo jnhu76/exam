@@ -12,7 +12,9 @@ LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, support
 > operational control plane, configurable exam modes, RBAC remediation) is
 > **CLOSED** (2026-08-14). Remaining Phase 3 product work (scoped
 > Teacher/Proctor/Grader role bundles, staff invitation, SMTP reset, account
-> lifecycle UI, WYSIWYG submit) and all Phase 4 platformization are tracked
+> lifecycle UI, rich-text/WYSIWYG authoring and answering — Issue #301 —
+> and the generic final-answer submit barrier — Issue #302) and all Phase 4
+> platformization are tracked
 > as GitHub Issues — see [`docs/roadmap/post-mvp-issues.md`](docs/roadmap/post-mvp-issues.md)
 > for the index.
 > Tenant schema, role enums, and `organizationId` boundaries are retained for
