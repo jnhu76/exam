@@ -623,6 +623,7 @@ const zhCN = {
       correct: "正确",
       incorrect: "错误",
       manual: "主观题",
+      hidden: "—",
     },
     aria: {
       correct: "回答正确",
@@ -1665,6 +1666,9 @@ const zhCN = {
       config: {
         title: "考试配置",
         timingMode: "时间模式：",
+        timingModeValue: {
+          timed_window: "定时窗口",
+        },
         retakePolicy: "重考策略：",
         scoreStrategy: "分数策略：",
         maxAttempts: "最大尝试次数：",

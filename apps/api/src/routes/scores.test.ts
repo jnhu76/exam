@@ -1225,6 +1225,129 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
     expect(body).not.toHaveProperty("questionSnapshot");
   });
 
+  it("result DTO carries manualGraded per question, preserved through the candidate answer stripping", async () => {
+    // Part 1 — objective question, real auto-grading path: the candidate DTO
+    // must carry manualGraded=false and still strip standardAnswer.
+    const { attemptId: objectiveAttemptId } = await createManualGradedMixedExam(
+      {
+        title: "P3-2 manualGraded objective",
+        resultPublicationMode: "immediate",
+        includeTextResponse: false,
+      },
+    );
+    const objectiveRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${objectiveAttemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(objectiveRes.statusCode).toBe(200);
+    const objectiveBody = objectiveRes.json();
+    expect(objectiveBody.questionResults).toHaveLength(1);
+    expect(objectiveBody.questionResults[0]).toMatchObject({
+      type: "single_choice",
+      manualGraded: false,
+    });
+    expect(objectiveBody.questionResults[0]).not.toHaveProperty(
+      "standardAnswer",
+    );
+
+    // Part 2 — text_response question completed through the REAL grading API
+    // (no direct DB shortcut): the candidate DTO must carry manualGraded=true
+    // for the manual question while standardAnswer stays stripped.
+    const manualCreate = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "P3-2 manualGraded manual",
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600000).toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 10,
+        totalScore: 20,
+        questionSelectionMode: "manual",
+        questionIds: [textResponseId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+        resultPublicationMode: "immediate",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(manualCreate.statusCode).toBe(201);
+    const manualExamId = manualCreate.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${manualExamId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${manualExamId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const start = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${manualExamId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    const manualAttemptId = start.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${manualAttemptId}/answers/${textResponseId}`,
+      payload: {
+        attemptId: manualAttemptId,
+        questionId: textResponseId,
+        answer: "candidate essay text",
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${manualAttemptId}/submit`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    const grade = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${manualAttemptId}/grade-question`,
+      payload: { questionId: textResponseId, score: 20, comment: "ok" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(grade.statusCode).toBe(200);
+
+    const manualRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${manualAttemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(manualRes.statusCode).toBe(200);
+    const manualBody = manualRes.json();
+    expect(manualBody.questionResults).toHaveLength(1);
+    expect(manualBody.questionResults[0]).toMatchObject({
+      type: "text_response",
+      manualGraded: true,
+    });
+    expect(manualBody.questionResults[0]).not.toHaveProperty("standardAnswer");
+  });
+
   it("candidate can read own result but not another candidate's attempt", async () => {
     // attemptA belongs to the default candidate; candidate B is a different user.
     const { attemptId: attemptA } = await createManualGradedMixedExam({

@@ -112,6 +112,16 @@ function buildQuestionResults(
       type: question.type,
       content: question.content,
       order: question.order,
+      // Computed BEFORE the own-view standardAnswer stripping: the candidate
+      // DTO drops standardAnswer for every question, so the UI needs an
+      // independent "graded manually" signal to keep the manual marker while
+      // stripped objective answers render as hidden instead of mislabeled.
+      // text_response is always manual (its standardAnswer is a reference,
+      // not an auto-grading key); legacy fill_blank without a standardAnswer
+      // is manual too.
+      manualGraded:
+        question.type === "text_response" ||
+        (question.type === "fill_blank" && result.standardAnswer == null),
     };
   });
 }

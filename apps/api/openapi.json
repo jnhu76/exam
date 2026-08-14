@@ -19625,6 +19625,9 @@
                               },
                               "candidateAnswer": {},
                               "standardAnswer": {},
+                              "manualGraded": {
+                                "type": "boolean"
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -19647,6 +19650,7 @@
                               "score",
                               "maxScore",
                               "correct",
+                              "manualGraded",
                               "type",
                               "content",
                               "order"
