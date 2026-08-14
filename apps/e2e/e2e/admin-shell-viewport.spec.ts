@@ -54,7 +54,9 @@ test.describe("admin shell viewport scrolling (MVP-P2-04)", () => {
     );
 
     // Topbar is pinned at the viewport top (sticky).
-    const topbar = page.getByTestId("admin-layout").locator("header");
+    // The shell topbar is the only banner-role header (page-internal headers
+    // inside <main> do not map to banner), so it resolves uniquely.
+    const topbar = page.getByRole("banner");
     await expect(topbar).toBeVisible();
     expect(Math.abs((await topbar.boundingBox())!.y)).toBeLessThanOrEqual(1);
 
@@ -110,7 +112,9 @@ test.describe("admin shell viewport scrolling (MVP-P2-04)", () => {
       viewport.height,
     );
 
-    const topbar = page.getByTestId("admin-layout").locator("header");
+    // The shell topbar is the only banner-role header (page-internal headers
+    // inside <main> do not map to banner), so it resolves uniquely.
+    const topbar = page.getByRole("banner");
     expect(Math.abs((await topbar.boundingBox())!.y)).toBeLessThanOrEqual(1);
 
     const nav = await navScrollInfo(sidebar);
