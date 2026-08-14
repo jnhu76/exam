@@ -9,7 +9,7 @@
 
 ```text
 BASE_SHA   2ede3303b873065af40ff82d05851586d4548e65
-FINAL_SHA  (filled at PR time)
+FINAL_SHA  7790c27a (PR #318 head)
 branch     fix/mvp-preflight-product-scan
 date       2026-08-14
 ```
