@@ -952,3 +952,10 @@ export type BackupRunEventType =
   | "failed"
   | "abandoned"
   | "duplicate_rejected";
+
+/**
+ * Terminal outcome of a host-side retention run (P7-CLOSE P7-3b).
+ * `succeeded` means: retention operation succeeded AND repository/chain
+ * verification succeeded — not merely that a delete command returned zero.
+ */
+export type RetentionRunResult = "succeeded" | "failed";

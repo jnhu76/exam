@@ -12,6 +12,7 @@ import {
   DiagnosticsResponseSchema,
   BackupEvidenceResponseSchema,
   RestoreReadinessResponseSchema,
+  RetentionReadinessResponseSchema,
   OpsPolicyResponseSchema,
   UpsertOpsPolicyRequestSchema,
   type ComplianceStatus,
@@ -28,6 +29,8 @@ import type {
   BackupRunRow,
   RestoreDrillRow,
 } from "@exam/db/src/repository/backupEvidenceRepo.js";
+import { createRetentionEvidenceRepo } from "@exam/db/src/repository/retentionEvidenceRepo.js";
+import type { RetentionRunRow } from "@exam/db/src/repository/retentionEvidenceRepo.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -499,6 +502,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           tx,
         ).upsertPolicyWithinTransaction(ctx, tx, {
           desiredRpoSeconds: data.desiredRpoSeconds,
+          desiredRtoSeconds: data.desiredRtoSeconds ?? null,
           desiredRetentionDays: data.desiredRetentionDays,
           desiredDrillCadenceDays: data.desiredDrillCadenceDays,
           expectedVersion: data.version,
@@ -512,6 +516,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           targetId: "ops-policy",
           metadata: {
             desiredRpoSeconds: updated.desiredRpoSeconds,
+            desiredRtoSeconds: updated.desiredRtoSeconds,
             desiredRetentionDays: updated.desiredRetentionDays,
             desiredDrillCadenceDays: updated.desiredDrillCadenceDays,
             reason: updated.reason,
@@ -562,6 +567,46 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           ? toRestoreDrillWire(latestSuccess)
           : null,
         drillHistory: drills.map(toRestoreDrillWire),
+      };
+    },
+  });
+
+  /**
+   * GET /system/retention-readiness
+   *
+   * P7-CLOSE P7-3b — READ-ONLY retention evidence projection: latest host-side
+   * retention run, latest successful, and history. Retention is host-operator
+   * owned (ADR-017 D4); this route reads EVIDENCE only, never execution.
+   *
+   * Gated by SystemRestoreReadinessView (Admin + Maintainer presets — same
+   * observation boundary as restore readiness).
+   */
+  fastify.get("/system/retention-readiness", {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemRestoreReadinessView),
+    ],
+    schema: {
+      security: cookieAuth,
+      "x-role": ["Admin", "Maintainer"],
+      response: { 200: RetentionReadinessResponseSchema },
+    },
+    handler: async (request) => {
+      const ctx = getRequestContext(request);
+      const repo = createRetentionEvidenceRepo(anyDb);
+      const [latestRetention, latestSuccess, history] = await Promise.all([
+        repo.latestRetention(ctx),
+        repo.latestSucceededRetention(ctx),
+        repo.listRetentionRuns(ctx, 20),
+      ]);
+      return {
+        latestRetention: latestRetention
+          ? toRetentionRunWire(latestRetention)
+          : null,
+        latestSuccessfulRetention: latestSuccess
+          ? toRetentionRunWire(latestSuccess)
+          : null,
+        retentionHistory: history.map(toRetentionRunWire),
       };
     },
   });
@@ -627,6 +672,7 @@ async function buildOpsPolicyProjection(
   const policyWire = policy
     ? {
         desiredRpoSeconds: policy.desiredRpoSeconds,
+        desiredRtoSeconds: policy.desiredRtoSeconds,
         desiredRetentionDays: policy.desiredRetentionDays,
         desiredDrillCadenceDays: policy.desiredDrillCadenceDays,
         version: policy.version,
@@ -660,7 +706,32 @@ async function buildOpsPolicyProjection(
     rpoDetail = `last verified backup age ${Math.round(rpoObservedSeconds)}s > desired ${policy.desiredRpoSeconds}s`;
   }
 
-  // ── Retention (host-managed — no product enforcement evidence) ──
+  // ── RTO (observed via restore drill evidence) ──
+  let rtoStatus: ComplianceStatus;
+  let rtoDetail: string | null;
+  const automatedDrill = drills.find(
+    (d) => d.source === "automated" && d.result === "succeeded",
+  );
+  const rtoObservedMs = automatedDrill?.durationMs ?? null;
+  if (!policy) {
+    rtoStatus = "NOT_CONFIGURED";
+    rtoDetail = "no operational policy intent recorded";
+  } else if (policy.desiredRtoSeconds === null) {
+    rtoStatus = "NOT_CONFIGURED";
+    rtoDetail = "desired RTO not configured — no RTO objective set";
+  } else if (rtoObservedMs === null) {
+    rtoStatus = "UNKNOWN";
+    rtoDetail =
+      "no qualifying automated drill evidence — RTO cannot be measured (operator-declared drills do not satisfy RTO)";
+  } else if (rtoObservedMs <= policy.desiredRtoSeconds * 1000) {
+    rtoStatus = "SATISFIED";
+    rtoDetail = `latest automated restore duration ${rtoObservedMs}ms <= desired ${policy.desiredRtoSeconds}s (${rtoObservedMs / 1000}s)`;
+  } else {
+    rtoStatus = "NOT_SATISFIED";
+    rtoDetail = `latest automated restore duration ${rtoObservedMs}ms > desired ${policy.desiredRtoSeconds}s (${rtoObservedMs / 1000}s)`;
+  }
+
+  // ── Retention (host-managed — evidence-based) ──
   const retentionStatus: ComplianceStatus = policy
     ? "NOT_ENFORCED"
     : "NOT_CONFIGURED";
@@ -714,6 +785,15 @@ async function buildOpsPolicyProjection(
         status: rpoStatus,
         observedDetail: rpoDetail,
       },
+      rto: {
+        desired:
+          policy?.desiredRtoSeconds != null
+            ? `${policy.desiredRtoSeconds}s`
+            : null,
+        observed: rtoObservedMs != null ? `${rtoObservedMs}ms` : null,
+        status: rtoStatus,
+        observedDetail: rtoDetail,
+      },
       retention: {
         desired: policy ? `${policy.desiredRetentionDays}d` : null,
         observed: "host-managed",
@@ -744,6 +824,25 @@ function toRestoreDrillWire(r: RestoreDrillRow) {
     completedAt: r.completedAt?.toISOString() ?? null,
     durationMs: r.durationMs,
     failureReason: r.failureReason,
+  };
+}
+
+/** Maps a retention-run evidence row to the wire shape (ISO timestamps). */
+function toRetentionRunWire(r: RetentionRunRow) {
+  return {
+    id: r.id,
+    operationId: r.operationId,
+    tool: r.tool,
+    result: r.result,
+    startedAt: r.startedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+    prunedBackups: r.prunedBackups,
+    prunedWalArchives: r.prunedWalArchives,
+    retentionObjective: r.retentionObjective,
+    verificationStatus: r.verificationStatus,
+    verificationDetail: r.verificationDetail,
+    failureReason: r.failureReason,
+    executorType: r.executorType,
   };
 }
 

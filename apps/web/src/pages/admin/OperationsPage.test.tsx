@@ -138,6 +138,7 @@ function policyResponse(overrides: Record<string, unknown> = {}) {
   return {
     policy: {
       desiredRpoSeconds: 3600,
+      desiredRtoSeconds: null,
       desiredRetentionDays: 30,
       desiredDrillCadenceDays: 7,
       version: 1,
@@ -151,6 +152,12 @@ function policyResponse(overrides: Record<string, unknown> = {}) {
         observed: "7200s",
         status: "NOT_SATISFIED",
         observedDetail: "last verified backup age 7200s > desired 3600s",
+      },
+      rto: {
+        desired: null,
+        observed: null,
+        status: "NOT_CONFIGURED",
+        observedDetail: "desired RTO not configured",
       },
       retention: {
         desired: "30d",
@@ -436,6 +443,12 @@ describe("OperationsPage policy intent (P7-E3)", () => {
               status: "NOT_CONFIGURED",
               observedDetail: "no operational policy intent recorded",
             },
+            rto: {
+              desired: null,
+              observed: null,
+              status: "NOT_CONFIGURED",
+              observedDetail: "no operational policy intent recorded",
+            },
             retention: {
               desired: null,
               observed: "host-managed",
@@ -500,6 +513,7 @@ describe("OperationsPage policy intent (P7-E3)", () => {
       policyResponse({
         policy: {
           desiredRpoSeconds: 600,
+          desiredRtoSeconds: null,
           desiredRetentionDays: 30,
           desiredDrillCadenceDays: 7,
           version: 2,
@@ -513,6 +527,12 @@ describe("OperationsPage policy intent (P7-E3)", () => {
             observed: "7200s",
             status: "NOT_SATISFIED",
             observedDetail: "last verified backup age 7200s > desired 600s",
+          },
+          rto: {
+            desired: null,
+            observed: null,
+            status: "NOT_CONFIGURED",
+            observedDetail: "desired RTO not configured",
           },
           retention: {
             desired: "30d",
@@ -552,6 +572,7 @@ describe("OperationsPage policy intent (P7-E3)", () => {
     await waitFor(() => {
       expect(putMock).toHaveBeenCalledWith("/api/system/ops-policy", {
         desiredRpoSeconds: 600,
+        desiredRtoSeconds: null,
         desiredRetentionDays: 30,
         desiredDrillCadenceDays: 7,
         version: 1,

@@ -22,6 +22,11 @@
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
  *     drill --operation-id logical-restore:2026-08-12 --backup-type logical \
  *       --result succeeded --source automated --duration-ms 42000
+ *   docker compose exec -T app node dist/scripts/backup-evidence.js \
+ *     retention --operation-id retention:2026-08-13T10 --tool pgbackrest \
+ *       --result succeeded --objective "keep 2 full + 7d WAL" \
+ *       --pruned-backups 3 --pruned-wal-archives 1247 \
+ *       --verification-status verified
  *
  * SUCCESS semantics (ADR-017 D10): `complete` records a verified success;
  * the CLI refuses to record success without verification evidence — use
@@ -31,6 +36,7 @@
 
 import { createDatabase } from "@exam/db";
 import { createBackupEvidenceRepo } from "@exam/db/src/repository/backupEvidenceRepo.js";
+import { createRetentionEvidenceRepo } from "@exam/db/src/repository/retentionEvidenceRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
@@ -230,7 +236,7 @@ async function main(): Promise<void> {
     const [command, ...rest] = process.argv.slice(2);
     if (!command) {
       fail(
-        "subcommand required: start | complete | fail | drill (see file header for usage)",
+        "subcommand required: start | complete | fail | drill | retention (see file header for usage)",
       );
     }
     const args = parseArgs(rest);
@@ -447,6 +453,54 @@ async function main(): Promise<void> {
         });
         process.stdout.write(
           `recorded ${source} restore drill ${drill.operationId}: ${drill.result}\n`,
+        );
+        break;
+      }
+      case "retention": {
+        // Host-side retention evidence (P7-CLOSE P7-3b). Records the outcome
+        // of an automated retention/expire operation executed by the Host
+        // Operator outside Exam RBAC. Success means: retention operation
+        // succeeded AND repository/chain verification succeeded — not merely
+        // that a delete command returned zero.
+        const operationId = required(args, "operation-id");
+        const tool = required(args, "tool");
+        const result = assertOneOf(
+          required(args, "result"),
+          ["succeeded", "failed"] as const,
+          "result",
+        );
+        const verificationStatus = args["verification-status"]
+          ? assertOneOf(
+              args["verification-status"],
+              ["verified", "failed", "pending"] as const,
+              "verification-status",
+            )
+          : null;
+        const retentionRepo = createRetentionEvidenceRepo(conn.db);
+        const run = await retentionRepo.recordRetentionRun(ctx, {
+          operationId,
+          tool,
+          result,
+          startedAt: now,
+          completedAt: now,
+          prunedBackups: args["pruned-backups"]
+            ? parsePositiveInt(args["pruned-backups"], "pruned-backups")
+            : null,
+          prunedWalArchives: args["pruned-wal-archives"]
+            ? parsePositiveInt(
+                args["pruned-wal-archives"],
+                "pruned-wal-archives",
+              )
+            : null,
+          retentionObjective: args.objective ?? null,
+          verificationStatus,
+          verificationDetail: args["verification-detail"] ?? null,
+          failureReason: args.reason ?? null,
+          executorType: assertExecutor(args.executor ?? "host_script"),
+          now,
+        });
+        process.stdout.write(
+          `recorded retention ${run.operationId}: ${run.result} (tool=${run.tool})\n`,
         );
         break;
       }

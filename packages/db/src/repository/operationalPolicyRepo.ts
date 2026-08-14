@@ -14,6 +14,7 @@ export type OperationalPolicyRow = {
   id: string;
   organizationId: string;
   desiredRpoSeconds: number;
+  desiredRtoSeconds: number | null;
   desiredRetentionDays: number;
   desiredDrillCadenceDays: number;
   version: number;
@@ -31,6 +32,7 @@ function row(
     id: r.id,
     organizationId: r.organizationId,
     desiredRpoSeconds: r.desiredRpoSeconds,
+    desiredRtoSeconds: r.desiredRtoSeconds,
     desiredRetentionDays: r.desiredRetentionDays,
     desiredDrillCadenceDays: r.desiredDrillCadenceDays,
     version: r.version,
@@ -85,6 +87,7 @@ export function createOperationalPolicyRepo(db: Database) {
     tx: TransactionDatabase,
     params: {
       desiredRpoSeconds: number;
+      desiredRtoSeconds: number | null;
       desiredRetentionDays: number;
       desiredDrillCadenceDays: number;
       expectedVersion: number;
@@ -115,6 +118,7 @@ export function createOperationalPolicyRepo(db: Database) {
         .update(backupOperationalPolicy)
         .set({
           desiredRpoSeconds: params.desiredRpoSeconds,
+          desiredRtoSeconds: params.desiredRtoSeconds,
           desiredRetentionDays: params.desiredRetentionDays,
           desiredDrillCadenceDays: params.desiredDrillCadenceDays,
           version: current.version + 1,
@@ -148,6 +152,7 @@ export function createOperationalPolicyRepo(db: Database) {
           id: randomUUID(),
           organizationId: orgId,
           desiredRpoSeconds: params.desiredRpoSeconds,
+          desiredRtoSeconds: params.desiredRtoSeconds,
           desiredRetentionDays: params.desiredRetentionDays,
           desiredDrillCadenceDays: params.desiredDrillCadenceDays,
           version: 1,

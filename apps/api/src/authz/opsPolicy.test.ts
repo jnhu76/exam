@@ -68,6 +68,7 @@ describe("P7-E3 operational policy intent", () => {
   const repo = () => createOperationalPolicyRepo(db);
   const base = {
     desiredRpoSeconds: 3600,
+    desiredRtoSeconds: null as number | null,
     desiredRetentionDays: 30,
     desiredDrillCadenceDays: 7,
     reason: "initial setup",
@@ -81,6 +82,9 @@ describe("P7-E3 operational policy intent", () => {
       repo().upsertPolicyWithinTransaction(ctx, tx, {
         desiredRpoSeconds:
           (overrides.desiredRpoSeconds as number) ?? base.desiredRpoSeconds,
+        desiredRtoSeconds:
+          (overrides.desiredRtoSeconds as number | null) ??
+          base.desiredRtoSeconds,
         desiredRetentionDays:
           (overrides.desiredRetentionDays as number) ??
           base.desiredRetentionDays,
@@ -154,6 +158,7 @@ describe("P7-E3 operational policy intent", () => {
             (tx) =>
               repo().upsertPolicyWithinTransaction(ctx, tx, {
                 desiredRpoSeconds: 7200,
+                desiredRtoSeconds: null,
                 desiredRetentionDays: 30,
                 desiredDrillCadenceDays: 7,
                 expectedVersion: 1,
@@ -170,6 +175,7 @@ describe("P7-E3 operational policy intent", () => {
                 conn2.db,
               ).upsertPolicyWithinTransaction(ctx, tx, {
                 desiredRpoSeconds: 9000,
+                desiredRtoSeconds: null,
                 desiredRetentionDays: 30,
                 desiredDrillCadenceDays: 7,
                 expectedVersion: 1,
@@ -221,6 +227,7 @@ describe("P7-E3 operational policy intent", () => {
             (tx) =>
               repo().upsertPolicyWithinTransaction(ctx, tx, {
                 desiredRpoSeconds: 3600,
+                desiredRtoSeconds: null,
                 desiredRetentionDays: 30,
                 desiredDrillCadenceDays: 7,
                 expectedVersion: 0,
@@ -237,6 +244,7 @@ describe("P7-E3 operational policy intent", () => {
                 conn2.db,
               ).upsertPolicyWithinTransaction(ctx, tx, {
                 desiredRpoSeconds: 1800,
+                desiredRtoSeconds: null,
                 desiredRetentionDays: 30,
                 desiredDrillCadenceDays: 7,
                 expectedVersion: 0,
@@ -284,6 +292,7 @@ describe("P7-E3 operational policy intent", () => {
       executeInTransaction(db, (tx) =>
         repo().upsertPolicyWithinTransaction(ctx, tx, {
           desiredRpoSeconds: 60, // below the 300s floor
+          desiredRtoSeconds: null,
           desiredRetentionDays: 30,
           desiredDrillCadenceDays: 7,
           expectedVersion: 0,

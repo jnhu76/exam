@@ -357,9 +357,11 @@ const zhCN = {
       },
       fields: {
         rpo: "恢复点目标 (RPO)",
+        rto: "恢复时间目标 (RTO)",
         retention: "保留期目标",
         drill: "恢复演练周期",
       },
+      rtoPlaceholder: "留空 = 未配置",
       lastChange: "最近变更",
       edit: "编辑意图",
       save: "保存",

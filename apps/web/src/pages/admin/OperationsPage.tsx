@@ -66,6 +66,7 @@ export function OperationsPage() {
   const [stale, setStale] = useState(false);
   const [policyDraft, setPolicyDraft] = useState<{
     desiredRpoSeconds: string;
+    desiredRtoSeconds: string | null;
     desiredRetentionDays: string;
     desiredDrillCadenceDays: string;
     reason: string;
@@ -121,6 +122,9 @@ export function OperationsPage() {
         "/api/system/ops-policy",
         {
           desiredRpoSeconds: Number(policyDraft.desiredRpoSeconds),
+          desiredRtoSeconds: policyDraft.desiredRtoSeconds
+            ? Number(policyDraft.desiredRtoSeconds)
+            : null,
           desiredRetentionDays: Number(policyDraft.desiredRetentionDays),
           desiredDrillCadenceDays: Number(policyDraft.desiredDrillCadenceDays),
           version: current?.version ?? 0,
@@ -374,6 +378,7 @@ export function OperationsPage() {
                   {(
                     [
                       ["rpo", policy.compliance.rpo],
+                      ["rto", policy.compliance.rto],
                       ["retention", policy.compliance.retention],
                       ["drill", policy.compliance.drill],
                     ] as const
@@ -414,7 +419,7 @@ export function OperationsPage() {
 
                 {policyDraft !== null ? (
                   <div className="mt-3 space-y-3 border-t pt-3">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
                         <Label htmlFor="policy-rpo">
                           {t("ops.policy.fields.rpo")} (s)
@@ -429,6 +434,25 @@ export function OperationsPage() {
                             setPolicyDraft({
                               ...policyDraft,
                               desiredRpoSeconds: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="policy-rto">
+                          {t("ops.policy.fields.rto")} (s)
+                        </Label>
+                        <Input
+                          id="policy-rto"
+                          type="number"
+                          min={30}
+                          max={172800}
+                          placeholder={t("ops.policy.rtoPlaceholder")}
+                          value={policyDraft.desiredRtoSeconds ?? ""}
+                          onChange={(e) =>
+                            setPolicyDraft({
+                              ...policyDraft,
+                              desiredRtoSeconds: e.target.value || null,
                             })
                           }
                         />
@@ -514,6 +538,10 @@ export function OperationsPage() {
                         desiredRpoSeconds: String(
                           policy.policy?.desiredRpoSeconds ?? 3600,
                         ),
+                        desiredRtoSeconds:
+                          policy.policy?.desiredRtoSeconds != null
+                            ? String(policy.policy.desiredRtoSeconds)
+                            : null,
                         desiredRetentionDays: String(
                           policy.policy?.desiredRetentionDays ?? 30,
                         ),

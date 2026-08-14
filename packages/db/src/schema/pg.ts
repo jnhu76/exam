@@ -20,6 +20,7 @@ import type {
   QuestionSnapshot,
   RestoreDrillResult,
   RestoreDrillSource,
+  RetentionRunResult,
   ResultPublicationMode,
   SubmittedAnswersSnapshot,
   AttemptInterruptionEvent,
@@ -1354,6 +1355,8 @@ export const backupOperationalPolicy = pgTable(
     organizationId: organizationId().references(() => organizations.id),
     /** Desired RPO in seconds (safe range 5 minutes .. 7 days). */
     desiredRpoSeconds: integer("desired_rpo_seconds").notNull(),
+    /** Desired RTO in seconds (nullable: NOT_CONFIGURED for legacy rows). Safe range 30s .. 48h when non-null. */
+    desiredRtoSeconds: integer("desired_rto_seconds"),
     /** Desired backup retention objective in days (1 .. 3650). */
     desiredRetentionDays: integer("desired_retention_days").notNull(),
     /** Desired restore-drill cadence in days (1 .. 365). */
@@ -1383,6 +1386,10 @@ export const backupOperationalPolicy = pgTable(
     check(
       "backup_operational_policy_cadence_check",
       sql`${table.desiredDrillCadenceDays} BETWEEN 1 AND 365`,
+    ),
+    check(
+      "backup_operational_policy_rto_check",
+      sql`${table.desiredRtoSeconds} IS NULL OR (${table.desiredRtoSeconds} BETWEEN 30 AND 172800)`,
     ),
   ],
 );
@@ -1430,6 +1437,68 @@ export const restoreDrillRuns = pgTable(
     check(
       "restore_drill_runs_source_check",
       sql`${table.source} IN ('automated', 'operator_declared')`,
+    ),
+  ],
+);
+
+/**
+ * Host-side retention evidence (P7-CLOSE P7-3b). Records automated
+ * retention/expire operations executed by the Host Operator outside Exam RBAC.
+ * This is EVIDENCE only — Exam never performs retention. Success means: the
+ * retention operation succeeded AND repository/chain verification succeeded,
+ * not merely that a delete command returned zero.
+ */
+export const retentionRuns = pgTable(
+  "retention_runs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    /** Stable operation identity (e.g. `retention:2026-08-13T10`). */
+    operationId: text("operation_id").notNull(),
+    /** Retention tool identifier (e.g. `pgbackrest`, `wal-g`). */
+    tool: text("tool").notNull(),
+    /** Terminal outcome of the retention run. */
+    result: text("result").notNull().$type<RetentionRunResult>(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    /** Number of old backups pruned (safe summary count). */
+    prunedBackups: integer("pruned_backups"),
+    /** Number of old WAL archives pruned (safe summary count). */
+    prunedWalArchives: integer("pruned_wal_archives"),
+    /** Human-readable retention objective applied (e.g. "keep 2 full + 7d WAL"). */
+    retentionObjective: text("retention_objective"),
+    /** Post-expire repository verification outcome. */
+    verificationStatus: text(
+      "verification_status",
+    ).$type<BackupVerificationStatus | null>(),
+    verificationDetail: text("verification_detail"),
+    failureReason: text("failure_reason"),
+    /** Always host_script — Exam never executes retention. */
+    executorType: text("executor_type")
+      .notNull()
+      .default("host_script")
+      .$type<BackupExecutorType>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("retention_runs_org_operation_unique").on(
+      table.organizationId,
+      table.operationId,
+    ),
+    check(
+      "retention_runs_result_check",
+      sql`${table.result} IN ('succeeded', 'failed')`,
+    ),
+    check(
+      "retention_runs_verification_check",
+      sql`${table.verificationStatus} IS NULL OR (${table.verificationStatus} IN ('verified', 'failed', 'pending'))`,
     ),
   ],
 );
