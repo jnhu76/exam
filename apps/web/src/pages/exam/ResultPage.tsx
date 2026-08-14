@@ -165,7 +165,12 @@ export function ResultPage() {
                   </TableHeader>
                   <TableBody>
                     {result.questionResults.map((question) => {
-                      const isManual = question.standardAnswer == null;
+                      const isManual = question.manualGraded === true;
+                      // Candidate DTO strips standardAnswer server-side
+                      // (RBAC-M10-E); an objective question whose answer is
+                      // absent was hidden, not manually graded.
+                      const answerHidden =
+                        !isManual && question.standardAnswer == null;
                       return (
                         <TableRow key={question.questionId}>
                           <DataTableCell role="number">
@@ -217,6 +222,10 @@ export function ResultPage() {
                             {isManual ? (
                               <span className="text-muted-foreground">
                                 {t("candidateResult.answer.manual")}
+                              </span>
+                            ) : answerHidden ? (
+                              <span className="text-muted-foreground">
+                                {t("candidateResult.answer.hidden")}
                               </span>
                             ) : (
                               <AnswerText

@@ -12,6 +12,14 @@ export const QuestionScoreResultSchema = z.object({
   correct: z.boolean(),
   candidateAnswer: z.unknown(),
   standardAnswer: z.unknown(),
+  /**
+   * True when the question was graded manually (text_response, or a legacy
+   * fill_blank without a standardAnswer). Computed server-side BEFORE the
+   * candidate-view answer stripping, so the UI can keep showing the manual
+   * marker while a stripped objective answer renders as hidden instead of
+   * being mislabeled "manual".
+   */
+  manualGraded: z.boolean(),
 });
 
 // ── Manual Grading (P2D-J2) ──────────────────────────────────────

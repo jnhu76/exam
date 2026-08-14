@@ -198,6 +198,9 @@ export function ExamCreatePage() {
   // Auto-calc totalScore from the selected questions (mirrors the legacy
   // ExamConfigForm behavior); the user may switch to manual entry.
   const [manualTotalScore, setManualTotalScore] = useState(false);
+  // The 及格分 default (60) follows the auto-calculated 总分 until the user
+  // edits it explicitly (see the auto-calc effect below).
+  const [passingScoreTouched, setPassingScoreTouched] = useState(false);
 
   const loadData = useCallback(async () => {
     setError(null);
@@ -412,14 +415,26 @@ export function ExamCreatePage() {
   // requires totalScore === sum(question scores); auto-calc prevents
   // avoidable publish-time 400s. The user may switch to manual entry.
   useEffect(() => {
-    if (hasQuestions && !manualTotalScore && computedTotal > 0) {
-      setState((s) =>
-        s.totalScore === computedTotal
-          ? s
-          : { ...s, totalScore: computedTotal },
-      );
-    }
-  }, [computedTotal, hasQuestions, manualTotalScore]);
+    if (!hasQuestions || manualTotalScore || computedTotal <= 0) return;
+    setState((s) => {
+      let next = s;
+      if (s.totalScore !== computedTotal) {
+        next = { ...next, totalScore: computedTotal };
+      }
+      // While the 及格分 has not been explicitly edited, it tracks the auto
+      // total at the 60% convention (like the default for a 100-point exam).
+      // Without this, the untouched default (60) can exceed a small total and
+      // leave step 3 born in an error state; explicit user edits are never
+      // overwritten.
+      if (!passingScoreTouched) {
+        const defaultPassing = Math.max(1, Math.round(computedTotal * 0.6));
+        if (next.passingScore !== defaultPassing) {
+          next = { ...next, passingScore: defaultPassing };
+        }
+      }
+      return next;
+    });
+  }, [computedTotal, hasQuestions, manualTotalScore, passingScoreTouched]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
@@ -715,6 +730,7 @@ export function ExamCreatePage() {
                   onChange={(e) => {
                     // Empty input keeps the previous value — never store 0.
                     if (e.target.value === "") return;
+                    setPassingScoreTouched(true);
                     setState((s) => ({
                       ...s,
                       passingScore: Number(e.target.value),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
@@ -117,6 +117,36 @@ export function ExamDetailPage() {
   const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Localized value labels for the 考试配置 block. Raw enum values (e.g.
+  // "timed_window", "unlimited") must never reach the admin UI; unknown
+  // values fall back to the raw value so a future enum addition degrades
+  // gracefully instead of rendering an i18n key.
+  const policyLabels = useMemo(
+    () => ({
+      timingMode: {
+        timed_window: t("admin.examDetail.config.timingModeValue.timed_window"),
+      } as Record<string, string>,
+      retakePolicy: {
+        unlimited: t("admin.examProfilePages.enumLabels.retakePolicyUnlimited"),
+        max_attempts: t(
+          "admin.examProfilePages.enumLabels.retakePolicyMaxAttempts",
+        ),
+        pass_then_stop: t(
+          "admin.examProfilePages.enumLabels.retakePolicyPassThenStop",
+        ),
+      } as Record<string, string>,
+      scoreStrategy: {
+        highest: t("admin.examProfilePages.enumLabels.scoreStrategyHighest"),
+        latest: t("admin.examProfilePages.enumLabels.scoreStrategyLatest"),
+        first: t("admin.examProfilePages.enumLabels.scoreStrategyFirst"),
+      } as Record<string, string>,
+    }),
+    [t],
+  );
+  const labelFor =
+    (map: Record<string, string>) =>
+    (value: string): string =>
+      map[value] ?? value;
   const [exam, setExam] = useState<ExamDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -618,15 +648,19 @@ export function ExamDetailPage() {
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.timingMode")}
             </span>
-            <span>{exam.timingMode}</span>
+            <span>{labelFor(policyLabels.timingMode)(exam.timingMode)}</span>
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.retakePolicy")}
             </span>
-            <span>{exam.retakePolicy}</span>
+            <span>
+              {labelFor(policyLabels.retakePolicy)(exam.retakePolicy)}
+            </span>
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.scoreStrategy")}
             </span>
-            <span>{exam.scoreStrategy}</span>
+            <span>
+              {labelFor(policyLabels.scoreStrategy)(exam.scoreStrategy)}
+            </span>
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.maxAttempts")}
             </span>

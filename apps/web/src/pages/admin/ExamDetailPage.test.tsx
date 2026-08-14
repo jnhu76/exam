@@ -93,7 +93,9 @@ describe("ExamDetailPage", () => {
     it("renders config section", async () => {
       renderPage();
       expect(await screen.findByText("考试配置")).toBeInTheDocument();
-      expect(screen.getByText("timed_window")).toBeInTheDocument();
+      // Policy enums render as localized labels, never raw values.
+      expect(screen.getByText("定时窗口")).toBeInTheDocument();
+      expect(screen.queryByText("timed_window")).not.toBeInTheDocument();
     });
 
     // Characterization (UI-MIGRATE-N-W4B): the detail stat + config cards are
@@ -109,7 +111,7 @@ describe("ExamDetailPage", () => {
       const configLabel = await screen.findByText("考试配置");
       const configCard = configLabel.closest("[data-slot='card']");
       expect(configCard).toBeInTheDocument();
-      expect(configCard).toHaveTextContent("timed_window");
+      expect(configCard).toHaveTextContent("定时窗口");
     });
 
     it("renders Phase 1 tabs without audit placeholder", async () => {

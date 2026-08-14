@@ -247,7 +247,9 @@ describe("ResultPage", () => {
   it("P3-2: score visible + answers hidden — renders score but not standardAnswer/rubric", async () => {
     // Realistic candidate DTO: standardAnswer stripped (undefined) by the API,
     // no rubric field. The page must show score/pass and must NOT open an
-    // answer-review section just because the score is visible.
+    // answer-review section just because the score is visible. manualGraded
+    // survives the stripping, so only genuinely manual questions keep the
+    // "主观题" marker while objective answers render as hidden.
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -265,6 +267,7 @@ describe("ResultPage", () => {
           order: 0,
           candidateAnswer: "a",
           // standardAnswer intentionally ABSENT (server strips it for candidates)
+          manualGraded: false,
           score: 10,
           maxScore: 10,
           correct: true,
@@ -276,6 +279,7 @@ describe("ResultPage", () => {
           order: 1,
           candidateAnswer: "candidate essay",
           // standardAnswer absent; rubric is never in the DTO
+          manualGraded: true,
           score: 15,
           maxScore: 20,
           correct: true,
@@ -291,9 +295,12 @@ describe("ResultPage", () => {
     );
     expect(screen.getByText("已通过")).toBeInTheDocument();
 
-    // Answer gate closed (DTO carries no standardAnswer): the correct-answer
-    // column renders the manual/placeholder text, NOT a real answer.
-    expect(screen.getAllByText("主观题").length).toBeGreaterThan(0);
+    // Answer gate closed (DTO carries no standardAnswer): the objective
+    // correct-answer cell renders the hidden placeholder, NOT a real answer
+    // and NOT the manual marker.
+    expect(screen.getAllByText("—")).toHaveLength(1);
+    // The genuinely manual question keeps the manual marker.
+    expect(screen.getByText("主观题")).toBeInTheDocument();
     // No rubric is ever rendered by ResultPage (it is not in the DTO contract).
     expect(screen.queryByText(/评分标准|rubric/i)).not.toBeInTheDocument();
   });

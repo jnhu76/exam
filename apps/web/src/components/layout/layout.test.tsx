@@ -330,6 +330,71 @@ describe("ExamLayout header navigation", () => {
   });
 });
 
+describe("Admin shell viewport-scrolling contract (MVP-P2-04)", () => {
+  it("keeps the desktop sidebar attached to the viewport (sticky h-screen self-start)", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    const aside = screen.getByTestId("app-sidebar");
+    // The aside must not stretch to the page height (min-h-screen). It is a
+    // viewport-constrained, self-starting flex item that sticks to the top of
+    // the scrollport while the main document scrolls.
+    expect(aside).toHaveClass(
+      "sticky",
+      "top-0",
+      "h-screen",
+      "min-h-0",
+      "self-start",
+    );
+  });
+
+  it("gives the sidebar navigation its own internal scroll region", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    const nav = screen
+      .getByTestId("app-sidebar")
+      .querySelector("nav") as HTMLElement;
+    expect(nav).not.toBeNull();
+    // flex-1 + min-h-0 + overflow-y-auto: the nav region shrinks within the
+    // h-screen sidebar and scrolls independently instead of growing the page.
+    expect(nav).toHaveClass("flex-1", "min-h-0", "overflow-y-auto");
+  });
+
+  it("keeps the sidebar header and footer from being compressed by the nav region", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    const aside = screen.getByTestId("app-sidebar");
+    const brandHeader = aside.firstElementChild as HTMLElement;
+    expect(brandHeader).toHaveClass("shrink-0");
+    const logoutButton = aside.querySelector(
+      'button[aria-label="退出登录"]',
+    ) as HTMLElement;
+    expect(logoutButton).not.toBeNull();
+    expect(logoutButton.parentElement).toHaveClass("shrink-0");
+  });
+
+  it("renders the Admin topbar as a sticky, opaque surface below overlay z-index", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={admin}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="*" element={<PlaceholderPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/dashboard",
+    );
+    const header = screen
+      .getByTestId("admin-layout")
+      .querySelector("header") as HTMLElement;
+    expect(header).not.toBeNull();
+    // Sticky + opaque bg; z-40 stays below dialog/sheet/popover overlays (z-50).
+    expect(header).toHaveClass("sticky", "top-0", "z-40", "bg-card");
+  });
+});
+
 describe("layout shells", () => {
   it("renders LoginPage with login layout test id", () => {
     renderWithProviders(

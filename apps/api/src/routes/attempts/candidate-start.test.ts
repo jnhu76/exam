@@ -161,43 +161,50 @@ describe("attempt routes", () => {
   });
 
   describe("CandidateExamSummary availabilityStatus derivation", () => {
+    // Built lazily at call time: `questionId` is assigned in beforeAll, which
+    // runs after describe collection — a describe-scope const would capture
+    // it as undefined and produce an invalid snapshot.
+    const buildSnapshot = () => [
+      {
+        originalQuestionId: questionId,
+        type: "single_choice" as const,
+        content: "Q",
+        attachments: [] as never[],
+        options: [{ id: "a", content: "A" }],
+        standardAnswer: "a",
+        score: 100,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full" as const,
+          fillBlankMatchMode: "exact" as const,
+        },
+        order: 0,
+        rubric: null,
+      },
+    ];
+
     async function createAndEnrollExam(
       opts: {
         title?: string;
+        status?: "draft" | "published" | "open" | "closed";
         retakePolicy?: string;
         maxAttempts?: number;
         openOffsetMs?: number;
         closeOffsetMs?: number;
         enroll?: boolean;
         now?: Date;
+        questionIds?: string[];
+        questionSnapshot?: ReturnType<typeof buildSnapshot>;
       } = {},
     ): Promise<string> {
       const now = opts.now ?? new Date();
       const id = crypto.randomUUID();
-      const snapshot = [
-        {
-          originalQuestionId: questionId,
-          type: "single_choice" as const,
-          content: "Q",
-          attachments: [] as never[],
-          options: [{ id: "a", content: "A" }],
-          standardAnswer: "a",
-          score: 100,
-          gradingRule: {
-            multiSelectScoring: "all_correct_full" as const,
-            fillBlankMatchMode: "exact" as const,
-          },
-          order: 0,
-          rubric: null,
-        },
-      ];
       await ctx.db.insert(schema.exams).values({
         id,
         organizationId: ctx.org.id,
         title: opts.title ?? `Summary-${uniquePrefix()}`,
         description: "",
         courseId,
-        status: "open",
+        status: opts.status ?? "open",
         timingMode: "timed_window",
         durationMinutes: 60,
         openAt: new Date(now.getTime() + (opts.openOffsetMs ?? -3600000)),
@@ -205,8 +212,8 @@ describe("attempt routes", () => {
         passingScore: 60,
         totalScore: 100,
         questionSelectionMode: "manual",
-        questionIds: [questionId],
-        questionSnapshot: snapshot,
+        questionIds: opts.questionIds ?? [questionId],
+        questionSnapshot: opts.questionSnapshot ?? buildSnapshot(),
         controlFlags: { ...DEFAULT_CONTROL_FLAGS },
         retakePolicy: (opts.retakePolicy ?? "max_attempts") as
           | "max_attempts"
@@ -274,6 +281,78 @@ describe("attempt routes", () => {
       const target = await getSummary(freshExamId);
       expect(target.availabilityStatus).toBe("available");
       expect(target.primaryAction).toBe("start");
+    });
+
+    it("reports the authored question count for a draft exam (snapshot not frozen yet)", async () => {
+      // A draft has no question snapshot; the candidate card must not claim 0
+      // questions when the exam was authored with questions (MVP-P2-02). The
+      // draft-only fallback is the whole point: questionIds are the current
+      // authoring state only while the exam is still a draft.
+      const draftId = crypto.randomUUID();
+      await ctx.db.insert(schema.exams).values({
+        id: draftId,
+        organizationId: ctx.org.id,
+        title: `Draft Summary-${uniquePrefix()}`,
+        description: "",
+        courseId,
+        status: "draft",
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 86400000),
+        closeAt: new Date(Date.now() + 172800000),
+        passingScore: 60,
+        totalScore: 100,
+        questionSelectionMode: "manual",
+        questionIds: [questionId, crypto.randomUUID()],
+        questionSnapshot: [],
+        controlFlags: { ...DEFAULT_CONTROL_FLAGS },
+        retakePolicy: "max_attempts",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await ctx.db.insert(schema.examEnrollments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        examId: draftId,
+        candidateId: candidateProfileId,
+        status: "assigned",
+        attemptCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const target = await getSummary(draftId);
+      expect(target.availabilityStatus).toBe("unavailable");
+      expect(target.totalQuestions).toBe(2);
+    });
+
+    it("does NOT fall back to authored ids for a published exam with an empty snapshot", async () => {
+      // Deliberately inconsistent fixture: published exam whose frozen snapshot
+      // is empty while questionIds still lists two authored questions. The
+      // frozen snapshot is authoritative; the summary must report 0 (fail
+      // closed) rather than silently masking the broken snapshot.
+      const publishedId = await createAndEnrollExam({
+        title: "Published Empty Snapshot Exam",
+        status: "published",
+        questionIds: [questionId, crypto.randomUUID()],
+        questionSnapshot: [],
+      });
+      const target = await getSummary(publishedId);
+      expect(target.totalQuestions).toBe(0);
+    });
+
+    it("reports the frozen snapshot length when it differs from authored ids (published)", async () => {
+      // Published exam: questionIds was later edited (2 ids) but the snapshot
+      // froze at publish time (1 question). The summary must follow the
+      // snapshot, not the authored ids.
+      const publishedId = await createAndEnrollExam({
+        title: "Published Snapshot Wins Exam",
+        status: "published",
+        questionIds: [questionId, crypto.randomUUID()],
+      });
+      const target = await getSummary(publishedId);
+      expect(target.totalQuestions).toBe(1);
     });
 
     it("derives in_progress/resume when active attempt exists", async () => {
