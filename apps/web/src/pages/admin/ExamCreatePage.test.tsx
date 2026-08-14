@@ -262,6 +262,50 @@ describe("ExamCreatePage wizard — step 3 (questions + scores)", () => {
     });
     expect(screen.getByText("自动计算：25 分")).toBeInTheDocument();
   });
+
+  it("auto-adjusts the untouched default 及格分 when it exceeds the auto total (born-in-error fix)", async () => {
+    const user = userEvent.setup();
+    await goToStep3(user);
+    // Default 及格分 is 60; adding questions totaling 25 would leave
+    // passingScore > totalScore, blocking 下一步 with an unexplained error.
+    await user.click(screen.getByRole("button", { name: "手动选题" }));
+    const dialog = await screen.findByRole("dialog");
+    const addButtons = within(dialog).getAllByRole("button", { name: "添加" });
+    await user.click(addButtons[0]!);
+    await user.click(addButtons[1]!);
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    // 及格分 follows the auto total down to 60% (25 * 0.6 = 15).
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("及格分", { selector: "input" }),
+      ).toHaveValue(15);
+    });
+    // The step is no longer born in an error state: no validation message and
+    // 下一步 proceeds to the schedule step.
+    expect(screen.queryByText("及格分不能超过总分")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    await screen.findByLabelText("开始时间");
+  });
+
+  it("never overwrites an explicitly edited 及格分", async () => {
+    const user = userEvent.setup();
+    await goToStep3(user);
+    await user.click(screen.getByRole("button", { name: "手动选题" }));
+    const dialog = await screen.findByRole("dialog");
+    // User sets 及格分 = 8 BEFORE picking questions.
+    fireEvent.change(screen.getByLabelText("及格分", { selector: "input" }), {
+      target: { value: "8" },
+    });
+    const addButtons = within(dialog).getAllByRole("button", { name: "添加" });
+    await user.click(addButtons[0]!);
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    // The explicit value (8) survives question selection (8 <= 25 is valid).
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("及格分", { selector: "input" }),
+      ).toHaveValue(8);
+    });
+  });
 });
 
 describe("ExamCreatePage wizard — no-profile create flow", () => {
