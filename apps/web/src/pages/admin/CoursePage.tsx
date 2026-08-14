@@ -328,6 +328,7 @@ export function CoursePage() {
               <Field>
                 <Label htmlFor="course-name">
                   {t("admin.courses.dialog.name")}
+                  <span className="ml-1 text-destructive">*</span>
                 </Label>
                 <Input
                   id="course-name"
@@ -344,6 +345,7 @@ export function CoursePage() {
               <Field>
                 <Label htmlFor="course-code">
                   {t("admin.courses.dialog.code")}
+                  <span className="ml-1 text-destructive">*</span>
                 </Label>
                 <Input
                   id="course-code"

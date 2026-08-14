@@ -113,8 +113,8 @@ describe("CoursePage", () => {
     await user.click(await screen.findByRole("button", { name: "新增课程" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("课程名称")).toHaveValue("");
-    expect(within(dialog).getByLabelText("课程代码")).toHaveValue("");
+    expect(within(dialog).getByLabelText(/课程名称/)).toHaveValue("");
+    expect(within(dialog).getByLabelText(/课程代码/)).toHaveValue("");
   });
 
   it("shows validation errors for empty fields", async () => {
@@ -130,8 +130,8 @@ describe("CoursePage", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "新增课程" }));
-    await user.type(screen.getByLabelText("课程名称"), "物理");
-    await user.type(screen.getByLabelText("课程代码"), "PHY101");
+    await user.type(screen.getByLabelText(/课程名称/), "物理");
+    await user.type(screen.getByLabelText(/课程代码/), "PHY101");
     await user.type(screen.getByLabelText("描述"), "大学物理");
     await user.click(screen.getByRole("button", { name: "保存" }));
     expect(apiPost).toHaveBeenCalledWith("/api/courses", {
@@ -147,7 +147,7 @@ describe("CoursePage", () => {
     await user.click(await screen.findByRole("button", { name: "新增课程" }));
     await user.click(screen.getByRole("button", { name: "保存" }));
     expect(screen.getByText("请输入课程名称")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("课程名称"), "物理");
+    await user.type(screen.getByLabelText(/课程名称/), "物理");
     expect(screen.queryByText("请输入课程名称")).not.toBeInTheDocument();
   });
 
@@ -157,8 +157,8 @@ describe("CoursePage", () => {
     const editButtons = await screen.findAllByLabelText("编辑课程");
     await user.click(editButtons[0]!);
     expect(screen.getByText("编辑课程")).toBeInTheDocument();
-    expect(screen.getByLabelText("课程名称")).toHaveValue("数学");
-    expect(screen.getByLabelText("课程代码")).toHaveValue("MATH101");
+    expect(screen.getByLabelText(/课程名称/)).toHaveValue("数学");
+    expect(screen.getByLabelText(/课程代码/)).toHaveValue("MATH101");
   });
 
   it("saves edited course", async () => {
@@ -166,7 +166,7 @@ describe("CoursePage", () => {
     renderPage();
     const editButtons = await screen.findAllByLabelText("编辑课程");
     await user.click(editButtons[0]!);
-    const nameInput = screen.getByLabelText("课程名称");
+    const nameInput = screen.getByLabelText(/课程名称/);
     await user.clear(nameInput);
     await user.type(nameInput, "高等数学A");
     await user.click(screen.getByRole("button", { name: "保存" }));
@@ -257,8 +257,8 @@ describe("CoursePage", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "新增课程" }));
-    await user.type(screen.getByLabelText("课程名称"), "物理");
-    await user.type(screen.getByLabelText("课程代码"), "PHY101");
+    await user.type(screen.getByLabelText(/课程名称/), "物理");
+    await user.type(screen.getByLabelText(/课程代码/), "PHY101");
     await user.click(screen.getByRole("button", { name: "保存" }));
     expect(screen.getByText("保存中...")).toBeInTheDocument();
     resolveSave!({ id: "c3" });
