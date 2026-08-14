@@ -278,3 +278,66 @@ removed (wizard born-in-error state, candidate result mislabel, raw enum
 labels, false draft question count, missing required markers) without any
 design-system migration, behavior redesign, or future-feature work. The next
 step is the human "First Real Exam" acceptance test on a fresh deployment.
+
+---
+
+## Multimodal Visual Pass
+
+### Model / capability
+
+Image-capable multimodal model (Read tool with image inspection) — Chromium
+150.0.7871.24 headless, Playwright-driven screenshots at 1440×900 (desktop)
+and 390×844 (mobile).
+
+### Screenshot matrix
+
+```text
+Desktop (1440×900) — 27 screenshots:
+  01-login, 10-admin-dashboard, 20-admin-candidates, 21-admin-create-candidate-dialog,
+  30-admin-courses, 31-admin-create-course-dialog, 40-admin-questions,
+  41-admin-question-create, 50-admin-exams, 51-56-admin-exam-wizard (steps 1-5 + picker),
+  60-admin-exam-detail, 61-admin-enrollment-dialog, 62-admin-score-list,
+  63-admin-results, 70-candidate-exam-list, 71-candidate-start,
+  80-candidate-take-first, 81-candidate-take-middle, 84-candidate-submit-dialog,
+  91-candidate-result, 100-admin-system, admin-sidebar-scroll
+
+Mobile (390×844) — 9 screenshots:
+  mobile-01-login, mobile-candidate-exam-list, mobile-candidate-start,
+  mobile-candidate-take, mobile-candidate-submit-dialog, mobile-candidate-result,
+  mobile-admin-candidates, mobile-admin-create-candidate-dialog, mobile-admin-drawer
+```
+
+### Findings
+
+No UI-P0 or UI-P1 defects found. The MVP critical paths are visually solid.
+
+| ID | Sev | Screenshot | Visual evidence | Fix | After evidence |
+|----|-----|------------|-----------------|-----|----------------|
+| (none) | — | — | — | — | — |
+
+### Deliberately ignored aesthetic suggestions
+
+- Mobile header "考试平..." truncation — expected behavior for long app names
+  in constrained viewport; not a defect
+- Admin sidebar has many nav items (概览/运维/题库/考试/监考/恢复中心/管理) —
+  by design for the full feature set; scrolling works correctly
+- Candidate exam list shows only 2 cards — seed data, not a UI issue
+- Exam list table shows E2E-generated test data — seed artifact, not a defect
+
+### Previously fixed issues — visual verification
+
+- **MVP-P1-01 (wizard born-in-error):** VERIFIED — wizard step 3 shows
+  总分 100 / 及格分 60 with no error state; 下一步 proceeds normally
+- **MVP-P2-04 (admin sidebar scrolling):** VERIFIED — sidebar fills viewport
+  with internal nav scroll; all nav items (including 管理 section + 退出)
+  accessible without page scroll; topbar stays pinned
+
+### Verification
+
+All screenshots captured against running dev stack (API :3000, Web :4173)
+with demo seed data. Candidate1 (candidate1/candidate123) used for
+candidate flows; admin (admin/admin123) for admin flows.
+
+```text
+VERIFIED_CODE_SHA  f6ae292d (current PR head at time of visual pass)
+```
