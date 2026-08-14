@@ -214,8 +214,11 @@ audit, external log shipping. All Phase 4; none started.
   evidence, plus a retention evidence ledger + readiness endpoint + host
   pgBackRest script (P7-F option c; execution stays host-only per ADR-017 D4).
   The full static + unit/integration verification is green; the gate verdict
-  flip to PASS (and ADR-017 rev 4 / ADR-018 acceptance) remains a **human
-  decision**. See
+  flip to PASS **requires operational acceptance first** — a real automated
+  restore drill (measured duration ≤ declared RTO) and a real scheduled
+  retention run (verified evidence) on a real volume — before the human can
+  sign off. ADR-017 rev 4 / ADR-018 acceptance follows the same prerequisite.
+  Status: `IMPLEMENTED — OPERATIONAL_ACCEPTANCE_PENDING`. See
   [`docs/audits/P7-CLOSE-RTO-RETENTION-CLOSEOUT.md`](../audits/P7-CLOSE-RTO-RETENTION-CLOSEOUT.md).
   - **E2A — Operational RBAC Boundary**: Maintainer is the **sixth** assignable
     human role (the **seventh** role preset counting the synthetic,

@@ -6,7 +6,7 @@
 # the Exam ledger. This script is HOST-SIDE automation — it runs outside
 # Exam RBAC via cron, systemd timer, or manual operator invocation.
 #
-# The retention policy is configured in pgbackrest.conf (repo-retention-*
+# The retention policy is configured in pgbackrest.conf (repo1-retention-*
 # settings). This script does NOT set retention policy — it applies whatever
 # the operator has configured and records the evidence.
 #
@@ -60,7 +60,9 @@ if ! docker inspect "${APP_CONTAINER}" >/dev/null 2>&1; then
 fi
 
 # Stable operation identity for this retention run.
-OPERATION_ID="retention:$(date +%Y-%m-%dT%H)"
+# UUID avoids unique-constraint collision when the same-hour retry runs again
+# (the DB has a UNIQUE index on (organization_id, operation_id)).
+OPERATION_ID="retention:$(date +%Y-%m-%dT%H:%M:%S)$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 8)"
 
 echo "pgBackRest retention/expire:"
 echo "  project: ${PROJECT}"
@@ -112,17 +114,24 @@ fi
 # observed remaining backups. A fixed "config-driven" string would prove only
 # "expire returned 0" — not that backup/WAL growth is actually bounded, which
 # is the retention invariant this evidence exists to support. The policy lives
-# in pgbackrest.conf (repo-retention-*); the remaining counts after expire are
+# in pgbackrest.conf (repo*-retention-*); the remaining counts after expire are
 # the direct observable that retention is in effect.
-INFO_OUTPUT="$(docker exec "${DB_CONTAINER}" \
-  pgbackrest --stanza="${STANZA}" info --output=json 2>&1)" || true
+#
+# IMPORTANT: if pgbackrest info or jq fails, we MUST record "UNKNOWN", never "0".
+# Using 0 to represent an unknown count would fabricate evidence — the whole
+# point of this script is truthful evidence recording.
+INFO_OK=false
+COUNTS_OBSERVED=false
 FULL_COUNT=0
 DIFF_COUNT=0
-if command -v jq >/dev/null 2>&1; then
+INFO_OUTPUT="$(docker exec "${DB_CONTAINER}" \
+  pgbackrest --stanza="${STANZA}" info --output=json 2>&1)" && INFO_OK=true || true
+if [ "${INFO_OK}" = true ] && command -v jq >/dev/null 2>&1; then
   FULL_COUNT=$(echo "${INFO_OUTPUT}" \
-    | jq '[.[] | .backup[]? | select(.type=="full")] | length' 2>/dev/null) || FULL_COUNT=0
+    | jq '[.[] | .backup[]? | select(.type=="full")] | length' 2>/dev/null) && \
   DIFF_COUNT=$(echo "${INFO_OUTPUT}" \
-    | jq '[.[] | .backup[]? | select(.type=="diff" or .type=="incr")] | length' 2>/dev/null) || DIFF_COUNT=0
+    | jq '[.[] | .backup[]? | select(.type=="diff" or .type=="incr")] | length' 2>/dev/null) && \
+  COUNTS_OBSERVED=true || true
 fi
 BACKUP_COUNT=$((FULL_COUNT + DIFF_COUNT))
 
@@ -137,7 +146,7 @@ CONF_TEXT="$(docker exec "${DB_CONTAINER}" cat "${PGBACKREST_CONF}" 2>/dev/null)
   || CONF_TEXT=""
 if [ -n "${CONF_TEXT}" ]; then
   mapfile -t KNOB_LINES < <(printf '%s\n' "${CONF_TEXT}" \
-    | grep -oiE '^[[:space:]]*repo[-_]retention[-_](full|diff|archive(_type)?)[[:space:]]*=.*' \
+    | grep -oiE '^[[:space:]]*repo[0-9]+[-_]retention[-_](full|diff|archive[-_]type)[[:space:]]*=.*' \
     | sed -E 's/[[:space:]]+/ /g; s/^[[:space:]]*//')
   if [ "${#KNOB_LINES[@]}" -gt 0 ]; then
     RETENTION_KNOBS="$(printf '%s; ' "${KNOB_LINES[@]}")"
@@ -145,10 +154,15 @@ if [ -n "${CONF_TEXT}" ]; then
   fi
 fi
 
-if [ -n "${RETENTION_KNOBS}" ]; then
-  RETENTION_OBJECTIVE="${RETENTION_KNOBS} (pgbackrest.conf); ${FULL_COUNT} full, ${DIFF_COUNT} diff remaining after expire"
+if [ "${COUNTS_OBSERVED}" = true ]; then
+  COUNTS_SUFFIX="${FULL_COUNT} full, ${DIFF_COUNT} diff remaining after expire"
 else
-  RETENTION_OBJECTIVE="pgbackrest expire; ${FULL_COUNT} full, ${DIFF_COUNT} diff remaining after expire (retention knobs in pgbackrest.conf, unreadable here)"
+  COUNTS_SUFFIX="remaining backup counts unavailable (pgbackrest info or jq failed)"
+fi
+if [ -n "${RETENTION_KNOBS}" ]; then
+  RETENTION_OBJECTIVE="${RETENTION_KNOBS} (pgbackrest.conf); ${COUNTS_SUFFIX}"
+else
+  RETENTION_OBJECTIVE="pgbackrest expire; ${COUNTS_SUFFIX} (retention knobs in pgbackrest.conf, unreadable here)"
 fi
 
 # ── Step 4: Determine result ──

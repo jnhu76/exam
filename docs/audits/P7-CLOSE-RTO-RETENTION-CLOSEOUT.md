@@ -16,7 +16,7 @@
 BASE_SHA   : f8b664f462afd913143b9e0c35b5ab4b61354d23  (origin/master, PR #288 merged)
 branch     : feat/p7-close-rto-retention-final
 START_DATE : 2026-08-13
-WORKTREE   : P7-CLOSE changeset (14 files, +761/-10) — uncommitted, pending human review
+WORKTREE   : round-1 committed (79a1749e); round-2 committed (4369270f)
 ```
 
 ## What P7-CLOSE implements
@@ -130,6 +130,28 @@ in this same changeset before merge:
 
 These remediations do not change the Gate P7-3 verdict below — they strengthen
 the evidence truthfulness the verdict rests on.
+
+## Review remediation (round 2)
+
+The second review found three evidence-truthfulness issues and one doc-sync
+problem in the host-side retention script:
+
+- **pgBackRest retention config regex wrong (P1):** the regex matched
+  `repo-retention-*` but pgBackRest uses `repo1-retention-*` (with repository
+  index). The regex never matched any real config knob. Fix: change to
+  `repo[0-9]+[-_]retention[-_](full|diff|archive[-_]type)`.
+- **`pgbackrest info` / `jq` failure fabricated `0` (P1):** when `pgbackrest
+  info` failed or `jq` was unavailable, the evidence string still claimed
+  `"0 full, 0 diff remaining"` — a false truthful-sounding value. The script's
+  entire purpose is truthful evidence. Fix: track `COUNTS_OBSERVED` flag;
+  record `"remaining backup counts unavailable"` when counts cannot be observed.
+- **`OPERATION_ID` unique-constraint collision on same-hour retry (P1):**
+  `retention:YYYY-MM-DDTHH` is stable within an hour; the DB has a UNIQUE index
+  on `(organization_id, operation_id)`, so a second run within the same hour
+  would unique-conflict on evidence insert. Fix: second-level UTC timestamp +
+  8-char random hex suffix, making each run's identity unique.
+- **Doc sync (P2):** stale WORKTREE line, missing round-2 provenance in
+  implementation-status.md. Fixed in this changeset.
 
 ## Verification evidence
 
