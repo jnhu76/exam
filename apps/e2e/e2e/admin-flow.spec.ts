@@ -168,10 +168,18 @@ test.describe("admin operation flow", () => {
     const searchInput = page.getByPlaceholder("搜索考生");
     const targetCheckbox = page.getByRole("checkbox", { name: extraName });
     const loadMore = page.getByRole("button", { name: "加载更多" });
+    // isEnabled() waits for the element to be ATTACHED (up to the locator
+    // timeout) when the button has been unmounted after the last page loads;
+    // short-circuit on count() so a detached button reports false instantly
+    // instead of stalling the poll past its deadline.
+    const loadMoreAttachedAndEnabled = async () => {
+      if ((await loadMore.count()) === 0) return false;
+      return loadMore.isEnabled().catch(() => false);
+    };
     await searchInput.fill(extraName);
 
     while (!(await targetCheckbox.isVisible().catch(() => false))) {
-      if (!(await loadMore.isEnabled().catch(() => false))) break;
+      if (!(await loadMoreAttachedAndEnabled())) break;
 
       const responsePromise = page.waitForResponse(
         /\/api\/candidates\?page=\d+&pageSize=50/,
@@ -188,7 +196,7 @@ test.describe("admin operation flow", () => {
             .isVisible()
             .catch(() => false);
           const loadMoreVisible = await loadMore.isVisible().catch(() => false);
-          const loadMoreEnabled = await loadMore.isEnabled().catch(() => false);
+          const loadMoreEnabled = await loadMoreAttachedAndEnabled();
 
           return targetVisible || !loadMoreVisible || loadMoreEnabled;
         })
