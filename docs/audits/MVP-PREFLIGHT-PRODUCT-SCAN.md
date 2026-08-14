@@ -9,10 +9,15 @@
 
 ```text
 BASE_SHA   2ede3303b873065af40ff82d05851586d4548e65
-VERIFIED_CODE_SHA  64cba7633c80e00b5b13a52a18ee58a980673c23
-            (the exact code+tests commit on which the verification in §G was
-            executed; the later docs commit that writes this SHA advances the
-            PR head but does not invalidate VERIFIED_CODE_SHA)
+COMMAND_VERIFIED_SHA  64cba7633c80e00b5b13a52a18ee58a980673c23
+            (the exact code+tests commit on which the command verification
+            in §G was executed; the later docs commits that write this SHA
+            advance the PR head but do not invalidate it)
+VISUAL_VERIFIED_SHA   f6ae292d2c69adce280d616c4dd41ae0554d4a39
+            (the PR-head commit at the time of the multimodal visual pass
+            at the end of this document — a different, later commit than
+            COMMAND_VERIFIED_SHA; the two verification records are
+            independent)
 branch     fix/mvp-preflight-product-scan
 date       2026-08-14
 ```
@@ -177,10 +182,13 @@ C. published, 2 authored ids, 1-question snapshot → `totalQuestions` 1
 
 **Fix:** 课程名称/课程代码 labels in the course dialog now carry the same
 `<span className="ml-1 text-destructive">*</span>` required marker the
-candidate dialog uses (`apps/web/src/pages/admin/CoursePage.tsx`).
+candidate dialog uses (`apps/web/src/pages/admin/CoursePage.tsx`). Review
+closeout: both inputs also expose the state programmatically — the HTML
+`required` attribute on each input and `aria-hidden="true"` on the marker
+span, so the asterisk stays out of the accessible label.
 
 **Tests:** `CoursePage.test.tsx` label matchers updated for the new accessible
-names (regex match); 18/18 pass.
+names (regex match); new required/aria-hidden contract test; 19/19 pass.
 
 ### E6. MVP-P2-04 — admin sidebar viewport scrolling + sticky topbar (FIXED)
 
@@ -230,27 +238,43 @@ Post-MVP / follow-up items recorded as Issues, not part of MVP readiness:
 
 ## G. Verification
 
-All verification below was executed on `VERIFIED_CODE_SHA` (see §A).
+Command verification below was executed on `COMMAND_VERIFIED_SHA` (see §A).
+The multimodal visual pass at the end of this document ran later, on
+`VISUAL_VERIFIED_SHA`; the resolved-database evidence (§G.1) was gathered
+live while each mode actually ran, and the coverage record (§G.2) is the
+generated output of the full verification chain.
 
 ```text
 pnpm verify:static                      PASS (incl. prettier, eslint, arch,
                                         copy guards, openapi, e2e-runner)
+                                        [no database access — static gates]
 pnpm test                               PASS — 2214 passed / 7 skipped
                                         (164 files, 16 tasks)
+                                        [resolved DB: exam_test worker family
+                                        exam_test_w* — §G.1]
 pnpm build                              PASS (9 tasks)
+                                        [no database access]
 pnpm verify                             PASS (full coverage chain; one
                                         @exam/db coverage run hit the
                                         documented BUG-FLAKE-002 cross-package
                                         turbo contention and passed on rerun
                                         and standalone — see
                                         docs/standards/test-flakes.md)
+                                        [resolved DB: exam_test worker family
+                                        exam_test_w* — §G.1]
 pnpm --filter @exam/api test candidate-start  15/15 PASS (snapshot
                                         authority cases A/B/C included)
+                                        [resolved DB: exam_test worker family
+                                        exam_test_w* — §G.1]
 pnpm --filter @exam/web test layout responsive-shell  67/67 PASS
+                                        [jsdom — no database]
 E2E (scripts/e2e/run-wsl.sh):
   required subset (candidate-happy-path, admin-flow, exam-wizard-product,
   admin-shell-viewport)                 15/15 PASS
   full suite (2 shards)                 122 PASS / 0 FAIL / 0 FLAKY
+                                        [resolved DBs: per-shard ephemeral
+                                        worker DBs exam_e2e_w0 / exam_e2e_w1;
+                                        serial runs resolve exam_e2e — §G.1]
 ```
 
 Live re-render of every fixed state was confirmed against the running dev
@@ -266,6 +290,84 @@ viewport behavior at 1440x900 / 1280x720 / 1024x768 / 390x844 via the
 > persistent local `exam_e2e` DB accumulated >50 candidates (target on page 2).
 > Fixed with a `count()` short-circuit (detached button reports false
 > instantly). CI uses a fresh DB per run, so it never observed this.
+
+### G.1 Resolved databases — directly verified, not inferred from env files
+
+Evidence gathered live on 2026-08-14 while each mode was actually running
+(server-side `pg_stat_activity` and real API responses — not `.env` parsing):
+
+| Mode | Process / command | Direct evidence | Resolved DB |
+| -- | -- | -- | -- |
+| dev | `pnpm --filter api dev` (API :3210, `.env`) | while serving: `pg_stat_activity` shows `application_name=postgres.js → datname=exam`; `POST /api/auth/login` (admin/admin123) → HTTP 200, and those demo accounts exist only in the dev DB; `psql`: `current_database()=exam` with 6 users / 9 exams / 3 courses (demo seed) | `exam` |
+| test | `pnpm --filter @exam/api test` (`exam.test.ts`, 66/66 PASS) | during the run: `pg_stat_activity` shows `postgres.js → exam_test_w0` (2–3 backends); zero `postgres.js` backends on `exam` or `exam_e2e` at any point | `exam_test_w*` — per-worker DBs created by ADR-007 worker-database isolation from the `TEST_DATABASE_URL` base (`exam_test`) |
+| WSL E2E (2 shards, default) | `bash scripts/e2e/run-wsl.sh` (full suite) | runner log: `shard 1 api (:3100, db=exam_e2e_w0)` / `shard 2 (:3101, db=exam_e2e_w1)`; during the run: `pg_stat_activity` shows only `exam_e2e_w0` / `exam_e2e_w1` backends | `exam_e2e_w0` + `exam_e2e_w1` (per-shard ephemeral worker DBs, dropped after the run) |
+| WSL E2E (serial, `E2E_WORKERS=1`) | `run-wsl.sh <spec>` | runner log: `迁移 exam_e2e 库` + `api dev server (:3000, APP_MODE=e2e)`; kept-server probe (§G.3): live `postgres.js` backends on `exam_e2e` and an API-created course row visible in `exam_e2e` | `exam_e2e` (persistent, reseeded) |
+
+### G.2 Coverage — generated result from the full verification chain
+
+Source: `pnpm verify` coverage stage (`turbo coverage`, 9 packages with a
+coverage script), executed on closeout head
+`496f3eb8671afbfe0ec8bf60d7373968d860bdd5` — `@exam/web:coverage` re-ran on
+this head; the other packages replayed turbo-cached runs of byte-identical
+inputs (turbo caches by input hash, and their sources are unchanged since
+`COMMAND_VERIFIED_SHA`).
+
+Configured thresholds (per-package vitest `coverage.thresholds`; packages not
+listed run coverage as a report only, with no threshold gate):
+
+| Package | lines | branches | functions |
+| -- | -- | -- | -- |
+| @exam/api | 60 | 50 | 50 |
+| @exam/web | 75 | 70 | 70 |
+
+Generated "All files" result (v8 provider) and verdict:
+
+| Package | stmts % | branch % | funcs % | lines % | Threshold gate | Status |
+| -- | -- | -- | -- | -- | -- | -- |
+| @exam/api | 84.01 | 73.40 | 88.86 | 85.12 | 60 / 50 / 50 | PASS |
+| @exam/web | 81.05 | 74.48 | 76.61 | 83.32 | 75 / 70 / 70 | PASS |
+| @exam/db | 80.76 | 68.13 | 74.85 | 81.34 | none | PASS (report only) |
+| @exam/exam-engine | 84.39 | 76.74 | 86.41 | 86.05 | none | PASS (report only) |
+| @exam/auth | 92.59 | 88.88 | 100.00 | 92.00 | none | PASS (report only) |
+| @exam/authz | 100.00 | 90.90 | 100.00 | 100.00 | none | PASS (report only) |
+| @exam/contracts | 96.60 | 88.72 | 94.44 | 97.23 | none | PASS (report only) |
+| @exam/import-export | 100.00 | 92.85 | 100.00 | 100.00 | none | PASS (report only) |
+| @exam/domain | 69.73 | 53.38 | 42.02 | 71.03 | none | PASS (report only) |
+
+Both threshold-bearing packages exceed every configured threshold; the whole
+`pnpm verify` chain exited 0 (vitest fails the task on any threshold miss).
+Test totals in this coverage run: 5535 passed / 7 skipped across the 9
+packages.
+
+### G.3 Review-closeout rerun (course-dialog a11y fix)
+
+After the final CodeRabbit closeout fix (course dialog HTML `required` +
+`aria-hidden` marker, commit
+`496f3eb8671afbfe0ec8bf60d7373968d860bdd5`), the chain was re-verified on
+that head:
+
+```text
+pnpm verify (static + coverage + build)   PASS — exit 0
+                                          (@exam/web:coverage re-ran on this
+                                          head: 1643 passed, thresholds met;
+                                          other packages replayed cached runs
+                                          of identical inputs)
+CoursePage.test.tsx                       19/19 PASS (new required/aria-hidden
+                                          contract test included)
+WSL E2E full suite (2 shards)             122 PASS / 0 FAIL — shard 1
+                                          (exam_e2e_w0) 62 passed, shard 2
+                                          (exam_e2e_w1) 60 passed; worker DBs
+                                          dropped after the run
+WSL E2E serial (E2E_WORKERS=1,
+  admin-shell-viewport)                   4/4 PASS
+```
+
+The §G.1 serial evidence came from a `KEEP_SERVER=1` run of the same spec:
+with the e2e API still up on :3000 (`APP_MODE=e2e`), `pg_stat_activity`
+showed 10 live `postgres.js` backends on `exam_e2e`, and a course created
+through that API (`PROVENANCE-MARKER-318`) was visible via
+`current_database()=exam_e2e` in `exam_e2e` while absent from `exam` —
+deleted again afterwards.
 
 ## H. Verdict
 
@@ -339,5 +441,8 @@ with demo seed data. Candidate1 (candidate1/candidate123) used for
 candidate flows; admin (admin/admin123) for admin flows.
 
 ```text
-VERIFIED_CODE_SHA  f6ae292d (current PR head at time of visual pass)
+VISUAL_VERIFIED_SHA  f6ae292d2c69adce280d616c4dd41ae0554d4a39
+            (PR head at the time of this visual pass — a later commit than
+            the §G COMMAND_VERIFIED_SHA 64cba7633c80e00b5b13a52a18ee58a980673c23;
+            the two verification records are independent — see §A)
 ```
