@@ -18,7 +18,7 @@ P7 — CLOSED (2026-08-14)
 
 ```text
 BASE_SHA : d7dbebf1b8fe13909c7bcd0ca371398eea5552cc  (origin/master, PR #290 merged)
-FINAL_SHA: 97f2303a80a0fa280f3b450f87f6151c6b0ecb67  (closeout branch head)
+FINAL_SHA: d7ec9af4a466a09105be8b2d5e335b77b45d45d9  (commit carrying the full closeout)
 DATE     : 2026-08-14
 BRANCH   : feat/p7-final-program-closeout
 ```
@@ -336,5 +336,5 @@ pnpm verify (full)                         : PASS (exit 0) — static gates
 ```
 
 The full static gates and the test suites are green on the closeout commit
-(`97f2303a`); no code changed in this closeout — the changeset is
+(`d7ec9af4`); no code changed in this closeout — the changeset is
 documentation + Issue governance only.
