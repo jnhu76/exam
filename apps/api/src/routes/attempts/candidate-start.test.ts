@@ -276,6 +276,48 @@ describe("attempt routes", () => {
       expect(target.primaryAction).toBe("start");
     });
 
+    it("reports the authored question count for a draft exam (snapshot not frozen yet)", async () => {
+      // A draft has no question snapshot; the candidate card must not claim 0
+      // questions when the exam was authored with questions.
+      const draftId = crypto.randomUUID();
+      await ctx.db.insert(schema.exams).values({
+        id: draftId,
+        organizationId: ctx.org.id,
+        title: `Draft Summary-${uniquePrefix()}`,
+        description: "",
+        courseId,
+        status: "draft",
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 86400000),
+        closeAt: new Date(Date.now() + 172800000),
+        passingScore: 60,
+        totalScore: 100,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        questionSnapshot: [],
+        controlFlags: { ...DEFAULT_CONTROL_FLAGS },
+        retakePolicy: "max_attempts",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await ctx.db.insert(schema.examEnrollments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        examId: draftId,
+        candidateId: candidateProfileId,
+        status: "assigned",
+        attemptCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const target = await getSummary(draftId);
+      expect(target.availabilityStatus).toBe("unavailable");
+      expect(target.totalQuestions).toBe(1);
+    });
+
     it("derives in_progress/resume when active attempt exists", async () => {
       const inProgressExamId = await createAndEnrollExam({
         title: "InProgress Exam",

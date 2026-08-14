@@ -383,7 +383,13 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             windowStartAt: exam.openAt.toISOString(),
             windowEndAt: exam.closeAt.toISOString(),
             durationMinutes: exam.durationMinutes,
-            totalQuestions: exam.questionSnapshot.length,
+            // Snapshot is authoritative once the exam is published; a draft
+            // has no snapshot yet, so fall back to the authored question ids
+            // (a draft's candidate card must not claim 0 questions).
+            totalQuestions:
+              exam.questionSnapshot.length > 0
+                ? exam.questionSnapshot.length
+                : exam.questionIds.length,
             passingScore: exam.passingScore,
             totalScore: exam.totalScore,
             attemptsUsed: enrollment.attemptCount,
