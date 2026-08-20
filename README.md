@@ -28,12 +28,22 @@ LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, support
 
 ```bash
 git clone <repo-url> exam && cd exam
-node scripts/generate-env.mjs   # creates .env from .env.example and fills JWT_SECRET
-docker compose up -d --build    # app + db + email-worker
+node scripts/generate-env.mjs   # creates .env from .env.example, fills JWT_SECRET + POSTGRES_PASSWORD
+docker compose up -d --build    # build + start app, db, email-worker
+docker compose ps               # wait for app (healthy), db (healthy), email-worker (up)
 ```
 
-Open <http://localhost:3000> and create the first Admin. LAN access, Redis,
-Email, and troubleshooting are in [Mode 2: Docker Compose (Full Stack)](#mode-2-docker-compose-full-stack).
+Create the first Admin (Phase 1 has no public self-register), then open
+<http://localhost:3000>:
+
+```bash
+docker compose exec app node dist/scripts/bootstrap-admin.js \
+  --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
+  --name 'System Admin' --organization-name 'My Organization'
+```
+
+LAN access, Redis, email, the optional browser Launchpad flow, and
+troubleshooting: [Mode 2: Docker Compose (Full Stack)](#mode-2-docker-compose-full-stack).
 
 ### Local development
 
@@ -165,7 +175,7 @@ runbook (env vars, first install, recovery, upgrades) is
 
 ```bash
 git clone <repo-url> exam && cd exam
-node scripts/generate-env.mjs   # creates .env from .env.example and fills JWT_SECRET
+node scripts/generate-env.mjs   # creates .env from .env.example, fills JWT_SECRET + POSTGRES_PASSWORD
 docker compose up -d --build    # build + start app, db, email-worker
 docker compose ps               # wait until app (healthy), db (healthy), email-worker (up)
 ```
@@ -186,10 +196,10 @@ docker compose exec app \
 - The `app` healthcheck requires both the API and the SPA to respond, so
   `app: healthy` means the web app is reachable.
 - State persists in `./data/` (bind mounts) across `docker compose down`.
-- Host port: `APP_PORT` in `.env` (default 3000).
-- LAN access: set `CORS_ORIGIN` and `PUBLIC_WEB_ORIGIN` in `.env` to your
-  machine's address (e.g. `http://192.168.1.5:3000`); both default to
-  `http://localhost:3000`.
+- Host port: `APP_PORT` in `.env` (default 3000). `CORS_ORIGIN` and
+  `PUBLIC_WEB_ORIGIN` default to `http://localhost:<APP_PORT>`, so changing
+  the host port needs no origin override; for LAN access set them to your
+  machine's address (e.g. `http://192.168.1.5:3000`).
 - Redis is **not started by default** (no Redis in the default stack; nothing
   depends on it). To enable it: `docker compose --profile redis up` plus
   `REDIS_PASSWORD=<secret>` and `REDIS_URL=redis://:<secret>@redis:6379`
@@ -222,6 +232,33 @@ the installation is initialized, `/launchpad` redirects to `/login` (it
 never reopens). See
 [`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md) §11.
 
+#### Build from source (contributors and PR verification)
+
+No prebuilt image is published yet (see
+[Issue #321](https://github.com/jnhu76/exam/issues/321)), so every install
+builds from source. For Dockerfile testing and PR acceptance, use the
+source-build override — it pins a stable local tag and forces Compose to
+build from the current checkout, so a stale local/registry image can never
+fake a passing verification:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.build.yml \
+  up -d --build
+```
+
+Proof that `app` and `email-worker` run the freshly built image (not just
+"containers are up"):
+
+```bash
+docker image inspect exam-local:dev --format '{{.Id}}'
+docker inspect --format '{{.Image}}' "$(docker compose ps -q app)"
+docker inspect --format '{{.Image}}' "$(docker compose ps -q email-worker)"
+```
+
+The three IDs must match.
+
 #### Backup and recovery
 
 Authoritative state is the PostgreSQL data directory under
@@ -241,6 +278,7 @@ clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `Dockerfile`              | Multi-stage build: base → builder → production runner                         |
 | `docker-compose.yml`      | Production: app + email-worker + PostgreSQL 18 (Redis 7 optional, `--profile redis`) |
+| `docker-compose.build.yml` | Source-build override (contributors / PR verification): `pull_policy: build`, stable local tag `exam-local:dev` |
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
@@ -350,7 +388,7 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | `JWT_SECRET`        | auto-generated in dev           | JWT signing secret (**required in production**; fail-fast)    |
 | `NODE_ENV`          | `development`                   | Node environment (build/fallback signal)                      |
 | `COOKIE_SECURE`     | `false`                         | Whether cookies should be secure (HTTPS only)                 |
-| `CORS_ORIGIN`       | dev `http://localhost:4173`; Compose `http://localhost:3000` | CORS origin for the API server (comma-separated → array). The bundled Compose defaults to the same-origin deployment; set to your machine's address for LAN access |
+| `CORS_ORIGIN`       | dev `http://localhost:4173`; Compose `http://localhost:<APP_PORT>` | CORS origin for the API server (comma-separated → array). The bundled Compose default follows the host port; set to your machine's address for LAN access |
 | `DEPLOYMENT_MODE`   | `singleTenant`                  | Deployment mode. Phase 1 is `singleTenant` only. `multiTenant` is rejected at startup (Phase 4) |
 
 ### Seed Data Configuration (Optional)

@@ -70,7 +70,7 @@ if any is unset. There is NO default database password in production
 
 | Variable | Purpose | Validation |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API and worker | required, no default (P6-007) |
+| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API and worker | required, no default (P6-007) — generate with `node scripts/generate-env.mjs` |
 | `JWT_SECRET` | Signs the `auth-token` cookie JWT; also required by the worker's runtime-config loader | non-empty; no default in production — generate with `node scripts/generate-env.mjs` |
 | `DATABASE_URL` | PostgreSQL connection for API + worker | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
 
@@ -78,8 +78,8 @@ if any is unset. There is NO default database password in production
 
 | Variable | Default | Notes |
 |---|---|---|
-| `CORS_ORIGIN` | `http://localhost:3000` | Browser origin allowlist (credentials:true); comma-separated → array. Override for LAN/hostname access |
-| `PUBLIC_WEB_ORIGIN` | `http://localhost:3000` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). Override for LAN/hostname access; HTTPS recommended in production |
+| `CORS_ORIGIN` | `http://localhost:<APP_PORT>` | Browser origin allowlist (credentials:true); comma-separated → array. The Compose default follows the host port; override for LAN/hostname access |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost:<APP_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
 | `APP_PORT` | 3000 | API listen port |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookie, fail-fast required env |
@@ -136,9 +136,9 @@ if any is unset. There is NO default database password in production
 git clone <repo-url> exam && cd exam
 
 # 2. Configure environment. The generator creates .env from .env.example and
-#    fills JWT_SECRET. To set secrets manually instead: cp .env.example .env,
-#    then set JWT_SECRET (openssl rand -hex 32) and, for real deployments,
-#    change POSTGRES_PASSWORD (P6-007: no default in the Compose file).
+#    fills the empty JWT_SECRET and POSTGRES_PASSWORD with random values (an
+#    existing value is never rotated). To set secrets manually instead:
+#    cp .env.example .env, then set both (openssl rand -hex 32).
 node scripts/generate-env.mjs
 
 # 3. (Optional) Enable real Email delivery — edit .env:

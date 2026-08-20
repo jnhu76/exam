@@ -1,9 +1,7 @@
 # Sole operator entry point (deployment-topology-contract.mjs enforces this).
-# POSTGRES_PASSWORD and JWT_SECRET are REQUIRED (no defaults; generate the
-# latter with `node scripts/generate-env.mjs`). CORS_ORIGIN / PUBLIC_WEB_ORIGIN
-# default to the same-origin deployment; override for LAN/hostname access.
-# Redis is optional: `docker compose --profile redis up`. Data persists in
-# ./data/ (override with EXAM_DATA_ROOT).
+# POSTGRES_PASSWORD and JWT_SECRET are required with no defaults — run
+# `node scripts/generate-env.mjs`. Authoritative state is the ./data bind
+# mounts (see docs/deployment/backup-and-recovery.md).
 services:
   app:
     build: .
@@ -17,8 +15,8 @@ services:
       APP_PORT: 3000
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${APP_PORT:-3000}}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${APP_PORT:-3000}}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
@@ -55,7 +53,7 @@ services:
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
       - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
-      # Always mounted, inert unless PITR is enabled via scripts/backup/postgres-enable-pitr.sh.
+      # Inert unless PITR is enabled via scripts/backup/postgres-enable-pitr.sh.
       - ${EXAM_WAL_ARCHIVE_HOST_PATH:-${EXAM_DATA_ROOT:-./data}/wal-archive}:/wal-archive
     healthcheck:
       test:
@@ -74,9 +72,8 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Optional: owns the shared rate-limit state. `docker compose --profile redis up`.
-  # `$$` escapes Compose interpolation — the container shell checks REDIS_PASSWORD
-  # at startup (never run an open instance) and runs redis-server with --requirepass.
+  # `$$` escapes Compose interpolation — the startup guard requires a
+  # password at container runtime and the server runs with --requirepass.
   redis:
     image: redis:7-alpine
     profiles: ["redis"]
@@ -100,10 +97,8 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Drains the PostgreSQL email_outbox table (ADR-011). The image ENTRYPOINT runs
-  # the API server, so the entrypoint is overridden. depends_on app:service_healthy
-  # serializes the worker's startup self-migrate after the app's migrate (the
-  # drizzle migration journal is not a concurrency lock).
+  # Outbox drainer (ADR-011). The entrypoint override is required (the image
+  # ENTRYPOINT runs the API server); app-health gating serializes migrations.
   email-worker:
     build: .
     entrypoint: ["node"]
@@ -113,8 +108,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
       NODE_ENV: production
       APP_MODE: production
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:3000}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${APP_PORT:-3000}}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${APP_PORT:-3000}}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
