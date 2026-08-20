@@ -1,93 +1,41 @@
-# Production Compose contract.
-#
-# ONE-COMPOSE MODEL: this file is the ONLY
-# production/operator Docker Compose entry point. There is no
-# docker-compose.pitr.yml / backup.yml / restore.yml / production.yml.
-# Optional PostgreSQL capabilities such as PITR are DATABASE configuration,
-# not an alternate Docker topology: enabling PITR is
-# `scripts/backup/postgres-enable-pitr.sh` (ALTER SYSTEM), not a second
-# Compose file. Development/test Compose files (docker-compose.dev.yml,
-# docker-compose.test.yml) are development infrastructure and may remain.
-#
-# Security invariants enforced here and by the
-# scripts/repository-contract/deployment-topology-contract.mjs guard:
-#
-#   - POSTGRES_PASSWORD is REQUIRED (no functional fallback). The bundled
-#     production Compose must never accept a default database credential.
-#     See P6-007 in docs/audits/P6-MVP-READY-REALITY-AUDIT.md.
-#   - JWT_SECRET is REQUIRED for the API and the worker.
-#   - PUBLIC_WEB_ORIGIN and CORS_ORIGIN are REQUIRED for the API and the
-#     worker (the worker's shared runtime-config loader validates both).
-#   - The email-worker depends on app: service_healthy so its self-migrate
-#     call occurs strictly AFTER the app container has completed migrations
-#     and become healthy. The drizzle migration journal tracks state; it is
-#     NOT a concurrency lock (P6-009).
-#   - Redis is an OPTIONAL profile (`--profile redis` /
-#     COMPOSE_PROFILES=redis) and stays OPTIONAL at Compose parse time: a
-#     bare `docker compose up` needs no Redis configuration. When the
-#     profile IS enabled it MUST be authenticated: the redis container
-#     refuses to start without REDIS_PASSWORD (startup guard) and the
-#     server runs with `requirepass` (Redis now owns the
-#     shared rate-limit state, so an open instance is not acceptable). The
-#     API reads REDIS_URL; when the profile is enabled the operator must set
-#     it to the authenticated URL, e.g. redis://:<REDIS_PASSWORD>@redis:6379.
-#     See docs/deployment/mvp-deployment-runbook.md §10.
-#
-# Portable persistence: authoritative state lives in operator-visible
-# host bind mounts under ${EXAM_DATA_ROOT:-./data}. Containers are disposable;
-# the declared host data directory is not. See
-# docs/deployment/backup-and-recovery.md. The official PostgreSQL image owns
-# its internal PGDATA layout (/var/lib/postgresql/18/docker); the host
-# abstraction is simply ${EXAM_DATA_ROOT}/postgres — operators do not need to
-# understand the internal subdirectories. Scripts that launch this topology
-# for tests/smoke MUST set EXAM_DATA_ROOT to an isolated temp directory so they
-# never share the repo-root ./data/ (isolation rule).
+# Sole operator entry point (deployment-topology-contract.mjs enforces this).
+# POSTGRES_PASSWORD and JWT_SECRET are REQUIRED (no defaults; generate the
+# latter with `node scripts/generate-env.mjs`). CORS_ORIGIN / PUBLIC_WEB_ORIGIN
+# default to the same-origin deployment; override for LAN/hostname access.
+# Redis is optional: `docker compose --profile redis up`. Data persists in
+# ./data/ (override with EXAM_DATA_ROOT).
 services:
   app:
     build: .
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}@db:5432/${POSTGRES_DB:-exam}
-      # Redis is optional in the implemented MVP (ADR-001), but it owns the
-      # shared rate-limit state when enabled (P7). The default empty value
-      # disables Redis; when the optional `redis` profile is enabled, set
-      # REDIS_URL to the AUTHENTICATED URL (the redis service requires
-      # REDIS_PASSWORD; use redis://:<REDIS_PASSWORD>@redis:6379).
-      # REDIS_MODE (off|optional|required) defaults to "optional" when
-      # REDIS_URL is set (P7).
-      REDIS_URL: ${REDIS_URL:-}
-      REDIS_MODE: ${REDIS_MODE:-}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-exam}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
       NODE_ENV: production
       APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required for production}
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN is required for production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:3000}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
-      # ADR-006: runtime timezone (display/log/diagnostics only; does not
-      # change business-time comparison semantics).
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
-      # Forward the Launchpad first-install setup
-      # token explicitly (NOT via a broad env_file, to keep explicit
-      # environment ownership). Unset/empty disables Launchpad (the
-      # bootstrap endpoint refuses) so a bare `docker compose up` still
-      # starts normally. Setting it in .env makes the browser first-Admin
-      # setup form usable. See backup-and-recovery.md §11.
+      REDIS_URL: ${REDIS_URL:-}
+      REDIS_MODE: ${REDIS_MODE:-}
       LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
+      # Proves the API and the SPA are both reachable, not just the backend.
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+          "Promise.all([fetch('http://127.0.0.1:3000/api/health'), fetch('http://127.0.0.1:3000/')]).then(([api, web]) => { const ok = api.ok && (web.headers.get('content-type') || '').includes('text/html'); process.exit(ok ? 0 : 1) }).catch(() => process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
@@ -101,31 +49,13 @@ services:
     image: postgres:18.4-bookworm
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-exam}
-      # P6-007: the database superuser password is REQUIRED for production.
-      # The bundled production Compose must never accept a default
-      # credential. The same required value is composed into the API and
-      # worker DATABASE_URL above. Note: if an existing pgdata volume was
-      # initialized with a different password, the operator must either
-      # supply that password here or recreate the volume.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-exam}
-      # ADR-006: display/session timezone only; business time is instant-based.
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
-      # Authoritative state is an operator-visible host bind mount.
-      # Containers are disposable; this host directory is not. The official
-      # postgres image owns its internal PGDATA layout under this path.
       - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
-      # The WAL archive mount is ALWAYS present on the
-      # canonical db service, but it is inert by default (archive_mode stays
-      # off until an operator enables PITR via
-      # scripts/backup/postgres-enable-pitr.sh). The mount existing != PITR
-      # enabled. A normal operator never needs to understand WAL/PITR just
-      # to run Exam. For real disaster recovery, point
-      # EXAM_WAL_ARCHIVE_HOST_PATH at an INDEPENDENT failure domain (NAS /
-      # another server / a separate disk); the local default path is for
-      # development/drills only and is NOT host-loss protection.
+      # Always mounted, inert unless PITR is enabled via scripts/backup/postgres-enable-pitr.sh.
       - ${EXAM_WAL_ARCHIVE_HOST_PATH:-${EXAM_DATA_ROOT:-./data}/wal-archive}:/wal-archive
     healthcheck:
       test:
@@ -144,53 +74,24 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Redis is OPTIONAL in the implemented MVP (ADR-001 / P6-010), but it owns
-  # the shared rate-limit state when enabled (P7) — so an ENABLED production
-  # Redis MUST be authenticated (ADR-001 security
-  # considerations). The service is gated behind the `redis` profile: it is
-  # NOT started by a bare `docker compose up`. The password check lives at
-  # CONTAINER STARTUP (not Compose expansion), so the profile stays truly
-  # optional: a bare `docker compose up` with REDIS_PASSWORD unset still
-  # parses and runs. Only when the profile is enabled does the redis
-  # container refuse to start without a password — never an open instance.
-  # Enable it explicitly with `docker compose --profile redis up` (or set
-  # COMPOSE_PROFILES=redis) AND set REDIS_URL on the `app` service to the
-  # authenticated URL, `redis://:<REDIS_PASSWORD>@redis:6379`. Compose
-  # config/inspect does not interpolate the secret into the stored command
-  # definition — the command references `$REDIS_PASSWORD` and the container
-  # shell expands it at startup (the redis-server argv then receives the
-  # password via `--requirepass`, which is how requirepass is configured).
-  # See docs/deployment/mvp-deployment-runbook.md §10.
+  # Optional: owns the shared rate-limit state. `docker compose --profile redis up`.
+  # `$$` escapes Compose interpolation — the container shell checks REDIS_PASSWORD
+  # at startup (never run an open instance) and runs redis-server with --requirepass.
   redis:
     image: redis:7-alpine
-    # `$$` is the Compose escape: the container sees `$REDIS_PASSWORD`, not
-    # the interpolated secret. The first line is the startup guard — the
-    # shell fails the container when REDIS_PASSWORD is unset or empty, so
-    # an unauthenticated server can never start. The second line runs the
-    # server with requirepass read from the container environment.
+    profiles: ["redis"]
     command:
       - sh
       - -ec
       - |
         : "$${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
         exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
-    profiles: ["redis"]
     environment:
-      # The empty default keeps Redis optional at Compose
-      # parse time (a bare `docker compose up` needs no Redis
-      # configuration); the startup guard above enforces the password when
-      # the redis profile actually runs.
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
-      # Redis persistence is OPTIONAL for correctness. It holds only
-      # rate-limit counters; losing it resets operational history but never
-      # affects PostgreSQL authority. Restoring Redis is NOT a condition for
-      # restoring Exam authority (C1.2).
       - ${EXAM_DATA_ROOT:-./data}/redis:/data
     healthcheck:
-      # An unauthenticated ping must fail (NOAUTH) — the healthcheck itself
-      # proves the server enforces the password.
       test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 10s
       timeout: 5s
@@ -199,58 +100,24 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Email delivery worker (ADR-011). Required MVP process: drains the
-  # PostgreSQL `email_outbox` table that `result_published` notifications
-  # write into. Without this service, `docker compose up` would start the
-  # API and DB but Email queued by the publication transaction would never
-  # be sent. The worker is PostgreSQL-only (no Redis/Fastify); it resolves
-  # the single internal default organization via the branding resolver. It
-  # is intentionally NOT wired to start when EMAIL_ENABLED is false at the
-  # Compose level: a stopped-but-restarted worker is harmless (it polls an
-  # empty outbox and writes a heartbeat). Disable Email delivery by setting
-  # EMAIL_ENABLED=false in the runtime env, not by removing this service.
-  #
-  # Migration ordering (P6-009): the worker self-migrates at startup via
-  # `migratePostgres(db)`. The drizzle migration journal tracks applied
-  # state; it is NOT a distributed lock and does NOT serialize concurrent
-  # migration runners. To avoid racing the app container's migration call,
-  # this service depends on `app: condition: service_healthy`, so the
-  # required startup sequence is:
-  #     db healthy → app entrypoint migrates → app becomes healthy
-  #                → email-worker starts → worker's migratePostgres re-run
-  #                → worker poll loop starts
-  # The app's healthcheck only passes once the API is bound, which is
-  # strictly after the entrypoint's `node dist/scripts/migrate.js` returns.
-  #
-  # The image's ENTRYPOINT is docker-entrypoint.sh, which hard-codes
-  # `exec node dist/server.js`. To run the worker instead, override the
-  # entrypoint to `node` and pass the worker entrypoint as the command.
+  # Drains the PostgreSQL email_outbox table (ADR-011). The image ENTRYPOINT runs
+  # the API server, so the entrypoint is overridden. depends_on app:service_healthy
+  # serializes the worker's startup self-migrate after the app's migrate (the
+  # drizzle migration journal is not a concurrency lock).
   email-worker:
     build: .
     entrypoint: ["node"]
     command: ["dist/workers/emailDeliveryWorker.js"]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for production}@db:5432/${POSTGRES_DB:-exam}
-      # JWT_SECRET is required by the runtime config loader at worker boot
-      # (getRuntimeConfig → resolveJwtSecret fails fast in production
-      # without it). The worker itself never signs or verifies JWTs.
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-exam}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
       NODE_ENV: production
       APP_MODE: production
-      # PUBLIC_WEB_ORIGIN is validated at worker boot by runtimeConfig
-      # (used to build Email action links).
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN is required for production}
-      # CORS_ORIGIN is validated at worker boot by runtimeConfig
-      # (resolveCorsOrigin fails fast in production without it). The worker
-      # itself never serves CORS-protected responses, but the config loader
-      # does not know that.
-      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required for production}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
-      # Email transport — defaults match the bare/test deployment (sends
-      # nothing). Set EMAIL_ENABLED=true + EMAIL_TRANSPORT=smtp + SMTP_* to
-      # enable real delivery. See docs/architecture/email-config.md.
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-fake}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@example.local}
@@ -265,22 +132,12 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-    # P6-009: serialize migrations. The worker's startup migratePostgres
-    # call MUST run strictly after the app container has completed its
-    # migrations (the drizzle journal tracks state, it does not lock). The
-    # app healthcheck only passes once the API is bound, which is strictly
-    # after `node dist/scripts/migrate.js` returns. depending on db alone
-    # would let the worker race the app's migrate call.
     depends_on:
       app:
         condition: service_healthy
     networks:
       - exam-net
     restart: unless-stopped
-
-# No top-level named volumes: authoritative state lives in
-# operator-visible host bind mounts under ${EXAM_DATA_ROOT:-./data}
-# (see the db and redis service volumes above).
 
 networks:
   exam-net:

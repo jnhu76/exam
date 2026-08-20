@@ -436,7 +436,7 @@ describe("runtimeConfig", () => {
       delete process.env.CORS_ORIGIN;
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
-      expect(config.cors.origin).toBe("http://localhost:5173");
+      expect(config.cors.origin).toBe("http://localhost:4173");
     });
   });
 
@@ -579,7 +579,7 @@ describe("runtimeConfig", () => {
       delete process.env.CORS_ORIGIN;
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
-      expect(config.cors.origin).toBe("http://localhost:5173");
+      expect(config.cors.origin).toBe("http://localhost:4173");
     });
   });
 

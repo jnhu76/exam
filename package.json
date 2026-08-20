@@ -22,6 +22,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "coverage": "turbo coverage",
+    "env:init": "node scripts/generate-env.mjs",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:reset": "docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up -d",

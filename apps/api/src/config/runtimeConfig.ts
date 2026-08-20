@@ -124,7 +124,7 @@ export interface CorsConfig {
  * action path to produce an in-Email link back to the candidate result page.
  *
  * Validated at boot to an absolute origin (scheme + host[+port], no path).
- * Defaults to `http://localhost:5173` in non-production so a bare dev run
+ * Defaults to `http://localhost:4173` in non-production so a bare dev run
  * still works; production requires the env var (fail-fast).
  */
 export interface PublicWebOriginConfig {
@@ -424,7 +424,7 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
 /**
  * Resolve the CORS origin(s) from `CORS_ORIGIN`. In production, the value
  * is required and a missing value triggers a fast failure. In non-production
- * modes the default is `http://localhost:5173`. Comma-separated values are
+ * modes the default is `http://localhost:4173`. Comma-separated values are
  * split into an array; a single origin is returned as a plain string.
  *
  * @param env - Process environment to read from.
@@ -442,7 +442,7 @@ function resolveCorsOrigin(
       throw new RuntimeConfigError("CORS_ORIGIN is required in production");
     }
   } else {
-    raw = env.CORS_ORIGIN || "http://localhost:5173";
+    raw = env.CORS_ORIGIN || "http://localhost:4173";
   }
   if (raw.includes(",")) {
     const parts = raw
@@ -473,7 +473,7 @@ function resolvePublicWebOrigin(env: NodeJS.ProcessEnv, mode: AppMode): string {
       );
     }
   } else {
-    raw = env.PUBLIC_WEB_ORIGIN || "http://localhost:5173";
+    raw = env.PUBLIC_WEB_ORIGIN || "http://localhost:4173";
   }
   const trimmed = raw.replace(/\/+$/, "");
   let parsed: URL;
