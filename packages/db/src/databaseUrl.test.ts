@@ -19,6 +19,7 @@ function env(
     APP_MODE: undefined,
     NODE_ENV: undefined,
     ALLOW_UNSAFE_TEST_DATABASE_URL: undefined,
+    DB_HOST_PORT: undefined,
     ...overrides,
   } as NodeJS.ProcessEnv;
 }
@@ -159,14 +160,32 @@ describe("resolveDatabaseUrl — dev/prod modes", () => {
     ).toBe("postgresql://u:p@h:5432/exam");
   });
 
-  it("throws in development when DATABASE_URL is unset (no hardcoded default)", () => {
-    // A missing DATABASE_URL is a misconfiguration, not a guessed localhost
-    // connection. The dev compose exposes port 15432, not 5432; a hardcoded
-    // fallback would guess the wrong port and fail confusingly (or, worse,
-    // connect to an unintended local instance). Fail fast and require .env.
-    expect(() => resolveDatabaseUrl(env({ APP_MODE: "development" }))).toThrow(
-      /DATABASE_URL is required in development/,
+  it("constructs the dev URL from DB_HOST_PORT when DATABASE_URL is unset", () => {
+    // DB_HOST_PORT owns the dev host port (same variable docker-compose.dev.yml
+    // publishes); the constructed URL can never contradict the published port.
+    expect(resolveDatabaseUrl(env({ APP_MODE: "development" }))).toBe(
+      "postgresql://exam:exam@localhost:5432/exam",
     );
+  });
+
+  it("follows a DB_HOST_PORT override (owner test)", () => {
+    expect(
+      resolveDatabaseUrl(
+        env({ APP_MODE: "development", DB_HOST_PORT: "25432" }),
+      ),
+    ).toBe("postgresql://exam:exam@localhost:25432/exam");
+  });
+
+  it("an explicit DATABASE_URL wins over DB_HOST_PORT (external PostgreSQL)", () => {
+    expect(
+      resolveDatabaseUrl(
+        env({
+          APP_MODE: "development",
+          DB_HOST_PORT: "25432",
+          DATABASE_URL: "postgresql://u:p@h:5433/exam",
+        }),
+      ),
+    ).toBe("postgresql://u:p@h:5433/exam");
   });
 
   it("throws in production when DATABASE_URL is missing", () => {

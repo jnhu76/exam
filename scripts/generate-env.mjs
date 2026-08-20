@@ -1,14 +1,23 @@
 #!/usr/bin/env node
-// First-run setup: create .env from .env.example (if missing) and fill empty
-// secrets. Works on Linux/macOS/WSL and Windows PowerShell — the only
-// prerequisite is Node, which the repo already requires.
+// First-run setup for Docker DEPLOYMENT: create .env.deploy from
+// .env.deploy.example (if missing) and fill empty secrets. Works on
+// Linux/macOS/WSL and Windows PowerShell — the only prerequisite is Node,
+// which the repo already requires.
 //
 //   node scripts/generate-env.mjs
 //
-// Secret contract: first run → generate; existing value → preserve. Re-running
-// against an initialized .env never rotates a secret.
+// The deployment stack is then started explicitly against the file:
+//   docker compose --env-file .env.deploy -f docker-compose.yml up -d --build
 //
-// Optional argument: a .env path to operate on (defaults to repo-root .env).
+// Passing --env-file makes Compose use ONLY .env.deploy for interpolation
+// (the dev .env is never read for deployment), and no dev tooling ever
+// reads .env.deploy. Development keeps its own .env (cp .env.example .env).
+//
+// Secret contract: first run → generate; existing value → preserve. Re-running
+// against an initialized .env.deploy never rotates a secret.
+//
+// Optional argument: an env-file path to operate on (defaults to repo-root
+// .env.deploy).
 
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,12 +25,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = process.argv[2] ? resolve(process.argv[2]) : join(root, ".env");
-const examplePath = join(root, ".env.example");
+const envPath = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(root, ".env.deploy");
+const examplePath = join(root, ".env.deploy.example");
 
 if (!existsSync(envPath)) {
   copyFileSync(examplePath, envPath);
-  console.log(`Created ${envPath} from .env.example`);
+  console.log(`Created ${envPath} from .env.deploy.example`);
 }
 
 const SECRET_KEYS = ["JWT_SECRET", "POSTGRES_PASSWORD"];
@@ -53,4 +64,6 @@ if (env !== original) {
   writeFileSync(envPath, env);
 }
 
-console.log("Next: docker compose up -d --build");
+console.log(
+  "Next: docker compose --env-file .env.deploy -f docker-compose.yml up -d --build",
+);

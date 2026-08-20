@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:15432/exam_test}"
+DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/exam_test}"
 
 CURRENT_DB="$(psql "$DB_URL" -t -A -c 'SELECT current_database();' | tr -d '[:space:]')"
 case "${CURRENT_DB}" in

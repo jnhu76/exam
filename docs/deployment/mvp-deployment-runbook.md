@@ -60,7 +60,18 @@ Backups:   operator-supplied pg_dump schedule against the 'pgdata' volume
 
 ## 2. Environment variables
 
-Copy `.env.example` → `.env` and set the production-required values. The
+Deployment and development settings are SEPARATE files:
+
+- `.env.deploy` (from `.env.deploy.example`, filled by
+  `node scripts/generate-env.mjs`) — deployment only. Compose reads it
+  ONLY via the explicit `--env-file .env.deploy` flag; passing the flag
+  makes Compose ignore the dev `.env` entirely. Every `docker compose`
+  command in this runbook includes it.
+- `.env` (from `.env.example`) — local development only. No dev tooling
+  (`pnpm dev` / Vite / Drizzle / vitest) ever reads `.env.deploy`, and no
+  deployment secret ever lands in `.env`.
+
+Set the production-required values in `.env.deploy`. The
 bundled `docker-compose.yml` uses Compose `${VAR:?...}` required-expansion
 for the production-required variables below — Compose itself fails to start
 if any is unset. There is NO default database password in production
@@ -78,9 +89,9 @@ if any is unset. There is NO default database password in production
 
 | Variable | Default | Notes |
 |---|---|---|
-| `CORS_ORIGIN` | `http://localhost:<APP_PORT>` | Browser origin allowlist (credentials:true); comma-separated → array. The Compose default follows the host port; override for LAN/hostname access |
-| `PUBLIC_WEB_ORIGIN` | `http://localhost:<APP_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
-| `APP_PORT` | 3000 | Host published port (`${APP_PORT:-3000}:3000`); the container API stays on 3000. Caveat: `.env` `APP_PORT` is also the `pnpm dev` API port (the Vite dev proxy targets a fixed 3000) — set it for Docker only, unset it for dev |
+| `CORS_ORIGIN` | `http://localhost:<EXAM_PORT>` | Browser origin allowlist (credentials:true); comma-separated → array. The Compose default follows the host port; override for LAN/hostname access |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost:<EXAM_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
+| `EXAM_PORT` | 3000 | Host published port (`${EXAM_PORT:-3000}:3000`); the container API stays on 3000 (`APP_PORT` is container-internal only). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookie, fail-fast required env |
 | `NODE_ENV` | development | maps to production/test/development |
@@ -123,8 +134,9 @@ if any is unset. There is NO default database password in production
 | `SMTP_USER` / `SMTP_PASSWORD` | (empty) | auth block omitted if both empty; password is scrubbed from logs/errors |
 
 > **dotenv gotcha:** dotenv does NOT overwrite inherited `process.env`. Stale
-> shell `EMAIL_*` / `SMTP_*` values silently override `.env`. Use
-> `env -u EMAIL_ENABLED -u SMTP_HOST ... docker compose up` to start cleanly
+> shell `EMAIL_*` / `SMTP_*` values silently override `.env.deploy`. Use
+> `env -u EMAIL_ENABLED -u SMTP_HOST ... docker compose --env-file .env.deploy up`
+> to start cleanly
 > when a stale shell env is suspected.
 
 ---
@@ -135,13 +147,14 @@ if any is unset. There is NO default database password in production
 # 1. Clone and enter the repository
 git clone <repo-url> exam && cd exam
 
-# 2. Configure environment. The generator creates .env from .env.example and
-#    fills the empty JWT_SECRET and POSTGRES_PASSWORD with random values (an
-#    existing value is never rotated). To set secrets manually instead:
-#    cp .env.example .env, then set both (openssl rand -hex 32).
+# 2. Configure the deployment environment. The generator creates .env.deploy
+#    from .env.deploy.example and fills the empty JWT_SECRET and
+#    POSTGRES_PASSWORD with random values (an existing value is never
+#    rotated). To set secrets manually instead:
+#    cp .env.deploy.example .env.deploy, then set both (openssl rand -hex 32).
 node scripts/generate-env.mjs
 
-# 3. (Optional) Enable real Email delivery — edit .env:
+# 3. (Optional) Enable real Email delivery — edit .env.deploy:
 # EMAIL_ENABLED=true
 # EMAIL_TRANSPORT=smtp
 # SMTP_HOST=smtp.your-org.internal
@@ -150,40 +163,40 @@ node scripts/generate-env.mjs
 
 # 4. Build and start the default stack (app + db + email-worker).
 #    Redis is NOT started by default (P6-010); see §10 to enable it.
-docker compose up -d --build
+docker compose --env-file .env.deploy up -d --build
 
 # 5. Watch the API come up (migration runs inside the container entrypoint).
-docker compose logs --tail=50 -f app
+docker compose --env-file .env.deploy logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
 # 6. Verify app + db are healthy. The email-worker starts after app health
 #    and waits for the first organization to be bootstrapped (step 7).
-docker compose ps
+docker compose --env-file .env.deploy ps
 # Expected: app (healthy), db (healthy), email-worker (up)
 ```
 
 `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost:3000`; set
-them in `.env` to your machine's address for LAN access.
+them in `.env.deploy` to your machine's address for LAN access.
 
 # 7. Bootstrap the first Admin (production path — see §5). This also
 #    creates the internal default organization, which unblocks the worker.
 #    Two equivalent paths share one canonical atomic mutation body:
 #
 #    (a) CLI fallback (operator path):
-docker compose exec app \
+docker compose --env-file .env.deploy exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
 #
 #    (b) Launchpad first-install page (browser path): set
 #        LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32> in .env BEFORE step 4,
-#        then navigate to http://<host>:<APP_PORT>/launchpad and complete
+#        then navigate to http://<host>:<EXAM_PORT>/launchpad and complete
 #        the first-Admin setup form. Once initialized, /launchpad redirects
 #        to /login and never reopens. See backup-and-recovery.md §8.
 
 # 8. The same worker container detects the new organization, resolves it,
 #    and enters its poll loop without restarting. Verify:
-docker compose logs --tail=20 email-worker
+docker compose --env-file .env.deploy logs --tail=20 email-worker
 # Look for: 'resolved default organization', 'starting poll loop'
 ```
 
@@ -235,17 +248,17 @@ chain is what serializes them — not the journal.
 
 ```bash
 # Run migrations manually (rarely needed; containers do this automatically)
-docker compose exec app node dist/scripts/migrate.js
+docker compose --env-file .env.deploy exec app node dist/scripts/migrate.js
 
 # Inspect the drizzle journal. NOTE: $POSTGRES_USER / $POSTGRES_DB are
 # expanded INSIDE the db container (the postgres image exports them as
 # env vars), not by the host shell — so wrap the psql call in sh -c and
 # run it via 'docker compose exec db'.
-docker compose exec db sh -c \
+docker compose --env-file .env.deploy exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM drizzle.__drizzle_migrations;"'
 
 # Inspect table count
-docker compose exec db sh -c \
+docker compose --env-file .env.deploy exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'
 ```
 
@@ -268,7 +281,7 @@ bootstrap path.
 # Production first-Admin bootstrap (P6-008). Run once against a fresh
 # migrated database. The password is ALWAYS explicitly supplied; there is
 # no default.
-docker compose exec app \
+docker compose --env-file .env.deploy exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin \
   --password '<STRONG_OPERATOR_PASSWORD>' \
@@ -308,7 +321,7 @@ the Admin via `POST /api/admin/candidates`.
 ### Reset admin password later (without re-seeding)
 
 ```bash
-docker compose exec app node dist/scripts/reset-admin-password.js
+docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-password.js
 ```
 
 ### Dev/test seed (NOT for production)
@@ -333,19 +346,19 @@ the production DB.
 
 ```bash
 # Normal start (default stack: app + db + email-worker; Redis is optional — §10)
-docker compose up -d
+docker compose --env-file .env.deploy up -d
 
 # Verify
-docker compose ps
+docker compose --env-file .env.deploy ps
 # Expected: app (healthy), db (healthy), email-worker (up)
 
 # API health (liveness — process alive)
-curl -s http://localhost:${APP_PORT:-3000}/api/health
+curl -s http://localhost:${EXAM_PORT:-3000}/api/health
 # Expected: {"status":"ok"}
 
 # Admin-only system health (DB ping + CPU/memory)
 # (requires authentication; obtain the auth-token cookie via the login page)
-curl -s -b "auth-token=<JWT>" http://localhost:${APP_PORT:-3000}/api/system/health
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/health
 # Expected: {"cpu":..,"memory":..,"dbResponseMs":..,"status":"ok"}
 ```
 
@@ -428,7 +441,7 @@ that `result_published` notifications write into.
 ```bash
 # The worker starts automatically with 'docker compose up -d'. Verify.
 # Use the native --tail flag (not a pipe) so failure context is preserved.
-docker compose logs --tail=20 email-worker
+docker compose --env-file .env.deploy logs --tail=20 email-worker
 # Look for:
 #   'email delivery worker starting'
 #   'resolved default organization'
@@ -436,7 +449,7 @@ docker compose logs --tail=20 email-worker
 #   'starting poll loop' (pollIntervalMs, batchSize, lockTimeoutMs)
 
 # Inspect the worker heartbeat (admin-only)
-curl -s -b "auth-token=<JWT>" http://localhost:${APP_PORT:-3000}/api/system/diagnostics \
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
   | jq .emailStatus
 # Expected fields: status, enabled, worker.{status,lastPollAt,lastSuccessAt,
 #                  lastErrorAt,lastError}, outbox.{pending,processing,
@@ -477,7 +490,7 @@ assumes a single API process.
 
 ```bash
 # Inspect scanner metrics (admin-only)
-curl -s -b "auth-token=<JWT>" http://localhost:${APP_PORT:-3000}/api/system/diagnostics \
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
   | jq '.heartbeatStatus, .deadlineScannerStatus'
 # Expected: interval, timeout, lastScanAt, disruptedCount / autoSubmitCount
 ```
@@ -527,10 +540,10 @@ the password and the authenticated URL:
 #    (URL-encode the password if it contains reserved characters)
 
 # 2. Start the stack with the redis profile:
-docker compose --profile redis up -d --build
+docker compose --env-file .env.deploy --profile redis up -d --build
 
 # 3. Verify all four services:
-docker compose ps
+docker compose --env-file .env.deploy ps
 # Expected: app (healthy), db (healthy), redis (healthy), email-worker (up)
 ```
 
@@ -554,10 +567,10 @@ After first install:
 
 ```bash
 # 1. API liveness
-curl -s http://localhost:${APP_PORT:-3000}/api/health
+curl -s http://localhost:${EXAM_PORT:-3000}/api/health
 
 # 2. Public config
-curl -s http://localhost:${APP_PORT:-3000}/api/system/public-config
+curl -s http://localhost:${EXAM_PORT:-3000}/api/system/public-config
 
 # 3. Admin login via the web UI (https://exam.your-org.internal/login)
 #    Log in with the seeded admin credentials.
@@ -578,7 +591,7 @@ curl -s http://localhost:${APP_PORT:-3000}/api/system/public-config
 #    and that it navigates to the authoritative frozen result page.
 
 # 7. (If EMAIL_ENABLED=true) Verify the worker drained the outbox:
-curl -s -b "auth-token=<JWT>" http://localhost:${APP_PORT:-3000}/api/system/diagnostics \
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
   | jq .emailStatus.outbox
 #    Expect sent to increase; pending/processing to return to 0.
 
@@ -596,11 +609,11 @@ production database.
 
 ```bash
 # Graceful shutdown: SIGTERM is propagated to each container.
-docker compose stop    # stops containers without removing them
+docker compose --env-file .env.deploy stop    # stops containers without removing them
 # or
-docker compose down    # stops and removes containers (keeps volumes)
+docker compose --env-file .env.deploy down    # stops and removes containers (keeps volumes)
 # or
-docker compose down -v # DANGEROUS: removes the pgdata named volume and
+docker compose --env-file .env.deploy down -v # DANGEROUS: removes the pgdata named volume and
                        # destroys all data (only for clean reinstall).
                        # NOTE: data under ./data/* (bind mounts, incl. the
                        # Redis dir and backup spools) is NOT removed by
@@ -629,45 +642,45 @@ email-worker container (SIGTERM):
 
 ```bash
 # Restart a single service
-docker compose restart app
-docker compose restart email-worker
-docker compose restart db
-docker compose restart redis       # optional profile; not started by default
+docker compose --env-file .env.deploy restart app
+docker compose --env-file .env.deploy restart email-worker
+docker compose --env-file .env.deploy restart db
+docker compose --env-file .env.deploy restart redis       # optional profile; not started by default
                                     # (P6-010 / ADR-001)
 
 # Stuck Email processing recovery
 # The worker recovers abandoned rows at the top of every poll cycle after
 # EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s). To force immediate recovery,
 # restart the worker:
-docker compose restart email-worker
+docker compose --env-file .env.deploy restart email-worker
 
 # Dead Email inspection (admin-only via psql). $POSTGRES_USER / $POSTGRES_DB
 # are expanded INSIDE the db container (postgres image env), not by the
 # host shell — wrap in sh -c.
-docker compose exec db sh -c \
+docker compose --env-file .env.deploy exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, recipient_user_id, subject, attempt_count, last_error, created_at, last_attempt_at FROM email_outbox WHERE status = '\''dead'\'';"'
 
 # Replay a dead Email (advanced — inspect last_error first)
 # ⚠️  This re-attempts delivery. Confirm the recipient and content first.
-docker compose exec db sh -c \
+docker compose --env-file .env.deploy exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE email_outbox SET status='\''pending'\'', locked_at=NULL, locked_by=NULL, next_attempt_at=now(), last_error=NULL WHERE id = '\''<UUID>'\'';"'
 
 # Stale worker heartbeat
 # /api/system/diagnostics emailStatus.worker.status=degraded when
 # now - last_poll_at > EMAIL_WORKER_HEARTBEAT_STALE_MS (default 60s).
 # Restart the worker:
-docker compose restart email-worker
+docker compose --env-file .env.deploy restart email-worker
 
 # Failed migration. Use the native --tail flag instead of a pipe so failure
 # context is preserved.
-docker compose logs --tail=100 app
+docker compose --env-file .env.deploy logs --tail=100 app
 # Re-running migrate is idempotent:
-docker compose exec app node dist/scripts/migrate.js
+docker compose --env-file .env.deploy exec app node dist/scripts/migrate.js
 # If schema is corrupted, restore from backup (§11 backup/restore) and
 # re-run migrate.
 
 # Admin password reset
-docker compose exec app node dist/scripts/reset-admin-password.js
+docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-password.js
 
 # Candidate interrupted attempt
 # REC-I3 implements direct-entry candidate restore: the Web client calls the
@@ -678,7 +691,7 @@ docker compose exec app node dist/scripts/reset-admin-password.js
 # frozen policy is operator_incident.
 
 # Log / requestId investigation
-docker compose logs app | jq 'select(.reqId == "<REQ_ID>")'
+docker compose --env-file .env.deploy logs app | jq 'select(.reqId == "<REQ_ID>")'
 ```
 
 ---
@@ -691,21 +704,21 @@ additionally scrubbed by `sanitizeEmailError`.
 
 ```bash
 # Tail all services
-docker compose logs -f
+docker compose --env-file .env.deploy logs -f
 
 # Filter by service
-docker compose logs -f app
-docker compose logs -f email-worker
+docker compose --env-file .env.deploy logs -f app
+docker compose --env-file .env.deploy logs -f email-worker
 
 # Filter by request id (JSON log)
-docker compose logs app | jq 'select(.reqId == "req-42")'
+docker compose --env-file .env.deploy logs app | jq 'select(.reqId == "req-42")'
 
 # Filter by log level
-docker compose logs app | jq 'select(.level >= 40)'   # warn and above
+docker compose --env-file .env.deploy logs app | jq 'select(.level >= 40)'   # warn and above
 
 # Live diagnostics (admin-only)
 watch -n 5 'curl -s -b "auth-token=<JWT>"
-  http://localhost:${APP_PORT:-3000}/api/system/diagnostics | jq'
+  http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics | jq'
 ```
 
 Diagnostic fields (see `GET /api/system/diagnostics`):
@@ -806,11 +819,11 @@ which preserve ownership/mode/symlinks and refuse unsafe paths:
 ```bash
 # Stop Exam first (PostgreSQL must be STOPPED — a live copy is corrupt-prone).
 # The source is the deployment's EXAM_DATA_ROOT (default ./data):
-docker compose down
+docker compose --env-file .env.deploy down
 scripts/backup/cold-filesystem-backup.sh \
   "${EXAM_DATA_ROOT:-./data}" \
   /mnt/nas/exam-backups/$(date +%Y%m%d)
-docker compose up -d
+docker compose --env-file .env.deploy up -d
 ```
 
 Restore into a fresh data root, then start Exam with the same PostgreSQL
@@ -842,13 +855,13 @@ contract (DROP + recreate from template0, then `pg_restore`) is enforced by
 scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
 
 # Clean restore (STOP API + worker first; script requires typing target DB name):
-docker compose stop app email-worker
+docker compose --env-file .env.deploy stop app email-worker
 scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
-docker compose up -d app email-worker
+docker compose --env-file .env.deploy up -d app email-worker
 
 # P7-E2B — record the restore drill in the product ledger after restart
 # (the restore script prints the exact command with its measured duration):
-docker compose exec app node dist/scripts/backup-evidence.js drill \
+docker compose --env-file .env.deploy exec app node dist/scripts/backup-evidence.js drill \
   --operation-id logical-restore:$(date +%F) --backup-type logical \
   --result succeeded --source operator_declared --duration-ms <ms>
 ```
@@ -871,7 +884,7 @@ objects):
 # Backup (online, consistent). $POSTGRES_USER / $POSTGRES_DB are expanded
 # INSIDE the db container (postgres image env), not by the host shell —
 # wrap pg_dump in sh -c. The dump stream is captured on the host.
-docker compose exec -T db sh -c \
+docker compose --env-file .env.deploy exec -T db sh -c \
   'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean --if-exists' \
   > backup_$(date +%Y%m%d_%H%M%S).sql
 
@@ -885,11 +898,11 @@ tail -5 backup_*.sql   # should contain 'PostgreSQL database dump complete'
 # remove objects that exist in the target DB yet are absent from an older
 # dump. For an EXACT historical replacement, recreate/clean the target
 # database under an explicit restore contract (C2 restore drill).
-docker compose stop app email-worker
-docker compose exec -T db sh -c \
+docker compose --env-file .env.deploy stop app email-worker
+docker compose --env-file .env.deploy exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
   < backup_YYYYMMDD_HHMMSS.sql
-docker compose up -d app email-worker
+docker compose --env-file .env.deploy up -d app email-worker
 ```
 
 For larger deployments, prefer the C2 logical backup (`scripts/backup/postgres-logical-backup.sh`,

@@ -20,7 +20,7 @@
 #   bash scripts/e2e/run.sh --rebuild --headed    # 强制 --no-cache 重建（不支持 headed，仅作示例）
 #
 # 环境变量：
-#   APP_PORT             宿主机暴露给 app 的端口，默认 3000
+#   EXAM_PORT            宿主机暴露给 app 的端口，默认 3000
 #   JWT_SECRET           覆盖默认 change-me-in-development
 #   E2E_PROXY            E2E 容器内 npm install 时的 HTTP(S) 代理
 #   COMPOSE_PROJECT_NAME 隔离多个并发运行，默认 exam-e2e
@@ -125,10 +125,10 @@ fi
 # 在 compose up 之前显式失败，能把”环境污染”变成可识别错误，而不是污染 E2E。
 #
 # 端口覆盖方式（需要配合 docker-compose.test.override.yml）：
-#   APP_PORT=3300 DB_HOST_PORT=5433 \
+#   EXAM_PORT=3300 DB_HOST_PORT=5433 \
 #     COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
 #     bash scripts/e2e/run.sh
-APP_HOST_PORT="${APP_PORT:-3000}"
+APP_HOST_PORT="${EXAM_PORT:-3000}"
 DB_HOST_PORT="${DB_HOST_PORT:-5432}"
 
 port_owner() {
@@ -165,7 +165,7 @@ ensure_host_port_free() {
   err "处理建议（任选其一）："
   err "  1) 停掉占用进程：lsof -iTCP:${port} -sTCP:LISTEN | tail -n +2"
   err "  2) 停 dev compose：docker compose -f docker-compose.dev.yml down -v"
-  err "  3) 改用其他端口：APP_PORT=3001 bash scripts/e2e/run.sh"
+  err "  3) 改用其他端口：EXAM_PORT=3001 bash scripts/e2e/run.sh"
   return 1
 }
 

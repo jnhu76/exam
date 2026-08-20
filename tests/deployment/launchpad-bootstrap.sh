@@ -123,7 +123,7 @@ start_stack() {
   # PUBLIC_WEB_ORIGIN for this stack's own port so the host-side curl
   # requests pass (shell env wins over .env during compose interpolation).
   local origin="http://localhost:${port}"
-  EXAM_DATA_ROOT="${data_root}" APP_PORT="${port}" \
+  EXAM_DATA_ROOT="${data_root}" EXAM_PORT="${port}" \
     CORS_ORIGIN="${origin}" PUBLIC_WEB_ORIGIN="${origin}" \
     run_compose "${project}" up -d --build --quiet-pull 2>&1 | tail -6
   wait_app_healthy "${project}"
@@ -135,7 +135,7 @@ db_query() {
     psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${query}" 2>&1
 }
 
-# The app container is the API + SPA server. The host port is APP_PORT.
+# The app container is the API + SPA server. The host port is EXAM_PORT.
 status_get() { curl -s --max-time 10 "http://localhost:$1/api/launchpad/status"; }
 post_json() {
   local port="$1" path="$2" body="$3" out="$4"

@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GENERATOR = join(__dirname, "generate-env.mjs");
-const EXAMPLE = join(__dirname, "..", ".env.example");
+const EXAMPLE = join(__dirname, "..", ".env.deploy.example");
 
 function runGenerator(envPath) {
   return child_process.spawnSync(process.execPath, [GENERATOR, envPath], {
@@ -30,10 +30,10 @@ function secretLine(envText, key) {
   return match ? match[1] : null;
 }
 
-test("first run: .env is created from .env.example and both empty secrets are filled", () => {
+test("first run: .env.deploy is created from .env.deploy.example and both empty secrets are filled", () => {
   const dir = mkdtempSync(join(tmpdir(), "genenv-first-"));
   try {
-    const envPath = join(dir, ".env");
+    const envPath = join(dir, ".env.deploy");
     const result = runGenerator(envPath);
     assert.equal(result.status, 0, result.stderr);
 

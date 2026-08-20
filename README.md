@@ -28,16 +28,21 @@ LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, support
 
 ```bash
 git clone <repo-url> exam && cd exam
-node scripts/generate-env.mjs   # creates .env from .env.example, fills JWT_SECRET + POSTGRES_PASSWORD
-docker compose up -d --build    # build + start app, db, email-worker
-docker compose ps               # wait for app (healthy), db (healthy), email-worker (up)
+node scripts/generate-env.mjs   # creates .env.deploy, fills JWT_SECRET + POSTGRES_PASSWORD
+docker compose --env-file .env.deploy up -d --build  # build + start app, db, email-worker
+docker compose --env-file .env.deploy ps             # wait for app (healthy), db (healthy), email-worker (up)
 ```
+
+Deployment settings (`.env.deploy`) and development settings (`.env`) are
+separate files: Compose reads `.env.deploy` only via the explicit
+`--env-file` flag, and no dev tooling (`pnpm dev` / Vite / Drizzle / vitest)
+ever reads `.env.deploy`. See [`docs/development/ports.md`](docs/development/ports.md).
 
 Create the first Admin (Phase 1 has no public self-register), then open
 <http://localhost:3000>:
 
 ```bash
-docker compose exec app node dist/scripts/bootstrap-admin.js \
+docker compose --env-file .env.deploy exec app node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
 ```
@@ -60,11 +65,12 @@ pnpm dev
 
 This starts:
 
-- **Web** (Vite): <http://localhost:4173>
+- **Web** (Vite): <http://localhost:5173>
 - **API** (Fastify): <http://localhost:3000>
 
 The web dev server proxies `/api/*` requests to the API server automatically.
-(The Vite port is 4173 rather than the default 5173 due to a WSL limitation.)
+Dev ports are conventional and single-source owned (`VITE_PORT` / `DEV_API_PORT`
+/ `DB_HOST_PORT`); see [`docs/development/ports.md`](docs/development/ports.md).
 
 ### Test Users (basic seed)
 
@@ -154,15 +160,15 @@ Requires a running PostgreSQL instance. Use `pnpm db:up` to start one via Docker
 
 ```bash
 pnpm install
-pnpm db:up       # Start PostgreSQL container (port 15432)
+pnpm db:up       # Start PostgreSQL container (host port: DB_HOST_PORT, default 5432)
 pnpm db:migrate  # Run migrations
 pnpm db:seed     # Seed with test users
 pnpm dev         # Start API + Web with hot reload
 ```
 
-- Web: <http://localhost:4173>
+- Web: <http://localhost:5173>
 - API: <http://localhost:3000>
-- Database: PostgreSQL 18 on `localhost:15432`
+- Database: PostgreSQL 18 on `localhost:5432`
 
 ### Mode 2: Docker Compose (Full Stack)
 
@@ -175,15 +181,15 @@ runbook (env vars, first install, recovery, upgrades) is
 
 ```bash
 git clone <repo-url> exam && cd exam
-node scripts/generate-env.mjs   # creates .env from .env.example, fills JWT_SECRET + POSTGRES_PASSWORD
-docker compose up -d --build    # build + start app, db, email-worker
-docker compose ps               # wait until app (healthy), db (healthy), email-worker (up)
+node scripts/generate-env.mjs   # creates .env.deploy, fills JWT_SECRET + POSTGRES_PASSWORD
+docker compose --env-file .env.deploy up -d --build  # build + start app, db, email-worker
+docker compose --env-file .env.deploy ps             # wait until app (healthy), db (healthy), email-worker (up)
 ```
 
 Open <http://localhost:3000>, then create the first Admin:
 
 ```bash
-docker compose exec app \
+docker compose --env-file .env.deploy exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
@@ -191,25 +197,25 @@ docker compose exec app \
 
 - In Docker mode the API also serves the built frontend on the same port
   (same-origin), so <http://localhost:3000> is the web app — not just the
-  API. (In local dev the web runs on <http://localhost:4173> via Vite and
+  API. (In local dev the web runs on <http://localhost:5173> via Vite and
   the API on 3000.)
 - The `app` healthcheck requires both the API and the SPA to respond, so
   `app: healthy` means the web app is reachable.
-- State persists in `./data/` (bind mounts) across `docker compose down`.
-- Host port: `APP_PORT` in `.env` (default 3000). `CORS_ORIGIN` and
-  `PUBLIC_WEB_ORIGIN` default to `http://localhost:<APP_PORT>`, so the
+- State persists in `./data/` (bind mounts) across
+  `docker compose --env-file .env.deploy down`.
+- Host port: `EXAM_PORT` in `.env` (default 3000) publishes the app container
+  (container-internal port stays 3000). `CORS_ORIGIN` and
+  `PUBLIC_WEB_ORIGIN` default to `http://localhost:<EXAM_PORT>`, so the
   browser origin follows the host port; for LAN access set them to your
   machine's address (e.g. `http://192.168.1.5:3000`).
-- Known limitation: `.env` `APP_PORT` serves two roles — the Docker host
-  port and the local dev API port — while the Vite dev proxy targets a
-  fixed 3000. Setting `APP_PORT` (e.g. 3001) keeps Docker correct but
-  shifts the dev API and breaks the dev `/api` proxy. A single-source port
-  model is planned follow-up work; keep `APP_PORT` unset for `pnpm dev`
-  until then.
+- Port ownership is single-source: `EXAM_PORT` (Docker host publish),
+  `DEV_API_PORT` / `VITE_PORT` / `DB_HOST_PORT` (local dev). See
+  [`docs/development/ports.md`](docs/development/ports.md).
 - Redis is **not started by default** (no Redis in the default stack; nothing
-  depends on it). To enable it: `docker compose --profile redis up` plus
+  depends on it). To enable it:
+  `docker compose --env-file .env.deploy --profile redis up` plus
   `REDIS_PASSWORD=<secret>` and `REDIS_URL=redis://:<secret>@redis:6379`
-  in `.env` (the redis container refuses to start without a password).
+  in `.env.deploy` (the redis container refuses to start without a password).
 - Email (optional): `EMAIL_ENABLED=true` + `EMAIL_TRANSPORT=smtp` + `SMTP_*`.
 - Common issues (ports, WSL2, China mainland mirrors):
   [`docs/docker-troubleshooting.md`](docs/docker-troubleshooting.md).
@@ -249,6 +255,7 @@ fake a passing verification:
 
 ```bash
 docker compose \
+  --env-file .env.deploy \
   -f docker-compose.yml \
   -f docker-compose.build.yml \
   up -d --build
@@ -259,8 +266,8 @@ Proof that `app` and `email-worker` run the freshly built image (not just
 
 ```bash
 docker image inspect exam-local:dev --format '{{.Id}}'
-docker inspect --format '{{.Image}}' "$(docker compose ps -q app)"
-docker inspect --format '{{.Image}}' "$(docker compose ps -q email-worker)"
+docker inspect --format '{{.Image}}' "$(docker compose --env-file .env.deploy ps -q app)"
+docker inspect --format '{{.Image}}' "$(docker compose --env-file .env.deploy ps -q email-worker)"
 ```
 
 The three IDs must match.
@@ -288,7 +295,8 @@ clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
-| `.env.example`            | Runtime/dev environment template                                              |
+| `.env.example`            | Local-development environment template (copy to `.env`)                      |
+| `.env.deploy.example`     | Docker-deployment environment template (copy to `.env.deploy`; used via `--env-file`) |
 | `.env.test.example`       | Test/coverage environment template (copy to `.env.test.local`)                |
 
 ## Development Commands
@@ -304,7 +312,7 @@ clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 | `pnpm db:push`           | Push schema changes to database                             |
 | `pnpm db:migrate`        | Run database migrations                                     |
 | `pnpm db:studio`         | Open Drizzle Studio                                         |
-| `pnpm db:up`             | Start PostgreSQL container (dev, port 15432)                |
+| `pnpm db:up`             | Start PostgreSQL container (dev, host port `DB_HOST_PORT`, default 5432) |
 | `pnpm db:down`           | Stop PostgreSQL container                                   |
 | `pnpm db:reset`          | Reset dev database (down + up + migrate)                   |
 | `pnpm test`              | Run all tests                                               |
@@ -386,7 +394,11 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | ------------------- | ------------------------------- | ------------------------------------------------------------- |
 | `VITE_API_BASE_URL` | `""` (proxy)                    | API base URL for the web client                               |
 | `APP_MODE`          | `development`                   | Run mode: `development`, `test`, `e2e`, `ci`, `production`    |
-| `APP_PORT`          | `3000`                          | API server port; in Compose also the host published port (container stays 3000). Dual-read caveat: also the `pnpm dev` API port while the Vite proxy targets a fixed 3000 — see the Docker known limitation |
+| `APP_PORT`          | `3000` (container-internal)      | Current API process bind port. Fixed at 3000 by every Compose file and the Dockerfile; never a host publish port. In `pnpm dev` the API uses `DEV_API_PORT` when `APP_PORT` is unset |
+| `DEV_API_PORT`      | `3000`                          | Local dev API bind port; also the Vite dev proxy target |
+| `VITE_PORT`         | `5173`                          | Local dev Vite port; also owns the dev default `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` |
+| `DB_HOST_PORT`      | `5432`                          | Dev compose PostgreSQL host publish; owns the constructed dev `DATABASE_URL` |
+| `EXAM_PORT`         | `3000`                          | Docker host published port (`${EXAM_PORT:-3000}:3000`); also owns the Compose default `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` |
 | `HOST`              | `0.0.0.0`                       | API server listen address                                     |
 | `DATABASE_URL`      | `postgresql://...`              | Database connection URL (**required in production**)           |
 | `REDIS_URL`         | (empty = disabled)              | Redis connection URL (optional; enables the shared rate limiter when the runtime is ready)     |
@@ -394,7 +406,7 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | `JWT_SECRET`        | auto-generated in dev           | JWT signing secret (**required in production**; fail-fast)    |
 | `NODE_ENV`          | `development`                   | Node environment (build/fallback signal)                      |
 | `COOKIE_SECURE`     | `false`                         | Whether cookies should be secure (HTTPS only)                 |
-| `CORS_ORIGIN`       | dev `http://localhost:4173`; Compose `http://localhost:<APP_PORT>` | CORS origin for the API server (comma-separated → array). The bundled Compose default follows the host port; set to your machine's address for LAN access |
+| `CORS_ORIGIN`       | dev `http://localhost:<VITE_PORT>`; Compose `http://localhost:<EXAM_PORT>` | CORS origin for the API server (comma-separated → array). The defaults follow the owning port variable; set to your machine's address for LAN access |
 | `DEPLOYMENT_MODE`   | `singleTenant`                  | Deployment mode. Phase 1 is `singleTenant` only. `multiTenant` is rejected at startup (Phase 4) |
 
 ### Seed Data Configuration (Optional)
@@ -430,13 +442,14 @@ pnpm --filter db test
 > **Note**: DB-dependent tests (`@exam/db`, `@exam/api`) require a running
 > PostgreSQL. Redis tests require a running Redis instance. Start both with
 > `pnpm db:up` (uses `docker-compose.dev.yml`, PostgreSQL 18 + Redis 7). The
-> dev compose maps PostgreSQL to host port **`15432`** (host `:5432` is
-> commonly occupied on Windows/WSL; override via `DB_HOST_PORT`).
+> dev compose publishes PostgreSQL on host port `DB_HOST_PORT` (default
+> `5432`; override in `.env` when that port is taken on your machine — keep
+> `TEST_DATABASE_URL`'s port in sync).
 > `pnpm db:up` auto-creates both `exam` (dev runtime) and `exam_test` (tests)
-> databases; set `DATABASE_URL` in `.env` (see `.env.example`) and
-> `TEST_DATABASE_URL` in `.env.test.local` (see `.env.test.example`). In CI,
-> GitHub Actions `services: postgres` and `services: redis` provide these
-> instead (on `:5432`/`:6379`, since CI runs in an isolated VM).
+> databases; set `TEST_DATABASE_URL` in `.env.test.local` (see
+> `.env.test.example`) and, for an external PostgreSQL, `DATABASE_URL` in
+> `.env`. In CI, GitHub Actions `services: postgres` and `services: redis`
+> provide these instead (on `:5432`/`:6379`, since CI runs in an isolated VM).
 
 ### Quick local test setup
 
@@ -447,18 +460,18 @@ pnpm db:up
 # 2. Copy env templates and adjust ports if needed:
 cp .env.example .env                              # runtime/dev config
 cp .env.test.example .env.test.local              # test config
-#    .env        → DATABASE_URL=postgresql://exam:exam@localhost:15432/exam
-#    .env.test.local → TEST_DATABASE_URL=postgresql://exam:exam@localhost:15432/exam_test
+#    .env        → DB_HOST_PORT=5432 (dev DATABASE_URL is constructed from it)
+#    .env.test.local → TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test
 #    .env        → REDIS_URL=redis://localhost:6379
 
 # 3. Run tests (vitest reads .env + .env.test.local; @exam/db + @exam/api hit exam_test)
 pnpm coverage
 ```
 
-> WSL/Windows users: host `:5432` is often taken by a Windows-side service, so
-> the dev compose publishes `15432` instead. CI uses `:5432` (isolated VM).
-> The single-source DB resolver (`packages/db/src/databaseUrl.ts`) reads the
-> URL from env; tests never silently fall back to a guessed localhost.
+> The dev DATABASE_URL is constructed from `DB_HOST_PORT` by the
+> single-source DB resolver (`packages/db/src/databaseUrl.ts`); an explicit
+> `DATABASE_URL` (external PostgreSQL) always wins, and tests never fall
+> back to a guessed localhost.
 
 ### E2E Tests (Playwright, browser)
 

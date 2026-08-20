@@ -103,7 +103,7 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=2`, fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
 | **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
-| **Forbidden** | `exam` or `exam_test` databases, `localhost:15432` (dev port) |
+| **Forbidden** | `exam` or `exam_test` databases, a host port that contradicts `DB_HOST_PORT` (default 5432) |
 | **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
 
 ### 1.8 E2E Merge
@@ -125,11 +125,11 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 
 | Context | Value | Purpose |
 |---------|-------|---------|
-| Local dev (`.env`) | `postgresql://exam:exam@localhost:15432/exam` | Runtime/dev |
+| Local dev (constructed) | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam` (default 5432) | Runtime/dev |
 | CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | Both DATABASE_URL and TEST_DATABASE_URL point to same test DB |
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 | Docker test | `postgresql://db:5432/exam_test` | Container internal |
-| WSL E2E | `postgresql://exam:exam@localhost:15432/exam_e2e` | E2E seed + runtime |
+| WSL E2E | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_e2e` (default 5432) | E2E seed + runtime |
 
 **Rules:**
 - `DATABASE_URL` is for **runtime/dev** use only.
@@ -140,7 +140,7 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 
 | Context | Value | Purpose |
 |---------|-------|---------|
-| Local dev (`.env`) | `postgresql://exam:exam@localhost:15432/exam_test` | vitest runtime |
+| Local dev (`.env.test.local`) | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_test` (default 5432) | vitest runtime |
 | CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | vitest runtime |
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 
@@ -485,7 +485,7 @@ pnpm --filter @exam/api test
 TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
 ```
 
-- **DB required**: Yes (`exam_test` on `localhost:15432`).
+- **DB required**: Yes (`exam_test` on `DB_HOST_PORT`, default 5432).
 - **Env**: `TEST_DATABASE_URL` must point to `exam_test`.
 
 ### 5.3 Web Tests
@@ -510,7 +510,7 @@ E2E_WORKERS=1 bash scripts/e2e/run-wsl.sh
 E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
 ```
 
-- **DB required**: Yes (`exam_e2e` on `localhost:15432`).
+- **DB required**: Yes (`exam_e2e` on `DB_HOST_PORT`, default 5432).
 - **Env**: `APP_MODE=development`, `DATABASE_URL` pointing to `exam_e2e`, `TEST_DATABASE_URL` unset.
 
 ---

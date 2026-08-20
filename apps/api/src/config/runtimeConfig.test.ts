@@ -24,6 +24,8 @@ const ENV_KEYS = [
   "APP_MODE",
   "API_DOCS_ENABLED",
   "APP_PORT",
+  "DEV_API_PORT",
+  "VITE_PORT",
   "HOST",
   "DATABASE_URL",
   "TEST_DATABASE_URL",
@@ -431,12 +433,31 @@ describe("runtimeConfig", () => {
       expect(config.cors.origin).toBe("https://example.com");
     });
 
-    it("development missing CORS_ORIGIN defaults to localhost", () => {
+    it("development missing CORS_ORIGIN defaults to the Vite dev origin", () => {
       process.env.APP_MODE = "development";
       delete process.env.CORS_ORIGIN;
+      delete process.env.VITE_PORT;
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
-      expect(config.cors.origin).toBe("http://localhost:4173");
+      expect(config.cors.origin).toBe("http://localhost:5173");
+    });
+
+    it("CORS default follows VITE_PORT (web port owner test)", () => {
+      process.env.APP_MODE = "development";
+      delete process.env.CORS_ORIGIN;
+      process.env.VITE_PORT = "5273";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.cors.origin).toBe("http://localhost:5273");
+    });
+
+    it("explicit CORS_ORIGIN wins over the VITE_PORT-derived default", () => {
+      process.env.APP_MODE = "development";
+      process.env.VITE_PORT = "5273";
+      process.env.CORS_ORIGIN = "http://dev.example.local";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.cors.origin).toBe("http://dev.example.local");
     });
   });
 
@@ -577,9 +598,60 @@ describe("runtimeConfig", () => {
     it("uses localhost default in development", () => {
       process.env.APP_MODE = "development";
       delete process.env.CORS_ORIGIN;
+      delete process.env.VITE_PORT;
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
-      expect(config.cors.origin).toBe("http://localhost:4173");
+      expect(config.cors.origin).toBe("http://localhost:5173");
+    });
+  });
+
+  describe("API port ownership", () => {
+    it("defaults to 3000 when APP_PORT and DEV_API_PORT are unset", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+      });
+      expect(config.port).toBe(3000);
+    });
+
+    it("DEV_API_PORT drives the dev bind port (API owner test)", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        DEV_API_PORT: "3100",
+      });
+      expect(config.port).toBe(3100);
+    });
+
+    it("explicit APP_PORT (Compose/E2E runners) wins over DEV_API_PORT", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        APP_PORT: "3000",
+        DEV_API_PORT: "3100",
+      });
+      expect(config.port).toBe(3000);
+    });
+  });
+
+  describe("PUBLIC_WEB_ORIGIN ownership", () => {
+    it("follows VITE_PORT when unset in development (web port owner test)", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        VITE_PORT: "5273",
+      });
+      expect(config.publicWebOrigin.origin).toBe("http://localhost:5273");
+    });
+
+    it("explicit PUBLIC_WEB_ORIGIN wins over the VITE_PORT-derived default", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        VITE_PORT: "5273",
+        PUBLIC_WEB_ORIGIN: "http://dev.example.local",
+      });
+      expect(config.publicWebOrigin.origin).toBe("http://dev.example.local");
     });
   });
 

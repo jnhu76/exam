@@ -124,8 +124,9 @@ export interface CorsConfig {
  * action path to produce an in-Email link back to the candidate result page.
  *
  * Validated at boot to an absolute origin (scheme + host[+port], no path).
- * Defaults to `http://localhost:4173` in non-production so a bare dev run
- * still works; production requires the env var (fail-fast).
+ * Defaults in non-production to `http://localhost:${VITE_PORT}` (VITE_PORT
+ * owns the dev web port; default 5173) so a bare dev run still works;
+ * production requires the env var (fail-fast).
  */
 export interface PublicWebOriginConfig {
   origin: string;
@@ -424,8 +425,10 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
 /**
  * Resolve the CORS origin(s) from `CORS_ORIGIN`. In production, the value
  * is required and a missing value triggers a fast failure. In non-production
- * modes the default is `http://localhost:4173`. Comma-separated values are
- * split into an array; a single origin is returned as a plain string.
+ * modes the default is `http://localhost:${VITE_PORT}` (default 5173) —
+ * VITE_PORT owns the dev web port, so the API origin follows the port Vite
+ * actually serves on. Comma-separated values are split into an array; a
+ * single origin is returned as a plain string.
  *
  * @param env - Process environment to read from.
  * @param mode - Current {@link AppMode}.
@@ -442,7 +445,7 @@ function resolveCorsOrigin(
       throw new RuntimeConfigError("CORS_ORIGIN is required in production");
     }
   } else {
-    raw = env.CORS_ORIGIN || "http://localhost:4173";
+    raw = env.CORS_ORIGIN || defaultDevWebOrigin(env);
   }
   if (raw.includes(",")) {
     const parts = raw
@@ -455,13 +458,27 @@ function resolveCorsOrigin(
   return raw;
 }
 
+/** VITE_PORT fallback — the conventional Vite dev port (verified available on
+ * WSL2 + Docker Desktop; see docs/development/ports.md). */
+const DEFAULT_VITE_PORT = "5173";
+
+/**
+ * Derive the default dev web origin from VITE_PORT (the single owner of the
+ * dev web port). Used only when CORS_ORIGIN / PUBLIC_WEB_ORIGIN are unset in
+ * non-production modes; explicit values always win.
+ */
+function defaultDevWebOrigin(env: NodeJS.ProcessEnv): string {
+  const port = env.VITE_PORT?.trim() || DEFAULT_VITE_PORT;
+  return `http://localhost:${port}`;
+}
+
 /**
  * Resolves and validates PUBLIC_WEB_ORIGIN (P5-N1 §12).
  *
  * The value is an absolute origin (scheme + host[+port], no path, no trailing
  * slash). Production requires the env var; non-production defaults to the Vite
- * dev origin so a bare `pnpm dev` works. The renderer re-validates at combine
- * time as defense in depth.
+ * dev origin derived from VITE_PORT so a bare `pnpm dev` works. The renderer
+ * re-validates at combine time as defense in depth.
  */
 function resolvePublicWebOrigin(env: NodeJS.ProcessEnv, mode: AppMode): string {
   let raw: string | undefined;
@@ -473,7 +490,7 @@ function resolvePublicWebOrigin(env: NodeJS.ProcessEnv, mode: AppMode): string {
       );
     }
   } else {
-    raw = env.PUBLIC_WEB_ORIGIN || "http://localhost:4173";
+    raw = env.PUBLIC_WEB_ORIGIN || defaultDevWebOrigin(env);
   }
   const trimmed = raw.replace(/\/+$/, "");
   let parsed: URL;
@@ -857,7 +874,7 @@ export function loadRuntimeConfig(
     app: { mode, isProduction, isTestLike },
     env: envValue,
     mode: deploymentMode,
-    port: Number(env.APP_PORT) || 3000,
+    port: Number(env.APP_PORT) || Number(env.DEV_API_PORT) || 3000,
     host: env.HOST || "0.0.0.0",
     database: { url: resolveDatabaseUrl(env, mode) },
     redis,

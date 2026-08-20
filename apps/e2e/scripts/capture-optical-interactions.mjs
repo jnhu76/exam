@@ -2,7 +2,7 @@ import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:4173";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const output = process.env.OPTICAL_CROPS ?? "/tmp/ui-optical-finish/crops";
 await mkdir(output, { recursive: true });
 
