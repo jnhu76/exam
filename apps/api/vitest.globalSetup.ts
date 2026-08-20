@@ -100,6 +100,6 @@ export default async function globalSetup(): Promise<void> {
       `(~${(RETRY_COUNT * RETRY_DELAY_MS) / 1000}s window).\n` +
       `  Target: ${host}:${port} (from TEST_DATABASE_URL)\n` +
       `  Remedy: ensure the Postgres test container is up and healthy.\n` +
-      `    pnpm db:up   # starts exam-db-1 (host port 15432 → exam_test)`,
+      `    pnpm db:up   # starts exam-db-1 (host port: DB_HOST_PORT, default 5432)`,
   );
 }

@@ -54,11 +54,12 @@ the security repo.
 
 ### Port 3000 already in use
 
-The stack maps `${APP_PORT:-3000}`. Change the host port in `.env`:
+The stack maps `${EXAM_PORT:-3000}`. Change the host port in `.env.deploy`:
 
 ```dotenv
-APP_PORT=3001
+EXAM_PORT=3001
 ```
+(docker compose --env-file .env.deploy ...)
 
 ### The stack is up but the page does not load
 

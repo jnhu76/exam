@@ -237,7 +237,7 @@ fi
 # ---- schema leak check ----
 echo ""
 echo "=== Schema leak check ==="
-SCHEMA_COUNT=$(psql "${DATABASE_URL:-postgresql://exam:exam@localhost:15432/exam_test}" -t -A \
+SCHEMA_COUNT=$(psql "${DATABASE_URL:-postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/exam_test}" -t -A \
   -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE 'test_%';" 2>/dev/null || echo "UNKNOWN")
 echo "  Remaining test_* schemas: $SCHEMA_COUNT"
 

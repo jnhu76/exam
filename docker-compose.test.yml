@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${EXAM_PORT:-3000}:3000"
     environment:
       # DB URLs are templated from the db service's POSTGRES_* vars so the db
       # name has a single source (POSTGRES_DB) — no 4-way hardcoded duplication.

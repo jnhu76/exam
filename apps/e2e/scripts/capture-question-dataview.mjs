@@ -9,19 +9,19 @@
  *   docker compose -f docker-compose.dev.yml up -d
  *   pnpm db:migrate && pnpm db:seed:demo     # seeds the dev DB (exam)
  *   pnpm --filter api dev                     # http://localhost:3000
- *   pnpm --filter web dev                     # http://localhost:4173
+ *   pnpm --filter web dev                     # http://localhost:5173
  *   node apps/e2e/scripts/capture-question-dataview.mjs
  *
  * Output: /tmp/ui-question-dataview/ (PNGs + manifest.json, NOT committed).
  *
- * Env overrides: QD_BASE_URL (default http://localhost:4173),
+ * Env overrides: QD_BASE_URL (default http://localhost:5173),
  *                QD_API_URL, QD_ADMIN_USER, QD_ADMIN_PASS, QD_OUTPUT.
  */
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const baseURL = process.env.QD_BASE_URL ?? "http://localhost:4173";
+const baseURL = process.env.QD_BASE_URL ?? "http://localhost:5173";
 const apiURL = process.env.QD_API_URL ?? "http://localhost:3000";
 const adminUser = process.env.QD_ADMIN_USER ?? "admin";
 const adminPass = process.env.QD_ADMIN_PASS ?? "admin123";

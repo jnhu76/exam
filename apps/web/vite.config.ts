@@ -1,10 +1,23 @@
 import { fileURLToPath, URL } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-function readPort(name: string, fallback: number): number {
-  const raw = process.env[name];
+const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+
+/**
+ * Resolve a port variable with shell-env priority: process.env (shell export)
+ * wins over the root `.env` file (loaded via Vite loadEnv), which wins over
+ * the fallback. Vite config runs in Node before dev-server env loading, so
+ * without loadEnv a root-`.env` VITE_PORT / DEV_API_PORT would be invisible
+ * here.
+ */
+function resolvePort(
+  name: string,
+  fallback: number,
+  loadedEnv: Record<string, string>,
+): number {
+  const raw = process.env[name] ?? loadedEnv[name];
   if (raw === undefined || raw === "") return fallback;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -13,32 +26,40 @@ function readPort(name: string, fallback: number): number {
   return port;
 }
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
+export default defineConfig(({ mode }) => {
+  const rootEnv = loadEnv(mode, repoRoot, "");
+
+  const vitePort = resolvePort("VITE_PORT", 5173, rootEnv);
+  const devApiPort = resolvePort("DEV_API_PORT", 3000, rootEnv);
+
+  return {
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        "@": fileURLToPath(new URL("./src", import.meta.url)),
+      },
     },
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules/react-dom/")) return "vendor-react-dom";
-          if (id.includes("node_modules/react/")) return "vendor-react";
-          if (id.includes("node_modules/")) return "vendor";
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules/react-dom/"))
+              return "vendor-react-dom";
+            if (id.includes("node_modules/react/")) return "vendor-react";
+            if (id.includes("node_modules/")) return "vendor";
+          },
         },
       },
     },
-  },
-  server: {
-    port: readPort("VITE_PORT", 4173),
-    allowedHosts: ["host.docker.internal"],
-    proxy: {
-      "/api": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
+    server: {
+      port: vitePort,
+      allowedHosts: ["host.docker.internal"],
+      proxy: {
+        "/api": {
+          target: `http://localhost:${devApiPort}`,
+          changeOrigin: true,
+        },
       },
     },
-  },
+  };
 });

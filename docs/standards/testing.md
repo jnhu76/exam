@@ -103,7 +103,7 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=2`, fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
 | **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
-| **Forbidden** | `exam` or `exam_test` databases, `localhost:15432` (dev port) |
+| **Forbidden** | `exam` or `exam_test` databases, a host port that contradicts `DB_HOST_PORT` (default 5432) |
 | **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
 
 ### 1.8 E2E Merge
@@ -125,26 +125,28 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 
 | Context | Value | Purpose |
 |---------|-------|---------|
-| Local dev (`.env`) | `postgresql://exam:exam@localhost:15432/exam` | Runtime/dev |
+| Local dev (constructed) | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam` (default 5432) | Runtime/dev |
 | CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | Both DATABASE_URL and TEST_DATABASE_URL point to same test DB |
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 | Docker test | `postgresql://db:5432/exam_test` | Container internal |
-| WSL E2E | `postgresql://exam:exam@localhost:15432/exam_e2e` | E2E seed + runtime |
+| WSL E2E | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_e2e` (default 5432) | E2E seed + runtime |
 
 **Rules:**
 - `DATABASE_URL` is for **runtime/dev** use only.
 - Unit/integration tests MUST NOT silently fall back to `DATABASE_URL`.
-- The DB resolver (`resolveDatabaseUrl`) enforces this: test/ci/e2e modes use `TEST_DATABASE_URL` exclusively.
+- The DB resolver (`resolveDatabaseUrl`) enforces this: test/ci/e2e modes use `TEST_DATABASE_URL` when set, otherwise a LOCAL test URL constructed from `DB_HOST_PORT` (single source — changing `DB_HOST_PORT` once makes local `pnpm test` follow automatically), and never fall back to `DATABASE_URL`.
 
 ### 2.2 `TEST_DATABASE_URL`
 
 | Context | Value | Purpose |
 |---------|-------|---------|
-| Local dev (`.env`) | `postgresql://exam:exam@localhost:15432/exam_test` | vitest runtime |
+| Local dev (`.env.test.local`) | optional — when unset resolves to `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_test` (default 5432) | vitest runtime |
 | CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | vitest runtime |
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 
 **Rules:**
+- An explicit `TEST_DATABASE_URL` always wins (CI / remote DB / special case).
+- When unset, the resolver constructs a LOCAL test URL from the single-source `DB_HOST_PORT` (the same variable `docker-compose.dev.yml` publishes and dev `DATABASE_URL` construction uses) and targets `exam_test`. There is nothing to keep in sync.
 - Must point to a database whose name contains `test`, `e2e`, or `ci`.
 - The name-safety guard in `resolveTestBranchUrl()` enforces this unless `ALLOW_UNSAFE_TEST_DATABASE_URL=1`.
 - In CI, `DATABASE_URL` and `TEST_DATABASE_URL` often point to the same test database. This is allowed because both are test databases.
@@ -183,7 +185,7 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | CI E2E | `e2e` | Routes to `TEST_DATABASE_URL`; E2E mode |
 | Local dev | `development` | Routes to `DATABASE_URL` |
 | Production | `production` | Routes to `DATABASE_URL`; production guards active |
-| Vitest (all) | `test` (forced by `TEST_RUNTIME_ENV`) | Routes to `TEST_DATABASE_URL` |
+| Vitest (all) | `test` (forced by `TEST_RUNTIME_ENV`) | Routes to `TEST_DATABASE_URL` when set, else a LOCAL URL constructed from `DB_HOST_PORT` |
 
 **Rules:**
 - `APP_MODE` is the authoritative runtime mode selector.
@@ -485,7 +487,7 @@ pnpm --filter @exam/api test
 TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
 ```
 
-- **DB required**: Yes (`exam_test` on `localhost:15432`).
+- **DB required**: Yes (`exam_test` on `DB_HOST_PORT`, default 5432).
 - **Env**: `TEST_DATABASE_URL` must point to `exam_test`.
 
 ### 5.3 Web Tests
@@ -510,7 +512,7 @@ E2E_WORKERS=1 bash scripts/e2e/run-wsl.sh
 E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
 ```
 
-- **DB required**: Yes (`exam_e2e` on `localhost:15432`).
+- **DB required**: Yes (`exam_e2e` on `DB_HOST_PORT`, default 5432).
 - **Env**: `APP_MODE=development`, `DATABASE_URL` pointing to `exam_e2e`, `TEST_DATABASE_URL` unset.
 
 ---

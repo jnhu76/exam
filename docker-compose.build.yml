@@ -1,6 +1,9 @@
 # Source-build override for contributors, Dockerfile testing, and PR
 # acceptance. Cannot run standalone (no db service); always merge:
-#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#   docker compose --env-file .env.deploy \
+#     -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# (Deployment env lives in .env.deploy — see .env.deploy.example; the dev
+# .env is never read when --env-file is passed.)
 # pull_policy: build forces building from the current checkout and never
 # pulling a registry/local-cache image under the pinned local tag.
 services:

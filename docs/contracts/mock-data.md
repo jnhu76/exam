@@ -98,7 +98,7 @@ bash ./scripts/e2e/run.sh
 ```bash
 docker compose -f docker-compose.dev.yml down -v
 # 或换端口
-APP_PORT=3001 bash ./scripts/e2e/run.sh
+EXAM_PORT=3001 bash ./scripts/e2e/run.sh
 ```
 
 ---

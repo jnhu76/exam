@@ -1,11 +1,13 @@
 # Sole operator entry point (deployment-topology-contract.mjs enforces this).
-# Authoritative state is the ./data bind mounts — see
+# Run with the deployment env file: docker compose --env-file .env.deploy ...
+# (created by node scripts/generate-env.mjs; the dev .env is never read when
+# --env-file is passed). Authoritative state is the ./data bind mounts — see
 # docs/deployment/backup-and-recovery.md.
 services:
   app:
     build: .
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${EXAM_PORT:-3000}:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-exam}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
@@ -14,8 +16,8 @@ services:
       APP_PORT: 3000
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${APP_PORT:-3000}}
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${APP_PORT:-3000}}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
@@ -107,8 +109,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
       NODE_ENV: production
       APP_MODE: production
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${APP_PORT:-3000}}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${APP_PORT:-3000}}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}

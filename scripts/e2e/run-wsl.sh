@@ -5,10 +5,9 @@
 # WSL/本地一键执行 E2E（不走 Docker app 镜像，直接在宿主跑 api dev server +
 # Playwright）。与 scripts/e2e/run.sh（Docker 模式）互补，失败集合应一致。
 #
-# 为什么需要这个脚本：WSL+Windows 下宿主 :5432 常被占，dev compose 用 15432；
-# 手动跑 E2E 需要一长串步骤（dev compose → migrate → seed → build web →
-# 同步 api/public → 起 dev server 带 E2E env → playwright），极易漏步。本脚本
-# 固化完整链路，让任何开发者（含 AI agent）一键复现。
+# 为什么需要这个脚本：手动跑 E2E 需要一长串步骤（dev compose → migrate →
+# seed → build web → 同步 api/public → 起 dev server 带 E2E env → playwright），
+# 极易漏步。本脚本固化完整链路，让任何开发者（含 AI agent）一键复现。
 #
 # 关键：dev server 必须带 E2E 专用 env，与 docker-compose.test.yml 对齐：
 #   - APP_MODE=e2e              选择测试数据库路径 + 自动关闭限流（与 CI 一致）
@@ -25,7 +24,8 @@
 #   bash scripts/e2e/run-wsl.sh --keep-server         # 跑完保留 dev server（仅串行）
 #
 # 环境变量：
-#   APP_PORT          api/dev server 端口，默认 3000
+#   DEV_API_PORT        api/dev server 端口，默认 3000
+#   DB_HOST_PORT        dev compose PostgreSQL 宿主端口，默认 5432
 #   KEEP_SERVER=1     等价于 --keep-server
 #   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
 #
@@ -48,7 +48,7 @@ cd "$ROOT_DIR"
 ORIG_CWD=$(pwd)
 
 DEV_COMPOSE="${ROOT_DIR}/docker-compose.dev.yml"
-APP_PORT="${APP_PORT:-3000}"
+DEV_API_PORT="${DEV_API_PORT:-3000}"
 KEEP_SERVER="${KEEP_SERVER:-0}"
 RESEED=1
 GREP_PATTERN=""
@@ -100,7 +100,7 @@ done
 # DATABASE_URL 显式 unset，防止残留的 dev URL 干扰（e2e 模式下 resolver 本来也不会读它）。
 E2E_DB_NAME="exam_e2e"
 export APP_MODE=e2e
-export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-15432}/${E2E_DB_NAME}"
+export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/${E2E_DB_NAME}"
 export RATE_LIMIT_DISABLED=1
 export HEARTBEAT_TIMEOUT_MS=15000
 export HEARTBEAT_SCAN_INTERVAL_MS=5000
@@ -110,7 +110,7 @@ export DEADLINE_SCAN_INTERVAL_MS=5000
 unset DATABASE_URL TEST_DB_URL
 
 # ── 共享 helper（串行 / 并行 shard 路径复用）──────────────────────────
-DB_HOST_PORT_VAL="${DB_HOST_PORT:-15432}"
+DB_HOST_PORT_VAL="${DB_HOST_PORT:-5432}"
 DB_BASE_URL_NO_NAME="postgresql://exam:exam@localhost:${DB_HOST_PORT_VAL}"
 
 # 每个库的唯一名前缀，便于失败时按前缀定位 worker 库。
@@ -170,7 +170,7 @@ launch_api() {
   else
     cmd=(pnpm --filter @exam/api dev)
   fi
-  APP_PORT="$port" TEST_DATABASE_URL="$db_url" \
+  DEV_API_PORT="$port" TEST_DATABASE_URL="$db_url" \
     APP_MODE=e2e RATE_LIMIT_DISABLED=1 \
     HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
     setsid "${cmd[@]}" >"$logfile" 2>&1 &
@@ -280,18 +280,18 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
     warn "跳过 seed（--no-reseed），复用现有数据"
   fi
 
-  log "启动 api dev server (:$APP_PORT, APP_MODE=e2e, fast scanners)..."
-  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$APP_PORT" /tmp/e2e-wsl-api.log
+  log "启动 api dev server (:$DEV_API_PORT, APP_MODE=e2e, fast scanners)..."
+  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log
   API_PID="$LAUNCHED_PID"
 
   log "等待 api 健康..."
-  wait_health "$APP_PORT" "$API_PID" /tmp/e2e-wsl-api.log || exit 1
+  wait_health "$DEV_API_PORT" "$API_PID" /tmp/e2e-wsl-api.log || exit 1
 
   log "运行 Playwright（WSL 本地，workers=1）..."
   cd apps/e2e
   assemble_pw_args
   set +e
-  E2E_BASE_URL="http://localhost:${APP_PORT}" npx playwright test "${PW_ARGS[@]}" --reporter=list
+  E2E_BASE_URL="http://localhost:${DEV_API_PORT}" npx playwright test "${PW_ARGS[@]}" --reporter=list
   # Freeze Playwright's real exit code; the EXIT trap (exit_handler) will
   # run_cleanup (stop server → keep persistent exam_e2e → artifacts) and
   # compute the final priority-matrix code. We must NOT `exit $?` directly —

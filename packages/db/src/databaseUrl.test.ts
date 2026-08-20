@@ -19,6 +19,7 @@ function env(
     APP_MODE: undefined,
     NODE_ENV: undefined,
     ALLOW_UNSAFE_TEST_DATABASE_URL: undefined,
+    DB_HOST_PORT: undefined,
     ...overrides,
   } as NodeJS.ProcessEnv;
 }
@@ -92,12 +93,35 @@ describe("resolveDatabaseUrl — test-like modes", () => {
     ).toBe("postgresql://u:p@h:5432/exam_test");
   });
 
-  it("throws when no test URL is set (never falls back to DATABASE_URL)", () => {
-    expect(() =>
+  it("constructs a LOCAL test URL when no explicit test URL is set (never falls back to DATABASE_URL)", () => {
+    // Without TEST_DATABASE_URL, the resolver builds exam_test@localhost:5432
+    // from the single-source DB_HOST_PORT default. DATABASE_URL (the dev/prod
+    // DB) is never consulted.
+    expect(
       resolveDatabaseUrl(
         env({ APP_MODE: "test", DATABASE_URL: "postgresql://u:p@h:5432/exam" }),
       ),
-    ).toThrow(/TEST_DATABASE_URL is required/);
+    ).toBe("postgresql://exam:exam@localhost:5432/exam_test");
+  });
+
+  it("a DB_HOST_PORT override flows into the constructed LOCAL test URL (owner test)", () => {
+    // PR #322 review P1-3: changing DB_HOST_PORT in .env once makes pnpm test
+    // follow — no manual "keep the test URL in sync" step.
+    expect(
+      resolveDatabaseUrl(env({ APP_MODE: "test", DB_HOST_PORT: "25432" })),
+    ).toBe("postgresql://exam:exam@localhost:25432/exam_test");
+  });
+
+  it("an explicit TEST_DATABASE_URL wins over DB_HOST_PORT (CI / remote / special case)", () => {
+    expect(
+      resolveDatabaseUrl(
+        env({
+          APP_MODE: "ci",
+          DB_HOST_PORT: "25432",
+          TEST_DATABASE_URL: "postgresql://u:p@h:5433/exam_ci",
+        }),
+      ),
+    ).toBe("postgresql://u:p@h:5433/exam_ci");
   });
 
   it("rejects a test DB name without test/e2e/ci", () => {
@@ -159,14 +183,32 @@ describe("resolveDatabaseUrl — dev/prod modes", () => {
     ).toBe("postgresql://u:p@h:5432/exam");
   });
 
-  it("throws in development when DATABASE_URL is unset (no hardcoded default)", () => {
-    // A missing DATABASE_URL is a misconfiguration, not a guessed localhost
-    // connection. The dev compose exposes port 15432, not 5432; a hardcoded
-    // fallback would guess the wrong port and fail confusingly (or, worse,
-    // connect to an unintended local instance). Fail fast and require .env.
-    expect(() => resolveDatabaseUrl(env({ APP_MODE: "development" }))).toThrow(
-      /DATABASE_URL is required in development/,
+  it("constructs the dev URL from DB_HOST_PORT when DATABASE_URL is unset", () => {
+    // DB_HOST_PORT owns the dev host port (same variable docker-compose.dev.yml
+    // publishes); the constructed URL can never contradict the published port.
+    expect(resolveDatabaseUrl(env({ APP_MODE: "development" }))).toBe(
+      "postgresql://exam:exam@localhost:5432/exam",
     );
+  });
+
+  it("follows a DB_HOST_PORT override (owner test)", () => {
+    expect(
+      resolveDatabaseUrl(
+        env({ APP_MODE: "development", DB_HOST_PORT: "25432" }),
+      ),
+    ).toBe("postgresql://exam:exam@localhost:25432/exam");
+  });
+
+  it("an explicit DATABASE_URL wins over DB_HOST_PORT (external PostgreSQL)", () => {
+    expect(
+      resolveDatabaseUrl(
+        env({
+          APP_MODE: "development",
+          DB_HOST_PORT: "25432",
+          DATABASE_URL: "postgresql://u:p@h:5433/exam",
+        }),
+      ),
+    ).toBe("postgresql://u:p@h:5433/exam");
   });
 
   it("throws in production when DATABASE_URL is missing", () => {

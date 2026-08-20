@@ -2,7 +2,9 @@ services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      - "15432:5432"
+      # DB_HOST_PORT owns the dev host port (default 5432 — verified available
+      # on WSL2/Docker Desktop; see docs/development/ports.md).
+      - "${DB_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
