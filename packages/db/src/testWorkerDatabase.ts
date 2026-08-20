@@ -142,26 +142,27 @@ function assertNotProduction(env: ResolverEnv): void {
 
 /**
  * Resolve the base database URL from environment.
- * Uses TEST_DATABASE_URL or TEST_DB_URL only — never falls back to DATABASE_URL.
- * Validates the postgres protocol FIRST (a worker-specific precondition,
- * checked before name-safety so a malformed scheme is reported as such), then
- * delegates URL + name-safety to the single-source test-branch resolver.
+ * Uses TEST_DATABASE_URL or TEST_DB_URL when set (CI / remote / operator
+ * special case); otherwise the single-source test-branch resolver constructs
+ * a LOCAL URL from DB_HOST_PORT. Never falls back to DATABASE_URL.
+ * Validates the postgres protocol FIRST when an explicit URL is present (a
+ * worker-specific precondition, checked before name-safety so a malformed
+ * scheme is reported as such), then delegates URL + name-safety to the
+ * single-source test-branch resolver.
  */
 function resolveBaseUrl(env: ResolverEnv): string {
   const raw = env.TEST_DATABASE_URL ?? env.TEST_DB_URL;
-  if (!raw) {
-    throw new Error(
-      "TEST_DATABASE_URL is required for worker-database test isolation. " +
-        "Refusing to use DATABASE_URL as test database.",
-    );
-  }
-  if (!raw.startsWith("postgresql://") && !raw.startsWith("postgres://")) {
+  if (
+    raw &&
+    !raw.startsWith("postgresql://") &&
+    !raw.startsWith("postgres://")
+  ) {
     throw new Error(
       `[testWorkerDatabase] base database URL must be postgresql:// or postgres://, got: ${raw}`,
     );
   }
-  // Protocol-valid: now delegate to the single-source resolver for the full
-  // name-safety guard (TEST_DATABASE_URL ?? TEST_DB_URL + test/e2e/ci check).
+  // Protocol-valid (or constructed local URL): delegate to the single-source
+  // resolver for the full URL + name-safety guard (test/e2e/ci check).
   return resolveTestBranchUrl(env);
 }
 

@@ -473,6 +473,41 @@ function defaultDevWebOrigin(env: NodeJS.ProcessEnv): string {
 }
 
 /**
+ * Resolve the API bind port, selecting the owner by runtime mode.
+ *
+ * Single-source port ownership: a stale `APP_PORT` left in a legacy dev `.env`
+ * must never hijack the local dev API, and a stale `DEV_API_PORT` must never
+ * override the container identity in production. The owner is therefore
+ * mode-aware:
+ *   - development → DEV_API_PORT ?? 3000. APP_PORT is deliberately ignored —
+ *     it is container-internal only (Compose sets it; a bare `pnpm dev` must
+ *     bind DEV_API_PORT even when a leftover APP_PORT=3000 exists).
+ *   - production  → APP_PORT ?? 3000. Container identity (every Compose file
+ *     fixes it at 3000; host publishing is EXAM_PORT). DEV_API_PORT never
+ *     reaches production.
+ *   - test/e2e/ci → APP_PORT ?? DEV_API_PORT ?? 3000. The runner decides:
+ *     Docker E2E (docker-compose.test.yml) sets APP_PORT (container-internal
+ *     3000); WSL E2E (run-wsl.sh) sets DEV_API_PORT per shard. Container
+ *     identity wins when both are set.
+ *
+ * @param env  - Process environment to read from.
+ * @param mode - Current {@link AppMode}.
+ * @returns The resolved bind port (positive integer).
+ */
+function resolveApiBindPort(env: NodeJS.ProcessEnv, mode: AppMode): number {
+  if (mode === "production") {
+    return parsePositiveInt(env.APP_PORT, 3000);
+  }
+  if (mode === "development") {
+    return parsePositiveInt(env.DEV_API_PORT, 3000);
+  }
+  return parsePositiveInt(
+    env.APP_PORT,
+    parsePositiveInt(env.DEV_API_PORT, 3000),
+  );
+}
+
+/**
  * Resolves and validates PUBLIC_WEB_ORIGIN (P5-N1 §12).
  *
  * The value is an absolute origin (scheme + host[+port], no path, no trailing
@@ -874,7 +909,7 @@ export function loadRuntimeConfig(
     app: { mode, isProduction, isTestLike },
     env: envValue,
     mode: deploymentMode,
-    port: Number(env.APP_PORT) || Number(env.DEV_API_PORT) || 3000,
+    port: resolveApiBindPort(env, mode),
     host: env.HOST || "0.0.0.0",
     database: { url: resolveDatabaseUrl(env, mode) },
     redis,

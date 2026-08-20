@@ -11,10 +11,15 @@
  * it must NOT re-implement mode/URL resolution.
  *
  * Resolution policy:
- *   - test/ci/e2e modes → TEST_DATABASE_URL ?? TEST_DB_URL → throw if absent.
- *     Never falls back to DATABASE_URL (a test must never silently hit the dev
- *     or prod DB). The resolved DB name must contain "test" | "e2e" | "ci"
- *     unless ALLOW_UNSAFE_TEST_DATABASE_URL=1 (a manual escape hatch, never a
+ *   - test/ci/e2e modes → `TEST_DATABASE_URL ?? TEST_DB_URL` when an explicit
+ *     value is set (CI / remote DB / special case wins). Otherwise a LOCAL
+ *     test URL is constructed as `postgresql://exam:exam@localhost:${DB_HOST_PORT
+ *     ?? 5432}/exam_test` — the SAME single-source DB_HOST_PORT that
+ *     docker-compose.dev.yml publishes and that dev DATABASE_URL construction
+ *     uses, so changing it once makes every local consumer follow. Never falls
+ *     back to DATABASE_URL (a test must never silently hit the dev or prod
+ *     DB). The resolved DB name must contain "test" | "e2e" | "ci" unless
+ *     ALLOW_UNSAFE_TEST_DATABASE_URL=1 (a manual escape hatch, never a
  *     default).
  *   - production → DATABASE_URL → throw if absent (fail fast).
  *   - development → DATABASE_URL when set (external PostgreSQL override);
@@ -74,32 +79,44 @@ function extractDatabaseName(url: string): string {
 }
 
 /**
+ * Construct a LOCAL test database URL from the single-source `DB_HOST_PORT`.
+ *
+ * Mirrors the docker-compose.dev.yml dev contract (exam:exam@localhost:<port>)
+ * and always targets the `exam_test` database, whose name passes the test/e2e/ci
+ * safety guard. Used only when no explicit TEST_DATABASE_URL / TEST_DB_URL is
+ * set — i.e. a bare local `pnpm test` relying on .env alone. An explicit value
+ * (CI / remote DB / operator special case) always wins, and DATABASE_URL is
+ * never consulted. CI always sets TEST_DATABASE_URL, so this construction path
+ * is local-only.
+ */
+function constructTestDatabaseUrl(env: NodeJS.ProcessEnv): string {
+  const port = env.DB_HOST_PORT?.trim() || DEFAULT_DB_HOST_PORT;
+  return `postgresql://exam:exam@localhost:${port}/exam_test`;
+}
+
+/**
  * Resolve a TEST database URL and enforce the test name-safety guard.
  *
  * This is the shared test-branch implementation used by both the mode-routing
  * {@link resolveDatabaseUrl} (when mode is test-like) and the explicitly
- * test-oriented {@link resolveTestDatabaseUrl} export. It always reads
- * TEST_DATABASE_URL ?? TEST_DB_URL and NEVER falls back to DATABASE_URL.
+ * test-oriented {@link resolveTestDatabaseUrl} export. It reads
+ * `TEST_DATABASE_URL ?? TEST_DB_URL` when set; otherwise it constructs a LOCAL
+ * test URL from the single-source `DB_HOST_PORT` (so changing DB_HOST_PORT in
+ * `.env` makes `pnpm test` follow automatically). It NEVER falls back to
+ * DATABASE_URL.
  *
  * Exported so `testDb.ts` can delegate without reimplementing the guard.
  *
  * @param env - Process environment to read from.
  * @returns A validated test database URL.
- * @throws When TEST_DATABASE_URL/TEST_DB_URL is missing, or the DB name lacks
- *   test/e2e/ci unless ALLOW_UNSAFE_TEST_DATABASE_URL=1.
+ * @throws When the DB name lacks test/e2e/ci unless
+ *   ALLOW_UNSAFE_TEST_DATABASE_URL=1.
  */
 export function resolveTestBranchUrl(env: NodeJS.ProcessEnv): string {
   const url = env.TEST_DATABASE_URL ?? env.TEST_DB_URL;
-  if (!url) {
-    throw new Error(
-      "TEST_DATABASE_URL is required for test/e2e/ci mode.\n" +
-        "Refusing to use DATABASE_URL as test database.\n" +
-        "Set TEST_DATABASE_URL to a dedicated test database, e.g.\n" +
-        '  TEST_DATABASE_URL="postgresql://exam:exam@localhost:5432/exam_test"',
-    );
-  }
+  const resolved = url ?? constructTestDatabaseUrl(env);
   if (env.ALLOW_UNSAFE_TEST_DATABASE_URL !== "1") {
-    const dbName = extractDatabaseName(url);
+    const dbName = extractDatabaseName(resolved);
     if (!/(test|e2e|ci)/.test(dbName)) {
       throw new Error(
         `Test database name "${dbName}" does not contain "test", "e2e", or "ci".\n` +
@@ -108,7 +125,7 @@ export function resolveTestBranchUrl(env: NodeJS.ProcessEnv): string {
       );
     }
   }
-  return url;
+  return resolved;
 }
 
 /**
@@ -136,8 +153,9 @@ function constructDevDatabaseUrl(env: NodeJS.ProcessEnv): string {
  * Resolve the database connection URL for the mode derived from `env`.
  *
  * Mode policy:
- *   - test/ci/e2e → TEST_DATABASE_URL ?? TEST_DB_URL (fail-fast; name-safety
- *     enforced). Never falls back to DATABASE_URL.
+ *   - test/ci/e2e → TEST_DATABASE_URL ?? TEST_DB_URL when set; otherwise a
+ *     LOCAL test URL constructed from DB_HOST_PORT (name-safety enforced).
+ *     Never falls back to DATABASE_URL.
  *   - production → DATABASE_URL (fail-fast if unset).
  *   - development → DATABASE_URL when set (external PostgreSQL); otherwise
  *     constructed from DB_HOST_PORT (dev compose contract) so a bare
@@ -146,7 +164,7 @@ function constructDevDatabaseUrl(env: NodeJS.ProcessEnv): string {
  * @param env - Process environment to read from (defaults to process.env).
  * @returns A validated database URL.
  * @throws When the required env var is missing (prod), or (in test-like
- *   modes) when the DB name lacks test/e2e/ci unless
+ *   modes) when the resolved DB name lacks test/e2e/ci unless
  *   ALLOW_UNSAFE_TEST_DATABASE_URL=1.
  */
 export function resolveDatabaseUrl(

@@ -29,6 +29,7 @@ import {
   type WorkerDatabaseHandle,
 } from "@exam/db/src/testWorkerDatabase.js";
 import { resolveTestScope, type ResolverEnv } from "@exam/db/src/testScope.js";
+import { resolveTestBranchUrl } from "@exam/db/src/databaseUrl.js";
 
 /** Which isolation strategy the adapter selected for this call. */
 export type ApiTestDatabaseMode = "file-schema" | "worker-database";
@@ -105,16 +106,10 @@ export async function setupApiTestDatabaseFromEnv(options?: {
 }): Promise<ApiTestDatabaseHandle> {
   const env = options?.env ?? process.env;
   const namespace = options?.namespace ?? "api";
-  const baseUrl =
-    options?.databaseUrl ??
-    env.TEST_DATABASE_URL ??
-    env.TEST_DB_URL ??
-    (() => {
-      throw new Error(
-        "TEST_DATABASE_URL is required for API test database setup. " +
-          "Refusing to use DATABASE_URL as test database.",
-      );
-    })();
+  // Explicit override (test-injected URL) wins; otherwise the single-source
+  // test-branch resolver picks TEST_DATABASE_URL/TEST_DB_URL, or constructs a
+  // LOCAL test URL from DB_HOST_PORT. Never falls back to DATABASE_URL.
+  const baseUrl = options?.databaseUrl ?? resolveTestBranchUrl(env);
 
   if (isWorkerDatabaseMode(env)) {
     const worker = await setupWorkerTestDatabase({ env });

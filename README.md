@@ -443,13 +443,16 @@ pnpm --filter db test
 > PostgreSQL. Redis tests require a running Redis instance. Start both with
 > `pnpm db:up` (uses `docker-compose.dev.yml`, PostgreSQL 18 + Redis 7). The
 > dev compose publishes PostgreSQL on host port `DB_HOST_PORT` (default
-> `5432`; override in `.env` when that port is taken on your machine — keep
-> `TEST_DATABASE_URL`'s port in sync).
+> `5432`; override in `.env` when that port is taken on your machine — local
+> tests follow automatically, since the resolver constructs
+> `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_test` when
+> `TEST_DATABASE_URL` is unset; no per-URL sync needed).
 > `pnpm db:up` auto-creates both `exam` (dev runtime) and `exam_test` (tests)
-> databases; set `TEST_DATABASE_URL` in `.env.test.local` (see
-> `.env.test.example`) and, for an external PostgreSQL, `DATABASE_URL` in
-> `.env`. In CI, GitHub Actions `services: postgres` and `services: redis`
-> provide these instead (on `:5432`/`:6379`, since CI runs in an isolated VM).
+> databases; set `TEST_DATABASE_URL` in `.env.test.local` only for a
+> non-default target (CI / remote DB) and, for an external PostgreSQL,
+> `DATABASE_URL` in `.env`. In CI, GitHub Actions `services: postgres` and
+> `services: redis` provide these instead (on `:5432`/`:6379`, since CI runs
+> in an isolated VM).
 
 ### Quick local test setup
 
@@ -461,7 +464,9 @@ pnpm db:up
 cp .env.example .env                              # runtime/dev config
 cp .env.test.example .env.test.local              # test config
 #    .env        → DB_HOST_PORT=5432 (dev DATABASE_URL is constructed from it)
-#    .env.test.local → TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test
+#    .env.test.local → TEST_DATABASE_URL is OPTIONAL locally: when unset, the
+#                      resolver constructs exam_test@localhost:<DB_HOST_PORT>
+#                      (auto-follows the port above; set it only for a remote DB)
 #    .env        → REDIS_URL=redis://localhost:6379
 
 # 3. Run tests (vitest reads .env + .env.test.local; @exam/db + @exam/api hit exam_test)

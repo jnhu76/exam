@@ -26,6 +26,7 @@ const ENV_KEYS = [
   "APP_PORT",
   "DEV_API_PORT",
   "VITE_PORT",
+  "DB_HOST_PORT",
   "HOST",
   "DATABASE_URL",
   "TEST_DATABASE_URL",
@@ -498,13 +499,20 @@ describe("runtimeConfig", () => {
       expect(config.database.url).toBe("postgresql://t:t@h:5432/testdb");
     });
 
-    it("throws in e2e mode when TEST_DATABASE_URL is unset", () => {
+    it("constructs a LOCAL test URL when TEST_DATABASE_URL is unset (never DATABASE_URL)", () => {
       process.env.APP_MODE = "e2e";
       delete process.env.TEST_DATABASE_URL;
       delete process.env.TEST_DB_URL;
       process.env.DATABASE_URL = "postgresql://e:e@h:5432/e2edb";
+      // PR #322 review P1-3: no explicit test URL → the resolver builds
+      // exam_test@localhost:<DB_HOST_PORT>. DATABASE_URL (the dev/e2e DB) is
+      // never consulted.
+      process.env.DB_HOST_PORT = "25432";
       resetRuntimeConfigForTest();
-      expect(() => getRuntimeConfig()).toThrow(/TEST_DATABASE_URL is required/);
+      const config = getRuntimeConfig();
+      expect(config.database.url).toBe(
+        "postgresql://exam:exam@localhost:25432/exam_test",
+      );
     });
 
     it("uses DATABASE_URL in development", () => {
@@ -606,6 +614,13 @@ describe("runtimeConfig", () => {
   });
 
   describe("API port ownership", () => {
+    const PROD = {
+      JWT_SECRET: "s",
+      DATABASE_URL: "postgresql://x",
+      CORS_ORIGIN: "https://a.com",
+      PUBLIC_WEB_ORIGIN: "https://a.com",
+    };
+
     it("defaults to 3000 when APP_PORT and DEV_API_PORT are unset", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
@@ -623,14 +638,49 @@ describe("runtimeConfig", () => {
       expect(config.port).toBe(3100);
     });
 
-    it("explicit APP_PORT (Compose/E2E runners) wins over DEV_API_PORT", () => {
+    it("a stale APP_PORT does NOT hijack the dev API (development ignores APP_PORT)", () => {
+      // PR #322 review P1-2: the pre-split `.env` left APP_PORT=3000 behind.
+      // In development the API must follow DEV_API_PORT only, so an upgrade
+      // user's stale value can never point Vite's proxy at the wrong process.
       const config = loadRuntimeConfig({
         APP_MODE: "development",
         ...DEV_DB,
         APP_PORT: "3000",
         DEV_API_PORT: "3100",
       });
+      expect(config.port).toBe(3100);
+    });
+
+    it("production bind port follows APP_PORT (container identity)", () => {
+      // DEV_API_PORT must never leak into production; compose fixes APP_PORT.
+      const config = loadRuntimeConfig({
+        APP_MODE: "production",
+        ...PROD,
+        APP_PORT: "3000",
+        DEV_API_PORT: "3100",
+      });
       expect(config.port).toBe(3000);
+    });
+
+    it("e2e mode: APP_PORT (Docker E2E container) wins over DEV_API_PORT", () => {
+      // docker-compose.test.yml sets APP_PORT=3000 inside the app container.
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam_e2e",
+        APP_PORT: "3000",
+        DEV_API_PORT: "3100",
+      });
+      expect(config.port).toBe(3000);
+    });
+
+    it("e2e mode: DEV_API_PORT drives the WSL runner when APP_PORT is unset", () => {
+      // scripts/e2e/run-wsl.sh launches each shard with DEV_API_PORT=<port>.
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam_e2e",
+        DEV_API_PORT: "3100",
+      });
+      expect(config.port).toBe(3100);
     });
   });
 

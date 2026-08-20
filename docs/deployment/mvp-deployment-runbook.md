@@ -63,10 +63,11 @@ Backups:   operator-supplied pg_dump schedule against the 'pgdata' volume
 Deployment and development settings are SEPARATE files:
 
 - `.env.deploy` (from `.env.deploy.example`, filled by
-  `node scripts/generate-env.mjs`) — deployment only. Compose reads it
-  ONLY via the explicit `--env-file .env.deploy` flag; passing the flag
-  makes Compose ignore the dev `.env` entirely. Every `docker compose`
-  command in this runbook includes it.
+  `node scripts/generate-env.mjs`) — deployment only. Compose reads it via the
+  explicit `--env-file .env.deploy` flag; passing the flag replaces the default
+  `.env` as Compose's interpolation file, so the dev `.env` is never read for
+  deployment (host shell environment variables can still override individual
+  values). Every `docker compose` command in this runbook includes it.
 - `.env` (from `.env.example`) — local development only. No dev tooling
   (`pnpm dev` / Vite / Drizzle / vitest) ever reads `.env.deploy`, and no
   deployment secret ever lands in `.env`.

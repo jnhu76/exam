@@ -64,7 +64,7 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
 
 - Container: `exam-db-1` (postgres:18.4), host port `DB_HOST_PORT` (default `5432`) → container `5432`, user/pass `exam`/`exam`. Port ownership map: `docs/development/ports.md`.
 - `exam_test` is created once at first container init by `docker/db/init/01-create-databases.sql`. It MUST exist (the test name-safety guard in `packages/db/src/testDb.ts` refuses any name without `test`/`e2e`/`ci`).
-- The DB name is resolved by APP_MODE: `test`/`ci`/`e2e` → `TEST_DATABASE_URL` (fail-fast, never falls back to `DATABASE_URL`); otherwise → `DATABASE_URL` (dev: unset `DATABASE_URL` is constructed from `DB_HOST_PORT` by `packages/db/src/databaseUrl.ts`).
+- The DB name is resolved by APP_MODE: `test`/`ci`/`e2e` → `TEST_DATABASE_URL` when set; otherwise a LOCAL test URL is constructed from `DB_HOST_PORT` (`postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_test`, the single source — an explicit value always wins). Never falls back to `DATABASE_URL`. Otherwise → `DATABASE_URL` (dev: unset `DATABASE_URL` is constructed from `DB_HOST_PORT` by `packages/db/src/databaseUrl.ts`).
 
 **Agent rules — do NOT deviate:**
 
@@ -81,7 +81,7 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
      cp .env.test.example .env.test.local  # test config (one-time)
      ```
    - A bare `pnpm dev` reads `.env`; a bare `pnpm test` / `pnpm verify` reads `.env` + `.env.test.local`. Both should work with zero shell setup after the two copies above.
-   - Deployment env is a SEPARATE file: `.env.deploy` (from `.env.deploy.example`, filled by `node scripts/generate-env.mjs`), read ONLY via `docker compose --env-file .env.deploy`. Dev tooling never reads it; deployment Compose never reads `.env` when the flag is passed.
+   - Deployment env is a SEPARATE file: `.env.deploy` (from `.env.deploy.example`, filled by `node scripts/generate-env.mjs`), read via `docker compose --env-file .env.deploy`. Dev tooling never reads it; the flag replaces the default `.env` as Compose's interpolation file, so deployment Compose never reads `.env` when it is passed (host shell exports still win over both files).
    - An agent must NOT rely on a shell `export` to fix a missing `.env` value. If `.env` is missing a required DB URL, fix `.env`, not the shell.
    - Shell env residue is per-session only and does not persist; treat any inherited `DATABASE_URL`/`TEST_DATABASE_URL`/`APP_MODE` as suspect. When in doubt, prefix the command with an explicit `unset` or the intended values, e.g.:
 
