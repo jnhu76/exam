@@ -46,6 +46,12 @@
  *     alternate Docker topology. Development/test Compose files
  *     (docker-compose.dev.yml, docker-compose.test*.yml) are development
  *     infrastructure and are explicitly ALLOWED.
+ *   - `docker-compose.build.yml` is ALLOWED as the single source-build MODE
+ *     override (it cannot run standalone — it defines no db service and
+ *     must only carry build/image/pull_policy keys for app and
+ *     email-worker). It is a mode of the one entry point, not a second
+ *     production topology; the structural rules are in
+ *     assertBuildVariant().
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -65,7 +71,9 @@ try {
 
 // ONE production/operator Compose entry point (docker-compose.yml). No
 // production PITR/backup/restore/production variant Compose file may exist.
-// dev/test Compose files are allowed (development infrastructure). The
+// dev/test Compose files are allowed (development infrastructure), and
+// docker-compose.build.yml is allowed as the single source-build MODE
+// override (build/image/pull_policy only — see assertBuildVariant). The
 // stable rule: optional operational capabilities (PITR, backup, restore)
 // do NOT get another production topology — they are database
 // configuration (scripts/backup/postgres-enable-pitr.sh — ALTER SYSTEM),
@@ -76,13 +84,18 @@ const FORBIDDEN_PROD_VARIANT_RE =
   /docker-compose\.(pitr|backup|restore|production)\.yml$/i;
 const ALLOWED_TEST_VARIANT_RE = /^docker-compose\.test[^/]*\.ya?ml$/i;
 const ALLOWED_DEV_VARIANT = "docker-compose.dev.yml";
+const ALLOWED_BUILD_VARIANT = "docker-compose.build.yml";
 try {
   const repoFiles = readdirSync(ROOT);
   for (const f of repoFiles) {
     if (!/^docker-compose\b.*\.ya?ml$/i.test(f)) continue;
     if (f === "docker-compose.yml" || f === ALLOWED_DEV_VARIANT) continue;
-    if (ALLOWED_TEST_VARIANT_RE.test(f)) continue;
-    if (FORBIDDEN_PROD_VARIANT_RE.test(f)) {
+    if (f === ALLOWED_BUILD_VARIANT) {
+      // Structurally checked below; here it just bypasses the
+      // unrecognized-variant error.
+    } else if (ALLOWED_TEST_VARIANT_RE.test(f)) {
+      continue;
+    } else if (FORBIDDEN_PROD_VARIANT_RE.test(f)) {
       errors.push(
         `'${f}' is a forbidden production Compose variant: there must be ` +
           "exactly ONE production/operator Compose entry point " +
@@ -105,6 +118,23 @@ try {
   }
 } catch {
   // If the root cannot be read, the compose read above already failed.
+}
+
+// docker-compose.build.yml structural rules (see header). It is a pure
+// build-mode override of the ONE entry point: only app/email-worker, only
+// build/image/pull_policy keys — no ports, environment, volumes, command,
+// or entrypoint (topology belongs to docker-compose.yml alone).
+try {
+  assertBuildVariant(readFileSync(join(ROOT, ALLOWED_BUILD_VARIANT), "utf-8"));
+} catch (err) {
+  if (err && err.code === "ENOENT") {
+    errors.push(
+      `${ALLOWED_BUILD_VARIANT} is missing: the source-build verification ` +
+        "mode (contributors / PR acceptance) is a required surface.",
+    );
+  } else {
+    throw err;
+  }
 }
 
 // The deployment verification suite lives under tests/deployment/ and must
@@ -483,6 +513,74 @@ function extractServiceBlock(servicesBlockText, serviceName) {
   }
   if (best === null) return null;
   return extractTopLevelBlock(lines.slice(best.idx).join("\n"), serviceName);
+}
+
+/**
+ * docker-compose.build.yml is the single allowed source-build MODE override
+ * of the one operator entry point. It cannot run standalone (no db service),
+ * so the rules here keep it from silently growing into a second topology:
+ *   - only `app` and `email-worker` may appear;
+ *   - each must carry build + a pinned local image tag + pull_policy: build
+ *     (the PR-acceptance guarantee that containers run the freshly built
+ *     checkout, never a registry/local-cache image);
+ *   - it must not carry any topology keys (ports/environment/volumes/
+ *     command/entrypoint) — those live in docker-compose.yml alone.
+ */
+function assertBuildVariant(text) {
+  const services = extractTopLevelBlock(text, "services");
+  if (!services) {
+    errors.push(
+      `${ALLOWED_BUILD_VARIANT} has no top-level 'services:' mapping.`,
+    );
+    return;
+  }
+  for (const name of topLevelKeys(services)) {
+    if (name !== "app" && name !== "email-worker") {
+      errors.push(
+        `${ALLOWED_BUILD_VARIANT} may only override 'app' and 'email-worker' ` +
+          `(found '${name}'); it is a build-mode override of docker-compose.yml, ` +
+          "not a second topology.",
+      );
+      continue;
+    }
+    const block = extractServiceBlock(services, name);
+    if (!block) continue;
+    const noComments = block
+      .split(/\r?\n/)
+      .filter((l) => !/^\s*#/.test(l))
+      .join("\n");
+    if (!/^\s*build:\s*\S/im.test(noComments)) {
+      errors.push(
+        `${ALLOWED_BUILD_VARIANT} service '${name}' must keep a build key.`,
+      );
+    }
+    if (!/^\s*image:\s*exam-local:dev\s*$/im.test(noComments)) {
+      errors.push(
+        `${ALLOWED_BUILD_VARIANT} service '${name}' must pin 'image: exam-local:dev' ` +
+          "(the stable local tag used to prove which build the containers run).",
+      );
+    }
+    if (!/^\s*pull_policy:\s*build\s*$/im.test(noComments)) {
+      errors.push(
+        `${ALLOWED_BUILD_VARIANT} service '${name}' must pin 'pull_policy: build' ` +
+          "(source-build verification must never reuse a registry/local-cache image).",
+      );
+    }
+    for (const forbidden of [
+      "ports:",
+      "environment:",
+      "volumes:",
+      "command:",
+      "entrypoint:",
+    ]) {
+      if (new RegExp(`^\\s*${forbidden}\\s*$`, "im").test(noComments)) {
+        errors.push(
+          `${ALLOWED_BUILD_VARIANT} service '${name}' must not carry '${forbidden}' — ` +
+            "topology belongs to docker-compose.yml alone.",
+        );
+      }
+    }
+  }
 }
 
 function topLevelKeys(blockText) {

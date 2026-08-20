@@ -24,6 +24,29 @@ LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, support
 
 ## Quick Start
 
+### Docker (recommended)
+
+```bash
+git clone <repo-url> exam && cd exam
+node scripts/generate-env.mjs   # creates .env from .env.example, fills JWT_SECRET + POSTGRES_PASSWORD
+docker compose up -d --build    # build + start app, db, email-worker
+docker compose ps               # wait for app (healthy), db (healthy), email-worker (up)
+```
+
+Create the first Admin (Phase 1 has no public self-register), then open
+<http://localhost:3000>:
+
+```bash
+docker compose exec app node dist/scripts/bootstrap-admin.js \
+  --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
+  --name 'System Admin' --organization-name 'My Organization'
+```
+
+LAN access, Redis, email, the optional browser Launchpad flow, and
+troubleshooting: [Mode 2: Docker Compose (Full Stack)](#mode-2-docker-compose-full-stack).
+
+### Local development
+
 ```bash
 # Install dependencies
 pnpm install
@@ -37,10 +60,11 @@ pnpm dev
 
 This starts:
 
-- **Web** (Vite): <http://localhost:5173>
+- **Web** (Vite): <http://localhost:4173>
 - **API** (Fastify): <http://localhost:3000>
 
 The web dev server proxies `/api/*` requests to the API server automatically.
+(The Vite port is 4173 rather than the default 5173 due to a WSL limitation.)
 
 ### Test Users (basic seed)
 
@@ -136,81 +160,67 @@ pnpm db:seed     # Seed with test users
 pnpm dev         # Start API + Web with hot reload
 ```
 
-- Web: <http://localhost:5173>
+- Web: <http://localhost:4173>
 - API: <http://localhost:3000>
 - Database: PostgreSQL 18 on `localhost:15432`
 
 ### Mode 2: Docker Compose (Full Stack)
 
-Production-like deployment. Builds the app image and starts the default MVP
-topology in containers: API + PostgreSQL + Email delivery worker. Redis is
-**optional** (gated behind the `redis` profile); when enabled it owns ONE
-production responsibility — the **shared rate-limit state** (P7 decision
-2026-08-08, ADR-001 "Post-MVP Decision (P7)"). The Email worker is required
-to drain the PostgreSQL `email_outbox` table that `result_published`
-notifications write into (ADR-011). See
-[`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md)
-for the canonical deployment & operations runbook (prerequisites, env vars,
-first install, recovery, upgrade checklist, known limitations).
+Production-like deployment: API + PostgreSQL + Email delivery worker in
+containers; Redis optional (`--profile redis`). The canonical operator
+runbook (env vars, first install, recovery, upgrades) is
+[`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md).
+
+#### Docker Quick Start
 
 ```bash
-# Configure production-required env (copy template, edit):
-cp .env.example .env
-#   POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN, PUBLIC_WEB_ORIGIN are
-#   REQUIRED in the bundled docker-compose.yml (it uses ${VAR:?...}
-#   required-expansion — Compose fails to start if any is unset). There
-#   is NO default database password in production (P6-007).
-
+git clone <repo-url> exam && cd exam
+node scripts/generate-env.mjs   # creates .env from .env.example, fills JWT_SECRET + POSTGRES_PASSWORD
 docker compose up -d --build    # build + start app, db, email-worker
-docker compose logs -f app
-docker compose ps               # verify app, db, email-worker are up
-docker compose down             # stops + removes containers (keeps ./data)
-# NOTE: authoritative state lives in the operator-visible host bind
-# mount ./data/postgres (EXAM_DATA_ROOT, default ./data). `docker compose down`
-# retains it; `docker compose down -v` is a no-op for bind mounts. To destroy
-# authoritative data you must explicitly delete ./data/postgres. See
-# docs/deployment/backup-and-recovery.md.
-
-# (Optional) enable the Redis profile — the shared rate limiter reads/writes
-# Redis when the runtime is ready:
-docker compose --profile redis up -d --build
-# and set REDIS_PASSWORD=<secret>, REDIS_URL=redis://:<secret>@redis:6379
-#   (REDIS_MODE=optional|required) in .env — production Redis runs with
-#   requirepass, so an authenticated URL is required (see runbook §10)
+docker compose ps               # wait until app (healthy), db (healthy), email-worker (up)
 ```
 
-- App: <http://localhost:3000>
-- Database: PostgreSQL (internal, not exposed to host)
-- Email worker: drains `email_outbox` (resident process; see ADR-011)
-- Migrations run on container start. The `app` container runs
-  `node dist/scripts/migrate.js` in its entrypoint before binding the API.
-  The `email-worker` depends on `app: service_healthy`, so its startup
-  self-migrate call is serialized strictly AFTER the app's migrate call
-  (the drizzle journal tracks state; it is NOT a concurrency lock — P6-009).
-- Redis: **optional** profile (`--profile redis`); not started by a bare
-  `docker compose up` (P6-010 / ADR-001). When running, the API's shared
-  rate limiter reads/writes Redis (ADR-001 "Post-MVP Decision (P7)");
-  PostgreSQL remains the exam fact authority.
-
-The scanner (heartbeat + deadline) runs **in-process** inside the `app`
-container — there is no separate scanner service.
-
-#### Production first-Admin bootstrap
-
-The first Admin is created via the `bootstrap-admin` CLI against a fresh
-migrated database (P6-008). The baseline dev/test seed
-(`packages/db/src/seed.ts`) ships known default credentials and refuses to
-run when `APP_MODE=production`. Do NOT use the baseline seed as the
-production bootstrap path.
+Open <http://localhost:3000>, then create the first Admin:
 
 ```bash
 docker compose exec app \
   node dist/scripts/bootstrap-admin.js \
-  --username admin \
-  --password '<STRONG_OPERATOR_PASSWORD>' \
-  --name 'System Admin' \
-  --organization-name 'My Organization'
+  --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
+  --name 'System Admin' --organization-name 'My Organization'
 ```
+
+- In Docker mode the API also serves the built frontend on the same port
+  (same-origin), so <http://localhost:3000> is the web app — not just the
+  API. (In local dev the web runs on <http://localhost:4173> via Vite and
+  the API on 3000.)
+- The `app` healthcheck requires both the API and the SPA to respond, so
+  `app: healthy` means the web app is reachable.
+- State persists in `./data/` (bind mounts) across `docker compose down`.
+- Host port: `APP_PORT` in `.env` (default 3000). `CORS_ORIGIN` and
+  `PUBLIC_WEB_ORIGIN` default to `http://localhost:<APP_PORT>`, so the
+  browser origin follows the host port; for LAN access set them to your
+  machine's address (e.g. `http://192.168.1.5:3000`).
+- Known limitation: `.env` `APP_PORT` serves two roles — the Docker host
+  port and the local dev API port — while the Vite dev proxy targets a
+  fixed 3000. Setting `APP_PORT` (e.g. 3001) keeps Docker correct but
+  shifts the dev API and breaks the dev `/api` proxy. A single-source port
+  model is planned follow-up work; keep `APP_PORT` unset for `pnpm dev`
+  until then.
+- Redis is **not started by default** (no Redis in the default stack; nothing
+  depends on it). To enable it: `docker compose --profile redis up` plus
+  `REDIS_PASSWORD=<secret>` and `REDIS_URL=redis://:<secret>@redis:6379`
+  in `.env` (the redis container refuses to start without a password).
+- Email (optional): `EMAIL_ENABLED=true` + `EMAIL_TRANSPORT=smtp` + `SMTP_*`.
+- Common issues (ports, WSL2, China mainland mirrors):
+  [`docs/docker-troubleshooting.md`](docs/docker-troubleshooting.md).
+
+#### Production first-Admin bootstrap
+
+The first Admin is created via the `bootstrap-admin` CLI against a fresh
+migrated database (P6-008) — see the Quick Start command above. The baseline
+dev/test seed (`packages/db/src/seed.ts`) ships known default credentials and
+refuses to run when `APP_MODE=production`. Do NOT use the baseline seed as the
+production bootstrap path.
 
 The bootstrap: (1) locates or creates the internal default organization
 (slug `default`); (2) creates the first Admin with the explicit password;
@@ -227,6 +237,33 @@ PostgreSQL advisory lock so exactly one first installation may win); once
 the installation is initialized, `/launchpad` redirects to `/login` (it
 never reopens). See
 [`docs/deployment/backup-and-recovery.md`](docs/deployment/backup-and-recovery.md) §11.
+
+#### Build from source (contributors and PR verification)
+
+No prebuilt image is published yet (see
+[Issue #321](https://github.com/jnhu76/exam/issues/321)), so every install
+builds from source. For Dockerfile testing and PR acceptance, use the
+source-build override — it pins a stable local tag and forces Compose to
+build from the current checkout, so a stale local/registry image can never
+fake a passing verification:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.build.yml \
+  up -d --build
+```
+
+Proof that `app` and `email-worker` run the freshly built image (not just
+"containers are up"):
+
+```bash
+docker image inspect exam-local:dev --format '{{.Id}}'
+docker inspect --format '{{.Image}}' "$(docker compose ps -q app)"
+docker inspect --format '{{.Image}}' "$(docker compose ps -q email-worker)"
+```
+
+The three IDs must match.
 
 #### Backup and recovery
 
@@ -247,6 +284,7 @@ clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `Dockerfile`              | Multi-stage build: base → builder → production runner                         |
 | `docker-compose.yml`      | Production: app + email-worker + PostgreSQL 18 (Redis 7 optional, `--profile redis`) |
+| `docker-compose.build.yml` | Source-build override (contributors / PR verification): `pull_policy: build`, stable local tag `exam-local:dev` |
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
@@ -294,7 +332,7 @@ clean restore, and C3 physical `pg_basebackup` + WAL archive / PITR.
 
 ## Project Structure
 
-```
+```text
 apps/
   web/          React 19 + Vite + TypeScript frontend
   api/          Fastify + TypeScript backend
@@ -348,7 +386,7 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | ------------------- | ------------------------------- | ------------------------------------------------------------- |
 | `VITE_API_BASE_URL` | `""` (proxy)                    | API base URL for the web client                               |
 | `APP_MODE`          | `development`                   | Run mode: `development`, `test`, `e2e`, `ci`, `production`    |
-| `APP_PORT`          | `3000`                          | API server port                                               |
+| `APP_PORT`          | `3000`                          | API server port; in Compose also the host published port (container stays 3000). Dual-read caveat: also the `pnpm dev` API port while the Vite proxy targets a fixed 3000 — see the Docker known limitation |
 | `HOST`              | `0.0.0.0`                       | API server listen address                                     |
 | `DATABASE_URL`      | `postgresql://...`              | Database connection URL (**required in production**)           |
 | `REDIS_URL`         | (empty = disabled)              | Redis connection URL (optional; enables the shared rate limiter when the runtime is ready)     |
@@ -356,7 +394,7 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | `JWT_SECRET`        | auto-generated in dev           | JWT signing secret (**required in production**; fail-fast)    |
 | `NODE_ENV`          | `development`                   | Node environment (build/fallback signal)                      |
 | `COOKIE_SECURE`     | `false`                         | Whether cookies should be secure (HTTPS only)                 |
-| `CORS_ORIGIN`       | `http://localhost:5173`         | CORS origin for API server (**required in production**)       |
+| `CORS_ORIGIN`       | dev `http://localhost:4173`; Compose `http://localhost:<APP_PORT>` | CORS origin for the API server (comma-separated → array). The bundled Compose default follows the host port; set to your machine's address for LAN access |
 | `DEPLOYMENT_MODE`   | `singleTenant`                  | Deployment mode. Phase 1 is `singleTenant` only. `multiTenant` is rejected at startup (Phase 4) |
 
 ### Seed Data Configuration (Optional)

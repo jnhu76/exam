@@ -70,17 +70,17 @@ if any is unset. There is NO default database password in production
 
 | Variable | Purpose | Validation |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API and worker | required, no default (P6-007) |
-| `JWT_SECRET` | Signs the `auth-token` cookie JWT; also required by the worker's runtime-config loader | non-empty; no default in production |
-| `CORS_ORIGIN` | Browser origin allowlist (credentials:true) | comma-separated → array |
-| `PUBLIC_WEB_ORIGIN` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path) | HTTPS recommended in production; never derived from `request.headers.host` |
+| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API and worker | required, no default (P6-007) — generate with `node scripts/generate-env.mjs` |
+| `JWT_SECRET` | Signs the `auth-token` cookie JWT; also required by the worker's runtime-config loader | non-empty; no default in production — generate with `node scripts/generate-env.mjs` |
 | `DATABASE_URL` | PostgreSQL connection for API + worker | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
 
 ### Optional (with safe defaults)
 
 | Variable | Default | Notes |
 |---|---|---|
-| `APP_PORT` | 3000 | API listen port |
+| `CORS_ORIGIN` | `http://localhost:<APP_PORT>` | Browser origin allowlist (credentials:true); comma-separated → array. The Compose default follows the host port; override for LAN/hostname access |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost:<APP_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
+| `APP_PORT` | 3000 | Host published port (`${APP_PORT:-3000}:3000`); the container API stays on 3000. Caveat: `.env` `APP_PORT` is also the `pnpm dev` API port (the Vite dev proxy targets a fixed 3000) — set it for Docker only, unset it for dev |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookie, fail-fast required env |
 | `NODE_ENV` | development | maps to production/test/development |
@@ -135,17 +135,13 @@ if any is unset. There is NO default database password in production
 # 1. Clone and enter the repository
 git clone <repo-url> exam && cd exam
 
-# 2. Configure environment (copy template, edit production-required values)
-cp .env.example .env
-# Edit .env:
-#   POSTGRES_PASSWORD=<STRONG_DB_PASSWORD>   # REQUIRED (P6-007, no default)
-#   JWT_SECRET=<GENERATE_A_LONG_RANDOM_SECRET>      # REQUIRED
-#   CORS_ORIGIN=https://exam.your-org.internal      # REQUIRED
-#   PUBLIC_WEB_ORIGIN=https://exam.your-org.internal # REQUIRED
-#   (the bundled Compose composes DATABASE_URL from POSTGRES_*)
-#   (REDIS_URL is optional — leave unset to disable Redis; see §10)
+# 2. Configure environment. The generator creates .env from .env.example and
+#    fills the empty JWT_SECRET and POSTGRES_PASSWORD with random values (an
+#    existing value is never rotated). To set secrets manually instead:
+#    cp .env.example .env, then set both (openssl rand -hex 32).
+node scripts/generate-env.mjs
 
-# 3. (Optional) Enable real Email delivery
+# 3. (Optional) Enable real Email delivery — edit .env:
 # EMAIL_ENABLED=true
 # EMAIL_TRANSPORT=smtp
 # SMTP_HOST=smtp.your-org.internal
@@ -157,7 +153,6 @@ cp .env.example .env
 docker compose up -d --build
 
 # 5. Watch the API come up (migration runs inside the container entrypoint).
-#    Use the native --tail flag instead of a pipe so failure context is kept.
 docker compose logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
@@ -165,6 +160,10 @@ docker compose logs --tail=50 -f app
 #    and waits for the first organization to be bootstrapped (step 7).
 docker compose ps
 # Expected: app (healthy), db (healthy), email-worker (up)
+```
+
+`CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost:3000`; set
+them in `.env` to your machine's address for LAN access.
 
 # 7. Bootstrap the first Admin (production path — see §5). This also
 #    creates the internal default organization, which unblocks the worker.

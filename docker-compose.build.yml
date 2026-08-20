@@ -1,0 +1,15 @@
+# Source-build override for contributors, Dockerfile testing, and PR
+# acceptance. Cannot run standalone (no db service); always merge:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# pull_policy: build forces building from the current checkout and never
+# pulling a registry/local-cache image under the pinned local tag.
+services:
+  app:
+    build: .
+    image: exam-local:dev
+    pull_policy: build
+
+  email-worker:
+    build: .
+    image: exam-local:dev
+    pull_policy: build
