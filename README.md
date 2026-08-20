@@ -197,9 +197,15 @@ docker compose exec app \
   `app: healthy` means the web app is reachable.
 - State persists in `./data/` (bind mounts) across `docker compose down`.
 - Host port: `APP_PORT` in `.env` (default 3000). `CORS_ORIGIN` and
-  `PUBLIC_WEB_ORIGIN` default to `http://localhost:<APP_PORT>`, so changing
-  the host port needs no origin override; for LAN access set them to your
+  `PUBLIC_WEB_ORIGIN` default to `http://localhost:<APP_PORT>`, so the
+  browser origin follows the host port; for LAN access set them to your
   machine's address (e.g. `http://192.168.1.5:3000`).
+- Known limitation: `.env` `APP_PORT` serves two roles — the Docker host
+  port and the local dev API port — while the Vite dev proxy targets a
+  fixed 3000. Setting `APP_PORT` (e.g. 3001) keeps Docker correct but
+  shifts the dev API and breaks the dev `/api` proxy. A single-source port
+  model is planned follow-up work; keep `APP_PORT` unset for `pnpm dev`
+  until then.
 - Redis is **not started by default** (no Redis in the default stack; nothing
   depends on it). To enable it: `docker compose --profile redis up` plus
   `REDIS_PASSWORD=<secret>` and `REDIS_URL=redis://:<secret>@redis:6379`
@@ -380,7 +386,7 @@ Historical material (plans, audits, reviews, implementation reports) lives under
 | ------------------- | ------------------------------- | ------------------------------------------------------------- |
 | `VITE_API_BASE_URL` | `""` (proxy)                    | API base URL for the web client                               |
 | `APP_MODE`          | `development`                   | Run mode: `development`, `test`, `e2e`, `ci`, `production`    |
-| `APP_PORT`          | `3000`                          | API server port                                               |
+| `APP_PORT`          | `3000`                          | API server port; in Compose also the host published port (container stays 3000). Dual-read caveat: also the `pnpm dev` API port while the Vite proxy targets a fixed 3000 — see the Docker known limitation |
 | `HOST`              | `0.0.0.0`                       | API server listen address                                     |
 | `DATABASE_URL`      | `postgresql://...`              | Database connection URL (**required in production**)           |
 | `REDIS_URL`         | (empty = disabled)              | Redis connection URL (optional; enables the shared rate limiter when the runtime is ready)     |

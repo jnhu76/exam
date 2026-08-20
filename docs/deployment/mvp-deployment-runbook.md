@@ -80,7 +80,7 @@ if any is unset. There is NO default database password in production
 |---|---|---|
 | `CORS_ORIGIN` | `http://localhost:<APP_PORT>` | Browser origin allowlist (credentials:true); comma-separated → array. The Compose default follows the host port; override for LAN/hostname access |
 | `PUBLIC_WEB_ORIGIN` | `http://localhost:<APP_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
-| `APP_PORT` | 3000 | API listen port |
+| `APP_PORT` | 3000 | Host published port (`${APP_PORT:-3000}:3000`); the container API stays on 3000. Caveat: `.env` `APP_PORT` is also the `pnpm dev` API port (the Vite dev proxy targets a fixed 3000) — set it for Docker only, unset it for dev |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookie, fail-fast required env |
 | `NODE_ENV` | development | maps to production/test/development |

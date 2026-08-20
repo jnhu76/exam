@@ -1,7 +1,6 @@
 # Sole operator entry point (deployment-topology-contract.mjs enforces this).
-# POSTGRES_PASSWORD and JWT_SECRET are required with no defaults — run
-# `node scripts/generate-env.mjs`. Authoritative state is the ./data bind
-# mounts (see docs/deployment/backup-and-recovery.md).
+# Authoritative state is the ./data bind mounts — see
+# docs/deployment/backup-and-recovery.md.
 services:
   app:
     build: .
