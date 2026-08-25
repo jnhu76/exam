@@ -34,10 +34,14 @@ import {
   InvalidStateTransitionError,
   ConflictError,
   PermissionDeniedError,
+  RetakeDeferredError,
 } from "@exam/domain";
 import {
   deriveCandidateExamState,
   pickDisplayAttempt,
+  resolveCandidateEnrollmentResultVisibility,
+  isCandidateRetakeDeferred,
+  projectEnrollmentForLifecycleState,
 } from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -212,7 +216,10 @@ function normalizeEnrollment(
 /**
  * Builds the candidate-facing exam detail response by deriving availability
  * status, primary action, best score, and attempt limits from the exam,
- * enrollment, and attempt state.
+ * enrollment, and attempt state. Result-derived facts (bestScore,
+ * bestScorePercent, pass_then_stop's already_passed block) are projected
+ * only when the canonical result visibility authority says the result is
+ * visible (#324); the underlying grading truth is untouched.
  */
 function buildCandidateExamDetail(
   exam: Exam,
@@ -224,9 +231,14 @@ function buildCandidateExamDetail(
   finalAttempt: ExamAttempt | null = null,
 ) {
   const currentAttempts = enrollment?.attemptCount ?? 0;
-  const { availabilityStatus, primaryAction } = deriveCandidateExamState({
+  const resultVisible = resolveCandidateEnrollmentResultVisibility(
     exam,
     enrollment,
+    finalAttempt,
+  ).visible;
+  const { availabilityStatus, primaryAction } = deriveCandidateExamState({
+    exam,
+    enrollment: projectEnrollmentForLifecycleState(enrollment, resultVisible),
     activeAttempt,
     resumableAttempt,
     latestAttempt,
@@ -235,7 +247,9 @@ function buildCandidateExamDetail(
   });
 
   const bestScore =
-    enrollment?.finalScore != null ? enrollment.finalScore : undefined;
+    resultVisible && enrollment?.finalScore != null
+      ? enrollment.finalScore
+      : undefined;
   const bestScorePercent =
     bestScore != null && exam.totalScore > 0
       ? Math.round((bestScore / exam.totalScore) * 100)
@@ -245,10 +259,21 @@ function buildCandidateExamDetail(
   const maxAttemptsExhausted =
     exam.retakePolicy === "max_attempts" && currentAttempts >= exam.maxAttempts;
   const alreadyPassed =
-    exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true;
+    resultVisible &&
+    exam.retakePolicy === "pass_then_stop" &&
+    enrollment?.finalPassed === true;
+  // #324 review P1-2: while the final result exists but is hidden, retake
+  // eligibility is DEFERRED — passed and failed candidates must see the same
+  // canStartNewAttempt=false here, matching the identical opaque rejection
+  // the start route gives both until publication.
+  const retakeDeferred = isCandidateRetakeDeferred(
+    exam,
+    enrollment,
+    finalAttempt,
+  );
 
   const canStartNewAttempt =
-    !hasActive && !maxAttemptsExhausted && !alreadyPassed;
+    !hasActive && !maxAttemptsExhausted && !alreadyPassed && !retakeDeferred;
 
   const blockingReason = hasActive
     ? undefined
@@ -352,10 +377,19 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           );
           const latestAttempt = sortedByTime[0] ?? null;
 
+          const normalizedEnrollment = normalizeEnrollment(enrollment);
+          const resultVisible = resolveCandidateEnrollmentResultVisibility(
+            exam,
+            normalizedEnrollment,
+            finalAttempt ?? null,
+          ).visible;
           const { availabilityStatus, primaryAction } =
             deriveCandidateExamState({
               exam,
-              enrollment: normalizeEnrollment(enrollment),
+              enrollment: projectEnrollmentForLifecycleState(
+                normalizedEnrollment,
+                resultVisible,
+              ),
               activeAttempt,
               resumableAttempt,
               latestAttempt,
@@ -371,7 +405,9 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           });
 
           const bestScore =
-            enrollment.finalScore != null ? enrollment.finalScore : undefined;
+            resultVisible && enrollment.finalScore != null
+              ? enrollment.finalScore
+              : undefined;
           const bestScorePercent =
             bestScore != null && exam.totalScore > 0
               ? Math.round((bestScore / exam.totalScore) * 100)
@@ -611,56 +647,75 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         );
       }
 
-      const { attempt, isNew } = await executeInTransaction(
-        fastify.db,
-        async (tx) => {
-          const { exams, enrollments, attempts } = createExamEngineRepos(
-            {
-              examRepo: createExamRepo(tx),
-              attemptRepo: createAttemptRepo(tx),
-              enrollmentRepo: createEnrollmentRepo(tx),
-            },
-            ctx,
-          );
+      let attempt: ExamAttempt;
+      let isNew: boolean;
+      try {
+        const started = await executeInTransaction(
+          fastify.db,
+          async (tx) => {
+            const { exams, enrollments, attempts } = createExamEngineRepos(
+              {
+                examRepo: createExamRepo(tx),
+                attemptRepo: createAttemptRepo(tx),
+                enrollmentRepo: createEnrollmentRepo(tx),
+              },
+              ctx,
+            );
 
-          // Build interruption repos for the full restore path.
-          const episodeRepo = createInterruptionEpisodeRepoAdapter(
-            createAttemptInterruptionRepo(tx),
-            ctx,
-          );
-          const eventRepo = createInterruptionEventRepoAdapter(
-            createAttemptInterruptionEventRepo(tx),
-            ctx,
-          );
-          const adjustmentRepo = createTimeAdjustmentRepoAdapter(
-            createAttemptTimeAdjustmentRepo(tx),
-            ctx,
-          );
-          const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          );
+            // Build interruption repos for the full restore path.
+            const episodeRepo = createInterruptionEpisodeRepoAdapter(
+              createAttemptInterruptionRepo(tx),
+              ctx,
+            );
+            const eventRepo = createInterruptionEventRepoAdapter(
+              createAttemptInterruptionEventRepo(tx),
+              ctx,
+            );
+            const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+              createAttemptTimeAdjustmentRepo(tx),
+              ctx,
+            );
+            const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+              createAttemptGradingEntryRepo(tx),
+              ctx,
+            );
 
-          const started = await startOrRestoreAttempt(
-            exams,
-            enrollments,
-            attempts,
-            examId,
-            candidateId,
-            now,
-            {
-              unassignedErrorFactory: (message) =>
-                new PermissionDeniedError(message),
-              episodeRepo,
-              eventRepo,
-              adjustmentRepo,
-              gradingWorksetRepo,
-            },
+            const result = await startOrRestoreAttempt(
+              exams,
+              enrollments,
+              attempts,
+              examId,
+              candidateId,
+              now,
+              {
+                unassignedErrorFactory: (message) =>
+                  new PermissionDeniedError(message),
+                episodeRepo,
+                eventRepo,
+                adjustmentRepo,
+                gradingWorksetRepo,
+              },
+            );
+            return result;
+          },
+          "read committed",
+        );
+        attempt = started.attempt;
+        isNew = started.isNew;
+      } catch (error) {
+        // #324 review P1-3: the engine decides retake deferral UNDER the
+        // enrollment lock (the same serialization boundary as the grading
+        // finalizer), so the pass/fail fact can no longer race past a
+        // pre-transaction read. The wire contract stays opaque — a deferral
+        // is surfaced as a generic conflict so passed and failed candidates
+        // see the identical body.
+        if (error instanceof RetakeDeferredError) {
+          throw new ConflictError(
+            "Cannot start a new attempt for this exam at this time",
           );
-          return started;
-        },
-        "read committed",
-      );
+        }
+        throw error;
+      }
 
       examQueues.set(
         examId,
@@ -673,7 +728,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           .code(201)
           .send(
             LoadAttemptResponseSchema.parse(
-              toCandidateAttemptResponse(attempt, now),
+              toCandidateAttemptResponse(attempt, now, exam),
             ),
           );
       }
@@ -681,7 +736,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         .code(200)
         .send(
           LoadAttemptResponseSchema.parse(
-            toCandidateAttemptResponse(attempt, now),
+            toCandidateAttemptResponse(attempt, now, exam),
           ),
         );
     },
@@ -716,8 +771,15 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       }
       const ctx = getRequestContext(request);
       const attempt = await getOwnedAttempt(fastify, ctx, parsed.data.id);
+      const exam = (await createExamRepo(fastify.db).findById(
+        ctx,
+        attempt.examId,
+      )) as Exam | null;
+      if (!exam) {
+        throw new NotFoundError("Exam not found");
+      }
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt, fastify.now()),
+        toCandidateAttemptResponse(attempt, fastify.now(), exam),
       );
     },
   );
@@ -1055,9 +1117,16 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         now,
         { request },
       );
+      const exam = (await createExamRepo(fastify.db).findById(
+        ctx,
+        attempt.examId,
+      )) as Exam | null;
+      if (!exam) {
+        throw new NotFoundError("Exam not found");
+      }
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt, now),
+        toCandidateAttemptResponse(attempt, now, exam),
       );
     },
   );
@@ -1224,13 +1293,20 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // on entry, or deadline-reconciliation submitted). All three outcomes
       // (`restored`, `already_in_progress`, `terminal`) are legitimate 200
       // results — the schema accepts them all.
+      const exam = (await createExamRepo(fastify.db).findById(
+        ctx,
+        restoreResult.attempt.examId,
+      )) as Exam | null;
+      if (!exam) {
+        throw new NotFoundError("Exam not found");
+      }
       return RestoreAttemptResponseSchema.parse({
         lifecycle: restoreResult.lifecycle,
         compensation: {
           policy: restoreResult.compensation.policy,
           addedSeconds: restoreResult.compensation.addedSeconds,
         },
-        attempt: toCandidateAttemptResponse(restoreResult.attempt, now),
+        attempt: toCandidateAttemptResponse(restoreResult.attempt, now, exam),
       });
     },
   );

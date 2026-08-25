@@ -26,6 +26,8 @@ import {
   InvalidStateTransitionError,
   ValidationError,
   MaxAttemptsReachedError,
+  ExamAlreadyPassedError,
+  RetakeDeferredError,
 } from "@exam/domain";
 import { MisconductSeverity } from "@exam/domain";
 import type {
@@ -378,6 +380,19 @@ function makeEnrollmentRepo(
 
 const fixedNow = new Date("2025-01-01T10:30:00Z");
 const fixedStart = new Date("2025-01-01T10:30:00Z");
+
+/**
+ * Minimal deferred for deterministic concurrency handshakes.
+ */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 function makeGradingWorksetRepo(): GradingWorksetRepository {
   return {
@@ -973,6 +988,383 @@ describe("attemptCommands", () => {
       );
 
       expect(result.id).toBe("attempt-1");
+    });
+
+    // ── #324 review P1-3: retake deferral under the enrollment lock ────────
+    //
+    // While a pass_then_stop final result exists but is hidden (manual mode,
+    // not yet published), the start decision must defer BOTH passed and failed
+    // candidates with the same error. The decision runs inside the engine AFTER
+    // the enrollment lock, so it shares the grading finalizer's serialization
+    // boundary — no pre-transaction read can race ahead of a committed
+    // terminalization and leak a 409-vs-201 pass/fail oracle.
+
+    function hiddenPassThenStopExam() {
+      return makeExam({
+        retakePolicy: "pass_then_stop",
+        resultPublicationMode: "manual",
+        resultsPublishedAt: null,
+      });
+    }
+
+    function terminalAttempt(overrides: Partial<ExamAttempt> = {}) {
+      return makeAttempt({
+        id: "attempt-1",
+        status: "graded",
+        attemptNo: 1,
+        gradingStatus: "auto_graded",
+        gradedAt: new Date("2025-01-01T10:20:00Z"),
+        gradingResult: [
+          {
+            questionId: "q1",
+            score: 80,
+            maxScore: 100,
+            correct: true,
+            candidateAnswer: "a",
+            standardAnswer: "a",
+          },
+        ],
+        ...overrides,
+      });
+    }
+
+    it("defers retake while result hidden — passed candidate gets RetakeDeferredError, no new attempt", async () => {
+      const exam = hiddenPassThenStopExam();
+      const enrollment = makeEnrollment({
+        status: "started",
+        attemptCount: 1,
+        finalScore: 80,
+        finalPassed: true,
+        finalAttemptId: "attempt-1",
+      });
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([
+        terminalAttempt({ score: 80, passed: true }),
+      ]);
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
+
+      await expect(
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
+      ).rejects.toThrow(RetakeDeferredError);
+      // The deferral happens before any attempt creation.
+      expect(await attRepo.findByEnrollmentAndAttemptNo("enr-1", 2)).toBeNull();
+    });
+
+    it("defers retake while result hidden — failed candidate gets the SAME RetakeDeferredError, no new attempt", async () => {
+      const exam = hiddenPassThenStopExam();
+      const enrollment = makeEnrollment({
+        status: "started",
+        attemptCount: 1,
+        finalScore: 20,
+        finalPassed: false,
+        finalAttemptId: "attempt-1",
+      });
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([
+        terminalAttempt({
+          score: 20,
+          passed: false,
+          gradingResult: [
+            {
+              questionId: "q1",
+              score: 20,
+              maxScore: 100,
+              correct: false,
+              candidateAnswer: "b",
+              standardAnswer: "a",
+            },
+          ],
+        }),
+      ]);
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
+
+      await expect(
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
+      ).rejects.toThrow(RetakeDeferredError);
+      expect(await attRepo.findByEnrollmentAndAttemptNo("enr-1", 2)).toBeNull();
+    });
+
+    it("published result — passed candidate blocked by durable ExamAlreadyPassedError", async () => {
+      const exam = makeExam({
+        retakePolicy: "pass_then_stop",
+        resultPublicationMode: "manual",
+        resultsPublishedAt: new Date("2025-01-01T10:25:00Z"),
+      });
+      const enrollment = makeEnrollment({
+        status: "completed",
+        attemptCount: 1,
+        finalScore: 80,
+        finalPassed: true,
+        finalAttemptId: "attempt-1",
+      });
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([
+        terminalAttempt({ score: 80, passed: true }),
+      ]);
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
+
+      await expect(
+        startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          fixedNow,
+          startDeps,
+        ),
+      ).rejects.toThrow(ExamAlreadyPassedError);
+      expect(await attRepo.findByEnrollmentAndAttemptNo("enr-1", 2)).toBeNull();
+    });
+
+    it("published result — failed candidate may retake (new attempt created)", async () => {
+      const exam = makeExam({
+        retakePolicy: "pass_then_stop",
+        resultPublicationMode: "manual",
+        resultsPublishedAt: new Date("2025-01-01T10:25:00Z"),
+      });
+      const enrollment = makeEnrollment({
+        status: "started",
+        attemptCount: 1,
+        finalScore: 20,
+        finalPassed: false,
+        finalAttemptId: "attempt-1",
+      });
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([
+        terminalAttempt({
+          score: 20,
+          passed: false,
+          gradingResult: [
+            {
+              questionId: "q1",
+              score: 20,
+              maxScore: 100,
+              correct: false,
+              candidateAnswer: "b",
+              standardAnswer: "a",
+            },
+          ],
+        }),
+      ]);
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
+
+      const { attempt, isNew } = await startOrRestoreAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+        startDeps,
+      );
+      expect(isNew).toBe(true);
+      expect(attempt.attemptNo).toBe(2);
+    });
+
+    it("P1-3 deterministic race: grading commits after start arrival but before the lock — passed AND failed candidates get the same deferred rejection, no attempt created", async () => {
+      // Deterministic interleaving (issue #324 review P1-3):
+      //   T1 start request arrives while attempt #1 is still grading
+      //     (enrollment.finalAttemptId = null).
+      //   T2 grading finalizer commits terminalization under the enrollment
+      //     lock (finalScore/finalPassed/finalAttemptId).
+      //   T1 then acquires the enrollment lock and must observe the committed
+      //     state — the deferral decision shares the finalizer's serialization
+      //     boundary, so passed and failed candidates get the SAME opaque
+      //     rejection instead of a 409-vs-201 pass/fail oracle.
+      for (const outcome of ["pass", "fail"] as const) {
+        const exam = hiddenPassThenStopExam();
+        const now = new Date("2025-01-01T10:30:00Z");
+        const sharedEnrollments: ExamEnrollment[] = [
+          makeEnrollment({ status: "started", attemptCount: 1 }),
+        ];
+        const sharedAttempts: ExamAttempt[] = [
+          makeAttempt({
+            status: "submitted",
+            attemptNo: 1,
+            submittedAt: now,
+            gradingStatus: "auto_graded",
+          }),
+        ];
+
+        const t1ReachedLock = deferred<void>();
+        const gradingDone = deferred<void>();
+
+        const enrRepo: EnrollmentRepository = {
+          findByExamAndCandidate: (examId, candidateId) =>
+            sharedEnrollments.find(
+              (e) => e.examId === examId && e.candidateId === candidateId,
+            ) ?? null,
+          findByExamAndCandidateForUpdate: async (examId, candidateId) => {
+            // T1 has reached the enrollment lock; release T2 (grading) and
+            // WAIT for it to commit before returning the row — exactly what a
+            // real lock wait observes. The start decision therefore runs on
+            // post-terminalization state.
+            t1ReachedLock.resolve();
+            await gradingDone.promise;
+            return (
+              sharedEnrollments.find(
+                (e) => e.examId === examId && e.candidateId === candidateId,
+              ) ?? null
+            );
+          },
+          create: (input) => {
+            const enr: ExamEnrollment = {
+              id: input.id ?? "enr-new",
+              organizationId: input.organizationId,
+              examId: input.examId,
+              candidateId: input.candidateId,
+              status: input.status,
+              attemptCount: input.attemptCount,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            sharedEnrollments.push(enr);
+            return enr;
+          },
+          update: (id, data) => {
+            const idx = sharedEnrollments.findIndex((e) => e.id === id);
+            if (idx === -1) return null;
+            sharedEnrollments[idx] = { ...sharedEnrollments[idx]!, ...data };
+            return sharedEnrollments[idx]!;
+          },
+        };
+
+        const attRepo: AttemptRepository = {
+          findById: (id) => sharedAttempts.find((a) => a.id === id) ?? null,
+          findByIdForUpdate: (id) =>
+            sharedAttempts.find((a) => a.id === id) ?? null,
+          findActiveByEnrollment: (enrollmentId) =>
+            sharedAttempts.find(
+              (a) =>
+                a.enrollmentId === enrollmentId &&
+                (a.status === "in_progress" || a.status === "disrupted"),
+            ) ?? null,
+          findByEnrollmentAndAttemptNo: (enrollmentId, attemptNo) =>
+            sharedAttempts.find(
+              (a) =>
+                a.enrollmentId === enrollmentId && a.attemptNo === attemptNo,
+            ) ?? null,
+          create: (input) => {
+            const created = {
+              ...input,
+              id: input.id ?? "attempt-new",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            } as ExamAttempt;
+            sharedAttempts.push(created);
+            return created;
+          },
+          update: (id, data) => {
+            const idx = sharedAttempts.findIndex((a) => a.id === id);
+            if (idx === -1) return null;
+            sharedAttempts[idx] = { ...sharedAttempts[idx]!, ...data };
+            return sharedAttempts[idx]!;
+          },
+          refreshLastActivityIfInProgress: (id, tick) => {
+            const idx = sharedAttempts.findIndex((a) => a.id === id);
+            if (idx === -1) return null;
+            if (sharedAttempts[idx]!.status !== "in_progress") return null;
+            sharedAttempts[idx] = {
+              ...sharedAttempts[idx]!,
+              lastActivityAt: tick,
+            };
+            return sharedAttempts[idx]!;
+          },
+        };
+
+        const examRepo = {
+          findById: () => exam,
+          findByIdForUpdate: () => exam,
+          update: () => exam,
+        };
+
+        // T2 — grading finalizer. Waits for T1 to reach the enrollment lock,
+        // then commits the attempt terminal projection + enrollment final
+        // facts in one unit (mirroring finalizeTerminalGrading under the lock).
+        const t2 = (async () => {
+          await t1ReachedLock.promise;
+          const passed = outcome === "pass";
+          const score = passed ? 80 : 20;
+          const attIdx = sharedAttempts.findIndex((a) => a.id === "attempt-1");
+          sharedAttempts[attIdx] = {
+            ...sharedAttempts[attIdx]!,
+            status: "graded",
+            score,
+            passed,
+            gradedAt: now,
+            gradingStatus: "auto_graded",
+            gradingResult: [
+              {
+                questionId: "q1",
+                score,
+                maxScore: 100,
+                correct: passed,
+                candidateAnswer: passed ? "a" : "b",
+                standardAnswer: "a",
+              },
+            ],
+          };
+          const enrIdx = sharedEnrollments.findIndex((e) => e.id === "enr-1");
+          sharedEnrollments[enrIdx] = {
+            ...sharedEnrollments[enrIdx]!,
+            finalScore: score,
+            finalPassed: passed,
+            finalAttemptId: "attempt-1",
+          };
+          gradingDone.resolve();
+        })();
+
+        // T1 — the start request.
+        const t1 = startOrRestoreAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          now,
+          startDeps,
+        );
+
+        // Both outcomes land on the SAME semantic error, and neither created
+        // attempt #2 — the hidden-result deferral is identical for passed and
+        // failed candidates.
+        await expect(t1).rejects.toThrow(RetakeDeferredError);
+        await t2;
+        expect(sharedAttempts).toHaveLength(1);
+      }
     });
   });
 

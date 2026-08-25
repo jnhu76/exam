@@ -6,7 +6,6 @@ import {
   ScoreListQuerySchema,
   ScoreListResponseSchema,
   ErrorResponseSchema,
-  type HiddenReason,
 } from "@exam/contracts";
 import type {
   Exam,
@@ -18,6 +17,7 @@ import { NotFoundError } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { Permission } from "@exam/authz";
+import { resolveCandidateResultVisibility } from "@exam/exam-engine";
 import {
   formatZodError,
   ensureTargetOrg,
@@ -152,87 +152,6 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
   }
 
   return { allowed: true, message: null };
-}
-
-/**
- * P2D-J5a result visibility decision for a single attempt.
- *
- * Two-stage gate:
- *   1. resultReady — is the result itself computable? Requires status=graded
- *      AND all score fields present AND grading is no longer pending manual
- *      scoring. after_grading mode additionally requires gradingStatus to be
- *      exactly 'fully_graded' (auto_graded is not enough — that mode means
- *      "wait for all grading including manual to finish").
- *   2. publication gate — applies when the request reached this route via the
- *      ScoreOwnView capability path (candidate own-score access). Requests
- *      that reached via ScoreAllView (administrative / academic result access)
- *      bypass this stage and see the full result whenever resultReady is true.
- *
- * RBAC-M10-E (P1-4): the gate is driven by `scoreView` — the capability path
- * the score preHandler arbitrates (ScoreAllView -> "all", ScoreOwnView+owner
- * -> "own"). It is NOT `roles.includes("Candidate")`: a multi-role actor
- * reaching via ScoreAllView must NOT be demoted to candidate publication
- * policy just because they happen to hold a Candidate assignment.
- *
- * Returns `{ visible: true }` when the full result can be shown, otherwise
- * `{ visible: false, hiddenReason }` where hiddenReason is one of:
- *   - 'not_started'  — attempt is in a pre-submit lifecycle state.
- *   - 'not_graded'   — result not yet computable (grading pending or incomplete).
- *   - 'pending_publish' — manual mode and admin has not called publish-results.
- */
-export function computeResultVisibility(
-  exam: Exam,
-  attempt: ExamAttempt,
-  view: "own" | "all",
-): { visible: true } | { visible: false; hiddenReason: HiddenReason } {
-  // Stage 1: is the result computable?
-  const isPreSubmit = attempt.status !== "graded";
-  const scoreFieldsPresent =
-    attempt.score != null &&
-    attempt.passed != null &&
-    attempt.gradedAt != null &&
-    attempt.gradingResult != null;
-
-  if (isPreSubmit) {
-    // 'not_started' covers any non-graded lifecycle state (in_progress,
-    // submitted, grading, voided, disrupted, etc.) — the result is not yet
-    // computable. The label is historical, not literal.
-    return { visible: false, hiddenReason: "not_started" };
-  }
-  if (!scoreFieldsPresent) {
-    return { visible: false, hiddenReason: "not_graded" };
-  }
-
-  // gradingStatus semantics: 'pending_manual' always means not-ready.
-  // 'auto_graded' counts as ready UNLESS the exam mode is after_grading
-  // (which demands 'fully_graded'). 'fully_graded' is always ready.
-  const gradingStatus = attempt.gradingStatus ?? "auto_graded";
-  if (gradingStatus === "pending_manual") {
-    return { visible: false, hiddenReason: "not_graded" };
-  }
-  if (
-    exam.resultPublicationMode === "after_grading" &&
-    gradingStatus !== "fully_graded"
-  ) {
-    // after_grading demands fully_graded; auto_graded is insufficient.
-    return { visible: false, hiddenReason: "not_graded" };
-  }
-
-  // Stage 2: publication gate — applies only on the own-view capability path
-  // (ScoreOwnView + owner). The all-view path (ScoreAllView) bypasses it.
-  if (view === "all") {
-    return { visible: true };
-  }
-  switch (exam.resultPublicationMode) {
-    case "immediate":
-      return { visible: true };
-    case "after_grading":
-      return { visible: true };
-    case "manual":
-      return exam.resultsPublishedAt != null
-        ? { visible: true }
-        : { visible: false, hiddenReason: "pending_publish" };
-  }
 }
 
 /**
@@ -458,7 +377,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
 
       const view = await requireScoreView(request, reply);
       if (view === null) return;
-      const visibility = computeResultVisibility(exam, attempt, view);
+      const visibility = resolveCandidateResultVisibility(exam, attempt, view);
 
       if (!visibility.visible) {
         return AttemptResultResponseSchema.parse({

@@ -27,8 +27,9 @@
  *
  * **Publication visibility is a separate concern** (ADR §262/691/697: RBAC
  * does not replace the state machine). This preHandler answers only "may this
- * principal access this attempt at all." The handler's `computeResultVisibility`
- * continues to decide which fields are visible based on `ResultPublicationMode`
+ * principal access this attempt at all." The handler's
+ * `resolveCandidateResultVisibility` continues to decide which fields are
+ * visible based on `ResultPublicationMode`
  * and grading state — that logic is intentionally untouched here.
  */
 import type { FastifyReply, FastifyRequest } from "fastify";
