@@ -105,6 +105,45 @@ test.describe("result publishing policy (P2D-J5)", () => {
     expect(beforePublish.showResultImmediately).toBe(false);
     expect(beforePublish.hiddenReason).toBe("pending_publish");
 
+    // ── Before publish: no score-derived facts on ANY candidate surface ────
+    // (#324) The attempt is fully graded (score committed in the DB), yet the
+    // candidate must not observe it through the attempt-load API, the exam
+    // list/detail summaries, or the list/start UI pages.
+    const beforeAttempt = await request.get(
+      `${BASE_URL}/api/attempts/${attemptId}`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(beforeAttempt.status()).toBe(200);
+    const beforeAttemptBody = await beforeAttempt.json();
+    expect(beforeAttemptBody.score).toBeUndefined();
+    expect(beforeAttemptBody.passed).toBeUndefined();
+
+    const beforeList = await request.get(`${BASE_URL}/api/candidate/exams`, {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    });
+    const beforeListEntry = (
+      (await beforeList.json()) as Array<{
+        examId: string;
+        bestScore?: number;
+        bestScorePercent?: number;
+      }>
+    ).find((entry) => entry.examId === seeded.examId);
+    expect(beforeListEntry).toBeDefined();
+    expect(beforeListEntry!.bestScore).toBeUndefined();
+    expect(beforeListEntry!.bestScorePercent).toBeUndefined();
+
+    await page.goto(`${BASE_URL}/exam/list`);
+    const beforeCard = page.getByTestId(`exam-card-${seeded.examId}`);
+    await expect(beforeCard).toBeVisible({ timeout: 15_000 });
+    await expect(beforeCard.getByTestId("exam-best-score")).toHaveCount(0);
+
+    await page.goto(`${BASE_URL}/exam/${seeded.examId}/start`);
+    await expect(page.getByText("最高成绩")).toHaveCount(0);
+
+    // Return to the result page so the publish step below reloads the result
+    // view (the original flow asserts on a reload of THIS page).
+    await page.goto(`${BASE_URL}/exam/${attemptId}/result`);
+
     // ── Admin publishes results ─────────────────────────────────────────────
     const adminToken = await adminApiToken(request);
     const publishRes = await publishResultsApi(
@@ -137,6 +176,40 @@ test.describe("result publishing policy (P2D-J5)", () => {
     );
     expect(afterPublish.showResultImmediately).toBe(true);
     expect(afterPublish.totalScore).toBe(100);
+
+    // (#324) Every other candidate surface restores consistently: the
+    // attempt-load API returns score/passed, the exam list summary carries
+    // bestScore, and both UI pages render the published score.
+    const afterAttempt = await request.get(
+      `${BASE_URL}/api/attempts/${attemptId}`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    const afterAttemptBody = await afterAttempt.json();
+    expect(afterAttemptBody.score).toBe(100);
+    expect(afterAttemptBody.passed).toBe(true);
+
+    const afterList = await request.get(`${BASE_URL}/api/candidate/exams`, {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    });
+    const afterListEntry = (
+      (await afterList.json()) as Array<{
+        examId: string;
+        bestScore?: number;
+        bestScorePercent?: number;
+      }>
+    ).find((entry) => entry.examId === seeded.examId);
+    expect(afterListEntry!.bestScore).toBe(100);
+    expect(afterListEntry!.bestScorePercent).toBe(100);
+
+    await page.goto(`${BASE_URL}/exam/list`);
+    const afterCard = page.getByTestId(`exam-card-${seeded.examId}`);
+    await expect(afterCard).toBeVisible({ timeout: 15_000 });
+    await expect(afterCard.getByTestId("exam-best-score")).toHaveText("100");
+
+    await page.goto(`${BASE_URL}/exam/${seeded.examId}/start`);
+    await expect(page.getByText("最高成绩: 100/100")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Idempotent re-publish is a no-op (visibility already flipped).
     const rePublishRes = await publishResultsApi(

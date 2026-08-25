@@ -11,6 +11,7 @@ export {
   ENROLLMENT_VALID_TRANSITIONS,
 } from "./enrollmentStateMachine.js";
 export * from "./candidateExamSummary.js";
+export * from "./candidateResultVisibility.js";
 export * from "./timer.js";
 export * from "./answerProtocol.js";
 export * from "./attemptCommands.js";

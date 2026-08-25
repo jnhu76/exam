@@ -1,6 +1,9 @@
 import type { ExamAttempt, AnswerRecord, Exam } from "@exam/domain";
 import type { GradingStatus } from "@exam/domain";
-import { computeEffectiveDeadline } from "@exam/exam-engine";
+import {
+  computeEffectiveDeadline,
+  resolveCandidateResultVisibility,
+} from "@exam/exam-engine";
 
 /**
  * OpenAPI security scheme: HTTP-only cookie authentication. Shared by every
@@ -37,37 +40,6 @@ function getInputMode(
  * here for `timed_window` exams where closeAt is always set.
  */
 // computeEffectiveDeadline is re-exported above from @exam/exam-engine.
-
-/**
- * Computes resultVisibility based on exam publication mode and attempt state.
- */
-function computeResultVisibility(
-  exam: Exam,
-  attempt: ExamAttempt,
-): "hidden" | "visible" {
-  if (attempt.status !== "graded") return "hidden";
-  // Default: if gradingStatus is null (pre-migration), use "fully_graded"
-  // for graded attempts to avoid hiding results in after_grading mode
-  const gradingStatus =
-    attempt.gradingStatus ??
-    (attempt.status === "graded" ? "fully_graded" : "auto_graded");
-  if (gradingStatus === "pending_manual") return "hidden";
-  if (
-    exam.resultPublicationMode === "after_grading" &&
-    gradingStatus !== "fully_graded"
-  )
-    return "hidden";
-  switch (exam.resultPublicationMode) {
-    case "immediate":
-      return "visible";
-    case "after_grading":
-      return "visible";
-    case "manual":
-      return exam.resultsPublishedAt != null ? "visible" : "hidden";
-    default:
-      return "hidden";
-  }
-}
 
 /**
  * Computes answerVisibility — whether standardAnswer/rubric is shown.
@@ -109,12 +81,33 @@ function toAttemptResponse(attempt: ExamAttempt) {
 }
 
 /**
- * Serializes an ExamAttempt for candidate-facing responses, stripping
- * standardAnswer and other admin-only fields from the question snapshot.
+ * Serializes an ExamAttempt for candidate-facing responses. In addition to
+ * stripping standardAnswer/rubric from the question snapshot, this applies
+ * the canonical candidate result visibility authority (#324): when the exam's
+ * publication policy hides the result, the score/passed fields are omitted —
+ * grading truth stays in the DB, it just does not reach the candidate. The
+ * exam argument is REQUIRED so no caller can bypass the authority by
+ * accident.
  */
-export function toCandidateAttemptResponse(attempt: ExamAttempt, now: Date) {
+export function toCandidateAttemptResponse(
+  attempt: ExamAttempt,
+  now: Date,
+  exam: Exam,
+) {
+  const {
+    score: attemptScore,
+    passed: attemptPassed,
+    ...baseWithoutResultFacts
+  } = toAttemptResponse(attempt);
+  const visibility = resolveCandidateResultVisibility(exam, attempt);
   return {
-    ...toAttemptResponse(attempt),
+    ...baseWithoutResultFacts,
+    ...(visibility.visible && attemptScore !== undefined
+      ? { score: attemptScore }
+      : {}),
+    ...(visibility.visible && attemptPassed !== undefined
+      ? { passed: attemptPassed }
+      : {}),
     serverNow: now.toISOString(),
     questionSnapshot: attempt.questionSnapshot.map((q) => ({
       originalQuestionId: q.originalQuestionId,
@@ -262,7 +255,10 @@ export function buildCandidateTakeSnapshot(
     };
   });
 
-  const resultVisibility = computeResultVisibility(exam, attempt);
+  const resultVisibility = resolveCandidateResultVisibility(exam, attempt)
+    .visible
+    ? ("visible" as const)
+    : ("hidden" as const);
   const answerVisibility = computeAnswerVisibility();
 
   return {

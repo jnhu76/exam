@@ -4,7 +4,7 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
-import { computeResultVisibility } from "../routes/scores.js";
+import { resolveCandidateResultVisibility } from "@exam/exam-engine";
 
 // P5-N1-I2 Slice 5 — recipient composition for result_published fan-out.
 //
@@ -12,9 +12,9 @@ import { computeResultVisibility } from "../routes/scores.js";
 //
 // For a manual publish of exam E, a recipient is every Candidate enrolled in E
 // whose score-strategy-selected authoritative attempt (enrollment.finalAttemptId)
-// is "result-ready" (computeResultVisibility(exam, attempt, "own").visible).
+// is "result-ready" (resolveCandidateResultVisibility(exam, attempt, "own").visible).
 // This composes existing primitives only — no new scoring authority is invented.
-// computeResultVisibility is the same function the result page uses, so the
+// resolveCandidateResultVisibility is the same function the result page uses, so the
 // notification never links to a hidden result.
 
 /** A resolved result_published recipient. */
@@ -39,7 +39,7 @@ export interface ResultPublishedRecipient {
  *   1. enrollmentRepo.listByExam(ctx, exam.id) — one query, all enrollments
  *   2. for each enrollment: skip if finalAttemptId is null
  *   3. batch-load the authoritative attempts (avoid N+1)
- *   4. compose with computeResultVisibility(exam, attempt, "own"); skip if hidden
+ *   4. compose with resolveCandidateResultVisibility(exam, attempt, "own"); skip if hidden
  *   5. resolve recipientUserId via candidateProfile.userId, email via users.email
  *
  * The caller passes the SAME transaction-scoped db handle that the publication
@@ -73,13 +73,13 @@ export async function resolveResultPublishedRecipients(
     attemptById.set(a.id, a as unknown as ExamAttempt);
   }
 
-  // Step 3: compose with computeResultVisibility; keep only visible results.
+  // Step 3: compose with resolveCandidateResultVisibility; keep only visible results.
   // Track which candidateProfile each surviving attempt belongs to.
   const surviving: { candidateId: string; attempt: ExamAttempt }[] = [];
   for (const e of withAttempt) {
     const attempt = attemptById.get(e.finalAttemptId!);
     if (!attempt) continue; // race: attempt gone since enrollment wrote it
-    const visibility = computeResultVisibility(exam, attempt, "own");
+    const visibility = resolveCandidateResultVisibility(exam, attempt, "own");
     if (!visibility.visible) continue;
     surviving.push({ candidateId: e.candidateId, attempt });
   }
