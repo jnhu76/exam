@@ -21,6 +21,8 @@
 #   archive-renames-retained     — (#330) retained DB renamed to *_prior
 #   archive-evicts-old-generation — (#330) old archive DROPped before RENAME
 #   archive-existence-error-loud — (#330) docker error → rc=1, never silent
+#   archive-rename-failure-loud — (#330) ALTER fails → rc=1 loud, active DB
+#                                  name never a DROP target (review P1-2)
 #   exit-matrix-pass-pass        — PW 0 + clean cleanup → exit 0
 #   exit-matrix-fail-pass        — PW 7 + clean cleanup → exit 7
 #   exit-matrix-pass-fail        — PW 0 + dirty cleanup → 70
@@ -248,6 +250,36 @@ case "$scenario" in
     fi
     if grep -q "ALTER DATABASE" "$FAKE_DOCKER_LOG"; then
       echo "FAIL: ALTER issued despite failed existence query" >&2
+      exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
+  # Fake docker on PATH: exam_e2e_w0 exists; the ALTER DATABASE rename itself
+  # fails (e.g. another session still holds the DB). Archive must fail loudly
+  # (rc=1, stderr names the db) and must never have made the ACTIVE retained
+  # name a DROP target — only a pre-existing *_prior slot may be evicted, and
+  # it does not exist here. This is the failure that triggers the #330 review
+  # P1-2 ownership contract: run-wsl.sh claims the worker-DB name only AFTER
+  # archive success (pinned structurally in run-wsl-lib.test.mjs), so the
+  # failure-path EXIT cleanup never drops the forensic DB.
+  archive-rename-failure-loud)
+    rc=0
+    err_captured="$(archive_retained_worker_db "fakecid" "exam_e2e_w0" 2>&1 1>/dev/null)" || rc=$?
+    if [[ "$rc" -ne 1 ]]; then
+      echo "FAIL: rename failure must return 1 (loud), got rc=$rc" >&2
+      exit 1
+    fi
+    if [[ "$err_captured" != *"exam_e2e_w0"* ]]; then
+      echo "FAIL: stderr did not name the db: $err_captured" >&2
+      exit 1
+    fi
+    if ! grep -q 'ALTER DATABASE "exam_e2e_w0" RENAME' "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: rename was never attempted (preconditions broken)" >&2
+      exit 1
+    fi
+    if grep -q 'DROP DATABASE IF EXISTS "exam_e2e_w0"' "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: DROP issued against the active retained DB name" >&2
       exit 1
     fi
     echo "PASS"; exit 0

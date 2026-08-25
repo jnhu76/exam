@@ -314,17 +314,22 @@ fi
 # 隔离（不同库）。汇总所有 shard 退出码：任一非零则整体失败。
 log "并行模式：E2E_WORKERS=${E2E_WORKERS}，每 shard 独立 DB + server。"
 
-# 1. 为每个 shard 建库（幂等）。先登记 DB identity（EXIT trap cleanup 在
-#    migrate/seed/health 失败时也要知道要清理哪些库，issue #256-A review
-#    P1-1），再创建。启动前若同名库已存在（失败保留/崩溃泄漏的取证现场），
-#    先归档为 *_prior 再建全新库 —— 保留取证 ≠ 复用执行状态（issue #330）。
+# 1. 为每个 shard 建库（幂等）。顺序固定为「先归档 → 后 claim → 再创建」：
+#    - 启动前若同名库已存在（失败保留/崩溃泄漏的取证现场），先归档为
+#      *_prior 再建全新库 —— 保留取证 ≠ 复用执行状态（issue #330）。
+#    - DB identity 只在归档成功之后登记（#330 review P1-2）：归档失败 →
+#      exit 1 时，同名库是上一轮遗留的取证现场、尚未被本轮 claim，EXIT
+#      cleanup 无权 DROP 它。若先登记再归档，归档失败的退出路径会把这个
+#      取证现场当作本轮 ephemeral 库清掉，毁灭取证证据。
+#    - 登记仍在 ensure/migrate/seed/health 等可能失败的操作之前（issue
+#      #256-A review P1-1），任何退出路径 cleanup 都知道要清理哪些库。
 ARCHIVE_CID="$(docker compose -f "$DEV_COMPOSE" ps -q db)"
 for (( i=0; i<E2E_WORKERS; i++ )); do
-  SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")
   if ! archive_retained_worker_db "$ARCHIVE_CID" "${WORKER_DB_PREFIX}${i}"; then
     err "归档遗留 worker 库 ${WORKER_DB_PREFIX}${i} 失败，拒绝在不干净的基线上继续"
     exit 1
   fi
+  SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")
   ensure_db_exists "${WORKER_DB_PREFIX}${i}"
 done
 
