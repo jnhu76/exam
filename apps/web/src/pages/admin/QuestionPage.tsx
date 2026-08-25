@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
@@ -109,6 +109,13 @@ export function QuestionPage() {
   const [committedSearch, setCommittedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  // Latest-request guard: multi-select tag changes fire rapid overlapping
+  // requests (select A, then A+B before A resolves). Without a guard, a slow
+  // stale response resolving last would overwrite the table with outdated
+  // results. Each loadQuestions call bumps the generation; a response whose
+  // generation is no longer current must not mutate questions, total, error,
+  // or loading state.
+  const requestGenerationRef = useRef(0);
 
   const loadCourses = useCallback(async () => {
     try {
@@ -129,6 +136,8 @@ export function QuestionPage() {
   }, []);
 
   const loadQuestions = useCallback(async () => {
+    const generation = ++requestGenerationRef.current;
+    const isStale = () => generation !== requestGenerationRef.current;
     setIsTableLoading(true);
     setError(null);
     try {
@@ -144,12 +153,14 @@ export function QuestionPage() {
       const qData = await api.get<PaginatedResponse<QuestionRow>>(
         `/api/questions?${params.toString()}`,
       );
+      if (isStale()) return;
       setQuestions(qData.items);
       setTotal(qData.total);
     } catch {
+      if (isStale()) return;
       setError(t("admin.common.loadFailed"));
     } finally {
-      setIsTableLoading(false);
+      if (!isStale()) setIsTableLoading(false);
     }
   }, [
     filterCourse,

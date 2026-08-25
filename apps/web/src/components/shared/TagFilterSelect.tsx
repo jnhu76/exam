@@ -32,8 +32,10 @@ type TagFilterSelectProps = {
  * paginated list rows. Multiple selected tags keep the server's AND
  * semantics; the panel footer states this so the behavior is not a guess.
  *
- * The trigger has a fixed max width and shows a "+N" overflow instead of
- * every selected tag, so changing the selection cannot shift toolbar layout.
+ * The trigger has a fixed width (it shrinks only when the container is
+ * narrower than the trigger, so narrow screens stay safe) and shows a "+N"
+ * overflow instead of every selected tag, so changing the selection cannot
+ * shift toolbar layout.
  */
 export function TagFilterSelect({
   tags,
@@ -71,7 +73,7 @@ export function TagFilterSelect({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="w-auto max-w-[180px] justify-between gap-1 font-normal lg:w-[180px]"
+          className="w-[180px] max-w-full justify-between gap-1 font-normal"
           data-slot="tag-filter-trigger"
           {...aria}
         >

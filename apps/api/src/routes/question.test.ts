@@ -1020,4 +1020,106 @@ describe("question routes", () => {
       expect(byId.statusCode).toBe(200);
     });
   });
+
+  // Canonical tag grammar (issue #182): every tag the write contract accepts
+  // must round-trip through the comma-separated GET /questions?tags= filter.
+  describe("tag grammar round-trip", () => {
+    const mkQuestion = async (content: string, tags: string[]) =>
+      ctx.app.inject({
+        method: "POST",
+        url: "/api/questions",
+        payload: {
+          courseId,
+          type: "true_false",
+          content,
+          standardAnswer: true,
+          score: 2,
+          difficulty: 1,
+          tags,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+    it("normalizes padded/duplicate/empty tags on create and stores them filterable", async () => {
+      const res = await mkQuestion("Round-trip normalized tags", [
+        " 代数 ",
+        "代数",
+        "",
+        "几何",
+      ]);
+      expect(res.statusCode).toBe(201);
+      expect(res.json().tags).toEqual(["代数", "几何"]);
+
+      const byTag = await ctx.app.inject({
+        method: "GET",
+        url: `/api/questions?page=1&pageSize=50&tags=${encodeURIComponent("代数")}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(byTag.statusCode).toBe(200);
+      const items = byTag.json().items as Array<{
+        content: string;
+        tags: string[];
+      }>;
+      expect(
+        items.some((q) => q.content === "Round-trip normalized tags"),
+      ).toBe(true);
+      expect(items.every((q) => q.tags.includes("代数"))).toBe(true);
+    });
+
+    it("rejects comma-containing tags on create (cannot round-trip)", async () => {
+      const res = await mkQuestion("Comma tag rejected", ["代数,几何"]);
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error?.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("rejects comma-containing tags on update", async () => {
+      const created = await mkQuestion("Update comma rejection", ["ok"]);
+      expect(created.statusCode).toBe(201);
+      const id = created.json().id as string;
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/questions/${id}`,
+        payload: { tags: ["bad,comma"] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error?.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("import splits comma-separated tags, drops empties, and stores them filterable", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/questions/import",
+        payload: {
+          courseId,
+          confirm: true,
+          rows: [
+            {
+              type: "true_false",
+              content: "Import tag round-trip",
+              standardAnswer: true,
+              score: 5,
+              tags: "导入, ,另一个",
+            },
+          ],
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().errors).toBe(0);
+      expect(res.json().valid).toBe(1);
+
+      const byTag = await ctx.app.inject({
+        method: "GET",
+        url: `/api/questions?page=1&pageSize=50&tags=${encodeURIComponent("导入")}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(byTag.statusCode).toBe(200);
+      const items = byTag.json().items as Array<{ content: string }>;
+      expect(items.some((q) => q.content === "Import tag round-trip")).toBe(
+        true,
+      );
+    });
+  });
 });

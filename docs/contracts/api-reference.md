@@ -577,6 +577,8 @@
 }
 ```
 
+**tags 规范**(create / update / import 三个写路径统一):标签是去空格、非空、不含逗号的字符串。写入口会 trim、丢弃空值、按首现顺序去重;含逗号的标签直接 400 拒绝(标签以逗号分隔的 wire format 传输,含逗号无法往返)。`GET /questions?tags=` 与 `GET /questions/tags` 词表均遵循同一语法,因此所有被接受的标签都可被结构化筛选命中。
+
 ---
 
 ### POST /questions/import

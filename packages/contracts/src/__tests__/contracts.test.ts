@@ -861,6 +861,64 @@ describe("question contracts", () => {
       expect(result.data.rubric).toBeNull();
     }
   });
+
+  // ── canonical tag grammar (issue #182): trim / drop-empty / dedupe /
+  //    forbid-comma, so every accepted stored tag round-trips through the
+  //    comma-separated GET /questions?tags= wire format ──────────────────
+
+  it("CreateQuestionRequestSchema normalizes tags: trims, drops empties, dedupes in order", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "true_false",
+      content: "Is 1+1=2?",
+      standardAnswer: true,
+      score: 10,
+      tags: [" 代数 ", "", "代数", "几何", "  "],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tags).toEqual(["代数", "几何"]);
+    }
+  });
+
+  it("CreateQuestionRequestSchema rejects comma-containing tags", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "true_false",
+      content: "Is 1+1=2?",
+      standardAnswer: true,
+      score: 10,
+      tags: ["代数,几何"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("UpdateQuestionRequestSchema normalizes and rejects tags like create", () => {
+    const normalized = UpdateQuestionRequestSchema.safeParse({
+      tags: [" 代数 ", "代数", ""],
+    });
+    expect(normalized.success).toBe(true);
+    if (normalized.success) {
+      expect(normalized.data.tags).toEqual(["代数"]);
+    }
+
+    const rejected = UpdateQuestionRequestSchema.safeParse({ tags: ["a,b"] });
+    expect(rejected.success).toBe(false);
+  });
+
+  it("QuestionImportRowSchema keeps raw comma-separated tags (split happens at the route)", () => {
+    const result = QuestionImportRowSchema.safeParse({
+      type: "true_false",
+      content: "Is true?",
+      standardAnswer: true,
+      score: 5,
+      tags: "代数, 几何",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tags).toBe("代数, 几何");
+    }
+  });
 });
 
 describe("score contracts", () => {

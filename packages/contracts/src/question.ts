@@ -180,6 +180,41 @@ export const QuestionSchema = z.object({
 export type QuestionDTO = z.infer<typeof QuestionSchema>;
 
 /**
+ * Canonical tag grammar (issue #182): a stored tag is a non-empty string,
+ * trimmed, and free of commas — because GET /questions?tags= round-trips tags
+ * through a comma-separated wire format (`a,b` split + trim), so a tag with a
+ * comma or padding could never round-trip back through the structured filter.
+ * This schema is the single authoritative write gate: it trims, drops empty
+ * values, dedupes (first occurrence wins), and REJECTS comma-containing tags
+ * rather than silently altering them.
+ */
+export const QuestionTagsSchema = z
+  .array(z.string())
+  .superRefine((tags, ctx) => {
+    for (const [index, tag] of tags.entries()) {
+      if (tag.includes(",")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index],
+          message:
+            "tag must not contain a comma (tags travel on a comma-separated wire format)",
+        });
+      }
+    }
+  })
+  .transform((tags) => {
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const tag of tags) {
+      const trimmed = tag.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      normalized.push(trimmed);
+    }
+    return normalized;
+  });
+
+/**
  * Request schema for creating a new question, with type-specific validation
  * enforced via superRefine (option counts, standardAnswer format, etc.).
  */
@@ -193,7 +228,7 @@ export const CreateQuestionRequestSchema = z
     attachments: z.array(AttachmentSchema).default([]),
     score: z.number().positive(),
     difficulty: z.number().int().min(1).max(5).default(3),
-    tags: z.array(z.string()).default([]),
+    tags: QuestionTagsSchema.default([]),
     gradingRule: GradingRuleSchema.default({
       multiSelectScoring: "all_correct_full",
       fillBlankMatchMode: "exact",
@@ -217,7 +252,7 @@ export const UpdateQuestionRequestSchema = z.object({
   attachments: z.array(AttachmentSchema).optional(),
   score: z.number().positive().optional(),
   difficulty: z.number().int().min(1).max(5).optional(),
-  tags: z.array(z.string()).optional(),
+  tags: QuestionTagsSchema.optional(),
   gradingRule: GradingRuleSchema.optional(),
   rubric: z.string().nullable().optional(),
 });
