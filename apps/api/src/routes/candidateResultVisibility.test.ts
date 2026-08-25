@@ -20,6 +20,11 @@ import scoreRoutes from "./scores.js";
  * Leak repros (manual mode + fully graded + resultsPublishedAt = null):
  *   L1 submit response, L2 GET /attempts/:id, L3 candidate exam list,
  *   L4 candidate exam detail, L5 pass_then_stop blockingReason.
+ *
+ * #324 review P1-2 regressions: the pass_then_stop start oracle — while the
+ * result is hidden, passed and failed candidates must get the IDENTICAL
+ * opaque start rejection (no 409-vs-201 differential); after publish-results
+ * the durable pass_then_stop policy resumes (passed blocked, failed retakes).
  */
 describe("P1 #324: candidate result visibility projection", () => {
   let ctx: TestContext;
@@ -110,12 +115,14 @@ describe("P1 #324: candidate result visibility projection", () => {
 
   /**
    * Creates + publishes an exam with the given publication mode, enrolls the
-   * candidate, starts an attempt, answers correctly (full score → passed),
-   * and submits. Returns the graded attemptId and examId.
+   * candidate, starts an attempt, answers (correctly → full score → passed,
+   * or incorrectly → zero → failed), and submits. Returns the graded
+   * attemptId and examId.
    */
   async function createGradedAttemptForMode(
     resultPublicationMode: "immediate" | "after_grading" | "manual",
     retakePolicy: "unlimited" | "pass_then_stop" = "unlimited",
+    outcome: "pass" | "fail" = "pass",
   ): Promise<{ attemptId: string; examId: string }> {
     const createResponse = await ctx.app.inject({
       method: "POST",
@@ -176,7 +183,7 @@ describe("P1 #324: candidate result visibility projection", () => {
       payload: {
         attemptId,
         questionId,
-        answer: "a",
+        answer: outcome === "pass" ? "a" : "b",
         clientSeq: 1,
         clientSavedAt: new Date().toISOString(),
         baseVersion: 0,
@@ -278,10 +285,107 @@ describe("P1 #324: candidate result visibility projection", () => {
     const detail = await getCandidateExamDetail(examId);
     expect(detail.bestScore).toBeUndefined();
     expect(detail.blockingReason).not.toBe("already_passed");
+    expect(detail.canStartNewAttempt).toBe(false);
     const list = await getCandidateExamList();
     const entry = list.find((item) => item.examId === examId);
     expect(entry).toBeDefined();
     expect(entry!.bestScore).toBeUndefined();
+  });
+
+  // ── pass_then_stop start oracle closure (#324 review P1-2) ────────
+  //
+  // The engine's durable pass_then_stop block distinguishes passed (409)
+  // from failed (201) candidates on POST /attempts/:examId/start. While the
+  // result is hidden that difference IS the pass/fail fact. Retake
+  // eligibility is deferred until publication: both outcomes must behave
+  // identically pre-publish, then diverge exactly as the durable policy says.
+
+  it("start oracle: manual + unpublished — passed and failed candidates get the IDENTICAL opaque start rejection", async () => {
+    const { examId: passedExamId } = await createGradedAttemptForMode(
+      "manual",
+      "pass_then_stop",
+      "pass",
+    );
+    const { examId: failedExamId } = await createGradedAttemptForMode(
+      "manual",
+      "pass_then_stop",
+      "fail",
+    );
+
+    const passedStart = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${passedExamId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    const failedStart = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${failedExamId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    expect(passedStart.statusCode).toBe(409);
+    expect(failedStart.statusCode).toBe(409);
+    const stripRequestId = (body: unknown) => {
+      const parsed = body as { error: Record<string, unknown> };
+      const { requestId: _req, ...error } = parsed.error;
+      return error;
+    };
+    expect(stripRequestId(passedStart.json())).toEqual(
+      stripRequestId(failedStart.json()),
+    );
+    expect(JSON.stringify(stripRequestId(passedStart.json()))).not.toContain(
+      "已通过",
+    );
+
+    const passedDetail = await getCandidateExamDetail(passedExamId);
+    const failedDetail = await getCandidateExamDetail(failedExamId);
+    expect(passedDetail.canStartNewAttempt).toBe(false);
+    expect(failedDetail.canStartNewAttempt).toBe(false);
+    expect(passedDetail.blockingReason).toBeUndefined();
+    expect(failedDetail.blockingReason).toBeUndefined();
+  });
+
+  it("start oracle: manual + published — durable pass_then_stop policy resumes (passed blocked, failed may retake)", async () => {
+    const { examId: passedExamId } = await createGradedAttemptForMode(
+      "manual",
+      "pass_then_stop",
+      "pass",
+    );
+    const { examId: failedExamId } = await createGradedAttemptForMode(
+      "manual",
+      "pass_then_stop",
+      "fail",
+    );
+    for (const examId of [passedExamId, failedExamId]) {
+      const publishResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish-results`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(publishResponse.statusCode).toBe(200);
+    }
+
+    // Read the projection BEFORE starting anything — a successful failed-side
+    // start would create an in_progress attempt and change the detail.
+    const passedDetail = await getCandidateExamDetail(passedExamId);
+    const failedDetail = await getCandidateExamDetail(failedExamId);
+    expect(passedDetail.canStartNewAttempt).toBe(false);
+    expect(passedDetail.blockingReason).toBe("already_passed");
+    expect(failedDetail.canStartNewAttempt).toBe(true);
+
+    const passedStart = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${passedExamId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    const failedStart = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${failedExamId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    expect(passedStart.statusCode).toBe(409);
+    expect(failedStart.statusCode).toBe(201);
   });
 
   it("take-snapshot: manual + graded + unpublished — resultVisibility stays hidden", async () => {

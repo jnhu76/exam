@@ -319,8 +319,9 @@ test.describe("result publishing policy (P2D-J5)", () => {
     expect(beforeGrade.showResultImmediately).toBe(false);
     // The attempt is still 'submitted' (not yet 'graded'), so the result is not
     // yet computable and the contract labels it 'not_started' (the historical
-    // label covering any pre-graded lifecycle state — see scores.ts
-    // computeResultVisibility). The invariant that matters: result HIDDEN, no
+    // label covering any pre-graded lifecycle state — see the visibility
+    // authority resolveCandidateResultVisibility). The invariant that
+    // matters: result HIDDEN, no
     // partial score leaked while manual grading is pending.
     expect(beforeGrade.hiddenReason).toBe("not_started");
     // No score/pass leaked while manual grading is pending.

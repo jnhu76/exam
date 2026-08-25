@@ -40,7 +40,8 @@ import {
   deriveCandidateExamState,
   pickDisplayAttempt,
   resolveCandidateEnrollmentResultVisibility,
-  projectCandidateVisibleEnrollment,
+  isCandidateRetakeDeferred,
+  projectEnrollmentForLifecycleState,
 } from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -237,7 +238,7 @@ function buildCandidateExamDetail(
   ).visible;
   const { availabilityStatus, primaryAction } = deriveCandidateExamState({
     exam,
-    enrollment: projectCandidateVisibleEnrollment(enrollment, resultVisible),
+    enrollment: projectEnrollmentForLifecycleState(enrollment, resultVisible),
     activeAttempt,
     resumableAttempt,
     latestAttempt,
@@ -261,9 +262,18 @@ function buildCandidateExamDetail(
     resultVisible &&
     exam.retakePolicy === "pass_then_stop" &&
     enrollment?.finalPassed === true;
+  // #324 review P1-2: while the final result exists but is hidden, retake
+  // eligibility is DEFERRED — passed and failed candidates must see the same
+  // canStartNewAttempt=false here, matching the identical opaque rejection
+  // the start route gives both until publication.
+  const retakeDeferred = isCandidateRetakeDeferred(
+    exam,
+    enrollment,
+    finalAttempt,
+  );
 
   const canStartNewAttempt =
-    !hasActive && !maxAttemptsExhausted && !alreadyPassed;
+    !hasActive && !maxAttemptsExhausted && !alreadyPassed && !retakeDeferred;
 
   const blockingReason = hasActive
     ? undefined
@@ -376,7 +386,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           const { availabilityStatus, primaryAction } =
             deriveCandidateExamState({
               exam,
-              enrollment: projectCandidateVisibleEnrollment(
+              enrollment: projectEnrollmentForLifecycleState(
                 normalizedEnrollment,
                 resultVisible,
               ),
@@ -639,6 +649,34 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
 
       let attempt: ExamAttempt;
       let isNew: boolean;
+      // #324 review P1-2: the engine enforces pass_then_stop on durable
+      // grading truth, which distinguishes passed (409) from failed (201)
+      // candidates — a one-bit pass/fail oracle while the result is hidden.
+      // Defer retake eligibility instead: both outcomes get the SAME opaque
+      // rejection until the publication policy makes the result visible.
+      // Non-pass_then_stop exams never defer; skip the reads entirely.
+      let retakeDeferred = false;
+      if (exam.retakePolicy === "pass_then_stop") {
+        const enrollmentRow = await createEnrollmentRepo(
+          fastify.db,
+        ).findByExamAndCandidate(ctx, examId, candidateId);
+        const deferredFinalAttempt = enrollmentRow?.finalAttemptId
+          ? ((await createAttemptRepo(fastify.db).findById(
+              ctx,
+              enrollmentRow.finalAttemptId,
+            )) as ExamAttempt | null)
+          : null;
+        retakeDeferred = isCandidateRetakeDeferred(
+          exam,
+          normalizeEnrollment(enrollmentRow),
+          deferredFinalAttempt,
+        );
+      }
+      if (retakeDeferred) {
+        throw new ConflictError(
+          "Cannot start a new attempt for this exam at this time",
+        );
+      }
       try {
         const started = await executeInTransaction(
           fastify.db,
@@ -693,11 +731,11 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         attempt = started.attempt;
         isNew = started.isNew;
       } catch (error) {
-        // #324: the pass_then_stop start block is enforced by the engine on
-        // durable grading truth (finalPassed). While the result is not yet
-        // visible per the publication policy, the rejection must not disclose
-        // the pass fact — rethrow an opaque conflict instead. The block itself
-        // stays effective; only the reason copy is hidden.
+        // Defense in depth: the pre-check above normally rejects hidden-result
+        // pass_then_stop starts first. If the engine's durable block still
+        // fires while the result is not visible per the publication policy,
+        // rethrow an opaque conflict so the pass fact stays hidden. The block
+        // itself stays effective; only the reason copy is hidden.
         if (error instanceof ExamAlreadyPassedError) {
           const enrollment = await createEnrollmentRepo(
             fastify.db,

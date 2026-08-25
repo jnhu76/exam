@@ -978,7 +978,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
     // Mark the attempt fully_graded directly (visibility LOGIC is under test,
     // not the grading command which P1 already proves): set gradingStatus,
     // score, passed, gradedAt, and a terminal gradingResult for the
-    // text_response entry so computeResultVisibility sees a ready result.
+    // text_response entry so resolveCandidateResultVisibility sees a ready result.
     if (opts.includeTextResponse) {
       const requestContext = {
         actorId: ctx.admin.id,
@@ -998,8 +998,9 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
           : r,
       );
       await createAttemptRepo(ctx.db).update(requestContext, attemptId, {
-        // Terminal state: status=graded + fully_graded so computeResultVisibility
-        // treats the result as computable (it requires status==="graded").
+        // Terminal state: status=graded + fully_graded so
+        // resolveCandidateResultVisibility treats the result as computable
+        // (it requires status==="graded").
         status: "graded",
         gradingStatus: "fully_graded",
         score: 30,

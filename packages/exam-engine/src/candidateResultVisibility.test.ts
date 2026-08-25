@@ -3,7 +3,8 @@ import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
 import {
   resolveCandidateResultVisibility,
   resolveCandidateEnrollmentResultVisibility,
-  projectCandidateVisibleEnrollment,
+  isCandidateRetakeDeferred,
+  projectEnrollmentForLifecycleState,
 } from "./candidateResultVisibility.js";
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
@@ -162,11 +163,27 @@ describe("resolveCandidateResultVisibility", () => {
     });
   });
 
-  it("after_grading + legacy null gradingStatus on graded attempt → visible", () => {
+  it("after_grading + null gradingStatus → hidden (preserves authoritative /scores default)", () => {
+    // Migration 0004 backfilled every pre-column row to 'auto_graded' and the
+    // pre-#324 /scores gate defaulted null the same way — after_grading still
+    // demands exactly 'fully_graded', so such a row stays hidden.
     const exam = makeExam({ resultPublicationMode: "after_grading" });
     const { gradingStatus: _legacy, ...attempt } = makeGradedAttempt();
     expect(resolveCandidateResultVisibility(exam, attempt)).toEqual({
-      visible: true,
+      visible: false,
+      hiddenReason: "not_graded",
+    });
+  });
+
+  it("manual + null gradingStatus → still gated by publication, not grading", () => {
+    const exam = makeExam({
+      resultPublicationMode: "manual",
+      resultsPublishedAt: null,
+    });
+    const { gradingStatus: _legacy, ...attempt } = makeGradedAttempt();
+    expect(resolveCandidateResultVisibility(exam, attempt)).toEqual({
+      visible: false,
+      hiddenReason: "pending_publish",
     });
   });
 
@@ -248,16 +265,105 @@ describe("resolveCandidateEnrollmentResultVisibility", () => {
   });
 });
 
-describe("projectCandidateVisibleEnrollment", () => {
+describe("isCandidateRetakeDeferred", () => {
+  it("manual + unpublished + final result exists → deferred for a PASSED candidate", () => {
+    const exam = makeExam({
+      retakePolicy: "pass_then_stop",
+      resultPublicationMode: "manual",
+      resultsPublishedAt: null,
+    });
+    expect(
+      isCandidateRetakeDeferred(exam, makeEnrollment(), makeGradedAttempt()),
+    ).toBe(true);
+  });
+
+  it("manual + unpublished + final result exists → deferred for a FAILED candidate too (no 409-vs-201 oracle)", () => {
+    const exam = makeExam({
+      retakePolicy: "pass_then_stop",
+      resultPublicationMode: "manual",
+      resultsPublishedAt: null,
+    });
+    const failedEnrollment = makeEnrollment({
+      finalPassed: false,
+      finalScore: 20,
+    });
+    const failedAttempt = makeGradedAttempt({
+      passed: false,
+      score: 20,
+    });
+    expect(
+      isCandidateRetakeDeferred(exam, failedEnrollment, failedAttempt),
+    ).toBe(true);
+  });
+
+  it("manual + published → not deferred (durable pass_then_stop resumes)", () => {
+    const exam = makeExam({
+      retakePolicy: "pass_then_stop",
+      resultPublicationMode: "manual",
+      resultsPublishedAt: new Date(),
+    });
+    expect(
+      isCandidateRetakeDeferred(exam, makeEnrollment(), makeGradedAttempt()),
+    ).toBe(false);
+  });
+
+  it("after_grading + auto_graded (result hidden) → deferred", () => {
+    const exam = makeExam({
+      retakePolicy: "pass_then_stop",
+      resultPublicationMode: "after_grading",
+    });
+    expect(
+      isCandidateRetakeDeferred(exam, makeEnrollment(), makeGradedAttempt()),
+    ).toBe(true);
+  });
+
+  it("immediate (result visible) → not deferred", () => {
+    const exam = makeExam({
+      retakePolicy: "pass_then_stop",
+      resultPublicationMode: "immediate",
+    });
+    expect(
+      isCandidateRetakeDeferred(exam, makeEnrollment(), makeGradedAttempt()),
+    ).toBe(false);
+  });
+
+  it("non-pass_then_stop policy → never deferred", () => {
+    const exam = makeExam({
+      retakePolicy: "unlimited",
+      resultPublicationMode: "manual",
+      resultsPublishedAt: null,
+    });
+    expect(
+      isCandidateRetakeDeferred(exam, makeEnrollment(), makeGradedAttempt()),
+    ).toBe(false);
+  });
+
+  it("no final result selected yet → not deferred", () => {
+    const exam = makeExam({
+      retakePolicy: "pass_then_stop",
+      resultPublicationMode: "manual",
+      resultsPublishedAt: null,
+    });
+    const {
+      finalAttemptId: _noAttempt,
+      finalScore: _noScore,
+      ...pending
+    } = makeEnrollment();
+    expect(isCandidateRetakeDeferred(exam, pending, null)).toBe(false);
+    expect(isCandidateRetakeDeferred(exam, null, null)).toBe(false);
+  });
+});
+
+describe("projectEnrollmentForLifecycleState", () => {
   it("keeps the enrollment untouched when the result is visible", () => {
     const enrollment = makeEnrollment();
-    expect(projectCandidateVisibleEnrollment(enrollment, true)).toBe(
+    expect(projectEnrollmentForLifecycleState(enrollment, true)).toBe(
       enrollment,
     );
   });
 
   it("strips finalPassed while keeping finalScore/finalAttemptId when hidden", () => {
-    const projected = projectCandidateVisibleEnrollment(
+    const projected = projectEnrollmentForLifecycleState(
       makeEnrollment(),
       false,
     );
@@ -267,6 +373,6 @@ describe("projectCandidateVisibleEnrollment", () => {
   });
 
   it("passes null through", () => {
-    expect(projectCandidateVisibleEnrollment(null, false)).toBeNull();
+    expect(projectEnrollmentForLifecycleState(null, false)).toBeNull();
   });
 });

@@ -47,9 +47,10 @@ export type CandidateResultVisibility =
  *        manual        → visible only after admin publish-results
  *                        (exam.resultsPublishedAt != null)
  *
- * A graded attempt with a null gradingStatus is a legacy terminal row
- * predating the gradingStatus column; it is treated as fully_graded so
- * legacy results are not hidden in after_grading mode.
+ * A graded attempt with a null gradingStatus defaults to 'auto_graded',
+ * matching the DB column default + migration 0004 backfill and the
+ * pre-#324 authoritative /scores gate — in after_grading mode such a row
+ * stays HIDDEN (that mode demands exactly 'fully_graded').
  */
 export function resolveCandidateResultVisibility(
   exam: Exam,
@@ -71,9 +72,10 @@ export function resolveCandidateResultVisibility(
 
   // gradingStatus semantics: 'pending_manual' always means not-ready.
   // 'auto_graded' counts as ready UNLESS the exam mode is after_grading
-  // (which demands 'fully_graded'). A null gradingStatus on a graded attempt
-  // is a legacy terminal row — see the function doc.
-  const gradingStatus = attempt.gradingStatus ?? "fully_graded";
+  // (which demands 'fully_graded'). A null gradingStatus defaults to
+  // 'auto_graded' — the DB column default and the migration 0004 backfill
+  // both say legacy terminal rows were auto-graded. See the function doc.
+  const gradingStatus = attempt.gradingStatus ?? "auto_graded";
   if (gradingStatus === "pending_manual") {
     return { visible: false, hiddenReason: "not_graded" };
   }
@@ -125,20 +127,55 @@ export function resolveCandidateEnrollmentResultVisibility(
 }
 
 /**
- * Projects an enrollment down to the facts a candidate may derive from while
- * the result is not visible. finalPassed is a direct pass/fail fact and is
- * stripped; finalScore and finalAttemptId are kept because their PRESENCE
- * (not their value) drives the non-result lifecycle states ("graded",
- * view-result navigation) that stay visible by design — the numeric
- * bestScore projection is gated separately by the caller.
+ * Whether the candidate's retake eligibility is DEFERRED because a final
+ * result exists but is not yet visible (#324 review P1-2).
+ *
+ * The engine enforces pass_then_stop on durable grading truth: a candidate
+ * with finalPassed=true is rejected on start while a failed candidate gets a
+ * new attempt. While the result is hidden that difference is a one-bit
+ * pass/fail oracle (409 vs 201). When this returns true, callers must give
+ * passed and failed candidates IDENTICAL behavior — the candidate start route
+ * rejects both with the same opaque conflict, and the detail projection
+ * reports canStartNewAttempt=false — until publication makes the result
+ * visible and the durable policy resumes.
  */
-export function projectCandidateVisibleEnrollment(
+export function isCandidateRetakeDeferred(
+  exam: Exam,
+  enrollment: Pick<
+    ExamEnrollment,
+    "finalScore" | "finalPassed" | "finalAttemptId"
+  > | null,
+  finalAttempt: ExamAttempt | null,
+): boolean {
+  if (exam.retakePolicy !== "pass_then_stop") {
+    return false;
+  }
+  if (enrollment === null || enrollment.finalAttemptId == null) {
+    return false;
+  }
+  return !resolveCandidateEnrollmentResultVisibility(
+    exam,
+    enrollment,
+    finalAttempt,
+  ).visible;
+}
+
+/**
+ * Derivation input for deriveCandidateExamState — NOT a serialization-safe
+ * projection: while the result is hidden, only the direct pass/fail fact
+ * (finalPassed) is stripped; finalScore and finalAttemptId REMAIN because
+ * their PRESENCE (not their value) drives the non-result lifecycle states
+ * ("graded", view-result navigation) that stay visible by design. Never
+ * serialize this object to a candidate — the numeric bestScore projection is
+ * gated separately by the caller.
+ */
+export function projectEnrollmentForLifecycleState(
   enrollment: ExamEnrollment | null,
   resultVisible: boolean,
 ): ExamEnrollment | null {
   if (enrollment === null || resultVisible) {
     return enrollment;
   }
-  const { finalPassed: _hidden, ...visibleFacts } = enrollment;
-  return visibleFacts;
+  const { finalPassed: _hidden, ...lifecycleFacts } = enrollment;
+  return lifecycleFacts;
 }
