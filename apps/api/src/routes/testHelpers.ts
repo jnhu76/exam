@@ -131,6 +131,7 @@ type TestOrganization = typeof schema.organizations.$inferSelect;
 export interface TestContext {
   app: ReturnType<typeof Fastify>;
   db: Database;
+  conn: Awaited<ReturnType<typeof createDatabase>>;
   cleanup: () => Promise<void>;
   org: TestOrganization;
   admin: TestUser;
@@ -328,6 +329,7 @@ async function finishBuildTestApp(args: {
   return {
     app,
     db,
+    conn,
     cleanup: async () => {
       await app.close();
       await conn.sql.end();

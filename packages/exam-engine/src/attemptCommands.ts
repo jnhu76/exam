@@ -17,10 +17,12 @@ import {
   ValidationError,
   MaxAttemptsReachedError,
   ExamAlreadyPassedError,
+  RetakeDeferredError,
   GradingStatus,
   requiresManualGrading,
 } from "@exam/domain";
 import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
+import { isCandidateRetakeDeferred } from "./candidateResultVisibility.js";
 import { calculateDeadlineAt } from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
@@ -222,11 +224,27 @@ export async function startOrRestoreAttempt(
     throw new MaxAttemptsReachedError("Maximum attempt count reached");
   }
 
-  if (
-    exam.retakePolicy === "pass_then_stop" &&
-    enrollment.finalPassed === true
-  ) {
-    throw new ExamAlreadyPassedError("Already passed this exam");
+  if (exam.retakePolicy === "pass_then_stop") {
+    // #324 review P1-3: the retake-defer decision is made UNDER the enrollment
+    // lock — the SAME serialization boundary the grading finalizer uses when it
+    // commits finalScore/finalPassed/finalAttemptId. A decision made from a
+    // pre-transaction read (the round-1 route pre-check) could observe
+    // pre-terminalization state and, once grading commits, leak a pass/fail
+    // oracle (passed 409 vs failed 201) while the result is hidden. Under the
+    // lock, terminalization either already committed — in which case we defer
+    // BOTH outcomes until the result is visible — or it is still blocked behind
+    // us. The final attempt row is read non-locking; because the finalizer
+    // writes attempt-terminal and enrollment-final in one transaction, a
+    // committed finalAttemptId always resolves to committed attempt state.
+    const finalAttempt = enrollment.finalAttemptId
+      ? await attemptRepo.findById(enrollment.finalAttemptId)
+      : null;
+    if (isCandidateRetakeDeferred(exam, enrollment, finalAttempt)) {
+      throw new RetakeDeferredError();
+    }
+    if (enrollment.finalPassed === true) {
+      throw new ExamAlreadyPassedError("Already passed this exam");
+    }
   }
 
   // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only.

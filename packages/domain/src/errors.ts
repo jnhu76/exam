@@ -318,6 +318,23 @@ export class ExamAlreadyPassedError extends AppError {
   }
 }
 
+/**
+ * Retake eligibility is deferred because a final result exists but is not yet
+ * visible to the candidate (HTTP 409). Issue #324: while the result is hidden,
+ * pass_then_stop must reject passed AND failed candidates identically — the
+ * durable ExamAlreadyPassedError would otherwise be a one-bit pass/fail oracle.
+ * The engine throws this under the enrollment lock (shared with the grading
+ * finalizer); the API surfaces it as an opaque conflict so no pass/fail fact
+ * leaks.
+ */
+export class RetakeDeferredError extends AppError {
+  constructor(
+    message = "Cannot start a new attempt for this exam at this time",
+  ) {
+    super(message, "RETAKE_DEFERRED", 409);
+  }
+}
+
 /** Startup / runtime configuration error (HTTP 500). */
 export class RuntimeConfigError extends AppError {
   constructor(message: string, details?: unknown) {

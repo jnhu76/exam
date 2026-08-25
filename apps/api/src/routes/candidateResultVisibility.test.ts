@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import examRoutes from "./exam.js";
@@ -386,6 +387,160 @@ describe("P1 #324: candidate result visibility projection", () => {
 
     expect(passedStart.statusCode).toBe(409);
     expect(failedStart.statusCode).toBe(201);
+  });
+
+  it("start oracle P1-3: terminal grading commits while start waits on the enrollment lock — passed and failed candidates get the IDENTICAL opaque 409, no attempt created", async () => {
+    // Deterministic interleaving at the wire (issue #324 review P1-3). The
+    // round-1 pre-check read enrollment OUTSIDE the transaction, so a start
+    // that arrived while attempt #1 was still grading could observe
+    // finalAttemptId=null and — once grading committed — leak a pass/fail
+    // oracle (passed 409, failed 201). The decision now lives inside the
+    // engine, under the enrollment lock shared with the grading finalizer.
+    // Here we HOLD that lock in a test transaction, fire the start (it blocks
+    // on the engine's FOR UPDATE), wait until it is verifiably blocked, commit
+    // the terminalization, and assert both outcomes land on the same opaque
+    // 409 with no attempt #2 created.
+    async function createInFlightAttempt(outcome: "pass" | "fail") {
+      const createResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: `324-race-${uniquePrefix()}-${outcome}`,
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3_600_000).toISOString(),
+          closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+          passingScore: 6,
+          totalScore: 10,
+          questionSelectionMode: "manual",
+          questionIds: [questionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "pass_then_stop",
+          scoreStrategy: "highest",
+          maxAttempts: 3,
+          resultPublicationMode: "manual",
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const examId = createResponse.json().id as string;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/enrollments`,
+        payload: { candidateIds: [candidateProfileId] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const startResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(startResponse.statusCode).toBe(201);
+      const attemptId = startResponse.json().id as string;
+      // Hold attempt #1 at the grading boundary: not active, no terminal
+      // projection, enrollment.finalAttemptId still null.
+      await createAttemptRepo(ctx.db).update(candidateCtx(), attemptId, {
+        status: "grading",
+        gradingStatus: "auto_graded",
+      });
+      const enrollment = await createEnrollmentRepo(
+        ctx.db,
+      ).findByExamAndCandidate(candidateCtx(), examId, candidateProfileId);
+      expect(enrollment).not.toBeNull();
+      return { examId, attemptId, enrollmentId: enrollment!.id };
+    }
+
+    for (const outcome of ["pass", "fail"] as const) {
+      const { examId, attemptId, enrollmentId } =
+        await createInFlightAttempt(outcome);
+
+      // Hold the enrollment FOR UPDATE lock, fire the start, and wait until it
+      // is verifiably blocked on the engine's lock acquisition before writing
+      // the terminal grading facts (mirroring finalizeTerminalGrading).
+      let startRes: Awaited<ReturnType<typeof ctx.app.inject>> | undefined;
+      await ctx.conn.sql.begin(async (sql) => {
+        await sql`SELECT id FROM exam_enrollments WHERE id = ${enrollmentId} FOR UPDATE`;
+        startRes = ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${examId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        });
+        let blocked = false;
+        for (let i = 0; i < 200; i++) {
+          const rows = (await sql`
+            SELECT count(*)::int AS waiting
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND datname = current_database()
+              AND wait_event_type = 'Lock'
+          `) as unknown as Array<{ waiting: number }>;
+          if (rows[0]?.waiting && rows[0].waiting > 0) {
+            blocked = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        expect(blocked).toBe(true);
+        const passed = outcome === "pass";
+        const score = passed ? 10 : 0;
+        await sql`UPDATE exam_attempts SET status = 'graded', total_score = ${score}, passed = ${passed}, graded_at = now(), grading_status = 'auto_graded', grading_result = ${JSON.stringify(
+          [
+            {
+              questionId,
+              score,
+              maxScore: 10,
+              correct: passed,
+              candidateAnswer: passed ? "a" : "b",
+              standardAnswer: "a",
+            },
+          ],
+        )}::jsonb WHERE id = ${attemptId}`;
+        await sql`UPDATE exam_enrollments SET final_score = ${score}, final_passed = ${passed}, final_attempt_id = ${attemptId}, status = ${passed ? "completed" : "started"} WHERE id = ${enrollmentId}`;
+      });
+      const response = await startRes!;
+
+      // The start was in-flight before the terminalization committed and is
+      // decided on the committed state: identical opaque 409 for both outcomes.
+      // ConflictError's wire code normalizes to RESOURCE_CONFLICT (legacy map).
+      expect(response.statusCode).toBe(409);
+      const stripRequestId = (body: unknown) => {
+        const parsed = body as { error: Record<string, unknown> };
+        const { requestId: _req, ...error } = parsed.error;
+        return error;
+      };
+      expect(stripRequestId(response.json()).code).toBe("RESOURCE_CONFLICT");
+      expect(JSON.stringify(stripRequestId(response.json()))).not.toContain(
+        "已通过",
+      );
+
+      const attempts = await createAttemptRepo(ctx.db).findByExamAndCandidate(
+        candidateCtx(),
+        examId,
+        candidateProfileId,
+      );
+      // No attempt #2 was created for either outcome.
+      expect(attempts.filter((a) => a.status === "in_progress")).toHaveLength(
+        0,
+      );
+    }
   });
 
   it("take-snapshot: manual + graded + unpublished — resultVisibility stays hidden", async () => {
