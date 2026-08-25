@@ -23,8 +23,8 @@ import {
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { MobileRecordCard } from "@/components/shared/MobileRecordCard";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { TagFilterSelect } from "@/components/shared/TagFilterSelect";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -97,7 +97,8 @@ export function QuestionPage() {
   const [filterCourse, setFilterCourse] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
-  const [filterTags, setFilterTags] = useState("");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [tagVocabulary, setTagVocabulary] = useState<string[]>([]);
   // Search is split into two states to prevent stale/overlapping responses:
   //   - searchInput: the live text in the field (updated every keystroke)
   //   - committedSearch: the term actually sent to the server (updated only by
@@ -118,6 +119,15 @@ export function QuestionPage() {
     }
   }, []);
 
+  const loadTagVocabulary = useCallback(async () => {
+    try {
+      const data = await api.get<{ tags: string[] }>("/api/questions/tags");
+      setTagVocabulary(data.tags);
+    } catch {
+      // vocabulary is optional context — the filter still renders (empty)
+    }
+  }, []);
+
   const loadQuestions = useCallback(async () => {
     setIsTableLoading(true);
     setError(null);
@@ -129,7 +139,7 @@ export function QuestionPage() {
       if (filterType !== "all") params.set("type", filterType);
       if (filterDifficulty !== "all")
         params.set("difficulty", filterDifficulty);
-      if (filterTags.trim()) params.set("tags", filterTags.trim());
+      if (filterTags.length > 0) params.set("tags", filterTags.join(","));
       if (committedSearch.trim()) params.set("search", committedSearch.trim());
       const qData = await api.get<PaginatedResponse<QuestionRow>>(
         `/api/questions?${params.toString()}`,
@@ -154,7 +164,7 @@ export function QuestionPage() {
   useEffect(() => {
     let canceledFlag = false;
     async function init() {
-      await loadCourses();
+      await Promise.all([loadCourses(), loadTagVocabulary()]);
       if (!canceledFlag) setIsInitialLoading(false);
     }
     void init();
@@ -173,7 +183,9 @@ export function QuestionPage() {
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/questions/${id}`);
-      await loadQuestions();
+      // A deleted question may have been the last user of a tag — refresh
+      // the vocabulary so the filter never offers stale options.
+      await Promise.all([loadQuestions(), loadTagVocabulary()]);
     } catch {
       toast.error(t("admin.questions.toast.deleteFailed"));
     }
@@ -188,7 +200,7 @@ export function QuestionPage() {
     setFilterCourse("all");
     setFilterType("all");
     setFilterDifficulty("all");
-    setFilterTags("");
+    setFilterTags([]);
     setSearchInput("");
     setCommittedSearch("");
     setPage(1);
@@ -198,7 +210,7 @@ export function QuestionPage() {
     filterCourse !== "all" ||
     filterType !== "all" ||
     filterDifficulty !== "all" ||
-    filterTags.trim() !== "" ||
+    filterTags.length > 0 ||
     committedSearch.trim() !== "";
 
   // Immediate input change: update ONLY the displayed value. No server query —
@@ -455,14 +467,14 @@ export function QuestionPage() {
                     </SelectContent>
                   </Select>
 
-                  <Input
-                    className="w-auto lg:w-[180px]"
-                    placeholder={t("admin.questions.tagPlaceholder" as never)}
-                    value={filterTags}
-                    onChange={(e) => {
-                      setFilterTags(e.target.value);
+                  <TagFilterSelect
+                    tags={tagVocabulary}
+                    selected={filterTags}
+                    onChange={(next) => {
+                      setFilterTags(next);
                       setPage(1);
                     }}
+                    aria-label={t("admin.questions.tagFilterLabel" as never)}
                   />
                 </>
               }

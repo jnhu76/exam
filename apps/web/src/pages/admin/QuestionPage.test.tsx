@@ -27,6 +27,9 @@ const { apiGet } = vi.hoisted(() => ({
         totalPages: 1,
       });
     }
+    if (path === "/api/questions/tags") {
+      return Promise.resolve({ tags: ["代数", "几何", "概率"] });
+    }
 
     return Promise.resolve({
       items: [
@@ -47,6 +50,15 @@ const { apiGet } = vi.hoisted(() => ({
     });
   }),
 }));
+
+const questionsCalls = () =>
+  apiGet.mock.calls
+    .filter(
+      (call) =>
+        typeof call[0] === "string" &&
+        (call[0] as string).startsWith("/api/questions?"),
+    )
+    .map((call) => call[0] as string);
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -137,6 +149,11 @@ describe("QuestionPage", () => {
           totalPages: 1,
         });
       }
+      // Keep the tag-vocabulary branch: mockImplementation persists across
+      // tests, and later tests rely on the vocabulary fixture.
+      if (path === "/api/questions/tags") {
+        return Promise.resolve({ tags: ["代数", "几何", "概率"] });
+      }
 
       return Promise.resolve({
         items: [
@@ -157,20 +174,104 @@ describe("QuestionPage", () => {
       });
     });
 
-    fireEvent.change(screen.getByPlaceholderText("标签，逗号分隔"), {
-      target: { value: "abc" },
-    });
-    // Server-side search is now debounced via DataViewSearch; the field's
-    // accessible name updated to reflect full-dataset search (not current page).
     fireEvent.change(screen.getByLabelText("搜索题目"), {
       target: { value: "题目" },
     });
+    // Select one tag through the structured filter, then clear all filters.
+    await user.click(screen.getByRole("button", { name: "标签筛选" }));
+    await user.click(await screen.findByRole("checkbox", { name: "代数" }));
     await user.click(screen.getByRole("button", { name: "清空筛选" }));
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("标签，逗号分隔")).toHaveValue("");
+      // The tag filter trigger is back to its empty placeholder state and
+      // the free-text search box is empty again.
+      expect(
+        within(screen.getByRole("button", { name: "标签筛选" })).getByText(
+          "标签",
+        ),
+      ).toBeInTheDocument();
       expect(screen.getByLabelText("搜索题目")).toHaveValue("");
       expect(screen.getByText(/共 21 条/)).toBeInTheDocument();
+    });
+  });
+
+  it("filters tags via the structured multi-select with AND semantics", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("题目管理");
+
+    await user.click(screen.getByRole("button", { name: "标签筛选" }));
+    await user.click(await screen.findByRole("checkbox", { name: "代数" }));
+    await user.click(screen.getByRole("checkbox", { name: "几何" }));
+
+    await waitFor(() => {
+      const last = questionsCalls().at(-1) ?? "";
+      expect(decodeURIComponent(last)).toContain("tags=代数,几何");
+    });
+    // AND hint is visible so the multi-tag behavior is not a guess.
+    expect(screen.getByText("多标签为同时包含")).toBeInTheDocument();
+  });
+
+  it("narrows the tag vocabulary by search inside the dropdown", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("题目管理");
+
+    await user.click(screen.getByRole("button", { name: "标签筛选" }));
+    await user.type(await screen.findByLabelText("搜索标签"), "概率");
+    expect(screen.getByRole("checkbox", { name: "概率" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "代数" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("removes a single tag without clearing the others", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("题目管理");
+
+    await user.click(screen.getByRole("button", { name: "标签筛选" }));
+    await user.click(await screen.findByRole("checkbox", { name: "代数" }));
+    await user.click(screen.getByRole("checkbox", { name: "几何" }));
+    await user.click(screen.getByRole("checkbox", { name: "几何" }));
+
+    await waitFor(() => {
+      const last = questionsCalls().at(-1) ?? "";
+      expect(decodeURIComponent(last)).toContain("tags=代数");
+      expect(decodeURIComponent(last)).not.toContain("几何");
+    });
+  });
+
+  it("clears all selected tags from the dropdown footer", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("题目管理");
+
+    await user.click(screen.getByRole("button", { name: "标签筛选" }));
+    await user.click(await screen.findByRole("checkbox", { name: "代数" }));
+    await user.click(screen.getByRole("button", { name: "清除已选" }));
+
+    await waitFor(() => {
+      const last = questionsCalls().at(-1) ?? "";
+      expect(last).not.toContain("tags=");
+    });
+  });
+
+  it("supports keyboard operation of the tag filter", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("题目管理");
+
+    const trigger = screen.getByRole("button", { name: "标签筛选" });
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    const checkbox = await screen.findByRole("checkbox", { name: "代数" });
+    checkbox.focus();
+    await user.keyboard(" ");
+
+    await waitFor(() => {
+      const last = questionsCalls().at(-1) ?? "";
+      expect(decodeURIComponent(last)).toContain("tags=代数");
     });
   });
 });
