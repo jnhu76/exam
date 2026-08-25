@@ -100,6 +100,79 @@ describe("e2eSeedOrchestrator", () => {
     expect(order).toEqual(["migrate", "seed", "seedDemo", "verify"]);
   });
 
+  it("reset=true runs the reset step BEFORE migrate -> seed -> seedDemo -> verify", async () => {
+    const order: string[] = [];
+    const resetFn = vi.fn().mockImplementation(async () => {
+      order.push("reset");
+    });
+    const migrateFn = vi.fn().mockImplementation(async () => {
+      order.push("migrate");
+    });
+    const seedFn = vi.fn().mockImplementation(async () => {
+      order.push("seed");
+    });
+    const seedDemoFn = vi.fn().mockImplementation(async () => {
+      order.push("seedDemo");
+      return FAKE_IDS;
+    });
+    const verifyDemoSeedFn = vi.fn().mockImplementation(async () => {
+      order.push("verify");
+      return [];
+    });
+
+    const { logger, messages } = createCapturingLogger();
+
+    await runE2eSeed(fakeDb, fakeHash, {
+      reset: true,
+      resetFn,
+      migrateFn,
+      logger,
+      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+    });
+
+    expect(order).toEqual(["reset", "migrate", "seed", "seedDemo", "verify"]);
+    expect(messages).toContain("Resetting mutable E2E state...\n");
+  });
+
+  it("default (no reset) never touches mutable state", async () => {
+    const resetFn = vi.fn().mockResolvedValue(undefined);
+    const seedFn = vi.fn().mockResolvedValue(undefined);
+    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
+    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
+
+    const { logger, messages } = createCapturingLogger();
+
+    await runE2eSeed(fakeDb, fakeHash, {
+      skipMigrate: true,
+      resetFn,
+      logger,
+      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+    });
+
+    expect(resetFn).not.toHaveBeenCalled();
+    expect(messages).not.toContain("Resetting mutable E2E state...\n");
+  });
+
+  it("stops before migrating when the reset step fails", async () => {
+    const resetFn = vi.fn().mockRejectedValue(new Error("reset refused"));
+    const migrateFn = vi.fn().mockResolvedValue(undefined);
+    const seedFn = vi.fn().mockResolvedValue(undefined);
+    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
+    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
+
+    await expect(
+      runE2eSeed(fakeDb, fakeHash, {
+        reset: true,
+        resetFn,
+        migrateFn,
+        workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+      }),
+    ).rejects.toThrow("reset refused");
+
+    expect(migrateFn).not.toHaveBeenCalled();
+    expect(seedFn).not.toHaveBeenCalled();
+  });
+
   it("stops when baseline seed fails", async () => {
     const seedFn = vi.fn().mockRejectedValue(new Error("seed boom"));
     const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);

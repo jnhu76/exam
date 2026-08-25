@@ -3,6 +3,7 @@ import type { HashFunction, DemoIds } from "./demo-seed.js";
 import { seed, SEED_CREDENTIALS } from "./seed.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
+import { resetE2eState } from "./e2eReset.js";
 
 export interface E2eSeedLogger {
   write(message: string): void;
@@ -34,13 +35,34 @@ const defaultWorkflow: E2eSeedWorkflow = {
 
 export interface E2eSeedOptions {
   skipMigrate?: boolean;
+  /**
+   * When true, truncate all business tables (guarded — see `e2eReset.ts`)
+   * BEFORE migrating/seeding, converging the database to the canonical E2E
+   * baseline instead of an additive upsert. This is the "reseed" contract:
+   * `reset: true` makes the end state `seed output`, not `seed ∪ leftovers`.
+   * Default false keeps the historical additive-upsert behavior.
+   */
+  reset?: boolean;
+  /** Injected reset function for testing (defaults to `resetE2eState`). */
+  resetFn?: (db: Database) => Promise<void>;
   migrateFn?: (db: Database) => Promise<void>;
   logger?: E2eSeedLogger;
   workflow?: Partial<E2eSeedWorkflow>;
 }
 
 /**
- * Runs the canonical E2E seed workflow: migrate → seed → seedDemo → verify.
+ * Runs the canonical E2E seed workflow: [reset →] migrate → seed → seedDemo →
+ * verify.
+ *
+ * Two explicit contracts, selected by `opts.reset`:
+ *   - `reset: false` (default): ADDITIVE UPSERT — ensure the baseline + demo
+ *     reference rows exist; pre-existing mutable state (attempt rows, evidence
+ *     ledgers, audit logs, …) is left untouched. Idempotent by reuse.
+ *   - `reset: true`: CONVERGE — first truncate every business table (refusing
+ *     databases outside the e2e full-reset allowlist), then rebuild the
+ *     canonical state from zero. This is what a "reseed" of a previously used
+ *     E2E database must mean: retained leftovers must never leak into the
+ *     next run's preconditions.
  *
  * The caller is responsible for creating the database connection and
  * optionally running migrations before calling this function.
@@ -48,6 +70,8 @@ export interface E2eSeedOptions {
  * @param db - Drizzle database instance.
  * @param hashFn - Password hashing function.
  * @param opts.skipMigrate - When false, run migrations before seeding.
+ * @param opts.reset - Truncate business tables first (see above).
+ * @param opts.resetFn - Optional reset function override (testing).
  * @param opts.migrateFn - Optional migration function override.
  * @param opts.logger - Optional logger for progress messages.
  * @param opts.workflow - Optional workflow overrides for testing.
@@ -59,6 +83,8 @@ export async function runE2eSeed(
 ): Promise<E2eSeedResult> {
   const {
     skipMigrate = false,
+    reset = false,
+    resetFn,
     migrateFn,
     logger = defaultLogger,
     workflow = {},
@@ -67,6 +93,12 @@ export async function runE2eSeed(
     ...defaultWorkflow,
     ...workflow,
   };
+
+  if (reset) {
+    logger.write("Resetting mutable E2E state...\n");
+    const doReset = resetFn ?? resetE2eState;
+    await doReset(db);
+  }
 
   if (!skipMigrate) {
     logger.write("Running migrations...\n");

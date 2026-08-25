@@ -30,7 +30,14 @@ const RUN_WSL_SH = join(__dirname, "run-wsl.sh");
 //                             behavior per FAKE_COMPOSE_* env; every call is
 //                             logged to $FAKE_DOCKER_LOG so scenarios can
 //                             assert teardown did (not) run.
-const DOCKER_SCENARIOS = new Set(["drop-failure-loud", "drop-success"]);
+const DOCKER_SCENARIOS = new Set([
+  "drop-failure-loud",
+  "drop-success",
+  "archive-missing-noop",
+  "archive-renames-retained",
+  "archive-evicts-old-generation",
+  "archive-existence-error-loud",
+]);
 const COMPOSE_SCENARIOS = new Set([
   "keep-server-preserves-all",
   "keep-on-failure-preserves-compose",
@@ -45,7 +52,12 @@ const COMPOSE_SCENARIOS = new Set([
  */
 function runScenario(
   scenario,
-  { dockerFail = false, composePs = "cid", composeDown = "ok" } = {},
+  {
+    dockerFail = false,
+    composePs = "cid",
+    composeDown = "ok",
+    pgDatabasesExist = "",
+  } = {},
 ) {
   const env = {
     ...process.env,
@@ -64,11 +76,23 @@ function runScenario(
     env.FAKE_DOCKER_PSQL_FAIL = dockerFail ? "1" : "0";
     env.FAKE_COMPOSE_PS = composePs;
     env.FAKE_COMPOSE_DOWN = composeDown;
+    // Comma-separated database names the fake PostgreSQL "has" (used by the
+    // retained-DB archive scenarios' pg_database existence queries).
+    env.FAKE_DOCKER_PGDB_EXISTS = pgDatabasesExist;
     writeFileSync(
       join(fakeBin, "docker"),
       `#!/usr/bin/env bash
 # fake docker (test double): log every invocation, then behave per env.
 printf '%s\\n' "$*" >> "\${FAKE_DOCKER_LOG:-/dev/null}"
+# pg_database existence queries: echo 1 iff the queried datname is listed in
+# FAKE_DOCKER_PGDB_EXISTS (must run BEFORE the generic psql branch).
+if [[ "$1" == "exec" ]] && [[ "$*" == *"pg_database"* ]]; then
+  if [[ "\${FAKE_DOCKER_PSQL_FAIL:-0}" == "1" ]]; then exit 1; fi
+  for _db in \${FAKE_DOCKER_PGDB_EXISTS//,/ }; do
+    if [[ "$*" == *"datname='\${_db}'"* ]]; then echo 1; exit 0; fi
+  done
+  exit 0
+fi
 # worker-DB drop scenarios: docker exec <cid> psql -U exam -d postgres ...
 if [[ "$1" == "exec" ]] && [[ "$*" == *"psql"* ]]; then
   if [[ "\${FAKE_DOCKER_PSQL_FAIL:-0}" == "1" ]]; then
@@ -161,6 +185,36 @@ test("drop-failure-loud: nonzero rc + stderr names the db (no swallow)", () => {
 test("drop-success: returns 0 when docker drop succeeds", () => {
   const res = runScenario("drop-success");
   assertPass("drop-success", res);
+});
+
+// ── Contract 10 (issue #330): retained-DB archiving ─────────────────────
+test("archive-prefix-guard: refuses unsafe names incl. archives themselves", () => {
+  const res = runScenario("archive-prefix-guard");
+  assertPass("archive-prefix-guard", res);
+});
+
+test("archive-missing-noop: no pre-existing worker DB → clean no-op", () => {
+  const res = runScenario("archive-missing-noop");
+  assertPass("archive-missing-noop", res);
+});
+
+test("archive-renames-retained: retained DB renamed to *_prior", () => {
+  const res = runScenario("archive-renames-retained", {
+    pgDatabasesExist: "exam_e2e_w0",
+  });
+  assertPass("archive-renames-retained", res);
+});
+
+test("archive-evicts-old-generation: prior archive DROPped before RENAME", () => {
+  const res = runScenario("archive-evicts-old-generation", {
+    pgDatabasesExist: "exam_e2e_w0,exam_e2e_w0_prior",
+  });
+  assertPass("archive-evicts-old-generation", res);
+});
+
+test("archive-existence-error-loud: docker error → rc=1, never a silent no-op", () => {
+  const res = runScenario("archive-existence-error-loud", { dockerFail: true });
+  assertPass("archive-existence-error-loud", res);
 });
 
 // ── Contract 3: exit-code matrix ─────────────────────────────────────────
@@ -308,11 +362,13 @@ test("signal-exit-codes: TERM → 143, INT → 130, cleanup exactly once", () =>
 // that can fail (migrate/seed/health), so no exit path leaks a DB.
 test("run-wsl.sh: DB identities are registered before any failing op", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
-  // Parallel: the registration sits inside the per-shard setup loop,
-  // immediately before ensure_db_exists.
+  // Parallel: the registration sits inside the per-shard setup loop, before
+  // ensure_db_exists (the retained-DB archive step between them cannot fail
+  // silently — it exits the script on failure, so registration still
+  // precedes every failing op).
   assert.match(
     src,
-    /SHARD_WORKER_DBS\+=\(\"\$\{WORKER_DB_PREFIX\}\$\{i\}\"\)\s*\n\s*ensure_db_exists "\$\{WORKER_DB_PREFIX\}\$\{i\}"/,
+    /SHARD_WORKER_DBS\+=\(\"\$\{WORKER_DB_PREFIX\}\$\{i\}\"\)\s*\n(?:[^\n]*\n)*?\s*ensure_db_exists "\$\{WORKER_DB_PREFIX\}\$\{i\}"/,
     "parallel registration must precede ensure_db_exists",
   );
   // Serial: registration precedes ensure_db_exists (comment lines in between
