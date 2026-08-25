@@ -60,6 +60,8 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
 
 > **Why `exam_e2e` is a third DB:** WSL E2E reseeds every run to a known demo state. Pointing it at `exam` would clobber the human's manual dev data; pointing it at `exam_test` would collide with vitest's worker-DB isolation. A dedicated `exam_e2e` keeps fast-iteration e2e, dev, and unit tests all isolated. The Docker E2E path (`scripts/e2e/run.sh` + `docker-compose.test.yml`) uses its own throwaway container volume instead and does NOT touch any of these host databases.
 
+> **E2E reseed contract (issue #330):** the reseed CONVERGES the target database to the canonical baseline (guarded truncate of business tables, then migrate + seed — `packages/db/src/e2eReset.ts`); it is not an additive upsert. A parallel worker DB that survived a failed run (`E2E_KEEP_WORKER_DB_ON_FAILURE=1` retention, or a crash leak) is renamed to `exam_e2e_w<N>_prior` at the next run's startup — a forensic artifact kept exactly one generation per worker slot, inspectable, never reused as execution state, and never touched by run cleanup. Drop stale archives manually if disk matters.
+
 **Connection facts:**
 
 - Container: `exam-db-1` (postgres:18.4), host port `DB_HOST_PORT` (default `5432`) → container `5432`, user/pass `exam`/`exam`. Port ownership map: `docs/development/ports.md`.

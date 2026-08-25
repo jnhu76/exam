@@ -345,16 +345,16 @@ if (( ${#EXTRA_PW_ARGS[@]} > 0 )); then
 fi
 
 # ----- 5. 跑 e2e 容器 -----
-# Chromium 在其 HSTS 预加载列表中包含字面量主机名 `app`，因此在访问
-# `http://app:3000/` 时会强制使用 HTTPS → 导致 ERR_SSL_PROTOCOL_ERROR，因为 e2e
-# 应用容器仅支持纯 HTTP。请解析应用容器的 IP 地址并改用它（IP 不会被 HSTS 预加载）。
-# `getent`/`nslookup` 在 e2e 容器中不可靠，因此在宿主机上解析 IP 并通过环境变量传递。
-APP_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$APP_CID" 2>/dev/null | head -n1 | tr -d '[:space:]')"
-if [[ -z "$APP_IP" ]]; then
-  err "无法解析 app 容器 IP (APP_CID=$APP_CID)"; exit 1
-fi
-log "e2e 浏览器指向 app IP: $APP_IP (绕过 Chromium 对字面量主机名 'app' 的 HSTS 预加载)"
-E2E_BASE_URL_VALUE="http://${APP_IP}:3000"
+# e2e 容器共享 app 容器的网络命名空间（docker-compose.test.yml 的
+# network_mode: service:app），浏览器直接访问 http://localhost:3000。必须是
+# localhost 而不是 app 容器 IP/别名：
+#   1. Chromium 对字面量主机名 `app` 有 HSTS 预加载 → 强制 HTTPS →
+#      ERR_SSL_PROTOCOL_ERROR（app 仅纯 HTTP）。
+#   2. 非 localhost 的明文 HTTP 不是 secure context，navigator.locks 为
+#      undefined，PendingGrantCoordinator 会 fail-closed，所有加时弹窗
+#      spec（recovery-time-grant / recovery-operations-a11y /
+#      cross-tab）都会失败。localhost 是 potentially-trustworthy origin。
+E2E_BASE_URL_VALUE="http://localhost:3000"
 
 log "执行 Playwright: ${PW_ARGS[*]}"
 set +e
@@ -363,8 +363,19 @@ compose run --rm \
   -e CI="${CI:-1}" \
   e2e sh -lc '
     set -e
-    npm install --no-save --no-package-lock @playwright/test@1.61.0 >/dev/null 2>&1
-    "$@"
+    # The e2e container resolves @playwright/test and @exam/* through the
+    # workspace pnpm symlink farm: node_modules is bind-mounted read-only
+    # alongside /app/packages (see docker-compose.test.yml). An in-container
+    # `npm install` is impossible — apps/e2e/package.json declares pnpm
+    # `workspace:*` devDependencies and npm aborts with
+    # EUNSUPPORTEDPROTOCOL, which (with output redirected) silently killed
+    # this whole path since d91e401e. Fail loudly when the mount is missing.
+    if [ ! -e node_modules/@playwright/test ]; then
+      echo "[e2e] node_modules/@playwright/test is not resolvable inside the container." >&2
+      echo "[e2e] Run pnpm install at the repo root, then retry." >&2
+      exit 1
+    fi
+    exec "$@"
   ' _ "${PW_ARGS[@]}"
 EXIT_CODE=$?
 set -e

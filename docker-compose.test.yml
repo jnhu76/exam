@@ -6,8 +6,12 @@ services:
     environment:
       # DB URLs are templated from the db service's POSTGRES_* vars so the db
       # name has a single source (POSTGRES_DB) — no 4-way hardcoded duplication.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam_test}
-      TEST_DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam_test}
+      # The default must stay on the E2E full-reset allowlist (exam_e2e,
+      # exam_e2e_w<N>, exam_ci*): RUN_SEED=e2e reseeds with reset:true, whose
+      # guard refuses vitest-territory names like exam_test — an E2E stack
+      # named exam_test fails app startup deterministically (#330 review P1-1).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam_e2e}
+      TEST_DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam_e2e}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-e2e-test-secret}
       NODE_ENV: development
@@ -74,7 +78,7 @@ services:
       # interpolate these same vars so they can never diverge.
       POSTGRES_USER: ${POSTGRES_USER:-exam}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exam}
-      POSTGRES_DB: ${POSTGRES_DB:-exam_test}
+      POSTGRES_DB: ${POSTGRES_DB:-exam_e2e}
       # ADR-006: display/session timezone only; business time is instant-based.
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
@@ -88,7 +92,7 @@ services:
           "-U",
           "${POSTGRES_USER:-exam}",
           "-d",
-          "${POSTGRES_DB:-exam_test}",
+          "${POSTGRES_DB:-exam_e2e}",
         ]
       interval: 5s
       timeout: 3s
@@ -116,6 +120,19 @@ services:
     image: mcr.microsoft.com/playwright:v1.61.0-noble
     init: true
     ipc: host
+    # Share the app container's network namespace so the browser reaches the
+    # app at http://localhost:3000. Two reasons this must be localhost (not the
+    # app service name, an alias, or the container IP — the historical
+    # workarounds):
+    #   1. Chromium HSTS-preloads the bare hostname `app` → forced HTTPS →
+    #      ERR_SSL_PROTOCOL_ERROR against the plain-HTTP app.
+    #   2. Plain HTTP on a NON-localhost origin is not a secure context, so
+    #      `navigator.locks` (Web Locks API) is undefined — the operator-grant
+    #      PendingGrantCoordinator fail-closes and every grant-dialog spec
+    #      (recovery-time-grant, recovery-operations-a11y, cross-tab) fails.
+    #      localhost/127.0.0.1 is a potentially-trustworthy origin: secure
+    #      context, no HSTS preload entry.
+    network_mode: "service:app"
     depends_on:
       app:
         condition: service_healthy
@@ -123,24 +140,26 @@ services:
     volumes:
       - ./apps/e2e:/app/apps/e2e
       - ./packages:/app/packages:ro
+      # Workspace node_modules (read-only): specs resolve @playwright/test and
+      # @exam/* through the pnpm symlink farm, whose RELATIVE targets need both
+      # /app/packages (above) and /app/node_modules mounted. The historical
+      # in-container `npm install` cannot be used anymore: apps/e2e/package.json
+      # declares pnpm `workspace:*` devDependencies (since d91e401e) and npm
+      # aborts with EUNSUPPORTEDPROTOCOL — which silently killed the whole
+      # Docker E2E path because run.sh redirected the installer's output.
+      - ./node_modules:/app/node_modules:ro
       - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
     environment:
-      # Use the `examapp` alias instead of the service name `app`:
-      # Chromium HSTS-preloads the bare name `app` and forces HTTPS, which breaks
-      # plain-HTTP navigation with ERR_SSL_PROTOCOL_ERROR. `examapp` is not on
-      # any HSTS preload list. (scripts/e2e/run.sh overrides this with the app
-      # container IP for parity; both paths work.)
-      E2E_BASE_URL: "http://examapp:3000"
+      E2E_BASE_URL: "http://localhost:3000"
       HOME: /tmp
       HTTP_PROXY: ${E2E_PROXY:-}
       HTTPS_PROXY: ${E2E_PROXY:-}
     command: >-
-      sh -c "npm install --no-save --no-package-lock @playwright/test@1.61.0 2>/dev/null &&
+      sh -c "test -e node_modules/@playwright/test ||
+             { echo 'node_modules/@playwright/test not resolvable in container: run pnpm install at repo root' >&2; exit 1; } &&
              npx playwright test --reporter=list"
     profiles:
       - e2e
-    networks:
-      - exam-net
 
 volumes:
   pgdata:

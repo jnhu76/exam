@@ -12,8 +12,10 @@
 import { describe, expect, it } from "vitest";
 import {
   isDestructiveRollbackTarget,
+  isFullResetTarget,
   parseDatabaseName,
   refuseDbNameMessage,
+  refuseFullResetMessage,
 } from "./destructiveDbNameGuard.js";
 
 describe("isDestructiveRollbackTarget — canonical allowlist", () => {
@@ -95,6 +97,57 @@ describe("refuseDbNameMessage", () => {
     expect(msg).toMatch(/exam_test/);
     expect(msg).toMatch(/exam_e2e/);
     expect(msg).toMatch(/exam_ci/);
+  });
+});
+
+describe("isFullResetTarget — full-reset (truncate-all) allowlist", () => {
+  it("accepts the canonical E2E database and its worker family", () => {
+    expect(isFullResetTarget("exam_e2e")).toBe(true);
+    expect(isFullResetTarget("exam_e2e_w0")).toBe(true);
+    expect(isFullResetTarget("exam_e2e_w15")).toBe(true);
+  });
+
+  it("accepts the CI family", () => {
+    expect(isFullResetTarget("exam_ci_pr261")).toBe(true);
+    expect(isFullResetTarget("exam_ci-shard4")).toBe(true);
+  });
+
+  it("rejects the human dev database and the vitest databases", () => {
+    // A full reset truncates EVERY business table; the dev DB holds the
+    // human's demo data and exam_test* belongs to vitest — the E2E seed must
+    // fail loudly rather than wipe either.
+    expect(isFullResetTarget("exam")).toBe(false);
+    expect(isFullResetTarget("exam_test")).toBe(false);
+    expect(isFullResetTarget("exam_test_w0")).toBe(false);
+  });
+
+  it("rejects E2E forensic archives (_prior) — post-mortem artifacts are never execution state", () => {
+    expect(isFullResetTarget("exam_e2e_w0_prior")).toBe(false);
+    expect(isFullResetTarget("exam_e2e_prior")).toBe(false);
+  });
+
+  it("rejects look-alikes and empty names", () => {
+    expect(isFullResetTarget("exam_e2e_evil")).toBe(false);
+    expect(isFullResetTarget("exam_e2ew0")).toBe(false);
+    expect(isFullResetTarget("EXAM_E2E")).toBe(false);
+    expect(isFullResetTarget("")).toBe(false);
+    expect(isFullResetTarget("exam_e2e_w0;DROP DATABASE x")).toBe(false);
+  });
+
+  it("is strictly narrower than the rollback allowlist", () => {
+    for (const name of ["exam", "exam_test", "exam_test_w7"]) {
+      expect(isDestructiveRollbackTarget(name)).toBe(true);
+      expect(isFullResetTarget(name)).toBe(false);
+    }
+  });
+});
+
+describe("refuseFullResetMessage", () => {
+  it("names the rejected database and why the narrow allowlist exists", () => {
+    const msg = refuseFullResetMessage("exam");
+    expect(msg).toContain('"exam"');
+    expect(msg).toMatch(/exam_e2e/);
+    expect(msg).toMatch(/forensic/i);
   });
 });
 

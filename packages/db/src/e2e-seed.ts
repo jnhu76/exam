@@ -5,13 +5,18 @@
  * loading and database connection; delegates all orchestration to the
  * shared function.
  *
+ * Contract: this entrypoint CONVERGES the target database to the canonical
+ * E2E baseline (`reset: true`) — it truncates business tables before
+ * seeding, so leftover mutable state from a previous run cannot leak into
+ * the next. The reset refuses databases outside the e2e full-reset
+ * allowlist (see `e2eReset.ts`): pointing this at the dev `exam` database
+ * or a vitest `exam_test*` database fails loudly instead of wiping it.
+ *
  * Demo accounts produced (passwords identical):
  *   candidate1 / candidate123 = in_progress / resume
  *   candidate2 / candidate123 = available   / start
  *   candidate3 / candidate123 = resumable   / resume
  *   candidate4 / candidate123 = graded      / view_result
- *
- * Idempotent: running this twice does not duplicate users/exams/attempts.
  *
  * Usage:
  *   pnpm --filter @exam/db db:seed:e2e
@@ -40,6 +45,7 @@ if (isMain) {
 
     const result = await runE2eSeed(conn.db, hashPassword, {
       skipMigrate,
+      reset: true,
       migrateFn: async (db) => {
         const { migratePostgres } = await import("./postgres.js");
         await migratePostgres(db as Parameters<typeof migratePostgres>[0]);

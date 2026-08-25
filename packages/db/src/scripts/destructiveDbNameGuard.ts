@@ -104,3 +104,38 @@ export function refuseDbNameMessage(dbName: string): string {
     "Point DATABASE_URL at a guarded target."
   );
 }
+
+/**
+ * Exact allowlist for FULL-RESET targets — operations that truncate EVERY
+ * business table (the E2E seed's `reset` step, `resetE2eState`). Strictly
+ * narrower than the rollback allowlist above, because a full reset destroys
+ * all rows, not one incident family:
+ *
+ *   - `exam_e2e`                       — the canonical E2E database (serial
+ *                                        path, CI, Docker e2e entrypoint).
+ *   - `exam_e2e_w<N>`                  — the WSL parallel-shard worker DBs.
+ *   - `exam_ci[_-]<suffix>`            — CI-branch E2E databases.
+ *
+ * Explicitly NOT full-reset targets: `exam` (human dev data), `exam_test` /
+ * `exam_test_w<N>` (vitest territory — the E2E seed has no business wiping
+ * them), and `exam_e2e_w<N>_prior` (failure-forensic archives retained by the
+ * E2E runner; they are post-mortem artifacts, never execution state).
+ */
+const FULL_RESET_LITERALS = new Set<string>(["exam_e2e"]);
+
+/** True iff `dbName` may be fully reset (all business tables truncated). */
+export function isFullResetTarget(dbName: string): boolean {
+  if (FULL_RESET_LITERALS.has(dbName)) return true;
+  // Reuse the exact family patterns, restricted to the e2e/CI branches.
+  return /^exam_e2e_w\d+$/.test(dbName) || CI_DB_PATTERN.test(dbName);
+}
+
+/** Refusal message for a rejected full-reset target. */
+export function refuseFullResetMessage(dbName: string): string {
+  return (
+    `Refusing to reset database "${dbName}": full-reset targets are limited ` +
+    "to the E2E databases (exam_e2e, exam_e2e_w<N>, exam_ci[_-]<suffix>). " +
+    "The dev database (exam), the vitest databases (exam_test*), and E2E " +
+    "forensic archives (exam_e2e_w<N>_prior) are never full-reset targets."
+  );
+}

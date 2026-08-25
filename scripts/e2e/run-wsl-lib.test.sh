@@ -16,6 +16,13 @@
 #   ordering                     — DROP happens strictly after server stop+wait
 #   drop-failure-loud            — docker error → nonzero + stderr names the db
 #   drop-success                 — happy path returns 0
+#   archive-prefix-guard         — (#330) unsafe archive sources refused
+#   archive-missing-noop         — (#330) no retained DB → clean no-op
+#   archive-renames-retained     — (#330) retained DB renamed to *_prior
+#   archive-evicts-old-generation — (#330) old archive DROPped before RENAME
+#   archive-existence-error-loud — (#330) docker error → rc=1, never silent
+#   archive-rename-failure-loud — (#330) ALTER fails → rc=1 loud, active DB
+#                                  name never a DROP target (review P1-2)
 #   exit-matrix-pass-pass        — PW 0 + clean cleanup → exit 0
 #   exit-matrix-fail-pass        — PW 7 + clean cleanup → exit 7
 #   exit-matrix-pass-fail        — PW 0 + dirty cleanup → 70
@@ -162,6 +169,122 @@ case "$scenario" in
     fi
     echo "PASS"; exit 0
     ;;
+
+  # ── Contract 10 (issue #330): retained-DB archiving ────────────────────
+  # A pre-existing exam_e2e_w<N> is a forensic artifact, never execution
+  # state; archive_retained_worker_db renames it to *_prior (evicting the
+  # previous generation first) so the run starts from a fresh DB.
+  archive-prefix-guard)
+    fail=0
+    for bad in exam postgres exam_test production \
+               "exam_e2e_w0;DROP TABLE users" \
+               "exam_e2e_w0 --" exam_e2e_evil exam_e2ew0 \
+               exam_e2e_w0_prior "exam_e2e_w100; rm -rf"; do
+      if archive_retained_worker_db "fakecid" "$bad" >/dev/null 2>&1; then
+        echo "FAIL: unsafe archive source accepted: [${bad}]" >&2
+        fail=1
+      fi
+    done
+    if archive_retained_worker_db "" "exam_e2e_w0" >/dev/null 2>&1; then
+      echo "FAIL: empty container id accepted" >&2
+      fail=1
+    fi
+    if [[ "$fail" -eq 0 ]]; then echo "PASS"; else echo "FAIL"; fi
+    exit "$fail"
+    ;;
+
+  # Fake docker on PATH: pg_database queries find no matching DB.
+  archive-missing-noop)
+    rc=0
+    archive_retained_worker_db "fakecid" "exam_e2e_w0" >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "FAIL: missing DB must be a clean no-op, got rc=$rc" >&2
+      exit 1
+    fi
+    if grep -q "ALTER DATABASE" "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: ALTER issued for a missing DB" >&2
+      exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
+  # Fake docker on PATH: pg_database reports exam_e2e_w0 exists.
+  archive-renames-retained)
+    rc=0
+    archive_retained_worker_db "fakecid" "exam_e2e_w0" >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "FAIL: archive returned rc=$rc" >&2
+      exit 1
+    fi
+    if ! grep -q 'ALTER DATABASE "exam_e2e_w0" RENAME TO "exam_e2e_w0_prior"' "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: rename to the _prior archive slot not issued" >&2
+      exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
+  # Fake docker on PATH: both exam_e2e_w0 and exam_e2e_w0_prior exist.
+  archive-evicts-old-generation)
+    rc=0
+    archive_retained_worker_db "fakecid" "exam_e2e_w0" >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "FAIL: archive returned rc=$rc" >&2
+      exit 1
+    fi
+    drop_line="$(grep -n 'DROP DATABASE IF EXISTS "exam_e2e_w0_prior"' "$FAKE_DOCKER_LOG" | head -1 | cut -d: -f1)"
+    rename_line="$(grep -n 'ALTER DATABASE "exam_e2e_w0" RENAME' "$FAKE_DOCKER_LOG" | head -1 | cut -d: -f1)"
+    if [[ -z "$drop_line" || -z "$rename_line" || "$drop_line" -ge "$rename_line" ]]; then
+      echo "FAIL: old archive must be DROPped (line ${drop_line:-none}) BEFORE the rename (line ${rename_line:-none})" >&2
+      exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
+  # Fake docker on PATH: docker exec fails on the existence query itself.
+  archive-existence-error-loud)
+    rc=0
+    archive_retained_worker_db "fakecid" "exam_e2e_w0" >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 1 ]]; then
+      echo "FAIL: docker error on existence query must return 1 (loud), got rc=$rc" >&2
+      exit 1
+    fi
+    if grep -q "ALTER DATABASE" "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: ALTER issued despite failed existence query" >&2
+      exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
+  # Fake docker on PATH: exam_e2e_w0 exists; the ALTER DATABASE rename itself
+  # fails (e.g. another session still holds the DB). Archive must fail loudly
+  # (rc=1, stderr names the db) and must never have made the ACTIVE retained
+  # name a DROP target — only a pre-existing *_prior slot may be evicted, and
+  # it does not exist here. This is the failure that triggers the #330 review
+  # P1-2 ownership contract: run-wsl.sh claims the worker-DB name only AFTER
+  # archive success (pinned structurally in run-wsl-lib.test.mjs), so the
+  # failure-path EXIT cleanup never drops the forensic DB.
+  archive-rename-failure-loud)
+    rc=0
+    err_captured="$(archive_retained_worker_db "fakecid" "exam_e2e_w0" 2>&1 1>/dev/null)" || rc=$?
+    if [[ "$rc" -ne 1 ]]; then
+      echo "FAIL: rename failure must return 1 (loud), got rc=$rc" >&2
+      exit 1
+    fi
+    if [[ "$err_captured" != *"exam_e2e_w0"* ]]; then
+      echo "FAIL: stderr did not name the db: $err_captured" >&2
+      exit 1
+    fi
+    if ! grep -q 'ALTER DATABASE "exam_e2e_w0" RENAME' "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: rename was never attempted (preconditions broken)" >&2
+      exit 1
+    fi
+    if grep -q 'DROP DATABASE IF EXISTS "exam_e2e_w0"' "$FAKE_DOCKER_LOG"; then
+      echo "FAIL: DROP issued against the active retained DB name" >&2
+      exit 1
+    fi
+    echo "PASS"; exit 0
+    ;;
+
 
   # ── 5–8. Exit-code matrix (pure compute_final_exit) ────────────────────
   # compute_final_exit returns (not exits) the priority-matrix code; under

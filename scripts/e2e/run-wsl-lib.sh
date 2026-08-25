@@ -47,21 +47,36 @@
 #      pending drops is a cleanup failure, not a silent skip).
 #   9. Flag validation: validate_run_flags rejects `--keep-server` and
 #      `--no-reseed` in parallel mode (undefined lifecycle semantics).
+#  10. Retained-DB archiving: a pre-existing exam_e2e_w<N> at startup is a
+#      forensic artifact (E2E_KEEP_WORKER_DB_ON_FAILURE retention, or a crash
+#      leak), NEVER execution state for this run. archive_retained_worker_db
+#      renames it to exam_e2e_w<N>_prior (evicting the previous archive —
+#      keep-1-generation) so the run creates a FRESH worker DB while the
+#      artifact stays inspectable. run_cleanup never touches _prior archives.
 
 # ── DB-name safety ────────────────────────────────────────────────────────
 # Matches ONLY:
-#   exam_e2e         (serial path worker DB)
-#   exam_e2e_w0..w99 (parallel shard worker DBs)
+#   exam_e2e                  (serial path worker DB)
+#   exam_e2e_w0..w99          (parallel shard worker DBs)
+#   exam_e2e_w0..w99_prior    (forensic archives of failed runs)
 # Anchored — rejects `exam`, `postgres`, `exam_test`, `exam_e2e_w0;DROP...`,
 # `exam_e2e_evil`, etc. Kept in sync with packages/db name-safety intent
 # (test/e2e/ci only) but stricter, because this guards a DROP.
-WORKER_DB_NAME_RE='^exam_e2e(_w[0-9]+)?$'
+WORKER_DB_NAME_RE='^exam_e2e(_w[0-9]+)?(_prior)?$'
 
 # is_safe_worker_db_name <db_name> → 0 if safe, 1 otherwise.
 # Pure string check; no external commands.
 is_safe_worker_db_name() {
   local db="$1"
   [[ "$db" =~ $WORKER_DB_NAME_RE ]]
+}
+
+# is_safe_archive_db_name <db_name> → 0 iff the name is a forensic archive
+# slot (exam_e2e_w<N>_prior). Archives are rename TARGETS of
+# archive_retained_worker_db and may be DROPped by it when evicting the
+# previous generation; they must never be mistaken for active worker DBs.
+is_safe_archive_db_name() {
+  [[ "$1" =~ ^exam_e2e_w[0-9]+_prior$ ]]
 }
 
 # ── Bounded process-exit poll ─────────────────────────────────────────────
@@ -187,6 +202,85 @@ drop_worker_db_loud() {
   if [[ "$rc" -ne 0 ]]; then
     printf '[e2e-wsl] DROP DATABASE "%s" 失败 (rc=%s)。PostgreSQL 输出:\n%s\n' \
       "$db" "$rc" "$pg_out" >&2
+    return 1
+  fi
+  return 0
+}
+
+# ── Archive a retained worker DB out of the active namespace ──────────────
+# archive_retained_worker_db <cid> <db_name>
+#
+# Issue #330 root cause: a worker DB that survived a previous run (failure
+# retention via E2E_KEEP_WORKER_DB_ON_FAILURE=1, or a crash that bypassed
+# cleanup) contains that run's mutable state (evidence ledgers, attempts,
+# audit rows). Reusing it as this run's worker DB — even after migrate +
+# reseed — leaks that state into the new run's preconditions ("preserve for
+# forensics" was silently conflated with "reuse as execution baseline").
+#
+# This function separates the two concerns: the retained DB is RENAMED to
+# <db>_prior (a forensic artifact, inspectable, outside the active worker
+# namespace), and the caller then creates a FRESH <db> for this run. The
+# previous archive generation is evicted first (keep-1 per worker slot, so
+# disk stays bounded at ≤ E2E_WORKERS archives).
+#
+# Loud contract (mirrors drop_worker_db_loud):
+#   - rejects unsafe active/archive names (stderr, rc=2);
+#   - a docker/psql failure prints the raw error and returns 1 — never
+#     swallowed, never `|| true`d;
+#   - a missing <db> is a clean no-op (rc=0) — nothing to archive;
+#   - success returns 0.
+archive_retained_worker_db() {
+  local cid="$1" db="$2" archive exists_out
+  if ! is_safe_worker_db_name "$db" || [[ "$db" == *_prior ]]; then
+    printf '[e2e-wsl] 拒绝归档不安全的 worker 库名: "%s"\n' "$db" >&2
+    return 2
+  fi
+  archive="${db}_prior"
+  if ! is_safe_archive_db_name "$archive"; then
+    printf '[e2e-wsl] 拒绝不安全的归档库名: "%s"\n' "$archive" >&2
+    return 2
+  fi
+  if [[ -z "$cid" ]]; then
+    printf '[e2e-wsl] archive_retained_worker_db("%s"): 缺少 db 容器 id\n' "$db" >&2
+    return 3
+  fi
+  # Exists? A FAILED existence query is an error (never silently treated as
+  # "missing" — that would let a retained DB slide into this run); a
+  # successful empty result is a clean no-op.
+  if ! exists_out="$(docker exec "$cid" psql -U exam -d postgres -tAc \
+      "SELECT 1 FROM pg_database WHERE datname='${db}'" 2>&1)"; then
+    printf '[e2e-wsl] 检查 worker 库 %s 是否存在失败（docker/psql 错误）。输出:\n%s\n' \
+      "$db" "$exists_out" >&2
+    return 1
+  fi
+  if ! grep -q 1 <<<"$exists_out"; then
+    return 0
+  fi
+  log "发现遗留 worker 库 ${db}（上次失败保留/泄漏）→ 归档为 ${archive}（本次运行使用全新库）"
+  # Evict the previous forensic generation first (keep-1). A failure here is
+  # fatal for the archive step: proceeding would overwrite the only copy.
+  if ! exists_out="$(docker exec "$cid" psql -U exam -d postgres -tAc \
+      "SELECT 1 FROM pg_database WHERE datname='${archive}'" 2>&1)"; then
+    printf '[e2e-wsl] 检查旧归档 %s 是否存在失败（docker/psql 错误）。输出:\n%s\n' \
+      "$archive" "$exists_out" >&2
+    return 1
+  fi
+  if grep -q 1 <<<"$exists_out"; then
+    warn "淘汰旧取证归档 ${archive}（每 worker 仅保留最近一次失败的现场）"
+    # drop_worker_db_loud reads DROP_DB_CID from the environment; point it at
+    # this container. run_cleanup re-resolves/overwrites it for its own drops.
+    DROP_DB_CID="$cid"
+    if ! drop_worker_db_loud "$archive"; then
+      return 1
+    fi
+  fi
+  # Names are regex-validated bare identifiers; quote them anyway (defense in
+  # depth, same as drop_worker_db_loud).
+  local rename_out
+  if ! rename_out="$(docker exec "$cid" psql -U exam -d postgres -c \
+      "ALTER DATABASE \"${db}\" RENAME TO \"${archive}\"" 2>&1 >/dev/null)"; then
+    printf '[e2e-wsl] 归档 %s → %s 失败。PostgreSQL 输出:\n%s\n' \
+      "$db" "$archive" "$rename_out" >&2
     return 1
   fi
   return 0

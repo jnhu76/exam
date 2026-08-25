@@ -30,7 +30,15 @@ const RUN_WSL_SH = join(__dirname, "run-wsl.sh");
 //                             behavior per FAKE_COMPOSE_* env; every call is
 //                             logged to $FAKE_DOCKER_LOG so scenarios can
 //                             assert teardown did (not) run.
-const DOCKER_SCENARIOS = new Set(["drop-failure-loud", "drop-success"]);
+const DOCKER_SCENARIOS = new Set([
+  "drop-failure-loud",
+  "drop-success",
+  "archive-missing-noop",
+  "archive-renames-retained",
+  "archive-evicts-old-generation",
+  "archive-existence-error-loud",
+  "archive-rename-failure-loud",
+]);
 const COMPOSE_SCENARIOS = new Set([
   "keep-server-preserves-all",
   "keep-on-failure-preserves-compose",
@@ -45,7 +53,13 @@ const COMPOSE_SCENARIOS = new Set([
  */
 function runScenario(
   scenario,
-  { dockerFail = false, composePs = "cid", composeDown = "ok" } = {},
+  {
+    dockerFail = false,
+    dockerAlterFail = false,
+    composePs = "cid",
+    composeDown = "ok",
+    pgDatabasesExist = "",
+  } = {},
 ) {
   const env = {
     ...process.env,
@@ -62,13 +76,33 @@ function runScenario(
     const logPath = join(tmp, "docker.log");
     env.FAKE_DOCKER_LOG = logPath;
     env.FAKE_DOCKER_PSQL_FAIL = dockerFail ? "1" : "0";
+    env.FAKE_DOCKER_ALTER_FAIL = dockerAlterFail ? "1" : "0";
     env.FAKE_COMPOSE_PS = composePs;
     env.FAKE_COMPOSE_DOWN = composeDown;
+    // Comma-separated database names the fake PostgreSQL "has" (used by the
+    // retained-DB archive scenarios' pg_database existence queries).
+    env.FAKE_DOCKER_PGDB_EXISTS = pgDatabasesExist;
     writeFileSync(
       join(fakeBin, "docker"),
       `#!/usr/bin/env bash
 # fake docker (test double): log every invocation, then behave per env.
 printf '%s\\n' "$*" >> "\${FAKE_DOCKER_LOG:-/dev/null}"
+# pg_database existence queries: echo 1 iff the queried datname is listed in
+# FAKE_DOCKER_PGDB_EXISTS (must run BEFORE the generic psql branch).
+if [[ "$1" == "exec" ]] && [[ "$*" == *"pg_database"* ]]; then
+  if [[ "\${FAKE_DOCKER_PSQL_FAIL:-0}" == "1" ]]; then exit 1; fi
+  for _db in \${FAKE_DOCKER_PGDB_EXISTS//,/ }; do
+    if [[ "$*" == *"datname='\${_db}'"* ]]; then echo 1; exit 0; fi
+  done
+  exit 0
+fi
+# Archive-rename failure knob: fail ONLY the ALTER DATABASE step (existence
+# queries above still succeed), exercising the rename-failure path of the
+# #330 archive contract.
+if [[ "$1" == "exec" ]] && [[ "\${FAKE_DOCKER_ALTER_FAIL:-0}" == "1" ]] && [[ "$*" == *"ALTER DATABASE"* ]]; then
+  echo 'ERROR: database "exam_e2e_w0" is being accessed by other users' >&2
+  exit 1
+fi
 # worker-DB drop scenarios: docker exec <cid> psql -U exam -d postgres ...
 if [[ "$1" == "exec" ]] && [[ "$*" == *"psql"* ]]; then
   if [[ "\${FAKE_DOCKER_PSQL_FAIL:-0}" == "1" ]]; then
@@ -161,6 +195,49 @@ test("drop-failure-loud: nonzero rc + stderr names the db (no swallow)", () => {
 test("drop-success: returns 0 when docker drop succeeds", () => {
   const res = runScenario("drop-success");
   assertPass("drop-success", res);
+});
+
+// ── Contract 10 (issue #330): retained-DB archiving ─────────────────────
+test("archive-prefix-guard: refuses unsafe names incl. archives themselves", () => {
+  const res = runScenario("archive-prefix-guard");
+  assertPass("archive-prefix-guard", res);
+});
+
+test("archive-missing-noop: no pre-existing worker DB → clean no-op", () => {
+  const res = runScenario("archive-missing-noop");
+  assertPass("archive-missing-noop", res);
+});
+
+test("archive-renames-retained: retained DB renamed to *_prior", () => {
+  const res = runScenario("archive-renames-retained", {
+    pgDatabasesExist: "exam_e2e_w0",
+  });
+  assertPass("archive-renames-retained", res);
+});
+
+test("archive-evicts-old-generation: prior archive DROPped before RENAME", () => {
+  const res = runScenario("archive-evicts-old-generation", {
+    pgDatabasesExist: "exam_e2e_w0,exam_e2e_w0_prior",
+  });
+  assertPass("archive-evicts-old-generation", res);
+});
+
+test("archive-existence-error-loud: docker error → rc=1, never a silent no-op", () => {
+  const res = runScenario("archive-existence-error-loud", { dockerFail: true });
+  assertPass("archive-existence-error-loud", res);
+});
+
+// Rename failure is the trigger of the #330 review P1-2 ownership bug: the
+// retained forensic DB is still under its ACTIVE name, and run_cleanup must
+// never get a claim on it (run-wsl.sh registers only after archive success —
+// pinned structurally above). At lib level this pins the loud rc=1 and that
+// the active name itself is never a DROP target on this path.
+test("archive-rename-failure-loud: ALTER fails → rc=1 loud, active DB never DROPped", () => {
+  const res = runScenario("archive-rename-failure-loud", {
+    pgDatabasesExist: "exam_e2e_w0",
+    dockerAlterFail: true,
+  });
+  assertPass("archive-rename-failure-loud", res);
 });
 
 // ── Contract 3: exit-code matrix ─────────────────────────────────────────
@@ -302,19 +379,42 @@ test("signal-exit-codes: TERM → 143, INT → 130, cleanup exactly once", () =>
   assertPass("signal-exit-codes", res);
 });
 
-// ── P1-1: registration timing in run-wsl.sh (structural contract) ────────
+// ── P1-1 + #330 review P1-2: registration timing in run-wsl.sh (structural)
 // The behavioral scenarios cover what cleanup does WITH registered identities;
-// these assertions pin WHERE run-wsl.sh registers them — before any operation
-// that can fail (migrate/seed/health), so no exit path leaks a DB.
-test("run-wsl.sh: DB identities are registered before any failing op", () => {
+// these assertions pin WHERE run-wsl.sh registers them. Parallel loop order,
+// pinned below: (1) archive the pre-existing retained DB, (2) register
+// ownership, (3) create. Registration must follow a SUCCESSFUL archive — a
+// pre-existing exam_e2e_w<N> is a forensic artifact from a previous run, and
+// registering before the archive succeeds would let the failure-path EXIT
+// cleanup DROP it as if it were this run's ephemeral DB (#330 review P1-2).
+// Registration must still precede ensure_db_exists (and everything after it:
+// migrate/seed/health), so no exit path leaks a DB this run created
+// (issue #256-A review P1-1).
+test("run-wsl.sh: ownership claimed only after archive succeeds, before any failing op", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
-  // Parallel: the registration sits inside the per-shard setup loop,
-  // immediately before ensure_db_exists.
-  assert.match(
-    src,
-    /SHARD_WORKER_DBS\+=\(\"\$\{WORKER_DB_PREFIX\}\$\{i\}\"\)\s*\n\s*ensure_db_exists "\$\{WORKER_DB_PREFIX\}\$\{i\}"/,
-    "parallel registration must precede ensure_db_exists",
+  const lines = src.split("\n");
+  const archiveIdx = lines.findIndex((l) =>
+    l.includes('archive_retained_worker_db "$ARCHIVE_CID"'),
   );
+  const claimIdx = lines.findIndex((l) =>
+    l.includes('SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")'),
+  );
+  const ensureIdx = lines.findIndex((l) =>
+    l.includes('ensure_db_exists "${WORKER_DB_PREFIX}${i}"'),
+  );
+  assert.ok(archiveIdx >= 0, "per-shard archive call must exist");
+  assert.ok(claimIdx >= 0, "parallel registration must exist");
+  assert.ok(ensureIdx >= 0, "per-shard ensure_db_exists must exist");
+  assert.ok(
+    archiveIdx < claimIdx && claimIdx < ensureIdx,
+    "parallel loop order must be archive → register → ensure: an archive failure must exit BEFORE this run claims the retained DB name, and registration must still precede every failing op",
+  );
+  assert.ok(
+    lines.slice(archiveIdx, claimIdx).some((l) => l.trim() === "exit 1"),
+    "archive failure must exit the script before ownership registration",
+  );
+  const claimSites = lines.filter((l) => l.includes("SHARD_WORKER_DBS+=("));
+  assert.equal(claimSites.length, 1, "exactly one parallel registration site");
   // Serial: registration precedes ensure_db_exists (comment lines in between
   // are allowed; the old late registration after wait_health had ensure
   // BEFORE the registration and must not match).
