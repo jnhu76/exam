@@ -954,4 +954,70 @@ describe("question routes", () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  // Structured tag filter vocabulary endpoint (issue #182): distinct, sorted,
+  // org-scoped, authenticated. The admin UI consumes this to enumerate tags
+  // truthfully instead of deriving them from the paginated list rows.
+  describe("GET /api/questions/tags", () => {
+    it("returns the distinct sorted tag vocabulary of the org", async () => {
+      const mk = async (content: string, tags: string[]) =>
+        ctx.app.inject({
+          method: "POST",
+          url: "/api/questions",
+          payload: {
+            courseId,
+            type: "true_false",
+            content,
+            standardAnswer: true,
+            score: 2,
+            difficulty: 1,
+            tags,
+          },
+          cookies: { "auth-token": ctx.adminToken },
+        });
+      const r1 = await mk("Tag vocab question one", ["beta", "alpha"]);
+      const r2 = await mk("Tag vocab question two", ["alpha", "gamma"]);
+      expect(r1.statusCode).toBe(201);
+      expect(r2.statusCode).toBe(201);
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/questions/tags",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const { tags } = res.json() as { tags: string[] };
+      expect(tags).toContain("alpha");
+      expect(tags).toContain("beta");
+      expect(tags).toContain("gamma");
+      // distinct: alpha appears once; sorted ascending.
+      expect(tags.filter((t) => t === "alpha")).toHaveLength(1);
+      const sortedCopy = [...tags].sort();
+      expect(tags).toEqual(sortedCopy);
+    });
+
+    it("requires authentication", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/questions/tags",
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("does not shadow GET /api/questions/:id (uuid route still works)", async () => {
+      const listRes = await ctx.app.inject({
+        method: "GET",
+        url: "/api/questions?page=1&pageSize=1",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(listRes.statusCode).toBe(200);
+      const first = listRes.json().items[0];
+      const byId = await ctx.app.inject({
+        method: "GET",
+        url: `/api/questions/${first.id}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(byId.statusCode).toBe(200);
+    });
+  });
 });
