@@ -52,6 +52,11 @@ const questionListQuerySchema = z.object({
   search: z.string().optional(),
 });
 
+/** Zod schema for the distinct tag vocabulary response (issue #182 tag filter). */
+const questionTagListResponseSchema = z.object({
+  tags: z.array(z.string()),
+});
+
 /** Fastify plugin that registers all question CRUD and import routes. */
 const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -126,6 +131,29 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         pageSize,
         totalPages: Math.ceil(total / pageSize),
       };
+    },
+  );
+
+  fastify.get(
+    "/questions/tags",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionView),
+      ],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin", "Teacher"],
+        response: {
+          200: questionTagListResponseSchema,
+        },
+      },
+    },
+    /** Returns the distinct sorted tag vocabulary of the org (issue #182 tag filter). */
+    async (request: any) => {
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createQuestionRepo(fastify.db);
+      return { tags: await repo.listAllTags(ctx) };
     },
   );
 

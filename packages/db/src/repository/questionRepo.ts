@@ -102,6 +102,32 @@ export function createQuestionRepo(db: Database) {
     },
 
     /**
+     * Returns the distinct set of tag strings used by any question in the
+     * tenant, sorted ascending. Backs the admin tag-filter vocabulary
+     * endpoint (issue 182). The jsonb_array_elements argument is guarded by a
+     * CASE at the expansion site, so a legacy non-array tags value cannot
+     * break the listing regardless of planner qual placement; null and empty
+     * elements are excluded so the vocabulary only contains real tags.
+     */
+    async listAllTags(ctx: TenantContext | RequestContext): Promise<string[]> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db.execute<{ tag: string }>(sql`
+        select distinct tag_value #>> '{}' as tag
+        from ${questions},
+          jsonb_array_elements(
+            case when jsonb_typeof(${questions.tags}) = 'array'
+                 then ${questions.tags}
+                 else '[]'::jsonb end
+          ) as tag_value
+        where ${questions.organizationId} = ${orgId}
+          and (tag_value #>> '{}') is not null
+          and (tag_value #>> '{}') <> ''
+        order by tag
+      `);
+      return rows.map((row) => row.tag);
+    },
+
+    /**
      * Returns the count of questions belonging to a specific course,
      * scoped to the tenant. Used by course deletion guard.
      */
