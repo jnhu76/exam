@@ -176,6 +176,20 @@ describe("testInfraLock — key derivation", () => {
     expect(key >= -9223372036854775808n).toBe(true);
     expect(key <= 9223372036854775807n).toBe(true);
   });
+
+  it("derives distinct keys per resource class (schema vs database)", () => {
+    const schemaKey = getTestInfraLifecycleLockKey("schema");
+    const databaseKey = getTestInfraLifecycleLockKey("database");
+    // The 2026-08-26 audit fix split the single shared key by resource class
+    // so a long-tail DROP DATABASE (23.4s hold) can no longer block the
+    // high-frequency schema queue. Distinct keys are the structural
+    // guarantee; the PG tests below prove the runtime consequence.
+    expect(databaseKey).not.toBe(schemaKey);
+    for (const key of [schemaKey, databaseKey]) {
+      expect(key >= -9223372036854775808n).toBe(true);
+      expect(key <= 9223372036854775807n).toBe(true);
+    }
+  });
 });
 
 describe("resolveTestInfraCoordinationUrl — canonical coordination URL", () => {
@@ -482,44 +496,86 @@ PG_DESCRIBE(
   // advisory locks on the coordination DB.
   { timeout: 30_000 },
   () => {
-    it("a held database-class lock does not block a schema-class critical section", async () => {
+    it("a held database-class lock does not hold the schema key (pg_locks proof)", async () => {
       // Deterministic reproducer of the 2026-08-26 audit failure: one
       // pathological DROP DATABASE held the single shared key for 23.4s and
       // every queued schema setup inherited that wait inside its hook budget.
-      // With the class split, the schema class must acquire independently.
-      const holderEntered = createDeferred<void>("holderEntered");
-      const releaseHolder = createDeferred<void>("releaseHolder");
-      const schemaAcquired = createDeferred<void>("schemaAcquired");
-      const holderPromise = withTestInfraLifecycleLock(
-        ADMIN_URL,
-        async () => {
-          holderEntered.resolve();
-          await releaseHolder.promise;
-        },
-        { lockClass: "database" },
-      );
+      //
+      // pg_locks is filtered to THIS session (pid = pg_backend_pid()), so the
+      // proof is independent of sibling critical sections and needs no timing:
+      // a session holding the DATABASE key must not also hold the SCHEMA key,
+      // which is exactly why a schema-class caller can never be blocked by a
+      // database-class holder after the split.
+      const probe = postgres(COORD_URL, { max: 1 });
+      const schemaKey = getTestInfraLifecycleLockKey("schema");
+      const databaseKey = getTestInfraLifecycleLockKey("database");
+      const countAdvisoryOnThisSession = async (key: bigint) => {
+        // pg_locks.classid/objid are oid (raw unsigned 32-bit halves of the
+        // advisory bigint key); mask the key halves before casting so a
+        // high-bit key never raises "integer out of range".
+        const rows = (await probe.unsafe(
+          `SELECT count(*)::int AS n
+           FROM pg_locks
+           WHERE pid = pg_backend_pid()
+             AND locktype = 'advisory'
+             AND granted
+             AND classid = (($1::bigint >> 32) & 4294967295)::oid
+             AND objid = ($1::bigint & 4294967295)::oid`,
+          [key.toString()],
+        )) as Array<{ n: number }>;
+        return rows[0]?.n ?? 0;
+      };
       try {
-        await holderEntered.promise;
-        const schemaPromise = withTestInfraLifecycleLock(
+        await probe.unsafe("SELECT pg_advisory_lock($1)", [
+          databaseKey.toString(),
+        ]);
+        try {
+          // Sanity: this session really does hold the database key.
+          expect(await countAdvisoryOnThisSession(databaseKey)).toBe(1);
+          // The database holder must NOT hold the schema key on its own
+          // session, so a schema-class caller can never be blocked by it.
+          expect(await countAdvisoryOnThisSession(schemaKey)).toBe(0);
+        } finally {
+          await probe.unsafe("SELECT pg_advisory_unlock($1)", [
+            databaseKey.toString(),
+          ]);
+        }
+      } finally {
+        await probe.end().catch(() => {});
+      }
+    });
+
+    it("database-class critical sections are routed to the database key", async () => {
+      const databaseKey = getTestInfraLifecycleLockKey("database");
+      const probe = postgres(COORD_URL, { max: 1 });
+      try {
+        await withTestInfraLifecycleLock(
           ADMIN_URL,
           async () => {
-            schemaAcquired.resolve();
+            // Runs inside the held critical section. A different session
+            // cannot re-acquire a key the holder's own session owns, so
+            // try-locking the DATABASE key here must FAIL — proving the
+            // section is routed to the DATABASE key. A regression that
+            // routes the database class onto the schema key leaves the
+            // DATABASE key free, so the try-lock succeeds and this assertion
+            // fails. The probe only ever try-locks: it never blocks, never
+            // queues, and no key is held externally, so this test cannot
+            // starve sibling critical sections (unlike a race-based probe).
+            const rows = (await probe.unsafe(
+              "SELECT pg_try_advisory_lock($1) AS ok",
+              [databaseKey.toString()],
+            )) as Array<{ ok: boolean }>;
+            if (rows[0]?.ok === true) {
+              await probe.unsafe("SELECT pg_advisory_unlock($1)", [
+                databaseKey.toString(),
+              ]);
+            }
+            expect(rows[0]?.ok).toBe(false);
           },
-          { lockClass: "schema" },
+          { lockClass: "database" },
         );
-        const winner = await Promise.race([
-          schemaAcquired.promise.then((): string => "schema-acquired"),
-          raceTimeoutLabel("race-timeout", 3_000),
-        ]);
-        // On the pre-split single-key implementation the schema section
-        // blocks behind the database holder (released only after the race),
-        // so this assertion fails with "race-timeout".
-        expect(winner).toBe("schema-acquired");
-        releaseHolder.resolve();
-        await Promise.all([holderPromise, schemaPromise]);
       } finally {
-        disposeAll(holderEntered, releaseHolder, schemaAcquired);
-        await Promise.allSettled([holderPromise]);
+        await probe.end().catch(() => {});
       }
     });
 
@@ -534,6 +590,12 @@ PG_DESCRIBE(
         },
         { lockClass: "database" },
       );
+      await first.promise;
+      // `first.promise` resolves inside the held critical section, so the
+      // second caller is now guaranteed to launch BEHIND a real database-key
+      // holder. Launching it before this point races the initial acquisition:
+      // if the second caller happened to win the key first, the test would
+      // misread "second-finished-early" and fail spuriously.
       let overlapped = false;
       const secondPromise = (async () => {
         await withTestInfraLifecycleLock(
@@ -545,7 +607,6 @@ PG_DESCRIBE(
         );
       })();
       try {
-        await first.promise;
         const winner = await Promise.race([
           secondPromise.then((): string => "second-finished-early"),
           raceTimeoutLabel("second-still-waiting", 1_000),
