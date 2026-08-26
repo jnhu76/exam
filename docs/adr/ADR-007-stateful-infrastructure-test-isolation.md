@@ -956,6 +956,28 @@ This ADR is informed by, but does not modify, `docs/standards/test-flakes.md`:
   invariants are enforced, but the existing mitigations stay until each
   follow-up phase removes them with evidence.
 
+## Post-implementation addendum: database lifecycle ownership (S0 convergence)
+
+The physical lifecycle of the databases this ADR introduced is now owned
+explicitly and is normative in `docs/standards/testing.md` §2.8:
+
+- The implicit local `exam_test` base database is self-provisioned by the
+  test harness (`packages/db/src/testDbBootstrap.ts`, wired into both vitest
+  globalSetups) — the Docker initdb bootstrap was removed. An explicit
+  `TEST_DATABASE_URL` is operator-owned: verified, never auto-created.
+- Physical worker databases (`exam_test_w<N>`) are reclaimed by an idle-only
+  sweep (`sweepIdleWorkerDatabases`) at apps/api run start and teardown, on
+  the implicit-local server only. Vitest assigns monotonically increasing
+  worker ids across files (no reuse), so without the sweep every full API run
+  leaks ~90 physical databases; this closes the unbounded-accumulation gap
+  without changing the per-worker isolation model of this ADR.
+- DB-routing / topology environment variables are part of the Turbo task
+  cache identity for DB-backed test tasks (turbo `env`, not
+  `passThroughEnv`), so cache replay cannot mask a database/topology switch.
+
+These are lifecycle-owner clarifications; the per-worker database / schema
+isolation design of this ADR is unchanged.
+
 ## References
 
 - `docs/standards/test-flakes.md` — flake registry, including `BUG-FLAKE-001`
