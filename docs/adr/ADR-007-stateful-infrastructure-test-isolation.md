@@ -754,55 +754,84 @@ Failure principles:
 - MUST record minimum reproduction, failure log, and the suspected invariant
   violation.
 
-## Acquisition-count contract for the lifecycle lock (2026-08-26 audit addendum)
+## Test-infra lifecycle contract (2026-08-26 audit, revised same day after round-2 review)
 
-The Phase 6D lifecycle lock serializes heavy DDL on purpose; the 2026-08-26
-drifting-timeout audit (see `docs/standards/test-flakes.md` "2026-08-26" entry)
-showed the failure mode is not the lock itself but its **queue load**: measured
-244 acquisitions per `@exam/db` coverage run with median wait ~0.7s / p95 ~2.2s
-on fully green runs, scaling monotonically with worker count (workers=1:
-p50 19ms). Two structural rules now bound the load at the seams:
+The Phase 6D lifecycle lock serializes heavy DDL on purpose. The 2026-08-26
+drifting-timeout audit first blamed the lock's **queue load** (measured 244
+acquisitions per `@exam/db` coverage run, median wait ~0.7s / p95 ~2.2s on
+green runs, scaling monotonically with worker count). A second review round
+traced that load one level further up to a **wrong worker identity**. The full
+causal chain, top to bottom:
 
-1. **One critical section per setup.** `getIsolatedTestDb` batches
-   CREATE SCHEMA + migrate into a single
-   `withTestInfraLifecycleLock` acquisition. Any future setup seam MUST NOT
-   split its bootstrap across multiple lock acquisitions — each extra
-   acquisition pays a full global queue wait.
-2. **Bootstrap once per process per database.** The worker-database path
-   memoizes ensure+migrate per resolved worker URL; repeated setups in the
-   same process acquire the lock zero times. Vitest runs every test file in a
-   fresh isolated worker process (workers are not reused under the default
-   `isolate` semantics), so process scope == file scope.
-3. **Split keys by resource class.** The single shared key meant one
-   long-tail physical-DDL outlier (a measured 23.4s `DROP DATABASE` on WSL2
-   I/O) blocked the entire high-frequency schema queue and starved unrelated
-   suites past their 10s hookTimeout. `withTestInfraLifecycleLock` now takes
-   `lockClass: "schema" | "database"`: CREATE/DROP DATABASE callers MUST use
-   the `database` key; schema/migration critical sections keep the original
-   key. Cross-class engine contention (the Phase 6D concern) is carried by the
-   participating lifecycle suites' deterministic-queue hang-protection
-   budgets, not by one global key.
-4. **Queue-participant hooks get the 30s budget explicitly.** Vitest's
-   per-describe `{ timeout }` applies to test bodies only — hooks resolve
-   their own timeout as `beforeAll(fn, timeout = getDefaultHookTimeout())`
-   (verified in the vitest runner source), so a hook that acquires the
-   lifecycle lock runs on the 10s global default unless the package config
-   raises it. Worse, a timed-out hook is not cancelled: its orphaned promise
-   keeps holding the advisory lock and cascades multi-second waits to every
-   sibling (measured 23.8s single wait after one hook timeout).
-   `packages/db/vitest.config.ts` therefore sets `hookTimeout: 30_000`,
-   matching the 30s budgets the lifecycle describes already declare for their
-   tests. Any future suite whose beforeAll/afterAll acquires the lifecycle
-   lock relies on this package-level budget; do not lower it without
-   re-justifying the queue envelope.
+```text
+VITEST_WORKER_ID bound as the slot identity (instance id, unbounded by maxWorkers)
+    ↓
+per-file physical database churn under isolate defaults
+    ↓
+CREATE DATABASE + full migrate per test file (~90 DBs per full API run)
+    ↓
+global lifecycle advisory-lock queue (p95 ~2.2s; long-tail 23.4s DROP DATABASE)
+    ↓
+5s testTimeout / 10s hookTimeout budgets consumed by queue waits
+    ↓
+drifting timeout victims (auth limiter, e2eReset, examProfileRepo, 0027, …)
+```
 
-Regression tests assert these rules via
-`getTestInfraLockAcquisitionCount()` and fail on the pre-fix implementation.
-`TEST_INFRA_TRACE=1` emits per-acquisition wait/hold diagnostics to stderr for
-future audits. Known remaining load (follow-up, not contract): every fresh
-worker still pays one CREATE DATABASE + full migrate acquisition; template-DB
-cloning or a slot-bounded worker DB pool would be the next structural
-reduction.
+Measured proof of the first layer (16-file API probe,
+`API_TEST_MAX_WORKERS=2`, cold database set): before the identity fix the run
+created **13** physical `exam_test_w*` databases; after rebinding it created
+exactly **2** (= `maxWorkers`). A warm rerun traced 32 acquisitions with max
+wait **58ms** and 1.36s total hold — the queue vanished without any lock-key
+surgery.
+
+Contract rules going forward:
+
+1. **Slot-scoped resources bind to `VITEST_POOL_ID`, never
+   `VITEST_WORKER_ID`.** Semantics verified against installed vitest 4.1.7
+   source and official docs: `VITEST_POOL_ID` is an execution SLOT —
+   allocated before a task starts, freed when it finishes ("Value is between
+   1-maxWorkers"); concurrent files never share a slot.
+   `VITEST_WORKER_ID` is a worker INSTANCE id — unique per created worker
+   regardless of `maxWorkers`, monotonic across the run ("tracks individual
+   worker instances regardless of the maxWorkers setting", migration guide).
+   `testScope.resolveWorkerId` resolution order: `TEST_WORKER_ID` (explicit
+   manual override) → `VITEST_POOL_ID` → `VITEST_WORKER_ID` (legacy
+   fallback) → `"1"`.
+2. **Inter-file isolation is preserved by the truncate boundary, not by name
+   uniqueness.** Sequential files sharing a slot database reset state through
+   the once-per-process `resetPostgres()` boundary in `buildTestApp`;
+   concurrent files are always on different slots because a slot is freed
+   only after its task finishes (vitest scheduler `getWorkerId` /
+   `freeWorkerId`).
+3. **One critical section per setup.** `getIsolatedTestDb` batches
+   CREATE SCHEMA + migrate into a single `withTestInfraLifecycleLock`
+   acquisition. Any future setup seam MUST NOT split its bootstrap across
+   multiple acquisitions — each extra acquisition pays a full global queue
+   wait.
+4. **Bootstrap once per process per database.** The worker-database path
+   memoizes ensure+migrate per resolved worker URL (failures evict the
+   entry); repeated setups in the same process acquire the lock zero times.
+5. **ONE lifecycle lock key.** Physical CREATE/DROP DATABASE and schema/
+   migration DDL serialize against EACH OTHER on purpose — that is the Phase
+   6D engine guarantee (heavy DDL must not fight migration traffic on the
+   catalog). A resource-class key split (`schema` vs `database`) was tried on
+   2026-08-26 and withdrawn the same day: its motivating queue load was the
+   identity symptom above, and "a bigger budget absorbs cross-class
+   contention" is not concurrency control.
+6. **Hook budgets are declared at the hook call site, never package-wide.**
+   Vitest's per-describe `{ timeout }` covers TEST bodies only; hooks take
+   their own numeric timeout argument (`beforeAll(fn, 30_000)`). Lifecycle
+   hooks that queue on the lock declare 30s explicitly at each call site;
+   everything else surfaces at the 10s default so an unrelated broken hook
+   fails fast instead of being masked for 30s. A timed-out hook is NOT
+   cancelled — its orphaned promise keeps holding the advisory lock — which
+   is exactly why unraised budgets matter.
+
+Regression tests assert these rules deterministically (charset/priority unit
+tests for rule 1; pg_locks self-session proofs and try-lock probes for rules
+3–5; `getTestInfraLockAcquisitionCount()` counters), never by timing.
+`TEST_INFRA_TRACE=1` emits per-acquisition wait/hold diagnostics to stderr
+for future audits.
 
 ## Relationship to existing flake records
 

@@ -52,7 +52,10 @@ for (const [key, value] of Object.entries(envVars)) {
 // 关键：并行模式下**绝不能**设置 TEST_WORKER_ID。resolveWorkerId() 优先读
 // TEST_WORKER_ID，若固定为 1，所有 vitest worker 都会解析成 worker 1 → 共用
 // exam_test_w1 → per-worker database 隔离失效。并行依赖 vitest 自动注入的
-// VITEST_WORKER_ID。serial 模式（本配置默认）可以手工设 TEST_WORKER_ID=1。
+// VITEST_POOL_ID（执行槽位，1..maxWorkers，任务结束即回收，因此 slot DB 的
+// 数量恰好等于 maxWorkers；VITEST_WORKER_ID 是实例 id、不受 maxWorkers 约束，
+// 只作 legacy 兜底，绝不能作为槽位身份）。serial 模式（本配置默认）可以
+// 手工设 TEST_WORKER_ID=1。
 //
 // 非法 API_TEST_MAX_WORKERS（非数字 / ≤0 / 非整数）直接 throw，fail-fast，
 // 不静默退化为串行（避免开发者以为在跑并行实际却串行）。

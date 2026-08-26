@@ -52,13 +52,14 @@
 
 ## 已修复事故
 
-### 2026-08-26 — 漂移型 5s/10s 超时的共享根因：test-infra DDL advisory-lock 队列负载（S0 审计 follow-up）
+### 2026-08-26 — 漂移型 5s/10s 超时的根因链：worker identity 错绑（第一层）→ DDL advisory-lock 队列负载（第二层）（S0 审计 follow-up ×2 轮审查）
 
 - **现象**：`pnpm verify` / coverage 下漂移型超时，victim 位置不固定：auth.test.ts
   login-limiter（5s）、e2eReset.test.ts 首用例（5s）、examProfileRepo.test.ts
   beforeAll（10s，次生 "cleanup is not a function"）、0027 sabotage 用例、历史
   testWorkerDatabase/seed 条目。单文件复跑必过，失败点随调度漂移。
-- **证据（TEST_INFRA_TRACE 插桩 + pg 采样，packages/db coverage 默认并行）**：
+- **证据一（TEST_INFRA_TRACE 插桩 + pg 采样，packages/db coverage 默认并行，
+  第一轮审查）**：
   - 单次 run **244 次** lifecycle-lock 获取；等待 **p50≈730ms、p95≈2.2s、max≈4.8s**；
     每轮 72-93 次等待 >1s、5-7 次 >3s —— 全绿 run 也如此。
   - 并发单调恶化：workers=1 → p50=19ms/max=265ms（队列消失）；2 → max 2s；
@@ -67,20 +68,32 @@
     backend 等 advisory lock（1 持有 + 队列）。
   - 纯 CPU 假设证伪：auth limiter 单跑 1032ms，4 个 argon2 燃烧器下仅 1173ms
     （+14%），纯 CPU 饥和不构成 5s 击穿。
-- **根因（三条结构性队列负载，一条预算耦合）**：
-  1. vitest isolate 默认让**每个测试文件跑在新 worker 进程**（官方文档确认
-     workers-not-reused），"worker database" 实为 **per-file database**：api
-     165 文件单轮创建 ~90 个 `exam_test_w*`，每个都付 CREATE+全量 migrate，
-     全部串行在同一把锁上。
-  2. worker 路径 `setupWorkerTestDatabase` **无进程内记忆化**：每次
-     `buildTestApp()` 都重新 ensure+migrate-check 两次取锁（api 单轮 351 次
-     获取）——温构建纯属队列负载。
-  3. file-schema 路径 `getIsolatedTestDb` 把 CREATE SCHEMA 与 migrate 拆成
-     **两次取锁**：每次 setup 付两轮全队列等待（最坏 4.8s+4.4s，直接吃穿
-     10s hookTimeout —— examProfileRepo victim 的机制）。
-  4. 预算耦合：默认 testTimeout 5s / hookTimeout 10s 同时承担"测试逻辑"与
-     "隔离基建排队"，e2eReset 首用例自身 1.88s（含 10 次真实 argon2）×
-     coverage×竞争放大即逼近 5s。
+- **证据二（定向探针，第二轮审查——第一层根因实证）**：固定 16 个 api 测试
+  文件、`API_TEST_MAX_WORKERS=2`、清空 `exam_test_w*` 冷启动：
+  - 修复前创建 **13 个**物理 worker 库 —— `maxWorkers=2` 名不副实；
+  - 绑定 `VITEST_POOL_ID` 后恰好 **2 个**；温跑 trace 32 次获取、wait
+    **p50=30ms / max=58ms**、hold 总量 1.36s —— 第二层队列压力随第一层修复
+    自然消失，无需动锁键。
+  - vitest 语义证据（安装版 4.1.7 dist + 官方文档）：`VITEST_POOL_ID`
+    "Value is between 1-maxWorkers"，是 Jest `JEST_WORKER_ID` 对应物、执行
+    槽位、任务结束即回收（scheduler `getWorkerId`/`freeWorkerId` 源码）；
+    `VITEST_WORKER_ID` "unique per each isolated worker"、官方 migration
+    guide 明言不受 maxWorkers 限制、单调递增。另实证 per-file `run` 消息只
+    重置 `VITEST_WORKER_ID`，`VITEST_POOL_ID` 整个进程生命周期不变。
+- **根因（分层因果链）**：
+  1. **第一层（identity 错绑，本轮新发现）**：`testScope.resolveWorkerId`
+     把槽位域资源（物理库名 / Redis / queue 前缀）绑到 `VITEST_WORKER_ID`
+     （worker 实例 id）。isolate 默认下每文件一个新实例 ⇒ 每文件唯一实例 id
+     ⇒ 每文件独立物理库 + 全量 migrate（api 全量 ~90 库），`maxWorkers=2`
+     形同虚设。"worker database" 名实不符的真正原因不是 "vitest worker
+     生命周期奇怪"，而是**选错了 Vitest identity**。
+  2. **第二层（放大结构，第一轮审查发现，修复保留）**：
+     - worker 路径 `setupWorkerTestDatabase` 无进程内记忆化：每次
+       `buildTestApp()` 重新 ensure+migrate-check 两次取锁（351→255 次/run）；
+     - file-schema 路径 `getIsolatedTestDb` 把 CREATE SCHEMA 与 migrate 拆成
+       两次取锁（最坏两轮全队列等待，吃穿 10s hookTimeout 的机制）。
+  3. 预算耦合是受害面而非根因：5s testTimeout / 10s hookTimeout 同时承担
+     测试逻辑与隔离基建排队；queue 塌缩后预算自然够用。
 - **修复中捕获的自然失败（根因证据闭环）**：修复迭代中一次 `@exam/db`
   coverage run 复现了完整 victim 链：trace 显示一次病态
   `dropDatabaseIfExists` **持锁 23.4s**（WSL2 I/O 长尾的 DROP DATABASE），
@@ -88,54 +101,51 @@
   0027 ×2 共 6 个 suite "Hook timed out in 10000ms" + 次生 "cleanup is not
   a function"。与 S0 会话 examProfileRepo victim 完全同签名。
 - **修复（最小结构，非 timeout/skip/retry）**：
-  1. `testWorkerDatabase.ts`：per-process bootstrap 记忆化（URL→ensure+migrate
-     promise，失败驱逐）——同进程第二次 setup 取锁 **0 次**（api 获取
-     351→255，p95 224-323ms，max ≤970ms；auth limiter 温构建零锁）。
-  2. `testDb.ts` `getIsolatedTestDb`：CREATE SCHEMA + migrate 合并为**一次**
+  1. **worker identity 重绑（第一层修复，`testScope.ts`）**：解析序改为
+     `TEST_WORKER_ID`（显式覆盖）→ `VITEST_POOL_ID` → `VITEST_WORKER_ID`
+     （legacy 兜底）→ `"1"`。效果：探针冷启 13→2 个物理库；温跑 wait max
+     58ms。顺序文件共享同一 slot 库时，隔离由 `buildTestApp` 的每进程一次
+     truncate 边界保持（并发文件永在异槽：槽位任务结束才回收）。
+  2. `testWorkerDatabase.ts`：per-process bootstrap 记忆化（URL→ensure+migrate
+     promise，失败驱逐）——同进程第二次 setup 取锁 **0 次**（auth limiter
+     温构建零锁）。
+  3. `testDb.ts` `getIsolatedTestDb`：CREATE SCHEMA + migrate 合并为**一次**
      锁临界区（连接建立移出锁外；`testIsolation.ts` 新增
      `createTestSchemaUnlocked`）——最坏暴露从两轮全队列等待减为一轮。
-  3. **锁键拆类**（削断长尾放大）：`testInfraLock.ts` 新增
-     `TestInfraLockClass`（`schema` = CREATE/DROP SCHEMA + migrate 高频队列；
-     `database` = CREATE/DROP DATABASE 长尾源），`ensureDatabaseExists` /
-     `dropDatabaseIfExists` 走 database 键。一次 23s 的 DROP DATABASE 不再
-     阻塞全部 schema setup；跨类引擎竞争由 lifecycle 套件既有 30s
-     hang-protection 预算承接。computeLockKey 同时补上真正的 int64 折叠
-     （`BigInt.asIntN(64,…)`；旧键值不变，新键此前会 "out of range for
-     type bigint"）。
   4. `e2eReset.test.ts`：对齐 demo-seed 预计算 hash 先例（memoizedHash）+
-     bootstrap（ensure+migrate）移入 beforeAll；首用例 1881ms→1007ms；并按
-     PR #242 队列参与方规则补 30s 预算（describe 覆盖测试体，hook 由
-     vitest.config.ts 的 `hookTimeout: 30_000` 覆盖——见下）。
+     bootstrap（ensure+migrate）移入 beforeAll；首用例 1881ms→1007ms；
+     beforeAll/afterAll 在调用点显式传 30s 数值超时（见修复 6）。
   5. `testInfraLock.ts`：新增 `getTestInfraLockAcquisitionCount()`（回归测试
-     断言用）与 `TEST_INFRA_TRACE=1` 门控的 wait/hold/class 结构化诊断日志。
-  6. **hook 预算补全（审计 addendum，vitest 语义实证）**：vitest 4 源码实证
-     `beforeAll(fn, timeout = getDefaultHookTimeout())` —— describe 的
-     `{ timeout }` 只作用于**测试体**，**不传播到 hook**；hook 默认走全局
-     `hookTimeout`（10s）。而 packages/db 几乎所有 lifecycle 套件的
-     beforeAll/afterAll 都是 DDL 锁队列参与方，且**超时的 hook 不会被取消**
-     （orphan promise 继续持锁），一旦某个 hook 超时即引发级联：观察到单次
-     schema 等待 **23.8s**、e2eReset/0024 beforeAll 相继 10s 超时。
-     修复：`packages/db/vitest.config.ts` 设 `hookTimeout: 30_000`（与
-     lifecycle describe 已声明的 30s 测试预算一致）；修正后连续 5 次 coverage
-     全绿，最长等待回落到 2.3-2.9s，级联消失。`ensureDatabaseExists` describe
-     的 15s 预算（其余参与方均为 30s）也一并对齐为 30s。
-- **回归测试（旧实现必败，stash/变异实证）**：`testIsolation.test.ts`
+     断言用）与 `TEST_INFRA_TRACE=1` 门控的 wait/hold 结构化诊断日志；
+     computeLockKey 补上真正的 int64 折叠（`BigInt.asIntN(64,…)`）。
+  6. **hook 预算显式化（vitest 语义实证）**：describe 的 `{ timeout }` 只
+     作用于测试体，hook 独立走全局 `hookTimeout`（默认 10s），且**超时的
+     hook 不会被取消**（orphan promise 继续持锁引发级联，观察值 23.8s）。
+     排队取锁的生命周期 hook 改为调用点显式 `beforeAll(fn, 30_000)` /
+     `afterAll(fn, 30_000)`；**不再设包级 `hookTimeout` 放宽** —— 无关坏
+     hook 必须仍在 10s 默认暴露。
+- **已试并撤回的方案（第 1 轮修法，第 2 轮审查否决）**：
+  - ~~锁键拆类（schema/database 双键）~~：撤回理由：(a) 动机性队列负载本身
+    是 identity 症状，identity 修复后 wait max 58ms，无拆键需要；(b)
+    "跨类竞争由 30s budget 承接"不成立——**timeout 预算不是并发控制**；
+    (c) 单键正是 Phase 6D 的引擎级保证（CREATE/DROP DATABASE 不与 migrate
+    并发打 catalog），拆键是在撤销旧安全设计。单键恢复，并保留"任意临界区
+    持有 THE 单键、探针 try-lock 必败"的确定性回归。
+  - ~~包级 `hookTimeout: 30_000`~~：作用域过度扩大（把 @exam/db 全部
+    beforeAll/afterAll 一律放宽到 30s，无关坏 hook 的暴露延迟 3 倍）。改为
+    仅生命周期 hook 显式传参。
+- **回归测试（旧实现必败，stash/变异实证）**：`testScope.test.ts` 同槽位
+  稳定名 / 异槽不同名 / POOL>WORKER 优先级 / legacy 回退 / 空值穿透 /
+  charset 校验（旧实现按 WORKER_ID 取名必败）；`testIsolation.test.ts`
   "acquires the lifecycle lock exactly once"（旧实现 2≠1 FAIL）；
   `testWorkerDatabase.test.ts` "second setup … does not re-acquire"（旧实现
-  2≠0 FAIL）；`testInfraLock.test.ts` 键派生 "derives distinct keys per
-  resource class"（同键变异 FAIL）+ "a held database-class lock does not
-  hold the schema key (pg_locks proof)"（同键变异 FAIL 'expected 1 to be
-  +0'，拆键 PASS，pg_locks 本会话过滤、与兄弟临界区无关、无时序）+ "database-
-  class critical sections are routed to the database key"（路由变异 FAIL
-  'expected true to be false'，正确路由 PASS，在持有临界区内部从第二会话
-  try-lock database 键必败——无外部持键、无竞速）+ "database-class callers
-  still serialize against each other"（修复了 second 抢跑初始获取的潜在
-  乱序竞态：second 必须在 first 确证持锁后才启动）。
-- **遗留（follow-up，不本 PR）**：per-file fresh worker 的 CREATE+migrate 基线
-  （api ~255 次/run 获取）仍在；模板库克隆（CREATE DATABASE … TEMPLATE，登记册
-  既有方向）与 slot-bounded worker DB 池可进一步压垮队列负载；schema 类内部
-  的 migrate 串行（~49 次 × 0.6-0.9s/run）是剩余的主要利用率来源，队列 p95
-  仍 ~2-2.5s —— 队列参与方的 hang-protection 预算规则继续有效。
+  2≠0 FAIL）；`testInfraLock.test.ts` 单键回归："any critical section holds
+  THE single lifecycle key (probe try-lock must fail)"（重引入分键或改路由
+  变异 FAIL，pg_locks try-lock 无竞速无时序）+ 跨库协同 pg_locks 本会话
+  过滤证明。
+- **遗留（follow-up，不本 PR）**：模板库克隆（CREATE DATABASE … TEMPLATE）
+  可把 slot 冷启动从 CREATE+migrate 进一步降到 clone；api 全量并行铺开时
+  关注 slot 复用率与 @exam/db file-schema 路径的 migrate 串行利用率。
 
 ### 2026-07-21 — fire-and-forget audit 与破坏性清理发生生命周期竞态
 
