@@ -12,12 +12,12 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     command: postgres -c default_transaction_isolation='repeatable read'
-    # Create the exam_test database (required by pnpm test's testDb.ts
-    # name-safety check) alongside the exam dev DB. POSTGRES_DB auto-creates
-    # only one DB; this init script creates the second. Runs once on first
-    # initialization (empty data dir) per the postgres image convention.
-    volumes:
-      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+    # NOTE: no /docker-entrypoint-initdb.d mount. POSTGRES_DB creates the dev
+    # `exam` database; the test `exam_test` database is self-provisioned by
+    # the test harness (packages/db/src/testDbBootstrap.ts) on the implicit
+    # local URL, so it is (re)created whenever missing — including on a
+    # container whose initdb phase already ran (which an initdb script could
+    # never heal).
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
       interval: 2s
