@@ -84,9 +84,18 @@
   1. **第一层（identity 错绑，本轮新发现）**：`testScope.resolveWorkerId`
      把槽位域资源（物理库名 / Redis / queue 前缀）绑到 `VITEST_WORKER_ID`
      （worker 实例 id）。isolate 默认下每文件一个新实例 ⇒ 每文件唯一实例 id
-     ⇒ 每文件独立物理库 + 全量 migrate（api 全量 ~90 库），`maxWorkers=2`
-     形同虚设。"worker database" 名实不符的真正原因不是 "vitest worker
-     生命周期奇怪"，而是**选错了 Vitest identity**。
+     ⇒ 每文件独立物理库 + 全量 migrate（每次冷跑的物理库基数 ≈ 每文件一库，
+     以残留形式留存），`maxWorkers=2` 形同虚设。"worker database" 名实不符
+     的真正原因不是 "vitest worker 生命周期奇怪"，而是**选错了 Vitest
+     identity**。
+     **残留 vs 泄漏（round-3 修正，2026-08-27 实证）**：错绑产生的是
+     **错误基数的持续残留**，不是无界累积泄漏 —— 旧序（WORKER_ID 优先、
+     重建 dist）下 8 文件 run 1 物化 `exam_test_w0..w7`，同命令 run 2
+     **零新增**（实例 id 每次运行从 0 重启，同名复用）。历史观测到的
+     "84 个 exam_test_w%" 是不同形态 run 的实例 id 高水位，不是每次
+     run 的增量。修复后活跃集恰为 maxWorkers 个（w=2→{w1,w2}、w=4→
+     {w1..w4}，温跑复用零增长）；maxWorkers 收缩后高槽位库按设计留存为
+     空闲残留，不自动清扫。
   2. **第二层（放大结构，第一轮审查发现，修复保留）**：
      - worker 路径 `setupWorkerTestDatabase` 无进程内记忆化：每次
        `buildTestApp()` 重新 ensure+migrate-check 两次取锁（351→255 次/run）；
@@ -102,10 +111,13 @@
   a function"。与 S0 会话 examProfileRepo victim 完全同签名。
 - **修复（最小结构，非 timeout/skip/retry）**：
   1. **worker identity 重绑（第一层修复，`testScope.ts`）**：解析序改为
-     `TEST_WORKER_ID`（显式覆盖）→ `VITEST_POOL_ID` → `VITEST_WORKER_ID`
-     （legacy 兜底）→ `"1"`。效果：探针冷启 13→2 个物理库；温跑 wait max
-     58ms。顺序文件共享同一 slot 库时，隔离由 `buildTestApp` 的每进程一次
-     truncate 边界保持（并发文件永在异槽：槽位任务结束才回收）。
+     `TEST_WORKER_ID`（显式覆盖）→ `VITEST_POOL_ID` → Vitest 下缺
+     `VITEST_POOL_ID` 直接 FAIL（绝不静默回退到已知坏身份）→ 非 Vitest
+     才 `"1"`；`VITEST_WORKER_ID` 彻底退出解析（round-3 起无任何仓库消费方
+     只注入它；serial/parallel 两种模式均实测注入 POOL_ID）。效果：探针冷启
+     13→2 个物理库；温跑 wait max 58ms。顺序文件共享同一 slot 库时，隔离由
+     `buildTestApp` 的每进程一次 truncate 边界保持（并发文件永在异槽：槽位
+     任务结束才回收）。
   2. `testWorkerDatabase.ts`：per-process bootstrap 记忆化（URL→ensure+migrate
      promise，失败驱逐）——同进程第二次 setup 取锁 **0 次**（auth limiter
      温构建零锁）。
@@ -143,6 +155,49 @@
   THE single lifecycle key (probe try-lock must fail)"（重引入分键或改路由
   变异 FAIL，pg_locks try-lock 无竞速无时序）+ 跨库协同 pg_locks 本会话
   过滤证明。
+- **round-3 合同收口（2026-08-27，第三轮对抗审查，全部变异实证）**：
+  1. **TEST_ADMIN_DATABASE 权威穿透（CodeRabbit round-2 发现，round-3
+     实证+修复）**：`withTestInfraLifecycleLock` 曾在 seam 之下静默重读
+     `process.env.TEST_ADMIN_DATABASE`——调用方以显式 env 解析的
+     coordination DB 与锁会话实际落库不一致（advisory lock 是
+     database-local，协调静默失效）。修复：`options.env` 自调用方穿透
+     （resolve once, pass authority down）。回归：注入 env ≠ process.env
+     时，pg_locks 中 lifecycle 键的 granted 行 `database` OID 必须等于
+     注入权威库的 OID（唯一专用库，无兄弟噪声）；旧实现该行永不存在、
+     轮询超时 FAIL。
+  2. **bootstrap memo 权威域（key 加强）**：memo key 从 workerUrl 单键
+     改为 `(coordination admin URL, worker URL)`——同一 worker 库经不同
+     coordination 权威到达时不得复用他人 authority 之下的 ensure+migrate
+     （否则第二个权威静默跳过自己的串行化引导）。回归：同 workerUrl、
+     不同 `TEST_ADMIN_DATABASE` 的两次 setup，第二次锁获取数必须 >0
+     （旧 key 下为 0，变异 FAIL）。
+  3. **slot 复用的数据隔离（不止名字复用）**：`apps/api/tests/slotReuse/`
+     两阶段子 Vitest 运行（父测试控制顺序，真实 PostgreSQL）：stage A
+     经 canonical `buildTestApp` 写哨兵业务行后正常退出；stage B 稍后
+     以同槽位进入同一物理库——不得看到哨兵、必须看到 canonical seed
+     基线、migration metadata 必须原样。去掉 truncate 边界的变异使
+     stage B "does NOT see sentinel" 用例 FAIL（实证）。子运行以每次调用
+     唯一的 `TEST_WORKER_ID` 绑定专用槽库，绝不与外层并行 run 的
+     w1..wN 相撞。
+  4. **单一本地 run 合同（并发本地 run 不支持）**：两个独立本地 run 从
+     `VITEST_POOL_ID` 推导出相同槽库名，无守卫时并发共享物理库——实验
+     （变异禁用 lease 后重建 dist）实测：run B 的行在 run A 的槽库中
+     可见（foreignRows=5），且 B 的 reset 边界抹掉 A 的行。合同选择
+     Option B（放弃 run namespace，复杂度更低）：`setupWorkerTestDatabase`
+     以 `exam_test_slot_lease:<db>` 键空间的 session 级 advisory RUN
+     lease 声明槽库，进程退出自动释放；第二个 run 快速失败并给出明确
+     修复指引。有界等待（默认 10s，`TEST_SLOT_LEASE_WAIT_MS` 可测覆盖）
+     吸收同 run 内顺序文件的槽位交接（前文件进程退出尾巴仅数百 ms）。
+     回归：外部会话持同一 lease 键时 setup 必须 reject（确定性，无竞速），
+     释放后同进程重试必须成功。CI shard 各有独立 PG service，不受影响。
+  5. **TEST_WORKER_ID × 并行的可执行不变量**：并行不变量从
+     vitest.config 注释升级为启动前 throw（`apps/api/vitest.parallelism.ts`，
+     含 10 项 config-contract 单测）：`TEST_WORKER_ID` 显式设置 +
+     `API_TEST_MAX_WORKERS>1` ⇒ 测试启动前失败。serial 调试路径
+     （无/1 worker + TEST_WORKER_ID）保持文档化支持。
+  6. **本轮新增概念清单**：仅一个——per-slot-database run lease
+     （单一本地 run 合同的执行边界）；同时删除了一个旧概念
+     （VITEST_WORKER_ID legacy 兜底分支）。
 - **遗留（follow-up，不本 PR）**：模板库克隆（CREATE DATABASE … TEMPLATE）
   可把 slot 冷启动从 CREATE+migrate 进一步降到 clone；api 全量并行铺开时
   关注 slot 复用率与 @exam/db file-schema 路径的 migrate 串行利用率。
@@ -554,11 +609,13 @@ database（不同 vitest worker 不同 database）提供；`fileParallelism:fals
   BUG-FLAKE-001. The legacy file-schema path keeps its existing serial
   mitigation. CI shard validation remains pending.
 
-**关键不变量**（config 注释固化）：**并行模式绝不设 `TEST_WORKER_ID`**。
+**关键不变量**（round-3 起由 `apps/api/vitest.parallelism.ts` 在测试启动前
+throw 执行，不再只是注释）：**并行模式绝不设 `TEST_WORKER_ID`**。
 `resolveWorkerId()` 优先 `TEST_WORKER_ID`，固定会让所有 worker 落到
-`exam_test_w1` → 隔离失效。并行只依赖 vitest 注入的 `VITEST_WORKER_ID`。
-（实测：vitest `getWorkerId()` 单调递增 + 回收复用，`maxWorkers=2` 并发 ≤2
-但一次 suite 会创建 w0..w41 多个 database —— 安全但累积，不影响正确性。）
+`exam_test_w1` → 隔离失效。并行只依赖 vitest 注入的 `VITEST_POOL_ID`
+（执行槽位，≤ maxWorkers；`VITEST_WORKER_ID` 是实例 id，2026-08-26 审计
+确认为第一层根因，round-3 起彻底退出槽位解析——它造成的正是下文旧记录中
+"w0..w41 多 database" 的每文件残留）。
 
 **验证矩阵**（fresh PG 容器 `exam-db-6432`，postgres:18.4，端口 6432）：
 

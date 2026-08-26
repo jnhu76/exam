@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveParallelism } from "../vitest.parallelism.js";
+import { resolveParallelism } from "./vitest.parallelism.js";
 
 /**
  * Config-contract tests for the @exam/api parallelism gate
