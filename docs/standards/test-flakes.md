@@ -52,6 +52,73 @@
 
 ## 已修复事故
 
+### 2026-08-26 — 漂移型 5s/10s 超时的共享根因：test-infra DDL advisory-lock 队列负载（S0 审计 follow-up）
+
+- **现象**：`pnpm verify` / coverage 下漂移型超时，victim 位置不固定：auth.test.ts
+  login-limiter（5s）、e2eReset.test.ts 首用例（5s）、examProfileRepo.test.ts
+  beforeAll（10s，次生 "cleanup is not a function"）、0027 sabotage 用例、历史
+  testWorkerDatabase/seed 条目。单文件复跑必过，失败点随调度漂移。
+- **证据（TEST_INFRA_TRACE 插桩 + pg 采样，packages/db coverage 默认并行）**：
+  - 单次 run **244 次** lifecycle-lock 获取；等待 **p50≈730ms、p95≈2.2s、max≈4.8s**；
+    每轮 72-93 次等待 >1s、5-7 次 >3s —— 全绿 run 也如此。
+  - 并发单调恶化：workers=1 → p50=19ms/max=265ms（队列消失）；2 → max 2s；
+    4 → p95 884ms/max 4s；8（默认）→ p95 2.2s/max 4.8s。
+  - 池/连接排除：峰值 22-28 连接 ≪ max_connections=100；采样同时最多 6 个
+    backend 等 advisory lock（1 持有 + 队列）。
+  - 纯 CPU 假设证伪：auth limiter 单跑 1032ms，4 个 argon2 燃烧器下仅 1173ms
+    （+14%），纯 CPU 饥和不构成 5s 击穿。
+- **根因（三条结构性队列负载，一条预算耦合）**：
+  1. vitest isolate 默认让**每个测试文件跑在新 worker 进程**（官方文档确认
+     workers-not-reused），"worker database" 实为 **per-file database**：api
+     165 文件单轮创建 ~90 个 `exam_test_w*`，每个都付 CREATE+全量 migrate，
+     全部串行在同一把锁上。
+  2. worker 路径 `setupWorkerTestDatabase` **无进程内记忆化**：每次
+     `buildTestApp()` 都重新 ensure+migrate-check 两次取锁（api 单轮 351 次
+     获取）——温构建纯属队列负载。
+  3. file-schema 路径 `getIsolatedTestDb` 把 CREATE SCHEMA 与 migrate 拆成
+     **两次取锁**：每次 setup 付两轮全队列等待（最坏 4.8s+4.4s，直接吃穿
+     10s hookTimeout —— examProfileRepo victim 的机制）。
+  4. 预算耦合：默认 testTimeout 5s / hookTimeout 10s 同时承担"测试逻辑"与
+     "隔离基建排队"，e2eReset 首用例自身 1.88s（含 10 次真实 argon2）×
+     coverage×竞争放大即逼近 5s。
+- **修复中捕获的自然失败（根因证据闭环）**：修复迭代中一次 `@exam/db`
+  coverage run 复现了完整 victim 链：trace 显示一次病态
+  `dropDatabaseIfExists` **持锁 23.4s**（WSL2 I/O 长尾的 DROP DATABASE），
+  其后 schema setup 排队等待 23.5-23.9s ≫ 10s hookTimeout → testCleanup ×2 +
+  0027 ×2 共 6 个 suite "Hook timed out in 10000ms" + 次生 "cleanup is not
+  a function"。与 S0 会话 examProfileRepo victim 完全同签名。
+- **修复（最小结构，非 timeout/skip/retry）**：
+  1. `testWorkerDatabase.ts`：per-process bootstrap 记忆化（URL→ensure+migrate
+     promise，失败驱逐）——同进程第二次 setup 取锁 **0 次**（api 获取
+     351→255，p95 224-323ms，max ≤970ms；auth limiter 温构建零锁）。
+  2. `testDb.ts` `getIsolatedTestDb`：CREATE SCHEMA + migrate 合并为**一次**
+     锁临界区（连接建立移出锁外；`testIsolation.ts` 新增
+     `createTestSchemaUnlocked`）——最坏暴露从两轮全队列等待减为一轮。
+  3. **锁键拆类**（削断长尾放大）：`testInfraLock.ts` 新增
+     `TestInfraLockClass`（`schema` = CREATE/DROP SCHEMA + migrate 高频队列；
+     `database` = CREATE/DROP DATABASE 长尾源），`ensureDatabaseExists` /
+     `dropDatabaseIfExists` 走 database 键。一次 23s 的 DROP DATABASE 不再
+     阻塞全部 schema setup；跨类引擎竞争由 lifecycle 套件既有 30s
+     hang-protection 预算承接。computeLockKey 同时补上真正的 int64 折叠
+     （`BigInt.asIntN(64,…)`；旧键值不变，新键此前会 "out of range for
+     type bigint"）。
+  4. `e2eReset.test.ts`：对齐 demo-seed 预计算 hash 先例（memoizedHash）+
+     bootstrap（ensure+migrate）移入 beforeAll；首用例 1881ms→1007ms；并按
+     PR #242 队列参与方规则补 describe 30s hang-protection 预算。
+  5. `testInfraLock.ts`：新增 `getTestInfraLockAcquisitionCount()`（回归测试
+     断言用）与 `TEST_INFRA_TRACE=1` 门控的 wait/hold/class 结构化诊断日志。
+- **回归测试（旧实现必败，stash/变异实证）**：`testIsolation.test.ts`
+  "acquires the lifecycle lock exactly once"（旧实现 2≠1 FAIL）；
+  `testWorkerDatabase.test.ts` "second setup … does not re-acquire"（旧实现
+  2≠0 FAIL）；`testInfraLock.test.ts` "a held database-class lock does not
+  block a schema-class critical section"（同键变异 FAIL 'race-timeout'，
+  拆键 PASS）+ "database-class callers still serialize against each other"。
+- **遗留（follow-up，不本 PR）**：per-file fresh worker 的 CREATE+migrate 基线
+  （api ~255 次/run 获取）仍在；模板库克隆（CREATE DATABASE … TEMPLATE，登记册
+  既有方向）与 slot-bounded worker DB 池可进一步压垮队列负载；schema 类内部
+  的 migrate 串行（~49 次 × 0.6-0.9s/run）是剩余的主要利用率来源，队列 p95
+  仍 ~2-2.5s —— 队列参与方的 hang-protection 预算规则继续有效。
+
 ### 2026-07-21 — fire-and-forget audit 与破坏性清理发生生命周期竞态
 
 - **现象**：attempt 路由测试偶发命中

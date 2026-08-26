@@ -754,6 +754,43 @@ Failure principles:
 - MUST record minimum reproduction, failure log, and the suspected invariant
   violation.
 
+## Acquisition-count contract for the lifecycle lock (2026-08-26 audit addendum)
+
+The Phase 6D lifecycle lock serializes heavy DDL on purpose; the 2026-08-26
+drifting-timeout audit (see `docs/standards/test-flakes.md` "2026-08-26" entry)
+showed the failure mode is not the lock itself but its **queue load**: measured
+244 acquisitions per `@exam/db` coverage run with median wait ~0.7s / p95 ~2.2s
+on fully green runs, scaling monotonically with worker count (workers=1:
+p50 19ms). Two structural rules now bound the load at the seams:
+
+1. **One critical section per setup.** `getIsolatedTestDb` batches
+   CREATE SCHEMA + migrate into a single
+   `withTestInfraLifecycleLock` acquisition. Any future setup seam MUST NOT
+   split its bootstrap across multiple lock acquisitions — each extra
+   acquisition pays a full global queue wait.
+2. **Bootstrap once per process per database.** The worker-database path
+   memoizes ensure+migrate per resolved worker URL; repeated setups in the
+   same process acquire the lock zero times. Vitest runs every test file in a
+   fresh isolated worker process (workers are not reused under the default
+   `isolate` semantics), so process scope == file scope.
+3. **Split keys by resource class.** The single shared key meant one
+   long-tail physical-DDL outlier (a measured 23.4s `DROP DATABASE` on WSL2
+   I/O) blocked the entire high-frequency schema queue and starved unrelated
+   suites past their 10s hookTimeout. `withTestInfraLifecycleLock` now takes
+   `lockClass: "schema" | "database"`: CREATE/DROP DATABASE callers MUST use
+   the `database` key; schema/migration critical sections keep the original
+   key. Cross-class engine contention (the Phase 6D concern) is carried by the
+   participating lifecycle suites' deterministic-queue hang-protection
+   budgets, not by one global key.
+
+Regression tests assert both rules via
+`getTestInfraLockAcquisitionCount()` and fail on the pre-fix implementation.
+`TEST_INFRA_TRACE=1` emits per-acquisition wait/hold diagnostics to stderr for
+future audits. Known remaining load (follow-up, not contract): every fresh
+worker still pays one CREATE DATABASE + full migrate acquisition; template-DB
+cloning or a slot-bounded worker DB pool would be the next structural
+reduction.
+
 ## Relationship to existing flake records
 
 This ADR is informed by, but does not modify, `docs/standards/test-flakes.md`:
