@@ -56,16 +56,61 @@ describe("resolveTestScope — local worker defaults", () => {
     expect(scope.queuePrefix).toBe("exam:test:local:w2");
   });
 
-  it("prefers VITEST_WORKER_ID and treats TEST_WORKER_ID as fallback only", () => {
-    const fromRunner = resolveTestScope(env({ VITEST_WORKER_ID: "3" }));
-    expect(fromRunner.workerId).toBe("3");
-    expect(fromRunner.scopeId).toBe("local_w3");
+  it("prefers VITEST_POOL_ID over VITEST_WORKER_ID, and TEST_WORKER_ID over both", () => {
+    // Slot id beats instance id — see resolveWorkerId docstring for why.
+    const fromRunner = resolveTestScope(
+      env({ VITEST_POOL_ID: "2", VITEST_WORKER_ID: "3" }),
+    );
+    expect(fromRunner.workerId).toBe("2");
+    expect(fromRunner.scopeId).toBe("local_w2");
+
+    // Legacy fallback still works when only VITEST_WORKER_ID is present
+    // (older runner / non-vitest harness).
+    const legacyOnly = resolveTestScope(env({ VITEST_WORKER_ID: "3" }));
+    expect(legacyOnly.workerId).toBe("3");
+    expect(legacyOnly.scopeId).toBe("local_w3");
 
     const explicit = resolveTestScope(
-      env({ VITEST_WORKER_ID: "3", TEST_WORKER_ID: "9" }),
+      env({
+        VITEST_POOL_ID: "2",
+        VITEST_WORKER_ID: "3",
+        TEST_WORKER_ID: "9",
+      }),
     );
     expect(explicit.workerId).toBe("9");
     expect(explicit.scopeId).toBe("local_w9");
+  });
+
+  it("treats an empty VITEST_POOL_ID as unset and falls through to VITEST_WORKER_ID", () => {
+    const scope = resolveTestScope(
+      env({ VITEST_POOL_ID: " ", VITEST_WORKER_ID: "4" }),
+    );
+    expect(scope.workerId).toBe("4");
+  });
+
+  it("slot-derived database name is stable across sequential files that share a slot", () => {
+    // Two "files" (fresh envs) handed the same pool slot by the runner must
+    // resolve to the SAME physical database — this is the property that caps
+    // database count at maxWorkers. The unique instance id differs; it must
+    // NOT affect the name.
+    const fileA = resolveTestScope(
+      env({ VITEST_POOL_ID: "1", VITEST_WORKER_ID: "11" }),
+    );
+    const fileB = resolveTestScope(
+      env({ VITEST_POOL_ID: "1", VITEST_WORKER_ID: "12" }),
+    );
+    expect(fileA.postgresDatabaseName).toBe("exam_test_w1");
+    expect(fileB.postgresDatabaseName).toBe("exam_test_w1");
+  });
+
+  it("concurrent slots resolve to DIFFERENT databases", () => {
+    const slot1 = resolveTestScope(
+      env({ VITEST_POOL_ID: "1", VITEST_WORKER_ID: "11" }),
+    );
+    const slot2 = resolveTestScope(
+      env({ VITEST_POOL_ID: "2", VITEST_WORKER_ID: "12" }),
+    );
+    expect(slot1.postgresDatabaseName).not.toBe(slot2.postgresDatabaseName);
   });
 });
 
@@ -181,16 +226,20 @@ describe("resolveTestScope — legacy file-schema fallback", () => {
 });
 
 describe("resolveTestScope — input validation", () => {
-  it("rejects an invalid worker id", () => {
+  it("rejects an invalid worker identity value from any source", () => {
     expect(() =>
       resolveTestScope(env({ TEST_WORKER_ID: "1; DROP TABLE users" })),
-    ).toThrow(/invalid TEST_WORKER_ID/);
+    ).toThrow(/invalid worker identity env/);
     expect(() => resolveTestScope(env({ TEST_WORKER_ID: "w/ slash" }))).toThrow(
-      /invalid TEST_WORKER_ID/,
+      /invalid worker identity env/,
     );
-    // Explicit empty value is rejected (not silently treated as unset).
+    // Explicit empty override is rejected (not silently treated as unset).
     expect(() => resolveTestScope(env({ TEST_WORKER_ID: "" }))).toThrow(
       /TEST_WORKER_ID/,
+    );
+    // Runner-controlled values are validated with the same charset.
+    expect(() => resolveTestScope(env({ VITEST_POOL_ID: "pool/x" }))).toThrow(
+      /invalid worker identity env/,
     );
   });
 

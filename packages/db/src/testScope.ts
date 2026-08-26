@@ -157,12 +157,36 @@ function readStringStrict(
  *
  * Resolution order (ADR-007):
  *   1. `TEST_WORKER_ID` — explicit manual override (wins if set).
- *   2. `VITEST_WORKER_ID` — injected automatically by the Vitest runner.
- *   3. `"1"` — final fallback.
+ *   2. `VITEST_POOL_ID` — injected automatically by the Vitest runner.
+ *   3. `VITEST_WORKER_ID` — legacy fallback (runner-injected too).
+ *   4. `"1"` — final fallback.
  *
  * Developers normally do NOT set `TEST_WORKER_ID`; the runner-provided
- * `VITEST_WORKER_ID` is the expected source. `TEST_WORKER_ID` exists as an
- * explicit override / fallback for environments that do not inject a runner id.
+ * env vars are the expected source.
+ *
+ * WHY `VITEST_POOL_ID` MUST WIN over `VITEST_WORKER_ID` (root cause of the
+ * 2026-08-26 drifting-timeout audit, docs/standards/test-flakes.md):
+ *
+ *   - `VITEST_POOL_ID` is an EXECUTION SLOT id: Vitest allocates it before a
+ *     task starts and frees it after the task finishes
+ *     (`getWorkerId`/`freeWorkerId`), so its values are bounded by
+ *     `maxWorkers`. Two files never share a slot concurrently; sequential
+ *     files intentionally reuse the freed slot. Vitest documents it as
+ *     "Value is between 1-maxWorkers" and as the Jest `JEST_WORKER_ID`
+ *     counterpart.
+ *   - `VITEST_WORKER_ID` is a WORKER INSTANCE id: unique per created worker,
+ *     NOT bounded by `maxWorkers`, monotonically increasing across the run
+ *     ("tracks individual worker instances regardless of the maxWorkers
+ *     setting", vitest migration guide).
+ *
+ * Binding slot-scoped resources (the per-worker DATABASE name, Redis prefix,
+ * queue prefix) to instance ids meant every test file paid its own
+ * CREATE DATABASE + migrate cycle: with `maxWorkers=2` a full API run still
+ * produced ~50-90 physical databases and loaded the shared test-infra DDL
+ * advisory-lock queue that starved sibling hooks past their budgets. Slot ids
+ * bound the physical database count to `maxWorkers` while keeping inter-file
+ * isolation intact (concurrent files are on different slots; sequential files
+ * reset state via the per-process truncate boundary in `buildTestApp`).
  */
 function resolveWorkerId(env: ResolverEnv): string {
   // `TEST_WORKER_ID` takes precedence when set (manual override). An
@@ -172,13 +196,19 @@ function resolveWorkerId(env: ResolverEnv): string {
   if (explicit.kind === "empty") {
     fail("TEST_WORKER_ID is set but empty (allowed: [A-Za-z0-9_-])");
   }
-  // VITEST_WORKER_ID is runner-controlled, so empty/whitespace is treated as
-  // "unset" (lenient) rather than rejected.
-  const fromRunner = readString(env, "VITEST_WORKER_ID");
-  const raw = explicit.kind === "value" ? explicit.value : (fromRunner ?? "1");
+  // Runner-controlled vars: empty/whitespace is treated as "unset" (lenient)
+  // rather than rejected. `VITEST_POOL_ID` is preferred over the legacy
+  // `VITEST_WORKER_ID` — see the docstring above for the slot-vs-instance
+  // distinction.
+  const raw =
+    explicit.kind === "value"
+      ? explicit.value
+      : (readString(env, "VITEST_POOL_ID") ??
+        readString(env, "VITEST_WORKER_ID") ??
+        "1");
   if (!WORKER_ID_RE.test(raw)) {
     fail(
-      `invalid TEST_WORKER_ID / VITEST_WORKER_ID: "${raw}" (allowed: [A-Za-z0-9_-])`,
+      `invalid worker identity env (allowed: [A-Za-z0-9_-]): "${raw}" (checked TEST_WORKER_ID / VITEST_POOL_ID / VITEST_WORKER_ID)`,
     );
   }
   return raw;
