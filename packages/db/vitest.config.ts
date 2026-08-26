@@ -44,6 +44,11 @@ for (const [key, value] of Object.entries(envVars)) {
 export default defineConfig(({ mode }) => ({
   test: {
     exclude: ["dist/**", "node_modules/**"],
+    // Test-database readiness (ownership contract + implicit-local
+    // self-provisioning of exam_test). Soft-skips when the server is down so
+    // the mixed pure/PG suite keeps its self-skip semantics. See
+    // ./vitest.globalSetup.ts.
+    globalSetup: ["./vitest.globalSetup.ts"],
     // Force test runtime mode via the monorepo-shared constant so every
     // package's vitest config agrees (see ../../vitest.shared.ts for why).
     env: {
