@@ -127,17 +127,37 @@ export function resolveTestInfraCoordinationUrl(
 }
 
 /**
- * Deterministic 64-bit advisory-lock key for all test-infra heavy lifecycle.
+ * Deterministic 64-bit advisory-lock key base for all test-infra heavy
+ * lifecycle, split by resource class (see {@link TestInfraLockClass}).
  *
- * Derived from a stable, human-readable name (`exam_test_infra_lifecycle`)
- * via FNV-1a so the key is reproducible and grep-able. We split the name into
- * two 32-bit halves (FNV-1a over the first and second half of the string) and
- * combine into one signed bigint accepted by `pg_advisory_lock(bigint)`.
+ * Derived from a stable, human-readable name via FNV-1a so the key is
+ * reproducible and grep-able. We split the name into two 32-bit halves
+ * (FNV-1a over the first and second half of the string) and combine into one
+ * signed bigint accepted by `pg_advisory_lock(bigint)`.
  *
- * `pg_advisory_lock(bigint)` takes a single 64-bit key; the value is treated as
- * signed in the C boundary, so we keep it within int64 range.
+ * `pg_advisory_lock(bigint)` takes a single 64-bit key; the value is treated
+ * as signed in the C boundary, so we keep it within int64 range.
  */
 const TEST_INFRA_LIFECYCLE_LOCK_NAME = "exam_test_infra_lifecycle";
+
+/**
+ * Resource class of a lifecycle critical section.
+ *
+ * `schema` — CREATE/DROP SCHEMA + Drizzle migrations (high frequency,
+ *   ~200 acquisitions per packages/db coverage run, holds ~30-900ms).
+ * `database` — CREATE/DROP DATABASE (low frequency, and the observed
+ *   long-tail outlier class: a pathological DROP DATABASE held the single
+ *   shared key for 23.4s on WSL2 I/O, starved every queued schema setup past
+ *   the 10s hookTimeout, and cascaded 6 suite failures — 2026-08-26 audit,
+ *   docs/standards/test-flakes.md).
+ *
+ * Cross-class coordination that Phase 6D wanted (physical DB DDL not fighting
+ * migration traffic on the engine) is carried by the participating tests'
+ * deterministic-queue hang-protection budgets (lifecycle suites use 30s);
+ * the key split exists so one class's outlier can no longer block the other
+ * class's entire queue.
+ */
+export type TestInfraLockClass = "schema" | "database";
 
 /**
  * FNV-1a (32-bit) hash of a string into an unsigned 32-bit integer, returned as
@@ -154,8 +174,9 @@ function fnv1a32(str: string): number {
 }
 
 /**
- * Stable 64-bit advisory-lock key for test-infra lifecycle. Computed once from
- * the fixed lock name; exported for tests/diagnostics.
+ * Stable 64-bit advisory-lock key for the SCHEMA lifecycle class (back-compat
+ * export — the pre-split single key). Computed once from the fixed lock name;
+ * exported for tests/diagnostics.
  */
 export const TEST_INFRA_LIFECYCLE_LOCK_KEY: bigint = computeLockKey(
   TEST_INFRA_LIFECYCLE_LOCK_NAME,
@@ -168,8 +189,19 @@ function computeLockKey(name: string): bigint {
   const lo = fnv1a32(name.slice(mid)) >>> 0; // unsigned 32-bit
   // (hi << 32) | lo  as a signed 64-bit. BigInt math keeps precision.
   const combined = (BigInt(hi) << 32n) | BigInt(lo);
-  // Fold into signed int64 range (PostgreSQL accepts the numeric value).
-  return combined;
+  // Fold into signed int64 range: pg_advisory_lock(bigint) is signed at the
+  // C boundary, and an unsigned combined value above 2^63-1 is rejected by
+  // PostgreSQL as "out of range for type bigint". asIntN is a no-op for
+  // values already in range, so pre-split keys are unchanged.
+  return BigInt.asIntN(64, combined);
+}
+
+/** Total acquisitions this process (diagnostics + regression tests). */
+let acquisitionCount = 0;
+
+/** Number of times this process acquired the lifecycle lock. */
+export function getTestInfraLockAcquisitionCount(): number {
+  return acquisitionCount;
 }
 
 /** Acquire the session-level advisory lock on `sql` (blocking). */
@@ -178,6 +210,7 @@ async function acquireAdvisoryLock(
   key: bigint,
 ): Promise<void> {
   await sql.unsafe("SELECT pg_advisory_lock($1)", [key.toString()]);
+  acquisitionCount++;
 }
 
 /** Release the session-level advisory lock on `sql`. Must be same session. */
@@ -188,12 +221,22 @@ async function releaseAdvisoryLock(
   await sql.unsafe("SELECT pg_advisory_unlock($1)", [key.toString()]);
 }
 
+/** Options for {@link withTestInfraLifecycleLock}. */
+export interface TestInfraLifecycleLockOptions {
+  /** Which resource class this critical section belongs to. */
+  lockClass?: TestInfraLockClass;
+}
+
 /**
  * Run `fn` while holding the cross-process test-infra advisory lock.
  *
  * Opens a dedicated admin connection, acquires the lock (blocking until the
- * lock is free — this is the serialization point across workers), runs `fn`,
- * and always releases the lock in `finally` (even on throw).
+ * lock is free — this is the serialization point across workers) for the
+ * chosen {@link TestInfraLockClass} key, runs `fn`, and always releases the
+ * lock in `finally` (even on throw). Callers whose critical section is a
+ * physical CREATE/DROP DATABASE MUST pass `lockClass: "database"` so a
+ * long-tail database DDL outlier cannot block the high-frequency schema
+ * lifecycle queue (and vice versa).
  *
  * PostgreSQL advisory locks are database-local. The `adminUrl` is normalized
  * via {@link resolveTestInfraCoordinationUrl} so ALL callers — regardless of
@@ -206,28 +249,60 @@ async function releaseAdvisoryLock(
  * coordination is by key identity in the PG server, not by connection.
  *
  * @param adminUrl Maintenance/admin URL used only to host the advisory lock
- *   session. This connection is opened and closed within the call.
+ * session. This connection is opened and closed within the call.
  * @param fn Heavy lifecycle body. Runs while the lock is held.
+ * @param options.lockClass Resource class whose key to acquire.
  */
 export async function withTestInfraLifecycleLock<T>(
   adminUrl: string,
   fn: () => Promise<T>,
+  options?: TestInfraLifecycleLockOptions,
 ): Promise<T> {
+  const lockClass = options?.lockClass ?? "schema";
+  const key = getTestInfraLifecycleLockKey(lockClass);
+  const trace = process.env.TEST_INFRA_TRACE === "1";
+  const t0 = trace ? performance.now() : 0;
+  const caller = trace ? firstExternalFrame() : "";
   const coordinationUrl = resolveTestInfraCoordinationUrl(adminUrl);
   const admin = postgres(coordinationUrl, { max: 1 });
-  await acquireAdvisoryLock(admin, TEST_INFRA_LIFECYCLE_LOCK_KEY);
+  await acquireAdvisoryLock(admin, key);
+  if (trace) {
+    process.stderr.write(
+      `[infra-lock] pid=${process.pid} class=${lockClass} acquired wait=${(performance.now() - t0).toFixed(0)}ms caller=${caller}\n`,
+    );
+  }
+  const tHold = trace ? performance.now() : 0;
   try {
     return await fn();
   } finally {
     try {
-      await releaseAdvisoryLock(admin, TEST_INFRA_LIFECYCLE_LOCK_KEY);
+      await releaseAdvisoryLock(admin, key);
     } finally {
       await admin.end();
+      if (trace) {
+        process.stderr.write(
+          `[infra-lock] pid=${process.pid} class=${lockClass} released hold=${(performance.now() - tHold).toFixed(0)}ms caller=${caller}\n`,
+        );
+      }
     }
   }
 }
 
+/** First stack frame outside this module, for TEST_INFRA_TRACE diagnostics. */
+function firstExternalFrame(): string {
+  const stack = new Error().stack ?? "";
+  for (const line of stack.split("\n")) {
+    if (line.includes("testInfraLock")) continue;
+    if (line.includes("at ")) return line.trim().slice(3, 83);
+  }
+  return "unknown";
+}
+
 /** Re-export the lock key computation for tests/diagnostics. */
-export function getTestInfraLifecycleLockKey(): bigint {
-  return TEST_INFRA_LIFECYCLE_LOCK_KEY;
+export function getTestInfraLifecycleLockKey(
+  lockClass: TestInfraLockClass = "schema",
+): bigint {
+  return lockClass === "schema"
+    ? TEST_INFRA_LIFECYCLE_LOCK_KEY
+    : computeLockKey(`${TEST_INFRA_LIFECYCLE_LOCK_NAME}_db`);
 }
