@@ -54,21 +54,6 @@ function memoizedHash(password: string): Promise<string> {
 let conn: Awaited<ReturnType<typeof createDatabase>>;
 let adminUrl: string;
 
-beforeAll(async () => {
-  const baseUrl = resolveTestDbUrl();
-  adminUrl = resolveTestInfraCoordinationUrl(baseUrl, process.env);
-  await ensureDatabaseExists(adminUrl, RESET_TEST_DB);
-  conn = await createDatabase(withDatabaseName(baseUrl, RESET_TEST_DB));
-  // Bootstrap (ensure + migrate) belongs to the setup phase: the timed test
-  // bodies then exercise reset/seed convergence, not first-time migration.
-  await migratePostgres(conn.db);
-});
-
-afterAll(async () => {
-  await conn.sql.end();
-  await dropDatabaseIfExists(adminUrl, RESET_TEST_DB);
-});
-
 /** Insert the mutable leftovers a failed E2E run leaves behind. */
 async function poisonWithFailedRunState(): Promise<void> {
   const orgRows = await conn.db.select().from(schema.organizations).limit(1);
@@ -99,10 +84,30 @@ async function poisonWithFailedRunState(): Promise<void> {
   });
 }
 
-// Queue-participant hang protection (see docs/standards/test-flakes.md PR #242
-// rule): beforeAll/afterAll acquire the shared test-infra DDL lock, so this
-// file gets the same deterministic-queue budget as its sibling suites.
+// Queue-participant hang protection (see docs/standards/test-flakes.md PR
+// #242 rule): beforeAll/afterAll acquire the shared test-infra DDL lock.
+// The 30s describe timeout covers the TEST bodies; the hooks themselves get
+// the same 30s via the package-wide `hookTimeout` in vitest.config.ts
+// (Vitest's per-describe timeout does NOT propagate to hooks).
 describe("E2E reseed convergence (issue #330)", { timeout: 30_000 }, () => {
+  beforeAll(async () => {
+    const baseUrl = resolveTestDbUrl();
+    adminUrl = resolveTestInfraCoordinationUrl(baseUrl, process.env);
+    await ensureDatabaseExists(adminUrl, RESET_TEST_DB);
+    conn = await createDatabase(withDatabaseName(baseUrl, RESET_TEST_DB));
+    // Bootstrap (ensure + migrate) belongs to the setup phase: the timed test
+    // bodies then exercise reset/seed convergence, not first-time migration.
+    await migratePostgres(conn.db);
+  });
+
+  afterAll(async () => {
+    if (conn) {
+      await conn.sql.end();
+    }
+    if (adminUrl) {
+      await dropDatabaseIfExists(adminUrl, RESET_TEST_DB);
+    }
+  });
   it("reset:true converges a retained DB to the canonical baseline", async () => {
     // First run: canonical baseline.
     await runE2eSeed(conn.db, memoizedHash, { reset: true });

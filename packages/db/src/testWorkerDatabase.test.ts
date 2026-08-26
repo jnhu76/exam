@@ -161,7 +161,14 @@ describe("setupWorkerTestDatabase — input guards (no PG)", () => {
 // PG-integration tests (skipped when PG is not reachable)
 // ---------------------------------------------------------------------------
 
-PG_DESCRIBE("ensureDatabaseExists", { timeout: 15_000 }, () => {
+// Hang-protection budget (docs/standards/test-flakes.md PR #242 rule):
+// `ensureDatabaseExists` acquires the shared lifecycle lock for CREATE
+// DATABASE, so like every other queue participant it gets the 30s budget —
+// a sibling DROP DATABASE long-tail (seconds on WSL2 I/O) is a legitimate
+// queue wait, not a test-logic failure. The former 15s budget was
+// inconsistent with the sibling `dropDatabaseIfExists` describe and starved
+// under exactly that long-tail.
+PG_DESCRIBE("ensureDatabaseExists", { timeout: 30_000 }, () => {
   it("creates the database if missing, idempotent on second call", async () => {
     // Phase 6D Option B: per-run unique name so a crashed prior run's leftover
     // DB cannot collide, and teardown uses robust dropDatabaseIfExists.

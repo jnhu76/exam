@@ -50,5 +50,15 @@ export default defineConfig(({ mode }) => ({
       ...loadEnv(mode, workspaceRoot, ""),
       ...TEST_RUNTIME_ENV,
     },
+    // Hang-protection budget for queue-participant HOOKS (PR #242 rule,
+    // 2026-08-26 audit addendum): every lifecycle beforeAll/afterAll here
+    // acquires the shared test-infra DDL advisory lock, but Vitest's
+    // per-describe `{ timeout }` applies to TEST BODIES only — hooks default
+    // to the 10s global hookTimeout. A queue wait + CREATE SCHEMA + full
+    // migrate can exceed 10s, and a timed-out hook is NOT cancelled (its
+    // orphaned promise keeps holding the lock), which then cascades into
+    // multi-second waits for every sibling (observed 23.8s). 30s matches the
+    // budget the lifecycle describes already declare for their tests.
+    hookTimeout: 30_000,
   },
 }));
