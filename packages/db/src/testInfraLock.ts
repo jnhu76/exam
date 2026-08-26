@@ -127,8 +127,7 @@ export function resolveTestInfraCoordinationUrl(
 }
 
 /**
- * Deterministic 64-bit advisory-lock key base for all test-infra heavy
- * lifecycle, split by resource class (see {@link TestInfraLockClass}).
+ * Deterministic 64-bit advisory-lock key for ALL test-infra heavy lifecycle.
  *
  * Derived from a stable, human-readable name via FNV-1a so the key is
  * reproducible and grep-able. We split the name into two 32-bit halves
@@ -137,27 +136,20 @@ export function resolveTestInfraCoordinationUrl(
  *
  * `pg_advisory_lock(bigint)` takes a single 64-bit key; the value is treated
  * as signed in the C boundary, so we keep it within int64 range.
+ *
+ * ONE key is a deliberate design decision, re-affirmed 2026-08-26: Phase 6D's
+ * purpose was to serialize ALL heavy DDL/migration against the PostgreSQL
+ * engine (catalog contention), so CREATE/DROP DATABASE and schema migration
+ * must NOT run concurrently. A temporary resource-class key split
+ * (`schema` vs `database`) was withdrawn the same day: its motivating queue
+ * load was itself a symptom of binding worker databases to `VITEST_WORKER_ID`
+ * (worker-instance ids are unbounded by maxWorkers) instead of
+ * `VITEST_POOL_ID` (execution slots, ≤ maxWorkers). After the identity fix,
+ * the measured queue collapsed to max wait 58ms / total hold 1.4s on the
+ * 16-file probe — no split needed; "budget absorbs cross-class contention"
+ * was never a concurrency-control argument anyway.
  */
 const TEST_INFRA_LIFECYCLE_LOCK_NAME = "exam_test_infra_lifecycle";
-
-/**
- * Resource class of a lifecycle critical section.
- *
- * `schema` — CREATE/DROP SCHEMA + Drizzle migrations (high frequency,
- *   ~200 acquisitions per packages/db coverage run, holds ~30-900ms).
- * `database` — CREATE/DROP DATABASE (low frequency, and the observed
- *   long-tail outlier class: a pathological DROP DATABASE held the single
- *   shared key for 23.4s on WSL2 I/O, starved every queued schema setup past
- *   the 10s hookTimeout, and cascaded 6 suite failures — 2026-08-26 audit,
- *   docs/standards/test-flakes.md).
- *
- * Cross-class coordination that Phase 6D wanted (physical DB DDL not fighting
- * migration traffic on the engine) is carried by the participating tests'
- * deterministic-queue hang-protection budgets (lifecycle suites use 30s);
- * the key split exists so one class's outlier can no longer block the other
- * class's entire queue.
- */
-export type TestInfraLockClass = "schema" | "database";
 
 /**
  * FNV-1a (32-bit) hash of a string into an unsigned 32-bit integer, returned as
@@ -221,22 +213,20 @@ async function releaseAdvisoryLock(
   await sql.unsafe("SELECT pg_advisory_unlock($1)", [key.toString()]);
 }
 
-/** Options for {@link withTestInfraLifecycleLock}. */
-export interface TestInfraLifecycleLockOptions {
-  /** Which resource class this critical section belongs to. */
-  lockClass?: TestInfraLockClass;
-}
+/** Options for {@link withTestInfraLifecycleLock}. Reserved for future use. */
+export interface TestInfraLifecycleLockOptions {}
 
 /**
  * Run `fn` while holding the cross-process test-infra advisory lock.
  *
- * Opens a dedicated admin connection, acquires the lock (blocking until the
- * lock is free — this is the serialization point across workers) for the
- * chosen {@link TestInfraLockClass} key, runs `fn`, and always releases the
- * lock in `finally` (even on throw). Callers whose critical section is a
- * physical CREATE/DROP DATABASE MUST pass `lockClass: "database"` so a
- * long-tail database DDL outlier cannot block the high-frequency schema
- * lifecycle queue (and vice versa).
+ * Opens a dedicated admin connection, acquires THE lifecycle lock (blocking
+ * until the lock is free — this is the serialization point across workers),
+ * runs `fn`, and always releases the lock in `finally` (even on throw). ALL
+ * heavy test-infra lifecycle — CREATE/DROP DATABASE, CREATE SCHEMA,
+ * migrations — serializes on this ONE key: that is the Phase 6D engine-level
+ * guarantee (heavy DDL never fights migration traffic on the catalog), and it
+ * is cheap to keep now that the queue load itself is gone (see the lock-name
+ * docstring for the withdrawn split).
  *
  * PostgreSQL advisory locks are database-local. The `adminUrl` is normalized
  * via {@link resolveTestInfraCoordinationUrl} so ALL callers — regardless of
@@ -251,15 +241,12 @@ export interface TestInfraLifecycleLockOptions {
  * @param adminUrl Maintenance/admin URL used only to host the advisory lock
  * session. This connection is opened and closed within the call.
  * @param fn Heavy lifecycle body. Runs while the lock is held.
- * @param options.lockClass Resource class whose key to acquire.
  */
 export async function withTestInfraLifecycleLock<T>(
   adminUrl: string,
   fn: () => Promise<T>,
-  options?: TestInfraLifecycleLockOptions,
 ): Promise<T> {
-  const lockClass = options?.lockClass ?? "schema";
-  const key = getTestInfraLifecycleLockKey(lockClass);
+  const key = TEST_INFRA_LIFECYCLE_LOCK_KEY;
   const trace = process.env.TEST_INFRA_TRACE === "1";
   const t0 = trace ? performance.now() : 0;
   const caller = trace ? firstExternalFrame() : "";
@@ -268,7 +255,7 @@ export async function withTestInfraLifecycleLock<T>(
   await acquireAdvisoryLock(admin, key);
   if (trace) {
     process.stderr.write(
-      `[infra-lock] pid=${process.pid} class=${lockClass} acquired wait=${(performance.now() - t0).toFixed(0)}ms caller=${caller}\n`,
+      `[infra-lock] pid=${process.pid} acquired wait=${(performance.now() - t0).toFixed(0)}ms caller=${caller}\n`,
     );
   }
   const tHold = trace ? performance.now() : 0;
@@ -281,7 +268,7 @@ export async function withTestInfraLifecycleLock<T>(
       await admin.end();
       if (trace) {
         process.stderr.write(
-          `[infra-lock] pid=${process.pid} class=${lockClass} released hold=${(performance.now() - tHold).toFixed(0)}ms caller=${caller}\n`,
+          `[infra-lock] pid=${process.pid} released hold=${(performance.now() - tHold).toFixed(0)}ms caller=${caller}\n`,
         );
       }
     }
@@ -298,11 +285,10 @@ function firstExternalFrame(): string {
   return "unknown";
 }
 
-/** Re-export the lock key computation for tests/diagnostics. */
-export function getTestInfraLifecycleLockKey(
-  lockClass: TestInfraLockClass = "schema",
-): bigint {
-  return lockClass === "schema"
-    ? TEST_INFRA_LIFECYCLE_LOCK_KEY
-    : computeLockKey(`${TEST_INFRA_LIFECYCLE_LOCK_NAME}_db`);
+/**
+ * Expose the single advisory-lock key for tests/diagnostics. There is exactly
+ * ONE lifecycle key; callers cannot select a class-specific variant.
+ */
+export function getTestInfraLifecycleLockKey(): bigint {
+  return TEST_INFRA_LIFECYCLE_LOCK_KEY;
 }

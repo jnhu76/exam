@@ -72,16 +72,21 @@ function uniqueLifecycleDbName(tag: string): string {
   return name.slice(0, 63).replace(/[^a-z0-9_]/g, "_");
 }
 
-afterAll(async () => {
-  // Best-effort cleanup of the prototype DB names used below.
-  if (PG_UP) {
-    await dropDatabaseIfExists(ADMIN_URL, "exam_test_w_phase3a_proto", {
-      keepMissing: true,
-    }).catch(() => {
-      /* best-effort; reported via diagnostics in dropDatabaseIfExists */
-    });
-  }
-});
+afterAll(
+  async () => {
+    // Best-effort cleanup of the prototype DB names used below.
+    if (PG_UP) {
+      await dropDatabaseIfExists(ADMIN_URL, "exam_test_w_phase3a_proto", {
+        keepMissing: true,
+      }).catch(() => {
+        /* best-effort; reported via diagnostics in dropDatabaseIfExists */
+      });
+    }
+  },
+  // Lifecycle queue participant (DROP DATABASE under the shared lock) gets an
+  // explicit hook budget; unrelated hooks keep the 10s default on purpose.
+  30_000,
+);
 
 // ---------------------------------------------------------------------------
 // Pure-logic tests (no PG service required)

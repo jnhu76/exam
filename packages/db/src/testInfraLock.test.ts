@@ -177,18 +177,16 @@ describe("testInfraLock — key derivation", () => {
     expect(key <= 9223372036854775807n).toBe(true);
   });
 
-  it("derives distinct keys per resource class (schema vs database)", () => {
-    const schemaKey = getTestInfraLifecycleLockKey("schema");
-    const databaseKey = getTestInfraLifecycleLockKey("database");
-    // The 2026-08-26 audit fix split the single shared key by resource class
-    // so a long-tail DROP DATABASE (23.4s hold) can no longer block the
-    // high-frequency schema queue. Distinct keys are the structural
-    // guarantee; the PG tests below prove the runtime consequence.
-    expect(databaseKey).not.toBe(schemaKey);
-    for (const key of [schemaKey, databaseKey]) {
-      expect(key >= -9223372036854775808n).toBe(true);
-      expect(key <= 9223372036854775807n).toBe(true);
-    }
+  it("is the ONLY lifecycle key (single shared key, no resource-class variants)", () => {
+    // One key is the Phase 6D engine guarantee re-affirmed 2026-08-26: ALL
+    // heavy DDL/migration (CREATE/DROP DATABASE included) serializes against
+    // each other, so physical DB DDL can never fight migration traffic on the
+    // catalog. The withdrawn resource-class split had no variants to begin
+    // with once the queue load itself was traced back to the worker-identity
+    // root cause (VITEST_WORKER_ID → VITEST_POOL_ID).
+    const key = getTestInfraLifecycleLockKey();
+    expect(key).toBe(getTestInfraLifecycleLockKey());
+    expect(key).not.toBe(0n);
   });
 });
 
@@ -482,142 +480,39 @@ PG_DESCRIBE(
   },
 );
 
-/** Resolve with `label` after `ms` (bounded race timer; unref'd). */
-function raceTimeoutLabel(label: string, ms: number): Promise<string> {
-  return new Promise<string>((resolve) => {
-    const timer = setTimeout(() => resolve(label), ms);
-    timer.unref?.();
-  });
-}
-
 PG_DESCRIBE(
-  "withTestInfraLifecycleLock — resource-class key split",
-  // Queue-participant hang protection: both critical sections below take real
-  // advisory locks on the coordination DB.
+  "withTestInfraLifecycleLock — single shared key semantics",
+  // Queue-participant hang protection: the critical section below takes a real
+  // advisory lock on the coordination DB.
   { timeout: 30_000 },
   () => {
-    it("a held database-class lock does not hold the schema key (pg_locks proof)", async () => {
-      // Deterministic reproducer of the 2026-08-26 audit failure: one
-      // pathological DROP DATABASE held the single shared key for 23.4s and
-      // every queued schema setup inherited that wait inside its hook budget.
-      //
-      // pg_locks is filtered to THIS session (pid = pg_backend_pid()), so the
-      // proof is independent of sibling critical sections and needs no timing:
-      // a session holding the DATABASE key must not also hold the SCHEMA key,
-      // which is exactly why a schema-class caller can never be blocked by a
-      // database-class holder after the split.
-      const probe = postgres(COORD_URL, { max: 1 });
-      const schemaKey = getTestInfraLifecycleLockKey("schema");
-      const databaseKey = getTestInfraLifecycleLockKey("database");
-      const countAdvisoryOnThisSession = async (key: bigint) => {
-        // pg_locks.classid/objid are oid (raw unsigned 32-bit halves of the
-        // advisory bigint key); mask the key halves before casting so a
-        // high-bit key never raises "integer out of range".
-        const rows = (await probe.unsafe(
-          `SELECT count(*)::int AS n
-           FROM pg_locks
-           WHERE pid = pg_backend_pid()
-             AND locktype = 'advisory'
-             AND granted
-             AND classid = (($1::bigint >> 32) & 4294967295)::oid
-             AND objid = ($1::bigint & 4294967295)::oid`,
-          [key.toString()],
-        )) as Array<{ n: number }>;
-        return rows[0]?.n ?? 0;
-      };
-      try {
-        await probe.unsafe("SELECT pg_advisory_lock($1)", [
-          databaseKey.toString(),
-        ]);
-        try {
-          // Sanity: this session really does hold the database key.
-          expect(await countAdvisoryOnThisSession(databaseKey)).toBe(1);
-          // The database holder must NOT hold the schema key on its own
-          // session, so a schema-class caller can never be blocked by it.
-          expect(await countAdvisoryOnThisSession(schemaKey)).toBe(0);
-        } finally {
-          await probe.unsafe("SELECT pg_advisory_unlock($1)", [
-            databaseKey.toString(),
-          ]);
-        }
-      } finally {
-        await probe.end().catch(() => {});
-      }
-    });
-
-    it("database-class critical sections are routed to the database key", async () => {
-      const databaseKey = getTestInfraLifecycleLockKey("database");
+    it("any critical section holds THE single lifecycle key (probe try-lock must fail)", async () => {
+      // Inverse of the withdrawn class-split regressions: with the ONE-key
+      // design restored, EVERY heavy-lifecycle body — schema migration and
+      // CREATE/DROP DATABASE alike — serializes on the same advisory key, so
+      // while any section is inside, NO other session can acquire that key.
+      // A regression that re-introduces per-class keys (or routes some caller
+      // to a second key) leaves THE key free here; the try-lock succeeds and
+      // this assertion fails. The probe only ever try-locks: it never blocks,
+      // never queues, and no key is held externally, so this test cannot
+      // starve sibling critical sections.
+      const key = getTestInfraLifecycleLockKey();
       const probe = postgres(COORD_URL, { max: 1 });
       try {
-        await withTestInfraLifecycleLock(
-          ADMIN_URL,
-          async () => {
-            // Runs inside the held critical section. A different session
-            // cannot re-acquire a key the holder's own session owns, so
-            // try-locking the DATABASE key here must FAIL — proving the
-            // section is routed to the DATABASE key. A regression that
-            // routes the database class onto the schema key leaves the
-            // DATABASE key free, so the try-lock succeeds and this assertion
-            // fails. The probe only ever try-locks: it never blocks, never
-            // queues, and no key is held externally, so this test cannot
-            // starve sibling critical sections (unlike a race-based probe).
-            const rows = (await probe.unsafe(
-              "SELECT pg_try_advisory_lock($1) AS ok",
-              [databaseKey.toString()],
-            )) as Array<{ ok: boolean }>;
-            if (rows[0]?.ok === true) {
-              await probe.unsafe("SELECT pg_advisory_unlock($1)", [
-                databaseKey.toString(),
-              ]);
-            }
-            expect(rows[0]?.ok).toBe(false);
-          },
-          { lockClass: "database" },
-        );
+        await withTestInfraLifecycleLock(ADMIN_URL, async () => {
+          const rows = (await probe.unsafe(
+            "SELECT pg_try_advisory_lock($1) AS ok",
+            [key.toString()],
+          )) as Array<{ ok: boolean }>;
+          if (rows[0]?.ok === true) {
+            await probe.unsafe("SELECT pg_advisory_unlock($1)", [
+              key.toString(),
+            ]);
+          }
+          expect(rows[0]?.ok).toBe(false);
+        });
       } finally {
         await probe.end().catch(() => {});
-      }
-    });
-
-    it("database-class callers still serialize against each other", async () => {
-      const first = createDeferred<void>("dbFirstEntered");
-      const releaseFirst = createDeferred<void>("dbReleaseFirst");
-      const firstPromise = withTestInfraLifecycleLock(
-        ADMIN_URL,
-        async () => {
-          first.resolve();
-          await releaseFirst.promise;
-        },
-        { lockClass: "database" },
-      );
-      await first.promise;
-      // `first.promise` resolves inside the held critical section, so the
-      // second caller is now guaranteed to launch BEHIND a real database-key
-      // holder. Launching it before this point races the initial acquisition:
-      // if the second caller happened to win the key first, the test would
-      // misread "second-finished-early" and fail spuriously.
-      let overlapped = false;
-      const secondPromise = (async () => {
-        await withTestInfraLifecycleLock(
-          ADMIN_URL,
-          async () => {
-            if (!releaseFirst.isSettled()) overlapped = true;
-          },
-          { lockClass: "database" },
-        );
-      })();
-      try {
-        const winner = await Promise.race([
-          secondPromise.then((): string => "second-finished-early"),
-          raceTimeoutLabel("second-still-waiting", 1_000),
-        ]);
-        expect(winner).toBe("second-still-waiting");
-        releaseFirst.resolve();
-        await Promise.all([firstPromise, secondPromise]);
-        expect(overlapped).toBe(false);
-      } finally {
-        disposeAll(first, releaseFirst);
-        await Promise.allSettled([firstPromise, secondPromise]);
       }
     });
   },

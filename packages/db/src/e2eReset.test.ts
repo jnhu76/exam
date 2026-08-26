@@ -86,9 +86,10 @@ async function poisonWithFailedRunState(): Promise<void> {
 
 // Queue-participant hang protection (see docs/standards/test-flakes.md PR
 // #242 rule): beforeAll/afterAll acquire the shared test-infra DDL lock.
-// The 30s describe timeout covers the TEST bodies; the hooks themselves get
-// the same 30s via the package-wide `hookTimeout` in vitest.config.ts
-// (Vitest's per-describe timeout does NOT propagate to hooks).
+// The 30s describe timeout covers the TEST bodies; the hooks declare their own
+// explicit timeout argument (Vitest's per-describe timeout does NOT propagate
+// to hooks, and there is deliberately NO package-wide hookTimeout raise — an
+// unrelated broken hook should surface at the 10s default, not 30s).
 describe("E2E reseed convergence (issue #330)", { timeout: 30_000 }, () => {
   beforeAll(async () => {
     const baseUrl = resolveTestDbUrl();
@@ -98,7 +99,7 @@ describe("E2E reseed convergence (issue #330)", { timeout: 30_000 }, () => {
     // Bootstrap (ensure + migrate) belongs to the setup phase: the timed test
     // bodies then exercise reset/seed convergence, not first-time migration.
     await migratePostgres(conn.db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     if (conn) {
@@ -107,7 +108,7 @@ describe("E2E reseed convergence (issue #330)", { timeout: 30_000 }, () => {
     if (adminUrl) {
       await dropDatabaseIfExists(adminUrl, RESET_TEST_DB);
     }
-  });
+  }, 30_000);
   it("reset:true converges a retained DB to the canonical baseline", async () => {
     // First run: canonical baseline.
     await runE2eSeed(conn.db, memoizedHash, { reset: true });
