@@ -43,6 +43,7 @@ import {
 } from "@exam/db/src/postgres.js";
 import { withTestInfraLifecycleLock } from "@exam/db/src/testInfraLock.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -172,12 +173,7 @@ describe("P7-S2-A: result publication is single-winner", () => {
   }
 
   beforeAll(async () => {
-    const testDbUrl =
-      process.env.TEST_DATABASE_URL ??
-      process.env.TEST_DB_URL ??
-      (() => {
-        throw new Error("TEST_DATABASE_URL must be set");
-      })();
+    const testDbUrl = resolveTestDbUrl();
     iso = await setupIsolatedTestDb({
       namespace: "prrace",
       databaseUrl: testDbUrl,
