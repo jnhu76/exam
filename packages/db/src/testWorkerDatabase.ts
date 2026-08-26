@@ -42,6 +42,7 @@ import postgres from "postgres";
 import { parseAppMode, resolveTestBranchUrl } from "./databaseUrl.js";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
 import {
+  computeAdvisoryLockKey,
   resolveTestInfraCoordinationUrl,
   withTestInfraLifecycleLock,
 } from "./testInfraLock.js";
@@ -215,6 +216,7 @@ function resolveAdminUrl(env: ResolverEnv, baseUrl: string): string {
 export async function ensureDatabaseExists(
   adminUrl: string,
   databaseName: string,
+  options: { env?: ResolverEnv } = {},
 ): Promise<void> {
   assertPgNameSafe(databaseName);
   await withTestInfraLifecycleLock(adminUrl, async () => {
@@ -251,7 +253,7 @@ export async function ensureDatabaseExists(
 export async function dropDatabaseIfExists(
   adminUrl: string,
   databaseName: string,
-  options: { keepMissing?: boolean } = {},
+  options: { keepMissing?: boolean; env?: ResolverEnv } = {},
 ): Promise<void> {
   const keepMissing = options.keepMissing ?? true;
   assertPgNameSafe(databaseName);
@@ -291,7 +293,8 @@ function isDatabaseMissingError(err: unknown): boolean {
 }
 
 /**
- * Per-process bootstrap memo: databaseUrl → completed ensure+migrate promise.
+ * Per-process bootstrap memo: (coordination admin URL, worker URL) → completed
+ * ensure+migrate promise.
  *
  * Vitest runs every test file in a fresh isolated worker process, and several
  * files call `buildTestApp()` (→ `setupWorkerTestDatabase`) multiple times per
@@ -301,31 +304,140 @@ function isDatabaseMissingError(err: unknown): boolean {
  * to be ensured + migrated once per process; the promise is shared so
  * concurrent first calls also collapse into one bootstrap. Failures evict the
  * entry so a retry re-runs the bootstrap.
+ *
+ * The memo key includes the coordination admin URL, not just the worker URL:
+ * the bootstrap runs UNDER a coordination authority (its advisory-lock queue).
+ * Two calls with the same worker URL but different authorities (e.g. different
+ * `TEST_ADMIN_DATABASE` in their envs) must not share bootstrap state — the
+ * second call's authority would silently skip its own serialized ensure+migrate
+ * and fragment the one-queue guarantee. Same authority + same worker URL ⇒
+ * memo hit; any authority change ⇒ fresh bootstrap.
  */
 const bootstrappedWorkerDatabases = new Map<string, Promise<void>>();
+
+function workerBootstrapMemoKey(adminUrl: string, workerUrl: string): string {
+  return `${adminUrl} ${workerUrl}`;
+}
+
+/**
+ * Per-slot-database run lease connections, keyed by database name.
+ *
+ * See {@link acquireSlotDatabaseLease} for the contract. The connection is
+ * deliberately held for the remainder of the process: the session-level
+ * advisory lease releases automatically when the process exits (socket close),
+ * so a crashed run can never leak its lease.
+ */
+const slotDatabaseLeases = new Map<string, postgres.Sql>();
+
+/**
+ * How long {@link acquireSlotDatabaseLease} waits before failing fast. A
+ * sequential same-run slot handoff (previous file's process exiting) resolves
+ * in milliseconds; a genuinely concurrent run holds the slot for minutes, so
+ * 10s cleanly separates the two. `TEST_SLOT_LEASE_WAIT_MS` may override the
+ * budget in tests (shortens the deterministic foreign-holder regression).
+ */
+const SLOT_LEASE_ACQUIRE_TIMEOUT_MS = 10_000;
+
+/** Advisory-lock key namespace for the per-slot-database run lease. */
+const SLOT_LEASE_LOCK_NAME_PREFIX = "exam_test_slot_lease:";
+
+/**
+ * Deterministic advisory-lock key for a slot database's run lease. Exported
+ * for deterministic regression tests that must hold/release the exact lease
+ * key from a foreign session.
+ */
+export function computeSlotLeaseKey(databaseName: string): bigint {
+  return computeAdvisoryLockKey(
+    `${SLOT_LEASE_LOCK_NAME_PREFIX}${databaseName}`,
+  );
+}
+
+/**
+ * Acquire the per-slot-database RUN lease, or fail fast.
+ *
+ * CONTRACT (round-3, 2026-08-27): two independent local Vitest runs on the
+ * same PostgreSQL server both derive the same slot database names from
+ * `VITEST_POOL_ID` (bounded 1..maxWorkers). Without a guard they would share
+ * physical slot DBs CONCURRENTLY — each run's inter-file truncate boundary
+ * wipes the other run's fixtures mid-test. Concurrent local worker-database
+ * runs are NOT supported (CI shards use separate PG service containers, so
+ * they never contend). Instead of inventing a run namespace, this lease makes
+ * the existing single-run contract executable: the first process to claim a
+ * slot database holds a session-level advisory lease on the coordination DB
+ * for its process lifetime; a second process fails fast with a clear message.
+ *
+ * The lease uses `pg_try_advisory_lock` with a bounded retry loop rather than
+ * one immediate try: sequential files within ONE run hand the slot over as
+ * the previous worker process exits, and that teardown tail can hold the
+ * lease for a few hundred milliseconds. A bounded wait absorbs the legitimate
+ * handoff while still failing fast (default 10s) against a real concurrent
+ * run.
+ */
+async function acquireSlotDatabaseLease(
+  env: ResolverEnv,
+  adminUrl: string,
+  databaseName: string,
+): Promise<void> {
+  if (slotDatabaseLeases.has(databaseName)) return;
+  const key = computeSlotLeaseKey(databaseName);
+  const lease = postgres(adminUrl, { max: 1 });
+  const rawWait = Number(env.TEST_SLOT_LEASE_WAIT_MS);
+  const waitMs =
+    Number.isFinite(rawWait) && rawWait >= 0
+      ? rawWait
+      : SLOT_LEASE_ACQUIRE_TIMEOUT_MS;
+  const deadline = Date.now() + waitMs;
+  try {
+    for (;;) {
+      const rows = (await lease.unsafe(
+        "SELECT pg_try_advisory_lock($1) AS ok",
+        [key.toString()],
+      )) as Array<{ ok: boolean }>;
+      if (rows[0]?.ok === true) {
+        slotDatabaseLeases.set(databaseName, lease);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `[testWorkerDatabase] slot database "${databaseName}" is in use by another test run on this PostgreSQL server. ` +
+            `Concurrent local worker-database runs are not supported: both runs derive the same slot database names from VITEST_POOL_ID. ` +
+            `Wait for the other run to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  } catch (err) {
+    await lease.end().catch(() => {});
+    throw err;
+  }
+}
 
 function ensureWorkerDatabaseBootstrapped(
   adminUrl: string,
   workerUrl: string,
   databaseName: string,
+  env: ResolverEnv,
 ): Promise<void> {
-  let bootstrap = bootstrappedWorkerDatabases.get(workerUrl);
+  const memoKey = workerBootstrapMemoKey(adminUrl, workerUrl);
+  let bootstrap = bootstrappedWorkerDatabases.get(memoKey);
   if (!bootstrap) {
     bootstrap = (async () => {
-      await ensureDatabaseExists(adminUrl, databaseName);
+      await ensureDatabaseExists(adminUrl, databaseName, { env });
       const conn = await createPostgresDatabase(workerUrl);
       try {
-        await withTestInfraLifecycleLock(adminUrl, () =>
-          migratePostgres(conn.db),
+        await withTestInfraLifecycleLock(
+          adminUrl,
+          () => migratePostgres(conn.db),
+          { env },
         );
       } finally {
         await conn.sql.end();
       }
     })().catch((err: unknown) => {
-      bootstrappedWorkerDatabases.delete(workerUrl);
+      bootstrappedWorkerDatabases.delete(memoKey);
       throw err;
     });
-    bootstrappedWorkerDatabases.set(workerUrl, bootstrap);
+    bootstrappedWorkerDatabases.set(memoKey, bootstrap);
   }
   return bootstrap;
 }
@@ -365,7 +477,16 @@ export async function setupWorkerTestDatabase(
   const adminUrl = resolveAdminUrl(env, baseUrl);
   const workerUrl = withDatabaseName(baseUrl, databaseName);
 
-  await ensureWorkerDatabaseBootstrapped(adminUrl, workerUrl, databaseName);
+  // Claim the slot database for this process BEFORE any lifecycle work: this
+  // is the single-run contract's executable boundary (see
+  // acquireSlotDatabaseLease). Fails fast if another run already owns it.
+  await acquireSlotDatabaseLease(env, adminUrl, databaseName);
+  await ensureWorkerDatabaseBootstrapped(
+    adminUrl,
+    workerUrl,
+    databaseName,
+    env,
+  );
   const conn = await createPostgresDatabase(workerUrl);
 
   let closed = false;

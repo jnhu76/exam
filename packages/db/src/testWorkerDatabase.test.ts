@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
+  computeSlotLeaseKey,
   dropDatabaseIfExists,
   ensureDatabaseExists,
   setupWorkerTestDatabase,
@@ -8,7 +9,10 @@ import {
   withDatabaseName,
 } from "./testWorkerDatabase.js";
 import { resolveTestDbUrl } from "./testDb.js";
-import { getTestInfraLockAcquisitionCount } from "./testInfraLock.js";
+import {
+  getTestInfraLifecycleLockKey,
+  getTestInfraLockAcquisitionCount,
+} from "./testInfraLock.js";
 
 /**
  * ADR-007 Phase 3A worker-database prototype tests.
@@ -379,6 +383,115 @@ PG_DESCRIBE(
         await dropDatabaseIfExists(ADMIN_URL, first.databaseName, {
           keepMissing: true,
         });
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "setupWorkerTestDatabase — bootstrap memo authority scoping (round-3)",
+  // Same lifecycle-queue budget: both bootstraps take the lock for
+  // ensure + migrate under their own coordination authority.
+  { timeout: 30_000 },
+  () => {
+    it("same worker URL under a DIFFERENT coordination authority does not memo-hit (old key was workerUrl only)", async () => {
+      // The bootstrap runs UNDER a coordination authority (its advisory-lock
+      // queue, selected by TEST_ADMIN_DATABASE). Two envs with the same worker
+      // URL but different authorities must bootstrap independently: the old
+      // memo key (workerUrl alone) let the second authority silently reuse the
+      // first authority's bootstrap and skip its own serialized ensure+migrate.
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `memoauth_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const injectedDb = new URL(BASE_URL).pathname.replace(/^\//, "");
+      const envAuthorityA = {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_WORKER_ID: workerId,
+        TEST_DATABASE_URL: BASE_URL,
+        TEST_ADMIN_DATABASE: "postgres",
+      };
+      const envAuthorityB = {
+        ...envAuthorityA,
+        TEST_ADMIN_DATABASE: injectedDb,
+      };
+      const beforeA = getTestInfraLockAcquisitionCount();
+      const a = await setupWorkerTestDatabase({ env: envAuthorityA });
+      const acquiredA = getTestInfraLockAcquisitionCount() - beforeA;
+      const beforeB = getTestInfraLockAcquisitionCount();
+      const b = await setupWorkerTestDatabase({ env: envAuthorityB });
+      const acquiredB = getTestInfraLockAcquisitionCount() - beforeB;
+      try {
+        expect(a.databaseName).toBe(b.databaseName);
+        expect(acquiredA).toBeGreaterThanOrEqual(1);
+        // Old implementation: memo key ignored the authority → acquiredB was
+        // 0 (bootstrap skipped). New key (adminUrl + workerUrl) forces a fresh
+        // bootstrap under authority B.
+        expect(acquiredB).toBeGreaterThanOrEqual(1);
+      } finally {
+        await a.close();
+        await b.close();
+        await dropDatabaseIfExists(ADMIN_URL, a.databaseName, {
+          keepMissing: true,
+        });
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "setupWorkerTestDatabase — slot-database run lease (round-3)",
+  // The foreign-holder case waits TEST_SLOT_LEASE_WAIT_MS (shortened below to
+  // 500ms); the happy path bootstraps a fresh worker DB under the lifecycle
+  // lock (seconds under sibling load).
+  { timeout: 30_000 },
+  () => {
+    it("lease key is namespace-separated from the lifecycle lock key", () => {
+      expect(computeSlotLeaseKey("exam_test_w1")).not.toBe(
+        getTestInfraLifecycleLockKey(),
+      );
+      // Different slot databases derive different lease keys.
+      expect(computeSlotLeaseKey("exam_test_w1")).not.toBe(
+        computeSlotLeaseKey("exam_test_w2"),
+      );
+    });
+
+    it("fails fast when a foreign session already holds the slot lease (deterministic)", async () => {
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `lease_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      // Hold the EXACT lease key from a foreign session — no timing, no race.
+      const foreign = postgres(ADMIN_URL, { max: 1 });
+      try {
+        await foreign.unsafe("SELECT pg_advisory_lock($1)", [
+          computeSlotLeaseKey(`exam_test_w${workerId}`).toString(),
+        ]);
+        await expect(
+          setupWorkerTestDatabase({
+            env: {
+              TEST_DB_ISOLATION: "worker-database",
+              TEST_WORKER_ID: workerId,
+              TEST_DATABASE_URL: BASE_URL,
+              TEST_SLOT_LEASE_WAIT_MS: "500",
+            },
+          }),
+        ).rejects.toThrow(/is in use by another test run/);
+
+        // Release the foreign lease; the same process must now succeed — the
+        // bounded wait absorbs the legitimate sequential handoff.
+        await foreign.unsafe("SELECT pg_advisory_unlock($1)", [
+          computeSlotLeaseKey(`exam_test_w${workerId}`).toString(),
+        ]);
+        const handle = await setupWorkerTestDatabase({
+          env: {
+            TEST_DB_ISOLATION: "worker-database",
+            TEST_WORKER_ID: workerId,
+            TEST_DATABASE_URL: BASE_URL,
+          },
+        });
+        await handle.close();
+        await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+          keepMissing: true,
+        });
+      } finally {
+        await foreign.end().catch(() => {});
       }
     });
   },

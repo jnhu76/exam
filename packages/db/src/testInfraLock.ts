@@ -170,12 +170,19 @@ function fnv1a32(str: string): number {
  * export — the pre-split single key). Computed once from the fixed lock name;
  * exported for tests/diagnostics.
  */
-export const TEST_INFRA_LIFECYCLE_LOCK_KEY: bigint = computeLockKey(
+export const TEST_INFRA_LIFECYCLE_LOCK_KEY: bigint = computeAdvisoryLockKey(
   TEST_INFRA_LIFECYCLE_LOCK_NAME,
 );
 
 /** Combine two FNV-1a halves into one signed bigint lock key. */
-function computeLockKey(name: string): bigint {
+/**
+ * Combine two FNV-1a halves into one signed bigint lock key.
+ *
+ * Exported so other test-infra helpers (e.g. the per-slot-database run lease
+ * in `testWorkerDatabase.ts`) can derive their OWN advisory-lock keys from
+ * stable names without duplicating the FNV-1a / int64-folding logic.
+ */
+export function computeAdvisoryLockKey(name: string): bigint {
   const mid = Math.floor(name.length / 2);
   const hi = fnv1a32(name.slice(0, mid)) >>> 0; // unsigned 32-bit
   const lo = fnv1a32(name.slice(mid)) >>> 0; // unsigned 32-bit
@@ -213,8 +220,26 @@ async function releaseAdvisoryLock(
   await sql.unsafe("SELECT pg_advisory_unlock($1)", [key.toString()]);
 }
 
-/** Options for {@link withTestInfraLifecycleLock}. Reserved for future use. */
-export interface TestInfraLifecycleLockOptions {}
+/**
+ * Options for {@link withTestInfraLifecycleLock}.
+ */
+export interface TestInfraLifecycleLockOptions {
+  /**
+   * Environment used to resolve `TEST_ADMIN_DATABASE` when normalizing
+   * `adminUrl` onto the coordination database. Defaults to `process.env`.
+   *
+   * AUTHORITY CONTRACT: a caller that resolved its infrastructure context from
+   * an explicit env (e.g. `setupWorkerTestDatabase({ env })` →
+   * `resolveAdminUrl(env, baseUrl)`) MUST pass the SAME env here. Without it
+   * this helper would silently re-read `process.env.TEST_ADMIN_DATABASE` and
+   * host the lock on a DIFFERENT database than the caller's resolved admin
+   * authority — and advisory locks are database-local, so two callers with
+   * different resolved authorities would never coordinate even though the key
+   * matches. Caller-resolved context must not change because a lower helper
+   * re-read ambient state; resolve once, pass authority down.
+   */
+  env?: NodeJS.ProcessEnv;
+}
 
 /**
  * Run `fn` while holding the cross-process test-infra advisory lock.
@@ -231,7 +256,11 @@ export interface TestInfraLifecycleLockOptions {}
  * PostgreSQL advisory locks are database-local. The `adminUrl` is normalized
  * via {@link resolveTestInfraCoordinationUrl} so ALL callers — regardless of
  * which database they otherwise connect to (`exam_test`, `postgres`, a worker
- * database) — coordinate on the SAME coordination database.
+ * database) — coordinate on the SAME coordination database. When the caller
+ * resolved `adminUrl` from an explicit env, pass that env via
+ * `options.env` so the normalization here is idempotent instead of silently
+ * re-deriving from `process.env` (see the authority contract on
+ * {@link TestInfraLifecycleLockOptions}).
  *
  * The `fn` receives nothing; it should perform the heavy DDL/migration via its
  * OWN connections (the lock connection is dedicated and not exposed). The lock
@@ -240,17 +269,23 @@ export interface TestInfraLifecycleLockOptions {}
  *
  * @param adminUrl Maintenance/admin URL used only to host the advisory lock
  * session. This connection is opened and closed within the call.
+ * @param options Optional env authority for the coordination-URL
+ * normalization (see {@link TestInfraLifecycleLockOptions}).
  * @param fn Heavy lifecycle body. Runs while the lock is held.
  */
 export async function withTestInfraLifecycleLock<T>(
   adminUrl: string,
   fn: () => Promise<T>,
+  options?: TestInfraLifecycleLockOptions,
 ): Promise<T> {
   const key = TEST_INFRA_LIFECYCLE_LOCK_KEY;
   const trace = process.env.TEST_INFRA_TRACE === "1";
   const t0 = trace ? performance.now() : 0;
   const caller = trace ? firstExternalFrame() : "";
-  const coordinationUrl = resolveTestInfraCoordinationUrl(adminUrl);
+  const coordinationUrl = resolveTestInfraCoordinationUrl(
+    adminUrl,
+    options?.env ?? process.env,
+  );
   const admin = postgres(coordinationUrl, { max: 1 });
   await acquireAdvisoryLock(admin, key);
   if (trace) {

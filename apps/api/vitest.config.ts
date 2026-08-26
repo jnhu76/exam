@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
+import { resolveParallelism } from "./vitest.parallelism.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
@@ -51,11 +52,13 @@ for (const [key, value] of Object.entries(envVars)) {
 //
 // 关键：并行模式下**绝不能**设置 TEST_WORKER_ID。resolveWorkerId() 优先读
 // TEST_WORKER_ID，若固定为 1，所有 vitest worker 都会解析成 worker 1 → 共用
-// exam_test_w1 → per-worker database 隔离失效。并行依赖 vitest 自动注入的
-// VITEST_POOL_ID（执行槽位，1..maxWorkers，任务结束即回收，因此 slot DB 的
-// 数量恰好等于 maxWorkers；VITEST_WORKER_ID 是实例 id、不受 maxWorkers 约束，
-// 只作 legacy 兜底，绝不能作为槽位身份）。serial 模式（本配置默认）可以
-// 手工设 TEST_WORKER_ID=1。
+// exam_test_w1 → per-worker database 隔离失效。该不变量由
+// vitest.parallelism.ts 的 resolveParallelism 在测试启动前 fail-fast（round-3
+// 起）；并行只依赖 vitest 自动注入的 VITEST_POOL_ID（执行槽位，1..maxWorkers，
+// 任务结束即回收，因此 slot DB 的数量恰好等于 maxWorkers；VITEST_WORKER_ID 是
+// 实例 id、不受 maxWorkers 约束，自 round-3 起彻底不再参与槽位解析——见
+// testScope.ts resolveWorkerId）。serial 模式（本配置默认）可以手工设
+// TEST_WORKER_ID=1。
 //
 // 非法 API_TEST_MAX_WORKERS（非数字 / ≤0 / 非整数）直接 throw，fail-fast，
 // 不静默退化为串行（避免开发者以为在跑并行实际却串行）。
@@ -64,37 +67,7 @@ for (const [key, value] of Object.entries(envVars)) {
 // 隔离。每个 shard 设 TEST_INFRA_SCOPE=ci + TEST_SHARD_INDEX + shard 命令
 // vitest run --shard=N/2。CI 不设 TEST_WORKER_ID（与本地并行同理）。
 // CI worker count 默认 1（保守），待 real timing data 后 tuning。
-function resolveParallelism(): {
-  fileParallelism: boolean;
-  maxWorkers?: number;
-} {
-  const dbIsolation = process.env.TEST_DB_ISOLATION?.trim();
-  const rawMax = process.env.API_TEST_MAX_WORKERS?.trim();
-
-  // No opt-in → legacy serial default.
-  if (rawMax === undefined || rawMax === "") {
-    return { fileParallelism: false };
-  }
-  // API_TEST_MAX_WORKERS is set. Require worker-database mode; reject otherwise
-  // rather than silently running parallel against shared schema.
-  if (dbIsolation !== "worker-database") {
-    throw new Error(
-      `[vitest.config] API_TEST_MAX_WORKERS=${rawMax} requires TEST_DB_ISOLATION=worker-database ` +
-        `(got TEST_DB_ISOLATION=${JSON.stringify(dbIsolation)}). ` +
-        `Parallel file-schema mode would reintroduce BUG-FLAKE-001. ` +
-        `Unset API_TEST_MAX_WORKERS for serial, or set TEST_DB_ISOLATION=worker-database.`,
-    );
-  }
-  const parsed = Number(rawMax);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(
-      `[vitest.config] API_TEST_MAX_WORKERS must be a positive integer (got ${JSON.stringify(rawMax)}).`,
-    );
-  }
-  return { fileParallelism: true, maxWorkers: parsed };
-}
-
-const parallelism = resolveParallelism();
+const parallelism = resolveParallelism(process.env);
 
 export default defineConfig(({ mode }) => ({
   test: {

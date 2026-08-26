@@ -56,19 +56,14 @@ describe("resolveTestScope — local worker defaults", () => {
     expect(scope.queuePrefix).toBe("exam:test:local:w2");
   });
 
-  it("prefers VITEST_POOL_ID over VITEST_WORKER_ID, and TEST_WORKER_ID over both", () => {
-    // Slot id beats instance id — see resolveWorkerId docstring for why.
+  it("prefers VITEST_POOL_ID, and TEST_WORKER_ID over it; VITEST_WORKER_ID is never a slot identity (round-3)", () => {
+    // Slot id is the only runner-injected identity — see resolveWorkerId
+    // docstring for why VITEST_WORKER_ID (instance id) was removed entirely.
     const fromRunner = resolveTestScope(
       env({ VITEST_POOL_ID: "2", VITEST_WORKER_ID: "3" }),
     );
     expect(fromRunner.workerId).toBe("2");
     expect(fromRunner.scopeId).toBe("local_w2");
-
-    // Legacy fallback still works when only VITEST_WORKER_ID is present
-    // (older runner / non-vitest harness).
-    const legacyOnly = resolveTestScope(env({ VITEST_WORKER_ID: "3" }));
-    expect(legacyOnly.workerId).toBe("3");
-    expect(legacyOnly.scopeId).toBe("local_w3");
 
     const explicit = resolveTestScope(
       env({
@@ -79,13 +74,31 @@ describe("resolveTestScope — local worker defaults", () => {
     );
     expect(explicit.workerId).toBe("9");
     expect(explicit.scopeId).toBe("local_w9");
+
+    // VITEST_WORKER_ID alone does NOT provide a slot id: outside Vitest it is
+    // ignored (serial fallback "1"), and under Vitest its presence without
+    // VITEST_POOL_ID fails fast instead of silently rebinding slot resources
+    // to the known-bad instance identity.
+    const legacyOnly = resolveTestScope(env({ VITEST_WORKER_ID: "3" }));
+    expect(legacyOnly.workerId).toBe("1");
+    expect(() =>
+      resolveTestScope(env({ VITEST_WORKER_ID: "3", VITEST: "true" })),
+    ).toThrow(/VITEST_POOL_ID is required for slot-scoped test resources/);
   });
 
-  it("treats an empty VITEST_POOL_ID as unset and falls through to VITEST_WORKER_ID", () => {
+  it("treats an empty VITEST_POOL_ID as unset: '1' outside Vitest, fail-fast under Vitest", () => {
+    const scope = resolveTestScope(env({ VITEST_POOL_ID: " " }));
+    expect(scope.workerId).toBe("1");
+    expect(() =>
+      resolveTestScope(env({ VITEST_POOL_ID: " ", VITEST: "true" })),
+    ).toThrow(/VITEST_POOL_ID is required for slot-scoped test resources/);
+  });
+
+  it("uses the runner-injected slot id under Vitest without an explicit override", () => {
     const scope = resolveTestScope(
-      env({ VITEST_POOL_ID: " ", VITEST_WORKER_ID: "4" }),
+      env({ VITEST_POOL_ID: "2", VITEST: "true" }),
     );
-    expect(scope.workerId).toBe("4");
+    expect(scope.workerId).toBe("2");
   });
 
   it("slot-derived database name is stable across sequential files that share a slot", () => {

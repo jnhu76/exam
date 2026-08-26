@@ -45,6 +45,30 @@ async function pgReachable(url: string): Promise<boolean> {
 const PG_UP = await pgReachable(ADMIN_URL);
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
 
+/** Create a disposable database (unique coordination-DB fixtures). */
+async function ensureDb(adminUrl: string, name: string): Promise<void> {
+  const sql = postgres(adminUrl);
+  try {
+    const rows = await sql`SELECT 1 FROM pg_database WHERE datname = ${name}`;
+    if (rows.length === 0) await sql.unsafe(`CREATE DATABASE "${name}"`);
+  } finally {
+    await sql.end();
+  }
+}
+
+/** Drop a disposable database, terminating lingering connections first. */
+async function dropDb(adminUrl: string, name: string): Promise<void> {
+  const sql = postgres(adminUrl);
+  try {
+    await sql`SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = ${name} AND pid <> pg_backend_pid()`;
+    await sql.unsafe(`DROP DATABASE IF EXISTS "${name}"`);
+  } finally {
+    await sql.end();
+  }
+}
+
 /**
  * One-shot deferred with a timeout, local to this test file (packages/db must
  * not import apps/api's barrier). Used to gate critical sections: the holder
@@ -475,6 +499,102 @@ PG_DESCRIBE(
           holderPromise,
           ...(contenderPromise ? [contenderPromise] : []),
         ]);
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "withTestInfraLifecycleLock — caller env authority (TEST_ADMIN_DATABASE)",
+  // Queue-participant budget: this describe acquires the real lifecycle lock.
+  { timeout: 30_000 },
+  () => {
+    it("hosts the lock on the caller-resolved coordination DB, not a process.env re-read (round-3 authority regression)", async () => {
+      // Reproduces the CodeRabbit round-2 finding against the round-3 fix:
+      // setupWorkerTestDatabase resolves adminUrl from ITS env
+      // (TEST_ADMIN_DATABASE=injected), and the lock helper must host the
+      // advisory lock on that SAME database. The old implementation silently
+      // re-read process.env.TEST_ADMIN_DATABASE below the seam, so a divergent
+      // ambient value moved the lock onto a different database — and advisory
+      // locks are database-local, i.e. coordination silently broke.
+      //
+      // The injected authority is a UNIQUE disposable database: no sibling
+      // test traffic can put rows there, so a granted row for THE lifecycle
+      // key on this DB can only come from OUR holder. Old implementation:
+      // holder's lock lands on the ambient DB, this DB never sees a row, the
+      // poll times out and the test FAILS — deterministic either way.
+      const ambientDb = "postgres";
+      const injectedDb = `exam_test_coordauth_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      await ensureDb(ADMIN_URL, injectedDb);
+      const injectedEnv = { TEST_ADMIN_DATABASE: injectedDb };
+      const injectedUrl = resolveTestInfraCoordinationUrl(
+        BASE_URL,
+        injectedEnv,
+      );
+      expect(new URL(injectedUrl).pathname).toBe(`/${injectedDb}`);
+
+      const key = getTestInfraLifecycleLockKey();
+      const holderEntered = createDeferred<void>("authority holder entered");
+      const releaseHolder = createDeferred<void>("authority release holder");
+
+      // The hosting database's oid: pg_locks is CLUSTER-GLOBAL (rows for
+      // locks hosted on OTHER databases appear too, tagged with the owning
+      // database oid), so the discriminator is row.database === injected oid.
+      // No sibling test uses this unique DB, so such a row can only be OUR
+      // holder — deterministic even under parallel-suite lock traffic.
+      const oidProbe = postgres(injectedUrl, { max: 1 });
+      let injectedOid = 0;
+      try {
+        const oidRows = (await oidProbe`
+          SELECT oid FROM pg_database WHERE datname = current_database()
+        `) as Array<{ oid: number }>;
+        injectedOid = Number(oidRows[0]?.oid);
+      } finally {
+        await oidProbe.end();
+      }
+      expect(injectedOid).toBeGreaterThan(0);
+
+      const saved = process.env.TEST_ADMIN_DATABASE;
+      process.env.TEST_ADMIN_DATABASE = ambientDb;
+      let holderPromise: Promise<void> | undefined;
+      try {
+        holderPromise = withTestInfraLifecycleLock(
+          injectedUrl,
+          async () => {
+            holderEntered.resolve();
+            await releaseHolder.promise;
+          },
+          { env: injectedEnv },
+        );
+        await holderEntered.promise;
+
+        // Exactly one granted lifecycle-key row HOSTED ON the injected
+        // authority DB. Old implementation hosts it on the ambient DB, no row
+        // ever carries the injected oid, and this poll times out → FAIL.
+        const rows = await pollAdvisoryLocks(
+          injectedUrl,
+          key,
+          (rs) =>
+            rs.filter((r) => r.granted && Number(r.database) === injectedOid)
+              .length === 1,
+        );
+        const hosted = rows.filter(
+          (r) => r.granted && Number(r.database) === injectedOid,
+        );
+        expect(hosted).toHaveLength(1);
+        expect(hosted[0]?.locktype).toBe("advisory");
+        expect(hosted[0]?.mode).toBe("ExclusiveLock");
+
+        releaseHolder.resolve();
+        await holderPromise;
+      } finally {
+        if (saved === undefined) delete process.env.TEST_ADMIN_DATABASE;
+        else process.env.TEST_ADMIN_DATABASE = saved;
+        disposeAll(holderEntered, releaseHolder);
+        await Promise.allSettled(holderPromise ? [holderPromise] : []);
+        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
       }
     });
   },
