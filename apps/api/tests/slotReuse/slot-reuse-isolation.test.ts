@@ -61,8 +61,11 @@ const slotWorkerId = `sr${Date.now().toString(36)}${randomUUID().slice(0, 6)}`;
 
 function childEnv(stage: "A" | "B"): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  // Serial child run: no parallel workers, no explicit-vs-parallel conflict.
-  delete env.API_TEST_MAX_WORKERS;
+  // Serial child run: defined-but-empty resolves to serial, and
+  // vitest.config only seeds env-file values for keys that are still
+  // undefined — deleting would let .env.test.local's API_TEST_MAX_WORKERS
+  // slip back in and trip the TEST_WORKER_ID x parallel guard.
+  env.API_TEST_MAX_WORKERS = "";
   // The child runner injects its own runner ids; do not leak the parent's.
   delete env.VITEST_POOL_ID;
   delete env.VITEST_WORKER_ID;
@@ -111,8 +114,7 @@ describe("slot-reuse data isolation (sequential files, same pool slot)", () => {
     expect(handoff.poolId).toBe("1");
     expect(handoff.stageBPoolId).toBe("1");
     expect(handoff.migrationCount ?? 0).toBeGreaterThan(0);
-  }, // Two child Vitest boots + two full buildTestApp bootstraps (CREATE
-  // DATABASE + migrate + seed + Fastify). Not a 5s-scale test.
+  }, // DATABASE + migrate + seed + Fastify). Not a 5s-scale test. // Two child Vitest boots + two full buildTestApp bootstraps (CREATE
   240_000);
 
   afterAll(
