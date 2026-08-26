@@ -782,8 +782,21 @@ p50 19ms). Two structural rules now bound the load at the seams:
    key. Cross-class engine contention (the Phase 6D concern) is carried by the
    participating lifecycle suites' deterministic-queue hang-protection
    budgets, not by one global key.
+4. **Queue-participant hooks get the 30s budget explicitly.** Vitest's
+   per-describe `{ timeout }` applies to test bodies only — hooks resolve
+   their own timeout as `beforeAll(fn, timeout = getDefaultHookTimeout())`
+   (verified in the vitest runner source), so a hook that acquires the
+   lifecycle lock runs on the 10s global default unless the package config
+   raises it. Worse, a timed-out hook is not cancelled: its orphaned promise
+   keeps holding the advisory lock and cascades multi-second waits to every
+   sibling (measured 23.8s single wait after one hook timeout).
+   `packages/db/vitest.config.ts` therefore sets `hookTimeout: 30_000`,
+   matching the 30s budgets the lifecycle describes already declare for their
+   tests. Any future suite whose beforeAll/afterAll acquires the lifecycle
+   lock relies on this package-level budget; do not lower it without
+   re-justifying the queue envelope.
 
-Regression tests assert both rules via
+Regression tests assert these rules via
 `getTestInfraLockAcquisitionCount()` and fail on the pre-fix implementation.
 `TEST_INFRA_TRACE=1` emits per-acquisition wait/hold diagnostics to stderr for
 future audits. Known remaining load (follow-up, not contract): every fresh

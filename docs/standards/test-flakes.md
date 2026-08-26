@@ -104,15 +104,33 @@
      type bigint"）。
   4. `e2eReset.test.ts`：对齐 demo-seed 预计算 hash 先例（memoizedHash）+
      bootstrap（ensure+migrate）移入 beforeAll；首用例 1881ms→1007ms；并按
-     PR #242 队列参与方规则补 describe 30s hang-protection 预算。
+     PR #242 队列参与方规则补 30s 预算（describe 覆盖测试体，hook 由
+     vitest.config.ts 的 `hookTimeout: 30_000` 覆盖——见下）。
   5. `testInfraLock.ts`：新增 `getTestInfraLockAcquisitionCount()`（回归测试
      断言用）与 `TEST_INFRA_TRACE=1` 门控的 wait/hold/class 结构化诊断日志。
+  6. **hook 预算补全（审计 addendum，vitest 语义实证）**：vitest 4 源码实证
+     `beforeAll(fn, timeout = getDefaultHookTimeout())` —— describe 的
+     `{ timeout }` 只作用于**测试体**，**不传播到 hook**；hook 默认走全局
+     `hookTimeout`（10s）。而 packages/db 几乎所有 lifecycle 套件的
+     beforeAll/afterAll 都是 DDL 锁队列参与方，且**超时的 hook 不会被取消**
+     （orphan promise 继续持锁），一旦某个 hook 超时即引发级联：观察到单次
+     schema 等待 **23.8s**、e2eReset/0024 beforeAll 相继 10s 超时。
+     修复：`packages/db/vitest.config.ts` 设 `hookTimeout: 30_000`（与
+     lifecycle describe 已声明的 30s 测试预算一致）；修正后连续 5 次 coverage
+     全绿，最长等待回落到 2.3-2.9s，级联消失。`ensureDatabaseExists` describe
+     的 15s 预算（其余参与方均为 30s）也一并对齐为 30s。
 - **回归测试（旧实现必败，stash/变异实证）**：`testIsolation.test.ts`
   "acquires the lifecycle lock exactly once"（旧实现 2≠1 FAIL）；
   `testWorkerDatabase.test.ts` "second setup … does not re-acquire"（旧实现
-  2≠0 FAIL）；`testInfraLock.test.ts` "a held database-class lock does not
-  block a schema-class critical section"（同键变异 FAIL 'race-timeout'，
-  拆键 PASS）+ "database-class callers still serialize against each other"。
+  2≠0 FAIL）；`testInfraLock.test.ts` 键派生 "derives distinct keys per
+  resource class"（同键变异 FAIL）+ "a held database-class lock does not
+  hold the schema key (pg_locks proof)"（同键变异 FAIL 'expected 1 to be
+  +0'，拆键 PASS，pg_locks 本会话过滤、与兄弟临界区无关、无时序）+ "database-
+  class critical sections are routed to the database key"（路由变异 FAIL
+  'expected true to be false'，正确路由 PASS，在持有临界区内部从第二会话
+  try-lock database 键必败——无外部持键、无竞速）+ "database-class callers
+  still serialize against each other"（修复了 second 抢跑初始获取的潜在
+  乱序竞态：second 必须在 first 确证持锁后才启动）。
 - **遗留（follow-up，不本 PR）**：per-file fresh worker 的 CREATE+migrate 基线
   （api ~255 次/run 获取）仍在；模板库克隆（CREATE DATABASE … TEMPLATE，登记册
   既有方向）与 slot-bounded worker DB 池可进一步压垮队列负载；schema 类内部
