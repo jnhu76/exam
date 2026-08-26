@@ -467,3 +467,97 @@ PG_DESCRIBE(
     });
   },
 );
+
+/** Resolve with `label` after `ms` (bounded race timer; unref'd). */
+function raceTimeoutLabel(label: string, ms: number): Promise<string> {
+  return new Promise<string>((resolve) => {
+    const timer = setTimeout(() => resolve(label), ms);
+    timer.unref?.();
+  });
+}
+
+PG_DESCRIBE(
+  "withTestInfraLifecycleLock — resource-class key split",
+  // Queue-participant hang protection: both critical sections below take real
+  // advisory locks on the coordination DB.
+  { timeout: 30_000 },
+  () => {
+    it("a held database-class lock does not block a schema-class critical section", async () => {
+      // Deterministic reproducer of the 2026-08-26 audit failure: one
+      // pathological DROP DATABASE held the single shared key for 23.4s and
+      // every queued schema setup inherited that wait inside its hook budget.
+      // With the class split, the schema class must acquire independently.
+      const holderEntered = createDeferred<void>("holderEntered");
+      const releaseHolder = createDeferred<void>("releaseHolder");
+      const schemaAcquired = createDeferred<void>("schemaAcquired");
+      const holderPromise = withTestInfraLifecycleLock(
+        ADMIN_URL,
+        async () => {
+          holderEntered.resolve();
+          await releaseHolder.promise;
+        },
+        { lockClass: "database" },
+      );
+      try {
+        await holderEntered.promise;
+        const schemaPromise = withTestInfraLifecycleLock(
+          ADMIN_URL,
+          async () => {
+            schemaAcquired.resolve();
+          },
+          { lockClass: "schema" },
+        );
+        const winner = await Promise.race([
+          schemaAcquired.promise.then((): string => "schema-acquired"),
+          raceTimeoutLabel("race-timeout", 3_000),
+        ]);
+        // On the pre-split single-key implementation the schema section
+        // blocks behind the database holder (released only after the race),
+        // so this assertion fails with "race-timeout".
+        expect(winner).toBe("schema-acquired");
+        releaseHolder.resolve();
+        await Promise.all([holderPromise, schemaPromise]);
+      } finally {
+        disposeAll(holderEntered, releaseHolder, schemaAcquired);
+        await Promise.allSettled([holderPromise]);
+      }
+    });
+
+    it("database-class callers still serialize against each other", async () => {
+      const first = createDeferred<void>("dbFirstEntered");
+      const releaseFirst = createDeferred<void>("dbReleaseFirst");
+      const firstPromise = withTestInfraLifecycleLock(
+        ADMIN_URL,
+        async () => {
+          first.resolve();
+          await releaseFirst.promise;
+        },
+        { lockClass: "database" },
+      );
+      let overlapped = false;
+      const secondPromise = (async () => {
+        await withTestInfraLifecycleLock(
+          ADMIN_URL,
+          async () => {
+            if (!releaseFirst.isSettled()) overlapped = true;
+          },
+          { lockClass: "database" },
+        );
+      })();
+      try {
+        await first.promise;
+        const winner = await Promise.race([
+          secondPromise.then((): string => "second-finished-early"),
+          raceTimeoutLabel("second-still-waiting", 1_000),
+        ]);
+        expect(winner).toBe("second-still-waiting");
+        releaseFirst.resolve();
+        await Promise.all([firstPromise, secondPromise]);
+        expect(overlapped).toBe(false);
+      } finally {
+        disposeAll(first, releaseFirst);
+        await Promise.allSettled([firstPromise, secondPromise]);
+      }
+    });
+  },
+);

@@ -8,6 +8,7 @@ import {
   withDatabaseName,
 } from "./testWorkerDatabase.js";
 import { resolveTestDbUrl } from "./testDb.js";
+import { getTestInfraLockAcquisitionCount } from "./testInfraLock.js";
 
 /**
  * ADR-007 Phase 3A worker-database prototype tests.
@@ -314,6 +315,56 @@ PG_DESCRIBE(
         await handle.close();
         await handle.close(); // idempotent
         await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+          keepMissing: true,
+        });
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "setupWorkerTestDatabase — per-process bootstrap memo",
+  // Same lifecycle-queue budget: the bootstrap takes the lock for
+  // CREATE DATABASE + full migrate and can queue behind sibling DDL.
+  { timeout: 30_000 },
+  () => {
+    it("second setup for the same worker URL does not re-acquire the lifecycle lock", async () => {
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `memo_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const env = {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_INFRA_SCOPE: "local",
+        TEST_WORKER_ID: workerId,
+        TEST_DATABASE_URL: BASE_URL,
+      };
+      const beforeFirst = getTestInfraLockAcquisitionCount();
+      const first = await setupWorkerTestDatabase({ env });
+      const firstAcquired = getTestInfraLockAcquisitionCount() - beforeFirst;
+      const beforeSecond = getTestInfraLockAcquisitionCount();
+      const second = await setupWorkerTestDatabase({ env });
+      const secondAcquired = getTestInfraLockAcquisitionCount() - beforeSecond;
+      try {
+        expect(first.databaseName).toBe(second.databaseName);
+        // Fresh bootstrap pays ensure + migrate (2 acquisitions)…
+        expect(firstAcquired).toBeGreaterThanOrEqual(1);
+        // …but a same-process repeat must reuse the memoized bootstrap and
+        // acquire the lock ZERO times. Regression: the old implementation
+        // re-acquired twice per call — every warm buildTestApp added pure
+        // global queue load (auth-style in-test builds waited behind it).
+        expect(secondAcquired).toBe(0);
+
+        // The memoized bootstrap must leave a fully migrated, usable handle.
+        const biz = postgres(second.databaseUrl);
+        try {
+          const rows = await biz`SELECT count(*)::int AS c FROM organizations`;
+          expect((rows[0] as { c: number }).c).toBe(0);
+        } finally {
+          await biz.end();
+        }
+      } finally {
+        await first.close();
+        await second.close();
+        await dropDatabaseIfExists(ADMIN_URL, first.databaseName, {
           keepMissing: true,
         });
       }

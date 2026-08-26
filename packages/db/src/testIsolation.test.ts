@@ -1,6 +1,6 @@
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 import postgres from "postgres";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   sanitizeSchemaName,
   quoteIdent,
@@ -18,7 +18,8 @@ import { migratePostgres } from "./postgres.js";
 import { schema } from "./schema/pg.js";
 import { seed } from "./seed.js";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { resolveTestDbUrl } from "./testDb.js";
+import { getIsolatedTestDb, resolveTestDbUrl } from "./testDb.js";
+import { getTestInfraLockAcquisitionCount } from "./testInfraLock.js";
 
 const TEST_DB_URL = resolveTestDbUrl();
 
@@ -424,3 +425,41 @@ describe("isTestDbIsolationEnabled", () => {
     expect(isTestDbIsolationEnabled()).toBe(false);
   });
 });
+
+describe(
+  "getIsolatedTestDb — single critical section per setup",
+  // Queue-participant hang protection (PR #242 rule, see
+  // docs/standards/test-flakes.md): the setup acquires the shared
+  // test-infra DDL lock and can queue behind sibling heavy sections.
+  { timeout: 30_000 },
+  () => {
+    it("acquires the lifecycle lock exactly once (create + connect + migrate batched)", async () => {
+      const orig = process.env.TEST_DB_ISOLATION;
+      process.env.TEST_DB_ISOLATION = "1";
+      try {
+        const before = getTestInfraLockAcquisitionCount();
+        const iso = await getIsolatedTestDb("db-single-acquire");
+        const acquired = getTestInfraLockAcquisitionCount() - before;
+        try {
+          // Regression: the old implementation re-queued between CREATE SCHEMA
+          // and migrate (2 acquisitions), paying the global DDL queue wait
+          // twice inside one setup; under parallel workers that alone consumed
+          // most of a test's default budget.
+          expect(acquired).toBe(1);
+          const rows = (await iso.db.execute(
+            sql`SELECT count(*)::int AS c FROM ${schema.organizations}`,
+          )) as unknown as Array<{ c: number }>;
+          expect(Number(rows[0]?.c ?? 0)).toBe(0);
+        } finally {
+          await iso.cleanup();
+        }
+      } finally {
+        if (orig === undefined) {
+          delete process.env.TEST_DB_ISOLATION;
+        } else {
+          process.env.TEST_DB_ISOLATION = orig;
+        }
+      }
+    });
+  },
+);
