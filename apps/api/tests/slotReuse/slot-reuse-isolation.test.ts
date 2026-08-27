@@ -10,6 +10,7 @@ import {
   withDatabaseName,
 } from "@exam/db/src/testWorkerDatabase.js";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
+import { resolveTestScope } from "@exam/db/src/testScope.js";
 
 /**
  * Round-3 slot-reuse isolation proof — PARENT orchestrator.
@@ -29,9 +30,11 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
  * The parent controls sequencing explicitly (await stage A's exit, then run
  * stage B) — no reliance on harness file ordering. Both children run SERIALLY
  * (no API_TEST_MAX_WORKERS) with a per-invocation TEST_WORKER_ID so the slot
- * DB under test (exam_test_w<id>) is dedicated to this proof and can never
- * collide with the outer run's own slot databases (which matter when the
- * outer run itself is parallel, e.g. CI maxWorkers=4).
+ * DB under test is dedicated to this proof and can never collide with the
+ * outer run's own slot databases (which matter when the outer run itself is
+ * parallel, e.g. CI maxWorkers=4). The expected name is derived through the
+ * same resolver, so the local (exam_test_w<id>) and CI shard
+ * (exam_test_s<N>_w<id>) naming shapes both hold.
  *
  * Mutation-demonstrated (round-3 validation): removing the one-time truncate
  * boundary in buildTestApp (workerDbTruncated / adapter.resetPostgres) makes
@@ -58,6 +61,15 @@ const handoffPath = join(workDir, "handoff.json");
 // Dedicated slot id for this invocation: charset-safe, unique per run, well
 // under the 63-char identifier limit once prefixed with exam_test_w.
 const slotWorkerId = `sr${Date.now().toString(36)}${randomUUID().slice(0, 6)}`;
+// The children inherit this process's scope shape (local-worker OR
+// ci-shard-worker with TEST_SHARD_INDEX), so derive the expected slot DB name
+// through the SAME resolver rather than hardcoding the local naming shape
+// (CI produced exam_test_s1_w<id>, locally exam_test_w<id>).
+const expectedSlotDbName = resolveTestScope({
+  ...process.env,
+  TEST_WORKER_ID: slotWorkerId,
+  TEST_DB_ISOLATION: "worker-database",
+}).postgresDatabaseName as string;
 
 function childEnv(stage: "A" | "B"): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
@@ -109,7 +121,7 @@ describe("slot-reuse data isolation (sequential files, same pool slot)", () => {
     // completed their assertions (each child exits non-zero on failure).
     expect(handoff.stageADone).toBe(true);
     expect(handoff.stageBDone).toBe(true);
-    expect(handoff.databaseName).toBe(`exam_test_w${slotWorkerId}`);
+    expect(handoff.databaseName).toBe(expectedSlotDbName);
     expect(handoff.stageBDatabaseName).toBe(handoff.databaseName);
     expect(handoff.poolId).toBe("1");
     expect(handoff.stageBPoolId).toBe("1");
@@ -121,7 +133,7 @@ describe("slot-reuse data isolation (sequential files, same pool slot)", () => {
       // Dedicated slot DB is disposable evidence: drop it, then the tmpdir.
       await dropDatabaseIfExists(
         withDatabaseName(resolveTestDbUrl(), "postgres"),
-        `exam_test_w${slotWorkerId}`,
+        expectedSlotDbName,
         { keepMissing: true },
       ).catch(() => {
         /* best-effort; exam_test_w* are disposable per contract */
