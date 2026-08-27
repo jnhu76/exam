@@ -34,6 +34,7 @@ invocation), so the repo-root `.env` is never read for interpolation.
 | Launchpad bootstrap | `pnpm test:deployment:launchpad` | release / manual | not yet measured; bootstrap-only flow | isolated project + temp root (suite-owned) |
 | Persistence & cold restore | `pnpm test:deployment:persistence` | release / manual | not yet measured; multi-recreation flow | isolated project + temp root |
 | Logical backup & restore | `pnpm test:deployment:logical` | release / manual | destructive pg_restore inside its own stack | isolated project + temp root |
+| Upgrade & uninstall lifecycle | `pnpm test:deployment:upgrade` | release / manual | ~2–4 min warm (one image build, three stack boots); operator-mode legs (no build override) against two local image tags | isolated project + temp root + teardown env-file copy |
 | PITR | `pnpm test:deployment:pitr` | nightly / manual (WAL archive + basebackup cycles) | slowest of the suite | isolated project + temp root + dedicated WAL archive path |
 
 PR-blocking set = fresh-install gate only (it composes the compose smoke).
