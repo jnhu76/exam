@@ -912,6 +912,20 @@ Contract rules going forward:
    which deliberately has NO `globalSetup` (Vitest exposes no CLI override
    for it) — they are fixtures of the parent invocation that already holds
    the lease, made safe by their unique `TEST_WORKER_ID` slot namespace.
+   A config without `globalSetup` is a run-lease bypass in the wrong hands,
+   so fixture-only is enforced BY MACHINE, not by comment: the child config
+   throws at load time unless `SLOT_REUSE_STAGE` is exactly `A`/`B` with a
+   non-empty `SLOT_REUSE_HANDOFF`, and `test.root`/`test.include` are pinned
+   to EXACTLY the one stage fixture (positional filters can only intersect
+   the pinned include; without the pin, `vitest list` under that config
+   discovers the entire ordinary API suite). There is deliberately no
+   generic bypass env — invented variables (`TEST_DISABLE_RUN_LEASE`,
+   `SKIP_RUN_LEASE`, `ALLOW_NESTED_TEST_RUN`) neither satisfy the guard nor
+   widen discovery. Regressions: `child-config.contract.test.ts` (direct
+   misuse fails at config load before any test; `vitest list` discovers
+   exactly the pinned fixture per stage; a positional filter cannot smuggle
+   an ordinary test; mutation-removing the include pin lets the config run
+   an ordinary API test and fails the suite).
 
 Regression tests assert these rules deterministically (charset/priority unit
 tests for rule 1; pg_locks self-session proofs and try-lock probes for rules
@@ -921,7 +935,8 @@ memo-authority, and wrapper-authority blocked-waiter regressions for rules
 rejection regressions (alien `TEST_ADMIN_DATABASE` values fail fast for BOTH
 roles of the two-run scenario, deterministically before any connection
 opens) plus an end-to-end conflict against the enclosing run's REAL held
-lease for rule 8; the two-stage
+lease, and the child-config fixture-only boundary regressions, for rule 8;
+the two-stage
 slot-reuse fixture pair for rule 2), never by timing. `TEST_INFRA_TRACE=1`
 emits per-acquisition wait/hold diagnostics to stderr for future audits.
 

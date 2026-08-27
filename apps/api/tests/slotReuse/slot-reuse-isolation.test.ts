@@ -39,9 +39,13 @@ import { resolveTestScope } from "@exam/db/src/testScope.js";
  * Run-lease interaction (round-5): the children run under the dedicated
  * ./vitest.child.config.ts, which has NO globalSetup — the outer run already
  * holds the cluster-scoped run lease for this whole proof, and the children
- * are its fixtures, not independent invocations. There is deliberately no
- * TEST_ADMIN_DATABASE escape: the run lease hosts canonically on `postgres`
- * and a different coordination database is not an isolation namespace.
+ * are its fixtures, not independent invocations. The fixture-only boundary
+ * is machine-enforced in that config (load-time SLOT_REUSE_STAGE=A|B +
+ * SLOT_REUSE_HANDOFF guard; test.include pinned to the one stage fixture —
+ * regressions in child-config.contract.test.ts). There is deliberately no
+ * TEST_ADMIN_DATABASE escape and no generic lease-bypass env: the run lease
+ * hosts canonically on `postgres` and a different coordination database is
+ * not an isolation namespace.
  *
  * Mutation-demonstrated (round-3 validation): removing the one-time truncate
  * boundary in buildTestApp (workerDbTruncated / adapter.resetPostgres) makes

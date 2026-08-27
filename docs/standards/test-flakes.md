@@ -209,7 +209,17 @@
      改走无 globalSetup 的专用子配置
      （`tests/slotReuse/vitest.child.config.ts`；vitest 不提供 globalSetup
      的 CLI 覆盖）——它们是持有 lease 的父 invocation 的 fixtures，安全性
-     来自唯一 `TEST_WORKER_ID` 槽位命名空间。回归：two-run
+     来自唯一 `TEST_WORKER_ID` 槽位命名空间。该子配置的 fixture-only
+     约束是**机器级**而非注释级：加载期强制
+     `SLOT_REUSE_STAGE=A|B` + 非空 `SLOT_REUSE_HANDOFF`（否则在配置
+     加载即失败、任何测试不会运行），`test.root`/`test.include` 钉死为
+     对应唯一 stage fixture（positional 过滤只能与之求交；未钉死时该
+     配置可发现全部普通 API 测试），且不存在通用绕过 env
+     （`TEST_DISABLE_RUN_LEASE` 等发明变量既过不了守卫也不放宽发现
+     范围）。回归：`child-config.contract.test.ts`（误用加载期失败、
+     两 stage 各自仅发现唯一 fixture、positional 逃逸无测试可跑、
+     变异移除 include 钉死后该配置可执行普通 API 测试且回归必红）。
+     另有：two-run
      immediate-conflict（<2s，无有界等待）、release 幂等 + 解锁后可
      重新获取、cluster-scope 拒绝（两个 alien TEST_ADMIN_DATABASE 均
      fail-fast，变异回 round-4 行为后该用例必红）、对 enclose run 真实
