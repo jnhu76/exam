@@ -8,6 +8,7 @@ import {
   withDatabaseName,
 } from "./testWorkerDatabase.js";
 import { resolveTestDbUrl } from "./testDb.js";
+import { getTestInfraLockAcquisitionCount } from "./testInfraLock.js";
 
 /**
  * ADR-007 Phase 3A worker-database prototype tests.
@@ -71,16 +72,21 @@ function uniqueLifecycleDbName(tag: string): string {
   return name.slice(0, 63).replace(/[^a-z0-9_]/g, "_");
 }
 
-afterAll(async () => {
-  // Best-effort cleanup of the prototype DB names used below.
-  if (PG_UP) {
-    await dropDatabaseIfExists(ADMIN_URL, "exam_test_w_phase3a_proto", {
-      keepMissing: true,
-    }).catch(() => {
-      /* best-effort; reported via diagnostics in dropDatabaseIfExists */
-    });
-  }
-});
+afterAll(
+  async () => {
+    // Best-effort cleanup of the prototype DB names used below.
+    if (PG_UP) {
+      await dropDatabaseIfExists(ADMIN_URL, "exam_test_w_phase3a_proto", {
+        keepMissing: true,
+      }).catch(() => {
+        /* best-effort; reported via diagnostics in dropDatabaseIfExists */
+      });
+    }
+  },
+  // Lifecycle queue participant (DROP DATABASE under the shared lock) gets an
+  // explicit hook budget; unrelated hooks keep the 10s default on purpose.
+  30_000,
+);
 
 // ---------------------------------------------------------------------------
 // Pure-logic tests (no PG service required)
@@ -160,7 +166,14 @@ describe("setupWorkerTestDatabase — input guards (no PG)", () => {
 // PG-integration tests (skipped when PG is not reachable)
 // ---------------------------------------------------------------------------
 
-PG_DESCRIBE("ensureDatabaseExists", { timeout: 15_000 }, () => {
+// Hang-protection budget (docs/standards/test-flakes.md PR #242 rule):
+// `ensureDatabaseExists` acquires the shared lifecycle lock for CREATE
+// DATABASE, so like every other queue participant it gets the 30s budget —
+// a sibling DROP DATABASE long-tail (seconds on WSL2 I/O) is a legitimate
+// queue wait, not a test-logic failure. The former 15s budget was
+// inconsistent with the sibling `dropDatabaseIfExists` describe and starved
+// under exactly that long-tail.
+PG_DESCRIBE("ensureDatabaseExists", { timeout: 30_000 }, () => {
   it("creates the database if missing, idempotent on second call", async () => {
     // Phase 6D Option B: per-run unique name so a crashed prior run's leftover
     // DB cannot collide, and teardown uses robust dropDatabaseIfExists.
@@ -314,6 +327,105 @@ PG_DESCRIBE(
         await handle.close();
         await handle.close(); // idempotent
         await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+          keepMissing: true,
+        });
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "setupWorkerTestDatabase — per-process bootstrap memo",
+  // Same lifecycle-queue budget: the bootstrap takes the lock for
+  // CREATE DATABASE + full migrate and can queue behind sibling DDL.
+  { timeout: 30_000 },
+  () => {
+    it("second setup for the same worker URL does not re-acquire the lifecycle lock", async () => {
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `memo_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const env = {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_INFRA_SCOPE: "local",
+        TEST_WORKER_ID: workerId,
+        TEST_DATABASE_URL: BASE_URL,
+      };
+      const beforeFirst = getTestInfraLockAcquisitionCount();
+      const first = await setupWorkerTestDatabase({ env });
+      const firstAcquired = getTestInfraLockAcquisitionCount() - beforeFirst;
+      const beforeSecond = getTestInfraLockAcquisitionCount();
+      const second = await setupWorkerTestDatabase({ env });
+      const secondAcquired = getTestInfraLockAcquisitionCount() - beforeSecond;
+      try {
+        expect(first.databaseName).toBe(second.databaseName);
+        // Fresh bootstrap pays ensure + migrate (2 acquisitions)…
+        expect(firstAcquired).toBeGreaterThanOrEqual(1);
+        // …but a same-process repeat must reuse the memoized bootstrap and
+        // acquire the lock ZERO times. Regression: the old implementation
+        // re-acquired twice per call — every warm buildTestApp added pure
+        // global queue load (auth-style in-test builds waited behind it).
+        expect(secondAcquired).toBe(0);
+
+        // The memoized bootstrap must leave a fully migrated, usable handle.
+        const biz = postgres(second.databaseUrl);
+        try {
+          const rows = await biz`SELECT count(*)::int AS c FROM organizations`;
+          expect((rows[0] as { c: number }).c).toBe(0);
+        } finally {
+          await biz.end();
+        }
+      } finally {
+        await first.close();
+        await second.close();
+        await dropDatabaseIfExists(ADMIN_URL, first.databaseName, {
+          keepMissing: true,
+        });
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "setupWorkerTestDatabase — bootstrap memo authority scoping (round-3)",
+  // Same lifecycle-queue budget: both bootstraps take the lock for
+  // ensure + migrate under their own coordination authority.
+  { timeout: 30_000 },
+  () => {
+    it("same worker URL under a DIFFERENT coordination authority does not memo-hit (old key was workerUrl only)", async () => {
+      // The bootstrap runs UNDER a coordination authority (its advisory-lock
+      // queue, selected by TEST_ADMIN_DATABASE). Two envs with the same worker
+      // URL but different authorities must bootstrap independently: the old
+      // memo key (workerUrl alone) let the second authority silently reuse the
+      // first authority's bootstrap and skip its own serialized ensure+migrate.
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `memoauth_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const injectedDb = new URL(BASE_URL).pathname.replace(/^\//, "");
+      const envAuthorityA = {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_WORKER_ID: workerId,
+        TEST_DATABASE_URL: BASE_URL,
+        TEST_ADMIN_DATABASE: "postgres",
+      };
+      const envAuthorityB = {
+        ...envAuthorityA,
+        TEST_ADMIN_DATABASE: injectedDb,
+      };
+      const beforeA = getTestInfraLockAcquisitionCount();
+      const a = await setupWorkerTestDatabase({ env: envAuthorityA });
+      const acquiredA = getTestInfraLockAcquisitionCount() - beforeA;
+      const beforeB = getTestInfraLockAcquisitionCount();
+      const b = await setupWorkerTestDatabase({ env: envAuthorityB });
+      const acquiredB = getTestInfraLockAcquisitionCount() - beforeB;
+      try {
+        expect(a.databaseName).toBe(b.databaseName);
+        expect(acquiredA).toBeGreaterThanOrEqual(1);
+        // Old implementation: memo key ignored the authority → acquiredB was
+        // 0 (bootstrap skipped). New key (adminUrl + workerUrl) forces a fresh
+        // bootstrap under authority B.
+        expect(acquiredB).toBeGreaterThanOrEqual(1);
+      } finally {
+        await a.close();
+        await b.close();
+        await dropDatabaseIfExists(ADMIN_URL, a.databaseName, {
           keepMissing: true,
         });
       }

@@ -127,15 +127,27 @@ export function resolveTestInfraCoordinationUrl(
 }
 
 /**
- * Deterministic 64-bit advisory-lock key for all test-infra heavy lifecycle.
+ * Deterministic 64-bit advisory-lock key for ALL test-infra heavy lifecycle.
  *
- * Derived from a stable, human-readable name (`exam_test_infra_lifecycle`)
- * via FNV-1a so the key is reproducible and grep-able. We split the name into
- * two 32-bit halves (FNV-1a over the first and second half of the string) and
- * combine into one signed bigint accepted by `pg_advisory_lock(bigint)`.
+ * Derived from a stable, human-readable name via FNV-1a so the key is
+ * reproducible and grep-able. We split the name into two 32-bit halves
+ * (FNV-1a over the first and second half of the string) and combine into one
+ * signed bigint accepted by `pg_advisory_lock(bigint)`.
  *
- * `pg_advisory_lock(bigint)` takes a single 64-bit key; the value is treated as
- * signed in the C boundary, so we keep it within int64 range.
+ * `pg_advisory_lock(bigint)` takes a single 64-bit key; the value is treated
+ * as signed in the C boundary, so we keep it within int64 range.
+ *
+ * ONE key is a deliberate design decision, re-affirmed 2026-08-26: Phase 6D's
+ * purpose was to serialize ALL heavy DDL/migration against the PostgreSQL
+ * engine (catalog contention), so CREATE/DROP DATABASE and schema migration
+ * must NOT run concurrently. A temporary resource-class key split
+ * (`schema` vs `database`) was withdrawn the same day: its motivating queue
+ * load was itself a symptom of binding worker databases to `VITEST_WORKER_ID`
+ * (worker-instance ids are unbounded by maxWorkers) instead of
+ * `VITEST_POOL_ID` (execution slots, ≤ maxWorkers). After the identity fix,
+ * the measured queue collapsed to max wait 58ms / total hold 1.4s on the
+ * 16-file probe — no split needed; "budget absorbs cross-class contention"
+ * was never a concurrency-control argument anyway.
  */
 const TEST_INFRA_LIFECYCLE_LOCK_NAME = "exam_test_infra_lifecycle";
 
@@ -154,22 +166,34 @@ function fnv1a32(str: string): number {
 }
 
 /**
- * Stable 64-bit advisory-lock key for test-infra lifecycle. Computed once from
- * the fixed lock name; exported for tests/diagnostics.
+ * Stable 64-bit advisory-lock key for the SCHEMA lifecycle class (back-compat
+ * export — the pre-split single key). Computed once from the fixed lock name;
+ * exported for tests/diagnostics.
  */
-export const TEST_INFRA_LIFECYCLE_LOCK_KEY: bigint = computeLockKey(
+export const TEST_INFRA_LIFECYCLE_LOCK_KEY: bigint = computeAdvisoryLockKey(
   TEST_INFRA_LIFECYCLE_LOCK_NAME,
 );
 
 /** Combine two FNV-1a halves into one signed bigint lock key. */
-function computeLockKey(name: string): bigint {
+function computeAdvisoryLockKey(name: string): bigint {
   const mid = Math.floor(name.length / 2);
   const hi = fnv1a32(name.slice(0, mid)) >>> 0; // unsigned 32-bit
   const lo = fnv1a32(name.slice(mid)) >>> 0; // unsigned 32-bit
   // (hi << 32) | lo  as a signed 64-bit. BigInt math keeps precision.
   const combined = (BigInt(hi) << 32n) | BigInt(lo);
-  // Fold into signed int64 range (PostgreSQL accepts the numeric value).
-  return combined;
+  // Fold into signed int64 range: pg_advisory_lock(bigint) is signed at the
+  // C boundary, and an unsigned combined value above 2^63-1 is rejected by
+  // PostgreSQL as "out of range for type bigint". asIntN is a no-op for
+  // values already in range, so pre-split keys are unchanged.
+  return BigInt.asIntN(64, combined);
+}
+
+/** Total acquisitions this process (diagnostics + regression tests). */
+let acquisitionCount = 0;
+
+/** Number of times this process acquired the lifecycle lock. */
+export function getTestInfraLockAcquisitionCount(): number {
+  return acquisitionCount;
 }
 
 /** Acquire the session-level advisory lock on `sql` (blocking). */
@@ -178,6 +202,7 @@ async function acquireAdvisoryLock(
   key: bigint,
 ): Promise<void> {
   await sql.unsafe("SELECT pg_advisory_lock($1)", [key.toString()]);
+  acquisitionCount++;
 }
 
 /** Release the session-level advisory lock on `sql`. Must be same session. */
@@ -189,16 +214,46 @@ async function releaseAdvisoryLock(
 }
 
 /**
+ * Options for {@link withTestInfraLifecycleLock}.
+ */
+export interface TestInfraLifecycleLockOptions {
+  /**
+   * Environment used to resolve `TEST_ADMIN_DATABASE` when normalizing
+   * `adminUrl` onto the coordination database. Defaults to `process.env`.
+   *
+   * AUTHORITY CONTRACT: a caller that resolved its infrastructure context from
+   * an explicit env (e.g. `setupWorkerTestDatabase({ env })` →
+   * `resolveAdminUrl(env, baseUrl)`) MUST pass the SAME env here. Without it
+   * this helper would silently re-read `process.env.TEST_ADMIN_DATABASE` and
+   * host the lock on a DIFFERENT database than the caller's resolved admin
+   * authority — and advisory locks are database-local, so two callers with
+   * different resolved authorities would never coordinate even though the key
+   * matches. Caller-resolved context must not change because a lower helper
+   * re-read ambient state; resolve once, pass authority down.
+   */
+  env?: NodeJS.ProcessEnv;
+}
+
+/**
  * Run `fn` while holding the cross-process test-infra advisory lock.
  *
- * Opens a dedicated admin connection, acquires the lock (blocking until the
- * lock is free — this is the serialization point across workers), runs `fn`,
- * and always releases the lock in `finally` (even on throw).
+ * Opens a dedicated admin connection, acquires THE lifecycle lock (blocking
+ * until the lock is free — this is the serialization point across workers),
+ * runs `fn`, and always releases the lock in `finally` (even on throw). ALL
+ * heavy test-infra lifecycle — CREATE/DROP DATABASE, CREATE SCHEMA,
+ * migrations — serializes on this ONE key: that is the Phase 6D engine-level
+ * guarantee (heavy DDL never fights migration traffic on the catalog), and it
+ * is cheap to keep now that the queue load itself is gone (see the lock-name
+ * docstring for the withdrawn split).
  *
  * PostgreSQL advisory locks are database-local. The `adminUrl` is normalized
  * via {@link resolveTestInfraCoordinationUrl} so ALL callers — regardless of
  * which database they otherwise connect to (`exam_test`, `postgres`, a worker
- * database) — coordinate on the SAME coordination database.
+ * database) — coordinate on the SAME coordination database. When the caller
+ * resolved `adminUrl` from an explicit env, pass that env via
+ * `options.env` so the normalization here is idempotent instead of silently
+ * re-deriving from `process.env` (see the authority contract on
+ * {@link TestInfraLifecycleLockOptions}).
  *
  * The `fn` receives nothing; it should perform the heavy DDL/migration via its
  * OWN connections (the lock connection is dedicated and not exposed). The lock
@@ -206,28 +261,204 @@ async function releaseAdvisoryLock(
  * coordination is by key identity in the PG server, not by connection.
  *
  * @param adminUrl Maintenance/admin URL used only to host the advisory lock
- *   session. This connection is opened and closed within the call.
+ * session. This connection is opened and closed within the call.
+ * @param options Optional env authority for the coordination-URL
+ * normalization (see {@link TestInfraLifecycleLockOptions}).
  * @param fn Heavy lifecycle body. Runs while the lock is held.
  */
 export async function withTestInfraLifecycleLock<T>(
   adminUrl: string,
   fn: () => Promise<T>,
+  options?: TestInfraLifecycleLockOptions,
 ): Promise<T> {
-  const coordinationUrl = resolveTestInfraCoordinationUrl(adminUrl);
+  const key = TEST_INFRA_LIFECYCLE_LOCK_KEY;
+  const trace = process.env.TEST_INFRA_TRACE === "1";
+  const t0 = trace ? performance.now() : 0;
+  const caller = trace ? firstExternalFrame() : "";
+  const coordinationUrl = resolveTestInfraCoordinationUrl(
+    adminUrl,
+    options?.env ?? process.env,
+  );
   const admin = postgres(coordinationUrl, { max: 1 });
-  await acquireAdvisoryLock(admin, TEST_INFRA_LIFECYCLE_LOCK_KEY);
+  await acquireAdvisoryLock(admin, key);
+  if (trace) {
+    process.stderr.write(
+      `[infra-lock] pid=${process.pid} acquired wait=${(performance.now() - t0).toFixed(0)}ms caller=${caller}\n`,
+    );
+  }
+  const tHold = trace ? performance.now() : 0;
   try {
     return await fn();
   } finally {
     try {
-      await releaseAdvisoryLock(admin, TEST_INFRA_LIFECYCLE_LOCK_KEY);
+      await releaseAdvisoryLock(admin, key);
     } finally {
       await admin.end();
+      if (trace) {
+        process.stderr.write(
+          `[infra-lock] pid=${process.pid} released hold=${(performance.now() - tHold).toFixed(0)}ms caller=${caller}\n`,
+        );
+      }
     }
   }
 }
 
-/** Re-export the lock key computation for tests/diagnostics. */
+/** First stack frame outside this module, for TEST_INFRA_TRACE diagnostics. */
+function firstExternalFrame(): string {
+  const stack = new Error().stack ?? "";
+  for (const line of stack.split("\n")) {
+    if (line.includes("testInfraLock")) continue;
+    if (line.includes("at ")) return line.trim().slice(3, 83);
+  }
+  return "unknown";
+}
+
+/**
+ * Expose the single advisory-lock key for tests/diagnostics. There is exactly
+ * ONE lifecycle key; callers cannot select a class-specific variant.
+ */
 export function getTestInfraLifecycleLockKey(): bigint {
   return TEST_INFRA_LIFECYCLE_LOCK_KEY;
+}
+
+// ---------------------------------------------------------------------------
+// Run-level exclusion lease (round-4, 2026-08-27; scope fixed round-5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lock name of the RUN-level exclusion lease for worker-database test runs.
+ *
+ * ONE key per PostgreSQL server — deliberately NOT per slot database: the
+ * contract is "one worker-database Vitest invocation per PostgreSQL server at
+ * a time", so the lock matches the contract's granularity. Slot databases
+ * (exam_test_w1..wN) are derived from VITEST_POOL_ID and are identical across
+ * two concurrent local invocations; excluding per-slot would only prevent
+ * same-instant sharing while letting two runs interleave slot handoffs —
+ * neither run would be the clear "second run".
+ */
+const TEST_INFRA_RUN_LEASE_LOCK_NAME = "exam_test_worker_database_run";
+
+/**
+ * The ONE database that hosts the run lease: the canonical `postgres`
+ * maintenance database of the target server.
+ *
+ * Round-5 scope fix: the resources this lease protects (the VITEST_POOL_ID
+ * slot databases) are named on the SERVER, not on any coordination database —
+ * `TEST_ADMIN_DATABASE` picks where a lock SESSION lives but renames no
+ * resources. Hosting the lease on a caller-steerable database therefore let
+ * two runs on the same server acquire two independent leases and then collide
+ * inside the same slot databases — the exact corruption the lease exists to
+ * prevent. Lock namespace must equal protected resource namespace, so the
+ * lease host is pinned here and TEST_ADMIN_DATABASE cannot steer it.
+ */
+const TEST_INFRA_RUN_LEASE_HOST_DATABASE = "postgres";
+
+/**
+ * Stable advisory-lock key for the run lease. Exported for deterministic
+ * two-run conflict regressions (a foreign session can hold exactly this key).
+ */
+export const TEST_INFRA_RUN_LEASE_LOCK_KEY: bigint = computeAdvisoryLockKey(
+  TEST_INFRA_RUN_LEASE_LOCK_NAME,
+);
+
+/** Handle for a held run lease. */
+export interface TestInfraRunLease {
+  /**
+   * Release the lease: unlock the session, then close it. Idempotent; safe to
+   * call from a Vitest globalSetup teardown.
+   */
+  release(): Promise<void>;
+}
+
+/**
+ * Acquire the RUN-level worker-database exclusion lease, or fail immediately.
+ *
+ * CONTRACT: concurrent local worker-database test runs on the same PostgreSQL
+ * server are NOT supported — both runs derive the same slot database names
+ * from VITEST_POOL_ID, so each run's inter-file truncate boundary would wipe
+ * the other run's fixtures mid-test. This lease makes that contract
+ * executable at the RIGHT lifecycle layer: the Vitest invocation itself
+ * (`globalSetup` before any worker exists; teardown after all files finish).
+ * CI is unaffected — every CI job owns its own PostgreSQL service container,
+ * so CI runs never contend for this key.
+ *
+ * Semantics (deliberately minimal — round-4 withdrew the per-slot lease this
+ * replaces):
+ *   - ONE immediate `pg_try_advisory_lock`: no retry loop, no bounded wait, no
+ *     timeout override. A wait here would recreate the exact failure mode this
+ *     PR eliminates (an internal 10s poll racing the caller's 5s testTimeout,
+ *     with the losing side reporting a generic timeout while the poll keeps
+ *     running in the background).
+ *   - The lease is held on a dedicated session for the WHOLE run and released
+ *     by the teardown the caller returns to. If the run crashes hard, the
+ *     session dies with the process and PostgreSQL releases the lease
+ *     automatically — a crashed run can never wedge the server.
+ *   - CLUSTER-SCOPED host (round-5): the lease ALWAYS hosts on the canonical
+ *     `postgres` database of the target server. `TEST_ADMIN_DATABASE` is NOT
+ *     an isolation namespace for the run lease — it is validated (must be
+ *     unset / empty / `postgres`) and rejected otherwise, because an alien
+ *     value would silently fragment the single-run contract while the
+ *     operator believes they created an independent test-infra domain. This
+ *     differs from the LIFECYCLE lock, which keeps honoring caller env for
+ *     its authority-propagation contract (round-3/4): that lock serializes
+ *     DDL within one resolved authority, while THIS lock excludes whole runs
+ *     from the server-wide slot-database namespace.
+ *
+ * @param baseUrl Any URL of the target PostgreSQL server (only host/port/
+ *   credentials are used; the database is normalized away).
+ * @param env Environment VALIDATED for the narrowed contract (TEST_ADMIN_DATABASE
+ *   must be unset or `postgres`). It never selects the lease host.
+ * @throws When another run already holds the lease — immediately, with a
+ *   message naming the single-run contract and the remedies. Also when
+ *   TEST_ADMIN_DATABASE is set to anything but unset/`postgres`.
+ */
+export async function acquireTestInfraRunLease(
+  baseUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<TestInfraRunLease> {
+  const declared = (env.TEST_ADMIN_DATABASE ?? "").trim();
+  if (declared !== "" && declared !== TEST_INFRA_RUN_LEASE_HOST_DATABASE) {
+    throw new Error(
+      `[testInfraLock] TEST_ADMIN_DATABASE must be unset or "${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" for worker-database runs: ` +
+        `the run lease is scoped to the whole PostgreSQL server and hosts on the canonical ` +
+        `"${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" database — a separate coordination database is not an isolation namespace ` +
+        `(slot databases are derived from VITEST_POOL_ID on the same server and would still collide). ` +
+        `Unset TEST_ADMIN_DATABASE, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`,
+    );
+  }
+  const coordinationUrl = resolveTestInfraCoordinationUrl(baseUrl, {
+    TEST_ADMIN_DATABASE: TEST_INFRA_RUN_LEASE_HOST_DATABASE,
+  });
+  const session = postgres(coordinationUrl, { max: 1 });
+  try {
+    const rows = (await session.unsafe(
+      "SELECT pg_try_advisory_lock($1) AS ok",
+      [TEST_INFRA_RUN_LEASE_LOCK_KEY.toString()],
+    )) as Array<{ ok: boolean }>;
+    if (rows[0]?.ok !== true) {
+      throw new Error(
+        "[testInfraLock] another worker-database test run is already active on this PostgreSQL server " +
+          "(run lease exam_test_worker_database_run is held). " +
+          "Concurrent local worker-database runs are not supported: both runs derive the same slot databases from VITEST_POOL_ID. " +
+          "Wait for the running invocation to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.",
+      );
+    }
+  } catch (err) {
+    await session.end().catch(() => {});
+    throw err;
+  }
+  let released = false;
+  return {
+    async release() {
+      if (released) return;
+      released = true;
+      try {
+        await session.unsafe("SELECT pg_advisory_unlock($1)", [
+          TEST_INFRA_RUN_LEASE_LOCK_KEY.toString(),
+        ]);
+      } finally {
+        await session.end();
+      }
+    },
+  };
 }

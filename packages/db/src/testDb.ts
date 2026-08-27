@@ -3,9 +3,10 @@ import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { migratePostgres } from "./postgres.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 import {
+  createTestSchemaUnlocked,
+  dropTestSchema,
+  generateUniqueSchemaName,
   isTestDbIsolationEnabled,
-  setupIsolatedTestDb,
-  type IsolatedTestDb,
 } from "./testIsolation.js";
 import type { Database } from "./types.js";
 
@@ -109,36 +110,39 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
     return getTestDb();
   }
 
-  const iso = await setupIsolatedTestDb({
-    namespace,
-    databaseUrl: resolveTestDbUrl(),
-  });
-  let conn: Awaited<ReturnType<typeof createDatabase>>;
+  const baseUrl = resolveTestDbUrl();
+  const schemaName = generateUniqueSchemaName(namespace);
+  // Connect BEFORE the critical section: `SET search_path` tolerates a
+  // not-yet-created schema, and keeping the pool setup outside the lock
+  // shrinks the critical section to CREATE SCHEMA + migrate only. A connect
+  // failure needs no cleanup (nothing created yet).
+  const conn = await createDatabase(baseUrl, schemaName);
   try {
-    conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-    // The full migration runs under the test-infra lifecycle lock (same
-    // coordination DB as CREATE/DROP SCHEMA + CREATE/DROP DATABASE, via
-    // canonicalization in testInfraLock.ts). Without it, parallel workers'
-    // migrations contend with sibling CREATE DATABASE / CREATE SCHEMA traffic
-    // and a single migrate can be starved past the test timeout.
-    await withTestInfraLifecycleLock(iso.databaseUrl, () =>
-      migratePostgres(conn.db, { migrationsSchema: iso.schemaName }),
-    );
+    // CREATE SCHEMA + migrate run in ONE advisory-lock critical section.
+    // Splitting them into two acquisitions made every setup pay the global
+    // DDL queue wait twice; under parallel workers that alone could consume
+    // most of a test's default budget (median wait ~0.7s, p95 ~2.7s measured
+    // on packages/db coverage — see docs/standards/test-flakes.md).
+    await withTestInfraLifecycleLock(baseUrl, async () => {
+      await createTestSchemaUnlocked(baseUrl, schemaName);
+      await migratePostgres(conn.db, { migrationsSchema: schemaName });
+    });
   } catch (err) {
-    await iso.cleanup();
+    await conn.sql.end().catch(() => {});
+    await dropTestSchema(baseUrl, schemaName).catch(() => {});
     throw err;
   }
 
   return {
     db: conn.db,
-    databaseUrl: iso.databaseUrl,
-    schemaName: iso.schemaName,
+    databaseUrl: baseUrl,
+    schemaName,
     cleanup: async () => {
       try {
         await conn.sql.end();
       } finally {
         // Ensure schema is dropped even if sql.end() throws
-        await iso.cleanup();
+        await dropTestSchema(baseUrl, schemaName).catch(() => {});
       }
     },
   };

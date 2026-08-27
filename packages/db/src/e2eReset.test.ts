@@ -22,6 +22,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDatabase } from "./database.js";
+import { migratePostgres } from "./postgres.js";
 import {
   ensureDatabaseExists,
   dropDatabaseIfExists,
@@ -36,20 +37,22 @@ import { schema } from "./schema/pg.js";
 
 const RESET_TEST_DB = "exam_e2e_w31";
 
+// The reseed contract under test is truncate/migrate/seed convergence, not
+// argon2 performance. Memoizing per distinct password (same pattern as
+// demo-seed.test.ts precomputed hashes) removes ~80ms × every seed user from
+// the two full reseed cycles inside the first test's default 5s budget.
+const hashCache = new Map<string, Promise<string>>();
+function memoizedHash(password: string): Promise<string> {
+  let hash = hashCache.get(password);
+  if (!hash) {
+    hash = hashPassword(password);
+    hashCache.set(password, hash);
+  }
+  return hash;
+}
+
 let conn: Awaited<ReturnType<typeof createDatabase>>;
 let adminUrl: string;
-
-beforeAll(async () => {
-  const baseUrl = resolveTestDbUrl();
-  adminUrl = resolveTestInfraCoordinationUrl(baseUrl, process.env);
-  await ensureDatabaseExists(adminUrl, RESET_TEST_DB);
-  conn = await createDatabase(withDatabaseName(baseUrl, RESET_TEST_DB));
-});
-
-afterAll(async () => {
-  await conn.sql.end();
-  await dropDatabaseIfExists(adminUrl, RESET_TEST_DB);
-});
 
 /** Insert the mutable leftovers a failed E2E run leaves behind. */
 async function poisonWithFailedRunState(): Promise<void> {
@@ -81,10 +84,34 @@ async function poisonWithFailedRunState(): Promise<void> {
   });
 }
 
-describe("E2E reseed convergence (issue #330)", () => {
+// Queue-participant hang protection (see docs/standards/test-flakes.md PR
+// #242 rule): beforeAll/afterAll acquire the shared test-infra DDL lock.
+// The 30s describe timeout covers the TEST bodies; the hooks declare their own
+// explicit timeout argument (Vitest's per-describe timeout does NOT propagate
+// to hooks, and there is deliberately NO package-wide hookTimeout raise — an
+// unrelated broken hook should surface at the 10s default, not 30s).
+describe("E2E reseed convergence (issue #330)", { timeout: 30_000 }, () => {
+  beforeAll(async () => {
+    const baseUrl = resolveTestDbUrl();
+    adminUrl = resolveTestInfraCoordinationUrl(baseUrl, process.env);
+    await ensureDatabaseExists(adminUrl, RESET_TEST_DB);
+    conn = await createDatabase(withDatabaseName(baseUrl, RESET_TEST_DB));
+    // Bootstrap (ensure + migrate) belongs to the setup phase: the timed test
+    // bodies then exercise reset/seed convergence, not first-time migration.
+    await migratePostgres(conn.db);
+  }, 30_000);
+
+  afterAll(async () => {
+    if (conn) {
+      await conn.sql.end();
+    }
+    if (adminUrl) {
+      await dropDatabaseIfExists(adminUrl, RESET_TEST_DB);
+    }
+  }, 30_000);
   it("reset:true converges a retained DB to the canonical baseline", async () => {
     // First run: canonical baseline.
-    await runE2eSeed(conn.db, hashPassword, { reset: true });
+    await runE2eSeed(conn.db, memoizedHash, { reset: true });
 
     // A failed run leaves its mutable state behind (retention).
     await poisonWithFailedRunState();
@@ -100,7 +127,7 @@ describe("E2E reseed convergence (issue #330)", () => {
     expect(staleEvidence).toHaveLength(1);
 
     // Next run's reseed must converge, not upsert on top.
-    await runE2eSeed(conn.db, hashPassword, { reset: true });
+    await runE2eSeed(conn.db, memoizedHash, { reset: true });
 
     const staleUserAfter = await conn.db
       .select()
@@ -133,13 +160,13 @@ describe("E2E reseed convergence (issue #330)", () => {
   });
 
   it("without reset, stale state survives the seed (additive contract, pinned)", async () => {
-    await runE2eSeed(conn.db, hashPassword, { reset: true });
+    await runE2eSeed(conn.db, memoizedHash, { reset: true });
     await poisonWithFailedRunState();
 
     // The orchestrator's default remains an additive upsert — this is the
     // documented contract B that the reseed entrypoints layer reset on top
     // of. Pinning it here keeps the two contracts distinguishable.
-    await runE2eSeed(conn.db, hashPassword, {});
+    await runE2eSeed(conn.db, memoizedHash, {});
 
     const staleUserAfter = await conn.db
       .select()

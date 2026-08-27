@@ -145,9 +145,25 @@ export async function createTestSchema(
 ): Promise<void> {
   const adminUrl = stripOptionsFromUrl(databaseUrl);
   await withTestInfraLifecycleLock(adminUrl, async () => {
-    await withAdminConnection(databaseUrl, async (sql) => {
-      await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(schemaName)}`);
-    });
+    await createTestSchemaUnlocked(databaseUrl, schemaName);
+  });
+}
+
+/**
+ * Create an isolated schema WITHOUT taking the test-infra lifecycle lock.
+ *
+ * Only for callers that already hold the lock and want to batch additional
+ * setup (e.g. `getIsolatedTestDb` runs CREATE SCHEMA + connect + migrate in
+ * ONE critical section instead of re-queueing between the schema create and
+ * the migration — each extra acquisition pays a full advisory-lock queue
+ * wait behind sibling workers' DDL).
+ */
+export async function createTestSchemaUnlocked(
+  databaseUrl: string,
+  schemaName: string,
+): Promise<void> {
+  await withAdminConnection(databaseUrl, async (sql) => {
+    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(schemaName)}`);
   });
 }
 

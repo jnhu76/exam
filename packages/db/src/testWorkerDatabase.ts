@@ -215,23 +215,33 @@ function resolveAdminUrl(env: ResolverEnv, baseUrl: string): string {
 export async function ensureDatabaseExists(
   adminUrl: string,
   databaseName: string,
+  options: { env?: ResolverEnv } = {},
 ): Promise<void> {
   assertPgNameSafe(databaseName);
-  await withTestInfraLifecycleLock(adminUrl, async () => {
-    const admin = postgres(adminUrl);
-    try {
-      const rows = (await admin`
+  await withTestInfraLifecycleLock(
+    adminUrl,
+    async () => {
+      const admin = postgres(adminUrl);
+      try {
+        const rows = (await admin`
         SELECT 1 FROM pg_database WHERE datname = ${databaseName}
       `) as Array<{ "?column?": number }>;
-      if (rows.length === 0) {
-        await admin.unsafe(
-          `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
-        );
+        if (rows.length === 0) {
+          await admin.unsafe(
+            `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
+          );
+        }
+      } finally {
+        await admin.end();
       }
-    } finally {
-      await admin.end();
-    }
-  });
+    },
+    // Pass the caller's env DOWN: the lock must host on the SAME coordination
+    // authority the caller resolved `adminUrl` from. Without this the lock
+    // helper silently re-read process.env.TEST_ADMIN_DATABASE below the seam
+    // and the DDL serializes on a different database than the caller's
+    // authority (round-4 wrapper-contract fix).
+    { ...(options.env ? { env: options.env } : {}) },
+  );
 }
 
 /**
@@ -251,36 +261,41 @@ export async function ensureDatabaseExists(
 export async function dropDatabaseIfExists(
   adminUrl: string,
   databaseName: string,
-  options: { keepMissing?: boolean } = {},
+  options: { keepMissing?: boolean; env?: ResolverEnv } = {},
 ): Promise<void> {
   const keepMissing = options.keepMissing ?? true;
   assertPgNameSafe(databaseName);
-  await withTestInfraLifecycleLock(adminUrl, async () => {
-    const admin = postgres(adminUrl);
-    try {
-      // Terminate any lingering connections to the target DB so DROP DATABASE
-      // cannot fail with "database ... is being accessed by other users".
-      // Exclude our own backend pid. Safe to run even if the DB is gone.
-      await admin`
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
-      `;
+  await withTestInfraLifecycleLock(
+    adminUrl,
+    async () => {
+      const admin = postgres(adminUrl);
       try {
-        await admin.unsafe(
-          `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
-        );
-      } catch (err) {
-        // `IF EXISTS` already covers the missing case; if keepMissing and the
-        // error is specifically "does not exist", it is a no-op. Any other
-        // error (e.g. lock conflict) is re-thrown so callers see it.
-        if (keepMissing && isDatabaseMissingError(err)) return;
-        throw err;
+        // Terminate any lingering connections to the target DB so DROP DATABASE
+        // cannot fail with "database ... is being accessed by other users".
+        // Exclude our own backend pid. Safe to run even if the DB is gone.
+        await admin`
+          SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity
+          WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
+        `;
+        try {
+          await admin.unsafe(
+            `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+          );
+        } catch (err) {
+          // `IF EXISTS` already covers the missing case; if keepMissing and the
+          // error is specifically "does not exist", it is a no-op. Any other
+          // error (e.g. lock conflict) is re-thrown so callers see it.
+          if (keepMissing && isDatabaseMissingError(err)) return;
+          throw err;
+        }
+      } finally {
+        await admin.end();
       }
-    } finally {
-      await admin.end();
-    }
-  });
+    },
+    // Same wrapper authority contract as ensureDatabaseExists above.
+    { ...(options.env ? { env: options.env } : {}) },
+  );
 }
 
 /** Heuristic: is `err` the "database does not exist" catalog error (3D000)? */
@@ -288,6 +303,63 @@ function isDatabaseMissingError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as { code?: string; cause?: { code?: string } };
   return e.code === "3D000" || e.cause?.code === "3D000";
+}
+
+/**
+ * Per-process bootstrap memo: (coordination admin URL, worker URL) → completed
+ * ensure+migrate promise.
+ *
+ * Vitest runs every test file in a fresh isolated worker process, and several
+ * files call `buildTestApp()` (→ `setupWorkerTestDatabase`) multiple times per
+ * file. Without this memo every call re-acquired the global test-infra
+ * advisory lock twice (existence check + migration no-op check) — pure queue
+ * load with no work performed. The database for a given worker URL only needs
+ * to be ensured + migrated once per process; the promise is shared so
+ * concurrent first calls also collapse into one bootstrap. Failures evict the
+ * entry so a retry re-runs the bootstrap.
+ *
+ * The memo key includes the coordination admin URL, not just the worker URL:
+ * the bootstrap runs UNDER a coordination authority (its advisory-lock queue).
+ * Two calls with the same worker URL but different authorities (e.g. different
+ * `TEST_ADMIN_DATABASE` in their envs) must not share bootstrap state — the
+ * second call's authority would silently skip its own serialized ensure+migrate
+ * and fragment the one-queue guarantee. Same authority + same worker URL ⇒
+ * memo hit; any authority change ⇒ fresh bootstrap.
+ */
+const bootstrappedWorkerDatabases = new Map<string, Promise<void>>();
+
+function workerBootstrapMemoKey(adminUrl: string, workerUrl: string): string {
+  return `${adminUrl} ${workerUrl}`;
+}
+
+function ensureWorkerDatabaseBootstrapped(
+  adminUrl: string,
+  workerUrl: string,
+  databaseName: string,
+  env: ResolverEnv,
+): Promise<void> {
+  const memoKey = workerBootstrapMemoKey(adminUrl, workerUrl);
+  let bootstrap = bootstrappedWorkerDatabases.get(memoKey);
+  if (!bootstrap) {
+    bootstrap = (async () => {
+      await ensureDatabaseExists(adminUrl, databaseName, { env });
+      const conn = await createPostgresDatabase(workerUrl);
+      try {
+        await withTestInfraLifecycleLock(
+          adminUrl,
+          () => migratePostgres(conn.db),
+          { env },
+        );
+      } finally {
+        await conn.sql.end();
+      }
+    })().catch((err: unknown) => {
+      bootstrappedWorkerDatabases.delete(memoKey);
+      throw err;
+    });
+    bootstrappedWorkerDatabases.set(memoKey, bootstrap);
+  }
+  return bootstrap;
 }
 
 /**
@@ -325,24 +397,13 @@ export async function setupWorkerTestDatabase(
   const adminUrl = resolveAdminUrl(env, baseUrl);
   const workerUrl = withDatabaseName(baseUrl, databaseName);
 
-  await ensureDatabaseExists(adminUrl, databaseName);
-
+  await ensureWorkerDatabaseBootstrapped(
+    adminUrl,
+    workerUrl,
+    databaseName,
+    env,
+  );
   const conn = await createPostgresDatabase(workerUrl);
-  try {
-    // worker-database mode uses the default `public` schema + the default
-    // `drizzle` migrationsSchema. Drizzle's `migrate()` is idempotent: once
-    // `__drizzle_migrations` is up to date, this is a no-op.
-    //
-    // ADR-007 Phase 6D: wrap migrate in the test-infra advisory lock. Drizzle
-    // migrations touch catalog rows and can contend with sibling workers that
-    // are concurrently migrating their own schema (CREATE TABLE IF NOT EXISTS,
-    // __drizzle_migrations journal). The lock removes that contention so a
-    // single migrate is not starved past the 5s testTimeout.
-    await withTestInfraLifecycleLock(adminUrl, () => migratePostgres(conn.db));
-  } catch (err) {
-    await conn.sql.end();
-    throw err;
-  }
 
   let closed = false;
   return {

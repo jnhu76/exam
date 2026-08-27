@@ -754,6 +754,192 @@ Failure principles:
 - MUST record minimum reproduction, failure log, and the suspected invariant
   violation.
 
+## Test-infra lifecycle contract (2026-08-26 audit, revised same day after round-2 review; round-3 holes closed 2026-08-27)
+
+The Phase 6D lifecycle lock serializes heavy DDL on purpose. The 2026-08-26
+drifting-timeout audit first blamed the lock's **queue load** (measured 244
+acquisitions per `@exam/db` coverage run, median wait ~0.7s / p95 ~2.2s on
+green runs, scaling monotonically with worker count). A second review round
+traced that load one level further up to a **wrong worker identity**. The full
+causal chain, top to bottom:
+
+```text
+VITEST_WORKER_ID bound as the slot identity (instance id, unbounded by maxWorkers)
+    ↓
+per-file physical database churn under isolate defaults
+    ↓
+CREATE DATABASE + full migrate per test file (per-run cardinality ≈ one DB per test FILE, left as residue)
+    ↓
+global lifecycle advisory-lock queue (p95 ~2.2s; long-tail 23.4s DROP DATABASE)
+    ↓
+5s testTimeout / 10s hookTimeout budgets consumed by queue waits
+    ↓
+drifting timeout victims (auth limiter, e2eReset, examProfileRepo, 0027, …)
+```
+
+Measured proof of the first layer (16-file API probe,
+`API_TEST_MAX_WORKERS=2`, cold database set): before the identity fix the run
+created **13** physical `exam_test_w*` databases; after rebinding it created
+exactly **2** (= `maxWorkers`). A warm rerun traced 32 acquisitions with max
+wait **58ms** and 1.36s total hold — the queue vanished without any lock-key
+surgery.
+
+**Residue vs leak (round-3 correction):** the wrong identity produced
+wrong-cardinality **persistent residue**, not a cumulative unbounded leak.
+Experiment (8 files, `maxWorkers=2`, old `VITEST_WORKER_ID`-first order,
+rebuilt dist): run 1 materialized `exam_test_w0..w7` (per-file instance ids,
+starting at 0); run 2 with the same command created **zero new databases** —
+instance ids restart each run, so the same names are reused. The historical
+"84 `exam_test_w%` databases" observation is the high-water mark of instance-id
+cardinality across differently-shaped runs, not per-run growth. After the
+slot-identity fix the active set is exactly `maxWorkers` databases
+(`maxWorkers=2` → `{w1,w2}`, `maxWorkers=4` → `{w1..w4}`, warm reruns reuse
+them); shrinking `maxWorkers` after a larger run leaves the higher slots as
+idle residue by design — no automatic sweeping.
+
+Contract rules going forward:
+
+1. **Slot-scoped resources bind to `VITEST_POOL_ID`, never
+   `VITEST_WORKER_ID`.** Semantics verified against installed vitest 4.1.7
+   source and official docs: `VITEST_POOL_ID` is an execution SLOT —
+   allocated before a task starts, freed when it finishes ("Value is between
+   1-maxWorkers"); concurrent files never share a slot; it is injected in
+   BOTH parallel and serial modes (verified empirically).
+   `VITEST_WORKER_ID` is a worker INSTANCE id — unique per created worker
+   regardless of `maxWorkers`, monotonic across the run ("tracks individual
+   worker instances regardless of the maxWorkers setting", migration guide).
+   `testScope.resolveWorkerId` resolution order (round-3, 2026-08-27):
+   `TEST_WORKER_ID` (explicit manual override) → `VITEST_POOL_ID` →
+   running under Vitest without `VITEST_POOL_ID` is a HARD FAILURE (never
+   silently fall back to the known-bad instance identity) → `"1"` only
+   outside Vitest (serial / standalone scripts). `VITEST_WORKER_ID` no
+   longer participates at all; no repository consumer injects only it.
+   The vitest config layer enforces the dual guard: an explicit
+   `TEST_WORKER_ID` together with `API_TEST_MAX_WORKERS > 1` fails BEFORE
+   tests start (`apps/api/vitest.parallelism.ts`).
+2. **Inter-file isolation is preserved by the truncate boundary, not by name
+   uniqueness.** Sequential files sharing a slot database reset state through
+   the once-per-process `resetPostgres()` boundary in `buildTestApp`;
+   concurrent files are always on different slots because a slot is freed
+   only after its task finishes (vitest scheduler `getWorkerId` /
+   `freeWorkerId`). Round-3 proved the DATA invariant end-to-end
+   (`apps/api/tests/slotReuse/`): two sequential child Vitest runs on the
+   same slot database — the successor does not observe the predecessor's
+   sentinel business row, sees the canonical seed baseline, and migration
+   metadata survives the reset; removing the boundary fails the proof
+   (mutation-verified).
+3. **One critical section per setup.** `getIsolatedTestDb` batches
+   CREATE SCHEMA + migrate into a single `withTestInfraLifecycleLock`
+   acquisition. Any future setup seam MUST NOT split its bootstrap across
+   multiple acquisitions — each extra acquisition pays a full global queue
+   wait.
+4. **Bootstrap once per process per database, keyed by coordination
+   authority.** The worker-database path memoizes ensure+migrate per
+   (coordination admin URL, worker URL) pair (failures evict the entry);
+   repeated setups in the same process under the same authority acquire the
+   lock zero times. The authority is part of the key (round-3): a bootstrap
+   runs UNDER a coordination authority's advisory-lock queue
+   (`TEST_ADMIN_DATABASE`), so the same worker database reached through a
+   different authority must not reuse another authority's bootstrap state.
+5. **ONE lifecycle lock key.** Physical CREATE/DROP DATABASE and schema/
+   migration DDL serialize against EACH OTHER on purpose — that is the Phase
+   6D engine guarantee (heavy DDL must not fight migration traffic on the
+   catalog). A resource-class key split (`schema` vs `database`) was tried on
+   2026-08-26 and withdrawn the same day: its motivating queue load was the
+   identity symptom above, and "a bigger budget absorbs cross-class
+   contention" is not concurrency control.
+6. **Hook budgets are declared at the hook call site, never package-wide.**
+   Vitest's per-describe `{ timeout }` covers TEST bodies only; hooks take
+   their own numeric timeout argument (`beforeAll(fn, 30_000)`). Lifecycle
+   hooks that queue on the lock declare 30s explicitly at each call site;
+   everything else surfaces at the 10s default so an unrelated broken hook
+   fails fast instead of being masked for 30s. A timed-out hook is NOT
+   cancelled — its orphaned promise keeps holding the advisory lock — which
+   is exactly why unraised budgets matter.
+7. **Coordination authority is caller-resolved and propagated, never
+   re-derived below the seam.** `withTestInfraLifecycleLock` accepts the
+   caller's env (`options.env`) so `setupWorkerTestDatabase({ env })` and
+   the lock session land on the SAME coordination database. Advisory locks
+   are database-local: a lower helper silently re-reading
+   `process.env.TEST_ADMIN_DATABASE` moved the lock onto a different
+   database and silently broke coordination (CodeRabbit round-2 finding,
+   regression-proven by mutation in round-3). Round-4 closed the same hole
+   in the WRAPPERS: `ensureDatabaseExists` / `dropDatabaseIfExists` must
+   thread `options.env` into the lock too — a bootstrap whose ensure/drop
+   DDL serialized on the ambient authority while its migration used the
+   caller's was one bootstrap on two serialization queues (wrapper-level
+   blocked-waiter regression, mutation-proven for both wrappers).
+8. **One local worker-database run per PostgreSQL server (single-run
+   contract), enforced at the RUN lifecycle layer.** Two independent local
+   runs derive the same slot database names from `VITEST_POOL_ID` and would
+   share physical slot DBs concurrently — each run's truncate boundary wipes
+   the other's fixtures mid-test. Experimentally confirmed (round-3, guard
+   disabled by mutation): a later run's rows became visible inside the
+   earlier run's slot database and the later run's reset destroyed the
+   earlier run's rows. Concurrent local runs are therefore NOT supported.
+   Round-3 first enforced this with a per-slot-database lease inside
+   `setupWorkerTestDatabase`; round-4 WITHDREW that design — it was a
+   worker-process occupancy lease, not a run lease (sequential slot handoffs
+   could let run B steal a freed slot and fail run A), its bounded 10s
+   acquisition wait recreated the timeout-coupling failure mode this ADR
+   eliminates, and its lease map keyed by database name alone repeated the
+   missing-authority-dimension bug of rule 7. The enforcement now lives
+   where its lifecycle is: `apps/api`'s Vitest `globalSetup` acquires ONE
+   run-level session lease (`exam_test_worker_database_run` key) before any
+   worker process exists, holds it for the whole invocation, and releases it
+   in the global teardown; a second invocation fails IMMEDIATELY in its own
+   globalSetup (one try-lock round-trip, no retry loop, no timeout
+   override). A crashed run releases automatically — the lease is a PG
+   session lock and the session dies with the process. CI is unaffected
+   (per-job PG service containers).
+   **Lease scope (round-5): the lock namespace must equal the protected
+   resource namespace.** The slot databases the lease protects are named on
+   the SERVER (VITEST_POOL_ID), so the lease ALWAYS hosts on the canonical
+   `postgres` database of that server — never on a caller-steerable
+   coordination database. Round-4 had hosted it on `TEST_ADMIN_DATABASE`:
+   advisory locks are database-local, so two runs with different
+   coordination DBs acquired two independent leases and then collided inside
+   the SAME slot databases — the exact corruption the lease exists to
+   prevent, and the round-4 "authority domain separation" regression had
+   asserted that hole as a feature. `TEST_ADMIN_DATABASE` is therefore NOT
+   an isolation namespace for worker-database runs: the lease validates it
+   (unset / empty / `postgres` only) and fails fast on anything else (a
+   repo-wide audit found no real consumer setting it — only this PR's own
+   tests did; it remains a caller-authority knob for the LIFECYCLE lock of
+   rule 7, where it serializes DDL within one resolved authority). Nested
+   proof runs (the slot-reuse fixtures) no longer escape via a private
+   coordination DB: they run under `tests/slotReuse/vitest.child.config.ts`,
+   which deliberately has NO `globalSetup` (Vitest exposes no CLI override
+   for it) — they are fixtures of the parent invocation that already holds
+   the lease, made safe by their unique `TEST_WORKER_ID` slot namespace.
+   A config without `globalSetup` is a run-lease bypass in the wrong hands,
+   so fixture-only is enforced BY MACHINE, not by comment: the child config
+   throws at load time unless `SLOT_REUSE_STAGE` is exactly `A`/`B` with a
+   non-empty `SLOT_REUSE_HANDOFF`, and `test.root`/`test.include` are pinned
+   to EXACTLY the one stage fixture (positional filters can only intersect
+   the pinned include; without the pin, `vitest list` under that config
+   discovers the entire ordinary API suite). There is deliberately no
+   generic bypass env — invented variables (`TEST_DISABLE_RUN_LEASE`,
+   `SKIP_RUN_LEASE`, `ALLOW_NESTED_TEST_RUN`) neither satisfy the guard nor
+   widen discovery. Regressions: `child-config.contract.test.ts` (direct
+   misuse fails at config load before any test; `vitest list` discovers
+   exactly the pinned fixture per stage; a positional filter cannot smuggle
+   an ordinary test; mutation-removing the include pin lets the config run
+   an ordinary API test and fails the suite).
+
+Regression tests assert these rules deterministically (charset/priority unit
+tests for rule 1; pg_locks self-session proofs and try-lock probes for rules
+3–5; `getTestInfraLockAcquisitionCount()` counters; authority-mismatch,
+memo-authority, and wrapper-authority blocked-waiter regressions for rules
+4/7; two-run immediate-conflict, idempotent-release, and cluster-scope
+rejection regressions (alien `TEST_ADMIN_DATABASE` values fail fast for BOTH
+roles of the two-run scenario, deterministically before any connection
+opens) plus an end-to-end conflict against the enclosing run's REAL held
+lease, and the child-config fixture-only boundary regressions, for rule 8;
+the two-stage
+slot-reuse fixture pair for rule 2), never by timing. `TEST_INFRA_TRACE=1`
+emits per-acquisition wait/hold diagnostics to stderr for future audits.
+
 ## Relationship to existing flake records
 
 This ADR is informed by, but does not modify, `docs/standards/test-flakes.md`:

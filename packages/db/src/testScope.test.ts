@@ -56,16 +56,74 @@ describe("resolveTestScope — local worker defaults", () => {
     expect(scope.queuePrefix).toBe("exam:test:local:w2");
   });
 
-  it("prefers VITEST_WORKER_ID and treats TEST_WORKER_ID as fallback only", () => {
-    const fromRunner = resolveTestScope(env({ VITEST_WORKER_ID: "3" }));
-    expect(fromRunner.workerId).toBe("3");
-    expect(fromRunner.scopeId).toBe("local_w3");
+  it("prefers VITEST_POOL_ID, and TEST_WORKER_ID over it; VITEST_WORKER_ID is never a slot identity (round-3)", () => {
+    // Slot id is the only runner-injected identity — see resolveWorkerId
+    // docstring for why VITEST_WORKER_ID (instance id) was removed entirely.
+    const fromRunner = resolveTestScope(
+      env({ VITEST_POOL_ID: "2", VITEST_WORKER_ID: "3" }),
+    );
+    expect(fromRunner.workerId).toBe("2");
+    expect(fromRunner.scopeId).toBe("local_w2");
 
     const explicit = resolveTestScope(
-      env({ VITEST_WORKER_ID: "3", TEST_WORKER_ID: "9" }),
+      env({
+        VITEST_POOL_ID: "2",
+        VITEST_WORKER_ID: "3",
+        TEST_WORKER_ID: "9",
+      }),
     );
     expect(explicit.workerId).toBe("9");
     expect(explicit.scopeId).toBe("local_w9");
+
+    // VITEST_WORKER_ID alone does NOT provide a slot id: outside Vitest it is
+    // ignored (serial fallback "1"), and under Vitest its presence without
+    // VITEST_POOL_ID fails fast instead of silently rebinding slot resources
+    // to the known-bad instance identity.
+    const legacyOnly = resolveTestScope(env({ VITEST_WORKER_ID: "3" }));
+    expect(legacyOnly.workerId).toBe("1");
+    expect(() =>
+      resolveTestScope(env({ VITEST_WORKER_ID: "3", VITEST: "true" })),
+    ).toThrow(/VITEST_POOL_ID is required for slot-scoped test resources/);
+  });
+
+  it("treats an empty VITEST_POOL_ID as unset: '1' outside Vitest, fail-fast under Vitest", () => {
+    const scope = resolveTestScope(env({ VITEST_POOL_ID: " " }));
+    expect(scope.workerId).toBe("1");
+    expect(() =>
+      resolveTestScope(env({ VITEST_POOL_ID: " ", VITEST: "true" })),
+    ).toThrow(/VITEST_POOL_ID is required for slot-scoped test resources/);
+  });
+
+  it("uses the runner-injected slot id under Vitest without an explicit override", () => {
+    const scope = resolveTestScope(
+      env({ VITEST_POOL_ID: "2", VITEST: "true" }),
+    );
+    expect(scope.workerId).toBe("2");
+  });
+
+  it("slot-derived database name is stable across sequential files that share a slot", () => {
+    // Two "files" (fresh envs) handed the same pool slot by the runner must
+    // resolve to the SAME physical database — this is the property that caps
+    // database count at maxWorkers. The unique instance id differs; it must
+    // NOT affect the name.
+    const fileA = resolveTestScope(
+      env({ VITEST_POOL_ID: "1", VITEST_WORKER_ID: "11" }),
+    );
+    const fileB = resolveTestScope(
+      env({ VITEST_POOL_ID: "1", VITEST_WORKER_ID: "12" }),
+    );
+    expect(fileA.postgresDatabaseName).toBe("exam_test_w1");
+    expect(fileB.postgresDatabaseName).toBe("exam_test_w1");
+  });
+
+  it("concurrent slots resolve to DIFFERENT databases", () => {
+    const slot1 = resolveTestScope(
+      env({ VITEST_POOL_ID: "1", VITEST_WORKER_ID: "11" }),
+    );
+    const slot2 = resolveTestScope(
+      env({ VITEST_POOL_ID: "2", VITEST_WORKER_ID: "12" }),
+    );
+    expect(slot1.postgresDatabaseName).not.toBe(slot2.postgresDatabaseName);
   });
 });
 
@@ -181,16 +239,20 @@ describe("resolveTestScope — legacy file-schema fallback", () => {
 });
 
 describe("resolveTestScope — input validation", () => {
-  it("rejects an invalid worker id", () => {
+  it("rejects an invalid worker identity value from any source", () => {
     expect(() =>
       resolveTestScope(env({ TEST_WORKER_ID: "1; DROP TABLE users" })),
-    ).toThrow(/invalid TEST_WORKER_ID/);
+    ).toThrow(/invalid worker identity env/);
     expect(() => resolveTestScope(env({ TEST_WORKER_ID: "w/ slash" }))).toThrow(
-      /invalid TEST_WORKER_ID/,
+      /invalid worker identity env/,
     );
-    // Explicit empty value is rejected (not silently treated as unset).
+    // Explicit empty override is rejected (not silently treated as unset).
     expect(() => resolveTestScope(env({ TEST_WORKER_ID: "" }))).toThrow(
       /TEST_WORKER_ID/,
+    );
+    // Runner-controlled values are validated with the same charset.
+    expect(() => resolveTestScope(env({ VITEST_POOL_ID: "pool/x" }))).toThrow(
+      /invalid worker identity env/,
     );
   });
 

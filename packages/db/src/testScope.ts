@@ -155,14 +155,30 @@ function readStringStrict(
 /**
  * Resolve the worker id.
  *
- * Resolution order (ADR-007):
+ * Resolution order (round-3 contract, 2026-08-27):
  *   1. `TEST_WORKER_ID` — explicit manual override (wins if set).
- *   2. `VITEST_WORKER_ID` — injected automatically by the Vitest runner.
- *   3. `"1"` — final fallback.
+ *   2. `VITEST_POOL_ID` — the execution-slot id injected by the Vitest
+ *      runner (present in BOTH parallel and serial modes, verified on the
+ *      pinned Vitest 4.1.7).
+ *   3. running under Vitest (`VITEST=true`) without `VITEST_POOL_ID` —
+ *      FAIL FAST. Slot-scoped resources REQUIRE the slot id.
+ *   4. not under Vitest → `"1"` (serial / standalone-script fallback).
  *
- * Developers normally do NOT set `TEST_WORKER_ID`; the runner-provided
- * `VITEST_WORKER_ID` is the expected source. `TEST_WORKER_ID` exists as an
- * explicit override / fallback for environments that do not inject a runner id.
+ * `VITEST_WORKER_ID` is deliberately NOT consulted anymore. It is a
+ * WORKER-INSTANCE id: unique per created worker, NOT bounded by
+ * `maxWorkers`, monotonically increasing across the run ("tracks individual
+ * worker instances regardless of the maxWorkers setting", vitest migration
+ * guide; empirically it starts at 0). It was the FIRST-LAYER ROOT CAUSE of
+ * the 2026-08-26 drifting-timeout audit (docs/standards/test-flakes.md):
+ * binding slot-scoped resources (physical DB name, Redis prefix, queue
+ * prefix) to instance ids made every test file pay its own CREATE DATABASE +
+ * migrate cycle (~13 physical DBs for 16 files at `maxWorkers=2`, ~90 for a
+ * full api run) and loaded the shared test-infra DDL advisory-lock queue
+ * until sibling hooks starved past their budgets. Re-enabling it as a silent
+ * fallback would re-introduce the known bug exactly when the slot id is
+ * missing; a clear failure is strictly better. No repository consumer
+ * injects only `VITEST_WORKER_ID` (CI sets neither; the real runner always
+ * provides `VITEST_POOL_ID`), so no compatibility branch is retained.
  */
 function resolveWorkerId(env: ResolverEnv): string {
   // `TEST_WORKER_ID` takes precedence when set (manual override). An
@@ -172,16 +188,33 @@ function resolveWorkerId(env: ResolverEnv): string {
   if (explicit.kind === "empty") {
     fail("TEST_WORKER_ID is set but empty (allowed: [A-Za-z0-9_-])");
   }
-  // VITEST_WORKER_ID is runner-controlled, so empty/whitespace is treated as
-  // "unset" (lenient) rather than rejected.
-  const fromRunner = readString(env, "VITEST_WORKER_ID");
-  const raw = explicit.kind === "value" ? explicit.value : (fromRunner ?? "1");
-  if (!WORKER_ID_RE.test(raw)) {
+  // Runner-controlled vars: empty/whitespace is treated as "unset" (lenient)
+  // rather than rejected — same as before the round-3 contract.
+  if (explicit.kind === "value") {
+    if (!WORKER_ID_RE.test(explicit.value)) {
+      fail(
+        `invalid worker identity env (allowed: [A-Za-z0-9_-]): "${explicit.value}" (checked TEST_WORKER_ID / VITEST_POOL_ID)`,
+      );
+    }
+    return explicit.value;
+  }
+  const pool = readString(env, "VITEST_POOL_ID");
+  if (pool !== undefined) {
+    if (!WORKER_ID_RE.test(pool)) {
+      fail(
+        `invalid worker identity env (allowed: [A-Za-z0-9_-]): "${pool}" (checked TEST_WORKER_ID / VITEST_POOL_ID)`,
+      );
+    }
+    return pool;
+  }
+  if (env.VITEST === "true") {
     fail(
-      `invalid TEST_WORKER_ID / VITEST_WORKER_ID: "${raw}" (allowed: [A-Za-z0-9_-])`,
+      "VITEST_POOL_ID is required for slot-scoped test resources but is absent while running under Vitest (VITEST=true). " +
+        "VITEST_WORKER_ID is NOT a slot identity (it is an unbounded worker-instance id and the root cause of the 2026-08-26 flake audit) " +
+        "— set TEST_WORKER_ID explicitly for serial debugging, or run through the Vitest runner so the slot id is injected.",
     );
   }
-  return raw;
+  return "1";
 }
 
 function resolveShardIndex(env: ResolverEnv, isCi: boolean): string {

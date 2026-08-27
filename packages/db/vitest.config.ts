@@ -50,5 +50,11 @@ export default defineConfig(({ mode }) => ({
       ...loadEnv(mode, workspaceRoot, ""),
       ...TEST_RUNTIME_ENV,
     },
+    // Deliberately NO package-wide hookTimeout raise. Vitest's per-describe
+    // `{ timeout }` applies to TEST bodies only — hooks default to the 10s
+    // global hookTimeout. The few lifecycle hooks that queue on the shared
+    // test-infra DDL advisory lock declare their own explicit 30s timeout at
+    // the hook call site (PR #242 rule); an unrelated broken hook must still
+    // surface at the 10s default instead of being masked for 30s.
   },
 }));
