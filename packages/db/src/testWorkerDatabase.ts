@@ -299,7 +299,7 @@ export async function dropDatabaseIfExists(
 }
 
 /** Heuristic: is `err` the "database does not exist" catalog error (3D000)? */
-function isDatabaseMissingError(err: unknown): boolean {
+export function isDatabaseMissingError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as { code?: string; cause?: { code?: string } };
   return e.code === "3D000" || e.cause?.code === "3D000";

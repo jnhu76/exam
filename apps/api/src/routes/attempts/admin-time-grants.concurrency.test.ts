@@ -31,6 +31,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { createPostgresDatabase } from "@exam/db/src/postgres.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { buildTestApp } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -88,12 +89,7 @@ describe("REC-I4-V1: deterministic operationId race recovery", () => {
   let sql2: { end(): Promise<void> };
 
   beforeAll(async () => {
-    const testDbUrl =
-      process.env.TEST_DATABASE_URL ??
-      process.env.TEST_DB_URL ??
-      (() => {
-        throw new Error("TEST_DATABASE_URL or TEST_DB_URL must be set");
-      })();
+    const testDbUrl = resolveTestDbUrl();
     iso = await setupIsolatedTestDb({
       namespace: "api",
       databaseUrl: testDbUrl,

@@ -1,5 +1,6 @@
 /**
- * Vitest globalSetup: DB availability pre-check + run-level exclusion lease.
+ * Vitest globalSetup: DB availability pre-check + test-DB ownership contract
+ * + run-level exclusion lease.
  *
  * WHY the pre-check: @exam/api's integration tests (39 files) all use
  * `buildTestApp` in `beforeAll`, which opens a real PostgreSQL connection. When
@@ -11,9 +12,14 @@
  * because `ctx` was never assigned. The result: 60+ files × dozens of tests
  * all "failing" with an error that hides the actual root cause.
  *
- * This globalSetup runs ONCE before any test file and fails fast with a clear
- * message if the test DB host/port is unreachable, so a down-DB surfaces as a
- * single clean abort instead of a 60-file cascade of misleading TypeErrors.
+ * OWNERSHIP CONTRACT (via `prepareTestDatabase`, @exam/db): an explicit
+ * TEST_DATABASE_URL / TEST_DB_URL means the target database is operator-owned
+ * — it must already exist (clear fail-fast, never auto-created); the implicit
+ * local `exam_test` (constructed from DB_HOST_PORT) is Exam's convenience
+ * target and is self-provisioned when missing, so a fresh `pnpm db:up` volume
+ * works for `pnpm test` with no initdb SQL. This hook only touches base-DB
+ * EXISTENCE; schemas inside the target are owned by the test-isolation /
+ * worker-database helpers and production migrations.
  *
  * WHY the run lease (round-4, 2026-08-27): concurrent local
  * worker-database runs on the same PostgreSQL server are NOT supported — both
@@ -25,12 +31,18 @@
  * invocation, not one worker's lifetime. A second invocation fails IMMEDIATELY
  * in its own globalSetup with a clear message (no retry loop, no bounded wait:
  * an internal poll here would recreate the exact timeout-coupling failure
- * mode this PR eliminates). The lease is CLUSTER-scoped (round-5): it always
- * hosts on the canonical `postgres` database of the test server, and
+ * mode this design eliminates). The lease is CLUSTER-scoped (round-5): it
+ * always hosts on the canonical `postgres` database of the test server, and
  * TEST_ADMIN_DATABASE may not steer or fragment it (alien values fail fast).
  * CI never contends: every CI job owns its own PostgreSQL service container.
  * A crashed run releases the lease automatically — the lease is a PG session
  * lock, and the session dies with the process.
+ *
+ * No worker-DB sweep here, by design: since the slot identity fix
+ * (VITEST_POOL_ID binding) physical worker-DB cardinality is bounded by
+ * maxWorkers and names are reused run over run; bounded idle residue (e.g.
+ * w3/w4 left by an earlier larger maxWorkers) is acceptable and is NOT
+ * garbage-collected.
  *
  * DESIGN CHOICES (pre-check):
  *  - Uses Node's built-in `net` module for a TCP connect probe. This avoids
@@ -64,6 +76,10 @@ import { createConnection } from "node:net";
 import { URL } from "node:url";
 import { resolveTestBranchUrl } from "@exam/db/src/databaseUrl.js";
 import { acquireTestInfraRunLease } from "@exam/db/src/testInfraLock.js";
+import {
+  prepareTestDatabase,
+  type TestDbBootstrapOutcome,
+} from "@exam/db/src/testDbBootstrap.js";
 
 const PROBE_TIMEOUT_MS = 2_000;
 const RETRY_COUNT = 5;
@@ -134,29 +150,34 @@ export default async function globalSetup(): Promise<
 
   for (let attempt = 1; attempt <= RETRY_COUNT; attempt += 1) {
     const ok = await probeTcp(host, port);
-    if (ok) {
-      // DB is reachable. In worker-database mode this invocation now claims
-      // the server's run lease and holds it until teardown (all files done).
-      // A concurrent invocation rejects here, immediately, before any worker
-      // process or database state exists.
-      if (!requiresRunLease(process.env)) return undefined;
-      const lease = await acquireApiRunLease(process.env);
-      return async () => {
-        await lease.release();
-      };
+    if (ok) break; // DB port is accepting connections — continue to ownership checks.
+    if (attempt === RETRY_COUNT) {
+      // All retries exhausted. Throw a clear, actionable error that names the
+      // remedy. vitest aborts the run immediately when globalSetup throws.
+      throw new Error(
+        `[vitest globalSetup] Test database is unreachable after ${RETRY_COUNT} attempts ` +
+          `(~${(RETRY_COUNT * RETRY_DELAY_MS) / 1000}s window).\n` +
+          `  Target: ${host}:${port} (resolved test DB URL)\n` +
+          `  Remedy: ensure the Postgres test container is up and healthy.\n` +
+          `    pnpm db:up   # starts exam-db-1 (host port: DB_HOST_PORT, default 5432)`,
+      );
     }
-    if (attempt < RETRY_COUNT) {
-      await sleep(RETRY_DELAY_MS);
-    }
+    await sleep(RETRY_DELAY_MS);
   }
 
-  // All retries exhausted. Throw a clear, actionable error that names the
-  // remedy. vitest aborts the run immediately when globalSetup throws.
-  throw new Error(
-    `[vitest globalSetup] Test database is unreachable after ${RETRY_COUNT} attempts ` +
-      `(~${(RETRY_COUNT * RETRY_DELAY_MS) / 1000}s window).\n` +
-      `  Target: ${host}:${port} (from TEST_DATABASE_URL)\n` +
-      `  Remedy: ensure the Postgres test container is up and healthy.\n` +
-      `    pnpm db:up   # starts exam-db-1 (host port: DB_HOST_PORT, default 5432)`,
-  );
+  // Ownership contract: explicit URL must exist (fail fast, never created);
+  // implicit local exam_test is self-provisioned. Throws a clear error on
+  // violation — vitest aborts the run.
+  const outcome: TestDbBootstrapOutcome = await prepareTestDatabase();
+
+  // In worker-database mode this invocation now claims the server's run lease
+  // and holds it until teardown (all files done). A concurrent invocation
+  // rejects here, immediately, before any worker process or database state
+  // exists. (Non-worker-database runs share nothing slot-derived and need no
+  // lease.)
+  if (!requiresRunLease(process.env)) return undefined;
+  const lease = await acquireApiRunLease(process.env);
+  return async () => {
+    await lease.release();
+  };
 }

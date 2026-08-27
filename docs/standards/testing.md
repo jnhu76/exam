@@ -145,8 +145,9 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 
 **Rules:**
-- An explicit `TEST_DATABASE_URL` always wins (CI / remote DB / special case).
-- When unset, the resolver constructs a LOCAL test URL from the single-source `DB_HOST_PORT` (the same variable `docker-compose.dev.yml` publishes and dev `DATABASE_URL` construction uses) and targets `exam_test`. There is nothing to keep in sync.
+- An explicit `TEST_DATABASE_URL` always wins (CI / remote DB / special case) and is **operator-owned**: the harness verifies it exists and fails fast if missing — it never creates, migrates, or falls back for an explicit URL (see §2.8).
+- Set-but-empty (`TEST_DATABASE_URL=`) counts as unset.
+- When unset, the resolver constructs a LOCAL test URL from the single-source `DB_HOST_PORT` (the same variable `docker-compose.dev.yml` publishes and dev `DATABASE_URL` construction uses) and targets `exam_test`, which the harness self-provisions when missing (see §2.8). There is nothing to keep in sync.
 - Must point to a database whose name contains `test`, `e2e`, or `ci`.
 - The name-safety guard in `resolveTestBranchUrl()` enforces this unless `ALLOW_UNSAFE_TEST_DATABASE_URL=1`.
 - In CI, `DATABASE_URL` and `TEST_DATABASE_URL` often point to the same test database. This is allowed because both are test databases.
@@ -219,6 +220,77 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 **Rules:**
 - Phase 1.x is single-tenant only.
 - `DEPLOYMENT_MODE=multiTenant` must fail fast at startup.
+
+### 2.8 Test Database Lifecycle Ownership
+
+The single authority for "who creates / verifies / drops which test database".
+The runtime seam is `packages/db/src/testDbBootstrap.ts` (`prepareTestDatabase`),
+wired into both vitest globalSetups (`apps/api/vitest.globalSetup.ts`,
+`packages/db/vitest.globalSetup.ts`).
+
+```
+                    PostgreSQL server
+                           |
+             +-------------+-------------+
+             |                           |
+     explicit test URL            implicit local URL
+  (TEST_DATABASE_URL/TEST_DB_URL)  (constructed from DB_HOST_PORT,
+             |                      always exam_test)
+     operator-owned DB              Exam-owned convenience DB
+             |                           |
+   MUST already exist             MAY self-provision if missing
+             |                           |
+  verify + FAIL FAST if absent    ensure -> migrate -> test
+```
+
+| Lifecycle | Owner | Notes |
+|-----------|-------|-------|
+| PostgreSQL server (local) | developer (`pnpm db:up`) | `docker-compose.dev.yml`; no initdb SQL — `POSTGRES_DB` creates only `exam` |
+| Implicit local `exam_test` | Exam test harness | Self-provisioned by `prepareTestDatabase` whenever missing; survives `DROP DATABASE` without container reset |
+| Explicit `TEST_DATABASE_URL` target | environment / operator (CI service, remote DB) | Base-database existence/lifecycle is operator-owned: verified connectable, NEVER created or dropped by the harness — restricted no-CREATEDB roles work for file-schema isolation. Schema lifecycle INSIDE the target is harness-owned: test schemas are created/dropped and production migrations run (`explicit base DB ≠ never migrated` must not be claimed). Worker-database isolation still derives physical DBs and needs CREATEDB |
+| Worker DBs `exam_test_w<N>` | Exam test harness | One physical DB per execution slot (`VITEST_POOL_ID`, bounded by `maxWorkers`); names are reused run over run. Bounded idle residue from an earlier larger `maxWorkers` (idle `w3/w4`) is acceptable — there is deliberately NO sweep/garbage collection |
+| Schemas `test_*` | per-test-file isolation (`testIsolation.ts`) | Created + dropped per file |
+| Schema content | production Drizzle migrations only | No test-only schema DDL anywhere |
+| Seed data | test bodies (`seed()` after migration) | `pnpm db:seed:demo` seeds ONLY the dev `exam` DB |
+| E2E DB `exam_e2e*` | E2E runners (`scripts/e2e/*`) | Own their full lifecycle; out of scope here |
+| CI DB | CI service containers (`POSTGRES_DB=exam_test`) | Operator-owned; the harness never creates on it |
+
+**Rules:**
+
+- Set-but-empty `TEST_DATABASE_URL=` counts as UNSET (template artifact, not an
+  operator decision).
+- The name-safety guard (name contains `test`/`e2e`/`ci`) applies on both
+  branches.
+- `prepareTestDatabase` refuses to run in production mode.
+- Turbo cache identity: every DB-routing / topology variable
+  (`TEST_DATABASE_URL`, `TEST_DB_URL`, `DB_HOST_PORT`, `TEST_DB_ISOLATION`,
+  `API_TEST_MAX_WORKERS`, `TEST_INFRA_SCOPE`, `TEST_SHARD_INDEX`,
+  `TEST_WORKER_ID`, `TEST_ADMIN_DATABASE`, `ALLOW_UNSAFE_TEST_DATABASE_URL`,
+  `API_TEST_GROUP`, `TEST_QUEUE_MODE`)
+  is declared in the `env` key of the DB-backed test tasks in `turbo.json` —
+  passed through AND hashed into the task cache key, so a routing change can
+  never replay a green result recorded against a different database. The
+  `passThroughEnv`-only shape is forbidden for these tasks (enforced by
+  `scripts/repository-contract/turbo-config-contract.mjs`).
+
+**Worker-DB physical lifecycle** (`TEST_DB_ISOLATION=worker-database`):
+
+| Event | Create? | Reuse? | Reset? | Drop? |
+|-------|---------|--------|--------|-------|
+| worker start (slot bootstrap) | ensure + migrate once per process (`exam_test_w<VITEST_POOL_ID>`, memoized per authority) | same slot → yes | — | — |
+| test file start (same slot) | — | yes — the SAME physical slot DB | `resetPostgres()` TRUNCATE boundary (mutation-proven) | — |
+| run end (success or failure) | — | — | — | nothing — slot DBs persist for the next run |
+| process crash | — | — | — | nothing — the next run reuses the same bounded set |
+| concurrent second local run | — | — | — | rejected by the globalSetup run lease (see `docs/adr/ADR-007` rule 8) |
+
+Slot identity is `VITEST_POOL_ID` (bounded 1..maxWorkers), NOT
+`VITEST_WORKER_ID` (unbounded worker-instance id — the root cause of the
+2026-08-26 flake audit, fixed by #335). Physical DB cardinality is therefore
+bounded by `maxWorkers` and names are reused run over run; the historical
+"~90 physical databases per run" was wrong-cardinality residue from the old
+identity binding, not cumulative growth. A later run with a smaller
+`maxWorkers` may leave idle `w3/w4` behind — bounded residue, acceptable,
+never garbage-collected.
 
 ---
 

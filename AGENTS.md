@@ -65,7 +65,7 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
 **Connection facts:**
 
 - Container: `exam-db-1` (postgres:18.4), host port `DB_HOST_PORT` (default `5432`) → container `5432`, user/pass `exam`/`exam`. Port ownership map: `docs/development/ports.md`.
-- `exam_test` is created once at first container init by `docker/db/init/01-create-databases.sql`. It MUST exist (the test name-safety guard in `packages/db/src/testDb.ts` refuses any name without `test`/`e2e`/`ci`).
+- `exam_test` is self-provisioned by the test harness (`packages/db/src/testDbBootstrap.ts`, wired into both vitest globalSetups) on the implicit local URL — created/recreated whenever missing, no Docker initdb script involved. An explicit `TEST_DATABASE_URL`/`TEST_DB_URL` is operator-owned instead: it must already exist (fail fast, never auto-created). The test name-safety guard in `packages/db/src/testDb.ts` still refuses any DB name without `test`/`e2e`/`ci`.
 - The DB name is resolved by APP_MODE: `test`/`ci`/`e2e` → `TEST_DATABASE_URL` when set; otherwise a LOCAL test URL is constructed from `DB_HOST_PORT` (`postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_test`, the single source — an explicit value always wins). Never falls back to `DATABASE_URL`. Otherwise → `DATABASE_URL` (dev: unset `DATABASE_URL` is constructed from `DB_HOST_PORT` by `packages/db/src/databaseUrl.ts`).
 
 **Agent rules — do NOT deviate:**

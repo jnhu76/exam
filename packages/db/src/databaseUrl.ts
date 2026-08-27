@@ -95,15 +95,49 @@ function constructTestDatabaseUrl(env: NodeJS.ProcessEnv): string {
 }
 
 /**
+ * Read the first explicitly-set, non-empty test URL variable.
+ *
+ * A set-but-empty (`TEST_DATABASE_URL=`) value is treated as UNSET: an empty
+ * string is not an operator decision, it is a template artifact, and treating
+ * it as an explicit URL would fail name-safety on the empty database name
+ * instead of constructing the implicit local URL.
+ */
+function readExplicitTestUrl(env: NodeJS.ProcessEnv): string | undefined {
+  for (const key of ["TEST_DATABASE_URL", "TEST_DB_URL"] as const) {
+    const raw = env[key];
+    if (raw === undefined) continue;
+    const trimmed = raw.trim();
+    if (trimmed.length > 0) return raw;
+  }
+  return undefined;
+}
+
+/**
+ * Whether an operator explicitly supplied `TEST_DATABASE_URL` / `TEST_DB_URL`.
+ *
+ * This is the ownership switch for the test database contract:
+ *   - explicit  → the target is operator-owned; the harness must NOT create it
+ *     and must fail fast when it is missing (no privilege escalation, no
+ *     fallback);
+ *   - implicit  → the harness constructs the local convenience URL
+ *     (`exam_test` on `DB_HOST_PORT`) and MAY self-provision that database.
+ *
+ * Set-but-empty values count as implicit (see {@link readExplicitTestUrl}).
+ */
+export function isExplicitTestDbUrl(env: NodeJS.ProcessEnv): boolean {
+  return readExplicitTestUrl(env) !== undefined;
+}
+
+/**
  * Resolve a TEST database URL and enforce the test name-safety guard.
  *
  * This is the shared test-branch implementation used by both the mode-routing
  * {@link resolveDatabaseUrl} (when mode is test-like) and the explicitly
  * test-oriented {@link resolveTestDatabaseUrl} export. It reads
- * `TEST_DATABASE_URL ?? TEST_DB_URL` when set; otherwise it constructs a LOCAL
- * test URL from the single-source `DB_HOST_PORT` (so changing DB_HOST_PORT in
- * `.env` makes `pnpm test` follow automatically). It NEVER falls back to
- * DATABASE_URL.
+ * `TEST_DATABASE_URL ?? TEST_DB_URL` when set to a non-empty value; otherwise
+ * it constructs a LOCAL test URL from the single-source `DB_HOST_PORT` (so
+ * changing DB_HOST_PORT in `.env` makes `pnpm test` follow automatically). It
+ * NEVER falls back to DATABASE_URL.
  *
  * Exported so `testDb.ts` can delegate without reimplementing the guard.
  *
@@ -113,7 +147,7 @@ function constructTestDatabaseUrl(env: NodeJS.ProcessEnv): string {
  *   ALLOW_UNSAFE_TEST_DATABASE_URL=1.
  */
 export function resolveTestBranchUrl(env: NodeJS.ProcessEnv): string {
-  const url = env.TEST_DATABASE_URL ?? env.TEST_DB_URL;
+  const url = readExplicitTestUrl(env);
   const resolved = url ?? constructTestDatabaseUrl(env);
   if (env.ALLOW_UNSAFE_TEST_DATABASE_URL !== "1") {
     const dbName = extractDatabaseName(resolved);

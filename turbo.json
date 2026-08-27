@@ -23,61 +23,103 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "passThroughEnv": [
+      "env": [
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
+        "DB_HOST_PORT",
         "TEST_DB_ISOLATION",
         "API_TEST_MAX_WORKERS",
+        "TEST_INFRA_SCOPE",
+        "TEST_SHARD_INDEX",
+        "TEST_WORKER_ID",
+        "API_TEST_GROUP",
+        "TEST_QUEUE_MODE",
+        "TEST_ADMIN_DATABASE",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
     "@exam/api#test": {
       "dependsOn": ["^build", "@exam/db#test"],
-      "passThroughEnv": [
+      "env": [
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
+        "DB_HOST_PORT",
         "TEST_DB_ISOLATION",
         "API_TEST_MAX_WORKERS",
+        "TEST_INFRA_SCOPE",
+        "TEST_SHARD_INDEX",
+        "TEST_WORKER_ID",
+        "API_TEST_GROUP",
+        "TEST_QUEUE_MODE",
+        "TEST_ADMIN_DATABASE",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
     "coverage": {
       "dependsOn": ["^build"],
-      "passThroughEnv": [
+      "env": [
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
+        "DB_HOST_PORT",
         "TEST_DB_ISOLATION",
         "API_TEST_MAX_WORKERS",
+        "TEST_INFRA_SCOPE",
+        "TEST_SHARD_INDEX",
+        "TEST_WORKER_ID",
+        "API_TEST_GROUP",
+        "TEST_QUEUE_MODE",
+        "TEST_ADMIN_DATABASE",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
     "@exam/api#coverage": {
       "dependsOn": ["^build", "@exam/db#coverage"],
-      "passThroughEnv": [
+      "env": [
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
+        "DB_HOST_PORT",
         "TEST_DB_ISOLATION",
         "API_TEST_MAX_WORKERS",
+        "TEST_INFRA_SCOPE",
+        "TEST_SHARD_INDEX",
+        "TEST_WORKER_ID",
+        "API_TEST_GROUP",
+        "TEST_QUEUE_MODE",
+        "TEST_ADMIN_DATABASE",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
     "test:integration": {
       "dependsOn": ["^build"],
-      "passThroughEnv": [
+      "env": [
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
+        "DB_HOST_PORT",
         "TEST_DB_ISOLATION",
         "API_TEST_MAX_WORKERS",
+        "TEST_INFRA_SCOPE",
+        "TEST_SHARD_INDEX",
+        "TEST_WORKER_ID",
+        "API_TEST_GROUP",
+        "TEST_QUEUE_MODE",
+        "TEST_ADMIN_DATABASE",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
     "@exam/api#test:integration": {
       "dependsOn": ["^build", "@exam/db#test:integration"],
-      "passThroughEnv": [
+      "env": [
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
+        "DB_HOST_PORT",
         "TEST_DB_ISOLATION",
         "API_TEST_MAX_WORKERS",
+        "TEST_INFRA_SCOPE",
+        "TEST_SHARD_INDEX",
+        "TEST_WORKER_ID",
+        "API_TEST_GROUP",
+        "TEST_QUEUE_MODE",
+        "TEST_ADMIN_DATABASE",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
