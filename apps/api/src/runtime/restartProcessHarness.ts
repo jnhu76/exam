@@ -251,11 +251,12 @@ export async function spawnApiServer(
   try {
     await waitHealthy(launch.exitPromise, launch.port, 45_000);
   } catch (err) {
-    // One fallback attempt ONLY for the explicit-port EADDRINUSE race
-    // (caller requested restart parity and the kernel handed the port away
-    // between old-process death and new-process bind). Child still alive
-    // here would mean a slow boot, not a bind loss — fail that path fast.
-    if (opts.port === undefined || launch.child.exitCode === null) {
+    // One fallback attempt ONLY for the explicit-port bind-loss race (child
+    // already dead AND not signal-killed). A still-running child means a slow
+    // boot or a config failure — kill it and rethrow the original error fast.
+    const childGoneUnsignaled =
+      launch.child.exitCode !== null || launch.child.signalCode !== null;
+    if (opts.port === undefined || !childGoneUnsignaled) {
       launch.child.kill("SIGKILL");
       await launch.exitPromise;
       throw err;
@@ -263,7 +264,15 @@ export async function spawnApiServer(
     await launch.exitPromise;
     const fallbackPort = await grabFreePort();
     launch = launchChild(opts, fallbackPort);
-    await waitHealthy(launch.exitPromise, launch.port, 45_000);
+    try {
+      await waitHealthy(launch.exitPromise, launch.port, 45_000);
+    } catch {
+      // Never leak the fallback child: kill it and surface the ORIGINAL
+      // error so the root cause (not the fallback timeout) is reported.
+      launch.child.kill("SIGKILL");
+      await launch.exitPromise;
+      throw err;
+    }
   }
   return {
     pid: launch.child.pid!,

@@ -416,6 +416,11 @@ describe("process-restart deadline recovery (#326)", () => {
       namespace: "restart-deadline",
     });
     workerUrl = cleanupHandle.databaseUrl;
+    // Same reset boundary as routes/testHelpers: worker databases persist
+    // across runs, so truncate business tables once before seeding.
+    if (cleanupHandle.mode === "worker-database") {
+      await cleanupHandle.resetPostgres();
+    }
     connInfo = await createDatabase(workerUrl);
     db = connInfo.db;
     const seedResult = await seed(db, hashPassword);
@@ -481,10 +486,18 @@ describe("process-restart deadline recovery (#326)", () => {
     readyAtMs: number;
     expectTerminalizedEvent?: boolean;
   }): Promise<void> {
-    const row = await waitUntil(
+    // Measure the elapsed time INSIDE the probe: a marginal waitUntil success
+    // near the documented ceiling must not flip into a false red one query
+    // later.
+    const converged = await waitUntil<{
+      row: AttemptRow;
+      observedAtMs: number;
+    }>(
       async () => {
         const current = await attemptRow(db, params.attemptId);
-        return current.status === "graded" ? current : null;
+        return current.status === "graded"
+          ? { row: current, observedAtMs: Date.now() }
+          : null;
       },
       {
         timeoutMs: CONVERGENCE_BOUND_MS,
@@ -492,7 +505,8 @@ describe("process-restart deadline recovery (#326)", () => {
         label: "attempt reaches graded",
       },
     );
-    const observedAtMs = Date.now();
+    const row = converged.row;
+    const observedAtMs = converged.observedAtMs;
     const measured = observedAtMs - params.readyAtMs;
 
     expect(
@@ -543,378 +557,417 @@ describe("process-restart deadline recovery (#326)", () => {
   }
 
   it("A: restart BEFORE deadline preserves attempt identity, answers, and exact deadline", async () => {
-    const firstPort = await grabFreePort();
-    const serverA = await boot({ port: firstPort, databaseUrl: workerUrl });
-    const candidate = await createCandidateFixture(
-      db,
-      orgId,
-      `rc-a-${Date.now().toString(36)}`,
-    );
-
-    const bundle = await createPublishedExam(
-      serverA.baseUrl,
-      adminToken,
-      "restart-pre-deadline",
-      {
-        durationMinutes: 30,
-        closeInMs: 90 * 60_000,
-      },
-    );
-    await enrollCandidate(
-      serverA.baseUrl,
-      adminToken,
-      bundle.examId,
-      candidate.profileId,
-    );
-
-    const startRes = await call(
-      serverA.baseUrl,
-      "POST",
-      `/api/attempts/${bundle.examId}/start`,
-      {
-        token: candidate.token,
-      },
-    );
-    expect(startRes.status).toBe(201);
-    const attemptId = asRecord(startRes.json).id as string;
-
-    const saved1 = await saveAnswer(
-      serverA.baseUrl,
-      candidate.token,
-      attemptId,
-      bundle.questionId,
-      true,
-      nextSeq(),
-      0,
-    );
-    expect(saved1.accepted).toBe(true);
-    expect(saved1.serverVersion).toBe(1);
-
-    const snapA = await takeSnapshot(
-      serverA.baseUrl,
-      candidate.token,
-      attemptId,
-    );
-    const rowA = await attemptRow(db, attemptId);
-    // API surface agrees with the durable authority byte-for-byte.
-    expect(snapA.effectiveDeadline).toBe(rowA.deadlineAt!.toISOString());
-    const enrollmentRows = await db
-      .select()
-      .from(schema.examEnrollments)
-      .where(
-        and(
-          eq(schema.examEnrollments.examId, bundle.examId),
-          eq(schema.examEnrollments.candidateId, candidate.profileId),
-        ),
+    try {
+      const firstPort = await grabFreePort();
+      const serverA = await boot({ port: firstPort, databaseUrl: workerUrl });
+      const candidate = await createCandidateFixture(
+        db,
+        orgId,
+        `rc-a-${Date.now().toString(36)}`,
       );
-    expect(enrollmentRows[0]!.attemptCount).toBe(1);
 
-    // ── REAL process restart ──────────────────────────────────────
-    const pidA = serverA.pid;
-    await killHard(serverA);
-    expect(isProcessAlive(pidA)).toBe(false);
+      const bundle = await createPublishedExam(
+        serverA.baseUrl,
+        adminToken,
+        "restart-pre-deadline",
+        {
+          durationMinutes: 30,
+          closeInMs: 90 * 60_000,
+        },
+      );
+      await enrollCandidate(
+        serverA.baseUrl,
+        adminToken,
+        bundle.examId,
+        candidate.profileId,
+      );
 
-    const serverB = await boot({ port: firstPort, databaseUrl: workerUrl });
-    expect(serverB.pid).not.toBe(pidA);
-    const version = await call(serverB.baseUrl, "GET", "/api/system/info", {});
-    expect(version.status).toBe(200);
-    // Freshly booted replacement process, not a lingering runtime.
-    expect(Number(asRecord(version.json).uptime)).toBeLessThan(20);
+      const startRes = await call(
+        serverA.baseUrl,
+        "POST",
+        `/api/attempts/${bundle.examId}/start`,
+        {
+          token: candidate.token,
+        },
+      );
+      expect(startRes.status).toBe(201);
+      const attemptId = asRecord(startRes.json).id as string;
 
-    // Durable auth authority survives (JWT secret + credential epoch are in PG).
-    const snapB = await takeSnapshot(
-      serverB.baseUrl,
-      candidate.token,
-      attemptId,
-    );
-    expect(snapB.attemptStatus).toBe("in_progress");
-    expect(snapB.effectiveDeadline).toBe(snapA.effectiveDeadline); // zero drift
-    expect(takeAnswerValue(snapB.questions, bundle.questionId)).toBe(true);
+      const saved1 = await saveAnswer(
+        serverA.baseUrl,
+        candidate.token,
+        attemptId,
+        bundle.questionId,
+        true,
+        nextSeq(),
+        0,
+      );
+      expect(saved1.accepted).toBe(true);
+      expect(saved1.serverVersion).toBe(1);
 
-    // POST start again restores THE SAME attempt — never fabricates a second one.
-    const restarted = await call(
-      serverB.baseUrl,
-      "POST",
-      `/api/attempts/${bundle.examId}/start`,
-      {
-        token: candidate.token,
-      },
-    );
-    expect(restarted.status).toBe(200);
-    expect(asRecord(restarted.json).id).toBe(attemptId);
+      const snapA = await takeSnapshot(
+        serverA.baseUrl,
+        candidate.token,
+        attemptId,
+      );
+      const rowA = await attemptRow(db, attemptId);
+      // API surface agrees with the durable authority byte-for-byte.
+      expect(snapA.effectiveDeadline).toBe(rowA.deadlineAt!.toISOString());
+      const enrollmentRows = await db
+        .select()
+        .from(schema.examEnrollments)
+        .where(
+          and(
+            eq(schema.examEnrollments.examId, bundle.examId),
+            eq(schema.examEnrollments.candidateId, candidate.profileId),
+          ),
+        );
+      expect(enrollmentRows[0]!.attemptCount).toBe(1);
 
-    const rowAfterReStart = await attemptRow(db, attemptId);
-    expect(rowAfterReStart.startedAt!.getTime()).toBe(
-      rowA.startedAt!.getTime(),
-    );
-    // M1-SENSITIVE INVARIANT: a regression that recomputes/extends deadlineAt
-    // on restore fails here — the stored deadline must be byte-stable.
-    expect(rowAfterReStart.deadlineAt!.getTime()).toBe(
-      rowA.deadlineAt!.getTime(),
-    );
-    expect(await countAttempts(db, enrollmentRows[0]!.id)).toBe(1);
-    const enrollmentAfter = await db
-      .select()
-      .from(schema.examEnrollments)
-      .where(eq(schema.examEnrollments.id, enrollmentRows[0]!.id));
-    expect(enrollmentAfter[0]!.attemptCount).toBe(1);
+      // ── REAL process restart ──────────────────────────────────────
+      const pidA = serverA.pid;
+      await killHard(serverA);
+      expect(isProcessAlive(pidA)).toBe(false);
 
-    // Version continuity ACROSS processes: v1 was minted by instance A; B must
-    // honor it as base — the Answer Save Protocol version chain is durable.
-    const saved2 = await saveAnswer(
-      serverB.baseUrl,
-      candidate.token,
-      attemptId,
-      bundle.questionId,
-      false,
-      nextSeq(),
-      saved1.serverVersion!,
-    );
-    expect(saved2.accepted).toBe(true);
-    expect(saved2.serverVersion).toBe(2);
-    const rowFinal = await attemptRow(db, attemptId);
-    const draftRecord = rowFinal.answers.find(
-      (a) => a.questionId === bundle.questionId,
-    );
-    expect(draftRecord?.answer).toBe(false);
-    expect(draftRecord?.version).toBe(2);
+      const serverB = await boot({ port: firstPort, databaseUrl: workerUrl });
+      expect(serverB.pid).not.toBe(pidA);
+      const version = await call(
+        serverB.baseUrl,
+        "GET",
+        "/api/system/info",
+        {},
+      );
+      expect(version.status).toBe(200);
+      // Freshly booted replacement process, not a lingering runtime. The
+      // ceiling mirrors the harness's 45s boot tolerance — uptime includes the
+      // whole tsx cold transform, so a tight bound here would flake on slow CI.
+      expect(Number(asRecord(version.json).uptime)).toBeLessThan(45);
 
-    await stopBootedServers();
-  }, 150_000);
+      // Durable auth authority survives (JWT secret + credential epoch are in PG).
+      const snapB = await takeSnapshot(
+        serverB.baseUrl,
+        candidate.token,
+        attemptId,
+      );
+      expect(snapB.attemptStatus).toBe("in_progress");
+      expect(snapB.effectiveDeadline).toBe(snapA.effectiveDeadline); // zero drift
+      expect(takeAnswerValue(snapB.questions, bundle.questionId)).toBe(true);
 
-  it("B: API down ACROSS deadline → converges once after restart; late saves rejected", async () => {
-    const portB = await grabFreePort();
-    const serverA = await boot({ port: portB, databaseUrl: workerUrl });
-    const candidate = await createCandidateFixture(
-      db,
-      orgId,
-      `rc-b-${Date.now().toString(36)}`,
-    );
-    const bundle = await createPublishedExam(
-      serverA.baseUrl,
-      adminToken,
-      "restart-cross-deadline",
-      {
-        durationMinutes: 30,
-        closeInMs: 12_000, // closeAt is the effective deadline (12s out)
-      },
-    );
-    await enrollCandidate(
-      serverA.baseUrl,
-      adminToken,
-      bundle.examId,
-      candidate.profileId,
-    );
-    const startRes = await call(
-      serverA.baseUrl,
-      "POST",
-      `/api/attempts/${bundle.examId}/start`,
-      {
-        token: candidate.token,
-      },
-    );
-    expect(startRes.status).toBe(201);
-    const attemptId = asRecord(startRes.json).id as string;
-    const preRow = await attemptRow(db, attemptId);
-    // durationMinutes=30 puts the per-attempt deadline beyond closeAt ⇒ min() picks closeAt.
-    expect(bundle.closeAtMs).toBeLessThan(preRow.deadlineAt!.getTime());
+      // POST start again restores THE SAME attempt — never fabricates a second one.
+      const restarted = await call(
+        serverB.baseUrl,
+        "POST",
+        `/api/attempts/${bundle.examId}/start`,
+        {
+          token: candidate.token,
+        },
+      );
+      expect(restarted.status).toBe(200);
+      expect(asRecord(restarted.json).id).toBe(attemptId);
 
-    const savedPre = await saveAnswer(
-      serverA.baseUrl,
-      candidate.token,
-      attemptId,
-      bundle.questionId,
-      true,
-      nextSeq(),
-      0,
-    );
-    expect(savedPre.accepted).toBe(true);
+      const rowAfterReStart = await attemptRow(db, attemptId);
+      expect(rowAfterReStart.startedAt!.getTime()).toBe(
+        rowA.startedAt!.getTime(),
+      );
+      // M1-SENSITIVE INVARIANT: a regression that recomputes/extends deadlineAt
+      // on restore fails here — the stored deadline must be byte-stable.
+      expect(rowAfterReStart.deadlineAt!.getTime()).toBe(
+        rowA.deadlineAt!.getTime(),
+      );
+      expect(await countAttempts(db, enrollmentRows[0]!.id)).toBe(1);
+      const enrollmentAfter = await db
+        .select()
+        .from(schema.examEnrollments)
+        .where(eq(schema.examEnrollments.id, enrollmentRows[0]!.id));
+      expect(enrollmentAfter[0]!.attemptCount).toBe(1);
 
-    await killHard(serverA);
-    // Cross the effective deadline while genuinely DOWN (nothing listening).
-    await waitUntil(async () => Date.now() >= bundle.closeAtMs + 300 || null, {
-      timeoutMs: 20_000,
-      intervalMs: 120,
-      label: "cross effective deadline while down",
-    });
-    expect(await healthState(serverA.baseUrl)).toBe("refused");
-
-    const serverB = await boot({ port: portB, databaseUrl: workerUrl });
-    const readyAtMs = Date.now();
-
-    // Duplicate-effects adversary: burst candidate traffic DURING convergence.
-    // Saves carry a forged marker so any improper post-deadline persistence
-    // becomes greppably visible in durable JSON.
-    await Promise.allSettled([
-      takeSnapshot(serverB.baseUrl, candidate.token, attemptId),
-      takeSnapshot(serverB.baseUrl, candidate.token, attemptId),
-      saveAnswer(
+      // Version continuity ACROSS processes: v1 was minted by instance A; B must
+      // honor it as base — the Answer Save Protocol version chain is durable.
+      const saved2 = await saveAnswer(
         serverB.baseUrl,
         candidate.token,
         attemptId,
         bundle.questionId,
-        "post-deadline-burst-marker",
+        false,
         nextSeq(),
-        9999,
-      ),
-      call(serverB.baseUrl, "POST", `/api/attempts/${bundle.examId}/start`, {
-        token: candidate.token,
-      }),
-    ]);
+        saved1.serverVersion!,
+      );
+      expect(saved2.accepted).toBe(true);
+      expect(saved2.serverVersion).toBe(2);
+      const rowFinal = await attemptRow(db, attemptId);
+      const draftRecord = rowFinal.answers.find(
+        (a) => a.questionId === bundle.questionId,
+      );
+      expect(draftRecord?.answer).toBe(false);
+      expect(draftRecord?.version).toBe(2);
+    } finally {
+      await stopBootedServers();
+    }
+  }, 150_000);
 
-    const enrollmentRows = await db
-      .select()
-      .from(schema.examEnrollments)
-      .where(eq(schema.examEnrollments.id, preRow.enrollmentId));
-    await assertConvergedOnceAndStable({
-      attemptId,
-      enrollmentId: enrollmentRows[0]!.id,
-      questionId: bundle.questionId,
-      closeAtMs: bundle.closeAtMs,
-      readyAtMs,
-    });
+  it("B: API down ACROSS deadline → converges once after restart; late saves rejected", async () => {
+    try {
+      const portB = await grabFreePort();
+      const serverA = await boot({ port: portB, databaseUrl: workerUrl });
+      const candidate = await createCandidateFixture(
+        db,
+        orgId,
+        `rc-b-${Date.now().toString(36)}`,
+      );
+      const bundle = await createPublishedExam(
+        serverA.baseUrl,
+        adminToken,
+        "restart-cross-deadline",
+        {
+          durationMinutes: 30,
+          closeInMs: 12_000, // closeAt is the effective deadline (12s out)
+        },
+      );
+      await enrollCandidate(
+        serverA.baseUrl,
+        adminToken,
+        bundle.examId,
+        candidate.profileId,
+      );
+      const startRes = await call(
+        serverA.baseUrl,
+        "POST",
+        `/api/attempts/${bundle.examId}/start`,
+        {
+          token: candidate.token,
+        },
+      );
+      expect(startRes.status).toBe(201);
+      const attemptId = asRecord(startRes.json).id as string;
+      const preRow = await attemptRow(db, attemptId);
+      // durationMinutes=30 puts the per-attempt deadline beyond closeAt ⇒ min() picks closeAt.
+      expect(bundle.closeAtMs).toBeLessThan(preRow.deadlineAt!.getTime());
 
-    // The burst's forged answer must not exist anywhere durable.
-    const finalRow = await attemptRow(db, attemptId);
-    expect(JSON.stringify(finalRow.answers)).not.toContain(
-      "post-deadline-burst-marker",
-    );
+      const savedPre = await saveAnswer(
+        serverA.baseUrl,
+        candidate.token,
+        attemptId,
+        bundle.questionId,
+        true,
+        nextSeq(),
+        0,
+      );
+      expect(savedPre.accepted).toBe(true);
 
-    // An explicit post-convergence save is durably rejected.
-    const lateSave = await saveAnswer(
-      serverB.baseUrl,
-      candidate.token,
-      attemptId,
-      bundle.questionId,
-      true,
-      nextSeq(),
-      0,
-    );
-    expect(lateSave.accepted).toBe(false);
-    expect(["ATTEMPT_ALREADY_SUBMITTED", "DEADLINE_EXCEEDED"]).toContain(
-      lateSave.reason,
-    );
+      await killHard(serverA);
+      // Cross the effective deadline while genuinely DOWN (nothing listening).
+      await waitUntil(
+        async () => Date.now() >= bundle.closeAtMs + 300 || null,
+        {
+          timeoutMs: 20_000,
+          intervalMs: 120,
+          label: "cross effective deadline while down",
+        },
+      );
+      // Down-state was machine-proven by killHard; a soft check here only guards
+      // against an unexpected rebinder on the freed port (spurious-"refused"
+      // immunity: any non-listening classification passes).
+      expect(await healthState(serverA.baseUrl)).not.toBe("ok");
 
-    // Representative verification: the candidate sees the graded result.
-    // NOTE the derivation order in candidateExamSummary: afterWindow(closeAt)
-    // precedes the graded branch, so a scored attempt inside a closed exam
-    // window surfaces as "expired" + view_result — both are result-visible.
-    const summary = await call(serverB.baseUrl, "GET", "/api/candidate/exams", {
-      token: candidate.token,
-    });
-    expect(summary.status).toBe(200);
-    const entries = summary.json as Array<{
-      examId: string;
-      availabilityStatus: string;
-      primaryAction: string;
-      bestScore?: number;
-    }>;
-    const entry = entries.find((e) => e.examId === bundle.examId);
-    expect(entry).toBeDefined();
-    const resultVisible =
-      entry!.availabilityStatus === "graded" ||
-      (entry!.availabilityStatus === "expired" &&
-        entry!.primaryAction === "view_result");
-    expect(resultVisible).toBe(true);
-    expect(entry!.bestScore).toBe(100);
+      const serverB = await boot({ port: portB, databaseUrl: workerUrl });
+      const readyAtMs = Date.now();
 
-    await stopBootedServers();
+      // Duplicate-effects adversary: burst candidate traffic DURING convergence.
+      // The forged marker uses the REAL current base version so the save-path
+      // deadline guard is the ONLY thing standing between it and durable
+      // persistence — a guard bypass becomes greppably visible in the JSON.
+      await Promise.allSettled([
+        takeSnapshot(serverB.baseUrl, candidate.token, attemptId),
+        takeSnapshot(serverB.baseUrl, candidate.token, attemptId),
+        saveAnswer(
+          serverB.baseUrl,
+          candidate.token,
+          attemptId,
+          bundle.questionId,
+          "post-deadline-burst-marker",
+          nextSeq(),
+          savedPre.serverVersion!,
+        ),
+        call(serverB.baseUrl, "POST", `/api/attempts/${bundle.examId}/start`, {
+          token: candidate.token,
+        }),
+      ]);
+
+      const enrollmentRows = await db
+        .select()
+        .from(schema.examEnrollments)
+        .where(eq(schema.examEnrollments.id, preRow.enrollmentId));
+      await assertConvergedOnceAndStable({
+        attemptId,
+        enrollmentId: enrollmentRows[0]!.id,
+        questionId: bundle.questionId,
+        closeAtMs: bundle.closeAtMs,
+        readyAtMs,
+      });
+
+      // The burst's forged answer must not exist anywhere durable.
+      const finalRow = await attemptRow(db, attemptId);
+      expect(JSON.stringify(finalRow.answers)).not.toContain(
+        "post-deadline-burst-marker",
+      );
+
+      // An explicit post-convergence save is durably rejected.
+      const lateSave = await saveAnswer(
+        serverB.baseUrl,
+        candidate.token,
+        attemptId,
+        bundle.questionId,
+        true,
+        nextSeq(),
+        0,
+      );
+      expect(lateSave.accepted).toBe(false);
+      expect(["ATTEMPT_ALREADY_SUBMITTED", "DEADLINE_EXCEEDED"]).toContain(
+        lateSave.reason,
+      );
+
+      // Representative verification: the candidate sees the graded result.
+      // NOTE the derivation order in candidateExamSummary: afterWindow(closeAt)
+      // precedes the graded branch, so a scored attempt inside a closed exam
+      // window surfaces as "expired" + view_result — both are result-visible.
+      const summary = await call(
+        serverB.baseUrl,
+        "GET",
+        "/api/candidate/exams",
+        {
+          token: candidate.token,
+        },
+      );
+      expect(summary.status).toBe(200);
+      const entries = summary.json as Array<{
+        examId: string;
+        availabilityStatus: string;
+        primaryAction: string;
+        bestScore?: number;
+      }>;
+      const entry = entries.find((e) => e.examId === bundle.examId);
+      expect(entry).toBeDefined();
+      const resultVisible =
+        entry!.availabilityStatus === "graded" ||
+        (entry!.availabilityStatus === "expired" &&
+          entry!.primaryAction === "view_result");
+      expect(resultVisible).toBe(true);
+      expect(entry!.bestScore).toBe(100);
+    } finally {
+      await stopBootedServers();
+    }
   }, 180_000);
 
   it("C: overdue DISRUPTED state at startup converges with exactly one terminalization", async () => {
-    // Faster heartbeat detector so the disruption lands well before the deadline.
-    const heavyHeartbeat = {
-      heartbeatTimeoutMs: 3000,
-      heartbeatScanIntervalMs: SCAN_INTERVAL_MS,
-    };
-    const portC = await grabFreePort();
-    const serverA = await boot({
-      port: portC,
-      databaseUrl: workerUrl,
-      ...heavyHeartbeat,
-    });
-    const candidate = await createCandidateFixture(
-      db,
-      orgId,
-      `rc-c-${Date.now().toString(36)}`,
-    );
-    const bundle = await createPublishedExam(
-      serverA.baseUrl,
-      adminToken,
-      "restart-overdue-disrupted",
-      {
-        durationMinutes: 30,
-        closeInMs: 14_000,
-      },
-    );
-    await enrollCandidate(
-      serverA.baseUrl,
-      adminToken,
-      bundle.examId,
-      candidate.profileId,
-    );
-    const startRes = await call(
-      serverA.baseUrl,
-      "POST",
-      `/api/attempts/${bundle.examId}/start`,
-      {
-        token: candidate.token,
-      },
-    );
-    expect(startRes.status).toBe(201);
-    const attemptId = asRecord(startRes.json).id as string;
-    const saved = await saveAnswer(
-      serverA.baseUrl,
-      candidate.token,
-      attemptId,
-      bundle.questionId,
-      true,
-      nextSeq(),
-      0,
-    );
-    expect(saved.accepted).toBe(true);
+    try {
+      // Faster heartbeat detector so the disruption lands well before the deadline.
+      const heavyHeartbeat = {
+        heartbeatTimeoutMs: 3000,
+        heartbeatScanIntervalMs: SCAN_INTERVAL_MS,
+      };
+      const portC = await grabFreePort();
+      const serverA = await boot({
+        port: portC,
+        databaseUrl: workerUrl,
+        ...heavyHeartbeat,
+      });
+      const candidate = await createCandidateFixture(
+        db,
+        orgId,
+        `rc-c-${Date.now().toString(36)}`,
+      );
+      const bundle = await createPublishedExam(
+        serverA.baseUrl,
+        adminToken,
+        "restart-overdue-disrupted",
+        {
+          durationMinutes: 30,
+          closeInMs: 14_000,
+        },
+      );
+      await enrollCandidate(
+        serverA.baseUrl,
+        adminToken,
+        bundle.examId,
+        candidate.profileId,
+      );
+      const startRes = await call(
+        serverA.baseUrl,
+        "POST",
+        `/api/attempts/${bundle.examId}/start`,
+        {
+          token: candidate.token,
+        },
+      );
+      expect(startRes.status).toBe(201);
+      const attemptId = asRecord(startRes.json).id as string;
+      const saved = await saveAnswer(
+        serverA.baseUrl,
+        candidate.token,
+        attemptId,
+        bundle.questionId,
+        true,
+        nextSeq(),
+        0,
+      );
+      expect(saved.accepted).toBe(true);
 
-    // Go silent: the heartbeat detector must persist 'disrupted' BEFORE the deadline.
-    await waitUntil(
-      async () =>
-        (await attemptRow(db, attemptId)).status === "disrupted" ? true : null,
-      {
-        timeoutMs: 12_000,
-        intervalMs: 250,
-        label: "heartbeat timeout flips attempt to disrupted",
-      },
-    );
-
-    await killHard(serverA);
-    await waitUntil(async () => Date.now() >= bundle.closeAtMs + 300 || null, {
-      timeoutMs: 25_000,
-      intervalMs: 120,
-      label: "overdue persisted state while down",
-    });
-
-    // Fresh process boots against ALREADY-OVERDUE disrupted state (startup
-    // catch-up comes purely from the regular interval scanner).
-    const serverB = await boot({ port: portC, databaseUrl: workerUrl });
-    const readyAtMs = Date.now();
-    const enrollmentRows = await db
-      .select()
-      .from(schema.examEnrollments)
-      .where(
-        and(
-          eq(schema.examEnrollments.candidateId, candidate.profileId),
-          eq(schema.examEnrollments.examId, bundle.examId),
-        ),
+      // Go silent: the heartbeat detector must persist 'disrupted' BEFORE the
+      // deadline. Premise-aware: if the clock crosses closeAt first, the
+      // scanner would grade with resolution:none and the terminalization
+      // contract below would red for the wrong reason — fail fast instead.
+      await waitUntil(
+        async () => {
+          if (Date.now() >= bundle.closeAtMs - 500) {
+            throw new Error(
+              "SCENARIO PREMISE VIOLATED: deadline crossed before heartbeat disruption persisted",
+            );
+          }
+          return (await attemptRow(db, attemptId)).status === "disrupted"
+            ? true
+            : null;
+        },
+        {
+          timeoutMs: 12_000,
+          intervalMs: 250,
+          label: "heartbeat timeout flips attempt to disrupted",
+        },
       );
 
-    await assertConvergedOnceAndStable({
-      attemptId,
-      enrollmentId: enrollmentRows[0]!.id,
-      questionId: bundle.questionId,
-      closeAtMs: bundle.closeAtMs,
-      readyAtMs,
-      expectTerminalizedEvent: true,
-    });
+      await killHard(serverA);
+      await waitUntil(
+        async () => Date.now() >= bundle.closeAtMs + 300 || null,
+        {
+          timeoutMs: 25_000,
+          intervalMs: 120,
+          label: "overdue persisted state while down",
+        },
+      );
 
-    await stopBootedServers();
+      // Fresh process boots against ALREADY-OVERDUE disrupted state (startup
+      // catch-up comes purely from the regular interval scanner).
+      const serverB = await boot({ port: portC, databaseUrl: workerUrl });
+      const readyAtMs = Date.now();
+      const enrollmentRows = await db
+        .select()
+        .from(schema.examEnrollments)
+        .where(
+          and(
+            eq(schema.examEnrollments.candidateId, candidate.profileId),
+            eq(schema.examEnrollments.examId, bundle.examId),
+          ),
+        );
+
+      await assertConvergedOnceAndStable({
+        attemptId,
+        enrollmentId: enrollmentRows[0]!.id,
+        questionId: bundle.questionId,
+        closeAtMs: bundle.closeAtMs,
+        readyAtMs,
+        expectTerminalizedEvent: true,
+      });
+    } finally {
+      await stopBootedServers();
+    }
   }, 180_000);
 });
