@@ -10,6 +10,10 @@ for repository releases from `v0.0.1` onward.
 
 ### Added
 
+- Added a reusable release-notes template and an ancestry-based issue/PR
+  traceability contract so future maintainers or local AI agents can produce
+  auditable releases without relying on memory or close dates.
+
 ### Changed
 
 ### Fixed
