@@ -47,14 +47,37 @@ fi
 safe_temp_root compose-smoke EXAM_DATA_ROOT
 export EXAM_DATA_ROOT
 
-# Strong per-run credentials (test-only, isolated throwaway stack).
-PG_PASSWORD="smoke-pass-${RUN_NUM}-$(date +%s)"
-JWT_SECRET="smoke-jwt-${RUN_NUM}-$(openssl rand -hex 16)"
+# ── Credentials ──────────────────────────────────────────────────────────
+# Two authorities, one contract:
+#   - default (DEPLOY_ENV_FILE unset): strong per-run credentials generated
+#     here (test-only, isolated throwaway stack).
+#   - DEPLOY_ENV_FILE set (fresh-install gate): the stack is driven by the
+#     GENERATED deployment env file via the --env-file seam in lib.sh, and
+#     this script consumes the SAME values so its direct psql/bootstrap
+#     calls agree with what Compose interpolates. A missing/blank secret in
+#     the file fails fast — generation authority is never bypassed.
+if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
+  if [ ! -f "${DEPLOY_ENV_FILE}" ]; then
+    echo "FAIL: DEPLOY_ENV_FILE=${DEPLOY_ENV_FILE} does not exist." >&2
+    exit 1
+  fi
+  PG_PASSWORD="$(env_file_value POSTGRES_PASSWORD)"
+  JWT_SECRET="$(env_file_value JWT_SECRET)"
+  if [ -z "${PG_PASSWORD}" ] || [ -z "${JWT_SECRET}" ]; then
+    echo "FAIL: deployment env file is missing POSTGRES_PASSWORD/JWT_SECRET." >&2
+    exit 1
+  fi
+  EXAM_PORT_FROM_ENV="$(env_file_value EXAM_PORT)"
+  ORIGIN="http://localhost:${EXAM_PORT_FROM_ENV:-3000}"
+else
+  PG_PASSWORD="smoke-pass-${RUN_NUM}-$(date +%s)"
+  JWT_SECRET="smoke-jwt-${RUN_NUM}-$(openssl rand -hex 16)"
+  ORIGIN="http://localhost:3000"
+fi
 ADMIN_USER="smokeadmin${RUN_NUM}"
 ADMIN_PASS="Smoke-Admin-${RUN_NUM}-$(openssl rand -hex 8)"
 ADMIN_NAME="Smoke Admin ${RUN_NUM}"
 ORG_NAME="Smoke Org ${RUN_NUM}"
-ORIGIN="http://localhost:3000"
 REDIS_PASSWORD="smoke-redis-${RUN_NUM}-$(openssl rand -hex 8)"
 
 export POSTGRES_PASSWORD="${PG_PASSWORD}"
@@ -112,6 +135,10 @@ trap cleanup EXIT
 
 # ── Test 1: empty POSTGRES_PASSWORD must fail Compose expansion ──────────
 echo "--- TEST 1: empty POSTGRES_PASSWORD fails Compose expansion ---"
+# Under DEPLOY_ENV_FILE (gate mode) the env file carries a real password, so
+# the property proven here is: a BLANK process-env override defeats the env
+# file and still fires the :? guard. Without the file, the property is the
+# classic unset-key failure. Both protect the same security boundary.
 # Unset the inherited values in a subshell (env -u cannot apply to shell
 # functions). Compose `${VAR:?...}` treats an unset OR empty value as a
 # failure. Capture output to a variable so `set -o pipefail` does not turn
@@ -307,6 +334,17 @@ echo "${HEALTH}" | grep -q '"status":"ok"' && echo "  PASS: API liveness OK." ||
   echo "  FAIL: API health did not return status:ok."
   exit 1
 }
+
+# ── Test 8b: SPA reachability (explicit, not only via the healthcheck) ───
+echo "--- TEST 8b: SPA index reachable (text/html) ---"
+SPA_PROBE=$(docker exec "$(app_container "${PROJECT}")" node -e \
+  "fetch('http://127.0.0.1:3000/').then(r=>console.log(JSON.stringify({status:r.status,ct:r.headers.get('content-type')||''}))).catch(e=>console.error('ERR',e.message))" 2>&1)
+echo "  spa: ${SPA_PROBE}"
+echo "${SPA_PROBE}" | grep -q '"status":200' \
+  && echo "${SPA_PROBE}" | grep -q 'text/html' \
+  && echo "  PASS: SPA index served as text/html." || {
+    echo "  FAIL: SPA index not reachable as text/html."; exit 1;
+  }
 
 # ── Test 9: production bootstrap creates exactly one Admin ──────────────
 echo "--- TEST 9: bootstrap-admin creates one explicit Admin ---"

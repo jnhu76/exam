@@ -45,6 +45,7 @@
     "test:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test",
     "test:db": "pnpm --filter @exam/db test",
     "test:deployment:compose": "bash tests/deployment/compose-smoke.sh",
+    "test:deployment:fresh": "bash tests/deployment/fresh-install.sh",
     "test:deployment:launchpad": "bash tests/deployment/launchpad-bootstrap.sh",
     "test:deployment:persistence": "bash tests/deployment/persistence-and-cold-restore.sh",
     "test:deployment:logical": "bash tests/deployment/logical-backup-restore.sh",

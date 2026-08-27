@@ -80,6 +80,37 @@ jobs:
       - name: Build
         run: pnpm build
 
+  # #327 — disposable true fresh-install acceptance, PR-blocking. Drives the
+  # canonical operator path (generate-env into an isolated path → compose
+  # --env-file up --build → first migration/bootstrap → down/up persistence →
+  # residue assertions) so deployment drift cannot stay green while unit/E2E
+  # bypass the production Compose topology. Source-build authority: every
+  # stage runs `up --build` against the current checkout (cache = perf only).
+  # Slower deployment suites (launchpad/persistence/logical/PITR) stay
+  # release/manual gates — see docs/deployment/gates.md.
+  deployment-fresh-install:
+    name: Deployment fresh-install gate
+    runs-on: ubuntu-latest
+    # 30 min: GH runners have NO docker layer cache, so the first
+    # up --build pays the full source build every run (p50 ~12-20 min).
+    # Measured after the first CI runs; tighten when real data exists.
+    timeout-minutes: 30
+    needs: static
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+
+      - name: Fresh-install acceptance gate
+        run: bash tests/deployment/fresh-install.sh ci
+
   web-coverage:
     name: Web coverage
     runs-on: ubuntu-latest
