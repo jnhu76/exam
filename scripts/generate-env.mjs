@@ -133,27 +133,36 @@ for (const key of PRESERVE_KEYS) {
   }
 }
 
-// EXAM_IMAGE follows .release-version when its current value is a canonical
-// pin for this repository (the upgrade path); any other value is an explicit
-// operator override and wins (see the derivation comment above). Blank and
+// EXAM_IMAGE follows .release-version when its effective value is a
+// canonical pin for this repository (the upgrade path); any other value is
+// an explicit operator override and wins (see the derivation comment above).
+// The EFFECTIVE value follows dotenv/--env-file semantics: the LAST
+// non-blank definition wins. Every EXAM_IMAGE line is then rewritten to a
+// single key, so a stale, quoted, or blank sibling can never create a
+// duplicate whose ordering silently decides the running image. Blank and
 // quoted-empty values are "absent" — they fall into ensureKey for filling.
-// Values are classified on their UNQUOTED form (dotenv quoting around a
-// canonical pin must not mask it), and every EXAM_IMAGE line is rewritten
-// on the re-pin path so a stale or blank sibling can never create a
-// duplicate key whose LAST definition silently wins.
-const nonBlankImage = env.match(/^EXAM_IMAGE=(\S.*)$/m);
-let existingImage = null;
-if (nonBlankImage) {
-  const unquoted = nonBlankImage[1].trim().replace(/^(["'])(.*)\1$/, "$2");
-  if (unquoted !== "") {
-    existingImage = unquoted;
-  }
-}
+const imageValues = [...env.matchAll(/^EXAM_IMAGE=(\S.*)$/gm)]
+  .map((m) => m[1].trim().replace(/^(["'])(.*)\1$/, "$2"))
+  .filter((v) => v !== "");
+const existingImage = imageValues.length
+  ? imageValues[imageValues.length - 1]
+  : null;
 if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
-  // Explicit override wins; drop blank EXAM_IMAGE siblings so a later fill
-  // cannot create a last-wins duplicate.
-  env = env.replace(/^EXAM_IMAGE=(?:""|'')?[ \t]*$/gm, "");
-  console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
+  // Explicit override wins: keep exactly that value as the single key.
+  const explicitLines = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
+  if (
+    explicitLines.length === 1 &&
+    explicitLines[0] === `EXAM_IMAGE=${existingImage}`
+  ) {
+    console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
+  } else {
+    env = env.replace(/^EXAM_IMAGE=.*$/gm, "");
+    if (!env.endsWith("\n")) env += "\n";
+    env = `${env}EXAM_IMAGE=${existingImage}\n`;
+    console.log(
+      `EXAM_IMAGE already set in ${envPath}; preserving the effective value.`,
+    );
+  }
 } else if (existingImage !== null) {
   // Canonical pin: strip every previous EXAM_IMAGE line (quoted or blank)
   // and append the single derived pin. Byte-idempotent when the pin is

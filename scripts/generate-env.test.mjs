@@ -360,6 +360,41 @@ test("quoted stale canonical pin + blank sibling: re-pinned, never duplicated", 
   }
 });
 
+test("effective (last-wins) explicit EXAM_IMAGE is preserved over a stale canonical sibling", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-image-lastwins-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    // dotenv/--env-file semantics: the LAST definition wins. A hand-edited
+    // file that stacked a stale canonical pin ABOVE an explicit mirror
+    // must keep the mirror (the value the running stack would actually
+    // use), never the first line.
+    writeFileSync(
+      envPath,
+      [
+        "JWT_SECRET=x",
+        "POSTGRES_PASSWORD=y",
+        "EXAM_IMAGE=ghcr.io/jnhu76/exam:v0.0.0",
+        "EXAM_IMAGE=registry.mirror.internal/exam:v9.9.9",
+      ].join("\n") + "\n",
+      "utf-8",
+    );
+
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+    const env = readFileSync(envPath, "utf-8");
+    const matches = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
+    assert.equal(matches.length, 1, "exactly one EXAM_IMAGE key must remain");
+    assert.equal(
+      matches[0],
+      "EXAM_IMAGE=registry.mirror.internal/exam:v9.9.9",
+      "the effective (last) explicit value must win",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("canonical EXAM_IMAGE pin follows .release-version on re-run (upgrade drift)", () => {
   const dir = mkdtempSync(join(tmpdir(), "genenv-image-repin-"));
   try {
