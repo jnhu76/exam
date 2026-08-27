@@ -83,6 +83,8 @@ describe("owned audit writer boundary", () => {
             action: "logout",
             targetType: "session",
             targetId: "bounded-user-agent",
+            // #325 logout audit payload schema requires the revocation flag.
+            metadata: { revoked: false },
           });
           return { ok: true };
         },

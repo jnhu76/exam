@@ -412,10 +412,13 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(data.newPassword);
+      // #325: admin candidate password reset also advances the credential
+      // epoch atomically — a compromised candidate's stolen JWTs die with
+      // the old password.
       const updated = await executeInTransaction(fastify.db, async (tx) => {
-        const changed = await createUserRepo(tx).update(ctx, id, {
-          passwordHash: newHash,
-        });
+        const changed = await createUserRepo(
+          tx,
+        ).updatePasswordAndAdvanceAuthEpoch(ctx, id, newHash);
         if (!changed) return null;
         await recordAtomicHttpAudit(tx, request, ctx, {
           action: "candidate.password_reset",

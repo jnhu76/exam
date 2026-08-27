@@ -132,6 +132,8 @@ export async function buildPermissionMatrixFixture(
           actorId: user.id,
           role: user.role,
           organizationId: testApp.org.id,
+          // Freshly seeded matrix users: DB default epoch is 0.
+          authEpoch: 0,
         },
         getRuntimeConfig().authSecret.jwtSecret,
       ),

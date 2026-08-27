@@ -181,6 +181,7 @@ describe("CSV export integration", () => {
       actorId: candidateBody.userId,
       role: "Candidate",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const escapeExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
@@ -265,6 +266,7 @@ describe("CSV export integration", () => {
       actorId: candidateBody.userId,
       role: "Candidate",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const injExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
@@ -375,6 +377,7 @@ describe("CSV export integration", () => {
       actorId: candidateBody.userId,
       role: "Candidate",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const labelExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
@@ -479,6 +482,7 @@ describe("CSV export integration", () => {
       actorId: candidateBody.userId,
       role: "Candidate",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const fallbackExamId = await createExamViaApi(ctx.app, ctx.adminToken, {

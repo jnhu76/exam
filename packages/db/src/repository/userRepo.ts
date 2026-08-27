@@ -7,6 +7,7 @@ import {
 } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
+  now,
   resolveOptionalOrganizationId,
   resolveOrganizationId,
 } from "./baseRepo.js";
@@ -243,6 +244,63 @@ export function createUserRepo(db: Database) {
         }
         throw err;
       }
+    },
+    /**
+     * #325: conditional (CAS) credential-epoch advance — the logout
+     * revocation primitive. Increments `auth_epoch` ONLY when the row's
+     * current epoch still equals `expectedEpoch` (the epoch embedded in the
+     * presenting token). A stale/revoked token therefore cannot advance the
+     * authority over a newer session, and an absent user/org pair matches
+     * zero rows.
+     *
+     * @returns the new epoch when the CAS matched, else null.
+     */
+    async advanceAuthEpochIfCurrent(
+      ctx: TenantContext | RequestContext,
+      userId: string,
+      expectedEpoch: number,
+    ): Promise<number | null> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .update(users)
+        .set({
+          authEpoch: sql`${users.authEpoch} + 1`,
+          updatedAt: now(),
+        })
+        .where(
+          and(
+            eq(users.organizationId, orgId),
+            eq(users.id, userId),
+            eq(users.authEpoch, expectedEpoch),
+          ),
+        )
+        .returning({ authEpoch: users.authEpoch });
+      return rows[0]?.authEpoch ?? null;
+    },
+    /**
+     * #325: atomically replace the password hash AND advance the credential
+     * epoch in one write. Every JWT issued under the previous generation
+     * fails closed on the next authenticated request. Used by
+     * self-service password change, admin candidate password reset, and the
+     * local admin-reset CLI so no credential-change path can preserve
+     * stolen tokens.
+     */
+    async updatePasswordAndAdvanceAuthEpoch(
+      ctx: TenantContext | RequestContext,
+      userId: string,
+      passwordHash: string,
+    ): Promise<typeof users.$inferSelect | null> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .update(users)
+        .set({
+          passwordHash,
+          authEpoch: sql`${users.authEpoch} + 1`,
+          updatedAt: now(),
+        })
+        .where(and(eq(users.organizationId, orgId), eq(users.id, userId)))
+        .returning();
+      return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
     },
   };
 }

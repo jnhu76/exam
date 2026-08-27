@@ -202,6 +202,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
         actorId: user.id,
         role: "Admin",
         organizationId: user.organizationId,
+        authEpoch: 0,
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );
@@ -241,6 +242,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
         actorId: user.id,
         role: "Candidate",
         organizationId: user.organizationId,
+        authEpoch: 0,
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );

@@ -318,6 +318,7 @@ describe("exam policy profile routes (P7-M2 CRUD)", () => {
       actorId: orgBAdminId,
       organizationId: orgBId,
       role: "Admin",
+      authEpoch: 0,
     });
 
     // Org A profile id.

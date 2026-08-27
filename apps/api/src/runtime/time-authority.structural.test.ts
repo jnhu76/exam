@@ -102,6 +102,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
       "refreshLastActivityIfInProgress uses SQL now() for updatedAt storage stamp only; the business-time lastActivityAt uses the caller-supplied now param (ADR-006 compliant).",
   },
   {
+    path: "packages/db/src/repository/userRepo.ts",
+    reason:
+      "#325 epoch mutations (logout CAS / password+epoch advance) use baseRepo now() for updatedAt storage stamps only (non-business); no exam business-time decision reads the wall clock here.",
+  },
+  {
     path: "apps/api/src/routes/export.ts",
     reason:
       "Date.now() is used only to generate a unique CSV download filename suffix (cache-busting); not an exam business-time decision.",

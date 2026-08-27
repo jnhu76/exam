@@ -88,6 +88,7 @@ describe("candidate routes", () => {
       actorId: adminId,
       role: "Admin",
       organizationId,
+      authEpoch: 0,
     });
     ({ token: teacherToken } = await createFutureRoleUserForTest(
       ctx.db,

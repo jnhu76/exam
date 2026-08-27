@@ -136,6 +136,15 @@ export const users = pgTable(
      * layer normalizes (trim-only, case-preserved) and maps blank input to null.
      */
     email: text("email"),
+    /**
+     * #325 (S1): durable per-user credential epoch — the revocation
+     * authority for JWT auth. Login signs the current epoch into the JWT;
+     * authentication accepts a token only when its claim matches this
+     * column. Logout / password change / password reset advance it, so all
+     * JWTs issued under a previous generation fail closed. One bounded
+     * scalar per user replaces any session/blacklist table.
+     */
+    authEpoch: integer("auth_epoch").default(0).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

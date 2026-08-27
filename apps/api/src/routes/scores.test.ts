@@ -371,6 +371,7 @@ describe("score routes", () => {
         actorId: foreignAdminId,
         role: "Admin",
         organizationId: foreignOrganizationId,
+        authEpoch: 0,
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );
@@ -424,6 +425,7 @@ describe("score routes", () => {
           actorId: roleId,
           role,
           organizationId: ctx.org.id,
+          authEpoch: 0,
         },
         getRuntimeConfig().authSecret.jwtSecret,
       );
@@ -739,6 +741,7 @@ describe("J8: score list routes", () => {
         actorId: tempUserId,
         role: "Candidate",
         organizationId: ctx.org.id,
+        authEpoch: 0,
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );
@@ -1138,6 +1141,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
         actorId: userIdB,
         role: "Candidate",
         organizationId: ctx.org.id,
+        authEpoch: 0,
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );

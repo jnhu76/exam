@@ -295,6 +295,7 @@ describe("exam creation with exam policy profile (P7-M2 resolution)", () => {
       actorId: orgBAdminId,
       organizationId: orgBId,
       role: "Admin",
+      authEpoch: 0,
     });
 
     const orgBProfile = await ctx.app.inject({

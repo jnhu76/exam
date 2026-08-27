@@ -175,6 +175,7 @@ describe("REC-I4-V1: deterministic operationId race recovery", () => {
         actorId: adminId,
         role: "Admin" as Role,
         organizationId: org.id,
+        authEpoch: 0,
       },
       jwtSecret,
     );
@@ -306,6 +307,7 @@ describe("REC-I4-V1: deterministic operationId race recovery", () => {
           actorId: candidateId,
           role: "Candidate" as Role,
           organizationId: org.id,
+          authEpoch: 0,
         },
         jwtSecret,
       );

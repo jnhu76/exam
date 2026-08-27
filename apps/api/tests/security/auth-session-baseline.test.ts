@@ -62,6 +62,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
       actorId: admin.id,
       role: admin.role as Role,
       organizationId: admin.organizationId,
+      authEpoch: 0,
     });
     adminUsername = admin.username;
 

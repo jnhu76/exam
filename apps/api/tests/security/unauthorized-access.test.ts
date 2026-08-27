@@ -69,6 +69,7 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
       actorId: candidate.id,
       role: candidate.role as Role,
       organizationId: candidate.organizationId,
+      authEpoch: 0,
     });
 
     app = Fastify();

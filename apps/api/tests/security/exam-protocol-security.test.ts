@@ -136,11 +136,13 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
       actorId: admin.id,
       role: admin.role as Role,
       organizationId: admin.organizationId,
+      authEpoch: 0,
     });
     candidateToken = signJWT({
       actorId: candidate.id,
       role: candidate.role as Role,
       organizationId: candidate.organizationId,
+      authEpoch: 0,
     });
 
     const otherCandidateUserId = randomUUID();
@@ -182,6 +184,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
       actorId: otherCandidateUserId,
       role: "Candidate",
       organizationId: candidate.organizationId,
+      authEpoch: 0,
     });
 
     const candidateRows = await db

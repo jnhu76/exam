@@ -106,11 +106,13 @@ describe("RBAC Permission Matrix (S02)", () => {
       actorId: adminId,
       role: "Admin" as Role,
       organizationId: org.id,
+      authEpoch: 0,
     });
     candidateToken = signJWT({
       actorId: candidate.id,
       role: candidate.role as Role,
       organizationId: candidate.organizationId,
+      authEpoch: 0,
     });
 
     app = Fastify();

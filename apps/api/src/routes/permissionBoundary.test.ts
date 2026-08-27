@@ -991,6 +991,7 @@ describe("permission boundary", () => {
           actorId: randomUUID(),
           role: "System" as never,
           organizationId: ctx.org.id,
+          authEpoch: 0,
         },
         getRuntimeConfig().authSecret.jwtSecret,
       );

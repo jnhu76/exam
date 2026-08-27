@@ -18,6 +18,9 @@ for repository releases from `v0.0.1` onward.
 
 ### Fixed
 
+- Made logout and password changes revoke previously issued authentication
+  tokens through a durable per-user credential epoch (#325).
+
 ### Removed
 
 ## [0.0.1] - 2026-08-27

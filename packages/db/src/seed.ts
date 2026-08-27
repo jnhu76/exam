@@ -206,6 +206,11 @@ export async function seed(
             // and (b) account-disable state (RBAC-M10-E authority preservation,
             // commit 9f0261a).
             target: [schema.users.organizationId, schema.users.username],
+            // #325 classification decision: this re-seed DOES rewrite the
+            // stored credential, but it deliberately does NOT advance
+            // users.auth_epoch. Seed is dev/demo tooling outside the product
+            // login surface — every buildTestApp/seed run would otherwise
+            // invalidate all outstanding fixtures for shared seeded rows.
             set: { passwordHash, name, updatedAt: timestamp },
           })
           .returning({ id: schema.users.id, role: schema.users.role });

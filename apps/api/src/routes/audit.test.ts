@@ -52,6 +52,7 @@ describe("audit log baseline (S06-lite)", () => {
       actorId: adminId,
       role: "Admin",
       organizationId: orgId,
+      authEpoch: 0,
     });
 
     candidateId = crypto.randomUUID();
@@ -70,6 +71,7 @@ describe("audit log baseline (S06-lite)", () => {
       actorId: candidateId,
       role: "Candidate",
       organizationId: orgId,
+      authEpoch: 0,
     });
 
     // RBAC-M10-E: every authenticated request resolves authority from ACTIVE
@@ -111,6 +113,14 @@ describe("audit log baseline (S06-lite)", () => {
     await ctx.db.delete(schema.users).where(eq(schema.users.id, candidateId));
     await ctx.cleanup();
   });
+
+  /** Extracts the auth-token value from a set-cookie header (string or array). */
+  function extractCookieValue(
+    header: string | string[] | undefined,
+  ): string | undefined {
+    const raw = Array.isArray(header) ? header.join("; ") : (header ?? "");
+    return raw.match(/auth-token=([^;]+)/)?.[1];
+  }
 
   async function clearAudits() {
     await ctx.db
@@ -259,6 +269,23 @@ describe("audit log baseline (S06-lite)", () => {
       expect(logouts[0]!.actorId).toBe(adminId);
       expect(logouts[0]!.targetType).toBe("user");
       expect(logouts[0]!.targetId).toBe(adminId);
+
+      // #325: this logout durably advanced the admin's credential epoch, so
+      // the pre-logout adminToken is revoked for later tests in this
+      // describe. Re-login and refresh the module-level token.
+      const relogin = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: {
+          username: adminUsername,
+          password: "audit-pass-1",
+        },
+      });
+      expect(relogin.statusCode).toBe(200);
+      const refreshed = extractCookieValue(relogin.headers["set-cookie"] ?? "");
+      if (refreshed) {
+        adminToken = refreshed;
+      }
     });
 
     it("does NOT emit logout audit when called without authentication", async () => {

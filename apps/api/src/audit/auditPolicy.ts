@@ -171,6 +171,14 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "best_effort",
     "operational",
     "medium",
+    // #325: revoked=true records that a durable epoch advance happened;
+    // false covers stale-token logout where the CAS matched nothing (no
+    // revocation occurred). No epoch values, tokens, or secrets are logged.
+    z
+      .object({
+        revoked: z.boolean(),
+      })
+      .strict(),
   ),
   [AuditAction.AuthProfileUpdate]: definition(
     "active",
