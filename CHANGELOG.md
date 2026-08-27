@@ -10,6 +10,16 @@ for repository releases from `v0.0.1` onward.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.0.2] - 2026-08-28
+
+### Added
+
 - Added a reusable release-notes template and an ancestry-based issue/PR
   traceability contract so future maintainers or local AI agents can produce
   auditable releases without relying on memory or close dates.
@@ -27,6 +37,13 @@ for repository releases from `v0.0.1` onward.
   and an executable lifecycle suite (`pnpm test:deployment:upgrade`) that
   proves pin-flip upgrade, data/journal continuity, and clean reinstall
   (#329).
+- Added the disposable fresh-install acceptance gate as a PR-blocking CI
+  job: env-file generation authority, compose smoke, persistence across
+  container recreation, and residue assertions (#327).
+- Added real process-boundary restart and deadline evidence: the API is
+  spawned as a real child process and SIGKILLed, proving deadline
+  durability across restart, scanner convergence, and disruption recovery
+  (#326).
 
 ### Changed
 
@@ -35,13 +52,36 @@ for repository releases from `v0.0.1` onward.
   local build); contributor/PR-acceptance source builds are the explicit
   `docker-compose.build.yml` override, which the deployment acceptance
   suites always merge (#321).
+- Runbook shutdown section: `down -v` no longer claims to destroy data —
+  with bind mounts there are no named volumes; deletion is the explicit
+  `rm` in the lifecycle guide (pre-P7-C1 text corrected).
 
 ### Fixed
 
 - Made logout and password changes revoke previously issued authentication
   tokens through a durable per-user credential epoch (#325).
+- Release image tag derivation traps: the metadata action would have
+  published a `v`-less tag (semver `{{version}}` strips the prefix, never
+  matching the operator pin) and a `latest` tag (default flavor for stable
+  semver) — both are pinned with `type=raw` + explicit `latest=false`,
+  verified against upstream source (#321).
+- Lifecycle-suite credential probe: an old-credentials assertion could
+  false-pass on a CSRF-403 origin rejection; it now sends the stack's
+  allowed origin and asserts a genuine `401` (#329).
 
-### Removed
+### Security
+
+- Logout and password changes revoke previously issued authentication
+  tokens through a durable per-user credential epoch (#325).
+
+### Notes
+
+- `v0.0.2` is a pre-1.0 development baseline. The prebuilt image and the
+  S1 closeout issues (#326/#327/#321/#329) are captured in this release;
+  roadmap work continues under Issue #333.
+- The first GHCR package publish is PRIVATE by default even though the
+  repository is public — the one-time Public flip and anonymous-pull
+  verification are part of this release's publication closeout.
 
 ## [0.0.1] - 2026-08-27
 
@@ -87,5 +127,6 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/jnhu76/exam/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/jnhu76/exam/releases/tag/v0.0.1
