@@ -1,35 +1,30 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { describe, expect, it } from "vitest";
 import { acquireApiRunLease, requiresRunLease } from "./vitest.globalSetup.js";
-import {
-  dropDatabaseIfExists,
-  ensureDatabaseExists,
-  withDatabaseName,
-} from "@exam/db/src/testWorkerDatabase.js";
-import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 
 /**
- * Round-4 run-lease wiring contract for `vitest.globalSetup.ts`.
+ * Round-4/5 run-lease wiring contract for `vitest.globalSetup.ts`.
  *
- * Two layers:
+ * Three layers:
  *   - Pure gate tests: `requiresRunLease` mirrors the scope resolver's
  *     isolation-mode semantics (default worker-database) without resolving a
  *     worker identity — the full resolver correctly fails in this pre-worker
  *     process (VITEST=true without VITEST_POOL_ID, the round-3 fail-fast).
- *   - Two-run conflict regression through the EXACT seam globalSetup uses
- *     (`acquireApiRunLease`): run A holds the lease, run B's acquire must
- *     reject IMMEDIATELY (no bounded wait — the withdrawn per-slot lease
- *     polled 10s and would have recreated the timeout-coupling failure mode),
- *     and release must unblock the next run.
- *
- * The conflict proof targets a DISPOSABLE coordination database
- * (`TEST_ADMIN_DATABASE=exam_test_apirun_<rand>`): the OUTER vitest
- * invocation's real run lease lives on the real coordination DB and must
- * never be touched by this test.
+ *   - Narrowed-contract regression (round-5): TEST_ADMIN_DATABASE is NOT an
+ *     isolation namespace for the run lease. The slot databases the lease
+ *     protects are named on the server (VITEST_POOL_ID), so an alien
+ *     coordination database would hand out independent leases to two runs
+ *     that then collide in the SAME slot databases. Alien values now fail
+ *     fast at the exact seam globalSetup uses, deterministically (validation
+ *     fires before any connection is opened).
+ *   - Two-run conflict, compressed: in worker-database mode the ENCLOSING
+ *     vitest invocation already holds the real run lease (its own
+ *     globalSetup acquired it on the canonical postgres database and keeps it
+ *     until teardown). A second acquire through the same seam IS "run B" — it
+ *     must reject IMMEDIATELY (no bounded wait). The round-4 version
+ *     redirected both acquires onto a disposable TEST_ADMIN_DATABASE
+ *     coordination DB; that redirection was exactly the scope hole round-5
+ *     closed, so the regression now asserts against the REAL held lease.
  */
-
-const BASE_URL = resolveTestDbUrl();
-const ADMIN_URL = withDatabaseName(BASE_URL, "postgres");
 
 describe("requiresRunLease — isolation-mode gate (pure)", () => {
   it("worker-database is the default: unset / empty / whitespace → lease required", () => {
@@ -53,40 +48,30 @@ describe("requiresRunLease — isolation-mode gate (pure)", () => {
   });
 });
 
-describe(
-  "acquireApiRunLease — two-run conflict (the exact globalSetup seam)",
-  // Hang protection only: the lease is one try-lock round-trip; the disposable
-  // coordination DB ensure/drop participate in the lifecycle queue.
-  { timeout: 30_000 },
-  () => {
-    const coordDb = `exam_test_apirun_${randomUUID().replace(/-/g, "").slice(0, 10)}`;
-    const leaseEnv = () => ({
-      ...process.env,
-      TEST_ADMIN_DATABASE: coordDb,
-    });
+describe("acquireApiRunLease — lease scope (the exact globalSetup seam)", () => {
+  it("TEST_ADMIN_DATABASE is not an isolation namespace: alien values fail fast (round-5)", async () => {
+    await expect(
+      acquireApiRunLease({ ...process.env, TEST_ADMIN_DATABASE: "coord_a" }),
+    ).rejects.toThrow(/TEST_ADMIN_DATABASE must be unset or "postgres"/);
+  });
 
-    afterAll(async () => {
-      await dropDatabaseIfExists(ADMIN_URL, coordDb, { keepMissing: true })
-        .then(() => {})
-        .catch(() => {
-          /* best-effort; disposable fixture */
-        });
-    }, 30_000);
-
-    it("run B fails immediately while run A holds; release unblocks run B", async () => {
-      await ensureDatabaseExists(ADMIN_URL, coordDb);
-      const runA = await acquireApiRunLease(leaseEnv());
-
+  it(
+    "run B rejects immediately: the enclosing run already holds the real lease",
+    { timeout: 30_000 },
+    async () => {
+      if (!requiresRunLease(process.env)) {
+        // file-schema environments hold no lease — prove the happy path
+        // (acquire + immediate release on the canonical host) instead.
+        const lease = await acquireApiRunLease(process.env);
+        await lease.release();
+        return;
+      }
       const t0 = Date.now();
-      await expect(acquireApiRunLease(leaseEnv())).rejects.toThrow(
+      await expect(acquireApiRunLease(process.env)).rejects.toThrow(
         /another worker-database test run is already active/,
       );
       // Immediate conflict — one try-lock round-trip, NOT a bounded wait.
       expect(Date.now() - t0).toBeLessThan(2_000);
-
-      await runA.release();
-      const runB = await acquireApiRunLease(leaseEnv());
-      await runB.release();
-    });
-  },
-);
+    },
+  );
+});

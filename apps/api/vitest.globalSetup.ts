@@ -25,10 +25,12 @@
  * invocation, not one worker's lifetime. A second invocation fails IMMEDIATELY
  * in its own globalSetup with a clear message (no retry loop, no bounded wait:
  * an internal poll here would recreate the exact timeout-coupling failure
- * mode this PR eliminates). CI never contends: every CI job owns its own
- * PostgreSQL service container. A crashed run releases the lease
- * automatically — the lease is a PG session lock, and the session dies with
- * the process.
+ * mode this PR eliminates). The lease is CLUSTER-scoped (round-5): it always
+ * hosts on the canonical `postgres` database of the test server, and
+ * TEST_ADMIN_DATABASE may not steer or fragment it (alien values fail fast).
+ * CI never contends: every CI job owns its own PostgreSQL service container.
+ * A crashed run releases the lease automatically — the lease is a PG session
+ * lock, and the session dies with the process.
  *
  * DESIGN CHOICES (pre-check):
  *  - Uses Node's built-in `net` module for a TCP connect probe. This avoids
@@ -109,8 +111,10 @@ export function requiresRunLease(env: NodeJS.ProcessEnv): boolean {
 
 /**
  * Acquire the run-level exclusion lease for this invocation against the test
- * DB server resolved from `env`. Exported (named) so the two-run conflict
- * regression can exercise the exact seam globalSetup uses.
+ * DB server resolved from `env`. The lease hosts on the canonical `postgres`
+ * database of that server (cluster-scoped, round-5); `env` is only validated
+ * (TEST_ADMIN_DATABASE must be unset or `postgres`). Exported (named) so the
+ * two-run conflict regression can exercise the exact seam globalSetup uses.
  */
 export async function acquireApiRunLease(env: NodeJS.ProcessEnv) {
   const baseUrl = resolveTestBranchUrl(env);

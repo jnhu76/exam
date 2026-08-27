@@ -744,9 +744,11 @@ PG_DESCRIBE(
 );
 
 PG_DESCRIBE(
-  "acquireTestInfraRunLease — run-level exclusion lease (round-4)",
-  // The lease is one try-lock round-trip on a disposable coordination DB; the
-  // lifecycle-queue budget is pure hang protection.
+  "acquireTestInfraRunLease — run-level exclusion lease (round-4; cluster-scoped round-5)",
+  // One try-lock round-trip on the canonical host; the budget is pure hang
+  // protection. Hermetic during the @exam/db suite: nothing here holds the
+  // run lease (this suite has no api globalSetup, verify orders db→api, and
+  // CI gives every job its own PostgreSQL service).
   { timeout: 30_000 },
   () => {
     it("run-lease key is namespace-separated from the lifecycle key", () => {
@@ -760,48 +762,44 @@ PG_DESCRIBE(
       // The withdrawn per-slot lease polled up to 10s before failing — an
       // internal wait racing the caller's testTimeout. The run lease must
       // answer in ONE try-lock round-trip: conflict ⇒ immediate rejection.
-      const injectedDb = `exam_test_runlease_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
-      await ensureDb(ADMIN_URL, injectedDb);
-      const env = { TEST_ADMIN_DATABASE: injectedDb };
-      try {
-        const a = await acquireTestInfraRunLease(BASE_URL, env);
-        const t0 = Date.now();
-        await expect(acquireTestInfraRunLease(BASE_URL, env)).rejects.toThrow(
-          /another worker-database test run is already active/,
-        );
-        expect(Date.now() - t0).toBeLessThan(2_000);
-        await a.release();
-        await a.release(); // idempotent — teardown may race a double call
-        const b = await acquireTestInfraRunLease(BASE_URL, env);
-        await b.release();
-      } finally {
-        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
-      }
+      // Canonical host: unset and explicit "postgres" share ONE coordination
+      // domain (the whole test server).
+      const a = await acquireTestInfraRunLease(BASE_URL, {});
+      const t0 = Date.now();
+      await expect(
+        acquireTestInfraRunLease(BASE_URL, { TEST_ADMIN_DATABASE: "postgres" }),
+      ).rejects.toThrow(/another worker-database test run is already active/);
+      expect(Date.now() - t0).toBeLessThan(2_000);
+      await a.release();
+      await a.release(); // idempotent — teardown may race a double call
+      const b = await acquireTestInfraRunLease(BASE_URL, {
+        TEST_ADMIN_DATABASE: "postgres",
+      });
+      await b.release();
     });
 
-    it("lease authority comes from the CALLER env (TEST_ADMIN_DATABASE domain separation)", async () => {
-      // Same authority discipline as the lifecycle lock: advisory locks are
-      // database-local, so a holder on the injected coordination DB must NOT
-      // affect a run whose env resolves a different coordination DB.
-      const injectedDb = `exam_test_runauth_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
-      await ensureDb(ADMIN_URL, injectedDb);
-      try {
-        const injected = { TEST_ADMIN_DATABASE: injectedDb };
-        const ambient = { TEST_ADMIN_DATABASE: "postgres" };
-        const a = await acquireTestInfraRunLease(BASE_URL, injected);
-        await expect(
-          acquireTestInfraRunLease(BASE_URL, injected),
-        ).rejects.toThrow(/already active/);
-        const other = await acquireTestInfraRunLease(BASE_URL, ambient);
-        await other.release();
-        await a.release();
-      } finally {
-        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
-      }
+    it("run lease is CLUSTER-scoped: alien TEST_ADMIN_DATABASE is rejected, not honored (round-5)", async () => {
+      // The slot databases this lease protects are named on the SERVER
+      // (exam_test_w1..wN); TEST_ADMIN_DATABASE only picks a lock-host
+      // database and renames no resources. Honoring it (round-4) let two runs
+      // on the same server acquire two independent leases — coord_a:key ≠
+      // coord_b:key — and then collide inside the SAME slot databases, the
+      // exact corruption the lease exists to prevent. The narrowed contract
+      // rejects alien values outright, deterministically (validation fires
+      // before any connection is opened), for BOTH roles of the two-run
+      // scenario.
+      const t0 = Date.now();
+      await expect(
+        acquireTestInfraRunLease(BASE_URL, { TEST_ADMIN_DATABASE: "coord_a" }),
+      ).rejects.toThrow(/TEST_ADMIN_DATABASE must be unset or "postgres"/);
+      await expect(
+        acquireTestInfraRunLease(BASE_URL, { TEST_ADMIN_DATABASE: "coord_b" }),
+      ).rejects.toThrow(/TEST_ADMIN_DATABASE must be unset or "postgres"/);
+      expect(Date.now() - t0).toBeLessThan(2_000);
+      // Neither rejected acquire took a lease: the canonical domain is still
+      // free for the next clean caller.
+      const next = await acquireTestInfraRunLease(BASE_URL, {});
+      await next.release();
     });
   },
 );

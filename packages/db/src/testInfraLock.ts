@@ -322,7 +322,7 @@ export function getTestInfraLifecycleLockKey(): bigint {
 }
 
 // ---------------------------------------------------------------------------
-// Run-level exclusion lease (round-4, 2026-08-27)
+// Run-level exclusion lease (round-4, 2026-08-27; scope fixed round-5)
 // ---------------------------------------------------------------------------
 
 /**
@@ -337,6 +337,21 @@ export function getTestInfraLifecycleLockKey(): bigint {
  * neither run would be the clear "second run".
  */
 const TEST_INFRA_RUN_LEASE_LOCK_NAME = "exam_test_worker_database_run";
+
+/**
+ * The ONE database that hosts the run lease: the canonical `postgres`
+ * maintenance database of the target server.
+ *
+ * Round-5 scope fix: the resources this lease protects (the VITEST_POOL_ID
+ * slot databases) are named on the SERVER, not on any coordination database —
+ * `TEST_ADMIN_DATABASE` picks where a lock SESSION lives but renames no
+ * resources. Hosting the lease on a caller-steerable database therefore let
+ * two runs on the same server acquire two independent leases and then collide
+ * inside the same slot databases — the exact corruption the lease exists to
+ * prevent. Lock namespace must equal protected resource namespace, so the
+ * lease host is pinned here and TEST_ADMIN_DATABASE cannot steer it.
+ */
+const TEST_INFRA_RUN_LEASE_HOST_DATABASE = "postgres";
 
 /**
  * Stable advisory-lock key for the run lease. Exported for deterministic
@@ -378,23 +393,42 @@ export interface TestInfraRunLease {
  *     by the teardown the caller returns to. If the run crashes hard, the
  *     session dies with the process and PostgreSQL releases the lease
  *     automatically — a crashed run can never wedge the server.
- *   - The coordination database is resolved from the CALLER's env
- *     (TEST_ADMIN_DATABASE, default `postgres`) via the same
- *     resolve-once-pass-down authority contract as the lifecycle lock.
+ *   - CLUSTER-SCOPED host (round-5): the lease ALWAYS hosts on the canonical
+ *     `postgres` database of the target server. `TEST_ADMIN_DATABASE` is NOT
+ *     an isolation namespace for the run lease — it is validated (must be
+ *     unset / empty / `postgres`) and rejected otherwise, because an alien
+ *     value would silently fragment the single-run contract while the
+ *     operator believes they created an independent test-infra domain. This
+ *     differs from the LIFECYCLE lock, which keeps honoring caller env for
+ *     its authority-propagation contract (round-3/4): that lock serializes
+ *     DDL within one resolved authority, while THIS lock excludes whole runs
+ *     from the server-wide slot-database namespace.
  *
  * @param baseUrl Any URL of the target PostgreSQL server (only host/port/
  *   credentials are used; the database is normalized away).
- * @param env Environment used to resolve TEST_ADMIN_DATABASE. Callers that
- *   resolved their infrastructure context from an explicit env MUST pass the
- *   same env here.
+ * @param env Environment VALIDATED for the narrowed contract (TEST_ADMIN_DATABASE
+ *   must be unset or `postgres`). It never selects the lease host.
  * @throws When another run already holds the lease — immediately, with a
- *   message naming the single-run contract and the remedies.
+ *   message naming the single-run contract and the remedies. Also when
+ *   TEST_ADMIN_DATABASE is set to anything but unset/`postgres`.
  */
 export async function acquireTestInfraRunLease(
   baseUrl: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<TestInfraRunLease> {
-  const coordinationUrl = resolveTestInfraCoordinationUrl(baseUrl, env);
+  const declared = (env.TEST_ADMIN_DATABASE ?? "").trim();
+  if (declared !== "" && declared !== TEST_INFRA_RUN_LEASE_HOST_DATABASE) {
+    throw new Error(
+      `[testInfraLock] TEST_ADMIN_DATABASE must be unset or "${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" for worker-database runs: ` +
+        `the run lease is scoped to the whole PostgreSQL server and hosts on the canonical ` +
+        `"${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" database — a separate coordination database is not an isolation namespace ` +
+        `(slot databases are derived from VITEST_POOL_ID on the same server and would still collide). ` +
+        `Unset TEST_ADMIN_DATABASE, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`,
+    );
+  }
+  const coordinationUrl = resolveTestInfraCoordinationUrl(baseUrl, {
+    TEST_ADMIN_DATABASE: TEST_INFRA_RUN_LEASE_HOST_DATABASE,
+  });
   const session = postgres(coordinationUrl, { max: 1 });
   try {
     const rows = (await session.unsafe(
