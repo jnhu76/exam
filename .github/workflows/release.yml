@@ -111,9 +111,16 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/jnhu76/exam
+          # type=raw passes .release-version through EXACTLY (v-prefixed):
+          # the semver type would strip the v ({{version}} of "v0.0.2" is
+          # "0.0.2") and the operator EXAM_IMAGE pin would never resolve.
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.release.outputs.version }}
-            type=sha,pattern=sha-{{commit}}
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=sha
+          # latest=auto would ADD a latest tag for semver-style values;
+          # the no-latest policy is enforced explicitly, not by omission.
+          flavor: |
+            latest=false
           labels: |
             org.opencontainers.image.title=exam
             org.opencontainers.image.description=Configurable LAN/on-premise exam and assessment platform
