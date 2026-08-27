@@ -114,8 +114,7 @@ describe("slot-reuse data isolation (sequential files, same pool slot)", () => {
     expect(handoff.poolId).toBe("1");
     expect(handoff.stageBPoolId).toBe("1");
     expect(handoff.migrationCount ?? 0).toBeGreaterThan(0);
-  }, // DATABASE + migrate + seed + Fastify). Not a 5s-scale test. // Two child Vitest boots + two full buildTestApp bootstraps (CREATE
-  240_000);
+  }, 240_000); // DATABASE + migrate + seed + Fastify). Not a 5s-scale test. // Two child Vitest boots + two full buildTestApp bootstraps (CREATE
 
   afterAll(
     async () => {
