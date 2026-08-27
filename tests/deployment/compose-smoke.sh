@@ -175,6 +175,24 @@ else
   exit 1
 fi
 
+# ── Test 1c: acceptance runs the SOURCE build, never a registry image ────
+echo "--- TEST 1c: merged acceptance model has no registry image ---"
+# The build override must replace the operator EXAM_IMAGE pin on BOTH app
+# and email-worker. If a registry image reference survived the merge into
+# the merged model, acceptance could pass on a pulled image instead of
+# this checkout (#321 two-path split).
+if run_compose "${PROJECT}" config 2>/dev/null | grep -q "image: ghcr.io/jnhu76/exam"; then
+  echo "  FAIL: a registry image reference survived the build override merge."
+  exit 1
+fi
+T1C_SOURCE_IMAGES="$(run_compose "${PROJECT}" config 2>/dev/null | grep -c "image: exam-local:dev" || true)"
+if [ "${T1C_SOURCE_IMAGES}" -eq 2 ]; then
+  echo "  PASS: app + email-worker resolve to exam-local:dev (source authority)."
+else
+  echo "  FAIL: expected 2 exam-local:dev image pins, found ${T1C_SOURCE_IMAGES}."
+  exit 1
+fi
+
 # ── Test 2: build + start the default stack (no redis profile) ───────────
 echo "--- TEST 2: start default stack (no redis profile) ---"
 run_compose "${PROJECT}" up -d --build --quiet-pull 2>&1 | tail -5

@@ -16,9 +16,14 @@ Since #321 the operator topology pins the prebuilt release image
 `-f docker-compose.build.yml` (source-build authority: `exam-local:dev`
 with `pull_policy: build`) on top of the operator file — a cached or
 registry image can never satisfy acceptance, and build cache is
-performance only. When `DEPLOY_ENV_FILE` is set, `run_compose` passes
-Compose's explicit `--env-file` (the exact runbook invocation), so the
-repo-root `.env` is never read for interpolation.
+performance only. The operator file still requires `EXAM_IMAGE` at
+interpolation time even though acceptance never runs that image; when
+`DEPLOY_ENV_FILE` is unset (legacy export mode) `run_compose` defaults an
+`exam-local:dev` placeholder for interpolation only — it is never pulled
+or run, and compose-smoke Test 1c asserts the merged acceptance model
+contains no registry image reference. When `DEPLOY_ENV_FILE` is set,
+`run_compose` passes Compose's explicit `--env-file` (the exact runbook
+invocation), so the repo-root `.env` is never read for interpolation.
 
 ## Gate inventory
 

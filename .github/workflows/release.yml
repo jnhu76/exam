@@ -94,11 +94,13 @@ jobs:
           fi
 
       # #321 — publish the prebuilt production image for THIS exact release
-      # source SHA. The semantic tag and the sha- alias are immutable by
-      # policy: never overwrite an existing semantic tag with different
-      # content, never attach an image built from a different SHA to an
-      # existing release. `latest` is deliberately NOT published (mutable
-      # convenience must never be an upgrade/rollback authority).
+      # source SHA. The GIT tag is immutable by policy (the step above
+      # refuses to move an existing tag to a different commit). The IMAGE
+      # tags (vX.Y.Z, sha-<short>) are pinned to the same source SHA; a
+      # re-run of this workflow for the same release rebuilds and refreshes
+      # their digests (no reproducible-build guarantee) but can never bind
+      # them to different source. `latest` is deliberately NOT published
+      # (mutable convenience must never be an upgrade/rollback authority).
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:

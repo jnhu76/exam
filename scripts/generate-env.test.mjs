@@ -316,3 +316,35 @@ test("explicit EXAM_IMAGE wins over the derived pin (never rotated)", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("canonical EXAM_IMAGE pin follows .release-version on re-run (upgrade drift)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-image-repin-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    // v0.0.0 is a canonical pin SHAPE (ghcr.io/jnhu76/exam:vX.Y.Z) for an
+    // older release — exactly what an operator's .env.deploy holds after
+    // `git pull` to the next version. generate-env must re-pin it to the
+    // current .release-version instead of preserving a stale pin.
+    writeFileSync(
+      envPath,
+      readFileSync(EXAMPLE, "utf-8").replace(
+        /^EXAM_IMAGE=.*$/m,
+        "EXAM_IMAGE=ghcr.io/jnhu76/exam:v0.0.0",
+      ),
+      "utf-8",
+    );
+
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+    const env = readFileSync(envPath, "utf-8");
+    assert.equal(
+      secretLine(env, "EXAM_IMAGE"),
+      `ghcr.io/jnhu76/exam:${RELEASE_VERSION}`,
+      "a stale canonical pin must follow the current .release-version",
+    );
+    assert.match(result.stdout, /re-pinned/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -243,6 +243,16 @@ below.
 (outbound access to ghcr.io at install/upgrade time only); afterwards the
 image is cached locally and the platform runtime has no network dependency.
 
+Two one-time registry facts (maintainer side, not per-install):
+
+- **First publish creates a PRIVATE GHCR package** even though the
+  repository is public. After the first release, flip
+  `ghcr.io/jnhu76/exam` to Public in GitHub → Packages → package settings
+  (one-way); until then anonymous operator pulls fail with an opaque
+  403/denied. The release closeout must verify an anonymous pull works.
+- Published images are **linux/amd64**. On other architectures use the
+  source-build path below.
+
 #### Offline / air-gapped transfer
 
 On any machine with registry access:
@@ -810,9 +820,11 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
 [ ] Back up the database (pg_dump — §11).
 [ ] Pull the new code: git pull && pnpm install --frozen-lockfile.
 [ ] Run pnpm verify:static locally.
-[ ] Point .env.deploy EXAM_IMAGE at the new release image (generate-env
-    re-derives it from .release-version; see §3 "Image acquisition"),
-    then pull it: docker compose --env-file .env.deploy pull.
+[ ] Re-pin the image: .env.deploy EXAM_IMAGE follows .release-version on
+    the next `node scripts/generate-env.mjs` run (a canonical
+    ghcr.io/jnhu76/exam:vX.Y.Z pin is re-derived; an explicit mirror
+    value must be updated by hand), then pull it:
+    docker compose --env-file .env.deploy pull.
 [ ] Pull/seed any new required env vars into .env.
 [ ] docker compose up -d (containers will run migrate on restart).
 [ ] Watch migration logs: docker compose logs app | grep -i migrat.

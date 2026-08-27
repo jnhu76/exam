@@ -14,10 +14,11 @@ for repository releases from `v0.0.1` onward.
   traceability contract so future maintainers or local AI agents can produce
   auditable releases without relying on memory or close dates.
 - Added prebuilt semantic-version Exam image distribution (#321): the release
-  workflow publishes `ghcr.io/jnhu76/exam:vX.Y.Z` (plus an immutable
-  `sha-<commit>` alias, no `latest`) from the exact release commit, and
+  workflow publishes `ghcr.io/jnhu76/exam:vX.Y.Z` (plus a `sha-<commit>`
+  alias tag, no `latest`) from the exact release commit, and
   `generate-env` derives the operator `EXAM_IMAGE` pin from
-  `.release-version` (an explicit value always wins, enabling offline
+  `.release-version` (a canonical pin follows the release authority;
+  an explicit mirror value wins, enabling offline
   `docker save`/`docker load` transfers).
 
 ### Changed

@@ -42,6 +42,12 @@ BUILD_OVERRIDE_FILE="${REPO_ROOT}/docker-compose.build.yml"
 # dev secrets cannot leak into a test stack. Unset = legacy behavior
 # (every required key is explicitly exported by the suites, which take
 # precedence over any ambient .env; no test stack reads developer files).
+#
+# EXAM_IMAGE interpolation (#321): the operator file requires EXAM_IMAGE
+# even though acceptance never RUNS that image (the build override below
+# replaces it on app + email-worker). In DEPLOY_ENV_FILE mode the generated
+# file carries the pin; in legacy-export mode there is no env file, so a
+# placeholder is defaulted here — interpolation-only, never pulled or run.
 run_compose() {
   local project=""
   if [ "${1:-}" != "" ] && [[ "${1}" != -* ]]; then
@@ -53,6 +59,8 @@ run_compose() {
   local -a args=(docker compose -f "${COMPOSE_FILE}" -f "${BUILD_OVERRIDE_FILE}")
   if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
     args+=(--env-file "${DEPLOY_ENV_FILE}")
+  else
+    export EXAM_IMAGE="${EXAM_IMAGE:-exam-local:dev}"
   fi
   if [ -n "${project}" ]; then
     args+=(-p "${project}")

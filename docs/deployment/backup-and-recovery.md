@@ -7,6 +7,11 @@
 > Scope: LAN/on-premise, single-tenant. Do NOT use this guide for any
 > multi-tenant, cloud, or Phase 4 deployment — those modes are not
 > implemented.
+>
+> **Compose shorthand:** every `docker compose` command in this guide is
+> shorthand for `docker compose --env-file .env.deploy ...` (the runbook
+> convention — the production Compose model requires the deployment env
+> file at interpolation time; bare commands refuse to parse).
 
 ---
 
@@ -21,8 +26,8 @@ docker-compose.yml
 Normal operations are always:
 
 ```bash
-docker compose up -d
-docker compose down
+docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.deploy down
 ```
 
 There is **no** alternative production startup command involving another
@@ -169,13 +174,13 @@ development/drills only and is NOT host-loss protection).
 
 ```bash
 # Stop (graceful — SIGTERM propagates, drains audit writes, closes DB pool):
-docker compose down
+docker compose --env-file .env.deploy down
 
 # Start again (same data root, fresh containers):
-docker compose up -d
+docker compose --env-file .env.deploy up -d
 
 # Confirm authoritative state survived:
-docker compose exec db sh -c \
+docker compose --env-file .env.deploy exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM organizations;"'
 ```
 
@@ -245,10 +250,10 @@ rsync -aHAX /path/on/hostA/data/ /path/on/hostB/data/
 
 # On host B, point EXAM_DATA_ROOT at the copied directory and start with
 # the SAME PostgreSQL major version and the SAME DB credentials the
-# volume was initialized with:
+# volume was initialized with. Copy the host-A .env.deploy too — its
+# POSTGRES_PASSWORD / JWT_SECRET / EXAM_IMAGE must match the data:
 export EXAM_DATA_ROOT=/path/on/hostB/data
-export POSTGRES_PASSWORD=<same-as-host-A>
-docker compose up -d
+docker compose --env-file .env.deploy up -d
 ```
 
 > **Raw PostgreSQL directory copying is supported only as a complete
@@ -280,7 +285,7 @@ scripts/backup/cold-filesystem-backup.sh \
   /mnt/nas/exam-backups/2026-08-10
 
 # 3. Restart Exam:
-docker compose up -d
+docker compose --env-file .env.deploy up -d
 ```
 
 Store the destination on an **independent failure domain** (NAS / another
@@ -297,8 +302,7 @@ mkdir -p /opt/exam/data-fresh
 scripts/backup/cold-filesystem-restore.sh /mnt/nas/exam-backups/2026-08-10 /opt/exam/data-fresh
 
 export EXAM_DATA_ROOT=/opt/exam/data-fresh
-export POSTGRES_PASSWORD=<same-as-when-backup-was-taken>
-docker compose up -d
+docker compose --env-file .env.deploy up -d
 
 # Run your Exam business-invariant checks after start.
 ```
@@ -350,7 +354,7 @@ domain**.
 
 ```bash
 # 1. Stop the API + worker (avoid writes during restore):
-docker compose stop app email-worker
+docker compose --env-file .env.deploy stop app email-worker
 
 # 2. Restore into a CLEAN target (DROP + recreate from template0, then
 #    pg_restore). No target-only schema/data from the previous database
@@ -359,7 +363,7 @@ docker compose stop app email-worker
 scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
 
 # 3. Restart the API + worker to use the restored database:
-docker compose up -d app email-worker
+docker compose --env-file .env.deploy up -d app email-worker
 
 # 4. Run your Exam business-invariant checks after restart.
 ```
@@ -752,7 +756,7 @@ The first Admin can also be created via the bootstrap CLI (equivalent
 canonical mutation body, atomic):
 
 ```bash
-docker compose exec app \
+docker compose --env-file .env.deploy exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
@@ -761,7 +765,7 @@ docker compose exec app \
 ### 11.3 Reset an Admin's password
 
 ```bash
-docker compose exec app \
+docker compose --env-file .env.deploy exec app \
   node dist/scripts/reset-admin-password.js \
   --username admin --password '<NEW_STRONG_PASSWORD>'
 ```
