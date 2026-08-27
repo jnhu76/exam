@@ -141,8 +141,9 @@ export async function prepareTestDatabase(
               `"${databaseName}" which does not exist on ` +
               `${new URL(databaseUrl).host}.\n` +
               `  An explicit TEST_DATABASE_URL / TEST_DB_URL is operator-owned: ` +
-              `the harness will not create it, migrate it, or fall back to ` +
-              `another database.\n` +
+              `the harness will not create the base database or silently fall ` +
+              `back to another one (test schemas inside it are still created ` +
+              `and migrated by the isolation helpers).\n` +
               `  Fix: create the database on that server, or unset ` +
               `TEST_DATABASE_URL / TEST_DB_URL to use the implicit local ` +
               `exam_test (auto-provisioned on DB_HOST_PORT).`,

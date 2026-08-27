@@ -18,6 +18,11 @@ permissions:
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  # Explicit CI scope for test topology (testScope derives ci-shard-worker names from
+  # this, not from ambient CI/GITHUB_ACTIONS) AND for Turbo cache identity: the var is
+  # declared in turbo.json env, so local (unset) and CI (ci) runs can never replay each
+  # other's cached test results.
+  TEST_INFRA_SCOPE: ci
 
 jobs:
   static:

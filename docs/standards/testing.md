@@ -265,7 +265,8 @@ wired into both vitest globalSetups (`apps/api/vitest.globalSetup.ts`,
 - Turbo cache identity: every DB-routing / topology variable
   (`TEST_DATABASE_URL`, `TEST_DB_URL`, `DB_HOST_PORT`, `TEST_DB_ISOLATION`,
   `API_TEST_MAX_WORKERS`, `TEST_INFRA_SCOPE`, `TEST_SHARD_INDEX`,
-  `TEST_WORKER_ID`, `TEST_ADMIN_DATABASE`, `ALLOW_UNSAFE_TEST_DATABASE_URL`)
+  `TEST_WORKER_ID`, `TEST_ADMIN_DATABASE`, `ALLOW_UNSAFE_TEST_DATABASE_URL`,
+  `API_TEST_GROUP`, `TEST_QUEUE_MODE`)
   is declared in the `env` key of the DB-backed test tasks in `turbo.json` —
   passed through AND hashed into the task cache key, so a routing change can
   never replay a green result recorded against a different database. The
