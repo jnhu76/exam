@@ -189,28 +189,45 @@
      worker-process 占用 lease（顺序槽位交接可让 run B 抢到空档、反而
      使 run A 失败），其 10s 有界等待重新制造了本 PR 消灭的
      timeout-coupling 失败模式，且按库名单维 key 的 lease map 复刻了
-     第 1 条的缺权威维度缺陷。现行实施：`apps/api` Vitest
-     `globalSetup` 在任何 worker 进程存在之前，对 coordination DB 上的
-     单键 `exam_test_worker_database_run` 做一次 `pg_try_advisory_lock`
+     第 1 条的缺权威维度缺陷。现行实施（round-4 定层，round-5 定域）：
+     `apps/api` Vitest `globalSetup` 在任何 worker 进程存在之前对单键
+     `exam_test_worker_database_run` 做一次 `pg_try_advisory_lock`
      （无重试、无等待、无超时覆盖），整个 invocation 持有、global
      teardown 释放；第二个 run 在自己的 globalSetup **立即**失败
      （实测约 1.8s 内中止，其中绝大部分是 vitest 启动本身）。崩溃的
-     run 随进程会话死亡自动释放。CI 各 job 独立 PG service，不受影响；
-     嵌套 proof run（slot-reuse fixtures）以独立 `TEST_ADMIN_DATABASE`
-     coordination 域声明自己是一次独立 invocation。回归：two-run
+     run 随进程会话死亡自动释放。CI 各 job 独立 PG service，不受影响。
+     **lease 作用域（round-5）**：锁命名空间必须等于被保护资源的命名
+     空间——槽库按 server 命名（VITEST_POOL_ID），故 lease 恒定挂在目标
+     server 的 canonical `postgres` 库，绝不由 `TEST_ADMIN_DATABASE` 决定。
+     round-4 把它挂在 coordination DB 上时，两个不同 coordination DB 的
+     run 各自拿到互不冲突的 lease、随后撞进同一批槽库（advisory lock 是
+     database-local 的）；当时还把"权威域分离"写成了正向回归。现
+     `TEST_ADMIN_DATABASE` 对 worker-database run 只允许 unset/`postgres`，
+     其他值在建立任何连接之前确定性 fail-fast（全仓审计无真实消费方设
+     置它；它仍是第 1 条 lifecycle lock 的 caller-authority 旋钮）。嵌套
+     proof run（slot-reuse fixtures）不再以私有 coordination DB 逃逸，
+     改走无 globalSetup 的专用子配置
+     （`tests/slotReuse/vitest.child.config.ts`；vitest 不提供 globalSetup
+     的 CLI 覆盖）——它们是持有 lease 的父 invocation 的 fixtures，安全性
+     来自唯一 `TEST_WORKER_ID` 槽位命名空间。回归：two-run
      immediate-conflict（<2s，无有界等待）、release 幂等 + 解锁后可
-     重新获取、权威域分离（不同 TEST_ADMIN_DATABASE 互不阻塞）、
-     psql 持键时真实 globalSetup 端到端中止。
+     重新获取、cluster-scope 拒绝（两个 alien TEST_ADMIN_DATABASE 均
+     fail-fast，变异回 round-4 行为后该用例必红）、对 enclose run 真实
+     持有 lease 的压缩版端到端冲突。
   5. **TEST_WORKER_ID × 并行的可执行不变量**：并行不变量从
      vitest.config 注释升级为启动前 throw（`apps/api/vitest.parallelism.ts`，
      含 10 项 config-contract 单测）：`TEST_WORKER_ID` 显式设置 +
      `API_TEST_MAX_WORKERS>1` ⇒ 测试启动前失败。serial 调试路径
      （无/1 worker + TEST_WORKER_ID）保持文档化支持。
-  6. **round-3→4 新增概念清单**：净零——新增 run-level lease
+  6. **round-3→5 新增概念清单**：净零——新增 run-level lease
      （globalSetup 层，替代 round-3 的 per-slot lease）的同时删除了
      per-slot lease 全套概念（10s 有界等待、`TEST_SLOT_LEASE_WAIT_MS`、
-     per-slot 键空间、进程内 lease map）与
-     VITEST_WORKER_ID legacy 兜底分支。round-4 另关闭
+     per-slot 键空间、进程内 lease map）、VITEST_WORKER_ID legacy 兜底
+     分支，以及 round-5 删除的"coordination DB 即隔离域"概念
+     （lease 恒挂 canonical `postgres`，`TEST_ADMIN_DATABASE` 对
+     worker-database run 收窄为 unset/`postgres`，slot-reuse 子运行
+     改用无 globalSetup 的专用子配置而非私有 coordination DB）。
+     round-4 另关闭
      `ensureDatabaseExists`/`dropDatabaseIfExists` 的 wrapper 级 env
      权威透传漏洞（round-3 只修了 lock helper 本体；wrapper 回归以
      blocked-waiter 证明锁定，两个 wrapper 分别变异验证必红）。

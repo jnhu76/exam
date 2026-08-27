@@ -885,23 +885,43 @@ Contract rules going forward:
    eliminates, and its lease map keyed by database name alone repeated the
    missing-authority-dimension bug of rule 7. The enforcement now lives
    where its lifecycle is: `apps/api`'s Vitest `globalSetup` acquires ONE
-   run-level session lease (`exam_test_worker_database_run` key on the
-   coordination DB) before any worker process exists, holds it for the
-   whole invocation, and releases it in the global teardown; a second
-   invocation fails IMMEDIATELY in its own globalSetup (one try-lock
-   round-trip, no retry loop, no timeout override). A crashed run releases
-   automatically — the lease is a PG session lock and the session dies with
-   the process. CI is unaffected (per-job PG service containers), and nested
-   proof runs (the slot-reuse fixtures) declare their own
-   `TEST_ADMIN_DATABASE` coordination domain, which is the honest statement
-   that they are separate invocations.
+   run-level session lease (`exam_test_worker_database_run` key) before any
+   worker process exists, holds it for the whole invocation, and releases it
+   in the global teardown; a second invocation fails IMMEDIATELY in its own
+   globalSetup (one try-lock round-trip, no retry loop, no timeout
+   override). A crashed run releases automatically — the lease is a PG
+   session lock and the session dies with the process. CI is unaffected
+   (per-job PG service containers).
+   **Lease scope (round-5): the lock namespace must equal the protected
+   resource namespace.** The slot databases the lease protects are named on
+   the SERVER (VITEST_POOL_ID), so the lease ALWAYS hosts on the canonical
+   `postgres` database of that server — never on a caller-steerable
+   coordination database. Round-4 had hosted it on `TEST_ADMIN_DATABASE`:
+   advisory locks are database-local, so two runs with different
+   coordination DBs acquired two independent leases and then collided inside
+   the SAME slot databases — the exact corruption the lease exists to
+   prevent, and the round-4 "authority domain separation" regression had
+   asserted that hole as a feature. `TEST_ADMIN_DATABASE` is therefore NOT
+   an isolation namespace for worker-database runs: the lease validates it
+   (unset / empty / `postgres` only) and fails fast on anything else (a
+   repo-wide audit found no real consumer setting it — only this PR's own
+   tests did; it remains a caller-authority knob for the LIFECYCLE lock of
+   rule 7, where it serializes DDL within one resolved authority). Nested
+   proof runs (the slot-reuse fixtures) no longer escape via a private
+   coordination DB: they run under `tests/slotReuse/vitest.child.config.ts`,
+   which deliberately has NO `globalSetup` (Vitest exposes no CLI override
+   for it) — they are fixtures of the parent invocation that already holds
+   the lease, made safe by their unique `TEST_WORKER_ID` slot namespace.
 
 Regression tests assert these rules deterministically (charset/priority unit
 tests for rule 1; pg_locks self-session proofs and try-lock probes for rules
 3–5; `getTestInfraLockAcquisitionCount()` counters; authority-mismatch,
 memo-authority, and wrapper-authority blocked-waiter regressions for rules
-4/7; two-run immediate-conflict, idempotent-release, and authority-domain
-regressions plus an end-to-end held-lease abort for rule 8; the two-stage
+4/7; two-run immediate-conflict, idempotent-release, and cluster-scope
+rejection regressions (alien `TEST_ADMIN_DATABASE` values fail fast for BOTH
+roles of the two-run scenario, deterministically before any connection
+opens) plus an end-to-end conflict against the enclosing run's REAL held
+lease for rule 8; the two-stage
 slot-reuse fixture pair for rule 2), never by timing. `TEST_INFRA_TRACE=1`
 emits per-acquisition wait/hold diagnostics to stderr for future audits.
 
