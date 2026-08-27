@@ -181,23 +181,39 @@
      w1..wN 相撞。
   4. **单一本地 run 合同（并发本地 run 不支持）**：两个独立本地 run 从
      `VITEST_POOL_ID` 推导出相同槽库名，无守卫时并发共享物理库——实验
-     （变异禁用 lease 后重建 dist）实测：run B 的行在 run A 的槽库中
+     （变异禁用守卫后重建 dist）实测：run B 的行在 run A 的槽库中
      可见（foreignRows=5），且 B 的 reset 边界抹掉 A 的行。合同选择
-     Option B（放弃 run namespace，复杂度更低）：`setupWorkerTestDatabase`
-     以 `exam_test_slot_lease:<db>` 键空间的 session 级 advisory RUN
-     lease 声明槽库，进程退出自动释放；第二个 run 快速失败并给出明确
-     修复指引。有界等待（默认 10s，`TEST_SLOT_LEASE_WAIT_MS` 可测覆盖）
-     吸收同 run 内顺序文件的槽位交接（前文件进程退出尾巴仅数百 ms）。
-     回归：外部会话持同一 lease 键时 setup 必须 reject（确定性，无竞速），
-     释放后同进程重试必须成功。CI shard 各有独立 PG service，不受影响。
+     Option B（放弃 run namespace，复杂度更低）。round-3 曾以
+     `setupWorkerTestDatabase` 内的 per-slot-database lease 实施；
+     round-4 **撤销该设计并上移生命周期层级**：per-slot lease 实为
+     worker-process 占用 lease（顺序槽位交接可让 run B 抢到空档、反而
+     使 run A 失败），其 10s 有界等待重新制造了本 PR 消灭的
+     timeout-coupling 失败模式，且按库名单维 key 的 lease map 复刻了
+     第 1 条的缺权威维度缺陷。现行实施：`apps/api` Vitest
+     `globalSetup` 在任何 worker 进程存在之前，对 coordination DB 上的
+     单键 `exam_test_worker_database_run` 做一次 `pg_try_advisory_lock`
+     （无重试、无等待、无超时覆盖），整个 invocation 持有、global
+     teardown 释放；第二个 run 在自己的 globalSetup **立即**失败
+     （实测约 1.8s 内中止，其中绝大部分是 vitest 启动本身）。崩溃的
+     run 随进程会话死亡自动释放。CI 各 job 独立 PG service，不受影响；
+     嵌套 proof run（slot-reuse fixtures）以独立 `TEST_ADMIN_DATABASE`
+     coordination 域声明自己是一次独立 invocation。回归：two-run
+     immediate-conflict（<2s，无有界等待）、release 幂等 + 解锁后可
+     重新获取、权威域分离（不同 TEST_ADMIN_DATABASE 互不阻塞）、
+     psql 持键时真实 globalSetup 端到端中止。
   5. **TEST_WORKER_ID × 并行的可执行不变量**：并行不变量从
      vitest.config 注释升级为启动前 throw（`apps/api/vitest.parallelism.ts`，
      含 10 项 config-contract 单测）：`TEST_WORKER_ID` 显式设置 +
      `API_TEST_MAX_WORKERS>1` ⇒ 测试启动前失败。serial 调试路径
      （无/1 worker + TEST_WORKER_ID）保持文档化支持。
-  6. **本轮新增概念清单**：仅一个——per-slot-database run lease
-     （单一本地 run 合同的执行边界）；同时删除了一个旧概念
-     （VITEST_WORKER_ID legacy 兜底分支）。
+  6. **round-3→4 新增概念清单**：净零——新增 run-level lease
+     （globalSetup 层，替代 round-3 的 per-slot lease）的同时删除了
+     per-slot lease 全套概念（10s 有界等待、`TEST_SLOT_LEASE_WAIT_MS`、
+     per-slot 键空间、进程内 lease map）与
+     VITEST_WORKER_ID legacy 兜底分支。round-4 另关闭
+     `ensureDatabaseExists`/`dropDatabaseIfExists` 的 wrapper 级 env
+     权威透传漏洞（round-3 只修了 lock helper 本体；wrapper 回归以
+     blocked-waiter 证明锁定，两个 wrapper 分别变异验证必红）。
 - **遗留（follow-up，不本 PR）**：模板库克隆（CREATE DATABASE … TEMPLATE）
   可把 slot 冷启动从 CREATE+migrate 进一步降到 clone；api 全量并行铺开时
   关注 slot 复用率与 @exam/db file-schema 路径的 migrate 串行利用率。

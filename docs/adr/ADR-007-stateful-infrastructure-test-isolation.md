@@ -863,31 +863,47 @@ Contract rules going forward:
    are database-local: a lower helper silently re-reading
    `process.env.TEST_ADMIN_DATABASE` moved the lock onto a different
    database and silently broke coordination (CodeRabbit round-2 finding,
-   regression-proven by mutation in round-3).
+   regression-proven by mutation in round-3). Round-4 closed the same hole
+   in the WRAPPERS: `ensureDatabaseExists` / `dropDatabaseIfExists` must
+   thread `options.env` into the lock too — a bootstrap whose ensure/drop
+   DDL serialized on the ambient authority while its migration used the
+   caller's was one bootstrap on two serialization queues (wrapper-level
+   blocked-waiter regression, mutation-proven for both wrappers).
 8. **One local worker-database run per PostgreSQL server (single-run
-   contract).** Two independent local runs derive the same slot database
-   names from `VITEST_POOL_ID` and would share physical slot DBs
-   concurrently — each run's truncate boundary wipes the other's fixtures
-   mid-test. Experimentally confirmed (round-3, lease disabled by mutation):
-   a later run's rows became visible inside the earlier run's slot database
-   and the later run's reset destroyed the earlier run's rows. Concurrent
-   local runs are therefore NOT supported; `setupWorkerTestDatabase`
-   acquires a per-slot-database advisory RUN lease
-   (`exam_test_slot_lease:<db>` key namespace, held for the process
-   lifetime, auto-released at process exit) and a second run fails fast with
-   a clear message instead of corrupting state. The bounded acquisition
-   wait (default 10s) absorbs the legitimate sequential slot handoff
-   between files of the SAME run (the previous worker process exits a few
-   hundred milliseconds after freeing the slot). CI shards are unaffected
-   (separate PG service containers per shard).
+   contract), enforced at the RUN lifecycle layer.** Two independent local
+   runs derive the same slot database names from `VITEST_POOL_ID` and would
+   share physical slot DBs concurrently — each run's truncate boundary wipes
+   the other's fixtures mid-test. Experimentally confirmed (round-3, guard
+   disabled by mutation): a later run's rows became visible inside the
+   earlier run's slot database and the later run's reset destroyed the
+   earlier run's rows. Concurrent local runs are therefore NOT supported.
+   Round-3 first enforced this with a per-slot-database lease inside
+   `setupWorkerTestDatabase`; round-4 WITHDREW that design — it was a
+   worker-process occupancy lease, not a run lease (sequential slot handoffs
+   could let run B steal a freed slot and fail run A), its bounded 10s
+   acquisition wait recreated the timeout-coupling failure mode this ADR
+   eliminates, and its lease map keyed by database name alone repeated the
+   missing-authority-dimension bug of rule 7. The enforcement now lives
+   where its lifecycle is: `apps/api`'s Vitest `globalSetup` acquires ONE
+   run-level session lease (`exam_test_worker_database_run` key on the
+   coordination DB) before any worker process exists, holds it for the
+   whole invocation, and releases it in the global teardown; a second
+   invocation fails IMMEDIATELY in its own globalSetup (one try-lock
+   round-trip, no retry loop, no timeout override). A crashed run releases
+   automatically — the lease is a PG session lock and the session dies with
+   the process. CI is unaffected (per-job PG service containers), and nested
+   proof runs (the slot-reuse fixtures) declare their own
+   `TEST_ADMIN_DATABASE` coordination domain, which is the honest statement
+   that they are separate invocations.
 
 Regression tests assert these rules deterministically (charset/priority unit
 tests for rule 1; pg_locks self-session proofs and try-lock probes for rules
-3–5; `getTestInfraLockAcquisitionCount()` counters; authority-mismatch and
-memo-authority regressions for rules 4/7; a foreign-session lease regression
-for rule 8; the two-stage slot-reuse fixture pair for rule 2), never by
-timing. `TEST_INFRA_TRACE=1` emits per-acquisition wait/hold diagnostics to
-stderr for future audits.
+3–5; `getTestInfraLockAcquisitionCount()` counters; authority-mismatch,
+memo-authority, and wrapper-authority blocked-waiter regressions for rules
+4/7; two-run immediate-conflict, idempotent-release, and authority-domain
+regressions plus an end-to-end held-lease abort for rule 8; the two-stage
+slot-reuse fixture pair for rule 2), never by timing. `TEST_INFRA_TRACE=1`
+emits per-acquisition wait/hold diagnostics to stderr for future audits.
 
 ## Relationship to existing flake records
 
