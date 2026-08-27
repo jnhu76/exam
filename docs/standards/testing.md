@@ -247,8 +247,8 @@ wired into both vitest globalSetups (`apps/api/vitest.globalSetup.ts`,
 |-----------|-------|-------|
 | PostgreSQL server (local) | developer (`pnpm db:up`) | `docker-compose.dev.yml`; no initdb SQL — `POSTGRES_DB` creates only `exam` |
 | Implicit local `exam_test` | Exam test harness | Self-provisioned by `prepareTestDatabase` whenever missing; survives `DROP DATABASE` without container reset |
-| Explicit `TEST_DATABASE_URL` target | environment / operator (CI service, remote DB) | Verified connectable; NEVER created/migrated/dropped by the harness — restricted no-CREATEDB roles are supported |
-| Worker DBs `exam_test_w<N>` | Exam test harness (implicit-local server only) | Created per vitest worker id by `setupWorkerTestDatabase`; idle leftovers swept at apps/api run start + teardown (`sweepIdleWorkerDatabases`, busy DBs skipped) |
+| Explicit `TEST_DATABASE_URL` target | environment / operator (CI service, remote DB) | Base-database existence/lifecycle is operator-owned: verified connectable, NEVER created or dropped by the harness — restricted no-CREATEDB roles work for file-schema isolation. Schema lifecycle INSIDE the target is harness-owned: test schemas are created/dropped and production migrations run (`explicit base DB ≠ never migrated` must not be claimed). Worker-database isolation still derives physical DBs and needs CREATEDB |
+| Worker DBs `exam_test_w<N>` | Exam test harness | One physical DB per execution slot (`VITEST_POOL_ID`, bounded by `maxWorkers`); names are reused run over run. Bounded idle residue from an earlier larger `maxWorkers` (idle `w3/w4`) is acceptable — there is deliberately NO sweep/garbage collection |
 | Schemas `test_*` | per-test-file isolation (`testIsolation.ts`) | Created + dropped per file |
 | Schema content | production Drizzle migrations only | No test-only schema DDL anywhere |
 | Seed data | test bodies (`seed()` after migration) | `pnpm db:seed:demo` seeds ONLY the dev `exam` DB |
@@ -276,18 +276,20 @@ wired into both vitest globalSetups (`apps/api/vitest.globalSetup.ts`,
 
 | Event | Create? | Reuse? | Reset? | Drop? |
 |-------|---------|--------|--------|-------|
-| worker start | ensure DB if missing (`exam_test_w<VITEST_WORKER_ID>`) | same id → yes | — | — |
-| test file start | (worker id may increment → new DB) | same id → yes | `resetPostgres()` TRUNCATE | — |
-| worker recycle | new id → new DB | old DB NOT reused | — | — |
-| successful run end | — | — | — | teardown sweep (idle only) |
-| failed run end | — | — | — | teardown sweep (idle only) |
-| process crash | — | — | — | nothing (leftover) |
-| next run | — | — | — | startup sweep reclaims crash leftovers |
+| worker start (slot bootstrap) | ensure + migrate once per process (`exam_test_w<VITEST_POOL_ID>`, memoized per authority) | same slot → yes | — | — |
+| test file start (same slot) | — | yes — the SAME physical slot DB | `resetPostgres()` TRUNCATE boundary (mutation-proven) | — |
+| run end (success or failure) | — | — | — | nothing — slot DBs persist for the next run |
+| process crash | — | — | — | nothing — the next run reuses the same bounded set |
+| concurrent second local run | — | — | — | rejected by the globalSetup run lease (see `docs/adr/ADR-007` rule 8) |
 
-Worker ids are assigned per fork execution and are not reused across files, so
-without the sweep one full API run leaves ~90 physical databases (observed:
-90 on a long-lived dev server). The sweep only ever runs against the
-implicit-local server; an operator-supplied server owns its own lifecycle.
+Slot identity is `VITEST_POOL_ID` (bounded 1..maxWorkers), NOT
+`VITEST_WORKER_ID` (unbounded worker-instance id — the root cause of the
+2026-08-26 flake audit, fixed by #335). Physical DB cardinality is therefore
+bounded by `maxWorkers` and names are reused run over run; the historical
+"~90 physical databases per run" was wrong-cardinality residue from the old
+identity binding, not cumulative growth. A later run with a smaller
+`maxWorkers` may leave idle `w3/w4` behind — bounded residue, acceptable,
+never garbage-collected.
 
 ---
 

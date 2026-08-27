@@ -6,12 +6,7 @@ import {
   __resetTestDbBootstrapMemoForTests,
   prepareTestDatabase,
 } from "./testDbBootstrap.js";
-import {
-  dropDatabaseIfExists,
-  ensureDatabaseExists,
-  sweepIdleWorkerDatabases,
-  withDatabaseName,
-} from "./testWorkerDatabase.js";
+import { withDatabaseName } from "./testWorkerDatabase.js";
 
 /**
  * Ownership-semantics tests for the test-database bootstrap contract:
@@ -22,7 +17,6 @@ import {
  *   malformed / unsafe DB name      = fail (name-safety guard preserved)
  *   bootstrap twice                 = idempotent
  *   concurrent bootstrap            = safe under the lifecycle lock
- *   worker-DB sweep                 = drops idle only, skips busy
  *
  * Pure contract tests run everywhere; PG-backed cases follow the
  * testWorkerDatabase.test.ts `PG_DESCRIBE` pattern (skip when the server is
@@ -47,11 +41,6 @@ async function pgReachable(url: string): Promise<boolean> {
 
 const PG_UP = await pgReachable(ADMIN_URL);
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
-
-/** Unique numeric-suffix worker DB name (matches ^exam_test_w[0-9]+$). */
-function uniqueWorkerDbName(): string {
-  return `exam_test_w${Math.floor(Math.random() * 1_000_000_000)}`;
-}
 
 async function databaseExists(name: string): Promise<boolean> {
   const admin = postgres(ADMIN_URL, { max: 1 });
@@ -162,42 +151,6 @@ PG_DESCRIBE("prepareTestDatabase — PG-backed ownership semantics", () => {
   });
 });
 
-// Timeout is generous: a dev server can carry dozens of stale exam_test_w<N>
-// leftovers from pre-sweep runs, and the sweep reclaims them all in one pass.
-PG_DESCRIBE(
-  "sweepIdleWorkerDatabases — bounded worker-DB cleanup",
-  { timeout: 60_000 },
-  () => {
-    it("drops idle exam_test_w<N> and skips databases held by a live backend", async () => {
-      const idleName = uniqueWorkerDbName();
-      const busyName = uniqueWorkerDbName();
-      await ensureDatabaseExists(ADMIN_URL, idleName);
-      await ensureDatabaseExists(ADMIN_URL, busyName);
-      try {
-        // Hold the "busy" database open from a second backend.
-        const holder = postgres(withDatabaseName(BASE_URL, busyName), {
-          max: 1,
-        });
-        try {
-          await holder`SELECT 1`;
-          const first = await sweepIdleWorkerDatabases(ADMIN_URL);
-          expect(first.dropped).toContain(idleName);
-          expect(first.skippedBusy).toContain(busyName);
-          expect(first.dropped).not.toContain(busyName);
-        } finally {
-          await holder.end();
-        }
-        // Once released, the next sweep reclaims it.
-        const second = await sweepIdleWorkerDatabases(ADMIN_URL);
-        expect(second.dropped).toContain(busyName);
-        expect(second.skippedBusy).not.toContain(busyName);
-      } finally {
-        await dropDatabaseIfExists(ADMIN_URL, idleName, { keepMissing: true });
-        await dropDatabaseIfExists(ADMIN_URL, busyName, { keepMissing: true });
-      }
-    });
-  },
-);
 afterAll(() => {
   __resetTestDbBootstrapMemoForTests();
 });

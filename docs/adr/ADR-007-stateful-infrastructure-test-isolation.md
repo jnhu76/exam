@@ -965,12 +965,14 @@ explicitly and is normative in `docs/standards/testing.md` §2.8:
   test harness (`packages/db/src/testDbBootstrap.ts`, wired into both vitest
   globalSetups) — the Docker initdb bootstrap was removed. An explicit
   `TEST_DATABASE_URL` is operator-owned: verified, never auto-created.
-- Physical worker databases (`exam_test_w<N>`) are reclaimed by an idle-only
-  sweep (`sweepIdleWorkerDatabases`) at apps/api run start and teardown, on
-  the implicit-local server only. Vitest assigns monotonically increasing
-  worker ids across files (no reuse), so without the sweep every full API run
-  leaks ~90 physical databases; this closes the unbounded-accumulation gap
-  without changing the per-worker isolation model of this ADR.
+- Physical worker databases (`exam_test_w<N>`) are named by execution slot
+  (`VITEST_POOL_ID`, bounded by `maxWorkers`) and are reused run over run;
+  there is deliberately NO idle sweep. The historical "unbounded
+  accumulation / ~90 DBs per full API run" was wrong-cardinality persistent
+  residue from the `VITEST_WORKER_ID` identity binding (root cause of the
+  2026-08-26 flake audit, fixed by #335: slots, not worker instances) — not
+  cumulative growth. Bounded idle residue from an earlier larger `maxWorkers`
+  is acceptable; nothing drops databases merely for being idle.
 - DB-routing / topology environment variables are part of the Turbo task
   cache identity for DB-backed test tasks (turbo `env`, not
   `passThroughEnv`), so cache replay cannot mask a database/topology switch.
