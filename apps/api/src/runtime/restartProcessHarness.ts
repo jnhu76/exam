@@ -190,9 +190,21 @@ function launchChild(opts: SpawnApiServerOptions, port: number): ChildLaunch {
     code: number | null;
     signal: NodeJS.Signals | null;
   }>((resolvePromise) => {
-    child.once("exit", (code, signal) => resolvePromise({ code, signal }));
+    // A failed spawn (e.g. ENOENT) emits 'error' WITHOUT a later 'exit';
+    // settle here too so waitHealthy fails fast instead of spinning.
+    let settled = false;
+    const settle = (): void => {
+      if (!settled) {
+        settled = true;
+        resolvePromise({ code: -1, signal: null });
+      }
+    };
+    child.once("exit", (code, signal) => {
+      settled = true;
+      resolvePromise({ code, signal });
+    });
+    child.once("error", settle);
   });
-  void child.on("error", () => undefined); // surfaced via exitPromise
   return { child, port, exitPromise };
 }
 
