@@ -27,6 +27,14 @@ COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 #   - an explicit EMPTY first argument is consumed and dropped (helpers that
 #     pass "${project}" with project empty do not forward an empty arg);
 #   - otherwise COMPOSE_PROJECT_NAME is used if set (Compose native).
+#
+# Env authority: when DEPLOY_ENV_FILE is set (absolute path), it is passed
+# as Compose's explicit --env-file — the same operator invocation the
+# runbook documents (`docker compose --env-file .env.deploy ...`). Compose
+# then NEVER reads the repo-root .env for interpolation, so a developer's
+# dev secrets cannot leak into a test stack. Unset = legacy behavior
+# (every required key is explicitly exported by the suites, which take
+# precedence over any ambient .env; no test stack reads developer files).
 run_compose() {
   local project=""
   if [ "${1:-}" != "" ] && [[ "${1}" != -* ]]; then
@@ -36,10 +44,27 @@ run_compose() {
     shift
   fi
   local -a args=(docker compose -f "${COMPOSE_FILE}")
+  if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
+    args+=(--env-file "${DEPLOY_ENV_FILE}")
+  fi
   if [ -n "${project}" ]; then
     args+=(-p "${project}")
   fi
   "${args[@]}" "$@"
+}
+
+# Read one KEY=VALUE pair from DEPLOY_ENV_FILE (or an explicitly given
+# file) and print the value; prints nothing when the key is absent/blank.
+# Handles `export `-prefixed lines, trailing CR, and double-quoted values.
+# Usage: env_file_value <KEY> [file="${DEPLOY_ENV_FILE}"]
+env_file_value() {
+  local key="${1:?env_file_value: missing key}"
+  local file="${2:-${DEPLOY_ENV_FILE:-}}"
+  if [ -z "${file}" ] || [ ! -f "${file}" ]; then
+    return 0
+  fi
+  sed -n -E "s/^(export[[:space:]]+)?${key}=\"?(.*)\$/\\2/p" "${file}" \
+    | tr -d '\r' | sed 's/"$//' | head -1
 }
 
 # Resolve the db container ID for a project via Compose (the authority on
