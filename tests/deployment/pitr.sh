@@ -106,6 +106,9 @@ echo "=== PITR suite: WAL archiving + physical backup + recovery (ts ${RUN_TS}) 
 echo "--- start SOURCE cluster; enable WAL archiving via the canonical operator script ---"
 run_compose "${PROJECT_SRC}" up -d --quiet-pull db >/dev/null
 wait_for_postgres "${PROJECT_SRC}"
+# The PITR helper is not a run_compose consumer; make its bare compose
+# invocation interpolation-safe when no env file drives the run (#321).
+export EXAM_IMAGE="${EXAM_IMAGE:-exam-local:dev}"
 bash "${ENABLE_PITR_SH}" "${PROJECT_SRC}" "${COMPOSE_FILE}" 2>&1 | sed 's/^/    /'
 ARCHIVE_MODE_VAL="$(psql_exec "${PROJECT_SRC}" "SHOW archive_mode;" | tr -d '[:space:]')"
 if [ "${ARCHIVE_MODE_VAL}" != "on" ]; then

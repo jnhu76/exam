@@ -225,6 +225,36 @@ if (!servicesBlock) {
     const appBlock = extractServiceBlock(servicesBlock, "app");
     if (appBlock) {
       assertRequiredPostgresPassword(appBlock, "app");
+      // #321 two-path split: the operator path must consume the prebuilt
+      // image via a REQUIRED EXAM_IMAGE pin (generate-env.mjs derives it
+      // from .release-version — the single version authority), and the
+      // base file must NOT carry a build key: contributors / PR acceptance
+      // get source authority exclusively through docker-compose.build.yml
+      // (pull_policy: build). A hardcoded tag here would drift from the
+      // release version; a base build key would blur the two paths.
+      const appNoComments = appBlock
+        .split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (
+        !/^\s*image:\s*\$\{EXAM_IMAGE:\?EXAM_IMAGE is required \(node scripts\/generate-env\.mjs\)\}\s*$/im.test(
+          appNoComments,
+        )
+      ) {
+        errors.push(
+          "'app' service must pin " +
+            "'image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}' " +
+            "(the operator prebuilt-image pin derived from .release-version; " +
+            "source builds belong to docker-compose.build.yml) — #321.",
+        );
+      }
+      if (/^\s*build:\s*\S/im.test(appNoComments)) {
+        errors.push(
+          "'app' service must NOT carry a build key in docker-compose.yml: " +
+            "the operator path consumes the prebuilt EXAM_IMAGE pin, and the " +
+            "source-build path is docker-compose.build.yml (pull_policy: build).",
+        );
+      }
       // The app must NOT depend on redis health (Redis is optional).
       assertNoRedisDependency(appBlock, "app");
       // The Launchpad first-install setup token
@@ -270,6 +300,22 @@ if (!servicesBlock) {
     } else {
       // P6-007: the worker's DATABASE_URL must require POSTGRES_PASSWORD.
       assertRequiredPostgresPassword(workerBlock, "email-worker");
+
+      // #321: same prebuilt-image pin as app (see the app service note).
+      const workerNoComments = workerBlock
+        .split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (
+        !/^\s*image:\s*\$\{EXAM_IMAGE:\?EXAM_IMAGE is required \(node scripts\/generate-env\.mjs\)\}\s*$/im.test(
+          workerNoComments,
+        )
+      ) {
+        errors.push(
+          "'email-worker' service must pin the same required EXAM_IMAGE as " +
+            "'app' — one image authority, two services.",
+        );
+      }
 
       // The image ENTRYPOINT is docker-entrypoint.sh which hard-codes
       // `exec node dist/server.js`. The service MUST override the

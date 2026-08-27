@@ -208,8 +208,12 @@ For Docker, pnpm workspace, or runtime image changes, verification must include:
 docker build -t exam-app:latest .
 docker run --rm --entrypoint sh exam-app:latest -lc 'pwd; find /app -maxdepth 3 -type d | sort | head -100'
 docker run --rm --entrypoint sh exam-app:latest -lc 'node -e "console.log(require.resolve(\"@exam/db/package.json\"))"'
-docker compose up -d --build
-docker compose logs app --tail=100
+# Operator path (prebuilt image; needs .env.deploy via generate-env):
+docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.deploy logs app --tail=100
+# Source-build acceptance (contributors / PR verification):
+docker compose --env-file .env.deploy \
+  -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 If the entrypoint path changes, also verify the actual runtime files:

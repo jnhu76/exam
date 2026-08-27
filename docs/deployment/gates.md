@@ -9,12 +9,21 @@ destructive/slow suite belongs in every PR.
 
 Every gate runs against `docker-compose.yml` (sole operator entry point,
 enforced by `scripts/repository-contract/deployment-topology-contract.mjs`).
-Source-build acceptance merges `-f docker-compose.build.yml` / uses
-`up --build`; a cached or registry image can never satisfy acceptance —
-build cache is performance only. When `DEPLOY_ENV_FILE` is set,
-`tests/deployment/lib.sh` passes Compose's explicit `--env-file` (the exact
-runbook invocation), so the repo-root `.env` is never read for
-interpolation.
+Since #321 the operator topology pins the prebuilt release image
+(`image: ${EXAM_IMAGE:?...}`, derived from `.release-version` by
+`scripts/generate-env.mjs`); acceptance must prove the SOURCE checkout, so
+`tests/deployment/lib.sh` `run_compose` ALWAYS merges
+`-f docker-compose.build.yml` (source-build authority: `exam-local:dev`
+with `pull_policy: build`) on top of the operator file — a cached or
+registry image can never satisfy acceptance, and build cache is
+performance only. The operator file still requires `EXAM_IMAGE` at
+interpolation time even though acceptance never runs that image; when
+`DEPLOY_ENV_FILE` is unset (legacy export mode) `run_compose` defaults an
+`exam-local:dev` placeholder for interpolation only — it is never pulled
+or run, and compose-smoke Test 1c asserts the merged acceptance model
+contains no registry image reference. When `DEPLOY_ENV_FILE` is set,
+`run_compose` passes Compose's explicit `--env-file` (the exact runbook
+invocation), so the repo-root `.env` is never read for interpolation.
 
 ## Gate inventory
 

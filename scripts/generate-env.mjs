@@ -7,7 +7,9 @@
 //   node scripts/generate-env.mjs
 //
 // The deployment stack is then started explicitly against the file:
-//   docker compose --env-file .env.deploy -f docker-compose.yml up -d --build
+//   docker compose --env-file .env.deploy -f docker-compose.yml up -d
+// (source builds — contributors / PR acceptance — merge
+// docker-compose.build.yml; the operator path never builds)
 //
 // Passing --env-file replaces the default `.env` as Compose's interpolation
 // file (the dev .env is never read for deployment), and no dev tooling ever
@@ -56,6 +58,29 @@ if (!existsSync(envPath)) {
 // POSTGRES_DB are connection identity — matching them avoids orphaning the DB.
 const SECRET_KEYS = ["JWT_SECRET", "POSTGRES_PASSWORD"];
 const PRESERVE_KEYS = ["POSTGRES_USER", "POSTGRES_DB"];
+
+// #321: the operator image pin is DERIVED from the repository release
+// version authority (.release-version) — never an independently maintained
+// copy that can silently drift. A canonical pin for THIS repository
+// (ghcr.io/jnhu76/exam:vX.Y.Z) FOLLOWS .release-version on re-runs (the
+// upgrade path: git pull → generate-env re-pins the new version); any other
+// value is an explicit operator override (air-gapped registry mirror,
+// offline docker load) and is preserved exactly like the other keys.
+const IMAGE_REPOSITORY = "ghcr.io/jnhu76/exam";
+const releaseVersionPath = join(root, ".release-version");
+if (!existsSync(releaseVersionPath)) {
+  console.error(".release-version not found at the repository root");
+  process.exit(1);
+}
+const releaseVersion = readFileSync(releaseVersionPath, "utf-8").trim();
+if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(releaseVersion)) {
+  console.error(`Invalid .release-version: ${releaseVersion}`);
+  process.exit(1);
+}
+const derivedImage = `${IMAGE_REPOSITORY}:${releaseVersion}`;
+const canonicalPinPattern = new RegExp(
+  `^${IMAGE_REPOSITORY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:v[0-9]+\\.[0-9]+\\.[0-9]+$`,
+);
 
 // Read the legacy dev .env once. A post-split dev-only .env has none of the
 // keys below, so legacyValue() returns null and fresh secrets are generated.
@@ -108,10 +133,35 @@ for (const key of PRESERVE_KEYS) {
   }
 }
 
+// EXAM_IMAGE follows .release-version when its current value is a canonical
+// pin for this repository (the upgrade path); any other value is an explicit
+// operator override and wins (see the derivation comment above). Blank and
+// quoted-empty values are "absent" — they fall into ensureKey for filling.
+const imageBlankPattern = /^EXAM_IMAGE=(?:""|'')?[ \t]*$/m;
+const nonBlankImage = env.match(/^EXAM_IMAGE=(\S.*)$/m);
+const existingImage =
+  nonBlankImage && !imageBlankPattern.test(env)
+    ? nonBlankImage[1].trim()
+    : null;
+if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
+  console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
+} else if (existingImage !== null) {
+  env = env.replace(/^EXAM_IMAGE=\S.*$/m, `EXAM_IMAGE=${derivedImage}`);
+  console.log(
+    `EXAM_IMAGE re-pinned to ${derivedImage} (follows .release-version)`,
+  );
+} else {
+  ensureKey(
+    "EXAM_IMAGE",
+    derivedImage,
+    "EXAM_IMAGE (pinned from .release-version)",
+  );
+}
+
 if (env !== original) {
   writeFileSync(envPath, env);
 }
 
 console.log(
-  "Next: docker compose --env-file .env.deploy -f docker-compose.yml up -d --build",
+  "Next: docker compose --env-file .env.deploy -f docker-compose.yml up -d",
 );

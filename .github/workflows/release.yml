@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 concurrency:
   group: repository-release
@@ -91,3 +92,58 @@ jobs:
               --title "Exam $version" \
               --notes-file "$notes"
           fi
+
+      # #321 — publish the prebuilt production image for THIS exact release
+      # source SHA. The GIT tag is immutable by policy (the step above
+      # refuses to move an existing tag to a different commit). The IMAGE
+      # tags (vX.Y.Z, sha-<short>) are pinned to the same source SHA; a
+      # re-run of this workflow for the same release rebuilds and refreshes
+      # their digests (no reproducible-build guarantee) but can never bind
+      # them to different source. `latest` is deliberately NOT published
+      # (mutable convenience must never be an upgrade/rollback authority).
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Derive image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/jnhu76/exam
+          # type=raw passes .release-version through EXACTLY (v-prefixed):
+          # the semver type would strip the v ({{version}} of "v0.0.2" is
+          # "0.0.2") and the operator EXAM_IMAGE pin would never resolve.
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=sha
+          # latest=auto would ADD a latest tag for semver-style values;
+          # the no-latest policy is enforced explicitly, not by omission.
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.title=exam
+            org.opencontainers.image.description=Configurable LAN/on-premise exam and assessment platform
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/jnhu76/exam
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Build and push release image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Record published digest
+        shell: bash
+        run: |
+          echo "image=ghcr.io/jnhu76/exam" >> "$GITHUB_STEP_SUMMARY"
+          echo "tags=${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "source=${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"

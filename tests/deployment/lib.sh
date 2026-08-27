@@ -18,6 +18,13 @@ LIB_DIR="$(
 )"
 REPO_ROOT="$(cd -- "${LIB_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+# Source-build override (the single build-mode surface). The deployment
+# verification suites ARE contributor/PR acceptance: every invocation merges
+# this override so the app/email-worker images are built from THE CURRENT
+# CHECKOUT (pull_policy: build) — a stale registry or local image can never
+# fake a passing acceptance run, regardless of the operator `image:` pin in
+# docker-compose.yml (#319 contract, #321 two-path split).
+BUILD_OVERRIDE_FILE="${REPO_ROOT}/docker-compose.build.yml"
 
 # ── Compose ──────────────────────────────────────────────────────────────
 # Run docker compose against the canonical production compose file.
@@ -35,6 +42,12 @@ COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 # dev secrets cannot leak into a test stack. Unset = legacy behavior
 # (every required key is explicitly exported by the suites, which take
 # precedence over any ambient .env; no test stack reads developer files).
+#
+# EXAM_IMAGE interpolation (#321): the operator file requires EXAM_IMAGE
+# even though acceptance never RUNS that image (the build override below
+# replaces it on app + email-worker). In DEPLOY_ENV_FILE mode the generated
+# file carries the pin; in legacy-export mode there is no env file, so a
+# placeholder is defaulted here — interpolation-only, never pulled or run.
 run_compose() {
   local project=""
   if [ "${1:-}" != "" ] && [[ "${1}" != -* ]]; then
@@ -43,9 +56,11 @@ run_compose() {
   elif [ "${1:-}" = "" ]; then
     shift
   fi
-  local -a args=(docker compose -f "${COMPOSE_FILE}")
+  local -a args=(docker compose -f "${COMPOSE_FILE}" -f "${BUILD_OVERRIDE_FILE}")
   if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
     args+=(--env-file "${DEPLOY_ENV_FILE}")
+  else
+    export EXAM_IMAGE="${EXAM_IMAGE:-exam-local:dev}"
   fi
   if [ -n "${project}" ]; then
     args+=(-p "${project}")
