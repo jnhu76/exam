@@ -135,6 +135,17 @@ ORG_NAME="Upgrade Org ${RUN_NUM}"
 ORIGIN_OLD="http://localhost:${CANARY_OLD}"
 bootstrap_admin "${PROJECT}" "${ADMIN_USER}" "${ADMIN_PASS}" "${ADMIN_NAME}" "${ORG_NAME}"
 
+LOGIN_UPGRADE=$(compose_operator exec -T app node -e "
+  fetch('http://127.0.0.1:3000/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'Origin': '${ORIGIN_OLD}'},
+    body: JSON.stringify({username: '${ADMIN_USER}', password: '${ADMIN_PASS}'})
+  }).then(r => ({status: r.status, ok: r.ok})).then(o => console.log(JSON.stringify(o)))
+    .catch(e => console.error('ERR', e.message))
+" 2>&1)
+echo "${LOGIN_UPGRADE}" | grep -q '"ok":true' && echo "  PASS: bootstrapped admin login succeeded." || {
+  echo "[upgrade] FAIL: admin login failed: ${LOGIN_UPGRADE}"; exit 1; }
+
 PSQL_SCHEMA="upgrade_uninstall"
 psql_exec "${PROJECT}" "CREATE SCHEMA IF NOT EXISTS ${PSQL_SCHEMA};"
 psql_exec "${PROJECT}" "CREATE TABLE IF NOT EXISTS ${PSQL_SCHEMA}.state (id text primary key, label text not null);"
@@ -226,17 +237,21 @@ bootstrap_admin "${PROJECT}" "${ADMIN_USER2}" "${ADMIN_PASS2}" "Upgrade Admin 2"
 [ "$(psql_exec "${PROJECT}" "SELECT count(*) FROM organizations;")" = "1" ] || {
   echo "[delete] FAIL: bootstrap on the fresh database did not create one org."; exit 1; }
 
+# The old account must be rejected by AUTH (401), not by CSRF (403): the
+# probe sends the CURRENT allowed Origin (CSRF passes, the route runs) so
+# only genuine credential failure can produce this answer — a surviving
+# account on recycled data would return 200 and fail the assertion.
 LOGIN_OLD=$(compose_operator exec -T app node -e "
   fetch('http://127.0.0.1:3000/api/auth/login', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json', 'Origin': '${ORIGIN_OLD}'},
+    headers: {'Content-Type': 'application/json', 'Origin': '${ORIGIN_NEW}'},
     body: JSON.stringify({username: '${ADMIN_USER}', password: '${ADMIN_PASS}'})
   }).then(r => ({status: r.status, ok: r.ok})).then(o => console.log(JSON.stringify(o)))
     .catch(e => console.error('ERR', e.message))
 " 2>&1 || true)
 echo "  old account login: ${LOGIN_OLD}"
-echo "${LOGIN_OLD}" | grep -q '"ok":false' && echo "  PASS: old credentials rejected on the fresh database." || {
-  echo "[delete] FAIL: old account still able to login after full removal."; exit 1; }
+echo "${LOGIN_OLD}" | grep -q '"status":401' && echo "  PASS: old credentials rejected (401) on the fresh database." || {
+  echo "[delete] FAIL: old account login was not a 401 auth rejection: ${LOGIN_OLD}"; exit 1; }
 
 LOGIN_NEW=$(compose_operator exec -T app node -e "
   fetch('http://127.0.0.1:3000/api/auth/login', {

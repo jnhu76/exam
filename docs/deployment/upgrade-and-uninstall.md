@@ -193,8 +193,10 @@ docker compose --env-file .env.deploy up -d
 
 Verified properties: `down` keeps `${EXAM_DATA_ROOT}/postgres` intact;
 `up` afterwards recreates containers and the database still holds every
-row (users, courses, exams, attempts, journal). A machine restart needs
-only `up -d` (the stack does not auto-start by default).
+row (users, courses, exams, attempts, journal). Services carry
+`restart: unless-stopped`, so a host reboot brings the stack back
+automatically; `up -d` recomputes desired state and is the safe resume
+command after any manual `stop`/`down`.
 
 ### 3.2 Full removal (data deleted)
 

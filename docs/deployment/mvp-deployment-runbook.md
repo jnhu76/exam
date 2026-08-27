@@ -687,13 +687,13 @@ production database.
 # Graceful shutdown: SIGTERM is propagated to each container.
 docker compose --env-file .env.deploy stop    # stops containers without removing them
 # or
-docker compose --env-file .env.deploy down    # stops and removes containers (keeps volumes)
+docker compose --env-file .env.deploy down    # stops and removes containers (keeps data)
 # or
-docker compose --env-file .env.deploy down -v # DANGEROUS: removes the pgdata named volume and
-                       # destroys all data (only for clean reinstall).
-                       # NOTE: data under ./data/* (bind mounts, incl. the
-                       # Redis dir and backup spools) is NOT removed by
-                       # `down -v` — delete those manually if they must go.
+docker compose --env-file .env.deploy down -v # with bind mounts there are no named
+                       # volumes, so -v removes NOTHING extra — data under
+                       # ./data/* (PGDATA, Redis dir, backup spools) is
+                       # retained either way. Deleting data is an explicit
+                       # rm — see upgrade-and-uninstall.md §3.2.
 ```
 
 Graceful shutdown behavior:

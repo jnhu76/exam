@@ -495,12 +495,10 @@ if (!servicesBlock) {
     }
     // The dead operator form must never come back in the lifecycle guide
     // (the operator consumes the prebuilt EXAM_IMAGE pin — #321; source
-    // builds belong to the contributor override).
-    if (
-      /docker compose(?! --env-file \.env\.deploy)[^\n]*\bup( -d)? --build/.test(
-        doc,
-      )
-    ) {
+    // builds belong to the contributor override). No `--build` form is
+    // legitimate in an OPERATOR lifecycle document, so any occurrence is
+    // flagged — including env-file variants.
+    if (/docker compose[^\n]*\bup( -d)? --build/.test(doc)) {
       errors.push(
         "upgrade-and-uninstall.md teaches 'up --build' for the operator " +
           "path — the operator consumes the prebuilt EXAM_IMAGE pin " +
