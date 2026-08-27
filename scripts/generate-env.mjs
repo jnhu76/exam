@@ -133,23 +133,54 @@ for (const key of PRESERVE_KEYS) {
   }
 }
 
-// EXAM_IMAGE follows .release-version when its current value is a canonical
-// pin for this repository (the upgrade path); any other value is an explicit
-// operator override and wins (see the derivation comment above). Blank and
+// EXAM_IMAGE follows .release-version when its effective value is a
+// canonical pin for this repository (the upgrade path); any other value is
+// an explicit operator override and wins (see the derivation comment above).
+// The EFFECTIVE value follows dotenv/--env-file semantics: the LAST
+// non-blank definition wins. Every EXAM_IMAGE line is then rewritten to a
+// single key, so a stale, quoted, or blank sibling can never create a
+// duplicate whose ordering silently decides the running image. Blank and
 // quoted-empty values are "absent" — they fall into ensureKey for filling.
-const imageBlankPattern = /^EXAM_IMAGE=(?:""|'')?[ \t]*$/m;
-const nonBlankImage = env.match(/^EXAM_IMAGE=(\S.*)$/m);
-const existingImage =
-  nonBlankImage && !imageBlankPattern.test(env)
-    ? nonBlankImage[1].trim()
-    : null;
+const imageValues = [...env.matchAll(/^EXAM_IMAGE=(\S.*)$/gm)]
+  .map((m) => m[1].trim().replace(/^(["'])(.*)\1$/, "$2"))
+  .filter((v) => v !== "");
+const existingImage = imageValues.length
+  ? imageValues[imageValues.length - 1]
+  : null;
 if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
-  console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
+  // Explicit override wins: keep exactly that value as the single key.
+  const explicitLines = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
+  if (
+    explicitLines.length === 1 &&
+    explicitLines[0] === `EXAM_IMAGE=${existingImage}`
+  ) {
+    console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
+  } else {
+    env = env.replace(/^EXAM_IMAGE=.*$/gm, "");
+    if (!env.endsWith("\n")) env += "\n";
+    env = `${env}EXAM_IMAGE=${existingImage}\n`;
+    console.log(
+      `EXAM_IMAGE already set in ${envPath}; preserving the effective value.`,
+    );
+  }
 } else if (existingImage !== null) {
-  env = env.replace(/^EXAM_IMAGE=\S.*$/m, `EXAM_IMAGE=${derivedImage}`);
-  console.log(
-    `EXAM_IMAGE re-pinned to ${derivedImage} (follows .release-version)`,
-  );
+  // Canonical pin: strip every previous EXAM_IMAGE line (quoted or blank)
+  // and append the single derived pin. Byte-idempotent when the pin is
+  // already current and alone.
+  const occurrences = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
+  if (
+    occurrences.length === 1 &&
+    occurrences[0] === `EXAM_IMAGE=${derivedImage}`
+  ) {
+    console.log(`EXAM_IMAGE already pinned to ${derivedImage}.`);
+  } else {
+    env = env.replace(/^EXAM_IMAGE=.*$/gm, "");
+    if (!env.endsWith("\n")) env += "\n";
+    env = `${env}EXAM_IMAGE=${derivedImage}\n`;
+    console.log(
+      `EXAM_IMAGE re-pinned to ${derivedImage} (follows .release-version)`,
+    );
+  }
 } else {
   ensureKey(
     "EXAM_IMAGE",
