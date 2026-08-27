@@ -229,16 +229,19 @@ describe("Tenant Isolation (S01)", () => {
       actorId: adminA.id,
       role: adminA.role as Role,
       organizationId: adminA.organizationId,
+      authEpoch: 0,
     });
     adminBToken = signJWT({
       actorId: adminB.id,
       role: adminB.role as Role,
       organizationId: adminB.organizationId,
+      authEpoch: 0,
     });
     candidateAToken = signJWT({
       actorId: candidateA.id,
       role: candidateA.role as Role,
       organizationId: candidateA.organizationId,
+      authEpoch: 0,
     });
 
     app = Fastify();

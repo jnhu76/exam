@@ -87,6 +87,7 @@ describe("candidate field routes", () => {
       actorId: adminId,
       role: "Admin",
       organizationId,
+      authEpoch: 0,
     });
   });
 
@@ -383,6 +384,7 @@ describe("candidate field routes", () => {
       actorId: localAdminId,
       role: "Admin",
       organizationId: localOrgId,
+      authEpoch: 0,
     });
 
     try {

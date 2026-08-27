@@ -393,7 +393,12 @@ describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () =
     });
     const { jwtSecret } = getRuntimeConfig().authSecret;
     const adminToken = signJWT(
-      { actorId: adminId, role: "Admin" as Role, organizationId: org.id },
+      {
+        actorId: adminId,
+        role: "Admin" as Role,
+        organizationId: org.id,
+        authEpoch: 0,
+      },
       jwtSecret,
     );
     const course = (
@@ -477,6 +482,7 @@ describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () =
         actorId: candidateId,
         role: "Candidate" as Role,
         organizationId: org.id,
+        authEpoch: 0,
       },
       jwtSecret,
     );

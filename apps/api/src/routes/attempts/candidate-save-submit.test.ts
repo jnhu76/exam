@@ -280,6 +280,7 @@ describe("attempt routes", () => {
         actorId: userId,
         role: "Candidate",
         organizationId: ctx.org.id,
+        authEpoch: 0,
       });
 
       const res = await ctx.app.inject({
@@ -979,6 +980,7 @@ describe("attempt routes", () => {
         actorId: otherUserId,
         role: "Candidate",
         organizationId: ctx.org.id,
+        authEpoch: 0,
       });
 
       const examRes = await ctx.app.inject({

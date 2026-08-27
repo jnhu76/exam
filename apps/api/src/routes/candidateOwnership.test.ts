@@ -412,6 +412,7 @@ describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => 
       actorId: orgBAdmin.id,
       organizationId: orgBId,
       role: "Admin",
+      authEpoch: 0,
     });
 
     // ── Create Org B candidate user ──
@@ -466,6 +467,7 @@ describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => 
       actorId: orgBCandUser.id,
       organizationId: orgBId,
       role: "Candidate",
+      authEpoch: 0,
     });
 
     candidateB = {

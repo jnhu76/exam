@@ -66,6 +66,7 @@ describe("XSS / CSRF / CSV Security Baseline (S08-lite)", () => {
       actorId: admin.id,
       role: admin.role as Role,
       organizationId: admin.organizationId,
+      authEpoch: 0,
     });
 
     app = Fastify();

@@ -108,7 +108,13 @@ const probeRoutes: FastifyPluginAsync = async (fastify) => {
         permissions: [],
         sessionId: "audit-probe-session",
       },
-      { action: "logout", targetType: "user", targetId },
+      {
+        action: "logout",
+        targetType: "user",
+        targetId,
+        // #325 logout audit payload schema requires the revocation flag.
+        metadata: { revoked: false },
+      },
     );
     return { accepted: true };
   });

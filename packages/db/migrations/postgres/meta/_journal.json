@@ -244,6 +244,13 @@
       "when": 1788810000000,
       "tag": "0034_retention_success_verified_invariant",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0035_user_auth_epoch",
+      "breakpoints": true
     }
   ]
 }

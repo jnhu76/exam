@@ -19,12 +19,17 @@ import {
   createUnsupportedRoleUserForTest,
   corruptUsersRoleProjectionForTest,
   LEGACY_ROLES,
+  rebuildAppOnSameDb,
   type UnsupportedRole,
 } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
+import { createHmac } from "node:crypto";
+import type { FastifyPluginAsync } from "fastify";
+import userRoutes from "./user.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 /**
  * Extracts the raw value of a named cookie from a set-cookie header string.
@@ -285,6 +290,7 @@ describe("auth routes", () => {
       actorId: disableUserId,
       role: "Admin",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
     const meRes = await ctx.app.inject({
       method: "GET",
@@ -380,10 +386,13 @@ describe("auth routes", () => {
   });
 
   it("POST /api/auth/logout returns 204 without a response body", async () => {
+    // #325: a valid-token logout is now a durable revocation, so this smoke
+    // test deliberately sends NO cookie — a captured-token logout is covered
+    // by the dedicated #325 regressions below (using isolated users, so the
+    // shared ctx.adminToken never has its epoch consumed here).
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/logout",
-      cookies: { "auth-token": ctx.adminToken },
     });
 
     expect(response.statusCode).toBe(204);
@@ -414,6 +423,16 @@ describe("auth routes", () => {
       },
     });
     expect(loginRes.statusCode).toBe(200);
+    // #325: the password change advanced the credential epoch, so the
+    // pre-change ctx.adminToken is revoked. Subsequent tests in this
+    // describe keep using ctx.adminToken — refresh it from the fresh login.
+    const refreshedToken = extractCookieValue(
+      loginRes.headers["set-cookie"]?.toString() ?? "",
+      "auth-token",
+    );
+    if (refreshedToken) {
+      ctx.adminToken = refreshedToken;
+    }
   });
 
   it("PATCH /api/auth/me/password rejects wrong current password", async () => {
@@ -678,6 +697,398 @@ describe("auth routes", () => {
       });
     } finally {
       await noAssignCtx.cleanup();
+    }
+  });
+});
+
+/**
+ * #325 — auth epoch revocation regressions (R1-R7).
+ *
+ * The authority model: users.auth_epoch is the durable per-user credential
+ * generation; JWTs carry the epoch they were issued under; authentication
+ * accepts a token only while the claim matches. Logout CAS-advances the
+ * epoch (all-tab / all-device revocation); password changes/resets advance
+ * it atomically with the credential write.
+ */
+describe("auth epoch revocation (#325)", () => {
+  async function createCandidateForEpochTest(
+    testCtx: Awaited<ReturnType<typeof buildTestApp>>,
+    usernamePrefix: string,
+  ): Promise<{ username: string; userId: string }> {
+    const now = new Date();
+    const userId = crypto.randomUUID();
+    const username = `epoch-${usernamePrefix}-${crypto.randomUUID().slice(0, 8)}`;
+    await testCtx.db.insert(schema.users).values({
+      id: userId,
+      organizationId: testCtx.org.id,
+      username,
+      passwordHash: await hashPassword("password123"),
+      name: "Epoch Test Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await testCtx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: testCtx.org.id,
+      userId,
+      role: "Candidate",
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { username, userId };
+  }
+
+  async function loginAndGetToken(
+    app: Awaited<ReturnType<typeof buildTestApp>>["app"],
+    username: string,
+    password = "password123",
+  ): Promise<{ status: number; token?: string }> {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username, password },
+    });
+    if (res.statusCode !== 200) return { status: res.statusCode };
+    const cookie = extractCookieValue(
+      res.headers["set-cookie"]?.toString() ?? "",
+      "auth-token",
+    );
+    return cookie
+      ? { status: res.statusCode, token: cookie }
+      : { status: res.statusCode };
+  }
+
+  it("R1: logout revokes the captured JWT — replay hits 401", async () => {
+    const r1Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username } = await createCandidateForEpochTest(r1Ctx, "r1");
+      const login = await loginAndGetToken(r1Ctx.app, username);
+      expect(login.status).toBe(200);
+      expect(login.token).toBeTruthy();
+
+      // Token works before logout.
+      const before = await r1Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": login.token! },
+      });
+      expect(before.statusCode).toBe(200);
+
+      // Logout with the captured cookie.
+      const out = await r1Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+        cookies: { "auth-token": login.token! },
+      });
+      expect(out.statusCode).toBe(204);
+
+      // Replay the captured JWT → revoked.
+      const after = await r1Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": login.token! },
+      });
+      expect(after.statusCode).toBe(401);
+      expect(after.json()).toMatchObject({ error: { code: "AUTH_REQUIRED" } });
+    } finally {
+      await r1Ctx.cleanup();
+    }
+  });
+
+  it("R2: epoch revocation is durable across an app rebuild on the same DB", async () => {
+    const r2Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username } = await createCandidateForEpochTest(r2Ctx, "r2");
+      const login = await loginAndGetToken(r2Ctx.app, username);
+      expect(login.token).toBeTruthy();
+
+      // Durable revocation through the first instance.
+      const out = await r2Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+        cookies: { "auth-token": login.token! },
+      });
+      expect(out.statusCode).toBe(204);
+
+      // Rebuild a second Fastify instance against the SAME database.
+      const rebuilt = await rebuildAppOnSameDb(r2Ctx, authRoutes, {
+        prefix: "/api/auth",
+      });
+      try {
+        const replay = await rebuilt.inject({
+          method: "GET",
+          url: "/api/auth/me",
+          cookies: { "auth-token": login.token! },
+        });
+        expect(replay.statusCode).toBe(401);
+      } finally {
+        await rebuilt.close();
+      }
+    } finally {
+      await r2Ctx.cleanup();
+    }
+  });
+
+  it("R3: stale-token logout cannot revoke a newer epoch (CAS invariant)", async () => {
+    const r3Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username } = await createCandidateForEpochTest(r3Ctx, "r3");
+
+      // Epoch-0 session A.
+      const loginA = await loginAndGetToken(r3Ctx.app, username);
+      expect(loginA.token).toBeTruthy();
+
+      // Legitimate logout advances the authority 0 -> 1.
+      const firstOut = await r3Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+        cookies: { "auth-token": loginA.token! },
+      });
+      expect(firstOut.statusCode).toBe(204);
+
+      // Fresh login issues an epoch-1 token B.
+      const loginB = await loginAndGetToken(r3Ctx.app, username);
+      expect(loginB.token).toBeTruthy();
+      expect(loginB.token).not.toBe(loginA.token);
+      const meB = await r3Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": loginB.token! },
+      });
+      expect(meB.statusCode).toBe(200);
+
+      // Attacker replays STALE epoch-0 token A against /logout.
+      const staleOut = await r3Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+        cookies: { "auth-token": loginA.token! },
+      });
+      expect(staleOut.statusCode).toBe(204);
+
+      // The CAS must NOT have advanced the epoch: DB stays at 1 and
+      // the new session B still authenticates.
+      const rows = await r3Ctx.db
+        .select({ authEpoch: schema.users.authEpoch })
+        .from(schema.users)
+        .where(eq(schema.users.username, username));
+      expect(rows[0]!.authEpoch).toBe(1);
+      const meBAfter = await r3Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": loginB.token! },
+      });
+      expect(meBAfter.statusCode).toBe(200);
+    } finally {
+      await r3Ctx.cleanup();
+    }
+  });
+
+  it("R4: logout invalidates every tab sharing the current epoch", async () => {
+    const r4Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username, userId } = await createCandidateForEpochTest(
+        r4Ctx,
+        "r4",
+      );
+      const loginA = await loginAndGetToken(r4Ctx.app, username);
+      expect(loginA.token).toBeTruthy();
+
+      // Tab B: a DIFFERENT JWT minted under the same current epoch.
+      const userRows = await r4Ctx.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+      const tabBToken = signJWT({
+        actorId: userId,
+        role: "Candidate",
+        organizationId: r4Ctx.org.id,
+        authEpoch: userRows[0]!.authEpoch,
+      });
+
+      // Tab A logs out → epoch advances → tab B dies too (documented
+      // all-tab/all-device semantics for v0.x).
+      const out = await r4Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+        cookies: { "auth-token": loginA.token! },
+      });
+      expect(out.statusCode).toBe(204);
+
+      const meB = await r4Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": tabBToken },
+      });
+      expect(meB.statusCode).toBe(401);
+      const meA = await r4Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": loginA.token! },
+      });
+      expect(meA.statusCode).toBe(401);
+    } finally {
+      await r4Ctx.cleanup();
+    }
+  });
+
+  it("R5: self-service password change revokes old token; new credentials log in", async () => {
+    const r5Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username } = await createCandidateForEpochTest(r5Ctx, "r5");
+      const oldLogin = await loginAndGetToken(r5Ctx.app, username);
+      expect(oldLogin.token).toBeTruthy();
+
+      const changeRes = await r5Ctx.app.inject({
+        method: "PATCH",
+        url: "/api/auth/me/password",
+        payload: {
+          currentPassword: "password123",
+          newPassword: "rotated12345",
+        },
+        cookies: { "auth-token": oldLogin.token! },
+      });
+      expect(changeRes.statusCode).toBe(200);
+
+      // Old credential is dead for the next protected request.
+      const replay = await r5Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": oldLogin.token! },
+      });
+      expect(replay.statusCode).toBe(401);
+
+      // New credentials work.
+      const relogin = await loginAndGetToken(
+        r5Ctx.app,
+        username,
+        "rotated12345",
+      );
+      expect(relogin.status).toBe(200);
+      const meNew = await r5Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": relogin.token! },
+      });
+      expect(meNew.statusCode).toBe(200);
+    } finally {
+      await r5Ctx.cleanup();
+    }
+  });
+
+  it("R6: admin candidate password reset revokes the candidate's live token", async () => {
+    // buildTestApp mounts this composite under /api; authRoutes needs its
+    // own /auth segment to reproduce production paths (/api/auth/...,
+    // /api/users/...).
+    const bothRoutes: FastifyPluginAsync = async (app) => {
+      await app.register(userRoutes);
+      await app.register(authRoutes, { prefix: "/auth" });
+    };
+    const r6Ctx = await buildTestApp(bothRoutes);
+    try {
+      const { username, userId } = await createCandidateForEpochTest(
+        r6Ctx,
+        "r6",
+      );
+      // Candidate profile so POST /users/:id/reset-password accepts the target.
+      await r6Ctx.db.insert(schema.candidateProfiles).values({
+        id: crypto.randomUUID(),
+        organizationId: r6Ctx.org.id,
+        userId,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const candLogin = await loginAndGetToken(r6Ctx.app, username);
+      expect(candLogin.token).toBeTruthy();
+
+      const resetRes = await r6Ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${userId}/reset-password`,
+        payload: { newPassword: "adminreset123" },
+        cookies: { "auth-token": r6Ctx.adminToken },
+      });
+      expect(resetRes.statusCode).toBe(200);
+
+      // Stolen pre-reset candidate JWT is revoked.
+      const replay = await r6Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": candLogin.token! },
+      });
+      expect(replay.statusCode).toBe(401);
+
+      // New password works.
+      const relogin = await loginAndGetToken(
+        r6Ctx.app,
+        username,
+        "adminreset123",
+      );
+      expect(relogin.status).toBe(200);
+    } finally {
+      await r6Ctx.cleanup();
+    }
+  });
+
+  it("R7: legacy/malformed authEpoch claims fail closed at the authenticate boundary", async () => {
+    const r7Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username, userId } = await createCandidateForEpochTest(
+        r7Ctx,
+        "r7",
+      );
+      const userRows = await r7Ctx.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+      const orgId = userRows[0]!.organizationId;
+
+      // Hand-sign valid HS256 tokens carrying deliberately bad authEpoch
+      // claims (same secret, correct signature — only the claim is wrong).
+      const secret = getRuntimeConfig().authSecret.jwtSecret;
+      const encode = (value: object) =>
+        Buffer.from(JSON.stringify(value)).toString("base64url");
+      const sign = (claim: unknown) => {
+        const head = encode({ alg: "HS256", typ: "JWT" });
+        const nowSec = Math.floor(Date.now() / 1000);
+        const body = encode({
+          actorId: userId,
+          role: "Candidate",
+          organizationId: orgId,
+          ...(claim !== undefined ? { authEpoch: claim } : {}),
+          iat: nowSec,
+          exp: nowSec + 3600,
+        });
+        const sig = createHmac("sha256", secret)
+          .update(`${head}.${body}`)
+          .digest("base64url");
+        return `${head}.${body}.${sig}`;
+      };
+
+      const malformedTokens: string[] = [
+        // No authEpoch claim at all (legacy pre-#325 shape).
+        sign(undefined),
+        // Wrong shapes: negative, non-integer, string "0", null.
+        sign(-1),
+        sign(1.5),
+        sign("0"),
+        sign(null),
+      ];
+
+      for (const bad of malformedTokens) {
+        const res = await r7Ctx.app.inject({
+          method: "GET",
+          url: "/api/auth/me",
+          cookies: { "auth-token": bad },
+        });
+        expect(res.statusCode).toBe(401);
+      }
+    } finally {
+      await r7Ctx.cleanup();
     }
   });
 });

@@ -314,6 +314,9 @@ async function finishBuildTestApp(args: {
       actorId: admin.id,
       role: admin.role as Role,
       organizationId: admin.organizationId,
+      // Mint against the CURRENT durable epoch (the shared seeded admin row
+      // may already have been advanced by earlier revocation tests).
+      authEpoch: admin.authEpoch,
     },
     jwtSecret,
   );
@@ -322,6 +325,7 @@ async function finishBuildTestApp(args: {
       actorId: candidate.id,
       role: candidate.role as Role,
       organizationId: candidate.organizationId,
+      authEpoch: candidate.authEpoch,
     },
     jwtSecret,
   );
@@ -409,6 +413,8 @@ export async function createAssignedUserForTest(
       actorId: user.id,
       role: user.role as Role,
       organizationId: user.organizationId,
+      // Mint with the row's current credential epoch (#325).
+      authEpoch: user.authEpoch,
     },
     getRuntimeConfig().authSecret.jwtSecret,
   );
@@ -461,6 +467,8 @@ export async function createUnassignedAssignableUserForTest(
       actorId: user.id,
       role: user.role as Role,
       organizationId: user.organizationId,
+      // Mint with the row's current credential epoch (#325).
+      authEpoch: user.authEpoch,
     },
     getRuntimeConfig().authSecret.jwtSecret,
   );
@@ -499,6 +507,8 @@ export async function createUnsupportedRoleUserForTest(
       actorId: user.id,
       role: user.role as Role,
       organizationId: user.organizationId,
+      // Mint with the row's current credential epoch (#325).
+      authEpoch: user.authEpoch,
     },
     getRuntimeConfig().authSecret.jwtSecret,
   );
@@ -613,6 +623,8 @@ export async function createCandidateViaApi(
       actorId: body.userId,
       role: "Candidate",
       organizationId: orgId,
+      // Freshly created user: DB default epoch is 0.
+      authEpoch: 0,
     },
     getRuntimeConfig().authSecret.jwtSecret,
   );
@@ -828,4 +840,36 @@ export async function exportResultsCsvAsAdmin(
     headers: res.headers,
     body: typeof res.body === "string" ? res.body : res.body.toString(),
   };
+}
+
+/**
+ * #325 R2: builds a SECOND Fastify app instance against the SAME database
+ * connection as an existing {@link TestContext}, with the production plugin
+ * assembly (security, error handler, db, audit lifecycle, auth...). The
+ * original instance is intentionally left untouched; tests use the rebuilt
+ * instance to prove durable epoch revocation is not in-memory state.
+ *
+ * Does NOT re-seed and does NOT close on ctx.cleanup() — the test must
+ * `await app.close()` it when done.
+ */
+export async function rebuildAppOnSameDb(
+  ctx: TestContext,
+  routePlugin: FastifyPluginAsync,
+  opts?: { prefix?: string },
+): Promise<FastifyInstance> {
+  const app = Fastify();
+  setupSecurity(app);
+  setupErrorHandler(app);
+  await app.register(zodProviderPlugin);
+  await app.register(fastifyCookie);
+  await app.register(createDbPlugin(ctx.conn.db));
+  await app.register(auditLifecyclePlugin);
+  await app.register(nowPlugin);
+  await app.register(authPlugin);
+  await app.register(authzScopedPlugin);
+  await app.register(tenantPlugin);
+  await app.register(emailPlugin);
+  await app.register(routePlugin, { prefix: opts?.prefix ?? "/api" });
+  await app.ready();
+  return app;
 }

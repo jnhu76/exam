@@ -16,6 +16,9 @@ vi.mock("@exam/db/src/repository/userRepo.js", () => ({
       organizationId: "org-1",
       role: mockRole,
       isActive: true,
+      // #325: authenticate compares the JWT authEpoch claim against this
+      // durable authority; fixture tokens are minted with epoch 0.
+      authEpoch: 0,
     }),
   }),
 }));
@@ -74,7 +77,12 @@ describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret
     const app = await buildAppWithAuth();
 
     const token = signJWT(
-      { actorId: "user-1", role: "Admin", organizationId: "org-1" },
+      {
+        actorId: "user-1",
+        role: "Admin",
+        organizationId: "org-1",
+        authEpoch: 0,
+      },
       "runtime-secret-A",
     );
 
@@ -94,7 +102,12 @@ describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret
     const app = await buildAppWithAuth();
 
     const token = signJWT(
-      { actorId: "user-1", role: "Admin", organizationId: "org-1" },
+      {
+        actorId: "user-1",
+        role: "Admin",
+        organizationId: "org-1",
+        authEpoch: 0,
+      },
       "different-secret-B",
     );
 
@@ -120,6 +133,7 @@ describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret
       actorId: "user-1",
       role: "Admin",
       organizationId: "org-1",
+      authEpoch: 0,
     });
 
     const res = await app.inject({
@@ -166,7 +180,12 @@ describe("auth plugin: requireCapability (RBAC runtime activation, PR #3)", () =
 
   async function tokenFor(role: string) {
     return signJWT(
-      { actorId: "user-1", role: role as never, organizationId: "org-1" },
+      {
+        actorId: "user-1",
+        role: role as never,
+        organizationId: "org-1",
+        authEpoch: 0,
+      },
       "runtime-secret-A",
     );
   }
@@ -290,7 +309,12 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
 
   function validToken(): string {
     return signJWT(
-      { actorId: "user-1", role: "Admin", organizationId: "org-1" },
+      {
+        actorId: "user-1",
+        role: "Admin",
+        organizationId: "org-1",
+        authEpoch: 0,
+      },
       "runtime-secret-A",
     );
   }

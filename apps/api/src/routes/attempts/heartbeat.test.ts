@@ -279,6 +279,7 @@ describe("attempt routes", () => {
           actorId: admin.id,
           role: admin.role as Role,
           organizationId: org.id,
+          authEpoch: 0,
         },
         jwtSecret,
       );
@@ -287,6 +288,7 @@ describe("attempt routes", () => {
           actorId: candidate.id,
           role: candidate.role as Role,
           organizationId: org.id,
+          authEpoch: 0,
         },
         jwtSecret,
       );

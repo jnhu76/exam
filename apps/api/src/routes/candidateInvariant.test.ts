@@ -129,6 +129,7 @@ describe("candidate profile invariant", () => {
       actorId: bareUserId,
       role: "Candidate",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const res = await ctx.app.inject({
@@ -175,6 +176,7 @@ describe("candidate profile invariant", () => {
       actorId: bareUserId,
       role: "Candidate",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const examId = await createExamViaApi(ctx.app, ctx.adminToken, {

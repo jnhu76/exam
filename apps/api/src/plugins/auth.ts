@@ -114,6 +114,17 @@ export function buildAuthPlugin(
           .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
 
+      // #325: durable revocation authority. The token's authEpoch claim must
+      // equal the user's current credential generation; a mismatch means the
+      // epoch advanced after issuance (logout / password change / reset) and
+      // the token is revoked. Same generic failure surface as invalid or
+      // expired tokens — no epoch values, no reason distinction.
+      if (payload.authEpoch !== user.authEpoch) {
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
+      }
+
       // RBAC-M10-E: resolve the authoritative runtime authority from ACTIVE
       // user_role_assignments. users.role / JWT role are NO LONGER
       // authoritative — they are compatibility projections only.

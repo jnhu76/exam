@@ -77,6 +77,7 @@ describe("Phase 1.1 regression - critical path", () => {
       actorId: passwordTestUserId,
       role: "Admin",
       organizationId: ctx.org.id,
+      authEpoch: 0,
     });
 
     const courseRes = await ctx.app.inject({

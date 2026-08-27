@@ -73,10 +73,15 @@ export async function resetAdminPassword(
   }
 
   const newHash = await hashPassword(params.newPassword);
+  // #325: the CLI reset also advances the credential epoch in the same
+  // durable change — resetting a compromised Admin password invalidates all
+  // previously issued JWTs for that account.
   await executeInTransaction(db, async (tx) => {
-    await createUserRepo(tx).update(systemCtx, user.id, {
-      passwordHash: newHash,
-    });
+    await createUserRepo(tx).updatePasswordAndAdvanceAuthEpoch(
+      systemCtx,
+      user.id,
+      newHash,
+    );
     await recordAtomicSystemAudit(
       tx,
       { tenant: systemCtx },

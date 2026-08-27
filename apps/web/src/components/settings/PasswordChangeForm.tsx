@@ -12,6 +12,11 @@ import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 /**
  * Password change form with current/new/confirm fields and minimum-length
  * validation. Optionally wraps in a Card or renders as a bare <form>.
+ *
+ * Changing the password revokes every issued token for the account (durable
+ * per-user credential epoch), so a successful change signs the user out:
+ * the form performs an explicit logout + redirect to /login instead of
+ * leaving the UI on a page whose next request would 401.
  */
 export function PasswordChangeForm({
   cardWrapper = true,
@@ -46,6 +51,8 @@ export function PasswordChangeForm({
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      await api.post("/api/auth/logout");
+      window.location.assign("/login");
     } catch (err) {
       toast.error(
         err instanceof Error

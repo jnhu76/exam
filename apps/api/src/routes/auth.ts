@@ -343,11 +343,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       // JWT role claim is a compatibility projection only; it never
       // authorizes (authenticate resolves authority fresh from assignments).
+      // #325: the token also carries the user's current credential epoch —
+      // the durable revocation authority checked on every request.
       const token = signJWT(
         {
           actorId: user.id,
           role: primaryRole as Role,
           organizationId: user.organizationId,
+          authEpoch: user.authEpoch,
         },
         getRuntimeConfig().authSecret.jwtSecret,
       );
@@ -409,10 +412,18 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /**
-     * POST /logout — clear the auth-token cookie and record an audit event.
+     * POST /logout — revoke the presented credential epoch, then clear the
+     * auth-token cookie (#325).
      *
-     * Attempts to verify the existing token for audit logging but
-     * clears the cookie regardless of token validity.
+     * Logout is intentionally callable with an absent/invalid/expired cookie
+     * so the browser cookie can always be cleared: 204 in every path. Only a
+     * VALID token performs durable revocation, and revocation is a CAS on
+     * `users.auth_epoch` — a stale already-revoked token cannot advance the
+     * authority over a newer login session. Revocation is all-tab /
+     * all-device: every JWT sharing the revoked epoch becomes invalid.
+     *
+     * Audit records the event best-effort (valid-token paths); audit
+     * availability never blocks clearing the browser cookie.
      */
     async (request, reply) => {
       const token = request.cookies["auth-token"];
@@ -422,6 +433,30 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             token,
             getRuntimeConfig().authSecret.jwtSecret,
           );
+          // Conditional mutation: only a credential that is CURRENT at this
+          // instant may advance the authority (stale-token replay against
+          // /logout must not invalidate a newer session).
+          let revokedEpoch: number | null = null;
+          try {
+            revokedEpoch = await createUserRepo(
+              fastify.db,
+            ).advanceAuthEpochIfCurrent(
+              {
+                actorId: payload.actorId,
+                organizationId: payload.organizationId,
+                role: payload.role,
+                permissions: [],
+                sessionId: "logout",
+              },
+              payload.actorId,
+              payload.authEpoch,
+            );
+          } catch (err) {
+            fastify.log.error(
+              { err, requestId: request.id },
+              "logout: epoch revocation failed",
+            );
+          }
           const ctx: RequestContext = {
             actorId: payload.actorId,
             organizationId: payload.organizationId,
@@ -434,6 +469,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             action: "logout",
             targetType: "user",
             targetId: payload.actorId,
+            metadata: { revoked: revokedEpoch !== null },
           });
         } catch (err) {
           fastify.log.warn(
@@ -550,10 +586,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(newPassword);
+      // #325: password change revokes every existing JWT for this user —
+      // hash + epoch advance are one atomic write. The current request
+      // returns success but its credential is dead for the NEXT protected
+      // request; the client is redirected to login by the 401.
       const updated = await executeInTransaction(fastify.db, async (tx) => {
-        const changed = await createUserRepo(tx).update(targetCtx, user.id, {
-          passwordHash: newHash,
-        });
+        const changed = await createUserRepo(
+          tx,
+        ).updatePasswordAndAdvanceAuthEpoch(targetCtx, user.id, newHash);
         if (!changed) return null;
         await recordAtomicHttpAudit(tx, request, targetCtx, {
           action: "auth.password_update",
