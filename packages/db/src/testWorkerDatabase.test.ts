@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
-  computeSlotLeaseKey,
   dropDatabaseIfExists,
   ensureDatabaseExists,
   setupWorkerTestDatabase,
@@ -9,10 +8,7 @@ import {
   withDatabaseName,
 } from "./testWorkerDatabase.js";
 import { resolveTestDbUrl } from "./testDb.js";
-import {
-  getTestInfraLifecycleLockKey,
-  getTestInfraLockAcquisitionCount,
-} from "./testInfraLock.js";
+import { getTestInfraLockAcquisitionCount } from "./testInfraLock.js";
 
 /**
  * ADR-007 Phase 3A worker-database prototype tests.
@@ -432,66 +428,6 @@ PG_DESCRIBE(
         await dropDatabaseIfExists(ADMIN_URL, a.databaseName, {
           keepMissing: true,
         });
-      }
-    });
-  },
-);
-
-PG_DESCRIBE(
-  "setupWorkerTestDatabase — slot-database run lease (round-3)",
-  // The foreign-holder case waits TEST_SLOT_LEASE_WAIT_MS (shortened below to
-  // 500ms); the happy path bootstraps a fresh worker DB under the lifecycle
-  // lock (seconds under sibling load).
-  { timeout: 30_000 },
-  () => {
-    it("lease key is namespace-separated from the lifecycle lock key", () => {
-      expect(computeSlotLeaseKey("exam_test_w1")).not.toBe(
-        getTestInfraLifecycleLockKey(),
-      );
-      // Different slot databases derive different lease keys.
-      expect(computeSlotLeaseKey("exam_test_w1")).not.toBe(
-        computeSlotLeaseKey("exam_test_w2"),
-      );
-    });
-
-    it("fails fast when a foreign session already holds the slot lease (deterministic)", async () => {
-      const runTag = Math.random().toString(36).slice(2, 8);
-      const workerId = `lease_${runTag}`.replace(/[^a-z0-9_]/g, "_");
-      // Hold the EXACT lease key from a foreign session — no timing, no race.
-      const foreign = postgres(ADMIN_URL, { max: 1 });
-      try {
-        await foreign.unsafe("SELECT pg_advisory_lock($1)", [
-          computeSlotLeaseKey(`exam_test_w${workerId}`).toString(),
-        ]);
-        await expect(
-          setupWorkerTestDatabase({
-            env: {
-              TEST_DB_ISOLATION: "worker-database",
-              TEST_WORKER_ID: workerId,
-              TEST_DATABASE_URL: BASE_URL,
-              TEST_SLOT_LEASE_WAIT_MS: "500",
-            },
-          }),
-        ).rejects.toThrow(/is in use by another test run/);
-
-        // Release the foreign lease; the same process must now succeed — the
-        // bounded wait absorbs the legitimate sequential handoff.
-        await foreign.unsafe("SELECT pg_advisory_unlock($1)", [
-          computeSlotLeaseKey(`exam_test_w${workerId}`).toString(),
-        ]);
-        const handle = await setupWorkerTestDatabase({
-          env: {
-            TEST_DB_ISOLATION: "worker-database",
-            TEST_WORKER_ID: workerId,
-            TEST_DATABASE_URL: BASE_URL,
-          },
-        });
-        await handle.close();
-        await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
-          keepMissing: true,
-        });
-      } finally {
-        await foreign.end().catch(() => {});
       }
     });
   },

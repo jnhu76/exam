@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { withDatabaseName } from "./testWorkerDatabase.js";
 import {
+  dropDatabaseIfExists,
+  ensureDatabaseExists,
+  withDatabaseName,
+} from "./testWorkerDatabase.js";
+import {
+  acquireTestInfraRunLease,
   getTestInfraLifecycleLockKey,
   resolveTestInfraCoordinationUrl,
+  TEST_INFRA_RUN_LEASE_LOCK_KEY,
   withTestInfraLifecycleLock,
 } from "./testInfraLock.js";
 import { resolveTestDbUrl } from "./testDb.js";
@@ -633,6 +639,168 @@ PG_DESCRIBE(
         });
       } finally {
         await probe.end().catch(() => {});
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "wrapper env authority — ensureDatabaseExists / dropDatabaseIfExists (round-4)",
+  // Queue-participant budget: both wrapper phases take the real lifecycle lock
+  // (and CREATE/DROP DATABASE) on the injected coordination DB.
+  { timeout: 30_000 },
+  () => {
+    it("ensure and drop queue on the CALLER-resolved coordination DB, not a process.env re-read", async () => {
+      // Wrapper-contract regression (round-4 review): the round-3 fix threaded
+      // `env` through `withTestInfraLifecycleLock` when called DIRECTLY, but
+      // `ensureDatabaseExists` / `dropDatabaseIfExists` — the wrappers every
+      // real caller goes through — silently dropped it. Result: the bootstrap's
+      // ensure/drop DDL serialized on the AMBIENT authority while its migration
+      // used the caller's — one bootstrap on two serialization queues.
+      //
+      // Proof shape (deterministic both ways): a foreign session holds THE
+      // lifecycle key on the caller-injected coordination DB. If the wrapper
+      // propagates env, its lock attempt queues THERE — visible as an un-granted
+      // pg_locks waiter row tagged with the injected DB oid — and the wrapper
+      // blocks until the holder releases. If the wrapper re-reads process.env
+      // (the bug), its lock lands on the ambient DB, no waiter row ever carries
+      // the injected oid, the poll times out and the test FAILS.
+      const injectedDb = `exam_test_coordwrap_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      const target = `exam_test_wraptgt_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      await ensureDb(ADMIN_URL, injectedDb);
+      const injectedEnv = { TEST_ADMIN_DATABASE: injectedDb };
+      const injectedUrl = resolveTestInfraCoordinationUrl(
+        BASE_URL,
+        injectedEnv,
+      );
+      const key = getTestInfraLifecycleLockKey();
+
+      const oidProbe = postgres(injectedUrl, { max: 1 });
+      const foreign = postgres(injectedUrl, { max: 1 });
+      const saved = process.env.TEST_ADMIN_DATABASE;
+      process.env.TEST_ADMIN_DATABASE = "postgres"; // ambient diverges
+      let ensurePromise: Promise<void> | undefined;
+      let dropPromise: Promise<void> | undefined;
+      try {
+        let injectedOid = 0;
+        const oidRows = (await oidProbe`
+          SELECT oid FROM pg_database WHERE datname = current_database()
+        `) as Array<{ oid: number }>;
+        injectedOid = Number(oidRows[0]?.oid);
+        expect(injectedOid).toBeGreaterThan(0);
+
+        // Phase 1 — ensureDatabaseExists must queue on the injected authority.
+        await foreign.unsafe("SELECT pg_advisory_lock($1)", [key.toString()]);
+        ensurePromise = ensureDatabaseExists(injectedUrl, target, {
+          env: injectedEnv,
+        });
+        await pollAdvisoryLocks(injectedUrl, key, (rs) =>
+          rs.some((r) => !r.granted && Number(r.database) === injectedOid),
+        );
+        await foreign.unsafe("SELECT pg_advisory_unlock($1)", [key.toString()]);
+        await ensurePromise;
+        ensurePromise = undefined;
+
+        // The wrapper really created the target DB through this path.
+        const catalog = postgres(ADMIN_URL, { max: 1 });
+        try {
+          const created = await catalog`
+            SELECT 1 FROM pg_database WHERE datname = ${target}
+          `;
+          expect(created.length).toBe(1);
+        } finally {
+          await catalog.end();
+        }
+
+        // Phase 2 — dropDatabaseIfExists must queue on the injected authority.
+        await foreign.unsafe("SELECT pg_advisory_lock($1)", [key.toString()]);
+        dropPromise = dropDatabaseIfExists(injectedUrl, target, {
+          env: injectedEnv,
+        });
+        await pollAdvisoryLocks(injectedUrl, key, (rs) =>
+          rs.some((r) => !r.granted && Number(r.database) === injectedOid),
+        );
+        await foreign.unsafe("SELECT pg_advisory_unlock($1)", [key.toString()]);
+        await dropPromise;
+        dropPromise = undefined;
+      } finally {
+        if (saved === undefined) delete process.env.TEST_ADMIN_DATABASE;
+        else process.env.TEST_ADMIN_DATABASE = saved;
+        await Promise.allSettled([
+          ensurePromise ?? Promise.resolve(),
+          dropPromise ?? Promise.resolve(),
+        ]);
+        await foreign.end().catch(() => {});
+        await oidProbe.end().catch(() => {});
+        await dropDb(ADMIN_URL, target).catch(() => {});
+        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
+      }
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "acquireTestInfraRunLease — run-level exclusion lease (round-4)",
+  // The lease is one try-lock round-trip on a disposable coordination DB; the
+  // lifecycle-queue budget is pure hang protection.
+  { timeout: 30_000 },
+  () => {
+    it("run-lease key is namespace-separated from the lifecycle key", () => {
+      expect(TEST_INFRA_RUN_LEASE_LOCK_KEY).not.toBe(
+        getTestInfraLifecycleLockKey(),
+      );
+      expect(TEST_INFRA_RUN_LEASE_LOCK_KEY).not.toBe(0n);
+    });
+
+    it("run B fails IMMEDIATELY while run A holds; release is idempotent and unblocks", async () => {
+      // The withdrawn per-slot lease polled up to 10s before failing — an
+      // internal wait racing the caller's testTimeout. The run lease must
+      // answer in ONE try-lock round-trip: conflict ⇒ immediate rejection.
+      const injectedDb = `exam_test_runlease_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      await ensureDb(ADMIN_URL, injectedDb);
+      const env = { TEST_ADMIN_DATABASE: injectedDb };
+      try {
+        const a = await acquireTestInfraRunLease(BASE_URL, env);
+        const t0 = Date.now();
+        await expect(acquireTestInfraRunLease(BASE_URL, env)).rejects.toThrow(
+          /another worker-database test run is already active/,
+        );
+        expect(Date.now() - t0).toBeLessThan(2_000);
+        await a.release();
+        await a.release(); // idempotent — teardown may race a double call
+        const b = await acquireTestInfraRunLease(BASE_URL, env);
+        await b.release();
+      } finally {
+        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
+      }
+    });
+
+    it("lease authority comes from the CALLER env (TEST_ADMIN_DATABASE domain separation)", async () => {
+      // Same authority discipline as the lifecycle lock: advisory locks are
+      // database-local, so a holder on the injected coordination DB must NOT
+      // affect a run whose env resolves a different coordination DB.
+      const injectedDb = `exam_test_runauth_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      await ensureDb(ADMIN_URL, injectedDb);
+      try {
+        const injected = { TEST_ADMIN_DATABASE: injectedDb };
+        const ambient = { TEST_ADMIN_DATABASE: "postgres" };
+        const a = await acquireTestInfraRunLease(BASE_URL, injected);
+        await expect(
+          acquireTestInfraRunLease(BASE_URL, injected),
+        ).rejects.toThrow(/already active/);
+        const other = await acquireTestInfraRunLease(BASE_URL, ambient);
+        await other.release();
+        await a.release();
+      } finally {
+        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
       }
     });
   },

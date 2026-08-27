@@ -42,7 +42,6 @@ import postgres from "postgres";
 import { parseAppMode, resolveTestBranchUrl } from "./databaseUrl.js";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
 import {
-  computeAdvisoryLockKey,
   resolveTestInfraCoordinationUrl,
   withTestInfraLifecycleLock,
 } from "./testInfraLock.js";
@@ -219,21 +218,30 @@ export async function ensureDatabaseExists(
   options: { env?: ResolverEnv } = {},
 ): Promise<void> {
   assertPgNameSafe(databaseName);
-  await withTestInfraLifecycleLock(adminUrl, async () => {
-    const admin = postgres(adminUrl);
-    try {
-      const rows = (await admin`
+  await withTestInfraLifecycleLock(
+    adminUrl,
+    async () => {
+      const admin = postgres(adminUrl);
+      try {
+        const rows = (await admin`
         SELECT 1 FROM pg_database WHERE datname = ${databaseName}
       `) as Array<{ "?column?": number }>;
-      if (rows.length === 0) {
-        await admin.unsafe(
-          `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
-        );
+        if (rows.length === 0) {
+          await admin.unsafe(
+            `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
+          );
+        }
+      } finally {
+        await admin.end();
       }
-    } finally {
-      await admin.end();
-    }
-  });
+    },
+    // Pass the caller's env DOWN: the lock must host on the SAME coordination
+    // authority the caller resolved `adminUrl` from. Without this the lock
+    // helper silently re-read process.env.TEST_ADMIN_DATABASE below the seam
+    // and the DDL serializes on a different database than the caller's
+    // authority (round-4 wrapper-contract fix).
+    { ...(options.env ? { env: options.env } : {}) },
+  );
 }
 
 /**
@@ -257,32 +265,37 @@ export async function dropDatabaseIfExists(
 ): Promise<void> {
   const keepMissing = options.keepMissing ?? true;
   assertPgNameSafe(databaseName);
-  await withTestInfraLifecycleLock(adminUrl, async () => {
-    const admin = postgres(adminUrl);
-    try {
-      // Terminate any lingering connections to the target DB so DROP DATABASE
-      // cannot fail with "database ... is being accessed by other users".
-      // Exclude our own backend pid. Safe to run even if the DB is gone.
-      await admin`
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
-      `;
+  await withTestInfraLifecycleLock(
+    adminUrl,
+    async () => {
+      const admin = postgres(adminUrl);
       try {
-        await admin.unsafe(
-          `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
-        );
-      } catch (err) {
-        // `IF EXISTS` already covers the missing case; if keepMissing and the
-        // error is specifically "does not exist", it is a no-op. Any other
-        // error (e.g. lock conflict) is re-thrown so callers see it.
-        if (keepMissing && isDatabaseMissingError(err)) return;
-        throw err;
+        // Terminate any lingering connections to the target DB so DROP DATABASE
+        // cannot fail with "database ... is being accessed by other users".
+        // Exclude our own backend pid. Safe to run even if the DB is gone.
+        await admin`
+          SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity
+          WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
+        `;
+        try {
+          await admin.unsafe(
+            `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+          );
+        } catch (err) {
+          // `IF EXISTS` already covers the missing case; if keepMissing and the
+          // error is specifically "does not exist", it is a no-op. Any other
+          // error (e.g. lock conflict) is re-thrown so callers see it.
+          if (keepMissing && isDatabaseMissingError(err)) return;
+          throw err;
+        }
+      } finally {
+        await admin.end();
       }
-    } finally {
-      await admin.end();
-    }
-  });
+    },
+    // Same wrapper authority contract as ensureDatabaseExists above.
+    { ...(options.env ? { env: options.env } : {}) },
+  );
 }
 
 /** Heuristic: is `err` the "database does not exist" catalog error (3D000)? */
@@ -317,99 +330,6 @@ const bootstrappedWorkerDatabases = new Map<string, Promise<void>>();
 
 function workerBootstrapMemoKey(adminUrl: string, workerUrl: string): string {
   return `${adminUrl} ${workerUrl}`;
-}
-
-/**
- * Per-slot-database run lease connections, keyed by database name.
- *
- * See {@link acquireSlotDatabaseLease} for the contract. The connection is
- * deliberately held for the remainder of the process: the session-level
- * advisory lease releases automatically when the process exits (socket close),
- * so a crashed run can never leak its lease.
- */
-const slotDatabaseLeases = new Map<string, postgres.Sql>();
-
-/**
- * How long {@link acquireSlotDatabaseLease} waits before failing fast. A
- * sequential same-run slot handoff (previous file's process exiting) resolves
- * in milliseconds; a genuinely concurrent run holds the slot for minutes, so
- * 10s cleanly separates the two. `TEST_SLOT_LEASE_WAIT_MS` may override the
- * budget in tests (shortens the deterministic foreign-holder regression).
- */
-const SLOT_LEASE_ACQUIRE_TIMEOUT_MS = 10_000;
-
-/** Advisory-lock key namespace for the per-slot-database run lease. */
-const SLOT_LEASE_LOCK_NAME_PREFIX = "exam_test_slot_lease:";
-
-/**
- * Deterministic advisory-lock key for a slot database's run lease. Exported
- * for deterministic regression tests that must hold/release the exact lease
- * key from a foreign session.
- */
-export function computeSlotLeaseKey(databaseName: string): bigint {
-  return computeAdvisoryLockKey(
-    `${SLOT_LEASE_LOCK_NAME_PREFIX}${databaseName}`,
-  );
-}
-
-/**
- * Acquire the per-slot-database RUN lease, or fail fast.
- *
- * CONTRACT (round-3, 2026-08-27): two independent local Vitest runs on the
- * same PostgreSQL server both derive the same slot database names from
- * `VITEST_POOL_ID` (bounded 1..maxWorkers). Without a guard they would share
- * physical slot DBs CONCURRENTLY — each run's inter-file truncate boundary
- * wipes the other run's fixtures mid-test. Concurrent local worker-database
- * runs are NOT supported (CI shards use separate PG service containers, so
- * they never contend). Instead of inventing a run namespace, this lease makes
- * the existing single-run contract executable: the first process to claim a
- * slot database holds a session-level advisory lease on the coordination DB
- * for its process lifetime; a second process fails fast with a clear message.
- *
- * The lease uses `pg_try_advisory_lock` with a bounded retry loop rather than
- * one immediate try: sequential files within ONE run hand the slot over as
- * the previous worker process exits, and that teardown tail can hold the
- * lease for a few hundred milliseconds. A bounded wait absorbs the legitimate
- * handoff while still failing fast (default 10s) against a real concurrent
- * run.
- */
-async function acquireSlotDatabaseLease(
-  env: ResolverEnv,
-  adminUrl: string,
-  databaseName: string,
-): Promise<void> {
-  if (slotDatabaseLeases.has(databaseName)) return;
-  const key = computeSlotLeaseKey(databaseName);
-  const lease = postgres(adminUrl, { max: 1 });
-  const rawWait = Number(env.TEST_SLOT_LEASE_WAIT_MS);
-  const waitMs =
-    Number.isFinite(rawWait) && rawWait >= 0
-      ? rawWait
-      : SLOT_LEASE_ACQUIRE_TIMEOUT_MS;
-  const deadline = Date.now() + waitMs;
-  try {
-    for (;;) {
-      const rows = (await lease.unsafe(
-        "SELECT pg_try_advisory_lock($1) AS ok",
-        [key.toString()],
-      )) as Array<{ ok: boolean }>;
-      if (rows[0]?.ok === true) {
-        slotDatabaseLeases.set(databaseName, lease);
-        return;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `[testWorkerDatabase] slot database "${databaseName}" is in use by another test run on this PostgreSQL server. ` +
-            `Concurrent local worker-database runs are not supported: both runs derive the same slot database names from VITEST_POOL_ID. ` +
-            `Wait for the other run to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`,
-        );
-      }
-      await new Promise((r) => setTimeout(r, 250));
-    }
-  } catch (err) {
-    await lease.end().catch(() => {});
-    throw err;
-  }
 }
 
 function ensureWorkerDatabaseBootstrapped(
@@ -477,10 +397,6 @@ export async function setupWorkerTestDatabase(
   const adminUrl = resolveAdminUrl(env, baseUrl);
   const workerUrl = withDatabaseName(baseUrl, databaseName);
 
-  // Claim the slot database for this process BEFORE any lifecycle work: this
-  // is the single-run contract's executable boundary (see
-  // acquireSlotDatabaseLease). Fails fast if another run already owns it.
-  await acquireSlotDatabaseLease(env, adminUrl, databaseName);
   await ensureWorkerDatabaseBootstrapped(
     adminUrl,
     workerUrl,
