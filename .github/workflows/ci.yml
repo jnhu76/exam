@@ -91,7 +91,10 @@ jobs:
   deployment-fresh-install:
     name: Deployment fresh-install gate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 30 min: GH runners have NO docker layer cache, so the first
+    # up --build pays the full source build every run (p50 ~12-20 min).
+    # Measured after the first CI runs; tighten when real data exists.
+    timeout-minutes: 30
     needs: static
 
     steps:

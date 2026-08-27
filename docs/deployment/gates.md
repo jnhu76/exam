@@ -20,7 +20,7 @@ interpolation.
 
 | Gate | Script | Trigger | Runtime class (measured) | Isolation |
 | --- | --- | --- | --- | --- |
-| Fresh-install acceptance (PR-blocking) | `pnpm test:deployment:fresh` (`tests/deployment/fresh-install.sh`) | every PR (`deployment-fresh-install` CI job) | ~4–6 min warm cache locally; CI cold-cache bounded by the 25 min job timeout | mktemp env file (never repo-root `.env.deploy`; dev file proven untouched via checksum), mktemp `EXAM_DATA_ROOT`, unique Compose project + canary host port, `down` + guarded temp-root removal, residue asserted |
+| Fresh-install acceptance (PR-blocking) | `pnpm test:deployment:fresh` (`tests/deployment/fresh-install.sh`) | every PR (`deployment-fresh-install` CI job) | ~1:45 warm cache locally; CI pays a full cold image build on every run (no runner layer cache; p50 est. 12–20 min, bounded by the 30 min job timeout — re-baseline after the first CI runs) | mktemp env file (never repo-root `.env.deploy`; dev file proven untouched via checksum), mktemp `EXAM_DATA_ROOT`, unique Compose project + canary host port, `down` + guarded temp-root removal (removal is best-effort with a WARN; the compose-project residue assert is the hard gate), INT/TERM routed through the EXIT trap |
 | Compose smoke | `pnpm test:deployment:compose` (`compose-smoke.sh`) | every PR, inside the fresh-install gate; also runnable standalone | ~2–3 min warm | same as above (its own temp root + project) |
 | Launchpad bootstrap | `pnpm test:deployment:launchpad` | release / manual | not yet measured; bootstrap-only flow | isolated project + temp root (suite-owned) |
 | Persistence & cold restore | `pnpm test:deployment:persistence` | release / manual | not yet measured; multi-recreation flow | isolated project + temp root |
@@ -57,7 +57,10 @@ Stages, each with a tagged failure (`[env]` `[smoke]` `[persist]` `[cleanup]`):
    unchanged by the rerun, login still works, and the published host port
    equals the env-file canary.
 4. `[cleanup]` — teardown, then asserts the Compose project is no longer
-   registered and the guarded temp roots are removed.
+   registered (`docker compose ls` scans all projects; names are
+   timestamp-unique, so a match is unambiguous residue evidence). Temp-root
+   removal is best-effort with a WARN — container-owned PGDATA files can
+   survive a failed removal without turning the gate red.
 
 ## Failure semantics
 

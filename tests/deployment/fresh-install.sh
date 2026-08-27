@@ -47,13 +47,19 @@ PROJECT="fresh-install-${RUN_NUM}-$(date +%s)"
 stage() { echo "=== [${1}] ${2}"; }
 
 # Unique high host port (4100..4899), probed free so parallel gates/dev
-# stacks never collide. Node is guaranteed (the repo requires it).
+# stacks never collide. Node is guaranteed (the repo requires it). Bounded:
+# 100 probes, then a hard exit — never an unbounded retry recursion.
 pick_free_port() {
   node -e '
     const net = require("node:net");
     const base = 4100 + (process.pid % 800);
     let port = base;
+    let attempts = 0;
     const tryBind = () => {
+      if (++attempts > 100) {
+        process.stderr.write("pick_free_port: no free port found\n");
+        process.exit(1);
+      }
       const s = net.createServer();
       s.once("error", () => { port += 1; tryBind(); });
       s.listen(port, "127.0.0.1", () => {
@@ -69,18 +75,27 @@ safe_temp_root fresh-install-data EXAM_DATA_ROOT
 ENV_FILE="${GATE_TMP}/.env.deploy"
 export DEPLOY_ENV_FILE="${ENV_FILE}"
 export EXAM_DATA_ROOT
-CANARY_PORT="$(pick_free_port)"
 
+# Teardown first: any failure (or INT/TERM) after this point must not leak
+# the compose stack or the temp roots. Signal exits route through the EXIT
+# trap (run-wsl.sh precedent).
 cleanup() {
   stage cleanup "tearing down project ${PROJECT} and temp roots"
   compose_down_best_effort "${PROJECT}"
   cleanup_temp_root "${EXAM_DATA_ROOT}"
   cleanup_temp_root "${GATE_TMP}"
+  # `docker compose -p X ls` ignores -p and lists ALL projects; the grep
+  # scans their names. Names are timestamp-unique per run, so a match is
+  # unambiguous residue evidence.
   if run_compose "${PROJECT}" ls 2>/dev/null | grep -qw "${PROJECT}"; then
     echo "  WARN: compose project ${PROJECT} still registered." >&2
   fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+CANARY_PORT="$(pick_free_port)"
 
 # ── [env] Generation authority from nothing ─────────────────────────────
 stage env "generating deployment env into isolated path (never repo root)"
@@ -107,7 +122,9 @@ if [ -n "${REAL_ENV_BEFORE}" ]; then
     echo "[env] FAIL: developer .env.deploy was modified."; exit 1; }
 fi
 # Prove the file (not ambient env) resolves the interpolation contract.
-if run_compose "${PROJECT}" config 2>/dev/null | grep -q "JWT_SECRET: ${GEN_JWT}"; then
+# -F: generated secrets are hex, but never let a future charset turn the
+# value into a pattern.
+if run_compose "${PROJECT}" config 2>/dev/null | grep -qF "JWT_SECRET: ${GEN_JWT}"; then
   stage env "PASS: compose interpolation resolves the generated file"
 else
   echo "[env] FAIL: compose does not interpolate the generated env file."
@@ -119,8 +136,20 @@ stage smoke "running tests/deployment/compose-smoke.sh (env-file authority)"
 bash "${SCRIPT_DIR}/compose-smoke.sh" "${RUN_NUM}"
 
 # ── [persist] Down (keep data) → up again: recreation + persistence ──────
+# Build/boot output goes to a file so a failed build still yields a
+# stage-tagged diagnostic with a meaningful tail (never just 3 lines).
+boot_stack() {
+  local log="${GATE_TMP}/up.log"
+  if run_compose "${PROJECT}" up -d --build --quiet-pull >"${log}" 2>&1; then
+    tail -3 "${log}"
+  else
+    echo "[persist] FAIL: compose up --build failed; last 30 log lines:"
+    tail -30 "${log}" >&2
+    exit 1
+  fi
+}
 stage persist "first up --build against unique data root"
-run_compose "${PROJECT}" up -d --build --quiet-pull 2>&1 | tail -3
+boot_stack
 wait_for_postgres "${PROJECT}"
 wait_for_app "${PROJECT}"
 
@@ -153,7 +182,7 @@ stage persist "down WITHOUT deleting data, then up again (real container recreat
 run_compose "${PROJECT}" down --remove-orphans >/dev/null 2>&1
 [ -d "${EXAM_DATA_ROOT}/postgres" ] || {
   echo "[persist] FAIL: data root lost after down."; exit 1; }
-run_compose "${PROJECT}" up -d --build --quiet-pull 2>&1 | tail -3
+boot_stack
 wait_for_postgres "${PROJECT}"
 wait_for_app "${PROJECT}"
 
@@ -173,9 +202,12 @@ docker exec "$(app_container "${PROJECT}")" node -e "
 " || { echo "[persist] FAIL: admin login failed after recreation."; exit 1; }
 
 # Canary: the published host port must come from THE GENERATED FILE.
-PUBLISHED="$(run_compose "${PROJECT}" port app 3000 2>/dev/null | sed 's/.*://')"
+# `|| true` keeps the stage-tagged diagnostic reachable — with the port
+# mapping missing entirely, `compose port` exits non-zero, and without the
+# guard set -e would abort before the FAIL line explains WHY.
+PUBLISHED="$(run_compose "${PROJECT}" port app 3000 2>/dev/null | sed 's/.*://' || true)"
 [ "${PUBLISHED}" = "${CANARY_PORT}" ] || {
-  echo "[persist] FAIL: published host port ${PUBLISHED:-none} != canary ${CANARY_PORT} — the env file authority was bypassed."
+  echo "[persist] FAIL: published host port '${PUBLISHED:-none}' != canary ${CANARY_PORT} — the env file authority was bypassed."
   exit 1
 }
 stage persist "PASS: env-file canary port honored (${CANARY_PORT})"

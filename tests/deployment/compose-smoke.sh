@@ -135,6 +135,10 @@ trap cleanup EXIT
 
 # ── Test 1: empty POSTGRES_PASSWORD must fail Compose expansion ──────────
 echo "--- TEST 1: empty POSTGRES_PASSWORD fails Compose expansion ---"
+# Under DEPLOY_ENV_FILE (gate mode) the env file carries a real password, so
+# the property proven here is: a BLANK process-env override defeats the env
+# file and still fires the :? guard. Without the file, the property is the
+# classic unset-key failure. Both protect the same security boundary.
 # Unset the inherited values in a subshell (env -u cannot apply to shell
 # functions). Compose `${VAR:?...}` treats an unset OR empty value as a
 # failure. Capture output to a variable so `set -o pipefail` does not turn
