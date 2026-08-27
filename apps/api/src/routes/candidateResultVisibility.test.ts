@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
+import postgres from "postgres";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import type { TestContext } from "./testHelpers.js";
@@ -475,71 +476,99 @@ describe("P1 #324: candidate result visibility projection", () => {
       // Hold the enrollment FOR UPDATE lock, fire the start, and wait until it
       // is verifiably blocked on the engine's lock acquisition before writing
       // the terminal grading facts (mirroring finalizeTerminalGrading).
-      let startRes: Awaited<ReturnType<typeof ctx.app.inject>> | undefined;
-      await ctx.conn.sql.begin(async (sql) => {
-        await sql`SELECT id FROM exam_enrollments WHERE id = ${enrollmentId} FOR UPDATE`;
-        startRes = ctx.app.inject({
-          method: "POST",
-          url: `/api/attempts/${examId}/start`,
-          cookies: { "auth-token": ctx.candidateToken },
-        });
-        let blocked = false;
-        for (let i = 0; i < 200; i++) {
-          const rows = (await sql`
-            SELECT count(*)::int AS waiting
-            FROM pg_stat_activity
-            WHERE pid <> pg_backend_pid()
-              AND datname = current_database()
-              AND wait_event_type = 'Lock'
-          `) as unknown as Array<{ waiting: number }>;
-          if (rows[0]?.waiting && rows[0].waiting > 0) {
-            blocked = true;
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 10));
-        }
-        expect(blocked).toBe(true);
-        const passed = outcome === "pass";
-        const score = passed ? 10 : 0;
-        await sql`UPDATE exam_attempts SET status = 'graded', total_score = ${score}, passed = ${passed}, graded_at = now(), grading_status = 'auto_graded', grading_result = ${JSON.stringify(
-          [
-            {
-              questionId,
-              score,
-              maxScore: 10,
-              correct: passed,
-              candidateAnswer: passed ? "a" : "b",
-              standardAnswer: "a",
-            },
-          ],
-        )}::jsonb WHERE id = ${attemptId}`;
-        await sql`UPDATE exam_enrollments SET final_score = ${score}, final_passed = ${passed}, final_attempt_id = ${attemptId}, status = ${passed ? "completed" : "started"} WHERE id = ${enrollmentId}`;
+      //
+      // The lock-hold runs on a dedicated auxiliary client, not ctx.conn.sql:
+      // under file-schema isolation createPostgresDatabase forces that pool to
+      // max:1 (a single backend shared by the app and this transaction). A
+      // sql.begin on it starves the app's only backend — the start request
+      // never reaches PostgreSQL at all, so no Lock waiter exists for the
+      // pg_stat_activity probe to observe. With the test transaction on its
+      // own connection (same database + search_path), the engine acquires a
+      // real backend and blocks server-side on the enrollment row lock exactly
+      // as it does under worker-database pools.
+      const shown = await ctx.conn.sql`SHOW search_path`;
+      const searchPath = String(
+        (shown[0] as Record<string, unknown>).search_path,
+      );
+      const co = ctx.conn.sql.options;
+      const lockHoldSql = postgres({
+        host: Array.isArray(co.host) ? co.host[0] : co.host,
+        port: Array.isArray(co.port) ? co.port[0] : co.port,
+        username: co.user,
+        password: co.pass ?? undefined,
+        database: co.database,
+        max: 1,
+        connection: { search_path: searchPath },
       });
-      const response = await startRes!;
+      try {
+        let startRes: Awaited<ReturnType<typeof ctx.app.inject>> | undefined;
+        await lockHoldSql.begin(async (sql) => {
+          await sql`SELECT id FROM exam_enrollments WHERE id = ${enrollmentId} FOR UPDATE`;
+          startRes = ctx.app.inject({
+            method: "POST",
+            url: `/api/attempts/${examId}/start`,
+            cookies: { "auth-token": ctx.candidateToken },
+          });
+          let blocked = false;
+          for (let i = 0; i < 200; i++) {
+            const rows = (await sql`
+              SELECT count(*)::int AS waiting
+              FROM pg_stat_activity
+              WHERE pid <> pg_backend_pid()
+                AND datname = current_database()
+                AND wait_event_type = 'Lock'
+            `) as unknown as Array<{ waiting: number }>;
+            if (rows[0]?.waiting && rows[0].waiting > 0) {
+              blocked = true;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 10));
+          }
+          expect(blocked).toBe(true);
+          const passed = outcome === "pass";
+          const score = passed ? 10 : 0;
+          await sql`UPDATE exam_attempts SET status = 'graded', total_score = ${score}, passed = ${passed}, graded_at = now(), grading_status = 'auto_graded', grading_result = ${JSON.stringify(
+            [
+              {
+                questionId,
+                score,
+                maxScore: 10,
+                correct: passed,
+                candidateAnswer: passed ? "a" : "b",
+                standardAnswer: "a",
+              },
+            ],
+          )}::jsonb WHERE id = ${attemptId}`;
+          await sql`UPDATE exam_enrollments SET final_score = ${score}, final_passed = ${passed}, final_attempt_id = ${attemptId}, status = ${passed ? "completed" : "started"} WHERE id = ${enrollmentId}`;
+        });
+        const response = await startRes!;
 
-      // The start was in-flight before the terminalization committed and is
-      // decided on the committed state: identical opaque 409 for both outcomes.
-      // ConflictError's wire code normalizes to RESOURCE_CONFLICT (legacy map).
-      expect(response.statusCode).toBe(409);
-      const stripRequestId = (body: unknown) => {
-        const parsed = body as { error: Record<string, unknown> };
-        const { requestId: _req, ...error } = parsed.error;
-        return error;
-      };
-      expect(stripRequestId(response.json()).code).toBe("RESOURCE_CONFLICT");
-      expect(JSON.stringify(stripRequestId(response.json()))).not.toContain(
-        "已通过",
-      );
+        // The start was in-flight before the terminalization committed and is
+        // decided on the committed state: identical opaque 409 for both outcomes.
+        // ConflictError's wire code normalizes to RESOURCE_CONFLICT (legacy map).
+        expect(response.statusCode).toBe(409);
+        const stripRequestId = (body: unknown) => {
+          const parsed = body as { error: Record<string, unknown> };
+          const { requestId: _req, ...error } = parsed.error;
+          return error;
+        };
+        expect(stripRequestId(response.json()).code).toBe("RESOURCE_CONFLICT");
+        expect(JSON.stringify(stripRequestId(response.json()))).not.toContain(
+          "已通过",
+        );
 
-      const attempts = await createAttemptRepo(ctx.db).findByExamAndCandidate(
-        candidateCtx(),
-        examId,
-        candidateProfileId,
-      );
-      // No attempt #2 was created for either outcome.
-      expect(attempts.filter((a) => a.status === "in_progress")).toHaveLength(
-        0,
-      );
+        const attempts = await createAttemptRepo(ctx.db).findByExamAndCandidate(
+          candidateCtx(),
+          examId,
+          candidateProfileId,
+        );
+        // No attempt #2 was created for either outcome.
+        expect(attempts.filter((a) => a.status === "in_progress")).toHaveLength(
+          0,
+        );
+      } finally {
+        await lockHoldSql.end({ timeout: 5 });
+      }
     }
   });
 
