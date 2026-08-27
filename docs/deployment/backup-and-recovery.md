@@ -241,7 +241,7 @@ readable by the host user, so copy as root (or via a helper container):
 
 ```bash
 # Stop Exam on host A first.
-docker compose down
+docker compose --env-file .env.deploy down
 
 # Copy the COMPLETE data root to host B. On host A (as root, or via a
 # throwaway container that preserves ownership/mode/symlinks):
@@ -275,7 +275,7 @@ requires downtime while PostgreSQL is stopped.
 
 ```bash
 # 1. Stop Exam cleanly (PostgreSQL must be STOPPED — a live copy is corrupt-prone):
-docker compose down
+docker compose --env-file .env.deploy down
 
 # 2. Run the backup helper (copies the COMPLETE postgres tree to a fresh
 #    destination with ownership/mode/symlinks preserved). The source is the

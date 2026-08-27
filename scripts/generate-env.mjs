@@ -135,8 +135,14 @@ for (const key of PRESERVE_KEYS) {
 
 // EXAM_IMAGE follows .release-version when its current value is a canonical
 // pin for this repository (the upgrade path); any other value is an explicit
-// operator override and wins (see the derivation comment above).
-const existingImage = env.match(/^EXAM_IMAGE=(\S.*)$/m)?.[1].trim() ?? null;
+// operator override and wins (see the derivation comment above). Blank and
+// quoted-empty values are "absent" — they fall into ensureKey for filling.
+const imageBlankPattern = /^EXAM_IMAGE=(?:""|'')?[ \t]*$/m;
+const nonBlankImage = env.match(/^EXAM_IMAGE=(\S.*)$/m);
+const existingImage =
+  nonBlankImage && !imageBlankPattern.test(env)
+    ? nonBlankImage[1].trim()
+    : null;
 if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
   console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
 } else if (existingImage !== null) {

@@ -165,6 +165,12 @@ Do not hide product fixes inside release metadata work.
   than repair or move it.
 - A failed GitHub Release-creation step may be rerun safely only when the
   existing tag resolves to the exact intended release commit.
+- The release workflow also publishes the prebuilt image
+  `ghcr.io/jnhu76/exam:vX.Y.Z` (+ `sha-<commit>`) from the exact release
+  SHA (#321). On the FIRST image release, flip the GHCR package to Public
+  (one-time, Package settings) and verify an anonymous
+  `docker pull ghcr.io/jnhu76/exam:vX.Y.Z` succeeds — closeout must record
+  the resulting digest and the anonymous-pull check result.
 - Pre-1.0 releases may change quickly; breaking changes still belong in the
   changelog.
 

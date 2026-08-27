@@ -227,15 +227,16 @@ self-migrate call is serialized strictly AFTER the app's migrate call
 The `app` and `email-worker` services run the **prebuilt release image**
 pinned in `.env.deploy` as `EXAM_IMAGE`. `node scripts/generate-env.mjs`
 derives the pin from the repository's `.release-version`
-(`ghcr.io/jnhu76/exam:vX.Y.Z`); an explicit `EXAM_IMAGE` value always wins
-(private registry mirrors, offline loads). The image is published
-automatically by the release workflow (`.github/workflows/release.yml`)
-when the release tag is cut — same commit as the GitHub Release, the
-immutable tag, and the `sha-<commit>` alias tag. There is deliberately NO
-`latest` tag; the semantic-version pin is the authority. Compose
-`${EXAM_IMAGE:?...}` refuses to start the stack when the pin is missing.
-If the pinned tag has not been published yet, use the source-build path
-below.
+(`ghcr.io/jnhu76/exam:vX.Y.Z`); an explicit non-canonical `EXAM_IMAGE`
+value wins (private registry mirrors, offline loads), while a canonical
+`ghcr.io/jnhu76/exam:vX.Y.Z` pin follows `.release-version` on the next
+generate-env run (the upgrade path). The image is published automatically
+by the release workflow (`.github/workflows/release.yml`) when the release
+tag is cut — same commit as the GitHub Release, the enforced-immutable git
+tag, and a `sha-<commit>` alias tag. There is deliberately NO `latest` tag;
+the semantic-version pin is the authority. Compose `${EXAM_IMAGE:?...}`
+refuses to start the stack when the pin is missing. If the pinned tag has
+not been published yet, use the source-build path below.
 
 #### Online pull (default)
 
@@ -825,14 +826,16 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
     ghcr.io/jnhu76/exam:vX.Y.Z pin is re-derived; an explicit mirror
     value must be updated by hand), then pull it:
     docker compose --env-file .env.deploy pull.
-[ ] Pull/seed any new required env vars into .env.
+[ ] Pull/seed any new required env vars into .env.deploy.
 [ ] docker compose up -d (containers will run migrate on restart).
 [ ] Watch migration logs: docker compose logs app | grep -i migrat.
 [ ] Verify /api/health and /api/system/health.
 [ ] Verify /api/system/diagnostics reflects expected DB + worker state.
 [ ] Run the operator checklist (P6 audit §25).
 [ ] If rollback is needed: restore the DB backup and redeploy the previous
-    image tag.
+    image tag. NOTE: a canonical EXAM_IMAGE pin follows .release-version on
+    the next generate-env run, which would silently revert the rollback —
+    edit .env.deploy AFTER the last generate-env run, or pin by digest.
 ```
 
 Migrations are forward-only by default. drizzle-kit does not auto-generate
