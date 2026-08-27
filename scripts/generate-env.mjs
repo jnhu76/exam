@@ -137,19 +137,41 @@ for (const key of PRESERVE_KEYS) {
 // pin for this repository (the upgrade path); any other value is an explicit
 // operator override and wins (see the derivation comment above). Blank and
 // quoted-empty values are "absent" — they fall into ensureKey for filling.
-const imageBlankPattern = /^EXAM_IMAGE=(?:""|'')?[ \t]*$/m;
+// Values are classified on their UNQUOTED form (dotenv quoting around a
+// canonical pin must not mask it), and every EXAM_IMAGE line is rewritten
+// on the re-pin path so a stale or blank sibling can never create a
+// duplicate key whose LAST definition silently wins.
 const nonBlankImage = env.match(/^EXAM_IMAGE=(\S.*)$/m);
-const existingImage =
-  nonBlankImage && !imageBlankPattern.test(env)
-    ? nonBlankImage[1].trim()
-    : null;
+let existingImage = null;
+if (nonBlankImage) {
+  const unquoted = nonBlankImage[1].trim().replace(/^(["'])(.*)\1$/, "$2");
+  if (unquoted !== "") {
+    existingImage = unquoted;
+  }
+}
 if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
+  // Explicit override wins; drop blank EXAM_IMAGE siblings so a later fill
+  // cannot create a last-wins duplicate.
+  env = env.replace(/^EXAM_IMAGE=(?:""|'')?[ \t]*$/gm, "");
   console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
 } else if (existingImage !== null) {
-  env = env.replace(/^EXAM_IMAGE=\S.*$/m, `EXAM_IMAGE=${derivedImage}`);
-  console.log(
-    `EXAM_IMAGE re-pinned to ${derivedImage} (follows .release-version)`,
-  );
+  // Canonical pin: strip every previous EXAM_IMAGE line (quoted or blank)
+  // and append the single derived pin. Byte-idempotent when the pin is
+  // already current and alone.
+  const occurrences = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
+  if (
+    occurrences.length === 1 &&
+    occurrences[0] === `EXAM_IMAGE=${derivedImage}`
+  ) {
+    console.log(`EXAM_IMAGE already pinned to ${derivedImage}.`);
+  } else {
+    env = env.replace(/^EXAM_IMAGE=.*$/gm, "");
+    if (!env.endsWith("\n")) env += "\n";
+    env = `${env}EXAM_IMAGE=${derivedImage}\n`;
+    console.log(
+      `EXAM_IMAGE re-pinned to ${derivedImage} (follows .release-version)`,
+    );
+  }
 } else {
   ensureKey(
     "EXAM_IMAGE",

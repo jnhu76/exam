@@ -317,6 +317,49 @@ test("explicit EXAM_IMAGE wins over the derived pin (never rotated)", () => {
   }
 });
 
+test("quoted stale canonical pin + blank sibling: re-pinned, never duplicated", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-image-quoted-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    // The reviewer repro (#346): the shipped example carries a blank
+    // EXAM_IMAGE= line; an operator who hand-edits the stale pin in
+    // QUOTED dotenv form creates two keys. Duplicate keys are last-wins
+    // in dotenv/--env-file — the stale quoted value must not survive.
+    writeFileSync(
+      envPath,
+      readFileSync(EXAMPLE, "utf-8").replace(
+        /^EXAM_IMAGE=.*$/m,
+        'EXAM_IMAGE="ghcr.io/jnhu76/exam:v0.0.0"',
+      ),
+      "utf-8",
+    );
+    // reintroduce the blank sibling as the reviewer found it
+    writeFileSync(
+      envPath,
+      readFileSync(envPath, "utf-8").replace(
+        /^EXAM_IMAGE=.*$/m,
+        'EXAM_IMAGE="ghcr.io/jnhu76/exam:v0.0.0"\nEXAM_IMAGE=',
+      ),
+      "utf-8",
+    );
+
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+    const env = readFileSync(envPath, "utf-8");
+    const matches = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
+    assert.equal(matches.length, 1, "exactly one EXAM_IMAGE key must remain");
+    assert.equal(
+      matches[0],
+      `EXAM_IMAGE=ghcr.io/jnhu76/exam:${RELEASE_VERSION}`,
+      "the stale quoted pin must be re-pinned to the current release",
+    );
+    assert.match(result.stdout, /re-pinned/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("canonical EXAM_IMAGE pin follows .release-version on re-run (upgrade drift)", () => {
   const dir = mkdtempSync(join(tmpdir(), "genenv-image-repin-"));
   try {

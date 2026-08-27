@@ -58,8 +58,6 @@ for repository releases from `v0.0.1` onward.
 
 ### Fixed
 
-- Made logout and password changes revoke previously issued authentication
-  tokens through a durable per-user credential epoch (#325).
 - Release image tag derivation traps: the metadata action would have
   published a `v`-less tag (semver `{{version}}` strips the prefix, never
   matching the operator pin) and a `latest` tag (default flavor for stable
@@ -68,6 +66,11 @@ for repository releases from `v0.0.1` onward.
 - Lifecycle-suite credential probe: an old-credentials assertion could
   false-pass on a CSRF-403 origin rejection; it now sends the stack's
   allowed origin and asserts a genuine `401` (#329).
+- A quoted stale `EXAM_IMAGE` value beside a blank key could survive as a
+  duplicate (last-wins), silently keeping the stack on an old image after
+  an upgrade — `generate-env` now classifies unquoted values, rewrites
+  every `EXAM_IMAGE` line on re-pin, and stays byte-idempotent when the
+  pin is current.
 
 ### Security
 
