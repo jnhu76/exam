@@ -16,6 +16,8 @@
 >   — Email configuration operational guide.
 > - [`docs/adr/ADR-001-redis.md`](../adr/ADR-001-redis.md) — Redis decision
 >   (optional in the implemented MVP).
+> - [`docs/deployment/upgrade-and-uninstall.md`](./upgrade-and-uninstall.md)
+>   — operator upgrade & uninstall lifecycle (canonical guide).
 >
 > **Scope:** LAN/on-premise, single-tenant. Do NOT use this runbook for any
 > multi-tenant, cloud, or Phase 4 deployment — those modes are not
@@ -816,26 +818,32 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
 
 ## 15. Upgrade checklist
 
+> **Canonical lifecycle guide:** see
+> [`upgrade-and-uninstall.md`](./upgrade-and-uninstall.md) — supported
+> path, version-skipping policy, rollback contract, and the uninstall
+> guide (preserve vs. full removal) live there, with the executable
+> evidence suite. The checklist below is the operator's short form.
+
 ```text
-[ ] Read CHANGELOG / release notes for breaking changes.
-[ ] Back up the database (pg_dump — §11).
-[ ] Pull the new code: git pull && pnpm install --frozen-lockfile.
+[ ] Read CHANGELOG / release notes for breaking changes (version-skip
+    restrictions / db major bumps are always announced there).
+[ ] Back up the database (logical dump — backup-and-recovery.md §7).
+[ ] Pull the new code: git pull.
 [ ] Run pnpm verify:static locally.
 [ ] Re-pin the image: .env.deploy EXAM_IMAGE follows .release-version on
     the next `node scripts/generate-env.mjs` run (a canonical
     ghcr.io/jnhu76/exam:vX.Y.Z pin is re-derived; an explicit mirror
     value must be updated by hand), then pull it:
     docker compose --env-file .env.deploy pull.
-[ ] Pull/seed any new required env vars into .env.deploy.
-[ ] docker compose up -d (containers will run migrate on restart).
-[ ] Watch migration logs: docker compose logs app | grep -i migrat.
-[ ] Verify /api/health and /api/system/health.
-[ ] Verify /api/system/diagnostics reflects expected DB + worker state.
-[ ] Run the operator checklist (P6 audit §25).
-[ ] If rollback is needed: restore the DB backup and redeploy the previous
-    image tag. NOTE: a canonical EXAM_IMAGE pin follows .release-version on
-    the next generate-env run, which would silently revert the rollback —
-    edit .env.deploy AFTER the last generate-env run, or pin by digest.
+[ ] docker compose --env-file .env.deploy up -d (migrate runs on app start).
+[ ] Watch migration logs: docker compose --env-file .env.deploy logs app
+    | grep -i migrat.
+[ ] Verify /api/health and /api/system/health; log in as an existing Admin;
+    open a candidate + a recent result.
+[ ] Rollback (if needed): restore the pre-upgrade backup + redeploy the
+    previous image tag (upgrade-and-uninstall.md §2.5 — a canonical
+    EXAM_IMAGE pin follows .release-version on the next generate-env run,
+    so edit .env.deploy AFTER it, or pin by digest).
 ```
 
 Migrations are forward-only by default. drizzle-kit does not auto-generate

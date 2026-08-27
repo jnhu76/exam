@@ -20,6 +20,13 @@ for repository releases from `v0.0.1` onward.
   `.release-version` (a canonical pin follows the release authority;
   an explicit mirror value wins, enabling offline
   `docker save`/`docker load` transfers).
+- Added the operator upgrade & uninstall lifecycle guide
+  (`docs/deployment/upgrade-and-uninstall.md`): supported upgrade path,
+  entrypoint auto-migration expectations, version-skipping policy,
+  forward-only rollback contract, uninstall preserve/full-removal modes,
+  and an executable lifecycle suite (`pnpm test:deployment:upgrade`) that
+  proves pin-flip upgrade, data/journal continuity, and clean reinstall
+  (#329).
 
 ### Changed
 

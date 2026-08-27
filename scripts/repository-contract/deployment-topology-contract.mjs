@@ -53,7 +53,7 @@
  *     production topology; the structural rules are in
  *     assertBuildVariant().
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname, "../..");
@@ -453,6 +453,59 @@ if (!servicesBlock) {
             "missing policy makes the worker a one-shot).",
         );
       }
+    }
+  }
+}
+
+// ── #329: operator lifecycle doc drift guard ─────────────────────────────
+// upgrade-and-uninstall.md is the canonical operator lifecycle contract.
+// This section fails when the OPERATOR commands in the doc drift from the
+// real invocation contract (env-file seam, compose pull, EXAM_IMAGE /
+// EXAM_DATA_ROOT keys) — a doc that teaches a dead command is a release
+// defect even though no test executes it.
+{
+  const lifecycleDoc = join(
+    ROOT,
+    "docs",
+    "deployment",
+    "upgrade-and-uninstall.md",
+  );
+  if (!existsSync(lifecycleDoc)) {
+    errors.push(
+      "docs/deployment/upgrade-and-uninstall.md is missing (operator " +
+        "upgrade/uninstall lifecycle authority — #329).",
+    );
+  } else {
+    const doc = readFileSync(lifecycleDoc, "utf-8");
+    const mustContain = [
+      "--env-file .env.deploy",
+      "docker compose --env-file .env.deploy pull",
+      "EXAM_IMAGE",
+      "EXAM_DATA_ROOT",
+      "docker compose --env-file .env.deploy down",
+    ];
+    for (const token of mustContain) {
+      if (!doc.includes(token)) {
+        errors.push(
+          "docs/deployment/upgrade-and-uninstall.md no longer contains " +
+            `'${token}' — the documented operator contract drifted from ` +
+            "the real invocation.",
+        );
+      }
+    }
+    // The dead operator form must never come back in the lifecycle guide
+    // (the operator consumes the prebuilt EXAM_IMAGE pin — #321; source
+    // builds belong to the contributor override).
+    if (
+      /docker compose(?! --env-file \.env\.deploy)[^\n]*\bup( -d)? --build/.test(
+        doc,
+      )
+    ) {
+      errors.push(
+        "upgrade-and-uninstall.md teaches 'up --build' for the operator " +
+          "path — the operator consumes the prebuilt EXAM_IMAGE pin " +
+          "(#321); source builds belong to the contributor override.",
+      );
     }
   }
 }
