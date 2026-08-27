@@ -162,9 +162,12 @@ node scripts/generate-env.mjs
 # SMTP_USER=...
 # SMTP_PASSWORD=...
 
-# 4. Build and start the default stack (app + db + email-worker).
-#    Redis is NOT started by default (P6-010); see §10 to enable it.
-docker compose --env-file .env.deploy up -d --build
+# 4. Pull and start the default stack (app + db + email-worker) from the
+#    prebuilt release image. Compose runs the image pinned in .env.deploy
+#    as EXAM_IMAGE, which step 2 derived from .release-version (see
+#    "Image acquisition" below). No local build happens; Redis is NOT
+#    started by default (P6-010); see §10 to enable it.
+docker compose --env-file .env.deploy up -d
 
 # 5. Watch the API come up (migration runs inside the container entrypoint).
 docker compose --env-file .env.deploy logs --tail=50 -f app
@@ -218,6 +221,65 @@ boot of the `app` container, then `exec node dist/server.js`. The
 directly. The worker depends on `app: service_healthy`, so its startup
 self-migrate call is serialized strictly AFTER the app's migrate call
 (P6-009: the drizzle journal tracks state; it is NOT a concurrency lock).
+
+### Image acquisition (#321)
+
+The `app` and `email-worker` services run the **prebuilt release image**
+pinned in `.env.deploy` as `EXAM_IMAGE`. `node scripts/generate-env.mjs`
+derives the pin from the repository's `.release-version`
+(`ghcr.io/jnhu76/exam:vX.Y.Z`); an explicit `EXAM_IMAGE` value always wins
+(private registry mirrors, offline loads). The image is published
+automatically by the release workflow (`.github/workflows/release.yml`)
+when the release tag is cut — same commit as the GitHub Release, the
+immutable tag, and the `sha-<commit>` alias tag. There is deliberately NO
+`latest` tag; the semantic-version pin is the authority. Compose
+`${EXAM_IMAGE:?...}` refuses to start the stack when the pin is missing.
+If the pinned tag has not been published yet, use the source-build path
+below.
+
+#### Online pull (default)
+
+`docker compose --env-file .env.deploy up -d` pulls the pinned image once
+(outbound access to ghcr.io at install/upgrade time only); afterwards the
+image is cached locally and the platform runtime has no network dependency.
+
+#### Offline / air-gapped transfer
+
+On any machine with registry access:
+
+```bash
+docker pull ghcr.io/jnhu76/exam:vX.Y.Z
+docker save ghcr.io/jnhu76/exam:vX.Y.Z | gzip > exam-image-vX.Y.Z.tar.gz
+sha256sum exam-image-vX.Y.Z.tar.gz   # record; verify after transfer
+```
+
+Transfer the archive (plus the repository checkout, for
+`generate-env.mjs`) by removable media, then on the air-gapped host:
+
+```bash
+sha256sum exam-image-vX.Y.Z.tar.gz                 # must match
+docker load < exam-image-vX.Y.Z.tar.gz
+node scripts/generate-env.mjs                      # derives the same EXAM_IMAGE
+docker compose --env-file .env.deploy up -d        # local image, no pull
+```
+
+Keep the loaded reference identical to `EXAM_IMAGE` — Compose matches by
+reference, not digest.
+
+#### Contributor source build (not the operator path)
+
+Contributors and PR acceptance verify THIS checkout by merging the build
+override; the deployment acceptance suites (`tests/deployment/`) always
+merge it via their compose wrapper:
+
+```bash
+docker compose --env-file .env.deploy \
+  -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+The override pins `exam-local:dev` with `pull_policy: build`, forcing a
+build from the current tree and never pulling a registry image under that
+tag.
 
 ---
 
@@ -541,7 +603,7 @@ the password and the authenticated URL:
 #    (URL-encode the password if it contains reserved characters)
 
 # 2. Start the stack with the redis profile:
-docker compose --env-file .env.deploy --profile redis up -d --build
+docker compose --env-file .env.deploy --profile redis up -d
 
 # 3. Verify all four services:
 docker compose --env-file .env.deploy ps
@@ -748,7 +810,9 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
 [ ] Back up the database (pg_dump — §11).
 [ ] Pull the new code: git pull && pnpm install --frozen-lockfile.
 [ ] Run pnpm verify:static locally.
-[ ] Rebuild the image: docker compose build.
+[ ] Point .env.deploy EXAM_IMAGE at the new release image (generate-env
+    re-derives it from .release-version; see §3 "Image acquisition"),
+    then pull it: docker compose --env-file .env.deploy pull.
 [ ] Pull/seed any new required env vars into .env.
 [ ] docker compose up -d (containers will run migrate on restart).
 [ ] Watch migration logs: docker compose logs app | grep -i migrat.

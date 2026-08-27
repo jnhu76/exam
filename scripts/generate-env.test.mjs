@@ -259,3 +259,60 @@ test("post-split dev-only .env (no deployment secrets) is ignored: fresh secrets
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── #321: EXAM_IMAGE is derived from the release version authority ────────
+// The operator image pin must be ghcr.io/jnhu76/exam:<.release-version> —
+// derived at generation time, never an independently maintained copy that
+// can silently drift from the release authority.
+
+const RELEASE_VERSION = readFileSync(
+  join(__dirname, "..", ".release-version"),
+  "utf-8",
+).trim();
+
+test("EXAM_IMAGE is derived from .release-version on first run (#321)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-image-first-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+
+    const env = readFileSync(envPath, "utf-8");
+    assert.match(RELEASE_VERSION, /^v\d+\.\d+\.\d+$/);
+    assert.equal(
+      secretLine(env, "EXAM_IMAGE"),
+      `ghcr.io/jnhu76/exam:${RELEASE_VERSION}`,
+      "EXAM_IMAGE must pin the current release version",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("explicit EXAM_IMAGE wins over the derived pin (never rotated)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-image-explicit-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    writeFileSync(
+      envPath,
+      readFileSync(EXAMPLE, "utf-8").replace(
+        /^EXAM_IMAGE=.*$/m,
+        "EXAM_IMAGE=registry.mirror.internal/exam:v9.9.9",
+      ),
+      "utf-8",
+    );
+
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+    const env = readFileSync(envPath, "utf-8");
+    assert.equal(
+      secretLine(env, "EXAM_IMAGE"),
+      "registry.mirror.internal/exam:v9.9.9",
+      "an explicit operator pin must never be overwritten",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

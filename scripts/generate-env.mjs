@@ -57,6 +57,22 @@ if (!existsSync(envPath)) {
 const SECRET_KEYS = ["JWT_SECRET", "POSTGRES_PASSWORD"];
 const PRESERVE_KEYS = ["POSTGRES_USER", "POSTGRES_DB"];
 
+// #321: the operator image pin is DERIVED from the repository release
+// version authority (.release-version) — never an independently maintained
+// copy that can silently drift. ensureKey preserves an explicit operator
+// override (an air-gapped registry mirror, for example) exactly like the
+// other keys: first run derives, existing value wins.
+const IMAGE_REPOSITORY = "ghcr.io/jnhu76/exam";
+const releaseVersion = readFileSync(
+  join(root, ".release-version"),
+  "utf-8",
+).trim();
+if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(releaseVersion)) {
+  console.error(`Invalid .release-version: ${releaseVersion}`);
+  process.exit(1);
+}
+const derivedImage = `${IMAGE_REPOSITORY}:${releaseVersion}`;
+
 // Read the legacy dev .env once. A post-split dev-only .env has none of the
 // keys below, so legacyValue() returns null and fresh secrets are generated.
 const legacyEnv = existsSync(legacyPath)
@@ -108,10 +124,16 @@ for (const key of PRESERVE_KEYS) {
   }
 }
 
+ensureKey(
+  "EXAM_IMAGE",
+  derivedImage,
+  "EXAM_IMAGE (pinned from .release-version)",
+);
+
 if (env !== original) {
   writeFileSync(envPath, env);
 }
 
 console.log(
-  "Next: docker compose --env-file .env.deploy -f docker-compose.yml up -d --build",
+  "Next: docker compose --env-file .env.deploy -f docker-compose.yml up -d",
 );

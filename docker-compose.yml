@@ -5,7 +5,13 @@
 # docs/deployment/backup-and-recovery.md.
 services:
   app:
-    build: .
+    # Operator path: prebuilt semantic image, pinned by EXAM_IMAGE in the
+    # deployment env file (generate-env.mjs derives the default from
+    # .release-version — the single version authority). Contributors / PR
+    # acceptance merge docker-compose.build.yml to build THIS checkout
+    # instead (pull_policy: build — a cached registry image can never fake
+    # source acceptance).
+    image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
     ports:
       - "${EXAM_PORT:-3000}:3000"
     environment:
@@ -100,8 +106,9 @@ services:
 
   # Outbox drainer (ADR-011). The entrypoint override is required (the image
   # ENTRYPOINT runs the API server); app-health gating serializes migrations.
+  # Image authority: same prebuilt pin as app (see the app service comment).
   email-worker:
-    build: .
+    image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
     entrypoint: ["node"]
     command: ["dist/workers/emailDeliveryWorker.js"]
     environment:

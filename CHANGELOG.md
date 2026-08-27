@@ -13,8 +13,20 @@ for repository releases from `v0.0.1` onward.
 - Added a reusable release-notes template and an ancestry-based issue/PR
   traceability contract so future maintainers or local AI agents can produce
   auditable releases without relying on memory or close dates.
+- Added prebuilt semantic-version Exam image distribution (#321): the release
+  workflow publishes `ghcr.io/jnhu76/exam:vX.Y.Z` (plus an immutable
+  `sha-<commit>` alias, no `latest`) from the exact release commit, and
+  `generate-env` derives the operator `EXAM_IMAGE` pin from
+  `.release-version` (an explicit value always wins, enabling offline
+  `docker save`/`docker load` transfers).
 
 ### Changed
+
+- Operator Compose defaults to the prebuilt pinned image
+  (`image: ${EXAM_IMAGE:?...}` on app and email-worker, `up -d` with no
+  local build); contributor/PR-acceptance source builds are the explicit
+  `docker-compose.build.yml` override, which the deployment acceptance
+  suites always merge (#321).
 
 ### Fixed
 

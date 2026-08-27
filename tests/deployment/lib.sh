@@ -18,6 +18,13 @@ LIB_DIR="$(
 )"
 REPO_ROOT="$(cd -- "${LIB_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+# Source-build override (the single build-mode surface). The deployment
+# verification suites ARE contributor/PR acceptance: every invocation merges
+# this override so the app/email-worker images are built from THE CURRENT
+# CHECKOUT (pull_policy: build) — a stale registry or local image can never
+# fake a passing acceptance run, regardless of the operator `image:` pin in
+# docker-compose.yml (#319 contract, #321 two-path split).
+BUILD_OVERRIDE_FILE="${REPO_ROOT}/docker-compose.build.yml"
 
 # ── Compose ──────────────────────────────────────────────────────────────
 # Run docker compose against the canonical production compose file.
@@ -43,7 +50,7 @@ run_compose() {
   elif [ "${1:-}" = "" ]; then
     shift
   fi
-  local -a args=(docker compose -f "${COMPOSE_FILE}")
+  local -a args=(docker compose -f "${COMPOSE_FILE}" -f "${BUILD_OVERRIDE_FILE}")
   if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
     args+=(--env-file "${DEPLOY_ENV_FILE}")
   fi
