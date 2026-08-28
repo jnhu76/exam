@@ -34,7 +34,12 @@ the architecture decisions that the implementation then realized.
 
 ## Context
 
-The platform is a **LAN / on-premise exam system** (`docs/SPEC.md`, `AGENTS.md`). Phase 1 is single-tenant, multi-user, with two product roles: `Admin` and `Candidate` (`packages/domain/src/enums.ts:1-6`). Phase 3 must introduce Teacher / Proctor / Grader / System-like authority without breaking current Admin behavior or violating the single-tenant boundary (`AGENTS.md` §"Phase1.4", "Phase2-Ready").
+The platform is a **LAN / on-premise exam system** (`docs/SPEC.md`,
+`AGENTS.md`). Phase 1 is single-tenant, multi-user, with two product roles:
+`Admin` and `Candidate` (`packages/domain/src/enums.ts:1-6`). Phase 3 must
+introduce Teacher / Proctor / Grader / System-like authority without breaking
+current Admin behavior or violating the single-tenant boundary
+(`docs/SPEC.md` §2.4.1 and `docs/roadmap/phase-roadmap.md` §Phase 3).
 
 This ADR is the formal authorization design that **must** exist before any Phase 3 role/permission implementation job begins (job card §1). It is built directly on top of the fact base produced by the Phase 3 audits:
 

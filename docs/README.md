@@ -3,22 +3,27 @@
 > The single canonical entry point for this repository's documentation.
 > Developers and AI agents: start here, not in `docs/archive/`.
 
-## Authority precedence
+## Authority by fact type
 
-When documents conflict, higher precedence wins:
+The repository does not use one global ranking for unlike facts. Each fact type
+has one authority:
 
-1. **Accepted ADRs** — [`docs/adr/`](adr/) (binding architectural decisions)
-2. **Contracts** — [`docs/contracts/`](contracts/) (behavior code must preserve)
-3. **Specification** — [`docs/SPEC.md`](SPEC.md) (invariants + domain model)
-4. **Current architecture** — [`docs/architecture/`](architecture/)
-5. **Standards** — [`docs/standards/`](standards/) (constraints on future work)
-6. **Current status** — [`docs/status/`](status/) (what is implemented now)
-7. **Roadmap** — [`docs/roadmap/`](roadmap/) (future work only)
-8. **Archive** — [`docs/archive/`](archive/) (historical; never current guidance)
+| Fact type | Authority |
+| --- | --- |
+| A specific architectural decision | Accepted ADRs under [`docs/adr/`](adr/) |
+| External behavior and data format | [`docs/contracts/`](contracts/), generated OpenAPI, and contract tests |
+| Product invariants and domain model | [`docs/SPEC.md`](SPEC.md) |
+| Current implemented architecture | [`docs/architecture/`](architecture/) and production code |
+| Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
+| Current implementation state | [`docs/status/`](status/) |
+| Phase scope and future work | [`docs/roadmap/`](roadmap/) and its GitHub Issue index |
+| Historical evidence | [`docs/archive/`](archive/), Git, Issues, and PRs |
 
-> `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` are the product/phase
-> authority and win over implementation details. If an archived document
-> conflicts with an active one, the active document wins.
+When two sources describe the same fact differently, treat the disagreement as
+a defect. Characterize the as-built behavior, identify the stale or violated
+authority, and reconcile the affected sources together. Do not silently choose
+the easiest source. Archived material is evidence only and never current
+guidance.
 
 ## Where things live
 
@@ -101,7 +106,7 @@ Recovery authority:
 | [`roadmap/ui-open-items.md`](roadmap/ui-open-items.md) | Unfinished visual-authority migration work |
 
 See also the root [`DESIGN.md`](../DESIGN.md) (project-owned visual authority) and
-[`AGENTS.md`](../AGENTS.md) §"Frontend Visual Authority".
+[`AGENTS.md`](../AGENTS.md) §“前端任务路由”.
 
 ### Formal executable models
 
@@ -129,4 +134,6 @@ pnpm lint:md      # markdown lint
 bash scripts/e2e/run-wsl.sh   # local E2E (uses the `exam_e2e` database)
 ```
 
-Database discipline: see [`AGENTS.md`](../AGENTS.md) §"Local Database Discipline".
+Database lifecycle and environment discipline are authoritative in
+[`standards/testing.md`](standards/testing.md) §2, especially §2.8. The root
+[`AGENTS.md`](../AGENTS.md) retains only the destructive-operation safety guard.

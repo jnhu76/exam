@@ -366,6 +366,6 @@ pnpm verify
 - **Outbox schema/repo:** `packages/db/src/schema/pg.ts` (`emailOutbox`),
   `packages/db/src/repository/emailOutboxRepo.ts`.
 - **Env template:** `.env.example` lines 63–88 (Email block).
-- **Local DB discipline (env-var priority rules):** `AGENTS.md` §Local Database
-  Discipline — the `env -u` pattern in §5 of this doc is the email-specific
-  application of those rules.
+- **Local DB discipline (env-var priority rules):**
+  `docs/standards/testing.md` §2 — the `env -u` pattern in §5 of this doc is
+  the email-specific application of that contract.
