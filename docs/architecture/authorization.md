@@ -147,14 +147,14 @@ resource gates remain the security authority.
 
 The following are not implemented in the current MVP authorization model:
 
-- Resource-relationship authorization (M11) beyond the Proctor→Exam slice:
-  Teacher→Course, Teacher→Exam, and Grader→Work assignment remain deferred.
-  **P7-RBAC F-04 (2026-08-13) CONFIRMED this gap** — the Teacher runtime is
-  org-wide today (no persisted scope carrier / resolver / scoped gates / LIST
-  filtering); the target remains Teacher@Course. It is **explicitly deferred
-  to a dedicated scoped-RBAC milestone** (closure requirements in
-  [`P7-RBAC-ROLE-REMEDIATION.md`](../audits/P7-RBAC-ROLE-REMEDIATION.md) §4).
-  The Proctor→Exam slice **is implemented** per ADR-015 (Accepted 2026-08-02,
+- Resource-relationship authorization (M11) status: **Teacher→Course (F-04)
+  is implemented** (#286, PR #347 — `teacher_course_assignments` carrier,
+  `teacherAccess` scoped gates, SQL-side LIST filtering, Admin assignment
+  API + UsersPage dialog), and **Grader→Exam is implemented** (#296, PR
+  #348 — `grader_exam_assignments` carrier, `graderAccess` scoped gates on
+  grading detail/write, grading-queue LIST filtering before
+  pagination/count, Admin assignment API + UsersPage dialog). The
+  Proctor→Exam slice **is implemented** per ADR-015 (Accepted 2026-08-02,
   PR #245; reality audit
   [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)):
   `exam_proctor_assignments` + `exam_proctor_assignment_events` persistence,
@@ -167,7 +167,9 @@ The following are not implemented in the current MVP authorization model:
 - Scoped role-assignment storage such as `scope_type`, `scope_resource_id`,
   `course_staff`, `teacher_exam_assignments`, and `grading_assignment`.
 - Full scoped Proctor and Grader product workflows (Proctor Recovery Center
-  UI is J6; Grader scoping is a separate M11 slice).
+  UI is J6; Grader→Exam runtime scoping is implemented (#296) — the
+  remaining Grader product work is staff invitation / account lifecycle
+  (#297), not scoping).
 - Staff invitation, SMTP password reset, and account-lifecycle UI.
 - Custom roles, permission-management UI, multi-tenant switching,
   SuperAdmin, and cross-tenant authorization.
