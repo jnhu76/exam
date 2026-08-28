@@ -86,3 +86,31 @@ export async function createTeacherViaApi(
   const body = (await res.json()) as { id: string };
   return { username, password, name, userId: body.id };
 }
+
+/**
+ * Assign a Teacher to a course through the SUPPORTED Admin product interface
+ * (POST /api/admin/users/:userId/course-assignments). Issue 286 made Teacher
+ * authority course-assignment-scoped: a Teacher without an active assignment
+ * holds no course/question/exam authority at all. Specs that exercise a
+ * Teacher acting on admin-seeded data must mint the assignment the same way a
+ * human Admin would — via this API, never direct DB insertion.
+ */
+export async function assignTeacherToCourse(
+  request: APIRequestContext,
+  teacher: { userId: string },
+  courseId: string,
+): Promise<void> {
+  const adminToken = await adminApiToken(request);
+  const res = await request.post(
+    `${BASE_URL}/api/admin/users/${teacher.userId}/course-assignments`,
+    {
+      headers: { Cookie: `auth-token=${adminToken}` },
+      data: { courseId },
+    },
+  );
+  if (!res.ok()) {
+    throw new Error(
+      `assign Teacher to course via POST /api/admin/users/:userId/course-assignments failed: ${res.status()} ${await res.text()}`,
+    );
+  }
+}
