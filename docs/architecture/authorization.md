@@ -82,32 +82,38 @@ re-introducing a role-based gate.
 
 ## Route coverage
 
-Per the M10-A through M10-F migration series and the P4-V0 Gate 0.5
-re-verification:
+The **living source of truth** for the route inventory is the permanent
+whole-application regression lock
+(`apps/api/src/authz/routeRegistryConformanceWholeApp.test.ts`): it captures
+the real `registerApiRoutes` composition through a Fastify `onRoute` hook on
+every test run and asserts the primary/protected/non-protected split plus the
+per-addition comment chain. Treat any count in prose (including below) as a
+snapshot — cite the test, not the number.
 
-- **91 primary runtime routes** in the `registerApiRoutes` composition.
-- **81 capability/ownership-gated protected routes**.
-- **10 non-capability routes**: 4 authenticate-only, 5 public, and
-  1 intentionally disabled public endpoint.
+Current snapshot (as of #296, PR #348, commit `ac79c695`):
+
+- **132 primary runtime routes** in the `registerApiRoutes` composition.
+- **116 capability/ownership-gated protected routes**.
+- **16 non-capability routes** (authenticate-only + public + one intentionally
+  disabled public endpoint; the test's intentional closed sets enumerate them
+  exactly).
 - **0 `requireRole` consumers**.
 - **0 `requirePermission` route consumers**.
 - **0 `users.role` authority decisions**.
 - **0 JWT-role authority decisions**.
 
-Fastify additionally generates 40 `HEAD` aliases for `GET` routes; these are
+Fastify additionally generates one `HEAD` alias per `GET` route; aliases are
 excluded from the primary application-route count.
 
-> **Gate 0.5 caveat.** The post-PR-197 re-verification (Gate 0.5, M10-F rerun)
-> is **PASS** (verified 2026-07-24 on commit `f2a7a80`). The runtime route tree
-> was re-captured via a Fastify `onRoute` hook over the full production
-> composition and reconciles exactly to the inventory above (91 primary routes
-> = 131 raw registrations including 40 auto-generated HEAD aliases; 81
-> capability/ownership-gated; 10 non-gated; 81/81 registry ↔ runtime MATCH with
-> zero drift; 0 `requireRole` / `requirePermission` / `users.role`-authority).
-> The final repository gate `pnpm verify` was executed in full during the P4-V0
-> re-issue and **passed (exit 0)**. Full evidence:
+> **Historical baseline (Gate 0.5, 2026-07-24, commit `f2a7a80`).** The
+> M10-A through M10-F migration series and the P4-V0 Gate 0.5 re-verification
+> reconciled the then-current tree to **91 primary routes (81 protected +
+> 10 non-gated)**, 81/81 registry ↔ runtime MATCH with zero drift, and a full
+> `pnpm verify` pass. Full evidence:
 > [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
-> The route inventory above may now be cited as freshly re-verified evidence.
+> That inventory is a **historical record**; the conformance test above is the
+> current authority (the count has grown with each subsequent route addition —
+> see the test's comment chain).
 
 ## MVP product-role boundary
 
@@ -142,20 +148,18 @@ resource gates remain the security authority.
 > Window contract. Admin remains the Exam business owner (考试管理员) and never
 > holds infrastructure execution authority; the Host Operator (not Exam RBAC)
 > performs real infrastructure maintenance.
+>
+> Since the S1 role-correctness campaign (#286 / PR #347, #296 / PR #348),
+> Teacher authority is additionally **course-assignment-scoped**
+> (`teacher_course_assignments`) and Grader grading authority is
+> **exam-assignment-scoped** (`grader_exam_assignments`); Admin remains
+> org-wide. See *Current scoped-role status* below.
 
-## Non-goals (Phase 3 product work, not implemented)
+## Current scoped-role status (M11 resource-relationship authorization)
 
-The following are not implemented in the current MVP authorization model:
+**Implemented** — scoped authority is live for all three staff roles:
 
-- Resource-relationship authorization (M11) status: **Teacher→Course (F-04)
-  is implemented** (#286, PR #347 — `teacher_course_assignments` carrier,
-  `teacherAccess` scoped gates, SQL-side LIST filtering, Admin assignment
-  API + UsersPage dialog), and **Grader→Exam is implemented** (#296, PR
-  #348 — `grader_exam_assignments` carrier, `graderAccess` scoped gates on
-  grading detail/write, grading-queue LIST filtering before
-  pagination/count, Admin assignment API + UsersPage dialog). The
-  Proctor→Exam slice **is implemented** per ADR-015 (Accepted 2026-08-02,
-  PR #245; reality audit
+- **Proctor → Exam** per ADR-015 (Accepted 2026-08-02, PR #245; reality audit
   [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)):
   `exam_proctor_assignments` + `exam_proctor_assignment_events` persistence,
   the `assignProctorToExam` / `revokeProctorFromExam` commands, the Admin
@@ -164,16 +168,36 @@ The following are not implemented in the current MVP authorization model:
   `proctorAccess` route-registry policy, and the minimum Proctor incident
   activation (view/create/investigate — resolve stays Admin-only). Closeout:
   [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-- Scoped role-assignment storage such as `scope_type`, `scope_resource_id`,
-  `course_staff`, `teacher_exam_assignments`, and `grading_assignment`.
-- Full scoped Proctor and Grader product workflows (Proctor Recovery Center
-  UI is J6; Grader→Exam runtime scoping is implemented (#296) — the
-  remaining Grader product work is staff invitation / account lifecycle
-  (#297), not scoping).
-- Staff invitation, SMTP password reset, and account-lifecycle UI.
+- **Teacher → Course** (#286, PR #347 — `teacher_course_assignments` carrier,
+  `teacherAccess: "course_assignment_scoped"` gates, SQL-side LIST filtering
+  before pagination/count across courses, questions, exams, candidates, and
+  scores, Admin assignment API + UsersPage dialog).
+- **Grader → Exam** (#296, PR #348 — `grader_exam_assignments` carrier,
+  `graderAccess: "exam_assignment_scoped"` gates on grading detail/write,
+  grading-queue LIST filtering before pagination/count, Admin assignment API +
+  UsersPage dialog).
+
+The shared contract across all three slices: **authority = capability ×
+assignment** — the scope row alone grants zero capabilities; scopes resolve
+fresh from the database on every request (revocation effective on the next
+request); LIST endpoints filter in SQL **before** pagination and total count;
+direct-ID out-of-scope probes fold into the canonical 404
+(anti-enumeration).
+
+**Still deferred** (Phase 3 product work, not implemented):
+
+- Scoped role-assignment storage generalizations such as `scope_type`,
+  `scope_resource_id`, `course_staff`, `teacher_exam_assignments`, and
+  `grading_assignment` — each implemented slice deliberately uses its own
+  narrow carrier table instead.
+- Full scoped Proctor product workflows; the Proctor Recovery Center UI is
+  J6.
+- Staff invitation, SMTP password reset, and account-lifecycle UI (#297 —
+  this, not scoping, is the remaining Grader product work).
 - Custom roles, permission-management UI, multi-tenant switching,
   SuperAdmin, and cross-tenant authorization.
 
 Built-in global role assignments and the Admin / Teacher / Candidate MVP role
-model already exist; the deferred work is resource-level scoping, not basic
-Teacher activation.
+model already exist; the deferred work is product lifecycle and workflow
+completion, not basic Teacher/Grader activation and no longer
+resource-level scoping (implemented for all three staff roles above).
