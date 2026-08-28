@@ -28,14 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
@@ -586,46 +579,35 @@ export function UsersPage() {
                     {t("admin.users.teacherCourses.empty")}
                   </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>
-                          {t("admin.users.teacherCourses.columnCourse")}
-                        </TableHead>
-                        <TableHead className="w-24">
-                          {t("admin.users.teacherCourses.columnAction")}
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {assignments
-                        .filter((a) => a.status === "active")
-                        .map((a) => {
-                          const course = courseOptions.find(
-                            (c) => c.id === a.courseId,
-                          );
-                          return (
-                            <TableRow key={a.id}>
-                              <TableCell>
-                                {course
-                                  ? `${course.name} (${course.code})`
-                                  : a.courseId}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={assignmentsBusy}
-                                  onClick={() => void revokeCourse(a)}
-                                >
-                                  {t("admin.users.teacherCourses.revokeBtn")}
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                    </TableBody>
-                  </Table>
+                  <ul className="flex flex-col gap-2">
+                    {assignments
+                      .filter((a) => a.status === "active")
+                      .map((a) => {
+                        const course = courseOptions.find(
+                          (c) => c.id === a.courseId,
+                        );
+                        return (
+                          <li
+                            key={a.id}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="min-w-0 truncate">
+                              {course
+                                ? `${course.name} (${course.code})`
+                                : a.courseId}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={assignmentsBusy}
+                              onClick={() => void revokeCourse(a)}
+                            >
+                              {t("admin.users.teacherCourses.revokeBtn")}
+                            </Button>
+                          </li>
+                        );
+                      })}
+                  </ul>
                 )}
               </Field>
             </FieldGroup>
