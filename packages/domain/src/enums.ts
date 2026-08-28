@@ -382,3 +382,24 @@ export const ExamProctorAssignmentCommandOutcome = {
 } as const;
 export type ExamProctorAssignmentCommandOutcome =
   (typeof ExamProctorAssignmentCommandOutcome)[keyof typeof ExamProctorAssignmentCommandOutcome];
+
+// ── Teacher-to-Course assignment (issue #286) ─────────────────────
+
+/**
+ * Teacher-course assignment episode status (monotonic revocation, same
+ * episode semantics as Proctor-to-Exam assignments).
+ */
+export const TeacherCourseAssignmentStatus = {
+  Active: "active",
+  Revoked: "revoked",
+} as const;
+export type TeacherCourseAssignmentStatus =
+  (typeof TeacherCourseAssignmentStatus)[keyof typeof TeacherCourseAssignmentStatus];
+
+/** Wire outcome for teacher-course assignment write operations. */
+export const TeacherCourseAssignmentOutcome = {
+  Applied: "applied",
+  NoChange: "no_change",
+} as const;
+export type TeacherCourseAssignmentOutcome =
+  (typeof TeacherCourseAssignmentOutcome)[keyof typeof TeacherCourseAssignmentOutcome];

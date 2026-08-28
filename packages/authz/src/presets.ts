@@ -151,6 +151,10 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // granted to Proctor/Teacher/Grader/Candidate.
   Permission.ExamProctorAssignmentView,
   Permission.ExamProctorAssignmentManage,
+  // Teacher-to-Course assignment management (issue #286 §3B) — Admin only;
+  // the scope carrier itself grants zero capabilities.
+  Permission.CourseTeacherAssignmentView,
+  Permission.CourseTeacherAssignmentManage,
 ];
 
 // ───────────────────────── Teacher (course/exam manager) ─────────────────────────

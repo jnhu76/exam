@@ -25,6 +25,8 @@ import type {
   ExamProctorAssignmentCommandType,
   ExamProctorAssignmentEventOutcome,
   ExamProctorAssignmentCommandOutcome,
+  TeacherCourseAssignmentStatus,
+  TeacherCourseAssignmentOutcome,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -766,6 +768,35 @@ export interface ExamProctorAssignmentEvent {
 export interface ExamProctorAssignmentCommandResult {
   outcome: ExamProctorAssignmentCommandOutcome;
   assignment: ExamProctorAssignment;
+}
+
+// ── Teacher-to-Course assignment (issue #286) ─────────────────────
+
+/**
+ * Teacher-course assignment episode — current state row. At most one active
+ * episode per (organization, teacher, course); revoked episodes remain as
+ * history (same append-preserving episode semantics as Proctor-to-Exam
+ * assignments, without the operation-receipt machinery: Teacher course
+ * assignment is an Admin configuration surface, not a live-exam race).
+ */
+export interface TeacherCourseAssignment {
+  id: string;
+  organizationId: string;
+  teacherUserId: string;
+  courseId: string;
+  status: TeacherCourseAssignmentStatus;
+  assignedBy: string;
+  assignedAt: Date;
+  revokedBy: string | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Result of a Teacher-course assignment write operation. */
+export interface TeacherCourseAssignmentResult {
+  outcome: TeacherCourseAssignmentOutcome;
+  assignment: TeacherCourseAssignment;
 }
 
 // ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────

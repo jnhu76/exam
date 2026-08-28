@@ -860,6 +860,46 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
+
+  // ── Teacher-to-Course assignment audit actions (issue #286) ──
+  // Atomic compliance facts written ONLY when the assignment state change
+  // actually applies (outcome=applied). Deliberately NO operationId — teacher
+  // course assignment is a Admin config surface without the live-exam race
+  // that motivates ADR-015 receipt/recovery machinery (assign-already-active
+  // resolves to no_change; revoke-without-active resolves to 404).
+  // Identifiers only — never candidate answers or candidate PII.
+  [AuditAction.CourseTeacherAssigned]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        organizationId: identifier,
+        courseId: identifier,
+        teacherUserId: identifier,
+        assignmentId: identifier,
+        actorId: identifier,
+        assignedAt: z.string().datetime(),
+      })
+      .strict(),
+  ),
+  [AuditAction.CourseTeacherRevoked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        organizationId: identifier,
+        courseId: identifier,
+        teacherUserId: identifier,
+        assignmentId: identifier,
+        actorId: identifier,
+        revokedAt: z.string().datetime(),
+      })
+      .strict(),
+  ),
 } as const satisfies Record<AuditActionKey, AuditActionDefinition>;
 
 export type AuditActionForDurability<Durability extends AuditDurability> = {

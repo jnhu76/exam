@@ -197,6 +197,11 @@ export const courses = pgTable(
   },
   (table) => [
     uniqueIndex("courses_org_code_unique").on(table.organizationId, table.code),
+    // Composite-FK target for teacher_course_assignments (issue #286 —
+    // mirrors the exams_org_id_unique convention added for
+    // exam_proctor_assignments): PostgreSQL requires a unique on the
+    // referenced (organization_id, id) pair. Additive index; no column edits.
+    uniqueIndex("courses_org_id_unique").on(table.organizationId, table.id),
   ],
 );
 
@@ -2034,6 +2039,112 @@ export const examProctorAssignments = pgTable(
 );
 
 /**
+ * Teacher-to-Course assignments (issue #286) — the scoped-authority carrier
+ * for Teacher@Course. Episode semantics mirror exam_proctor_assignments
+ * (monotonic active → revoked, one-active-per-triple partial unique) WITHOUT
+ * the operation-receipt machinery: course assignment is an Admin
+ * configuration surface with no live-exam race, so deterministic outcome
+ * contracts (assign-active → no_change; revoke-missing → 404) replace the
+ * idempotent operation replay path.
+ *
+ * Authority semantics: an ACTIVE row here is necessary but NOT sufficient —
+ * the assigned user must also hold an active Teacher role assignment
+ * (`user_role_assignments`). The row alone grants zero capabilities.
+ */
+export const teacherCourseAssignments = pgTable(
+  "teacher_course_assignments",
+  {
+    id: id(),
+    // organizationId / user FKs are declared as explicit named foreign keys
+    // below (same convention as exam_proctor_assignments).
+    organizationId: text("organization_id").notNull(),
+    teacherUserId: text("teacher_user_id").notNull(),
+    courseId: text("course_id").notNull(),
+    status: text("status").notNull().default("active"),
+    assignedBy: text("assigned_by").notNull(),
+    assignedAt: timestamp("assigned_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    revokedBy: text("revoked_by"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // Composite-FK target for consistency with the episode pattern.
+    uniqueIndex("teacher_course_assignments_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    // The one-active-episode arbiter: at most one active assignment per
+    // (organization, teacher, course).
+    uniqueIndex("teacher_course_assignments_active_unique")
+      .on(table.organizationId, table.teacherUserId, table.courseId)
+      .where(sql`${table.status} = 'active'`),
+    // listByTeacher (assignment API + scope resolution).
+    index("teacher_course_assignments_org_teacher_status_idx").on(
+      table.organizationId,
+      table.teacherUserId,
+      table.status,
+    ),
+    // listByCourse (reverse assignment surface, if needed).
+    index("teacher_course_assignments_org_course_status_idx").on(
+      table.organizationId,
+      table.courseId,
+      table.status,
+    ),
+    check(
+      "teacher_course_assignments_status_check",
+      sql`${table.status} IN ('active', 'revoked')`,
+    ),
+    check(
+      "teacher_course_assignments_revocation_shape_check",
+      sql`
+        (
+          ${table.status} = 'active'
+          AND ${table.revokedAt} IS NULL
+          AND ${table.revokedBy} IS NULL
+        )
+        OR
+        (
+          ${table.status} = 'revoked'
+          AND ${table.revokedAt} IS NOT NULL
+          AND ${table.revokedBy} IS NOT NULL
+        )
+      `,
+    ),
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organizations.id],
+      name: "teacher_course_assignments_org_fk",
+    }),
+    foreignKey({
+      columns: [table.teacherUserId],
+      foreignColumns: [users.id],
+      name: "teacher_course_assignments_teacher_user_fk",
+    }),
+    foreignKey({
+      columns: [table.assignedBy],
+      foreignColumns: [users.id],
+      name: "teacher_course_assignments_assigned_by_fk",
+    }),
+    foreignKey({
+      columns: [table.revokedBy],
+      foreignColumns: [users.id],
+      name: "teacher_course_assignments_revoked_by_fk",
+    }),
+    // Composite FK to courses(organization_id, id) — requires the
+    // courses_org_id_unique index added above (issue #286 §3A).
+    foreignKey({
+      columns: [table.organizationId, table.courseId],
+      foreignColumns: [courses.organizationId, courses.id],
+      name: "teacher_course_assignments_course_fk",
+    }),
+  ],
+);
+
+/**
  * Proctor-to-Exam assignment events — append-only command receipts
  * (ADR-015 §4.2). `UNIQUE (organization_id, operation_id)` is the sole
  * idempotency arbiter (NOT audit_logs). `assignment_id` is NOT NULL: every
@@ -2223,6 +2334,7 @@ export const schema = {
   examIncidentInterruptionLinks,
   examProctorAssignments,
   examProctorAssignmentEvents,
+  teacherCourseAssignments,
   attemptCommandReceipts,
   backupRuns,
   backupRunEvents,

@@ -1270,6 +1270,44 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 8,
     },
 
+    // ── Teacher-to-Course assignments (issue #286) — Admin-only ──
+    // Admin config surface: the carrier row grants ZERO capabilities and the
+    // permissions below are never in the Teacher preset, so these routes stay
+    // flat `requireCapability` (Organization scope, user resolver).
+    {
+      method: "POST",
+      path: "/admin/users/:userId/course-assignments",
+      legacyGate: "Admin",
+      permission: Permission.CourseTeacherAssignmentManage,
+      scope: Scope.Organization,
+      resolver: "user",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+    {
+      method: "GET",
+      path: "/admin/users/:userId/course-assignments",
+      legacyGate: "Admin",
+      permission: Permission.CourseTeacherAssignmentView,
+      scope: Scope.Organization,
+      resolver: "user",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+    {
+      method: "POST",
+      path: "/admin/users/:userId/course-assignments/:courseId/revoke",
+      legacyGate: "Admin",
+      permission: Permission.CourseTeacherAssignmentManage,
+      scope: Scope.Organization,
+      resolver: "user",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+
     // ── Exam incidents (ADR-014 routes; registry entries added by J4-I1B) ──
     {
       method: "POST",

@@ -179,6 +179,11 @@ export const Permission = {
   // §4.11 Proctor-to-Exam assignments (ADR-015)
   ExamProctorAssignmentView: "exam.proctor_assignment.view",
   ExamProctorAssignmentManage: "exam.proctor_assignment.manage",
+
+  // §4.12 Teacher-to-Course assignments (issue #286) — Admin-only scope
+  // management. The carrier grants zero capabilities by itself.
+  CourseTeacherAssignmentView: "course.teacher_assignment.view",
+  CourseTeacherAssignmentManage: "course.teacher_assignment.manage",
 } as const;
 
 /** Closed permission union. A typo is a compile error. */

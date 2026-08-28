@@ -30,4 +30,5 @@ export * from "./repository/attemptInterruptionEventRepo.js";
 export * from "./repository/attemptTimeAdjustmentRepo.js";
 export * from "./repository/incidentRepo.js";
 export * from "./repository/proctorAssignmentRepo.js";
+export * from "./repository/teacherCourseAssignmentRepo.js";
 export * from "./repository/attemptCommandReceiptRepo.js";

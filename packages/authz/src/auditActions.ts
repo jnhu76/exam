@@ -142,6 +142,10 @@ export const AuditAction = {
   // ── Proctor-to-Exam assignments (ADR-015) ──
   ExamProctorAssigned: "exam.proctor_assigned",
   ExamProctorRevoked: "exam.proctor_revoked",
+
+  // ── Teacher-to-Course assignments (issue #286) ──
+  CourseTeacherAssigned: "course.teacher_assigned",
+  CourseTeacherRevoked: "course.teacher_revoked",
 } as const;
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
