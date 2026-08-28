@@ -628,6 +628,22 @@ describe("M8: Teacher publish-results capability", () => {
       "m8-teacher",
     );
     teacherToken = teacher.token;
+    // Issue #286: the Teacher publish-results gate requires an ACTIVE
+    // teacher_course_assignments episode for the exam's course.
+    const teacherNow = new Date();
+    await ctx.db.insert(schema.teacherCourseAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      teacherUserId: teacher.user.id,
+      courseId,
+      status: "active",
+      assignedBy: ctx.admin.id,
+      assignedAt: teacherNow,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: teacherNow,
+      updatedAt: teacherNow,
+    });
   });
 
   afterAll(async () => {

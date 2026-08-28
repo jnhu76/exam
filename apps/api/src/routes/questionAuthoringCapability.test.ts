@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { schema } from "@exam/db/src/schema/pg.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import {
@@ -36,16 +38,34 @@ describe("question routes — Teacher authoring capabilities", () => {
     // active primary role assignment — without it, authenticate denies 401 and
     // the capability decisions under test never run.
     const createUserToken = async (role: "Teacher" | "Candidate") => {
-      const { token } = await createAssignedUserForTest(
+      const { user, token } = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         role,
         `p42b-${role.toLowerCase()}-question-auth`,
       );
-      return token;
+      return { token, userId: user.id };
     };
-    teacherToken = await createUserToken("Teacher");
-    candidateToken = await createUserToken("Candidate");
+    const teacher = await createUserToken("Teacher");
+    teacherToken = teacher.token;
+    candidateToken = (await createUserToken("Candidate")).token;
+
+    // Issue #286: the Teacher-scope gates require an ACTIVE
+    // teacher_course_assignments episode; grant the Teacher the seeded course.
+    const now = new Date();
+    await ctx.db.insert(schema.teacherCourseAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx.org.id,
+      teacherUserId: teacher.userId,
+      courseId,
+      status: "active",
+      assignedBy: ctx.admin.id,
+      assignedAt: now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
   afterAll(async () => {

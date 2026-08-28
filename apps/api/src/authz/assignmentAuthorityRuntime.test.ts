@@ -761,6 +761,23 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     // Publish requires >=1 question, and submitExamAsCandidate needs a real
     // question to answer, so a question must exist before publish.
     const courseId = await createCourse(ctx.app, ctx.adminToken, "E19 Course");
+    // Issue #286: ScoreAllView is course-scoped for non-Admin actors — the
+    // multi-role actor needs an ACTIVE teacher_course_assignments episode for
+    // the attempt's course to take the all-view path.
+    const e19Now = new Date();
+    await ctx.db.insert(schema.teacherCourseAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      teacherUserId: user.id,
+      courseId,
+      status: "active",
+      assignedBy: ctx.admin.id,
+      assignedAt: e19Now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: e19Now,
+      updatedAt: e19Now,
+    });
     const qRes = await ctx.app.inject({
       method: "POST",
       url: "/api/questions",

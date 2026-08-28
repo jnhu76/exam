@@ -11,3 +11,4 @@ coverage/
 .mcp.json
 opencode.jsonc
 formal/
+/data

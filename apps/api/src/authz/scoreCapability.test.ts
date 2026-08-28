@@ -116,10 +116,25 @@ function makeReply(): FastifyReply & { sentCode: number; sentBody: unknown } {
   };
 }
 
-function build(allows = REAL_PRESETS) {
+function build(
+  allows = REAL_PRESETS,
+  teacherCourseGate?: {
+    check: (request: FastifyRequest, courseId: string) => Promise<boolean>;
+  },
+) {
   return buildScoreCapabilityPreHandler({
     db: {} as never,
     allows,
+    // Issue #286 default wiring: an allow-all gate mirrors the pre-#286
+    // reach for the unit tests that do not target the teacher path; tests
+    // that DO target it pass their own gate stub.
+    ...(teacherCourseGate
+      ? { teacherCourseGate }
+      : {
+          teacherCourseGate: {
+            check: async () => true,
+          },
+        }),
   });
 }
 
@@ -254,6 +269,7 @@ describe("score capability preHandler — own/all arbitration (no role branching
     const handler = buildScoreCapabilityPreHandler({
       db: {} as never,
       allows: capsPredicate,
+      teacherCourseGate: { check: async () => true },
     });
     const reply = makeReply();
     // Primary role is Candidate (no ScoreAllView in its own preset).
@@ -328,5 +344,76 @@ describe("score capability preHandler — no role-name branching invariant", () 
     const reply = makeReply();
     await handler(makeReq("Custom", "actor-1"), reply);
     expect(reply.sentCode).toBe(0);
+  });
+});
+
+describe("score capability preHandler — Teacher course-scope on the all path (issue #286)", () => {
+  beforeEach(() => {
+    nextResolution = null;
+  });
+
+  it("non-Admin ScoreAllView holder WITHOUT an active assignment -> 404 (anti-enumeration; the course id comes from the chain)", async () => {
+    nextResolution = resolved("owner-B");
+    const seenCourseIds: string[] = [];
+    const handler = build(REAL_PRESETS, {
+      check: async (_request, courseId) => {
+        seenCourseIds.push(courseId);
+        return false;
+      },
+    });
+    const reply = makeReply();
+    await handler(makeReq("Teacher", "actor-1"), reply);
+    expect(reply.sentCode).toBe(404);
+    expect(JSON.stringify(reply.sentBody)).toContain("RESOURCE_NOT_FOUND");
+    expect(seenCourseIds).toEqual(["course-1"]);
+  });
+
+  it("non-Admin ScoreAllView holder WITH an active assignment -> allow (scoreView=all)", async () => {
+    nextResolution = resolved("owner-B");
+    const handler = build(REAL_PRESETS, { check: async () => true });
+    const reply = makeReply();
+    await handler(makeReq("Teacher", "actor-1"), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(reply.sentBody).toBeUndefined();
+  });
+
+  it("gate throws -> 503 AUTHZ_UNAVAILABLE (never fail open)", async () => {
+    nextResolution = resolved("owner-B");
+    const handler = build(REAL_PRESETS, {
+      check: async () => {
+        throw new Error("db down");
+      },
+    });
+    const reply = makeReply();
+    await handler(makeReq("Teacher", "actor-1"), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+
+  it("Admin short-circuits the teacher gate (resolver still ran)", async () => {
+    nextResolution = resolved("owner-B");
+    let checked = false;
+    const handler = build(REAL_PRESETS, {
+      check: async () => {
+        checked = true;
+        return false;
+      },
+    });
+    const reply = makeReply();
+    await handler(makeReq("Admin", "actor-1"), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(checked).toBe(false);
+  });
+
+  it("unwired gate for a non-Admin ScoreAllView holder -> 503 (fail closed, never org-wide)", async () => {
+    nextResolution = resolved("owner-B");
+    const handler = buildScoreCapabilityPreHandler({
+      db: {} as never,
+      allows: REAL_PRESETS,
+    });
+    const reply = makeReply();
+    await handler(makeReq("Teacher", "actor-1"), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
   });
 });

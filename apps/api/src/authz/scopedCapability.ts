@@ -63,6 +63,19 @@ export interface ProctorAssignmentGate {
 }
 
 /**
+ * Teacher-to-Course assignment gate (issue #286). Injected by the authz
+ * plugin; consults `teacher_course_assignments` (active row for
+ * organizationId + resolvedCourseId + actorId) per request. NEVER cached
+ * across requests and never placed into JWTs. Authority semantics: the
+ * assignment row is NECESSARY but not sufficient — the Teacher role preset
+ * capability check (stage 1) must also pass, so a stale row for a revoked
+ * Teacher grants nothing.
+ */
+export interface TeacherCourseAssignmentGate {
+  check(request: FastifyRequest, resolvedCourseId: string): Promise<boolean>;
+}
+
+/**
  * Extracts the resolved Exam id from a successful scope resolution. The
  * parent chain's `exam` node is authoritative when present (the incident
  * resolver reduces to Scope.Exam but its resourceId is the INCIDENT id, not
@@ -78,14 +91,37 @@ function resolvedExamId(resolution: ResolvedScope): string | null {
   return null;
 }
 
+/**
+ * Extracts the resolved Course id from a successful scope resolution
+ * (issue #286). The parent chain's `course` node is authoritative — it
+ * carries the DURABLE parent (exams.courseId / questions.courseId), never a
+ * client-supplied courseId. For plain Course-scoped resolutions (the course
+ * resolver itself) the resourceId IS the course id.
+ */
+function resolvedCourseId(resolution: ResolvedScope): string | null {
+  const courseNode = resolution.chain?.find((n) => n.type === "course");
+  if (courseNode?.id) return courseNode.id;
+  if (resolution.scope === Scope.Course) {
+    return resolution.resourceId ?? null;
+  }
+  return null;
+}
+
 /** Input to the resource-aware preHandler builder. */
 export interface ScopedCapabilityInput {
   /** The Phase 3 permission this route requires. */
   permission: PermissionKey;
   /** Which registered resolver reduces the resource to a scope. */
   resolverKey: ResourceResolverKey;
-  /** The request.params key carrying the resource id (e.g. "attemptId"). */
+  /** The request key carrying the resource id (e.g. "attemptId"). */
   resourceIdKey: string;
+  /**
+   * Where the resource id is sourced from. Defaults to `"params"` (the
+   * historical behavior). `"body"` supports create-style routes whose parent
+   * reference arrives in the request body (e.g. POST /questions courseId) —
+   * the route registry's `idSource` already models this distinction.
+   */
+  resourceIdSource?: "params" | "body";
   /** Resolver lookup (injected; built by the authz plugin from fastify.db). */
   resolvers: ResolverRegistry;
   /** Flat role-preset predicate (injected; wraps @exam/authz permissionsForRole). */
@@ -100,6 +136,16 @@ export interface ScopedCapabilityInput {
   proctorAccess?: "assignment_scoped";
   /** Assignment checker (injected by the authz plugin from fastify.db). */
   proctorAssignment?: ProctorAssignmentGate;
+  /**
+   * Issue #286: when `"course_assignment_scoped"`, non-Admin actors must hold
+   * an ACTIVE Teacher-to-Course assignment to the resolved Course. Admin
+   * short-circuits the assignment requirement (the resolver still runs). A
+   * missing assignment is folded into the 404 `RESOURCE_NOT_FOUND` bucket
+   * (anti-enumeration, same contract as proctorAccess).
+   */
+  teacherAccess?: "course_assignment_scoped";
+  /** Assignment checker (injected by the authz plugin from fastify.db). */
+  teacherAssignment?: TeacherCourseAssignmentGate;
 }
 
 /**
@@ -117,10 +163,13 @@ export function buildScopedCapabilityPreHandler(
     permission,
     resolverKey,
     resourceIdKey,
+    resourceIdSource = "params",
     resolvers,
     presetAllows,
     proctorAccess,
     proctorAssignment,
+    teacherAccess,
+    teacherAssignment,
   } = input;
   return async (request, reply) => {
     const ctx = request.ctx;
@@ -152,13 +201,16 @@ export function buildScopedCapabilityPreHandler(
         .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
     }
 
-    const params = (request.params ?? {}) as Record<string, string>;
-    const resourceId = params[resourceIdKey];
-    if (!resourceId) {
+    const resourceRecord =
+      resourceIdSource === "body"
+        ? ((request.body ?? {}) as Record<string, unknown>)
+        : ((request.params ?? {}) as Record<string, unknown>);
+    const resourceId = resourceRecord[resourceIdKey] as string | undefined;
+    if (!resourceId || typeof resourceId !== "string") {
       // No resource id on the request (mis-declared route). Fail closed.
       request.log.error(
         { resolverKey, permission, resourceIdKey, route: request.url },
-        "authz scoped-capability resource id missing on params",
+        "authz scoped-capability resource id missing on request",
       );
       return reply
         .code(503)
@@ -253,6 +305,67 @@ export function buildScopedCapabilityPreHandler(
               route: request.url,
             },
             "authz proctor-assignment lookup failed",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        if (!assigned) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+      }
+    }
+
+    // Issue #286 Teacher-to-Course assignment enforcement: mirrors the
+    // proctorAccess block above (capability first, then resolver, then
+    // episode gate for non-Admin actors only; missing assignment folds into
+    // 404 RESOURCE_NOT_FOUND). Deliberately a PARALLEL option, not a shared
+    // "scoped-assignment framework" — the two carriers have different
+    // semantics (exam episode with operation receipts vs. course config
+    // episode) and the campaign prohibits speculative unification.
+    if (teacherAccess === "course_assignment_scoped") {
+      if (!teacherAssignment) {
+        // Configuration error: a route declared Teacher assignment scope
+        // without wiring the gate. Never fail open.
+        request.log.error(
+          { resolverKey, permission, route: request.url },
+          "authz teacher-assignment gate not wired",
+        );
+        return reply
+          .code(503)
+          .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+      }
+      const runtimeCtx = ctx as RuntimeRequestContext;
+      if (!runtimeCtx.roles.includes(Role.Admin)) {
+        const courseId = resolvedCourseId(resolution);
+        if (!courseId) {
+          // The resolution produced no Course identity — the enforcement
+          // cannot run. Fail closed (mis-declared route).
+          request.log.error(
+            { resolverKey, permission, route: request.url },
+            "authz teacher-assignment enforcement: no resolved Course id",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        let assigned: boolean;
+        try {
+          assigned = await teacherAssignment.check(request, courseId);
+        } catch (error) {
+          // Operational failure: never fail open, never masquerade as
+          // 403/404 — same 503 AUTHZ_UNAVAILABLE contract as proctorAccess.
+          request.log.error(
+            {
+              err: error,
+              resolverKey,
+              permission,
+              courseId,
+              route: request.url,
+            },
+            "authz teacher-assignment lookup failed",
           );
           return reply
             .code(503)

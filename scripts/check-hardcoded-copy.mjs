@@ -136,6 +136,13 @@ const CJK_ALLOWLIST = [
       "When server-side messages are standardized to English (follow-up); not user-facing.",
   },
   {
+    path: "apps/api/src/routes/teacherAssignments.admin.ts",
+    reason:
+      "Thrown validation messages for teacher-assignment target qualification (issue #286: TARGET_USER_INACTIVE / TARGET_NOT_TEACHER). Server-side only — error handler returns a code, not this message.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
+  },
+  {
     path: "apps/api/src/routes/question.ts",
     reason:
       "Thrown validation messages (课程不存在). Server-side only — error handler returns a code, not this message.",

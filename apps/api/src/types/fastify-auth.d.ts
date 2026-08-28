@@ -41,6 +41,13 @@ export type AuthzMetadata =
        * this metadata proves the runtime wiring matches the registry.
        */
       proctorAccess?: "assignment_scoped";
+      /**
+       * Issue #286: present when the route enforces the Teacher-to-Course
+       * assignment for non-Admin actors (`course_assignment_scoped`).
+       * Parallel to proctorAccess; proves the runtime wiring matches the
+       * registry.
+       */
+      teacherAccess?: "course_assignment_scoped";
     }
   | { kind: "candidate_context"; permission: PermissionKey }
   | {
@@ -109,12 +116,22 @@ declare module "fastify" {
      * J4-I1B (ADR-015 §4.3): pass `{ proctorAccess: "assignment_scoped" }` to
      * additionally require an active Proctor-to-Exam assignment to the resolved
      * Exam for non-Admin actors (missing assignment -> 404 RESOURCE_NOT_FOUND).
+     *
+     * Issue #286: pass `{ teacherAccess: "course_assignment_scoped" }` to
+     * additionally require an active Teacher-to-Course assignment to the
+     * resolved Course for non-Admin actors (missing assignment -> 404
+     * RESOURCE_NOT_FOUND).
      */
     requireScopedCapability: (
       permission: PermissionKey,
       resolverKey: ResourceResolverKey,
       resourceIdKey: string,
-      options?: { proctorAccess?: "assignment_scoped" },
+      options?: {
+        proctorAccess?: "assignment_scoped";
+        teacherAccess?: "course_assignment_scoped";
+        /** Where the resource id is sourced from; defaults to "params". */
+        resourceIdSource?: "params" | "body";
+      },
     ) => AuthzPreHandler;
     /**
      * Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).

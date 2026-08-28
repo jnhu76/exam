@@ -251,6 +251,13 @@
       "when": 1788900000000,
       "tag": "0035_user_auth_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788900000001,
+      "tag": "0036_teacher_course_assignments",
+      "breakpoints": true
     }
   ]
 }

@@ -14,7 +14,7 @@ import {
   gradeQuestionApi,
 } from "../lib/flow";
 import { loginAsTeacher } from "../lib/login";
-import { createTeacherViaApi } from "../lib/teacher";
+import { assignTeacherToCourse, createTeacherViaApi } from "../lib/teacher";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
@@ -530,6 +530,11 @@ test.describe("M12: Teacher browser publication E2E", () => {
       name: "M12教师-发布",
       usernamePrefix: "m12-tpublish",
     });
+    // Issue 286: Teacher authority is course-assignment-scoped. The Teacher
+    // must hold an active assignment on the seeded exam's course before the
+    // detail surface (and its Publish Results action) resolves; the assignment
+    // is minted through the supported Admin API, not direct DB insertion.
+    await assignTeacherToCourse(request, teacher, seeded.courseId);
     await loginAsTeacher(page, teacher.username, teacher.password);
     await expect(page).toHaveURL(/\/admin\/exams(?:$|[/?#])/);
 

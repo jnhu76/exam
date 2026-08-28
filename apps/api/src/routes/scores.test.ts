@@ -1730,6 +1730,22 @@ describe("P3-3 admin frozen result view", () => {
       "Teacher",
       "m9-teacher",
     );
+    // Issue #286: ScoreAllView is course-scoped for non-Admin actors — grant
+    // the Teacher the attempt exam's course so the all-view path is reachable.
+    const m9Now = new Date();
+    await ctx.db.insert(schema.teacherCourseAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      teacherUserId: teacher.user.id,
+      courseId,
+      status: "active",
+      assignedBy: ctx.admin.id,
+      assignedAt: m9Now,
+      revokedBy: null,
+      revokedAt: null,
+      createdAt: m9Now,
+      updatedAt: m9Now,
+    });
 
     // SAME attempt, SAME moment as the candidate read below. Teacher holds
     // ScoreAllView → all-view path → bypasses Stage 2 publication gate and

@@ -6,13 +6,19 @@ import {
   PaginationParamsSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
+import { Permission, AuditAction } from "@exam/authz";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import type { CourseListFilters } from "@exam/db/src/repository/courseRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
+import { createTeacherCourseAssignmentRepo } from "@exam/db/src/repository/teacherCourseAssignmentRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";
-import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { recordBestEffortAudit } from "../audit/auditWriter.js";
+import { isOrgWideAdmin, resolveTeacherCourseScope } from "./teacherScope.js";
+import {
+  recordBestEffortAudit,
+  recordAtomicHttpAudit,
+} from "../audit/auditWriter.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** OpenAPI security scheme: HTTP-only cookie authentication. */
@@ -66,7 +72,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: courseListResponseSchema },
       },
     },
-    /** List courses with pagination and optional search. Returns paginated course items. */
+    /** List courses with pagination and optional search. Teacher actors see only their assigned courses (SQL-side, before pagination). */
     async (request: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize, search } = CourseListQuerySchema.parse(
@@ -75,6 +81,21 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createCourseRepo(fastify.db);
       const filters: CourseListFilters = {};
       if (search) filters.search = search;
+      // Issue #286 LIST scope: Admin → org-wide (null); Teacher → active
+      // assigned course ids, filtered in SQL before pagination/count.
+      const scope = await resolveTeacherCourseScope(fastify.db, ctx);
+      if (scope) {
+        if (scope.length === 0) {
+          return {
+            items: [],
+            total: 0,
+            page,
+            pageSize,
+            totalPages: 0,
+          };
+        }
+        filters.courseIds = scope;
+      }
       const { items, total } = await repo.listFiltered(ctx, filters, {
         page,
         pageSize,
@@ -103,7 +124,9 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.CourseView),
+        fastify.requireScopedCapability(Permission.CourseView, "course", "id", {
+          teacherAccess: "course_assignment_scoped",
+        }),
       ],
       schema: {
         params: idParamsSchema,
@@ -112,7 +135,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: courseItemSchema, 404: ErrorResponseSchema },
       },
     },
-    /** Get a single course by ID. Returns 404 if not found. */
+    /** Get a single course by ID. Returns 404 if not found OR out of the caller's Teacher course scope (anti-enumeration). */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
@@ -149,7 +172,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 201: courseItemSchema, 409: ErrorResponseSchema },
       },
     },
-    /** Create a new course. Returns 409 if the course code already exists. */
+    /** Create a new course. Non-Admin creators get an active self-assignment episode in the same transaction (issue #286 §3G). Returns 409 if the course code already exists. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateCourseRequestSchema.parse(request.body);
@@ -170,10 +193,45 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const course = await createCourseRepo(fastify.db).create(ctx, {
-        name: data.name,
-        code: data.code,
-        description: data.description,
+      // Issue #286 §3G: a non-Admin creator (Teacher product path) holds NO
+      // assignment to the course it just created, so every follow-up write
+      // would 404. The self-assignment episode is created in the SAME
+      // transaction with an atomic audit fact; Admin stays org-wide and
+      // never receives episode rows.
+      const isSelfAssigning = !isOrgWideAdmin(ctx);
+      const course = await executeInTransaction(fastify.db, async (tx) => {
+        const created = await createCourseRepo(tx).create(ctx, {
+          name: data.name,
+          code: data.code,
+          description: data.description,
+        });
+        if (isSelfAssigning) {
+          const now = fastify.now();
+          const assignment = await createTeacherCourseAssignmentRepo(
+            tx,
+          ).insertAssignment(ctx, {
+            teacherUserId: ctx.actorId,
+            courseId: created.id,
+            assignedBy: ctx.actorId,
+            assignedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: AuditAction.CourseTeacherAssigned,
+            targetType: "course",
+            targetId: created.id,
+            metadata: {
+              organizationId: ctx.organizationId,
+              courseId: created.id,
+              teacherUserId: ctx.actorId,
+              assignmentId: assignment.id,
+              actorId: ctx.actorId,
+              assignedAt: now.toISOString(),
+            },
+          });
+        }
+        return created;
       });
       recordBestEffortAudit(fastify, request, ctx, {
         action: "course.create",
@@ -197,7 +255,12 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.CourseUpdate),
+        fastify.requireScopedCapability(
+          Permission.CourseUpdate,
+          "course",
+          "id",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: idParamsSchema,
@@ -207,7 +270,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: courseItemSchema, 404: ErrorResponseSchema },
       },
     },
-    /** Update an existing course by ID. Returns 404 if not found. */
+    /** Update an existing course by ID. Returns 404 if not found OR out of the caller's Teacher course scope. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
@@ -260,11 +323,10 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** Delete a course by ID. Returns 409 if the course still contains questions, 404 if not found. */
+    /** Delete a course by ID. Returns 409 if the course still contains questions, 404 if not found. Teacher assignment episodes are removed in the same transaction (issue #286). */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(getRequestContext(request));
+      const ctx: RequestContext = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      const repo = createCourseRepo(fastify.db);
       const questionCount = await createQuestionRepo(
         fastify.db,
       ).countByCourseId(ctx, id);
@@ -281,7 +343,12 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
           }),
         );
       }
-      const deleted = await createCourseRepo(fastify.db).delete(ctx, id);
+      const deleted = await executeInTransaction(fastify.db, async (tx) => {
+        // Episodes reference the course by composite FK; remove them first
+        // so Admin deletion is not blocked once any assignment exists.
+        await createTeacherCourseAssignmentRepo(tx).deleteByCourse(ctx, id);
+        return createCourseRepo(tx).delete(ctx, id);
+      });
       if (deleted) {
         recordBestEffortAudit(fastify, request, ctx, {
           action: "course.delete",

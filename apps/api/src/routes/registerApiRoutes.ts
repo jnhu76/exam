@@ -23,6 +23,7 @@ import { emailRoutes } from "./email.js";
 import notificationRoutes from "./notifications.js";
 import { adminIncidentRoutes } from "./incidents.admin.js";
 import { adminProctorAssignmentRoutes } from "./proctorAssignments.admin.js";
+import { adminTeacherAssignmentRoutes } from "./teacherAssignments.admin.js";
 
 /**
  * Registers all API route modules on a Fastify instance.
@@ -63,4 +64,5 @@ export async function registerApiRoutes(
   await app.register(notificationRoutes, { prefix });
   await app.register(adminIncidentRoutes, { prefix });
   await app.register(adminProctorAssignmentRoutes, { prefix });
+  await app.register(adminTeacherAssignmentRoutes, { prefix });
 }

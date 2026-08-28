@@ -394,3 +394,180 @@ describe("scoped capability preHandler — Proctor assignment gate (J4-I1B)", ()
     expect(checked).toBe(false);
   });
 });
+
+describe("scoped capability preHandler — Teacher assignment gate (issue #286)", () => {
+  const allow = () => true;
+
+  /** A request whose ctx carries the authoritative runtime roles (RBAC-M10-E). */
+  function makeRuntimeReq(roles: readonly string[]): FastifyRequest {
+    return {
+      ctx: {
+        actorId: "actor-1",
+        organizationId: "org-1",
+        role: "Teacher",
+        permissions: [] as never,
+        sessionId: "s",
+        roles,
+        capabilities: [],
+      },
+      params: { courseId: "course-1" },
+      log: {
+        child: () => ({}),
+        error: () => {},
+        warn: () => {},
+        info: () => {},
+      },
+    } as unknown as FastifyRequest;
+  }
+
+  /** Resolves to Scope.Course via the DURABLE course chain node. */
+  const courseResolver: ScopeResolver = {
+    key: "course",
+    async resolve() {
+      return {
+        scope: Scope.Course,
+        organizationId: "org-1",
+        resourceId: "course-1",
+        chain: [{ type: "course", id: "course-1" }],
+      };
+    },
+  };
+
+  /** Exam-scoped resolution: the gate must read the CHAIN's course node. */
+  const examWithCourseResolver: ScopeResolver = {
+    key: "exam",
+    async resolve() {
+      return {
+        scope: Scope.Exam,
+        organizationId: "org-1",
+        resourceId: "exam-1",
+        chain: [
+          { type: "exam", id: "exam-1" },
+          { type: "course", id: "course-from-chain" },
+        ],
+      };
+    },
+  };
+
+  it("teacherAssignment.check throws -> 503 AUTHZ_UNAVAILABLE (never fail open)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.CourseView,
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+      resolvers: makeResolverMap({ course: courseResolver }),
+      presetAllows: allow,
+      teacherAccess: "course_assignment_scoped",
+      teacherAssignment: {
+        async check() {
+          throw new Error("db connection refused");
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Teacher"]), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+
+  it("an active course assignment passes the gate (no reply sent)", async () => {
+    let sawCourseId: string | null = null;
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.CourseView,
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+      resolvers: makeResolverMap({ course: courseResolver }),
+      presetAllows: allow,
+      teacherAccess: "course_assignment_scoped",
+      teacherAssignment: {
+        async check(_request, courseId) {
+          sawCourseId = courseId;
+          return true;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Teacher"]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(reply.sentBody).toBeUndefined();
+    expect(sawCourseId).toBe("course-1");
+  });
+
+  it("a missing assignment is folded into 404 RESOURCE_NOT_FOUND (anti-enumeration)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.CourseView,
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+      resolvers: makeResolverMap({ course: courseResolver }),
+      presetAllows: allow,
+      teacherAccess: "course_assignment_scoped",
+      teacherAssignment: {
+        async check() {
+          return false;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Teacher"]), reply);
+    expect(reply.sentCode).toBe(404);
+    expect(JSON.stringify(reply.sentBody)).toContain("RESOURCE_NOT_FOUND");
+  });
+
+  it("exam-scoped routes: the gate reads the chain's course node (durable parent), never a client courseId", async () => {
+    let sawCourseId: string | null = null;
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.ExamView,
+      resolverKey: "exam",
+      resourceIdKey: "courseId",
+      resolvers: makeResolverMap({ exam: examWithCourseResolver }),
+      presetAllows: allow,
+      teacherAccess: "course_assignment_scoped",
+      teacherAssignment: {
+        async check(_request, courseId) {
+          sawCourseId = courseId;
+          return true;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Teacher"]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(sawCourseId).toBe("course-from-chain");
+  });
+
+  it("Admin short-circuits the assignment requirement (resolver still ran)", async () => {
+    let checked = false;
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.CourseView,
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+      resolvers: makeResolverMap({ course: courseResolver }),
+      presetAllows: allow,
+      teacherAccess: "course_assignment_scoped",
+      teacherAssignment: {
+        async check() {
+          checked = true;
+          return false;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq([Role.Admin]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(checked).toBe(false);
+  });
+
+  it("teacherAccess declared without a wired gate -> 503 (config error, never allow)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.CourseView,
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+      resolvers: makeResolverMap({ course: courseResolver }),
+      presetAllows: allow,
+      teacherAccess: "course_assignment_scoped",
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Teacher"]), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+});

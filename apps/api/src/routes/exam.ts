@@ -60,6 +60,7 @@ import {
   ExamPublishResultsNotAllowedError,
 } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
+import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
 import { executeAdminExamTransition } from "./examTransitionExecutor.js";
 import {
@@ -382,12 +383,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** List exams with pagination. Each item includes participant count, graded attempt count, and UI action metadata. */
+    /** List exams with pagination. Each item includes participant count, graded attempt count, and UI action metadata. Teacher actors see only exams under assigned courses (SQL-side, before pagination). */
     async (request: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createExamRepo(fastify.db);
-      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
+      // Issue #286 LIST scope: Admin → org-wide; Teacher → exams under the
+      // active assigned course set, filtered in SQL before pagination/count.
+      const scope = await resolveTeacherCourseScope(fastify.db, ctx);
+      const { items, total } = scope
+        ? await repo.listByCourseIdsPaginated(ctx, scope, page, pageSize)
+        : await repo.listPaginated(ctx, page, pageSize);
       const attemptRepo = createAttemptRepo(fastify.db);
       const allEnrollments = await createEnrollmentRepo(fastify.db).list(ctx);
       const now = fastify.now();
@@ -428,7 +434,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamView),
+        fastify.requireScopedCapability(Permission.ExamView, "exam", "id", {
+          teacherAccess: "course_assignment_scoped",
+        }),
       ],
       schema: {
         params: idParamsSchema,
@@ -473,7 +481,18 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamCreate),
+        // Create-style route: the parent course id arrives in the BODY, so
+        // the resolver + teacher gate validate the target course before the
+        // handler runs (issue #286 §3G).
+        fastify.requireScopedCapability(
+          Permission.ExamCreate,
+          "course",
+          "courseId",
+          {
+            teacherAccess: "course_assignment_scoped",
+            resourceIdSource: "body",
+          },
+        ),
       ],
       schema: {
         // Raw defaults-free shape (P7-M2 §20 Option A): the fastify zod
@@ -487,6 +506,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           201: ExamSchema,
           400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
         },
       },
     },
@@ -791,7 +811,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamUpdate),
+        fastify.requireScopedCapability(Permission.ExamUpdate, "exam", "id", {
+          teacherAccess: "course_assignment_scoped",
+        }),
       ],
       schema: {
         params: idParamsSchema,
@@ -1109,7 +1131,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamPublish),
+        fastify.requireScopedCapability(Permission.ExamPublish, "exam", "id", {
+          teacherAccess: "course_assignment_scoped",
+        }),
       ],
       schema: {
         params: idParamsSchema,
@@ -1177,7 +1201,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamClose),
+        fastify.requireScopedCapability(Permission.ExamClose, "exam", "id", {
+          teacherAccess: "course_assignment_scoped",
+        }),
       ],
       schema: {
         params: idParamsSchema,
@@ -1639,7 +1665,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamResultPublish),
+        fastify.requireScopedCapability(
+          Permission.ExamResultPublish,
+          "exam",
+          "id",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: idParamsSchema,
@@ -1768,7 +1799,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamEnrollmentManage),
+        fastify.requireScopedCapability(
+          Permission.ExamEnrollmentManage,
+          "exam",
+          "examId",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: examIdParamsSchema,
@@ -1830,7 +1866,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamEnrollmentManage),
+        fastify.requireScopedCapability(
+          Permission.ExamEnrollmentManage,
+          "exam",
+          "examId",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: examIdParamsSchema,
@@ -1932,7 +1973,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamEnrollmentManage),
+        // The path's examId is the durable scope anchor; the handler still
+        // verifies enrollment↔exam consistency in-transaction.
+        fastify.requireScopedCapability(
+          Permission.ExamEnrollmentManage,
+          "exam",
+          "examId",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: enrollmentIdParamsSchema,
@@ -1999,7 +2047,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamEnrollmentManage),
+        fastify.requireScopedCapability(
+          Permission.ExamEnrollmentManage,
+          "exam",
+          "examId",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: examIdParamsSchema,

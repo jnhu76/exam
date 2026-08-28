@@ -22,14 +22,20 @@ import { type PermissionKey, type ResourceResolverKey } from "@exam/authz";
 import {
   buildScopedCapabilityPreHandler,
   type ProctorAssignmentGate,
+  type TeacherCourseAssignmentGate,
   type ResolverRegistry,
 } from "../authz/scopedCapability.js";
 import {
   createAttemptResolver,
   createExamResolver,
 } from "../authz/resolvers/attemptResolver.js";
+import {
+  createCourseResolver,
+  createQuestionResolver,
+} from "../authz/resolvers/courseResolver.js";
 import { createIncidentResolver } from "../authz/resolvers/incidentResolver.js";
 import { createProctorAssignmentRepo } from "@exam/db/src/repository/proctorAssignmentRepo.js";
+import { createTeacherCourseAssignmentRepo } from "@exam/db/src/repository/teacherCourseAssignmentRepo.js";
 import { buildScoreCapabilityPreHandler } from "../authz/scoreCapability.js";
 import { buildCandidateContextCapabilityPreHandler } from "../authz/candidateContextCapability.js";
 import { buildExamEligibilityCapabilityPreHandler } from "../authz/examEligibilityCapability.js";
@@ -58,6 +64,8 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   const resolvers: ResolverRegistry = {
     attempt: createAttemptResolver(fastify.db, fastify.log),
     exam: createExamResolver(fastify.db, fastify.log),
+    course: createCourseResolver(fastify.db, fastify.log),
+    question: createQuestionResolver(fastify.db, fastify.log),
     incident: createIncidentResolver(fastify.db, fastify.log),
     // NOTE: the `score` family is NOT a generic ScopeResolver — its resolution
     // carries ownership facts the generic interface cannot express, so the
@@ -83,18 +91,43 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     },
   };
 
+  /**
+   * Issue #286 Teacher-to-Course assignment gate. Reads the active
+   * `teacher_course_assignments` row for (ctx.organizationId, courseId,
+   * ctx.actorId) per request — never cached across requests, never placed
+   * into JWTs. Revocation is effective on the NEXT request by construction.
+   */
+  const teacherAssignmentGate: TeacherCourseAssignmentGate = {
+    check: async (request: FastifyRequest, resolvedCourseId: string) => {
+      const ctx = request.ctx;
+      if (!ctx) return false;
+      return createTeacherCourseAssignmentRepo(fastify.db).hasActiveAssignment(
+        ctx,
+        resolvedCourseId,
+        ctx.actorId,
+      );
+    },
+  };
+
   fastify.decorate(
     "requireScopedCapability",
     (
       permission: PermissionKey,
       resolverKey: ResourceResolverKey,
       resourceIdKey: string,
-      options?: { proctorAccess?: "assignment_scoped" },
+      options?: {
+        proctorAccess?: "assignment_scoped";
+        teacherAccess?: "course_assignment_scoped";
+        resourceIdSource?: "params" | "body";
+      },
     ) => {
       const handler = buildScopedCapabilityPreHandler({
         permission,
         resolverKey,
         resourceIdKey,
+        ...(options?.resourceIdSource
+          ? { resourceIdSource: options.resourceIdSource }
+          : {}),
         resolvers,
         presetAllows: (request: FastifyRequest, perm: PermissionKey) =>
           ctxAllows(request, perm),
@@ -102,6 +135,12 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
           ? {
               proctorAccess: "assignment_scoped" as const,
               proctorAssignment: proctorAssignmentGate,
+            }
+          : {}),
+        ...(options?.teacherAccess === "course_assignment_scoped"
+          ? {
+              teacherAccess: "course_assignment_scoped" as const,
+              teacherAssignment: teacherAssignmentGate,
             }
           : {}),
       });
@@ -115,6 +154,9 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
         ...(options?.proctorAccess === "assignment_scoped"
           ? { proctorAccess: "assignment_scoped" as const }
           : {}),
+        ...(options?.teacherAccess === "course_assignment_scoped"
+          ? { teacherAccess: "course_assignment_scoped" as const }
+          : {}),
       };
       return preHandler;
     },
@@ -125,11 +167,14 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Own/all is resolved from the actor's capability set (ScoreAllView /
   // ScoreOwnView) plus the resolved attempt ownership — never from a role-name
   // branch. Emits request.scoreView for the publication handler (P1-4).
+  // Issue #286: the ScoreAllView path is course-scoped for non-Admin actors
+  // through the same Teacher-to-Course gate the scoped routes use.
   const scoreHandler = buildScoreCapabilityPreHandler({
     db: fastify.db,
     logger: fastify.log,
     allows: (request: FastifyRequest, perm: PermissionKey) =>
       ctxAllows(request, perm),
+    teacherCourseGate: teacherAssignmentGate,
   });
   fastify.decorate("requireScoreCapability", () => {
     // P4-C1: attach an introspection-only `_isScoreCapability: true` tag so the
