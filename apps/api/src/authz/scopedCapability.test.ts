@@ -571,3 +571,145 @@ describe("scoped capability preHandler — Teacher assignment gate (issue #286)"
     expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
   });
 });
+
+describe("scoped capability preHandler — Grader assignment gate (issue #296)", () => {
+  const allow = () => true;
+
+  function makeRuntimeReq(roles: readonly string[]): FastifyRequest {
+    return {
+      ctx: {
+        actorId: "actor-1",
+        organizationId: "org-1",
+        role: "Grader",
+        permissions: [] as never,
+        sessionId: "s",
+        roles,
+        capabilities: [],
+      },
+      params: { attemptId: "attempt-1" },
+      log: {
+        child: () => ({}),
+        error: () => {},
+        warn: () => {},
+        info: () => {},
+      },
+    } as unknown as FastifyRequest;
+  }
+
+  /** Attempt resolution carrying the durable attempt→exam chain. */
+  const attemptResolver: ScopeResolver = {
+    key: "attempt",
+    async resolve() {
+      return {
+        scope: Scope.Attempt,
+        organizationId: "org-1",
+        resourceId: "attempt-1",
+        chain: [
+          { type: "attempt", id: "attempt-1" },
+          { type: "exam", id: "exam-from-chain" },
+          { type: "course", id: "course-1" },
+        ],
+      };
+    },
+  };
+
+  it("graderAssignment.check throws -> 503 AUTHZ_UNAVAILABLE (never fail open)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: attemptResolver }),
+      presetAllows: allow,
+      graderAccess: "exam_assignment_scoped",
+      graderAssignment: {
+        async check() {
+          throw new Error("db connection refused");
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Grader"]), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+
+  it("an active exam assignment passes the gate; the gate reads the CHAIN's exam node (durable parent)", async () => {
+    let sawExamId: string | null = null;
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingScoreWrite,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: attemptResolver }),
+      presetAllows: allow,
+      graderAccess: "exam_assignment_scoped",
+      graderAssignment: {
+        async check(_request, examId) {
+          sawExamId = examId;
+          return true;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Grader"]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(reply.sentBody).toBeUndefined();
+    expect(sawExamId).toBe("exam-from-chain");
+  });
+
+  it("a missing assignment is folded into 404 RESOURCE_NOT_FOUND (anti-enumeration)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: attemptResolver }),
+      presetAllows: allow,
+      graderAccess: "exam_assignment_scoped",
+      graderAssignment: {
+        async check() {
+          return false;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Grader"]), reply);
+    expect(reply.sentCode).toBe(404);
+    expect(JSON.stringify(reply.sentBody)).toContain("RESOURCE_NOT_FOUND");
+  });
+
+  it("Admin short-circuits the assignment requirement (resolver still ran)", async () => {
+    let checked = false;
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: attemptResolver }),
+      presetAllows: allow,
+      graderAccess: "exam_assignment_scoped",
+      graderAssignment: {
+        async check() {
+          checked = true;
+          return false;
+        },
+      },
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq([Role.Admin]), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(checked).toBe(false);
+  });
+
+  it("graderAccess declared without a wired gate -> 503 (config error, never allow)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({ attempt: attemptResolver }),
+      presetAllows: allow,
+      graderAccess: "exam_assignment_scoped",
+    });
+    const reply = makeReply();
+    await ph(makeRuntimeReq(["Grader"]), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+});

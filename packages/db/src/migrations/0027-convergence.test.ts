@@ -274,6 +274,12 @@ describe("0027 convergence — C. missing 0024 proctor tables", () => {
     await env.conn.sql.unsafe(`
       DROP TABLE IF EXISTS exam_proctor_assignment_events CASCADE;
       DROP TABLE IF EXISTS exam_proctor_assignments CASCADE;
+      -- Issue #296: grader_exam_assignments carries a composite FK to
+      -- exams(organization_id, id) and therefore DEPENDS on
+      -- exams_org_id_unique; a deployment frozen at the 0024 boundary cannot
+      -- have it. Drop it so the simulated skip stays faithful (the real 0027
+      -- migration never drops the index — it only creates it when missing).
+      DROP TABLE IF EXISTS grader_exam_assignments CASCADE;
       DROP INDEX IF EXISTS exams_org_id_unique;
     `);
   });

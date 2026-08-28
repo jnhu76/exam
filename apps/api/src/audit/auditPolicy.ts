@@ -900,6 +900,45 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
+
+  // ── Grader-to-Exam assignments (issue #296) ──
+  // Atomic compliance facts written ONLY when the assignment state change
+  // actually applies (outcome=applied). Deliberately NO operationId — grader
+  // exam assignment is an Admin config surface without the live-exam race
+  // (assign-already-active → no_change; revoke-without-active → 404).
+  // Identifiers only — never candidate answers or candidate PII.
+  [AuditAction.ExamGraderAssigned]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        organizationId: identifier,
+        examId: identifier,
+        graderUserId: identifier,
+        assignmentId: identifier,
+        actorId: identifier,
+        assignedAt: z.string().datetime(),
+      })
+      .strict(),
+  ),
+  [AuditAction.ExamGraderRevoked]: definition(
+    "active",
+    "atomic",
+    "privileged_mutation",
+    "low",
+    z
+      .object({
+        organizationId: identifier,
+        examId: identifier,
+        graderUserId: identifier,
+        assignmentId: identifier,
+        actorId: identifier,
+        revokedAt: z.string().datetime(),
+      })
+      .strict(),
+  ),
 } as const satisfies Record<AuditActionKey, AuditActionDefinition>;
 
 export type AuditActionForDurability<Durability extends AuditDurability> = {

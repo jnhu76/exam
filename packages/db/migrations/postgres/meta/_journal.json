@@ -258,6 +258,13 @@
       "when": 1788900000001,
       "tag": "0036_teacher_course_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788900000002,
+      "tag": "0037_grader_exam_assignments",
+      "breakpoints": true
     }
   ]
 }

@@ -18,8 +18,8 @@ work that remains is Issue-owned:
 | Item | Status | Issue |
 | --- | --- | --- |
 | P5-N2 — additional operational notification types | DEFERRED_TO_ISSUE | #299 |
-| M11 — Teacher→Course scope (F-04) | DEFERRED_TO_ISSUE | #286 |
-| M11 — Grader→Exam/Work scope | DEFERRED_TO_ISSUE | #296 |
+| M11 — Teacher→Course scope (F-04) | CLOSED 2026-08-28 (PR #347) | #286 |
+| M11 — Grader→Exam scope | CLOSED 2026-08-28 | #296 |
 | Staff invitation + SMTP password reset + account lifecycle | DEFERRED_TO_ISSUE | #297 |
 | Email template engine + backend i18n | DEFERRED_TO_ISSUE | #300 |
 | Generic final-answer submit barrier (ADR-008 Option D) | DEFERRED_TO_ISSUE | #302 |
@@ -46,13 +46,15 @@ The archived job plans under `docs/archive/roadmap/` are reference-only.
 
 ## M11 note
 
-The **Proctor→Exam slice** is **CLOSED** (ADR-015 Accepted, PR #245; J4-I1
-runtime CLOSED, PR #250 — see
-[`M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md)).
-The Teacher→Course and Grader→Work slices are Issue-owned (#286, #296). The
-Teacher runtime remains org-wide today (characterization test:
-`apps/api/src/authz/teacherScopeCharacterization.test.ts`); **no Teacher
-course isolation is claimed** until #286 closes.
+All three M11 slices are **CLOSED**: the **Proctor→Exam slice** (ADR-015
+Accepted, PR #245; J4-I1 runtime CLOSED, PR #250 — see
+[`M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md)),
+the **Teacher→Course slice** (#286, PR #347 — `teacher_course_assignments`
+carrier + `teacherAccess` gate + SQL-side LIST filtering), and the
+**Grader→Exam slice** (#296 — `grader_exam_assignments` carrier +
+`graderAccess` gate + grading-queue scope filtering before
+pagination/count). Authority is `capability × assignment` in all three:
+the scope row alone grants zero capabilities and Admin stays org-wide.
 
 ## Phase-roadmap alignment
 

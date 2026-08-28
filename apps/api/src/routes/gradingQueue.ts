@@ -27,6 +27,7 @@ import {
   getRequestContext,
 } from "./helpers.js";
 import { cookieAuth } from "./attempts.shared.js";
+import { resolveGraderExamScope } from "./graderScope.js";
 import { Permission } from "@exam/authz";
 import {
   recordAtomicHttpAudit,
@@ -39,7 +40,11 @@ import {
  * - GET  /admin/attempts/:attemptId/grading-details
  * - POST /admin/attempts/:attemptId/grade-question
  *
- * All routes are Admin-only (RBAC + organization boundary). Handlers mirror
+ * Admin is org-wide. Issue #296: Grader actors are assignment-scoped — the
+ * queue LIST filters to their active grader_exam_assignments exams in SQL
+ * BEFORE pagination and total count, and grading detail/write additionally
+ * require an active assignment on the attempt's exam (graderAccess gate,
+ * missing assignment → 404 anti-enumeration). Handlers mirror
  * attempts.admin.ts: validate -> ensureTargetOrg -> command/repo -> audit.
  *
  * Slice 3 ownership: the manual grading queue, grading-details view, and
@@ -69,7 +74,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       schema: {
         querystring: GradingQueueListQuerySchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Grader"],
         response: {
           200: GradingQueueListResponseSchema,
           400: ErrorResponseSchema,
@@ -86,13 +91,37 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const { page, pageSize, examId } = parsed.data;
       const entryRepo = createAttemptGradingEntryRepo(fastify.db);
       const offset = (page - 1) * pageSize;
+
+      // Issue #296: non-Admin actors (Grader) see only their assigned exams.
+      // Resolved fresh per request; an empty scope means zero rows + zero
+      // total BY CONTRACT. The scope intersects any examId query filter, and
+      // list + count receive the SAME filter so pagination totals agree.
+      const scope = await resolveGraderExamScope(fastify.db, ctx);
+      const scopedFilter = scope
+        ? examId
+          ? scope.includes(examId)
+            ? [examId]
+            : []
+          : scope
+        : null;
       const [rows, total] = await Promise.all([
         entryRepo.listPendingManualQueue(ctx, {
-          ...(examId ? { examId } : {}),
+          ...(scopedFilter !== null
+            ? { examIds: scopedFilter }
+            : examId
+              ? { examId }
+              : {}),
           limit: pageSize,
           offset,
         }),
-        entryRepo.countPendingManualQueue(ctx, examId ? { examId } : {}),
+        entryRepo.countPendingManualQueue(
+          ctx,
+          scopedFilter !== null
+            ? { examIds: scopedFilter }
+            : examId
+              ? { examId }
+              : {},
+        ),
       ]);
 
       // Presentation projection: each attempt-level row carries its
@@ -134,12 +163,15 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           Permission.GradingDetailView,
           "attempt",
           "attemptId",
+          // Issue #296: non-Admin actors must hold an active Grader-to-Exam
+          // assignment to the attempt's exam (attempt→exam chain node).
+          { graderAccess: "exam_assignment_scoped" },
         ),
       ],
       schema: {
         params: AttemptIdParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Grader"],
         response: {
           200: GradingDetailsResponseSchema,
           400: ErrorResponseSchema,
@@ -255,13 +287,16 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           Permission.GradingScoreWrite,
           "attempt",
           "attemptId",
+          // Issue #296: non-Admin actors must hold an active Grader-to-Exam
+          // assignment to the attempt's exam (attempt→exam chain node).
+          { graderAccess: "exam_assignment_scoped" },
         ),
       ],
       schema: {
         params: AttemptIdParamsSchema,
         body: GradeQuestionRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Grader"],
         response: {
           200: GradeQuestionResponseSchema,
           400: ErrorResponseSchema,
