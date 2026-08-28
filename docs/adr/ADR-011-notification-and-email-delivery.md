@@ -1,6 +1,6 @@
 # ADR-011: Notification Inbox and Email Delivery Architecture
 
-- **Status:** Accepted (2026-07-25, P5-N1-R0)
+- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**
 - **Date:** 2026-07-23
 - **Owners:** EXAM maintainers
 - **Related:** ADR-003 Job Queue, ADR-001 Redis, P5-0 Email Delivery Runtime, P3 Result Publishing Closeout, P5-N1 Notification Inbox
@@ -12,7 +12,10 @@ EXAM adopts a two-channel notification architecture:
 1. **Inbox notifications** are first-class business records stored in PostgreSQL.
 2. **Email** is an external delivery channel used for identity flows, offline recall, and high-impact operational alerts.
 3. **Email delivery is asynchronous** and uses the existing PostgreSQL `email_outbox` as a durable queue.
-4. A dedicated Node.js worker process claims and delivers due outbox rows.
+4. The email outbox poll loop claims and delivers due outbox rows. Since the
+   #320 CONVERGE amendment (§23) it runs **in-process inside the API
+   server** as a Fastify plugin; the standalone worker entrypoint remains
+   as an optional escape hatch with identical semantics.
 5. Redis, BullMQ, RabbitMQ, Kafka, and a general-purpose queue platform are not introduced at this stage.
 6. Notification and email code are feature/application modules. They must not be placed in a generic `utils` directory.
 7. Notification records store a relative `actionPath`. Absolute email links are produced at render time from the validated `PUBLIC_WEB_ORIGIN` runtime setting.
@@ -63,7 +66,7 @@ The design should extend these boundaries instead of introducing an unrelated ut
 | `email_outbox.recipient_user_id` | Does not exist; P5-N1 owns recipient linkage | schema `pg.ts` (absent) |
 | `email_outbox` status enum | `pending`, `processing`, `retry_wait`, `sent`, `dead` (5-state, migrated) | `packages/domain/src/email.ts:31-36`; `packages/db/src/schema/pg.ts:636-638` |
 | `email_outbox` locking | `locked_at`/`locked_by` columns exist; `FOR UPDATE SKIP LOCKED` claim implemented | `packages/db/src/repository/emailOutboxRepo.ts:221-275`; `schema/pg.ts:597-598` |
-| Worker | Resident daemon loop (`apps/api/src/workers/emailDeliveryWorker.ts`) — `while(!shuttingDown)` poll + heartbeat + graceful shutdown | `emailDeliveryWorker.ts:150-235`; script `worker:email` in `apps/api/package.json` |
+| Worker | In-process outbox loop plugin (`apps/api/src/plugins/emailOutboxLoop.ts`, #320 CONVERGE) reusing the poll body of the standalone entrypoint (`apps/api/src/workers/emailDeliveryWorker.ts`, retained as escape hatch) — poll + heartbeat + supervised retry + bounded shutdown | `emailOutboxLoop.ts`; `worker:email` script kept in `apps/api/package.json` |
 | `EMAIL_ENABLED=false` | `DisabledEmailSender` (no-op, returns `{providerMessageId:null}`); enqueue layer is NOT gated by `enabled` (no business caller exists yet) | `apps/api/src/email/senders.ts:40-44,189-192`; `emailDeliveryService.ts:50-70` |
 | `apps/api/src/notifications/` | Does not exist yet (P5-N1 owns) | verified absent |
 | `apps/api/src/workers/` | EXISTS — `emailDeliveryWorker.ts` (P5-0) | `apps/api/src/workers/emailDeliveryWorker.ts` |
@@ -521,34 +524,50 @@ Responsibilities:
 
 Business routes must not construct SMTP transports or instantiate notification services ad hoc. They call the decorated application service or a command-level dependency.
 
-### 8.6 Worker
+### 8.6 Worker (revised by #320 CONVERGE — see §23)
 
 ```text
-apps/api/src/workers/emailDeliveryWorker.ts  (new)
+apps/api/src/plugins/emailOutboxLoop.ts      (in-process loop — DEFAULT)
+apps/api/src/workers/emailDeliveryWorker.ts  (standalone entrypoint — escape hatch)
 ```
 
-The worker is a separate process entrypoint but remains in the existing API package initially.
+Since #320 (CONVERGE, 2026-08-29), the email outbox poll loop runs
+**in-process** inside the API server as a Fastify plugin. The plugin reuses
+the standalone worker's poll body verbatim (same `recoverAbandoned` +
+`processDueEmails` + heartbeat cycle, same `FOR UPDATE SKIP LOCKED`
+claiming via `EmailOutboxService`, same `worker_heartbeats` identity under
+the `email-delivery` name), so delivery semantics and diagnostics
+(`buildEmailStatus`) are unchanged by the topology.
 
-**Build entry constraint**: The worker must be an explicit build entry in the API package's tsconfig and build scripts. CI must verify the worker build artifact exists. The worker startup command must be listed in `package.json` scripts. The worker must not depend on bundler auto-discovery of files not imported by the server.
+Process-boundary differences by design:
 
-Example:
+- **Supervision**: a loop failure (e.g. a database hiccup during bootstrap
+  wait or a poll cycle) is logged with an error heartbeat and retried after
+  the poll interval instead of crashing the API process. The API is NOT
+  the loop's failure container.
+- **Bounded shutdown**: on SIGTERM the loop stops within
+  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 30s). Rows left `processing`
+  past the bound are redelivered via lock-timeout recovery (documented
+  at-least-once). The standalone worker instead finishes its current batch
+  unbounded; the in-process bound prevents SIGTERM latency from scaling
+  with batch size × SMTP latency.
+- **Startup**: the loop starts in the background (it does not block
+  `listen`) and waits for the internal default organization the same way
+  the worker does (`bootstrap_pending` heartbeats before bootstrap).
 
-```text
-API process:
-  node dist/server.js
+The standalone `emailDeliveryWorker.ts` entrypoint and the
+`worker:email` / `worker:email:dev` package scripts are retained as an
+escape hatch (e.g. draining a large backlog off the API process during an
+incident, or local debugging). They are NOT part of the supported
+deployment topology: the production Compose file has no email-worker
+service, and the deployment topology contract
+(`scripts/repository-contract/deployment-topology-contract.mjs`) FAILS if
+one reappears. Reintroducing a dedicated worker container is an ADR
+revision, not a config change.
 
-Email worker process:
-  node dist/workers/emailDeliveryWorker.js
-```
-
-Or via package.json scripts:
-
-```bash
-pnpm --filter @exam/api build
-pnpm --filter @exam/api worker:email
-```
-
-A new `apps/worker` package is introduced only if several worker types need independent dependencies, builds, ownership, or deployment. One email worker does not justify that split.
+A new `apps/worker` package is introduced only if several worker types need
+independent dependencies, builds, ownership, or deployment. One email
+worker does not justify that split.
 
 ### 8.7 Runtime configuration
 
@@ -887,7 +906,10 @@ Inbox records are not affected by any email stale TTL.
 
 ### 13.1 Worker heartbeat storage
 
-The worker is a separate process. Worker heartbeat and health status are persisted in PostgreSQL so that the API diagnostics surface can read them without process-local shared memory, HTTP RPC to the worker, or Redis.
+Worker heartbeat and health status are persisted in PostgreSQL so that the
+diagnostics surface can read them without process-local shared memory, HTTP
+RPC, or Redis — regardless of whether the loop runs in-process (default,
+#320) or as the standalone escape-hatch entrypoint.
 
 Recommended storage:
 
@@ -1052,9 +1074,22 @@ Rejected because provider latency and outages would affect business request late
 
 Rejected because PostgreSQL already provides the required durability and queue semantics at the current scale, while another infrastructure system adds deployment and consistency burden.
 
-### Create a separate worker application immediately
+### Keep a dedicated worker PROCESS as the default topology
 
-Deferred. A separate process entrypoint inside `apps/api` provides isolation without prematurely creating another package.
+Rejected by #320 (2026-08-29) on measured evidence. All delivery guarantees
+(durability, SKIP LOCKED, ownership fencing, lock-timeout recovery,
+at-least-once) are PostgreSQL + `EmailOutboxService`-owned, not
+process-owned. Under a full failure/load matrix (disabled email, idle,
+100/1k/10k backlogs, 0.5s/2s slow SMTP, retry storms, kill −9, SIGTERM,
+N=2 replicas), the in-process loop matched the dedicated worker's API
+latency (p50/p95) in every scenario, drained backlogs at identical rates,
+preserved retry semantics exactly, and passed the N=2 SKIP LOCKED
+ownership proof — while removing a second container, an entrypoint
+override, migration serialization, ~15 duplicated env vars, and a resident
+no-op poller in every `EMAIL_ENABLED=false` deployment. The one measured
+cost was a p99 tail increase (~+90 ms) under an artificially pathological
+2 s-per-send SMTP, accepted at single-machine LAN scale. See the #320
+experiment record for the full matrix.
 
 ### Store complete absolute URLs in notification rows
 
@@ -1198,3 +1233,41 @@ The following items are explicitly deferred and NOT part of V1:
 ### Language
 
 - [ ] The ADR contains no unintended Chinese-language fragments
+
+## 23. Amendment 2026-08-29 — #320 CONVERGE (in-process delivery loop)
+
+**Decision**: The email outbox delivery loop runs in-process inside the API
+server (`apps/api/src/plugins/emailOutboxLoop.ts`). The dedicated
+`email-worker` Compose service, its entrypoint override, its
+`app: service_healthy` migration serialization, and its duplicated
+environment block are removed from the supported deployment topology. The
+standalone `node dist/workers/emailDeliveryWorker.js` entrypoint is
+retained as an optional escape hatch (incident draining, local debugging).
+
+**Evidence**: measured A/B matrix on a disposable scratch database (issue
+#320 experiment record, 2026-08-29): disabled-email footprint (2 procs
+~326 MB → 1 proc ~269 MB), backlogs 100/1k/10k (drain parity, e.g. 50.2s vs
+47.7s at 1k; 84.5s vs 87.4s at 10k), slow SMTP 0.5s/2s (latency parity at
+p50/p95; p99 +~90 ms tail at 2s — accepted), 1k-row retry storm (all rows
+`dead` at exactly 3 attempts in both topologies; API latency flat),
+kill −9 recovery (17 abandoned `processing` rows recovered via lock
+timeout and redelivered), bounded SIGTERM (7.6s vs the worker's unbounded
+current-batch drain), and N=2 replica correctness (400/400 sent, 0
+double-claims, 0 ownershipLost, 2 distinct heartbeat identities). Claim
+query cost at 10k backlog: 11.9 ms per 100-row claim (EXPLAIN ANALYZE).
+
+**Consequences**:
+
+- The `app` container is the sole migration owner and sole outbox consumer
+  in the supported topology; the P6-009 migration-serialization dependency
+  chain no longer applies (single runner).
+- `EMAIL_ENABLED=false` deployments no longer ship a resident no-op
+  container; the loop still runs in-process and marks enqueued rows `sent`
+  via `DisabledEmailSender` (ADR-011 §12 Approach A unchanged).
+- The deployment topology contract asserts `app + db` and FAILS if an
+  `email-worker` service reappears; the app service must forward
+  `EMAIL_ENABLED`.
+- Diagnostics, `worker_heartbeats`, and `buildEmailStatus` are unchanged.
+- New runtime knob: `EMAIL_FAKE_DELAY_MS` (non-negative, default 0) —
+  simulated transport latency on the fake sender for tests/deployment
+  rehearsal.

@@ -49,6 +49,7 @@ const ENV_KEYS = [
   "EMAIL_MAX_ATTEMPTS",
   "EMAIL_RETRY_BASE_SECONDS",
   "EMAIL_FAKE_MODE",
+  "EMAIL_FAKE_DELAY_MS",
   "SMTP_HOST",
   "SMTP_PORT",
   "SMTP_SECURE",
@@ -1103,7 +1104,27 @@ describe("runtimeConfig", () => {
       expect(config.email.fromName).toBe("Exam Platform");
       expect(config.email.maxAttempts).toBe(3);
       expect(config.email.retryBaseSeconds).toBe(60);
+      expect(config.email.fakeDelayMs).toBe(0);
       expect(config.email.smtp).toBeNull();
+    });
+
+    it("parses EMAIL_FAKE_DELAY_MS as a non-negative integer", () => {
+      process.env.EMAIL_FAKE_DELAY_MS = "750";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.email.fakeDelayMs).toBe(750);
+    });
+
+    it("fails fast on a negative EMAIL_FAKE_DELAY_MS", () => {
+      process.env.EMAIL_FAKE_DELAY_MS = "-1";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("fails fast on a non-numeric EMAIL_FAKE_DELAY_MS", () => {
+      process.env.EMAIL_FAKE_DELAY_MS = "soon";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
     });
 
     it("enabled=true + transport=fake parses without SMTP config", () => {

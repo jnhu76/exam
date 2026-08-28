@@ -16,6 +16,7 @@ import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
 import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
 import emailPlugin from "./plugins/email.js";
+import emailOutboxLoopPlugin from "./plugins/emailOutboxLoop.js";
 import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
@@ -57,6 +58,11 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
       app.log.error({ err }, "Graceful shutdown failed");
       process.exitCode = 1;
     }
+    // Exit deterministically once graceful close has settled. Background
+    // scanners keep non-unref'ed timers that would otherwise hold the event
+    // loop open past the container runtime's stop grace period, turning a
+    // clean SIGTERM shutdown into a SIGKILL (exit 137).
+    process.exit(process.exitCode || 0);
   };
   const onSignal = () => {
     void close();
@@ -93,6 +99,7 @@ async function main() {
   await app.register(heartbeatPlugin);
   await app.register(deadlineScannerPlugin);
   await app.register(emailPlugin);
+  await app.register(emailOutboxLoopPlugin);
 
   await registerOpenApiDocs(app);
 

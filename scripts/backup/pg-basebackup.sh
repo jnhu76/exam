@@ -178,7 +178,16 @@ evidence_complete() {
   # bind the fallback to `cut` (which succeeds with empty output when du
   # fails), producing an invalid empty --size-bytes that the evidence CLI
   # rejects and fails a REAL, verified backup.
-  size_bytes="$(du -sb "${DEST}" 2>/dev/null | cut -f1)"
+  #
+  # du runs INSIDE the postgres container (as root), not on the host:
+  # pg_basebackup writes root-owned 0700 subdirectories, which a host-side
+  # du cannot traverse on native-Linux bind mounts (e.g. WSL2) — it exits 1
+  # with an UNDERSTATED size, and under `set -euo pipefail` that failure
+  # kills the script after a fully verified backup.
+  size_bytes="$(docker run --rm \
+    -v "${DEST}:/backup:ro" \
+    postgres:18.4-bookworm \
+    du -sb /backup 2>/dev/null | cut -f1 || true)"
   size_bytes="${size_bytes:-0}"
   if ! evidence complete --operation-id "${EVIDENCE_OPERATION_ID}" \
       --type physical_base --artifact-label "${ARTIFACT_LABEL}" \

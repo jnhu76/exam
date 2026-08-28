@@ -39,8 +39,8 @@ C4Context
     rel(exam_system, smtp, "Sends email", "SMTP (async)")
 ```
 
-**Authority**: `apps/api/src/server.ts`, `packages/authz/src/presets.ts`, `apps/api/src/workers/emailDeliveryWorker.ts`
-**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer holds exactly 5 operational `*.view` capabilities, 0 business permissions, 0 writes — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via email worker).
+**Authority**: `apps/api/src/server.ts`, `packages/authz/src/presets.ts`, `apps/api/src/plugins/emailOutboxLoop.ts` (#320 CONVERGE — in-process outbox loop; standalone `workers/emailDeliveryWorker.ts` remains as an optional escape hatch)
+**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer holds exactly 5 operational `*.view` capabilities, 0 business permissions, 0 writes — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
 **Known limitations**: Teacher/Proctor/Grader are Phase 3 roles (capability infrastructure exists; product role UI is incomplete). Teacher course-scope is NOT enforced — see P7-RBAC F-04. Email delivery is the only async external dependency. No CDN, no cloud services, no external APIs.
 
 ---
@@ -528,8 +528,8 @@ sequenceDiagram
     end
 ```
 
-**Authority**: `apps/api/src/workers/emailDeliveryWorker.ts`, `packages/db/src/repository/emailOutboxRepo.ts`, `apps/api/src/email/outboxService.ts`
-**Evidence**: Worker polls, claims via `FOR UPDATE SKIP LOCKED`, sends outside transaction, marks result with ownership fence.
+**Authority**: `apps/api/src/plugins/emailOutboxLoop.ts`, `packages/db/src/repository/emailOutboxRepo.ts`, `apps/api/src/email/outboxService.ts`
+**Evidence**: The in-process loop polls, claims via `FOR UPDATE SKIP LOCKED`, sends outside transaction, marks result with ownership fence (#320 CONVERGE).
 **Known limitations**: At-least-once delivery (crash after SMTP acceptance but before markSent causes duplicate). No production business caller enqueues emails (P5-N1 scope).
 
 ---

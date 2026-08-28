@@ -182,6 +182,8 @@ export interface EmailConfig {
   from: string;
   fromName: string;
   fakeMode: EmailFakeMode;
+  /** Simulated transport latency for the fake sender (0 = immediate). */
+  fakeDelayMs: number;
   maxAttempts: number;
   retryBaseSeconds: number;
   smtp: SmtpConfig | null;
@@ -295,6 +297,11 @@ const positiveIntSchema = z
   .union([z.string(), z.number()])
   .transform((v) => Number(v))
   .pipe(z.number().int().positive());
+
+const nonNegativeIntSchema = z
+  .union([z.string(), z.number()])
+  .transform((v) => Number(v))
+  .pipe(z.number().int().min(0));
 
 /**
  * Resolve the application runtime mode from `APP_MODE`, falling back to
@@ -726,6 +733,9 @@ function resolveEmailConfig(
   const retryBaseSeconds = positiveIntSchema.parse(
     env.EMAIL_RETRY_BASE_SECONDS ?? "60",
   );
+  const fakeDelayMs = nonNegativeIntSchema.parse(
+    env.EMAIL_FAKE_DELAY_MS ?? "0",
+  );
 
   let smtp: SmtpConfig | null = null;
   if (transportRaw === "smtp") {
@@ -776,6 +786,7 @@ function resolveEmailConfig(
     from: (env.EMAIL_FROM ?? "no-reply@example.local").trim(),
     fromName: (env.EMAIL_FROM_NAME ?? "Exam Platform").trim(),
     fakeMode: fakeModeRaw,
+    fakeDelayMs,
     maxAttempts,
     retryBaseSeconds,
     smtp,

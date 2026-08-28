@@ -100,13 +100,12 @@ docker compose --env-file .env.deploy up -d
   drizzle journal applies every not-yet-applied migration in order, then
   the API starts. Re-runs are idempotent (`NOTICE: schema "drizzle" already
   exists, skipping` is expected).
-- The `email-worker` starts only after `app` is healthy (`depends_on:
-  service_healthy`), then re-runs migrate idempotently before polling.
-  The journal tracks state but is NOT a concurrency lock — the Compose
-  dependency chain is what serializes the two runners.
-- `up -d` **recreates** `app` + `email-worker` when their image reference
-  changed; the `db` container is untouched when the `db` image did not
-  change (state and container continuity).
+- The email outbox delivery loop runs in-process inside the `app`
+  container (#320 CONVERGE — there is no dedicated email-worker service);
+  it waits for the first organization to be bootstrapped before polling.
+- `up -d` **recreates** `app` when its image reference changed; the `db`
+  container is untouched when the `db` image did not change (state and
+  container continuity).
 - No seed runs in production: the baseline seed refuses
   `APP_MODE=production` (bootstrap/`bootstrap-admin.js` is the only
   account-creation path).
@@ -134,9 +133,9 @@ docker compose --env-file .env.deploy up -d
   image tag**:
   ```bash
   # 1. Restore the pre-upgrade backup (clean target contract):
-  docker compose --env-file .env.deploy stop app email-worker
+  docker compose --env-file .env.deploy stop app
   scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
-  docker compose --env-file .env.deploy up -d app email-worker
+  docker compose --env-file .env.deploy up -d app
 
   # 2. Point EXAM_IMAGE at the previous release — CAREFUL: a canonical
   #    `ghcr.io/jnhu76/exam:vX.Y.Z` value follows .release-version on the
