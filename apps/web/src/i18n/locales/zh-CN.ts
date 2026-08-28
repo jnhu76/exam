@@ -736,8 +736,6 @@ const zhCN = {
         assignBtn: "分配",
         currentLabel: "已分配考试",
         empty: "尚未分配任何考试。",
-        columnExam: "考试",
-        columnAction: "操作",
         revokeBtn: "撤销",
         noChange: "该考试已在评卷列表中",
         loadFailed: "考试分配操作失败",
