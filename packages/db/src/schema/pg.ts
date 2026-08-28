@@ -2144,6 +2144,99 @@ export const teacherCourseAssignments = pgTable(
   ],
 );
 
+export const graderExamAssignments = pgTable(
+  "grader_exam_assignments",
+  {
+    id: id(),
+    // organizationId / user FKs are declared as explicit named foreign keys
+    // below (same convention as teacher_course_assignments).
+    organizationId: text("organization_id").notNull(),
+    graderUserId: text("grader_user_id").notNull(),
+    examId: text("exam_id").notNull(),
+    status: text("status").notNull().default("active"),
+    assignedBy: text("assigned_by").notNull(),
+    assignedAt: timestamp("assigned_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    revokedBy: text("revoked_by"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // Composite-FK target for consistency with the episode pattern.
+    uniqueIndex("grader_exam_assignments_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    // The one-active-episode arbiter: at most one active assignment per
+    // (organization, grader, exam).
+    uniqueIndex("grader_exam_assignments_active_unique")
+      .on(table.organizationId, table.graderUserId, table.examId)
+      .where(sql`${table.status} = 'active'`),
+    // listByGrader (assignment API + scope resolution).
+    index("grader_exam_assignments_org_grader_status_idx").on(
+      table.organizationId,
+      table.graderUserId,
+      table.status,
+    ),
+    // listByExam (reverse assignment surface, if needed).
+    index("grader_exam_assignments_org_exam_status_idx").on(
+      table.organizationId,
+      table.examId,
+      table.status,
+    ),
+    check(
+      "grader_exam_assignments_status_check",
+      sql`${table.status} IN ('active', 'revoked')`,
+    ),
+    check(
+      "grader_exam_assignments_revocation_shape_check",
+      sql`
+        (
+          ${table.status} = 'active'
+          AND ${table.revokedAt} IS NULL
+          AND ${table.revokedBy} IS NULL
+        )
+        OR
+        (
+          ${table.status} = 'revoked'
+          AND ${table.revokedAt} IS NOT NULL
+          AND ${table.revokedBy} IS NOT NULL
+        )
+      `,
+    ),
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organizations.id],
+      name: "grader_exam_assignments_org_fk",
+    }),
+    foreignKey({
+      columns: [table.graderUserId],
+      foreignColumns: [users.id],
+      name: "grader_exam_assignments_grader_user_fk",
+    }),
+    foreignKey({
+      columns: [table.assignedBy],
+      foreignColumns: [users.id],
+      name: "grader_exam_assignments_assigned_by_fk",
+    }),
+    foreignKey({
+      columns: [table.revokedBy],
+      foreignColumns: [users.id],
+      name: "grader_exam_assignments_revoked_by_fk",
+    }),
+    // Composite FK to exams(organization_id, id) — exams_org_id_unique
+    // already exists (issue #296).
+    foreignKey({
+      columns: [table.organizationId, table.examId],
+      foreignColumns: [exams.organizationId, exams.id],
+      name: "grader_exam_assignments_exam_fk",
+    }),
+  ],
+);
+
 /**
  * Proctor-to-Exam assignment events — append-only command receipts
  * (ADR-015 §4.2). `UNIQUE (organization_id, operation_id)` is the sole
@@ -2335,6 +2428,7 @@ export const schema = {
   examProctorAssignments,
   examProctorAssignmentEvents,
   teacherCourseAssignments,
+  graderExamAssignments,
   attemptCommandReceipts,
   backupRuns,
   backupRunEvents,

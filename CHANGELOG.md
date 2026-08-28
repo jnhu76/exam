@@ -29,6 +29,23 @@ for repository releases from `v0.0.1` onward.
   assignment/revoke write atomic `course.teacher_assigned` /
   `course.teacher_revoked` audit facts. Admin UI: a per-Teacher
   course-assignment dialog in UsersPage (assign, list, revoke).
+- Added the Grader-to-Exam scoped authority model (#296): a persisted
+  `grader_exam_assignments` carrier (migration 0037, the same episode
+  semantics as the Teacher carrier), an Admin assignment API
+  (`GET/POST /admin/users/:userId/exam-assignments`, revoke subpath),
+  a `graderAccess: "exam_assignment_scoped"` enforcement stage on the
+  scoped-capability gate (grading detail/write resolve the attempt→exam
+  chain per request), and grading-queue LIST scope filtering applied in
+  SQL before pagination AND before the total count (list and count
+  always agree). Authority remains `capability × assignment`: a bare
+  Grader role without assignments sees an empty queue and 404s on
+  out-of-scope probes (anti-enumeration), Admin keeps its org-wide
+  short-circuit, Teacher course assignments grant no grading scope and
+  Grader exam assignments grant no course authority, and revocation is
+  effective on the next request. Assignment/revoke write atomic
+  `exam.grader_assigned` / `exam.grader_revoked` audit facts. Admin UI:
+  a per-Grader exam-assignment dialog in UsersPage (assign, list,
+  revoke).
 
 ### Changed
 

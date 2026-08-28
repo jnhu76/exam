@@ -72,6 +72,21 @@ interface CourseAssignment {
   revokedAt: string | null;
 }
 
+/** Grader exam picker option (Admin exam list). */
+interface ExamOption {
+  id: string;
+  title: string;
+}
+
+/** Grader-to-Exam assignment episode as returned by the assignment API. */
+interface ExamAssignment {
+  id: string;
+  examId: string;
+  status: "active" | "revoked";
+  assignedAt: string;
+  revokedAt: string | null;
+}
+
 /**
  * Assignable-role item returned by GET /roles/assignable (RBAC-M8). The
  * backend @exam/authz ROLE_PRESETS is the SINGLE source of truth for the
@@ -121,6 +136,15 @@ export function UsersPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentsBusy, setAssignmentsBusy] = useState(false);
+
+  // Grader exam-assignment dialog state (issue 296).
+  const [examAssignmentsUser, setExamAssignmentsUser] =
+    useState<UserRow | null>(null);
+  const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
+  const [examOptions, setExamOptions] = useState<ExamOption[]>([]);
+  const [selectedExamId, setSelectedExamId] = useState<string>("");
+  const [examAssignmentsLoading, setExamAssignmentsLoading] = useState(false);
+  const [examAssignmentsBusy, setExamAssignmentsBusy] = useState(false);
 
   /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
   const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
@@ -308,6 +332,72 @@ export function UsersPage() {
     }
   }
 
+  /** Opens the Grader exam-assignment dialog for a Grader user. */
+  async function openExamAssignments(user: UserRow) {
+    setExamAssignmentsUser(user);
+    setExamAssignments([]);
+    setSelectedExamId("");
+    setExamAssignmentsLoading(true);
+    try {
+      const [assignmentRes, examRes] = await Promise.all([
+        api.get<{ items: ExamAssignment[] }>(
+          `/api/admin/users/${user.id}/exam-assignments?status=all`,
+        ),
+        api.get<Page<ExamOption>>("/api/exams?page=1&pageSize=100"),
+      ]);
+      setExamAssignments(assignmentRes.items);
+      setExamOptions(examRes.items);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, t("admin.users.graderExams.loadFailed")),
+      );
+      setExamAssignmentsUser(null);
+    } finally {
+      setExamAssignmentsLoading(false);
+    }
+  }
+
+  /** Assigns the selected exam to the dialog user and refreshes the list. */
+  async function assignExam() {
+    if (!examAssignmentsUser || !selectedExamId || examAssignmentsBusy) return;
+    setExamAssignmentsBusy(true);
+    try {
+      const res = await api.post<{ outcome: "applied" | "no_change" }>(
+        `/api/admin/users/${examAssignmentsUser.id}/exam-assignments`,
+        { examId: selectedExamId },
+      );
+      if (res.outcome === "no_change") {
+        toast.info(t("admin.users.graderExams.noChange"));
+      }
+      setSelectedExamId("");
+      await openExamAssignments(examAssignmentsUser);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, t("admin.users.graderExams.loadFailed")),
+      );
+    } finally {
+      setExamAssignmentsBusy(false);
+    }
+  }
+
+  /** Revokes an active exam assignment (next-request effective). */
+  async function revokeExam(assignment: ExamAssignment) {
+    if (!examAssignmentsUser || examAssignmentsBusy) return;
+    setExamAssignmentsBusy(true);
+    try {
+      await api.post(
+        `/api/admin/users/${examAssignmentsUser.id}/exam-assignments/${assignment.examId}/revoke`,
+      );
+      await openExamAssignments(examAssignmentsUser);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, t("admin.users.graderExams.loadFailed")),
+      );
+    } finally {
+      setExamAssignmentsBusy(false);
+    }
+  }
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
@@ -388,6 +478,15 @@ export function UsersPage() {
                           onClick={() => void openAssignments(user)}
                         >
                           {t("admin.users.teacherCourses.openBtn")}
+                        </Button>
+                      )}
+                      {user.role === "Grader" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void openExamAssignments(user)}
+                        >
+                          {t("admin.users.graderExams.openBtn")}
                         </Button>
                       )}
                       <ConfirmDialog
@@ -617,6 +716,104 @@ export function UsersPage() {
               variant="outline"
               onClick={() => setAssignmentsUser(null)}
               disabled={assignmentsBusy}
+            >
+              {t("admin.common.cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={examAssignmentsUser !== null}
+        onOpenChange={(next) => {
+          if (!next) setExamAssignmentsUser(null);
+        }}
+      >
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>
+              {t("admin.users.graderExams.dialogTitle", {
+                name: examAssignmentsUser?.name ?? "",
+              })}
+            </DialogTitle>
+          </DialogHeader>
+          {examAssignmentsLoading ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              {t("admin.common.loading")}
+            </p>
+          ) : (
+            <FieldGroup className="py-4">
+              <Field>
+                <Label>{t("admin.users.graderExams.pickLabel")}</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedExamId}
+                    onValueChange={setSelectedExamId}
+                  >
+                    <SelectTrigger className="min-w-0 flex-1">
+                      <SelectValue
+                        placeholder={t(
+                          "admin.users.graderExams.pickPlaceholder",
+                        )}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {examOptions.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => void assignExam()}
+                    disabled={!selectedExamId || examAssignmentsBusy}
+                  >
+                    {t("admin.users.graderExams.assignBtn")}
+                  </Button>
+                </div>
+              </Field>
+              <Field>
+                <Label>{t("admin.users.graderExams.currentLabel")}</Label>
+                {examAssignments.filter((a) => a.status === "active").length ===
+                0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    {t("admin.users.graderExams.empty")}
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {examAssignments
+                      .filter((a) => a.status === "active")
+                      .map((a) => {
+                        const exam = examOptions.find((e) => e.id === a.examId);
+                        return (
+                          <li
+                            key={a.id}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="min-w-0 truncate">
+                              {exam ? exam.title : a.examId}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={examAssignmentsBusy}
+                              onClick={() => void revokeExam(a)}
+                            >
+                              {t("admin.users.graderExams.revokeBtn")}
+                            </Button>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                )}
+              </Field>
+            </FieldGroup>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExamAssignmentsUser(null)}
+              disabled={examAssignmentsBusy}
             >
               {t("admin.common.cancel")}
             </Button>

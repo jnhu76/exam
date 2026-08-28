@@ -76,6 +76,19 @@ export interface TeacherCourseAssignmentGate {
 }
 
 /**
+ * Grader-to-Exam assignment gate (issue #296). Injected by the authz plugin;
+ * consults `grader_exam_assignments` (active row for organizationId +
+ * resolvedExamId + actorId) per request. NEVER cached across requests and
+ * never placed into JWTs. Authority semantics: the assignment row is
+ * NECESSARY but not sufficient — the Grader role preset capability check
+ * (stage 1) must also pass, so a stale row for a revoked Grader grants
+ * nothing.
+ */
+export interface GraderExamAssignmentGate {
+  check(request: FastifyRequest, resolvedExamId: string): Promise<boolean>;
+}
+
+/**
  * Extracts the resolved Exam id from a successful scope resolution. The
  * parent chain's `exam` node is authoritative when present (the incident
  * resolver reduces to Scope.Exam but its resourceId is the INCIDENT id, not
@@ -146,6 +159,16 @@ export interface ScopedCapabilityInput {
   teacherAccess?: "course_assignment_scoped";
   /** Assignment checker (injected by the authz plugin from fastify.db). */
   teacherAssignment?: TeacherCourseAssignmentGate;
+  /**
+   * Issue #296: when `"exam_assignment_scoped"`, non-Admin actors must hold
+   * an ACTIVE Grader-to-Exam assignment to the resolved Exam. Admin
+   * short-circuits the assignment requirement (the resolver still runs). A
+   * missing assignment is folded into the 404 `RESOURCE_NOT_FOUND` bucket
+   * (anti-enumeration, same contract as proctorAccess/teacherAccess).
+   */
+  graderAccess?: "exam_assignment_scoped";
+  /** Assignment checker (injected by the authz plugin from fastify.db). */
+  graderAssignment?: GraderExamAssignmentGate;
 }
 
 /**
@@ -170,6 +193,8 @@ export function buildScopedCapabilityPreHandler(
     proctorAssignment,
     teacherAccess,
     teacherAssignment,
+    graderAccess,
+    graderAssignment,
   } = input;
   return async (request, reply) => {
     const ctx = request.ctx;
@@ -366,6 +391,67 @@ export function buildScopedCapabilityPreHandler(
               route: request.url,
             },
             "authz teacher-assignment lookup failed",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        if (!assigned) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+      }
+    }
+
+    // Issue #296 Grader-to-Exam assignment enforcement: mirrors the
+    // teacherAccess block above (capability first, then resolver, then
+    // episode gate for non-Admin actors only; missing assignment folds into
+    // 404 RESOURCE_NOT_FOUND). Deliberately a PARALLEL option, not a shared
+    // "scoped-assignment framework" — the carriers differ (course config
+    // episodes vs. exam config episodes) and the campaign prohibits
+    // speculative unification.
+    if (graderAccess === "exam_assignment_scoped") {
+      if (!graderAssignment) {
+        // Configuration error: a route declared Grader assignment scope
+        // without wiring the gate. Never fail open.
+        request.log.error(
+          { resolverKey, permission, route: request.url },
+          "authz grader-assignment gate not wired",
+        );
+        return reply
+          .code(503)
+          .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+      }
+      const runtimeCtx = ctx as RuntimeRequestContext;
+      if (!runtimeCtx.roles.includes(Role.Admin)) {
+        const examId = resolvedExamId(resolution);
+        if (!examId) {
+          // The resolution produced no Exam identity — the enforcement
+          // cannot run. Fail closed (mis-declared route).
+          request.log.error(
+            { resolverKey, permission, route: request.url },
+            "authz grader-assignment enforcement: no resolved Exam id",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        let assigned: boolean;
+        try {
+          assigned = await graderAssignment.check(request, examId);
+        } catch (error) {
+          // Operational failure: never fail open, never masquerade as
+          // 403/404 — same 503 AUTHZ_UNAVAILABLE contract as teacherAccess.
+          request.log.error(
+            {
+              err: error,
+              resolverKey,
+              permission,
+              examId,
+              route: request.url,
+            },
+            "authz grader-assignment lookup failed",
           );
           return reply
             .code(503)

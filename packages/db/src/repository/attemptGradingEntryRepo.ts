@@ -18,7 +18,7 @@ import type {
   RequestContext,
 } from "@exam/domain";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 type AttemptGradingEntrySelect = (typeof attemptGradingEntries)["$inferSelect"];
 
@@ -239,7 +239,14 @@ export function createAttemptGradingEntryRepo(db: Database) {
      */
     async listPendingManualQueue(
       ctx: TenantContext | RequestContext,
-      options: { examId?: string; limit?: number; offset?: number } = {},
+      options: {
+        examId?: string;
+        /** Assigned-exam scope filter (issue #296). Empty array = assigned to
+         * nothing → zero rows BY CONTRACT (applied BEFORE pagination). */
+        examIds?: string[];
+        limit?: number;
+        offset?: number;
+      } = {},
     ) {
       const orgId = resolveOrganizationId(ctx);
       const conditions = [
@@ -252,6 +259,16 @@ export function createAttemptGradingEntryRepo(db: Database) {
       ];
       if (options.examId) {
         conditions.push(eq(examAttempts.examId, options.examId));
+      }
+      if (options.examIds) {
+        // Issue #296: scope filter BEFORE pagination. An empty scope is the
+        // zero-rows contract, never "no filter" (explicit `false` beats any
+        // driver quirk around `IN ()`).
+        if (options.examIds.length === 0) {
+          conditions.push(sql`false`);
+        } else {
+          conditions.push(inArray(examAttempts.examId, options.examIds));
+        }
       }
 
       const baseQuery = db
@@ -295,7 +312,12 @@ export function createAttemptGradingEntryRepo(db: Database) {
      */
     async countPendingManualQueue(
       ctx: TenantContext | RequestContext,
-      options: { examId?: string } = {},
+      options: {
+        examId?: string;
+        /** Assigned-exam scope filter (issue #296). Empty array = zero total
+         * BY CONTRACT — list and count MUST agree on the same filter. */
+        examIds?: string[];
+      } = {},
     ): Promise<number> {
       const orgId = resolveOrganizationId(ctx);
       const conditions = [
@@ -308,6 +330,13 @@ export function createAttemptGradingEntryRepo(db: Database) {
       ];
       if (options.examId) {
         conditions.push(eq(examAttempts.examId, options.examId));
+      }
+      if (options.examIds) {
+        if (options.examIds.length === 0) {
+          conditions.push(sql`false`);
+        } else {
+          conditions.push(inArray(examAttempts.examId, options.examIds));
+        }
       }
       const rows = await db
         .select({

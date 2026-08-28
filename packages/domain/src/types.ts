@@ -27,6 +27,8 @@ import type {
   ExamProctorAssignmentCommandOutcome,
   TeacherCourseAssignmentStatus,
   TeacherCourseAssignmentOutcome,
+  GraderExamAssignmentStatus,
+  GraderExamAssignmentOutcome,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -797,6 +799,32 @@ export interface TeacherCourseAssignment {
 export interface TeacherCourseAssignmentResult {
   outcome: TeacherCourseAssignmentOutcome;
   assignment: TeacherCourseAssignment;
+}
+
+/**
+ * Grader-exam assignment episode — current state row. At most one active
+ * episode per (organization, grader, exam); revoked episodes remain as
+ * history (same Admin-configuration-surface semantics as Teacher-to-Course
+ * assignments — no operation-receipt machinery).
+ */
+export interface GraderExamAssignment {
+  id: string;
+  organizationId: string;
+  graderUserId: string;
+  examId: string;
+  status: GraderExamAssignmentStatus;
+  assignedBy: string;
+  assignedAt: Date;
+  revokedBy: string | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Result of a Grader-exam assignment write operation. */
+export interface GraderExamAssignmentResult {
+  outcome: GraderExamAssignmentOutcome;
+  assignment: GraderExamAssignment;
 }
 
 // ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────

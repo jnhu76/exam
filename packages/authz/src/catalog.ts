@@ -184,6 +184,11 @@ export const Permission = {
   // management. The carrier grants zero capabilities by itself.
   CourseTeacherAssignmentView: "course.teacher_assignment.view",
   CourseTeacherAssignmentManage: "course.teacher_assignment.manage",
+
+  // §4.13 Grader-to-Exam assignments (issue #296) — Admin-only scope
+  // management. The carrier grants zero capabilities by itself.
+  ExamGraderAssignmentView: "exam.grader_assignment.view",
+  ExamGraderAssignmentManage: "exam.grader_assignment.manage",
 } as const;
 
 /** Closed permission union. A typo is a compile error. */

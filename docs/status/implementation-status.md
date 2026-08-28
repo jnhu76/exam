@@ -141,9 +141,13 @@ for the notification/email architecture.
 See [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md) — the
 GitHub Issues index (each item links to its Issue):
 
-- Scoped Teacher / Proctor / Grader role bundles **as product roles**
-  (presets exist; assignment UI and product flows do not).
-- Resource-relationship authorization (M11).
+- Scoped staff role bundles **as product roles**: the M11
+  resource-relationship slices are implemented (Proctor→Exam ADR-015;
+  Teacher→Course #286 / PR #347; Grader→Exam #296 — scoped assignment
+  carriers, Admin assignment APIs + UsersPage dialogs, per-request scope
+  enforcement); staff invitation + SMTP account lifecycle remains open
+  (#297).
+
 
 The remaining Phase 3 product work is sequenced as a hard module execution
 order with real dependencies (not narrative sequence):

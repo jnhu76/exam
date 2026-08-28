@@ -1328,6 +1328,44 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 8,
     },
 
+    // ── Grader-to-Exam assignments (issue #296) — Admin-only ──
+    // Admin config surface: the carrier row grants ZERO capabilities and the
+    // permissions below are never in the Grader preset, so these routes stay
+    // flat `requireCapability` (Organization scope, user resolver).
+    {
+      method: "POST",
+      path: "/admin/users/:userId/exam-assignments",
+      legacyGate: "Admin",
+      permission: Permission.ExamGraderAssignmentManage,
+      scope: Scope.Organization,
+      resolver: "user",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+    {
+      method: "GET",
+      path: "/admin/users/:userId/exam-assignments",
+      legacyGate: "Admin",
+      permission: Permission.ExamGraderAssignmentView,
+      scope: Scope.Organization,
+      resolver: "user",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+    {
+      method: "POST",
+      path: "/admin/users/:userId/exam-assignments/:examId/revoke",
+      legacyGate: "Admin",
+      permission: Permission.ExamGraderAssignmentManage,
+      scope: Scope.Organization,
+      resolver: "user",
+      sensitive: true,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+
     // ── Exam incidents (ADR-014 routes; registry entries added by J4-I1B) ──
     {
       method: "POST",

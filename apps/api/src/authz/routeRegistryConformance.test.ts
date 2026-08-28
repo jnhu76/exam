@@ -713,6 +713,73 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     expect(teacherScopedSpecs).toHaveLength(18);
   });
 
+  // ──────────────────── issue-296 Grader@Exam conformance ────────────────────
+  //
+  // The two grading detail/write routes resolve the attempt→exam chain and
+  // additionally require an active Grader-to-Exam assignment for non-Admin
+  // actors (graderAccess: "exam_assignment_scoped"). The grading-queue LIST
+  // is a flat GradingQueueView gate whose Grader scoping is handler-level SQL
+  // filtering (BEFORE pagination/count) — asserted by the grader matrix
+  // tests, not by gate metadata, mirroring the issue-286 LIST surfaces.
+  const graderScopedSpecs: Array<{
+    method: string;
+    path: string;
+    permission: string;
+    resolverKey: string;
+    resourceIdKey: string;
+  }> = [
+    {
+      method: "GET",
+      path: "/admin/attempts/:attemptId/grading-details",
+      permission: "grading.detail.view",
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+    },
+    {
+      method: "POST",
+      path: "/admin/attempts/:attemptId/grade-question",
+      permission: "grading.score.write",
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+    },
+  ];
+
+  it("has exactly 2 issue-296 grader-scoped routes defined", () => {
+    expect(graderScopedSpecs).toHaveLength(2);
+  });
+
+  it.each(graderScopedSpecs)(
+    "[issue-296] $method $path — scoped $resolverKey resolver gate WITH Grader exam-assignment enforcement",
+    ({ method, path, permission, resolverKey, resourceIdKey }) => {
+      const matches = capturedRoutes.filter(
+        (r) => r.method === method && r.url.endsWith(path),
+      );
+      expect(matches, `no captured route for ${method} ${path}`).toHaveLength(
+        1,
+      );
+      const route = matches[0]!;
+      expect(
+        route.scopedCapabilityHandlerCount,
+        `${method} ${path} scoped count`,
+      ).toBe(1);
+      expect(
+        route.flatCapabilityHandlerCount,
+        `${method} ${path} flat count`,
+      ).toBe(0);
+      expect(route.roleHandlerCount, `${method} ${path} role gate count`).toBe(
+        0,
+      );
+      expect(route.permissionListHandlerCount).toBe(0);
+      expect(route.authzHandlers[0]).toEqual({
+        kind: "scoped",
+        permission,
+        resolverKey,
+        resourceIdKey,
+        graderAccess: "exam_assignment_scoped",
+      });
+    },
+  );
+
   it.each(teacherScopedSpecs)(
     "[issue-286] $method $path — scoped $resolverKey resolver gate WITH Teacher course-assignment enforcement",
     ({ method, path, permission, resolverKey, resourceIdKey }) => {

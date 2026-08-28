@@ -23,6 +23,7 @@ import {
   buildScopedCapabilityPreHandler,
   type ProctorAssignmentGate,
   type TeacherCourseAssignmentGate,
+  type GraderExamAssignmentGate,
   type ResolverRegistry,
 } from "../authz/scopedCapability.js";
 import {
@@ -36,6 +37,7 @@ import {
 import { createIncidentResolver } from "../authz/resolvers/incidentResolver.js";
 import { createProctorAssignmentRepo } from "@exam/db/src/repository/proctorAssignmentRepo.js";
 import { createTeacherCourseAssignmentRepo } from "@exam/db/src/repository/teacherCourseAssignmentRepo.js";
+import { createGraderExamAssignmentRepo } from "@exam/db/src/repository/graderExamAssignmentRepo.js";
 import { buildScoreCapabilityPreHandler } from "../authz/scoreCapability.js";
 import { buildCandidateContextCapabilityPreHandler } from "../authz/candidateContextCapability.js";
 import { buildExamEligibilityCapabilityPreHandler } from "../authz/examEligibilityCapability.js";
@@ -109,6 +111,24 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     },
   };
 
+  /**
+   * Issue #296 Grader-to-Exam assignment gate. Reads the active
+   * `grader_exam_assignments` row for (ctx.organizationId, examId,
+   * ctx.actorId) per request — never cached across requests, never placed
+   * into JWTs. Revocation is effective on the NEXT request by construction.
+   */
+  const graderAssignmentGate: GraderExamAssignmentGate = {
+    check: async (request: FastifyRequest, resolvedExamId: string) => {
+      const ctx = request.ctx;
+      if (!ctx) return false;
+      return createGraderExamAssignmentRepo(fastify.db).hasActiveAssignment(
+        ctx,
+        resolvedExamId,
+        ctx.actorId,
+      );
+    },
+  };
+
   fastify.decorate(
     "requireScopedCapability",
     (
@@ -118,6 +138,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
       options?: {
         proctorAccess?: "assignment_scoped";
         teacherAccess?: "course_assignment_scoped";
+        graderAccess?: "exam_assignment_scoped";
         resourceIdSource?: "params" | "body";
       },
     ) => {
@@ -143,6 +164,12 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
               teacherAssignment: teacherAssignmentGate,
             }
           : {}),
+        ...(options?.graderAccess === "exam_assignment_scoped"
+          ? {
+              graderAccess: "exam_assignment_scoped" as const,
+              graderAssignment: graderAssignmentGate,
+            }
+          : {}),
       });
       const preHandler: AuthzPreHandler = (request, reply) =>
         handler(request, reply);
@@ -156,6 +183,9 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
           : {}),
         ...(options?.teacherAccess === "course_assignment_scoped"
           ? { teacherAccess: "course_assignment_scoped" as const }
+          : {}),
+        ...(options?.graderAccess === "exam_assignment_scoped"
+          ? { graderAccess: "exam_assignment_scoped" as const }
           : {}),
       };
       return preHandler;

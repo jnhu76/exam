@@ -9,10 +9,10 @@
  *   - Teacher@course: ENFORCED (issue #286 — teacher_course_assignments
  *     carrier + teacherAccess gate + SQL-side LIST filtering; see the
  *     Teacher section comment below).
- *   - Grader@exam: SEPARATE deferred scope status (NOT F-04). The grading
- *     queue LIST is org-wide today (`GradingQueueView` flat gate); detail
- *     reads are attempt-scoped by the existing attempt resolver, but there is
- *     no Grader↔Exam assignment scope carrier. Tracked as issue #296.
+ *   - Grader@exam: ENFORCED (issue #296 — grader_exam_assignments carrier +
+ *     graderAccess gate on grading detail/write + SQL-side grading-queue
+ *     LIST filtering before pagination/count; see the Grader section
+ *     comment below).
  *
  * Boundary invariants encoded here (ADR §7 review checklist):
  *  - Admin is a compatibility superset (no Candidate-own, no System-only).
@@ -154,6 +154,10 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // the scope carrier itself grants zero capabilities.
   Permission.CourseTeacherAssignmentView,
   Permission.CourseTeacherAssignmentManage,
+  // Grader-to-Exam assignment management (issue #296) — Admin only; the
+  // scope carrier itself grants zero capabilities.
+  Permission.ExamGraderAssignmentView,
+  Permission.ExamGraderAssignmentManage,
 ];
 
 // ───────────────────────── Teacher (course/exam manager) ─────────────────────────
@@ -220,6 +224,16 @@ const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
 ];
 
 // ───────────────────────── Grader (manual scoring) ─────────────────────────
+//
+// Issue #296 — IMPLEMENTED: Grader@Exam scope is enforced at runtime. The
+// grader_exam_assignments carrier (0037) persists the Grader↔Exam episodes;
+// grading detail/write routes resolve the attempt→exam chain fresh from the
+// DB per request (requireScopedCapability with graderAccess:
+// "exam_assignment_scoped") and the grading-queue LIST filters in SQL BEFORE
+// pagination/count. Authority = capability × assignment: the Grader preset
+// capabilities above are NECESSARY but not sufficient — without an active
+// assignment row the routes answer 404 (anti-enumeration) and the queue is
+// empty. Admin stays org-wide.
 
 const GRADER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.GradingQueueView,

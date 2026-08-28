@@ -384,6 +384,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // protected + 16 non-protected. Issue 286 adds the 3 Teacher-to-Course
     // assignment routes (POST/GET /admin/users/:userId/course-assignments +
     // POST …/:courseId/revoke, Admin-only flat gates) → 129 primary = 113
+    // protected + 16 non-protected. Issue 296 adds the 3 Grader-to-Exam
+    // assignment routes (POST/GET /admin/users/:userId/exam-assignments +
+    // POST …/:examId/revoke, Admin-only flat gates) → 132 primary = 116
     // protected + 16 non-protected.
     // This is a regression anchor, not a
     // hard-coded PASS: if a route is added/removed the counts move and the
@@ -392,11 +395,11 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(113);
+    ).toBe(116);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       16,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(129);
+    expect(capturedRoutes.length, "total primary routes").toBe(132);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

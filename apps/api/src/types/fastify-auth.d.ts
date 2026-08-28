@@ -121,6 +121,11 @@ declare module "fastify" {
      * additionally require an active Teacher-to-Course assignment to the
      * resolved Course for non-Admin actors (missing assignment -> 404
      * RESOURCE_NOT_FOUND).
+     *
+     * Issue #296: pass `{ graderAccess: "exam_assignment_scoped" }` to
+     * additionally require an active Grader-to-Exam assignment to the
+     * resolved Exam for non-Admin actors (missing assignment -> 404
+     * RESOURCE_NOT_FOUND).
      */
     requireScopedCapability: (
       permission: PermissionKey,
@@ -129,6 +134,7 @@ declare module "fastify" {
       options?: {
         proctorAccess?: "assignment_scoped";
         teacherAccess?: "course_assignment_scoped";
+        graderAccess?: "exam_assignment_scoped";
         /** Where the resource id is sourced from; defaults to "params". */
         resourceIdSource?: "params" | "body";
       },

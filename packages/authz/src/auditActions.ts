@@ -146,6 +146,10 @@ export const AuditAction = {
   // ── Teacher-to-Course assignments (issue #286) ──
   CourseTeacherAssigned: "course.teacher_assigned",
   CourseTeacherRevoked: "course.teacher_revoked",
+
+  // ── Grader-to-Exam assignments (issue #296) ──
+  ExamGraderAssigned: "exam.grader_assigned",
+  ExamGraderRevoked: "exam.grader_revoked",
 } as const;
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];

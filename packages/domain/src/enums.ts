@@ -403,3 +403,24 @@ export const TeacherCourseAssignmentOutcome = {
 } as const;
 export type TeacherCourseAssignmentOutcome =
   (typeof TeacherCourseAssignmentOutcome)[keyof typeof TeacherCourseAssignmentOutcome];
+
+// ── Grader-to-Exam assignment (issue #296) ─────────────────────────
+
+/**
+ * Grader-exam assignment episode status (monotonic revocation, same
+ * episode semantics as Teacher-to-Course assignments).
+ */
+export const GraderExamAssignmentStatus = {
+  Active: "active",
+  Revoked: "revoked",
+} as const;
+export type GraderExamAssignmentStatus =
+  (typeof GraderExamAssignmentStatus)[keyof typeof GraderExamAssignmentStatus];
+
+/** Wire outcome for grader-exam assignment write operations. */
+export const GraderExamAssignmentOutcome = {
+  Applied: "applied",
+  NoChange: "no_change",
+} as const;
+export type GraderExamAssignmentOutcome =
+  (typeof GraderExamAssignmentOutcome)[keyof typeof GraderExamAssignmentOutcome];

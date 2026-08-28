@@ -17,6 +17,7 @@ import {
   normalizeInterruptionPolicyConfiguration,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import { createGraderExamAssignmentRepo } from "@exam/db/src/repository/graderExamAssignmentRepo.js";
 import { createExamProfileRepo } from "@exam/db/src/repository/examProfileRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
@@ -1777,6 +1778,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         const exam = (await txRepo.findByIdForUpdate(ctx, id)) as Exam | null;
         if (!exam) return false;
         if (exam.status !== "draft") throw new ExamNotDraftError();
+        // Grader episodes die with the exam (composite FK would otherwise
+        // block deletion); the compliance record lives in audit_logs.
+        await createGraderExamAssignmentRepo(tx).deleteByExam(ctx, id);
         if (!(await txRepo.delete(ctx, id))) return false;
         await recordAtomicHttpAudit(tx, request, ctx, {
           action: "exam.delete",
