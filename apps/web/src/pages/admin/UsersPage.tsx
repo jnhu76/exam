@@ -28,7 +28,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
@@ -54,6 +61,22 @@ interface UserRow {
 /** Generic paginated response containing a list of items. */
 interface Page<T> {
   items: T[];
+}
+
+/** Course item (subset) as returned by GET /courses. */
+interface CourseOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
+/** Teacher-to-Course assignment episode as returned by the assignment API. */
+interface CourseAssignment {
+  id: string;
+  courseId: string;
+  status: "active" | "revoked";
+  assignedAt: string;
+  revokedAt: string | null;
 }
 
 /**
@@ -97,6 +120,14 @@ export function UsersPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Teacher course-assignment dialog state (issue 286).
+  const [assignmentsUser, setAssignmentsUser] = useState<UserRow | null>(null);
+  const [assignments, setAssignments] = useState<CourseAssignment[]>([]);
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignmentsBusy, setAssignmentsBusy] = useState(false);
 
   /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
   const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
@@ -218,6 +249,72 @@ export function UsersPage() {
     }
   }
 
+  /** Opens the Teacher course-assignment dialog for a Teacher user. */
+  async function openAssignments(user: UserRow) {
+    setAssignmentsUser(user);
+    setAssignments([]);
+    setSelectedCourseId("");
+    setAssignmentsLoading(true);
+    try {
+      const [assignmentRes, courseRes] = await Promise.all([
+        api.get<{ items: CourseAssignment[] }>(
+          `/api/users/${user.id}/course-assignments?status=all`,
+        ),
+        api.get<Page<CourseOption>>("/api/courses?page=1&pageSize=100"),
+      ]);
+      setAssignments(assignmentRes.items);
+      setCourseOptions(courseRes.items);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, t("admin.users.teacherCourses.loadFailed")),
+      );
+      setAssignmentsUser(null);
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  }
+
+  /** Assigns the selected course to the dialog user and refreshes the list. */
+  async function assignCourse() {
+    if (!assignmentsUser || !selectedCourseId || assignmentsBusy) return;
+    setAssignmentsBusy(true);
+    try {
+      const res = await api.post<{ outcome: "applied" | "no_change" }>(
+        `/api/users/${assignmentsUser.id}/course-assignments`,
+        { courseId: selectedCourseId },
+      );
+      if (res.outcome === "no_change") {
+        toast.info(t("admin.users.teacherCourses.noChange"));
+      }
+      setSelectedCourseId("");
+      await openAssignments(assignmentsUser);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, t("admin.users.teacherCourses.loadFailed")),
+      );
+    } finally {
+      setAssignmentsBusy(false);
+    }
+  }
+
+  /** Revokes an active course assignment (next-request effective). */
+  async function revokeCourse(assignment: CourseAssignment) {
+    if (!assignmentsUser || assignmentsBusy) return;
+    setAssignmentsBusy(true);
+    try {
+      await api.post(
+        `/api/users/${assignmentsUser.id}/course-assignments/${assignment.courseId}/revoke`,
+      );
+      await openAssignments(assignmentsUser);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, t("admin.users.teacherCourses.loadFailed")),
+      );
+    } finally {
+      setAssignmentsBusy(false);
+    }
+  }
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
@@ -291,6 +388,15 @@ export function UsersPage() {
                       >
                         <AppIcon icon={Pencil} size="inline" />
                       </Button>
+                      {user.role === "Teacher" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void openAssignments(user)}
+                        >
+                          {t("admin.users.teacherCourses.openBtn")}
+                        </Button>
+                      )}
                       <ConfirmDialog
                         trigger={
                           <Button
@@ -418,6 +524,119 @@ export function UsersPage() {
             </Button>
             <Button onClick={() => void save()} disabled={saving}>
               {saving ? t("admin.common.saving") : t("admin.common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={assignmentsUser !== null}
+        onOpenChange={(next) => {
+          if (!next) setAssignmentsUser(null);
+        }}
+      >
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>
+              {t("admin.users.teacherCourses.dialogTitle", {
+                name: assignmentsUser?.name ?? "",
+              })}
+            </DialogTitle>
+          </DialogHeader>
+          {assignmentsLoading ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              {t("admin.common.loading")}
+            </p>
+          ) : (
+            <FieldGroup className="py-4">
+              <Field>
+                <Label>{t("admin.users.teacherCourses.pickLabel")}</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedCourseId}
+                    onValueChange={setSelectedCourseId}
+                  >
+                    <SelectTrigger className="min-w-0 flex-1">
+                      <SelectValue
+                        placeholder={t(
+                          "admin.users.teacherCourses.pickPlaceholder",
+                        )}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courseOptions.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => void assignCourse()}
+                    disabled={!selectedCourseId || assignmentsBusy}
+                  >
+                    {t("admin.users.teacherCourses.assignBtn")}
+                  </Button>
+                </div>
+              </Field>
+              <Field>
+                <Label>{t("admin.users.teacherCourses.currentLabel")}</Label>
+                {assignments.filter((a) => a.status === "active").length ===
+                0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    {t("admin.users.teacherCourses.empty")}
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
+                          {t("admin.users.teacherCourses.columnCourse")}
+                        </TableHead>
+                        <TableHead className="w-24">
+                          {t("admin.users.teacherCourses.columnAction")}
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {assignments
+                        .filter((a) => a.status === "active")
+                        .map((a) => {
+                          const course = courseOptions.find(
+                            (c) => c.id === a.courseId,
+                          );
+                          return (
+                            <TableRow key={a.id}>
+                              <TableCell>
+                                {course
+                                  ? `${course.name} (${course.code})`
+                                  : a.courseId}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={assignmentsBusy}
+                                  onClick={() => void revokeCourse(a)}
+                                >
+                                  {t("admin.users.teacherCourses.revokeBtn")}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                )}
+              </Field>
+            </FieldGroup>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAssignmentsUser(null)}
+              disabled={assignmentsBusy}
+            >
+              {t("admin.common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
