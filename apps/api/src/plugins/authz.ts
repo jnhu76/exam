@@ -118,12 +118,16 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
       options?: {
         proctorAccess?: "assignment_scoped";
         teacherAccess?: "course_assignment_scoped";
+        resourceIdSource?: "params" | "body";
       },
     ) => {
       const handler = buildScopedCapabilityPreHandler({
         permission,
         resolverKey,
         resourceIdKey,
+        ...(options?.resourceIdSource
+          ? { resourceIdSource: options.resourceIdSource }
+          : {}),
         resolvers,
         presetAllows: (request: FastifyRequest, perm: PermissionKey) =>
           ctxAllows(request, perm),

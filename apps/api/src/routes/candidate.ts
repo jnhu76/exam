@@ -27,6 +27,7 @@ import {
   getRequestContext,
   resolveImportStatus,
 } from "./helpers.js";
+import { resolveTeacherCourseScope } from "./teacherScope.js";
 import {
   recordAtomicHttpAudit,
   recordBestEffortAudit,
@@ -198,13 +199,18 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
      *
      * Returns paginated candidate records enriched with user-level
      * name, username, and isActive status. Requires CandidateView.
+     * Teacher actors see only candidates enrolled in exams under their
+     * assigned courses (SQL-side EXISTS, before pagination — issue #286).
      */
     async (request) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
-      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
+      const scope = await resolveTeacherCourseScope(fastify.db, ctx);
+      const { items, total } = scope
+        ? await repo.listByCourseScopePaginated(ctx, scope, page, pageSize)
+        : await repo.listPaginated(ctx, page, pageSize);
 
       const itemsWithUsers = await Promise.all(
         items.map(async (c) => {

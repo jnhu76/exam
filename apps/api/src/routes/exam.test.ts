@@ -312,7 +312,7 @@ describe("exam routes", () => {
     expect(body.error.requestId).toBeDefined();
   });
 
-  it("POST /api/exams returns 400 ErrorResponse v0 for invalid courseId", async () => {
+  it("POST /api/exams returns 404 ErrorResponse v0 for invalid courseId", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
@@ -328,12 +328,13 @@ describe("exam routes", () => {
       },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(res.statusCode).toBe(400);
+    // Issue #286: the scoped-capability gate resolves the parent course
+    // BEFORE the handler, so a missing course is the canonical ADR §3.9
+    // resource_not_found -> 404 (anti-enumeration), not the legacy 400.
+    expect(res.statusCode).toBe(404);
     const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.code).toBe("RESOURCE_NOT_FOUND");
     expect(body.error.requestId).toBeDefined();
-    expect(body.error.details.fields).toBeDefined();
-    expect(body.error.details.fields[0].field).toBe("courseId");
   });
 
   it("PATCH /api/exams/:id returns 409 EXAM_UPDATE_NOT_ALLOWED for published exam non-schedule field", async () => {

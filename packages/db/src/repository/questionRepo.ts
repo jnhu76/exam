@@ -6,7 +6,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, count, eq, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 type QuestionSelect = typeof questions.$inferSelect;
 
@@ -26,6 +26,13 @@ export interface QuestionListFilters {
   tags?: string[];
   /** Case-insensitive substring search over question `content` (trimmed). */
   search?: string;
+  /**
+   * Restrict the listing to these course ids (issue #286 LIST scope filter).
+   * Applied in SQL BEFORE pagination/count — callers pass the actor's active
+   * Teacher assignment set (an EMPTY array here yields zero rows by contract).
+   * Combined with `courseId` by intersection at the call site.
+   */
+  courseIds?: string[];
 }
 
 /**
@@ -84,6 +91,14 @@ export function createQuestionRepo(db: Database) {
       if (filters.courseId) {
         conditions.push(eq(questions.courseId, filters.courseId));
       }
+      if (filters.courseIds) {
+        if (filters.courseIds.length === 0) {
+          // Scope-contracted empty set: no assigned courses → zero rows
+          // (both page and total), never an unfiltered listing.
+          return { items: [], total: 0 };
+        }
+        conditions.push(inArray(questions.courseId, filters.courseIds));
+      }
       if (filters.type) {
         conditions.push(eq(questions.type, filters.type));
       }
@@ -134,15 +149,30 @@ export function createQuestionRepo(db: Database) {
     },
 
     /**
-     * Returns the distinct set of tag strings used by any question in the
+     * Returns the distinct set of tag strings used by questions in the
      * tenant, sorted ascending. Backs the admin tag-filter vocabulary
      * endpoint (issue 182). The jsonb_array_elements argument is guarded by a
      * CASE at the expansion site, so a legacy non-array tags value cannot
      * break the listing regardless of planner qual placement; null and empty
      * elements are excluded so the vocabulary only contains real tags.
+     *
+     * Issue #286: `courseIds` (when provided) restricts the vocabulary to
+     * questions under those courses — SQL-side BEFORE aggregation, so a
+     * Teacher's vocabulary never reveals out-of-scope tags. An EMPTY array
+     * yields an empty vocabulary by contract (never the org-wide set).
      */
-    async listAllTags(ctx: TenantContext | RequestContext): Promise<string[]> {
+    async listAllTags(
+      ctx: TenantContext | RequestContext,
+      courseIds?: string[],
+    ): Promise<string[]> {
       const orgId = resolveOrganizationId(ctx);
+      if (courseIds && courseIds.length === 0) return [];
+      const courseFilter =
+        courseIds &&
+        sql` and ${questions.courseId} in (${sql.join(
+          courseIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`;
       const rows = await db.execute<{ tag: string }>(sql`
         select distinct tag_value #>> '{}' as tag
         from ${questions},
@@ -151,7 +181,7 @@ export function createQuestionRepo(db: Database) {
                  then ${questions.tags}
                  else '[]'::jsonb end
           ) as tag_value
-        where ${questions.organizationId} = ${orgId}
+        where ${questions.organizationId} = ${orgId}${courseFilter ?? sql``}
           and (tag_value #>> '{}') is not null
           and (tag_value #>> '{}') <> ''
         order by tag

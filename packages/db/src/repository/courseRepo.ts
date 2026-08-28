@@ -5,7 +5,7 @@ import {
   resolveOrganizationId,
 } from "./baseRepo.js";
 import type { RequestContext } from "@exam/domain";
-import { and, count, eq, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 type CourseSelect = typeof courses.$inferSelect;
 
@@ -21,6 +21,12 @@ async function countCourses(
 export interface CourseListFilters {
   /** Case-insensitive substring search over course `name` or `code`. */
   search?: string;
+  /**
+   * Restrict the listing to these course ids (issue #286 LIST scope filter).
+   * Applied in SQL BEFORE pagination/count — callers pass the actor's active
+   * Teacher assignment set (an EMPTY array here yields zero rows by contract).
+   */
+  courseIds?: string[];
 }
 
 /** Creates a tenant-scoped CRUD repository for the `courses` table. */
@@ -69,6 +75,14 @@ export function createCourseRepo(db: Database) {
         conditions.push(
           sql`(position(lower(${term}) in lower(${courses.name})) > 0 or position(lower(${term}) in lower(${courses.code})) > 0)`,
         );
+      }
+      if (filters.courseIds) {
+        if (filters.courseIds.length === 0) {
+          // Scope-contracted empty set: no assigned courses → zero rows
+          // (both page and total), never an unfiltered listing.
+          return { items: [], total: 0 };
+        }
+        conditions.push(inArray(courses.id, filters.courseIds));
       }
 
       const where = and(...conditions)!;

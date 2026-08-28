@@ -129,6 +129,8 @@ declare module "fastify" {
       options?: {
         proctorAccess?: "assignment_scoped";
         teacherAccess?: "course_assignment_scoped";
+        /** Where the resource id is sourced from; defaults to "params". */
+        resourceIdSource?: "params" | "body";
       },
     ) => AuthzPreHandler;
     /**

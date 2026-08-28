@@ -23,6 +23,7 @@ import {
   ensureTargetOrg,
   getRequestContext,
 } from "./helpers.js";
+import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** Zod schema for route params containing a UUID `id` field. */
@@ -198,7 +199,9 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ScoreAllView),
+        fastify.requireScopedCapability(Permission.ScoreAllView, "exam", "id", {
+          teacherAccess: "course_assignment_scoped",
+        }),
       ],
       schema: {
         params: idParamsSchema,

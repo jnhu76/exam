@@ -159,50 +159,41 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
 
 // ───────────────────────── Teacher (course/exam manager) ─────────────────────────
 //
-// F-04 — TARGET vs CURRENT REALITY (P7-RBAC-ROLE-REALITY-AUDIT):
-//   TARGET model:        Teacher@Course — authority narrowed to assigned courses.
-//   CURRENT reality:     org-wide effective reach. Every Teacher-gated route uses
-//                         flat requireCapability (organization scope); a Teacher
-//                         can list/read/create every org course/question/exam.
-//   MISSING infrastructure (deferred to a dedicated scoped-RBAC milestone):
-//                         - a persisted Teacher↔Course scope/assignment carrier
-//                           (user_role_assignments has NO scope/resource columns;
-//                           no course_teacher_assignments table exists), + migration
-//                         - a course/question scope resolver family (none exist;
-//                           only attempt/examEligibility/incident/score resolvers do)
-//                         - requireScopedCapability on course/question/exam routes
-//                           (today all use flat requireCapability)
-//                         - LIST-route scope filtering (GET /courses,/questions,
-//                           /exams return org-wide sets)
-//                         - assignment API + UI + create/update cross-course tests
-//   The `⚠️ target course-scoped` markers below name the INTENDED narrowing, NOT
-//   an enforced one. They MUST NOT be read as "narrowed at runtime today."
+// F-04 — IMPLEMENTED (issue #286): Teacher@Course scope is enforced at
+// runtime. The teacher_course_assignments carrier (0036) persists the
+// Teacher↔Course episodes; the course/question/exam routes resolve the scope
+// fresh from the DB per request (requireScopedCapability with
+// teacherAccess: "course_assignment_scoped") and LIST routes filter in SQL
+// BEFORE pagination. Authority = capability × assignment: the markers below
+// name the capabilities whose RESOURCE reach is course-scoped for a
+// non-Admin actor. Admin keeps its org-wide short-circuit.
 //   Marker boundary rule: a marker is applied to every permission whose
 //   resource lives under a course (candidate visibility for course enrollment,
 //   course, question, exam, enrollment, result, score). Organization-level
 //   permissions (OrganizationView) are NOT course resources and stay unmarked.
-//   P7-F is not globally blocked by F-04, but P7-F MUST NOT claim or depend on
-//   Teacher course isolation until the scope-bundle milestone closes it.
+//   Since #286 the markers are descriptive of the enforced narrowing; the
+//   enforcement itself lives in apps/api (scopedCapability teacherAccess +
+//   LIST scope filters) and is proven by the teacherCourseScope suite.
 
 const TEACHER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.OrganizationView,
-  Permission.CandidateView, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.CourseView, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.CourseCreate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.CourseUpdate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.QuestionView, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.QuestionCreate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.QuestionUpdate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.QuestionDelete, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.QuestionImport, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamView, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamCreate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamUpdate, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamPublish, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamClose, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamEnrollmentManage, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ExamResultPublish, // ⚠️ target course-scoped (F-04: NOT enforced today)
-  Permission.ScoreAllView, // ⚠️ target course-scoped (F-04: NOT enforced today)
+  Permission.CandidateView, // course-scoped for non-Admin (enforced, #286)
+  Permission.CourseView, // course-scoped for non-Admin (enforced, #286)
+  Permission.CourseCreate, // course-scoped for non-Admin (enforced, #286)
+  Permission.CourseUpdate, // course-scoped for non-Admin (enforced, #286)
+  Permission.QuestionView, // course-scoped for non-Admin (enforced, #286)
+  Permission.QuestionCreate, // course-scoped for non-Admin (enforced, #286)
+  Permission.QuestionUpdate, // course-scoped for non-Admin (enforced, #286)
+  Permission.QuestionDelete, // course-scoped for non-Admin (enforced, #286)
+  Permission.QuestionImport, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamView, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamCreate, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamUpdate, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamPublish, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamClose, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamEnrollmentManage, // course-scoped for non-Admin (enforced, #286)
+  Permission.ExamResultPublish, // course-scoped for non-Admin (enforced, #286)
+  Permission.ScoreAllView, // course-scoped for non-Admin (enforced, #286)
   // Explicitly NOT granted: GradingAnswerView, GradingScoreWrite, proctor perms.
 ];
 

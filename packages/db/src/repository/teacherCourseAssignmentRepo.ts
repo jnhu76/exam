@@ -229,6 +229,30 @@ export function createTeacherCourseAssignmentRepo(db: Database) {
     return Number(rows[0]?.count ?? 0);
   }
 
+  /**
+   * Deletes EVERY episode (active + revoked) for a course, scoped to the
+   * tenant. Used inside the course-delete transaction (issue #286): the
+   * composite course FK would otherwise block deletion once any episode
+   * exists. Episode history for a deleted course is meaningless; the
+   * compliance record lives in audit_logs.
+   */
+  async function deleteByCourse(
+    ctx: TenantContext | RequestContext,
+    courseId: string,
+  ): Promise<void> {
+    await db
+      .delete(teacherCourseAssignments)
+      .where(
+        and(
+          eq(
+            teacherCourseAssignments.organizationId,
+            resolveOrganizationId(ctx),
+          ),
+          eq(teacherCourseAssignments.courseId, courseId),
+        ),
+      );
+  }
+
   return {
     insertAssignment,
     findActiveByTeacherAndCourse,
@@ -238,6 +262,7 @@ export function createTeacherCourseAssignmentRepo(db: Database) {
     listActiveCourseIdsByTeacher,
     hasActiveAssignment,
     countActiveByCourse,
+    deleteByCourse,
   };
 }
 

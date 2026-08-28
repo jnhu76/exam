@@ -113,8 +113,15 @@ export interface ScopedCapabilityInput {
   permission: PermissionKey;
   /** Which registered resolver reduces the resource to a scope. */
   resolverKey: ResourceResolverKey;
-  /** The request.params key carrying the resource id (e.g. "attemptId"). */
+  /** The request key carrying the resource id (e.g. "attemptId"). */
   resourceIdKey: string;
+  /**
+   * Where the resource id is sourced from. Defaults to `"params"` (the
+   * historical behavior). `"body"` supports create-style routes whose parent
+   * reference arrives in the request body (e.g. POST /questions courseId) —
+   * the route registry's `idSource` already models this distinction.
+   */
+  resourceIdSource?: "params" | "body";
   /** Resolver lookup (injected; built by the authz plugin from fastify.db). */
   resolvers: ResolverRegistry;
   /** Flat role-preset predicate (injected; wraps @exam/authz permissionsForRole). */
@@ -156,6 +163,7 @@ export function buildScopedCapabilityPreHandler(
     permission,
     resolverKey,
     resourceIdKey,
+    resourceIdSource = "params",
     resolvers,
     presetAllows,
     proctorAccess,
@@ -193,13 +201,16 @@ export function buildScopedCapabilityPreHandler(
         .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
     }
 
-    const params = (request.params ?? {}) as Record<string, string>;
-    const resourceId = params[resourceIdKey];
-    if (!resourceId) {
+    const resourceRecord =
+      resourceIdSource === "body"
+        ? ((request.body ?? {}) as Record<string, unknown>)
+        : ((request.params ?? {}) as Record<string, unknown>);
+    const resourceId = resourceRecord[resourceIdKey] as string | undefined;
+    if (!resourceId || typeof resourceId !== "string") {
       // No resource id on the request (mis-declared route). Fail closed.
       request.log.error(
         { resolverKey, permission, resourceIdKey, route: request.url },
-        "authz scoped-capability resource id missing on params",
+        "authz scoped-capability resource id missing on request",
       );
       return reply
         .code(503)

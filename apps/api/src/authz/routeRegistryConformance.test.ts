@@ -381,40 +381,9 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       path: "/admin/attempts/:attemptId/export/csv",
       permission: "attempt.export",
     },
-    // 3 question routes
-    { method: "GET", path: "/questions/:id", permission: "question.view" },
-    { method: "PATCH", path: "/questions/:id", permission: "question.update" },
-    { method: "DELETE", path: "/questions/:id", permission: "question.delete" },
-    // 14 exam routes
-    { method: "GET", path: "/exams/:id", permission: "exam.view" },
-    { method: "PATCH", path: "/exams/:id", permission: "exam.update" },
-    { method: "POST", path: "/exams/:id/publish", permission: "exam.publish" },
-    { method: "POST", path: "/exams/:id/close", permission: "exam.close" },
-    {
-      method: "POST",
-      path: "/exams/:id/publish-results",
-      permission: "exam.result.publish",
-    },
-    {
-      method: "GET",
-      path: "/exams/:examId/enrollments",
-      permission: "exam.enrollment.manage",
-    },
-    {
-      method: "POST",
-      path: "/exams/:examId/enrollments",
-      permission: "exam.enrollment.manage",
-    },
-    {
-      method: "DELETE",
-      path: "/exams/:examId/enrollments/:enrollmentId",
-      permission: "exam.enrollment.manage",
-    },
-    {
-      method: "GET",
-      path: "/admin/exams/:examId/candidates/status",
-      permission: "exam.enrollment.manage",
-    },
+    // 5 exam lifecycle routes that REMAIN flat after issue #286:
+    // unpublish/extend/cancel/archive/delete are Admin-only permissions
+    // (never in the Teacher preset), so no course-scope gate is needed.
     {
       method: "POST",
       path: "/exams/:id/unpublish",
@@ -424,12 +393,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     { method: "POST", path: "/exams/:id/cancel", permission: "exam.cancel" },
     { method: "POST", path: "/exams/:id/archive", permission: "exam.archive" },
     { method: "DELETE", path: "/exams/:id", permission: "exam.delete" },
-    // 3 course routes
-    { method: "GET", path: "/courses/:id", permission: "course.view" },
-    { method: "PATCH", path: "/courses/:id", permission: "course.update" },
+    // DELETE /courses/:id stays flat: CourseDelete is Admin-only.
     { method: "DELETE", path: "/courses/:id", permission: "course.delete" },
-    // 1 score list route
-    { method: "GET", path: "/exams/:id/scores", permission: "score.all.view" },
     // 1 score export route
     {
       method: "GET",
@@ -438,8 +403,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   ];
 
-  it("has exactly 24 M10-B routes defined", () => {
-    expect(m10bRouteSpecs).toHaveLength(24);
+  it("has exactly 9 M10-B routes defined", () => {
+    expect(m10bRouteSpecs).toHaveLength(9);
   });
 
   /**
@@ -589,6 +554,196 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       proctorAccess: "assignment_scoped",
     });
   });
+
+  // ──────────────── Issue #286 flipped Teacher-scope gates ────────────────
+
+  /**
+   * Issue #286: course/question/exam read-write routes were flipped from flat
+   * `requireCapability` to `requireScopedCapability` with
+   * `teacherAccess: "course_assignment_scoped"` — target existence, tenant,
+   * durable parent chain, and (for non-Admin actors) the ACTIVE
+   * Teacher-to-Course assignment are all validated before the handler. The
+   * resolverKey/resourceIdKey pairs prove the scope anchor: question routes
+   * resolve through the question's DURABLE parent course, exam routes through
+   * the exam → course chain; create-style routes source the parent courseId
+   * from the request BODY.
+   */
+  const teacherScopedSpecs: Array<{
+    method: string;
+    path: string;
+    permission: string;
+    resolverKey: string;
+    resourceIdKey: string;
+  }> = [
+    // courses
+    {
+      method: "GET",
+      path: "/courses/:id",
+      permission: "course.view",
+      resolverKey: "course",
+      resourceIdKey: "id",
+    },
+    {
+      method: "PATCH",
+      path: "/courses/:id",
+      permission: "course.update",
+      resolverKey: "course",
+      resourceIdKey: "id",
+    },
+    // questions (detail/write resolve through the durable parent course)
+    {
+      method: "GET",
+      path: "/questions/:id",
+      permission: "question.view",
+      resolverKey: "question",
+      resourceIdKey: "id",
+    },
+    {
+      method: "PATCH",
+      path: "/questions/:id",
+      permission: "question.update",
+      resolverKey: "question",
+      resourceIdKey: "id",
+    },
+    {
+      method: "DELETE",
+      path: "/questions/:id",
+      permission: "question.delete",
+      resolverKey: "question",
+      resourceIdKey: "id",
+    },
+    // question create/import source the parent course from the BODY
+    {
+      method: "POST",
+      path: "/questions",
+      permission: "question.create",
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+    },
+    {
+      method: "POST",
+      path: "/questions/import",
+      permission: "question.import",
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+    },
+    // exams (course chain) — create sources courseId from the BODY
+    {
+      method: "GET",
+      path: "/exams/:id",
+      permission: "exam.view",
+      resolverKey: "exam",
+      resourceIdKey: "id",
+    },
+    {
+      method: "PATCH",
+      path: "/exams/:id",
+      permission: "exam.update",
+      resolverKey: "exam",
+      resourceIdKey: "id",
+    },
+    {
+      method: "POST",
+      path: "/exams",
+      permission: "exam.create",
+      resolverKey: "course",
+      resourceIdKey: "courseId",
+    },
+    {
+      method: "POST",
+      path: "/exams/:id/publish",
+      permission: "exam.publish",
+      resolverKey: "exam",
+      resourceIdKey: "id",
+    },
+    {
+      method: "POST",
+      path: "/exams/:id/close",
+      permission: "exam.close",
+      resolverKey: "exam",
+      resourceIdKey: "id",
+    },
+    {
+      method: "POST",
+      path: "/exams/:id/publish-results",
+      permission: "exam.result.publish",
+      resolverKey: "exam",
+      resourceIdKey: "id",
+    },
+    // enrollments + candidate live status anchor on the exam
+    {
+      method: "GET",
+      path: "/exams/:examId/enrollments",
+      permission: "exam.enrollment.manage",
+      resolverKey: "exam",
+      resourceIdKey: "examId",
+    },
+    {
+      method: "POST",
+      path: "/exams/:examId/enrollments",
+      permission: "exam.enrollment.manage",
+      resolverKey: "exam",
+      resourceIdKey: "examId",
+    },
+    {
+      method: "DELETE",
+      path: "/exams/:examId/enrollments/:enrollmentId",
+      permission: "exam.enrollment.manage",
+      resolverKey: "exam",
+      resourceIdKey: "examId",
+    },
+    {
+      method: "GET",
+      path: "/admin/exams/:examId/candidates/status",
+      permission: "exam.enrollment.manage",
+      resolverKey: "exam",
+      resourceIdKey: "examId",
+    },
+    // score list
+    {
+      method: "GET",
+      path: "/exams/:id/scores",
+      permission: "score.all.view",
+      resolverKey: "exam",
+      resourceIdKey: "id",
+    },
+  ];
+
+  it("has exactly 18 issue-286 teacher-scoped routes defined", () => {
+    expect(teacherScopedSpecs).toHaveLength(18);
+  });
+
+  it.each(teacherScopedSpecs)(
+    "[issue-286] $method $path — scoped $resolverKey resolver gate WITH Teacher course-assignment enforcement",
+    ({ method, path, permission, resolverKey, resourceIdKey }) => {
+      const matches = capturedRoutes.filter(
+        (r) => r.method === method && r.url.endsWith(path),
+      );
+      expect(matches, `no captured route for ${method} ${path}`).toHaveLength(
+        1,
+      );
+      const route = matches[0]!;
+      expect(
+        route.scopedCapabilityHandlerCount,
+        `${method} ${path} scoped count`,
+      ).toBe(1);
+      expect(
+        route.flatCapabilityHandlerCount,
+        `${method} ${path} flat count`,
+      ).toBe(0);
+      expect(route.roleHandlerCount, `${method} ${path} role gate count`).toBe(
+        0,
+      );
+      expect(route.permissionListHandlerCount).toBe(0);
+      expect(route.authzHandlers[0]).toEqual({
+        kind: "scoped",
+        permission,
+        resolverKey,
+        resourceIdKey,
+        teacherAccess: "course_assignment_scoped",
+      });
+    },
+  );
 
   // ──────────────────────── M10-C conformance ────────────────────────
 

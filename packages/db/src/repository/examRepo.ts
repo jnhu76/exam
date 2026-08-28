@@ -13,7 +13,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, asc, eq, exists, inArray } from "drizzle-orm";
+import { and, asc, count, eq, exists, inArray } from "drizzle-orm";
 
 type ExamSelect = typeof exams.$inferSelect;
 
@@ -72,6 +72,42 @@ export function createExamRepo(db: Database) {
         .from(exams)
         .where(and(...conditions))
         .orderBy(asc(exams.openAt), asc(exams.id));
+    },
+    /**
+     * Exams restricted to the given course ids with pagination (issue #286
+     * LIST scope filter). Filtering happens in SQL BEFORE limit/offset and
+     * BEFORE the total count — never post-pagination. An EMPTY course-id set
+     * yields `{ items: [], total: 0 }` by contract (never unfiltered).
+     * Ordering matches the generic listPaginated (createdAt, id) so the two
+     * list paths interleave identically for Admin.
+     */
+    async listByCourseIdsPaginated(
+      ctx: TenantContext | RequestContext,
+      courseIds: string[],
+      page: number,
+      pageSize: number,
+    ): Promise<{ items: ExamSelect[]; total: number }> {
+      if (courseIds.length === 0) return { items: [], total: 0 };
+      const orgId = resolveOrganizationId(ctx);
+      const where = and(
+        eq(exams.organizationId, orgId),
+        inArray(exams.courseId, courseIds),
+      )!;
+      const offset = (page - 1) * pageSize;
+      const [items, totalRows] = await Promise.all([
+        db
+          .select()
+          .from(exams)
+          .where(where)
+          .orderBy(exams.createdAt, exams.id)
+          .limit(pageSize)
+          .offset(offset),
+        db.select({ value: count() }).from(exams).where(where),
+      ]);
+      return {
+        items: items as ExamSelect[],
+        total: Number(totalRows[0]?.value ?? 0),
+      };
     },
     async findAuthorizationChain(
       ctx: TenantContext | RequestContext,

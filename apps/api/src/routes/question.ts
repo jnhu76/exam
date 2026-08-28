@@ -20,6 +20,7 @@ import {
   getRequestContext,
   resolveImportStatus,
 } from "./helpers.js";
+import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
@@ -75,7 +76,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** List questions with pagination and optional filters (courseId, type, difficulty, tags) and server-side content search. */
+    /** List questions with pagination and optional filters (courseId, type, difficulty, tags) and server-side content search. Teacher actors see only questions under assigned courses (SQL-side, before pagination). */
     async (request: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -88,6 +89,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         difficulty?: number;
         tags?: string[];
         search?: string;
+        courseIds?: string[];
       } = {};
       if (query.courseId) filters.courseId = query.courseId;
       if (query.type) filters.type = query.type;
@@ -99,6 +101,26 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           .filter(Boolean);
       }
       if (query.search) filters.search = query.search;
+
+      // Issue #286 LIST scope: Admin → org-wide; Teacher → active assigned
+      // course ids, applied in SQL before pagination/count. A client courseId
+      // filter stays in place and ANDs with the scope set in SQL — the
+      // intersection is implicit; an out-of-scope courseId simply yields zero
+      // rows.
+      const scope = await resolveTeacherCourseScope(fastify.db, ctx);
+      if (scope) {
+        filters.courseIds = scope;
+      }
+
+      if (filters.courseIds && filters.courseIds.length === 0) {
+        return {
+          items: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        };
+      }
 
       const { items, total } = await repo.listFiltered(ctx, filters, {
         page,
@@ -149,11 +171,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** Returns the distinct sorted tag vocabulary of the org (issue #182 tag filter). */
+    /** Returns the distinct sorted tag vocabulary (issue #182 tag filter). Teacher actors get the vocabulary of their assigned courses only. */
     async (request: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const repo = createQuestionRepo(fastify.db);
-      return { tags: await repo.listAllTags(ctx) };
+      // Issue #286: the vocabulary is scope-filtered SQL-side (before
+      // aggregation) so a Teacher never learns out-of-scope tags.
+      const scope = await resolveTeacherCourseScope(fastify.db, ctx);
+      const tags = await repo.listAllTags(ctx, scope ?? undefined);
+      return { tags };
     },
   );
 
@@ -162,7 +188,12 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.QuestionView),
+        fastify.requireScopedCapability(
+          Permission.QuestionView,
+          "question",
+          "id",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: idParamsSchema,
@@ -210,7 +241,18 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.QuestionCreate),
+        // Create-style route: the parent course id arrives in the BODY
+        // (resourceIdSource), so the resolver + teacher gate validate the
+        // target course (existence, org, active assignment) BEFORE creation.
+        fastify.requireScopedCapability(
+          Permission.QuestionCreate,
+          "course",
+          "courseId",
+          {
+            teacherAccess: "course_assignment_scoped",
+            resourceIdSource: "body",
+          },
+        ),
       ],
       schema: {
         body: CreateQuestionRequestSchema,
@@ -219,6 +261,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           201: QuestionSchema,
           400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
         },
       },
     },
@@ -294,7 +337,12 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.QuestionUpdate),
+        fastify.requireScopedCapability(
+          Permission.QuestionUpdate,
+          "question",
+          "id",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: idParamsSchema,
@@ -308,7 +356,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** Update an existing question by ID. Validates courseId and question existence. Returns 404 if not found, 400 on validation error. */
+    /** Update an existing question by ID. Validates courseId and question existence. A course MOVE additionally requires an active assignment to the destination course (issue #286 §3H). Returns 404 if not found, 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
@@ -338,6 +386,27 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
             ],
           }),
         );
+      }
+      // Issue #286 §3H: moving a question across courses must not widen
+      // authority. The gate validated the CURRENT course; the DESTINATION
+      // course needs its own active assignment for non-Admin actors. The
+      // denial mirrors the missing-course shape exactly (anti-enumeration:
+      // an unassigned destination is indistinguishable from a missing one).
+      if (validated.courseId !== existing.courseId) {
+        const scope = await resolveTeacherCourseScope(fastify.db, ctx);
+        if (scope && !scope.includes(validated.courseId)) {
+          return reply.code(400).send(
+            buildErrorResponse(request.id, "VALIDATION_ERROR", {
+              fields: [
+                {
+                  field: "courseId",
+                  code: "RESOURCE_NOT_FOUND",
+                  message: "课程不存在",
+                },
+              ],
+            }),
+          );
+        }
       }
       const updated = await createQuestionRepo(fastify.db).update(ctx, id, {
         ...validated,
@@ -387,7 +456,12 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.QuestionDelete),
+        fastify.requireScopedCapability(
+          Permission.QuestionDelete,
+          "question",
+          "id",
+          { teacherAccess: "course_assignment_scoped" },
+        ),
       ],
       schema: {
         params: idParamsSchema,
@@ -425,7 +499,16 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.QuestionImport),
+        // Create-style route: the target course id arrives in the BODY.
+        fastify.requireScopedCapability(
+          Permission.QuestionImport,
+          "course",
+          "courseId",
+          {
+            teacherAccess: "course_assignment_scoped",
+            resourceIdSource: "body",
+          },
+        ),
       ],
       config: { rateLimit: { max: 5, timeWindow: 60 * 1000 } },
       schema: {
@@ -435,6 +518,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: QuestionImportResultSchema,
           400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
         },
       },
     },
