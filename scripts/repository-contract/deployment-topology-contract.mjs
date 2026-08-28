@@ -6,29 +6,27 @@
  * Authority: docs/adr/ADR-011-notification-and-email-delivery.md,
  * docs/adr/ADR-001-redis.md, and the P6 MVP boundary
  * (docs/audits/P6-MVP-READY-REALITY-AUDIT.md). The MVP cannot be
- * release-ready if `docker compose up` starts the API (and its in-process
- * scanners) and PostgreSQL but never starts the Email delivery worker,
- * because the worker is the only consumer of the PostgreSQL
- * `email_outbox` table that `result_published` notifications write into
- * (ADR-011).
+ * release-ready if `docker compose up` starts the API and PostgreSQL but
+ * nothing consumes the PostgreSQL `email_outbox` table that identity and
+ * notification flows write into (ADR-011).
  *
- * The scanner is NOT a separate process — it runs in-process inside the
- * API server (see apps/api/src/plugins/deadlineScanner.ts and
- * heartbeat.ts), so it is covered by the `app` service healthcheck.
+ * The email outbox delivery loop is NOT a separate process — since #320
+ * (CONVERGE) it runs in-process inside the API server
+ * (apps/api/src/plugins/emailOutboxLoop.ts), exactly like the deadline
+ * scanner and heartbeat plugins, so it is covered by the `app` service
+ * healthcheck. The dedicated `email-worker` Compose service was removed by
+ * #320; its reintroduction is an ADR-011 topology change that must update
+ * this guard first.
  *
  * This guard fails fast if:
- *   - the production compose file loses the `app`, `db`, or `email-worker`
- *     service;
+ *   - the production compose file loses the `app` or `db` service;
+ *   - a dedicated `email-worker` service reappears (#320 CONVERGE removed
+ *     it; the outbox loop is in-process);
+ *   - the `app` service stops forwarding the EMAIL_ENABLED switch (the
+ *     in-process loop's sender/loop configuration rides on the app env);
  *   - the production compose file accepts a default database password
- *     (POSTGRES_PASSWORD must use `${...:?...}` required-expansion on db,
- *      app, and email-worker) — P6-007;
- *   - the worker service is missing the required DB/JWT/PUBLIC_WEB_ORIGIN
- *     /CORS_ORIGIN env that the worker entrypoint resolves;
- *   - the worker is allowed to start before app health (it must depend on
- *     app: service_healthy so its self-migrate call serializes after the
- *     app's migrate call — the drizzle journal tracks state, it does NOT
- *     lock concurrent runners) — P6-009;
- *   - the worker has no restart policy;
+ *     (POSTGRES_PASSWORD must use `${...:?...}` required-expansion on db
+ *      and app) — P6-007;
  *   - the `redis` service is NOT behind a profile (it must be optional) —
  *     P6-010;
  *   - the `redis` service accepts an unauthenticated production instance
@@ -48,8 +46,8 @@
  *     infrastructure and are explicitly ALLOWED.
  *   - `docker-compose.build.yml` is ALLOWED as the single source-build MODE
  *     override (it cannot run standalone — it defines no db service and
- *     must only carry build/image/pull_policy keys for app and
- *     email-worker). It is a mode of the one entry point, not a second
+ *     must only carry build/image/pull_policy keys for app). It is a mode
+ *     of the one entry point, not a second
  *     production topology; the structural rules are in
  *     assertBuildVariant().
  */
@@ -121,7 +119,7 @@ try {
 }
 
 // docker-compose.build.yml structural rules (see header). It is a pure
-// build-mode override of the ONE entry point: only app/email-worker, only
+// build-mode override of the ONE entry point: only app, only
 // build/image/pull_policy keys — no ports, environment, volumes, command,
 // or entrypoint (topology belongs to docker-compose.yml alone).
 try {
@@ -183,14 +181,29 @@ if (!servicesBlock) {
   const serviceNames = topLevelKeys(servicesBlock);
 
   // P6-010: Redis is OPTIONAL (ADR-001). The required MVP topology is
-  // app + db + email-worker. The `redis` service may be present (as an
-  // opt-in profile) but is NOT required.
-  for (const required of ["app", "db", "email-worker"]) {
+  // app + db (#320 CONVERGE: the email outbox loop runs in-process in the
+  // app container). The `redis` service may be present (as an opt-in
+  // profile) but is NOT required.
+  for (const required of ["app", "db"]) {
     if (!serviceNames.includes(required)) {
       errors.push(
         `docker-compose.yml is missing required service '${required}'.`,
       );
     }
+  }
+
+  // #320 CONVERGE: the dedicated email-worker Compose service was removed —
+  // the outbox delivery loop runs in-process inside the app container
+  // (ADR-011 §8.6). A reappearing worker service is a topology regression
+  // this guard must catch (it would double-consume the outbox and split the
+  // migration-ownership model the deployment tests encode).
+  if (serviceNames.includes("email-worker")) {
+    errors.push(
+      "'email-worker' service must NOT exist in docker-compose.yml (#320 " +
+        "CONVERGE: the email outbox loop runs in-process inside 'app'; " +
+        "reintroducing a dedicated worker container is an ADR-011 topology " +
+        "change that must revise this guard and the deployment tests).",
+    );
   }
 
   // P6-010: if a `redis` service is present, it MUST be behind a profile
@@ -282,6 +295,23 @@ if (!servicesBlock) {
             "UX is inert — the token never reaches the container).",
         );
       }
+      // #320 CONVERGE: the in-process email outbox loop reads its sender and
+      // polling configuration from EMAIL_*/EMAIL_WORKER_* environment
+      // variables. The app service must forward at least the EMAIL_ENABLED
+      // switch (false default) so a bare `docker compose up` stays disabled
+      // while operators can enable delivery without editing the Compose file.
+      if (
+        !/^\s*EMAIL_ENABLED:\s*\$\{EMAIL_ENABLED:-false\}\s*$/m.test(
+          appEnvNoComments,
+        )
+      ) {
+        errors.push(
+          "'app' service must forward 'EMAIL_ENABLED: ${EMAIL_ENABLED:-false}' " +
+            "(#320 CONVERGE: the in-process outbox loop is configured through " +
+            "the app environment; without this entry delivery can never be " +
+            "enabled in the deployment).",
+        );
+      }
     }
   }
 
@@ -290,169 +320,6 @@ if (!servicesBlock) {
     const dbBlock = extractServiceBlock(servicesBlock, "db");
     if (dbBlock) {
       assertRequiredPostgresPasswordDb(dbBlock);
-    }
-  }
-
-  if (serviceNames.includes("email-worker")) {
-    const workerBlock = extractServiceBlock(servicesBlock, "email-worker");
-    if (!workerBlock) {
-      errors.push("'email-worker' service block could not be parsed.");
-    } else {
-      // P6-007: the worker's DATABASE_URL must require POSTGRES_PASSWORD.
-      assertRequiredPostgresPassword(workerBlock, "email-worker");
-
-      // #321: same prebuilt-image pin as app (see the app service note).
-      const workerNoComments = workerBlock
-        .split(/\r?\n/)
-        .filter((l) => !/^\s*#/.test(l))
-        .join("\n");
-      if (
-        !/^\s*image:\s*\$\{EXAM_IMAGE:\?EXAM_IMAGE is required \(node scripts\/generate-env\.mjs\)\}\s*$/im.test(
-          workerNoComments,
-        )
-      ) {
-        errors.push(
-          "'email-worker' service must pin the same required EXAM_IMAGE as " +
-            "'app' — one image authority, two services.",
-        );
-      }
-
-      // The image ENTRYPOINT is docker-entrypoint.sh which hard-codes
-      // `exec node dist/server.js`. The service MUST override the
-      // entrypoint so the command actually runs the worker (otherwise
-      // `docker compose up email-worker` silently starts the API server).
-      // The service key is indented under `services:`, so match with
-      // leading whitespace.
-      if (!/^\s*entrypoint:\s*\S/im.test(workerBlock)) {
-        errors.push(
-          "'email-worker' service must override entrypoint (the image " +
-            "ENTRYPOINT is docker-entrypoint.sh which hard-codes the API " +
-            "server; without an entrypoint override, command: is ignored " +
-            "and the worker never runs).",
-        );
-      }
-
-      // Worker must run the production worker entrypoint, not the dev tsx
-      // path and not the API server. Match either command: or entrypoint:
-      // lines (the worker entrypoint is the source of truth).
-      if (!/dist\/workers\/emailDeliveryWorker\.js/.test(workerBlock)) {
-        errors.push(
-          "'email-worker' command must run dist/workers/emailDeliveryWorker.js.",
-        );
-      }
-
-      // Required env carried over from the worker entrypoint
-      // (apps/api/src/workers/emailDeliveryWorker.ts → getRuntimeConfig).
-      // Every var here is fail-fast at boot in APP_MODE=production:
-      //   DATABASE_URL     — db connection
-      //   JWT_SECRET       — resolveJwtSecret throws if unset in prod
-      //   PUBLIC_WEB_ORIGIN — resolvePublicWebOrigin throws if unset
-      //   CORS_ORIGIN      — resolveCorsOrigin throws if unset (the worker
-      //                      never serves CORS-protected responses, but the
-      //                      shared config loader enforces it)
-      //   APP_MODE         — production mode gates the fail-fast behavior
-      //                      above; a missing APP_MODE falls back to dev
-      //                      and silently disables the safety checks.
-      const requiredEnv = [
-        "DATABASE_URL",
-        "JWT_SECRET",
-        "PUBLIC_WEB_ORIGIN",
-        "CORS_ORIGIN",
-        "APP_MODE",
-      ];
-      // P6-CORR1 hardening (CodeRabbit review): scope the env-var check to
-      // the actual `environment:` child block of the email-worker service,
-      // so a sibling key or a future x-* extension mapping cannot satisfy
-      // the check by containing a matching key name. Falls back to the
-      // whole worker block if `environment:` cannot be parsed (defensive).
-      const envBlock =
-        extractServiceBlock(workerBlock, "environment") ?? workerBlock;
-      // Strip comment lines before substring matching so a comment like
-      // `# CORS_ORIGIN:` cannot satisfy the check.
-      const envBlockNoComments = envBlock
-        .split(/\r?\n/)
-        .filter((l) => !/^\s*#/.test(l))
-        .join("\n");
-      for (const key of requiredEnv) {
-        if (
-          !new RegExp(`^\\s*${escapeRegExp(key)}:\\s*\\S`, "m").test(
-            envBlockNoComments,
-          )
-        ) {
-          errors.push(
-            `'email-worker' service must define environment variable '${key}' ` +
-              `(fail-fast at worker boot in production).`,
-          );
-        }
-      }
-      // APP_MODE must specifically be production — the safety checks above
-      // only fire in production mode.
-      if (!/APP_MODE:\s*production\b/.test(envBlockNoComments)) {
-        errors.push(
-          "'email-worker' APP_MODE must be 'production' (otherwise the " +
-            "config loader's production fail-fast checks are silently " +
-            "disabled).",
-        );
-      }
-
-      // P6-009: serialize migrations. The worker self-migrates at startup
-      // and the drizzle migration journal tracks state but does NOT lock
-      // concurrent migration runners. The worker MUST depend on
-      // app: service_healthy so its migrate call occurs strictly after the
-      // app container's migrate call. depending on db alone would let the
-      // worker race the app's migrate call.
-      const dependsMatch = workerBlock.match(
-        /depends_on:\s*\n([\s\S]*?)(?=\n\S|\n\s{0,1}\S|\n$|$)/,
-      );
-      if (!dependsMatch) {
-        errors.push(
-          "'email-worker' service must declare depends_on with " +
-            "app: service_healthy (P6-009: serialize migrations).",
-        );
-      } else {
-        const depBlock = dependsMatch[1];
-        const hasApp =
-          /^\s{2,}app:\s*\n\s{4,}condition:\s*service_healthy\s*$/m.test(
-            "depends_on:\n" + depBlock,
-          );
-        if (!hasApp) {
-          errors.push(
-            "'email-worker' depends_on must specifically require " +
-              "'app: condition: service_healthy' (P6-009: the worker's " +
-              "startup migrate call must serialize after the app's " +
-              "migrate call; depending on db alone races the app migrate).",
-          );
-        }
-        // The worker must NOT depend on db directly (it depends on app,
-        // which transitively depends on db). A direct db dependency would
-        // weaken the serialization guarantee.
-        const hasDb =
-          /^\s{2,}db:\s*\n\s{4,}condition:\s*service_healthy\s*$/m.test(
-            "depends_on:\n" + depBlock,
-          );
-        if (hasDb) {
-          errors.push(
-            "'email-worker' depends_on must NOT name db directly (P6-009: " +
-              "it must depend on app: service_healthy so the worker's " +
-              "migrate call serializes after the app's migrate call).",
-          );
-        }
-      }
-
-      // Worker must have a non-trivial restart policy — it is a required
-      // long-running process. `restart: "no"` is a valid Compose value
-      // but defeats the intent; pin to the allowed set.
-      if (
-        !/restart:\s*(unless-stopped|always|on-failure(:\d+)?)/.test(
-          workerBlock,
-        )
-      ) {
-        errors.push(
-          "'email-worker' service must define a restart policy of " +
-            'unless-stopped, always, or on-failure (restart: "no" or a ' +
-            "missing policy makes the worker a one-shot).",
-        );
-      }
     }
   }
 }
@@ -616,7 +483,7 @@ function extractServiceBlock(servicesBlockText, serviceName) {
  * docker-compose.build.yml is the single allowed source-build MODE override
  * of the one operator entry point. It cannot run standalone (no db service),
  * so the rules here keep it from silently growing into a second topology:
- *   - only `app` and `email-worker` may appear;
+ *   - only `app` may appear;
  *   - each must carry build + a pinned local image tag + pull_policy: build
  *     (the PR-acceptance guarantee that containers run the freshly built
  *     checkout, never a registry/local-cache image);
@@ -632,9 +499,9 @@ function assertBuildVariant(text) {
     return;
   }
   for (const name of topLevelKeys(services)) {
-    if (name !== "app" && name !== "email-worker") {
+    if (name !== "app") {
       errors.push(
-        `${ALLOWED_BUILD_VARIANT} may only override 'app' and 'email-worker' ` +
+        `${ALLOWED_BUILD_VARIANT} may only override 'app' ` +
           `(found '${name}'); it is a build-mode override of docker-compose.yml, ` +
           "not a second topology.",
       );
@@ -709,8 +576,8 @@ function escapeRegExp(s) {
 /**
  * P6-007: assert that a service block references POSTGRES_PASSWORD via
  * Compose required-expansion (`${POSTGRES_PASSWORD:?...}`) and NOT via a
- * fallback default. Used on the `app` and `email-worker` services, whose
- * DATABASE_URL composition embeds POSTGRES_PASSWORD.
+ * fallback default. Used on the `app` service, whose DATABASE_URL
+ * composition embeds POSTGRES_PASSWORD.
  *
  * Acceptable:
  *   DATABASE_URL: postgresql://...:${POSTGRES_PASSWORD:?...}@db:5432/...

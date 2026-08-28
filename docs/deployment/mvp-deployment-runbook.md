@@ -39,12 +39,12 @@ Network:   internal LAN only. The platform must remain offline-capable.
            API when the deployment needs HTTPS — the app does not terminate
            TLS itself.
 Postgres:  provided by the 'db' service (postgres:18.4-bookworm). The
-           bundled docker-compose.yml composes DATABASE_URL for app and
-           email-worker from POSTGRES_USER / POSTGRES_PASSWORD /
-           POSTGRES_DB, so the bundled 'db' service is REQUIRED for the
-           supported MVP path. External Postgres is NOT a supported MVP
-           deployment — the worker's DATABASE_URL is composed, not read
-           from an external DATABASE_URL. Do NOT remove the 'db' service.
+           bundled docker-compose.yml composes DATABASE_URL for the app
+           from POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB, so the
+           bundled 'db' service is REQUIRED for the supported MVP path.
+           External Postgres is NOT a supported MVP deployment — DATABASE_URL
+           is composed, not read from an external source. Do NOT remove the
+           'db' service.
 Redis:     OPTIONAL — a bare 'docker compose up' starts no Redis and needs
            no Redis configuration (P7 review P1). When enabled (the 'redis'
            profile, P6-010), Redis owns the shared rate-limit state (P7):
@@ -84,9 +84,9 @@ if any is unset. There is NO default database password in production
 
 | Variable | Purpose | Validation |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API and worker | required, no default (P6-007) — generate with `node scripts/generate-env.mjs` |
-| `JWT_SECRET` | Signs the `auth-token` cookie JWT; also required by the worker's runtime-config loader | non-empty; no default in production — generate with `node scripts/generate-env.mjs` |
-| `DATABASE_URL` | PostgreSQL connection for API + worker | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
+| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API | required, no default (P6-007) — generate with `node scripts/generate-env.mjs` |
+| `JWT_SECRET` | Signs the `auth-token` cookie JWT | non-empty; no default in production — generate with `node scripts/generate-env.mjs` |
+| `DATABASE_URL` | PostgreSQL connection for the API | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
 
 ### Optional (with safe defaults)
 
@@ -107,7 +107,7 @@ if any is unset. There is NO default database password in production
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed rate limiter; Redis-backed shared state when the `redis` profile is enabled and the runtime is ready — local in-memory fallback only in `optional` mode; `required` mode fails closed with 503 `RATE_LIMIT_UNAVAILABLE` (never falls back to local). See §10 |
 
-### Email (worker + sender)
+### Email (in-process outbox loop + sender)
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -116,12 +116,14 @@ if any is unset. There is NO default database password in production
 | `EMAIL_FAKE_MODE` | success | `success` or `failure` (fake transport only) |
 | `EMAIL_FROM` | `no-reply@example.local` | Email From header |
 | `EMAIL_FROM_NAME` | Exam Platform | Email From name |
-| `EMAIL_MAX_ATTEMPTS` | 3 | worker max attempts before `dead` |
+| `EMAIL_MAX_ATTEMPTS` | 3 | max attempts before `dead` |
 | `EMAIL_RETRY_BASE_SECONDS` | 60 | exponential backoff base (base * 2^(attempts-1)) |
-| `EMAIL_WORKER_POLL_INTERVAL_MS` | 5000 | worker poll loop |
+| `EMAIL_WORKER_POLL_INTERVAL_MS` | 5000 | outbox loop poll interval |
 | `EMAIL_WORKER_BATCH_SIZE` | 20 | max rows per poll |
 | `EMAIL_WORKER_LOCK_TIMEOUT_MS` | 300000 (5 min) | abandoned-lock recovery threshold |
+| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | 30000 | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery |
 | `EMAIL_WORKER_HEARTBEAT_STALE_MS` | 60000 | diagnostics staleness threshold |
+| `EMAIL_FAKE_DELAY_MS` | 0 | fake-transport only: simulated send latency (tests/deployment rehearsal) |
 
 ### SMTP (only when `EMAIL_TRANSPORT=smtp`)
 
@@ -164,7 +166,7 @@ node scripts/generate-env.mjs
 # SMTP_USER=...
 # SMTP_PASSWORD=...
 
-# 4. Pull and start the default stack (app + db + email-worker) from the
+# 4. Pull and start the default stack (app + db) from the
 #    prebuilt release image. Compose runs the image pinned in .env.deploy
 #    as EXAM_IMAGE, which step 2 derived from .release-version (see
 #    "Image acquisition" below). No local build happens; Redis is NOT
@@ -175,17 +177,18 @@ docker compose --env-file .env.deploy up -d
 docker compose --env-file .env.deploy logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
-# 6. Verify app + db are healthy. The email-worker starts after app health
-#    and waits for the first organization to be bootstrapped (step 7).
+# 6. Verify app + db are healthy. The in-process email outbox loop waits for
+#    the first organization to be bootstrapped (step 7).
 docker compose --env-file .env.deploy ps
-# Expected: app (healthy), db (healthy), email-worker (up)
+# Expected: app (healthy), db (healthy)
 ```
 
 `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost:3000`; set
 them in `.env.deploy` to your machine's address for LAN access.
 
 # 7. Bootstrap the first Admin (production path — see §5). This also
-#    creates the internal default organization, which unblocks the worker.
+#    creates the internal default organization, which unblocks the in-process
+#    email outbox loop.
 #    Two equivalent paths share one canonical atomic mutation body:
 #
 #    (a) CLI fallback (operator path):
@@ -200,33 +203,32 @@ docker compose --env-file .env.deploy exec app \
 #        the first-Admin setup form. Once initialized, /launchpad redirects
 #        to /login and never reopens. See backup-and-recovery.md §8.
 
-# 8. The same worker container detects the new organization, resolves it,
-#    and enters its poll loop without restarting. Verify:
-docker compose --env-file .env.deploy logs --tail=20 email-worker
-# Look for: 'resolved default organization', 'starting poll loop'
+# 8. The in-process outbox loop detects the new organization, resolves it,
+#    and starts polling without restarting. Verify:
+docker compose --env-file .env.deploy logs --tail=20 app
+# Look for: 'resolved default organization',
+#           'in-process email outbox loop started'
 ```
 
-> **First-boot worker bootstrap-pending state (expected):** on a fresh
-> migrated database the `email-worker` cannot resolve the internal default
-> organization until `bootstrap-admin` creates it. Instead of exiting and
-> relying on Compose restart, the worker stays `Up`, writes a
-> `bootstrap_pending` heartbeat, and sleeps until the organization appears.
-> This is the documented first-boot behavior, NOT a defect. Once bootstrap
-> creates the org (step 7), the same worker container resolves it and
-> enters its poll loop. The `app` and `db` services are healthy regardless;
-> only the worker's ability to consume email is gated on the org existing.
+> **First-boot bootstrap-pending state (expected):** on a fresh migrated
+> database the in-process outbox loop cannot resolve the internal default
+> organization until `bootstrap-admin` creates it. The loop does not crash
+> the API: it writes a `bootstrap_pending` heartbeat and sleeps until the
+> organization appears. This is the documented first-boot behavior, NOT a
+> defect. Once bootstrap creates the org (step 7), the loop resolves it and
+> starts polling. The `app` and `db` services are healthy throughout; only
+> email consumption is gated on the org existing.
 
-The Dockerfile builds the app + email-worker from the same image. The
-`docker-entrypoint.sh` runs `node dist/scripts/migrate.js` once on first
-boot of the `app` container, then `exec node dist/server.js`. The
-`email-worker` container runs `node dist/workers/emailDeliveryWorker.js`
-directly. The worker depends on `app: service_healthy`, so its startup
-self-migrate call is serialized strictly AFTER the app's migrate call
-(P6-009: the drizzle journal tracks state; it is NOT a concurrency lock).
+The image ENTRYPOINT is `docker-entrypoint.sh`: it runs
+`node dist/scripts/migrate.js` once on boot, then `exec node dist/server.js`.
+The app container is the SOLE migration owner and the sole outbox consumer
+(#320 CONVERGE — the duplicate worker migrate path and its
+`app: service_healthy` serialization were removed with the dedicated
+container).
 
 ### Image acquisition (#321)
 
-The `app` and `email-worker` services run the **prebuilt release image**
+The `app` service runs the **prebuilt release image**
 pinned in `.env.deploy` as `EXAM_IMAGE`. `node scripts/generate-env.mjs`
 derives the pin from the repository's `.release-version`
 (`ghcr.io/jnhu76/exam:vX.Y.Z`); an explicit non-canonical `EXAM_IMAGE`
@@ -299,28 +301,16 @@ tag.
 ## 4. Migration
 
 Migrations are managed by drizzle-kit (`packages/db/drizzle.config.ts`). The
-production migration entrypoint is `node dist/scripts/migrate.js`, which is
-run:
-
-1. By the `app` container's `docker-entrypoint.sh` before `node dist/server.js`.
-2. By the `email-worker` container's startup (the worker calls
-   `migratePostgres(db)` before its poll loop).
-
-**Migration ordering (P6-009):** the drizzle migration journal tracks
-applied state; it is NOT a distributed lock and does NOT serialize
-concurrent migration runners. To avoid racing the app container's migrate
-call, the `email-worker` service declares `depends_on: app: condition:
-service_healthy`, so the required startup sequence is:
+production migration entrypoint is `node dist/scripts/migrate.js`, run once
+by the `app` container's `docker-entrypoint.sh` before
+`node dist/server.js`. There is exactly ONE migration runner since #320
+CONVERGE (the former duplicate worker self-migrate path is gone), so the
+P6-009 serialization concern no longer arises in the default deployment:
 
 ```text
 db healthy → app entrypoint migrates → API binds + becomes healthy
-           → email-worker starts → worker's migratePostgres re-run
-           → worker poll loop starts
+           → in-process outbox loop starts (after bootstrap)
 ```
-
-Both paths are idempotent (re-running migrate emits a NOTICE that the
-journal schema already exists and exits 0), but the Compose dependency
-chain is what serializes them — not the journal.
 
 ```bash
 # Run migrations manually (rarely needed; containers do this automatically)
@@ -421,12 +411,12 @@ the production DB.
 ## 6. Start services
 
 ```bash
-# Normal start (default stack: app + db + email-worker; Redis is optional — §10)
+# Normal start (default stack: app + db; Redis is optional — §10)
 docker compose --env-file .env.deploy up -d
 
 # Verify
 docker compose --env-file .env.deploy ps
-# Expected: app (healthy), db (healthy), email-worker (up)
+# Expected: app (healthy), db (healthy)
 
 # API health (liveness — process alive)
 curl -s http://localhost:${EXAM_PORT:-3000}/api/health
@@ -444,8 +434,8 @@ chaining these dependencies — the drizzle migration journal tracks state,
 it does NOT lock concurrent runners:
 
 ```text
-default topology:
-  db (healthy) ← app (healthy) ← email-worker
+default topology (#320 CONVERGE):
+  db (healthy) ← app (healthy)
                   ↑ app entrypoint runs migrate before binding
 
 optional redis profile (--profile redis):
@@ -453,9 +443,11 @@ optional redis profile (--profile redis):
   redis (healthy)   # NOT a dependency of app (P6-010)
 ```
 
-The scanner (heartbeat + deadline) runs **in-process** inside the `app`
-container — there is no separate scanner service. The scanner's liveness is
-covered by the `app` healthcheck and surfaced in `/api/system/diagnostics`.
+The scanners (heartbeat + deadline) AND the email outbox delivery loop run
+**in-process** inside the `app` container — there is no separate worker or
+scanner service (#320 CONVERGE removed the dedicated email-worker
+container). Their liveness is covered by the `app` healthcheck and surfaced
+in `/api/system/diagnostics`.
 
 ---
 
@@ -467,7 +459,7 @@ The implemented MVP separates **liveness** from **readiness**:
 |---|---|---|---|
 | `GET /api/health` | none | Liveness probe (Compose healthcheck, dependency ordering) | process alive only |
 | `GET /api/system/health` | admin (`SystemHealthView`) | Readiness / DB availability | DB ping latency + CPU/memory |
-| `GET /api/system/diagnostics` | admin (`SystemDiagnosticsView`) | Operational diagnostics | DB latency, Redis (if configured), scanner metrics, email worker heartbeat, outbox backlog, oldest pending age, dead rows |
+| `GET /api/system/diagnostics` | admin (`SystemDiagnosticsView`) | Operational diagnostics | DB latency, Redis (if configured), scanner metrics, outbox loop heartbeat, outbox backlog, oldest pending age, dead rows |
 | `GET /api/system/info` | none | Version + uptime | n/a |
 | `GET /api/system/public-config` | none | Public config (deployment mode, feature flags) | n/a |
 
@@ -478,9 +470,8 @@ The Compose `app` healthcheck polls `GET /api/health` every 30s (5s timeout,
 healthcheck:
   - marks the container healthy / unhealthy (visible via 'docker compose ps',
     'docker inspect', and Compose UI);
-  - supports dependency ordering: services that declare
-    'depends_on: app: condition: service_healthy' (currently the
-    email-worker) wait for the app healthcheck to pass before starting.
+  - no other service depends on app health since #320 CONVERGE removed the
+    email-worker service (the guard exists for future dependent services).
 ```
 
 A healthcheck does **not**, by itself, restart a still-running container.
@@ -501,30 +492,33 @@ such watchdog — the runbook documents the manual `docker compose restart`
 recovery path.
 
 **Health does not claim `ready` when a required dependency is unusable:**
-`/api/system/health` reflects the DB ping, and the worker's `emailStatus`
+`/api/system/health` reflects the DB ping, and the outbox loop's `emailStatus`
 gates on dead rows + heartbeat staleness. Optional delivery degradation
 (`EMAIL_ENABLED=false`) does not falsely break core availability —
 `emailStatus.status` correctly reports `disabled` rather than `unavailable`.
 
 ---
 
-## 8. Run Email worker
+## 8. Email outbox loop (in-process)
 
-The `email-worker` Compose service runs the resident Email delivery worker
-(ADR-011). It is the **only** consumer of the PostgreSQL `email_outbox` table
-that `result_published` notifications write into.
+The email outbox delivery loop runs **inside the `app` container** as a
+Fastify plugin (`plugins/emailOutboxLoop.ts`, #320 CONVERGE). It is the
+**only** consumer of the PostgreSQL `email_outbox` table that identity and
+notification flows write into. It reuses the exact poll body of the former
+standalone worker (ADR-011): durable outbox, `FOR UPDATE SKIP LOCKED`
+claiming, retry/backoff, lock-timeout recovery, at-least-once delivery, and
+a PostgreSQL heartbeat — so diagnostics are unchanged.
 
 ```bash
-# The worker starts automatically with 'docker compose up -d'. Verify.
+# The loop starts automatically with 'docker compose up -d'. Verify.
 # Use the native --tail flag (not a pipe) so failure context is preserved.
-docker compose --env-file .env.deploy logs --tail=20 email-worker
+docker compose --env-file .env.deploy logs --tail=20 app
 # Look for:
-#   'email delivery worker starting'
 #   'resolved default organization'
-#   'creating email sender' (enabled:false / true, transport:fake / smtp)
-#   'starting poll loop' (pollIntervalMs, batchSize, lockTimeoutMs)
+#   'in-process email outbox loop started' (pollIntervalMs, batchSize,
+#    lockTimeoutMs, enabled)
 
-# Inspect the worker heartbeat (admin-only)
+# Inspect the loop heartbeat (admin-only)
 curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
   | jq .emailStatus
 # Expected fields: status, enabled, worker.{status,lastPollAt,lastSuccessAt,
@@ -533,7 +527,7 @@ curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/dia
 #                  lastSuccessfulDeliveryAt
 ```
 
-The worker:
+The loop:
 
 - polls every `EMAIL_WORKER_POLL_INTERVAL_MS` (default 5s),
 - claims up to `EMAIL_WORKER_BATCH_SIZE` rows atomically
@@ -542,7 +536,12 @@ The worker:
   ownership-fenced on `locked_by`,
 - writes a heartbeat row to `worker_heartbeats` every poll cycle,
 - recovers abandoned processing rows at the top of every poll cycle
-  (`recoverAbandoned`).
+  (`recoverAbandoned`),
+- is supervised: a loop crash (e.g. a database hiccup) is retried after the
+  poll interval with an error heartbeat instead of crashing the API,
+- shuts down bounded: on SIGTERM the loop stops within
+  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 30s); rows still `processing`
+  are redelivered via lock-timeout recovery (documented at-least-once).
 
 With `EMAIL_ENABLED=false` (default), `DisabledEmailSender` drains outbox
 rows to `sent` status without any network call. This **does not** prove
@@ -593,7 +592,7 @@ holds only ephemeral coordination state:
   degraded); fail closed (503 `RATE_LIMIT_UNAVAILABLE`) in `required` mode.
 - Session/JWT = stateless cookie + JWT (no Redis session store).
 
-The default topology is `app + db + email-worker`. The `redis` Compose
+The default topology is `app + db`. The `redis` Compose
 service is gated behind the `redis` profile (P6-010): a bare
 `docker compose up` does NOT start it, and the `app` service does NOT
 depend on redis health. The API defaults `REDIS_URL` to empty (disabled).
@@ -620,7 +619,7 @@ docker compose --env-file .env.deploy --profile redis up -d
 
 # 3. Verify all four services:
 docker compose --env-file .env.deploy ps
-# Expected: app (healthy), db (healthy), redis (healthy), email-worker (up)
+# Expected: app (healthy), db (healthy), redis (healthy)
 ```
 
 The `redis` service exists for the optional shared rate limiter and
@@ -666,7 +665,7 @@ curl -s http://localhost:${EXAM_PORT:-3000}/api/system/public-config
 #    Verify the Candidate sees the Inbox badge, can open the notification,
 #    and that it navigates to the authoritative frozen result page.
 
-# 7. (If EMAIL_ENABLED=true) Verify the worker drained the outbox:
+# 7. (If EMAIL_ENABLED=true) Verify the outbox loop drained the queue:
 curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
   | jq .emailStatus.outbox
 #    Expect sent to increase; pending/processing to return to 0.
@@ -702,15 +701,12 @@ Graceful shutdown behavior:
 app container (SIGTERM):
   - auditWrites.stopAccepting() (no new audit writes accepted)
   - drain in-flight audit writes (10s timeout, best-effort)
+  - email outbox loop stops: waits up to EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS
+    (default 30s) for the current poll cycle, then abandons it
   - app.close() (releases DB pool, Redis client if configured, sender)
-email-worker container (SIGTERM):
-  - finish current poll cycle (no new claim)
-  - sender.close() (SmtpEmailSender closes the pooled transporter)
-  - sql.end() (close DB connection)
   - exit 0
-  - any processing row left behind is recovered by the next worker start
+  - any processing row left behind is recovered by the next app start
     via recoverAbandoned after EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s)
-```
 
 ---
 
@@ -719,16 +715,15 @@ email-worker container (SIGTERM):
 ```bash
 # Restart a single service
 docker compose --env-file .env.deploy restart app
-docker compose --env-file .env.deploy restart email-worker
 docker compose --env-file .env.deploy restart db
 docker compose --env-file .env.deploy restart redis       # optional profile; not started by default
                                     # (P6-010 / ADR-001)
 
 # Stuck Email processing recovery
-# The worker recovers abandoned rows at the top of every poll cycle after
-# EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s). To force immediate recovery,
-# restart the worker:
-docker compose --env-file .env.deploy restart email-worker
+# The outbox loop recovers abandoned rows at the top of every poll cycle
+# after EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s). To force immediate
+# recovery, restart the app:
+docker compose --env-file .env.deploy restart app
 
 # Dead Email inspection (admin-only via psql). $POSTGRES_USER / $POSTGRES_DB
 # are expanded INSIDE the db container (postgres image env), not by the
@@ -741,11 +736,11 @@ docker compose --env-file .env.deploy exec db sh -c \
 docker compose --env-file .env.deploy exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE email_outbox SET status='\''pending'\'', locked_at=NULL, locked_by=NULL, next_attempt_at=now(), last_error=NULL WHERE id = '\''<UUID>'\'';"'
 
-# Stale worker heartbeat
+# Stale loop heartbeat
 # /api/system/diagnostics emailStatus.worker.status=degraded when
 # now - last_poll_at > EMAIL_WORKER_HEARTBEAT_STALE_MS (default 60s).
-# Restart the worker:
-docker compose --env-file .env.deploy restart email-worker
+# Restart the app:
+docker compose --env-file .env.deploy restart app
 
 # Failed migration. Use the native --tail flag instead of a pipe so failure
 # context is preserved.
@@ -784,7 +779,6 @@ docker compose --env-file .env.deploy logs -f
 
 # Filter by service
 docker compose --env-file .env.deploy logs -f app
-docker compose --env-file .env.deploy logs -f email-worker
 
 # Filter by request id (JSON log)
 docker compose --env-file .env.deploy logs app | jq 'select(.reqId == "req-42")'
@@ -942,10 +936,10 @@ contract (DROP + recreate from template0, then `pg_restore`) is enforced by
 # Online logical backup (PostgreSQL stays ONLINE; API may be down):
 scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
 
-# Clean restore (STOP API + worker first; script requires typing target DB name):
-docker compose --env-file .env.deploy stop app email-worker
+# Clean restore (STOP the API first; script requires typing target DB name):
+docker compose --env-file .env.deploy stop app
 scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
-docker compose --env-file .env.deploy up -d app email-worker
+docker compose --env-file .env.deploy up -d app
 
 # P7-E2B — record the restore drill in the product ledger after restart
 # (the restore script prints the exact command with its measured duration):
@@ -980,17 +974,17 @@ docker compose --env-file .env.deploy exec -T db sh -c \
 ls -lh backup_*.sql
 tail -5 backup_*.sql   # should contain 'PostgreSQL database dump complete'
 
-# Restore (offline — stop API + worker first to avoid writes during restore).
+# Restore (offline — stop the API first to avoid writes during restore).
 # Feed the host-side dump file into the db container's psql.
 # NOTE: --clean --if-exists drops objects present in the dump, but does NOT
 # remove objects that exist in the target DB yet are absent from an older
 # dump. For an EXACT historical replacement, recreate/clean the target
 # database under an explicit restore contract (C2 restore drill).
-docker compose --env-file .env.deploy stop app email-worker
+docker compose --env-file .env.deploy stop app
 docker compose --env-file .env.deploy exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
   < backup_YYYYMMDD_HHMMSS.sql
-docker compose --env-file .env.deploy up -d app email-worker
+docker compose --env-file .env.deploy up -d app
 ```
 
 For larger deployments, prefer the C2 logical backup (`scripts/backup/postgres-logical-backup.sh`,

@@ -396,16 +396,22 @@ Rubric is absent from the Candidate result contract.
 - **Identity**: `email_outbox.id` (UUID)
 - **State machine**: `pending → processing → sent | retry_wait → processing → ... | dead`
 - **Classification**: Infrastructure record (durable queue)
-- **Owner**: Background worker process, scoped by `organizationId`
+- **Owner**: In-process email outbox loop in the API process (#320 CONVERGE), scoped by `organizationId`
 
-### 11.2 Email worker (IMPLEMENTED)
+### 11.2 Email outbox loop (IMPLEMENTED, in-process since #320 CONVERGE)
 
-- Standalone Node process (`apps/api/src/workers/emailDeliveryWorker.ts`).
-- Poll loop: `recoverAbandoned` → `processDueEmails` → heartbeat → sleep.
+- In-process Fastify plugin (`apps/api/src/plugins/emailOutboxLoop.ts`);
+  the standalone Node entrypoint (`apps/api/src/workers/emailDeliveryWorker.ts`)
+  remains as an optional escape hatch with identical semantics.
+- Poll loop: `recoverAbandoned` → `processDueEmails` → heartbeat → sleep,
+  supervised so a loop crash retries after the poll interval instead of
+  crashing the API.
 - Claim: atomic CTE + `FOR UPDATE SKIP LOCKED` + `UPDATE RETURNING`.
 - Send: OUTSIDE the claim transaction (SMTP never inside a DB transaction).
 - Retry: exponential backoff (`baseSeconds * 2^(attempts-1)`).
 - Terminal: `sent` (success) or `dead` (max attempts exceeded).
+- Shutdown: bounded by `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS`; abandoned
+  `processing` rows are redelivered via lock-timeout recovery.
 
 ### 11.3 Email delivery semantics
 

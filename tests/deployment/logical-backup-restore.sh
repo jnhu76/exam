@@ -153,7 +153,7 @@ write_probe "${PROJECT}" logical_probe markers B "state-B-${RUN_TS}"
 echo "  State B (live): $(capture_state)"
 
 echo "--- stop API + worker; restore State A into CLEAN target 'exam' ---"
-run_compose "${PROJECT}" stop app email-worker >/dev/null 2>&1 || true
+run_compose "${PROJECT}" stop app >/dev/null 2>&1 || true
 echo "exam" | bash "${RESTORE_SH}" "${PROJECT}" "${BACKUP_DUMP}" exam 2>&1 | sed 's/^/    /'
 
 echo "--- restart API; verify State A restored (A present, B ABSENT) ---"

@@ -20,7 +20,7 @@ REPO_ROOT="$(cd -- "${LIB_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 # Source-build override (the single build-mode surface). The deployment
 # verification suites ARE contributor/PR acceptance: every invocation merges
-# this override so the app/email-worker images are built from THE CURRENT
+# this override so the app image is built from THE CURRENT
 # CHECKOUT (pull_policy: build) — a stale registry or local image can never
 # fake a passing acceptance run, regardless of the operator `image:` pin in
 # docker-compose.yml (#319 contract, #321 two-path split).
@@ -45,7 +45,7 @@ BUILD_OVERRIDE_FILE="${REPO_ROOT}/docker-compose.build.yml"
 #
 # EXAM_IMAGE interpolation (#321): the operator file requires EXAM_IMAGE
 # even though acceptance never RUNS that image (the build override below
-# replaces it on app + email-worker). In DEPLOY_ENV_FILE mode the generated
+# replaces it on app). In DEPLOY_ENV_FILE mode the generated
 # file carries the pin; in legacy-export mode there is no env file, so a
 # placeholder is defaulted here — interpolation-only, never pulled or run.
 run_compose() {

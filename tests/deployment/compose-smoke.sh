@@ -15,16 +15,17 @@
 #   - When the redis profile IS enabled, REDIS_PASSWORD is mandatory: the
 #     redis container refuses to start without it (startup guard) and runs
 #     with requirepass — unauthenticated clients are rejected.
-#   - Default topology = app + db + email-worker (no redis).
-#   - db healthy → app migrates + becomes healthy → email-worker starts
-#     after app health (migration serialization).
+#   - Default topology = app + db (no redis). The email outbox loop runs
+#     in-process inside the app container (#320 CONVERGE) — no dedicated
+#     email-worker service exists anymore.
+#   - db healthy → app migrates + becomes healthy.
 #   - migrations applied exactly once.
-#   - worker heartbeat appears in worker_heartbeats, bootstrap_pending
-#     before bootstrap, success after.
+#   - the in-process outbox loop's heartbeat appears in worker_heartbeats,
+#     bootstrap_pending before bootstrap, success after.
 #   - bootstrap-admin creates exactly one explicit Admin.
 #   - login succeeds; no default Candidate accounts.
 #   - baseline seed refuses APP_MODE=production.
-#   - worker shuts down cleanly on SIGTERM.
+#   - SIGTERM stops the app (and the in-process loop) cleanly.
 #
 # Usage: ./compose-smoke.sh <run-number>
 set -euo pipefail
@@ -177,19 +178,19 @@ fi
 
 # ── Test 1c: acceptance runs the SOURCE build, never a registry image ────
 echo "--- TEST 1c: merged acceptance model has no registry image ---"
-# The build override must replace the operator EXAM_IMAGE pin on BOTH app
-# and email-worker. If a registry image reference survived the merge into
-# the merged model, acceptance could pass on a pulled image instead of
-# this checkout (#321 two-path split).
+# The build override must replace the operator EXAM_IMAGE pin on app. If a
+# registry image reference survived the merge into the merged model,
+# acceptance could pass on a pulled image instead of this checkout (#321
+# two-path split).
 if run_compose "${PROJECT}" config 2>/dev/null | grep -q "image: ghcr.io/jnhu76/exam"; then
   echo "  FAIL: a registry image reference survived the build override merge."
   exit 1
 fi
 T1C_SOURCE_IMAGES="$(run_compose "${PROJECT}" config 2>/dev/null | grep -c "image: exam-local:dev" || true)"
-if [ "${T1C_SOURCE_IMAGES}" -eq 2 ]; then
-  echo "  PASS: app + email-worker resolve to exam-local:dev (source authority)."
+if [ "${T1C_SOURCE_IMAGES}" -eq 1 ]; then
+  echo "  PASS: app resolves to exam-local:dev (source authority)."
 else
-  echo "  FAIL: expected 2 exam-local:dev image pins, found ${T1C_SOURCE_IMAGES}."
+  echo "  FAIL: expected 1 exam-local:dev image pin, found ${T1C_SOURCE_IMAGES}."
   exit 1
 fi
 
@@ -199,20 +200,24 @@ run_compose "${PROJECT}" up -d --build --quiet-pull 2>&1 | tail -5
 echo "  stack started."
 
 # ── Test 3: verify only 3 services started (no redis) ────────────────────
-echo "--- TEST 3: default topology = app + db + email-worker (no redis) ---"
+echo "--- TEST 3: default topology = app + db (no redis, no email-worker) ---"
 SERVICES=$(run_compose "${PROJECT}" ps --services 2>/dev/null | sort | tr '\n' ' ')
 echo "  services: ${SERVICES}"
 if echo "${SERVICES}" | grep -qw "redis"; then
   echo "  FAIL: redis was started without the profile (regression)."
   exit 1
 fi
-for s in app db email-worker; do
+for s in app db; do
   echo "${SERVICES}" | grep -qw "${s}" || {
     echo "  FAIL: required service '${s}' missing."
     exit 1
   }
 done
-echo "  PASS: default topology excludes redis; required services present."
+if echo "${SERVICES}" | grep -qw "email-worker"; then
+  echo "  FAIL: email-worker service started (#320 CONVERGE removed it)."
+  exit 1
+fi
+echo "  PASS: default topology excludes redis and email-worker; required services present."
 
 # ── Test 4: wait for app + db healthy ────────────────────────────────────
 echo "--- TEST 4: wait for app + db healthy (migrate runs first) ---"
@@ -231,31 +236,18 @@ for i in $(seq 1 60); do
   fi
 done
 
-# ── Test 5: email-worker started AFTER app health ────────────────────────
-echo "--- TEST 5: email-worker running (started after app: service_healthy) ---"
-WORKER_STATE=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
-if [ "${WORKER_STATE}" = "running" ]; then
-  echo "  PASS: email-worker is running."
+# ── Test 5: in-process outbox loop is waiting for bootstrap ──────────────
+echo "--- TEST 5: app is the only Exam container (outbox loop in-process) ---"
+EXAM_CONTAINERS=$(run_compose "${PROJECT}" ps --services 2>/dev/null | grep -cw "app")
+if [ "${EXAM_CONTAINERS}" = "1" ]; then
+  echo "  PASS: exactly one Exam container (app) is running."
 else
-  echo "  FAIL: email-worker is ${WORKER_STATE} (expected running)."
-  compose_logs "${PROJECT}" email-worker
+  echo "  FAIL: expected exactly 1 Exam container (app), found ${EXAM_CONTAINERS}."
   exit 1
 fi
 
-# ── Test 5b: worker stays Up with bootstrap_pending before bootstrap ─────
-echo "--- TEST 5b: worker stays Up with bootstrap_pending heartbeat ---"
-WORKER_CONTAINER="$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)"
-WORKER_RESTARTS_BEFORE=$(docker inspect "${WORKER_CONTAINER}" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
-WORKER_CONTAINER_ID_BEFORE=$(docker inspect "${WORKER_CONTAINER}" --format '{{.Id}}' 2>/dev/null || echo "unknown")
-if [ "${WORKER_RESTARTS_BEFORE}" != "0" ]; then
-  echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_BEFORE} before bootstrap (expected 0)."
-  exit 1
-fi
-if [ "${WORKER_CONTAINER_ID_BEFORE}" = "unknown" ]; then
-  echo "  FAIL: could not read email-worker container ID."
-  exit 1
-fi
-
+# ── Test 5b: in-process loop writes bootstrap_pending before bootstrap ───
+echo "--- TEST 5b: bootstrap_pending heartbeat from the in-process loop ---"
 PENDING_FOUND=0
 PENDING_INSTANCE_ID=""
 for i in $(seq 1 30); do
@@ -275,7 +267,7 @@ if [ "${PENDING_FOUND}" = "0" ]; then
   if [ -n "${LAST_PENDING_QUERY_ERROR}" ]; then
     echo "  last query error: ${LAST_PENDING_QUERY_ERROR}"
   fi
-  compose_logs "${PROJECT}" email-worker
+  compose_logs "${PROJECT}" app
   exit 1
 fi
 echo "  PASS: bootstrap_pending heartbeat from instance ${PENDING_INSTANCE_ID}."
@@ -293,20 +285,16 @@ if [ -n "${PENDING_SUCCESS_AT}" ]; then
 fi
 echo "  PASS: bootstrap_pending heartbeat has no last_success_at."
 
-WORKER_LOGS_PENDING=$(compose_logs "${PROJECT}" email-worker 60)
-if ! echo "${WORKER_LOGS_PENDING}" | grep -q "waiting for initial organization bootstrap"; then
-  echo "  FAIL: worker logs do not contain bootstrap wait message."
+APP_LOGS_PENDING=$(compose_logs "${PROJECT}" app 60)
+if ! echo "${APP_LOGS_PENDING}" | grep -q "waiting for initial organization bootstrap"; then
+  echo "  FAIL: app logs do not contain the loop bootstrap wait message."
   exit 1
 fi
-if echo "${WORKER_LOGS_PENDING}" | grep -q "creating email sender"; then
-  echo "  FAIL: worker created sender before organization existed."
+if echo "${APP_LOGS_PENDING}" | grep -q "in-process email outbox loop started"; then
+  echo "  FAIL: outbox loop started before organization existed."
   exit 1
 fi
-if echo "${WORKER_LOGS_PENDING}" | grep -q "starting poll loop"; then
-  echo "  FAIL: worker started poll loop before organization existed."
-  exit 1
-fi
-echo "  PASS: worker is waiting and has not started sender/poll loop."
+echo "  PASS: in-process loop is waiting and has not started polling."
 
 # ── Test 6: all repo migrations applied exactly once ─────────────────────
 echo "--- TEST 6: migrations applied exactly once ---"
@@ -328,7 +316,7 @@ else
 fi
 
 # ── Test 7: bootstrap_pending heartbeat present before bootstrap ─────────
-echo "--- TEST 7: worker heartbeat row shows bootstrap_pending ---"
+echo "--- TEST 7: outbox loop heartbeat row shows bootstrap_pending ---"
 if run_psql_query "SELECT count(*) FROM worker_heartbeats WHERE worker_name = 'email-delivery' AND last_error LIKE 'bootstrap_pending:%';"; then
   HB="${PSQL_QUERY_OUTPUT}"
 else
@@ -407,39 +395,21 @@ if [ "${SUCCESS_OK}" = "0" ]; then
   echo "  last SUCCESS_INFO query error: ${LAST_SUCCESS_INFO_ERROR:-<none>}"
   echo "  last SUCCESS_COUNT value: ${LAST_SUCCESS_COUNT_VALUE:-<empty>}"
   echo "  last SUCCESS_COUNT query error: ${LAST_SUCCESS_COUNT_ERROR:-<none>}"
-  compose_logs "${PROJECT}" email-worker
+  compose_logs "${PROJECT}" app
   exit 1
 fi
 echo "  PASS: heartbeat for instance ${PENDING_INSTANCE_ID} has last_success_at and no last_error."
 
-WORKER_CONTAINER_ID_AFTER=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.Id}}' 2>/dev/null || echo "unknown")
-if [ "${WORKER_CONTAINER_ID_BEFORE}" != "${WORKER_CONTAINER_ID_AFTER}" ]; then
-  echo "  FAIL: email-worker container changed across bootstrap (was ${WORKER_CONTAINER_ID_BEFORE}, now ${WORKER_CONTAINER_ID_AFTER})."
+APP_LOGS_RUNNING=$(compose_logs "${PROJECT}" app 80)
+if ! echo "${APP_LOGS_RUNNING}" | grep -q "resolved default organization"; then
+  echo "  FAIL: app logs do not show organization resolution."
   exit 1
 fi
-echo "  PASS: same email-worker container across bootstrap."
-
-WORKER_RESTARTS_AFTER=$(docker inspect "$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)" --format '{{.RestartCount}}' 2>/dev/null || echo "unknown")
-if [ "${WORKER_RESTARTS_AFTER}" != "0" ]; then
-  echo "  FAIL: email-worker RestartCount=${WORKER_RESTARTS_AFTER} after bootstrap (expected 0)."
+if ! echo "${APP_LOGS_RUNNING}" | grep -q "in-process email outbox loop started"; then
+  echo "  FAIL: app logs do not show the outbox loop start."
   exit 1
 fi
-echo "  PASS: email-worker RestartCount remains 0 after bootstrap."
-
-WORKER_LOGS_RUNNING=$(compose_logs "${PROJECT}" email-worker 80)
-if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "resolved default organization"; then
-  echo "  FAIL: worker logs do not show organization resolution."
-  exit 1
-fi
-if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "creating email sender"; then
-  echo "  FAIL: worker logs do not show sender creation."
-  exit 1
-fi
-if ! echo "${WORKER_LOGS_RUNNING}" | grep -q "starting poll loop"; then
-  echo "  FAIL: worker logs do not show poll loop start."
-  exit 1
-fi
-echo "  PASS: worker logs show resolved organization, sender creation, and poll loop."
+echo "  PASS: app logs show resolved organization and outbox loop start."
 
 # ── Test 10: no default Candidate accounts; exactly one Admin ───────────
 echo "--- TEST 10: no default Candidate accounts; exactly one Admin ---"
@@ -519,25 +489,23 @@ echo "${DUP_ERR}" | grep -q "active.*Admin.*exists" \
     echo "  FAIL: second Admin was not refused.";
     echo "  output: ${DUP_ERR}"; exit 1; }
 
-# ── Test 15: SIGTERM shuts worker down cleanly ───────────────────────────
-echo "--- TEST 15: SIGTERM shuts down email-worker cleanly ---"
-# Capture the container ID BEFORE stopping it (compose ps -q lists running
-# containers; the stopped container must be inspected by ID).
-WORKER_ID_BEFORE_STOP="$(run_compose "${PROJECT}" ps -q email-worker 2>/dev/null)"
-docker stop "${WORKER_ID_BEFORE_STOP}" >/dev/null 2>&1 || true
+# ── Test 15: SIGTERM stops the app (with the in-process loop) cleanly ────
+echo "--- TEST 15: SIGTERM stops app + outbox loop cleanly ---"
+APP_ID_BEFORE_STOP="$(run_compose "${PROJECT}" ps -q app 2>/dev/null)"
+docker stop "${APP_ID_BEFORE_STOP}" >/dev/null 2>&1 || true
 
-EXIT_CODE=$(docker inspect "${WORKER_ID_BEFORE_STOP}" --format '{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
+EXIT_CODE=$(docker inspect "${APP_ID_BEFORE_STOP}" --format '{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
 if [ "${EXIT_CODE}" != "0" ]; then
-  echo "  FAIL: email-worker exit code is ${EXIT_CODE} (expected 0)."
+  echo "  FAIL: app exit code is ${EXIT_CODE} (expected 0)."
   exit 1
 fi
-echo "  PASS: email-worker exited with code 0."
+echo "  PASS: app exited with code 0."
 
-if ! run_compose "${PROJECT}" logs --tail=20 email-worker 2>&1 | grep -q '"msg":"shutdown complete"'; then
-  echo "  FAIL: worker logs do not contain shutdown complete."
+if ! run_compose "${PROJECT}" logs --tail=40 app 2>&1 | grep -q '"msg":"email outbox loop stopped cleanly"'; then
+  echo "  FAIL: app logs do not contain the outbox loop clean-stop message."
   exit 1
 fi
-echo "  PASS: worker logs contain shutdown complete."
+echo "  PASS: app logs contain outbox loop stopped cleanly."
 
 # ── Test 16a: redis profile without REDIS_PASSWORD refuses to start ──────
 echo "--- TEST 16a: redis profile without REDIS_PASSWORD refuses to start ---"

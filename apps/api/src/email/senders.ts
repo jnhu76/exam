@@ -30,6 +30,8 @@ export interface EmailSenderConfig {
   from: string;
   fromName: string | null;
   fakeMode: EmailFakeMode;
+  /** Simulated transport latency for the fake sender (0 = immediate). */
+  fakeDelayMs?: number;
   smtp: SmtpOptions | null;
 }
 
@@ -46,11 +48,18 @@ export class DisabledEmailSender implements EmailSender {
 /**
  * Deterministic fake sender for tests and local dev. `success` always
  * resolves; `failure` always rejects with a fixed message so `lastError` is
- * assertable. Never touches the network.
+ * assertable. Never touches the network. `delayMs` simulates transport
+ * latency before resolving/rejecting (0 = immediate).
  */
 export class FakeEmailSender implements EmailSender {
-  constructor(private readonly mode: EmailFakeMode) {}
+  constructor(
+    private readonly mode: EmailFakeMode,
+    private readonly delayMs = 0,
+  ) {}
   async send(_message: EmailMessage): Promise<EmailSendResult> {
+    if (this.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    }
     if (this.mode === "failure") {
       throw new EmailSendError("Fake email sender failure");
     }
@@ -191,7 +200,7 @@ export function createEmailSender(config: EmailSenderConfig): EmailSender {
     return new DisabledEmailSender();
   }
   if (config.transport === "fake") {
-    return new FakeEmailSender(config.fakeMode);
+    return new FakeEmailSender(config.fakeMode, config.fakeDelayMs ?? 0);
   }
   if (config.transport === "smtp") {
     if (!config.smtp || !config.smtp.host || config.smtp.host.length === 0) {

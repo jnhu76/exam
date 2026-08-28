@@ -13,7 +13,7 @@
 #                    bootstrap, login, durable probe row, business
 #                    invariants, migration-journal row count.
 #   [upgrade-flip]   the operator's upgrade moment: EXAM_IMAGE re-pinned to
-#                    the new tag, `up -d` — app + email-worker containers
+#                    the new tag, `up -d` — app + db containers
 #                    are RECREATED from the new image, the db container is
 #                    untouched, the probe row survives, the journal count
 #                    is unchanged (migration rerun is a no-op), login still
@@ -154,7 +154,6 @@ psql_exec "${PROJECT}" "INSERT INTO ${PSQL_SCHEMA}.state VALUES ('probe','live')
 INVARIANTS_A="$(capture_business_invariants "${PROJECT}")"
 JOURNAL_A="$(psql_exec "${PROJECT}" "SELECT count(*) FROM drizzle.__drizzle_migrations;")"
 APP_A="$(app_container "${PROJECT}")"
-WORKER_A="$(compose_operator ps -q email-worker)"
 DB_A="$(db_container "${PROJECT}")"
 echo "  invariants=${INVARIANTS_A} journal=${JOURNAL_A}"
 
@@ -173,13 +172,11 @@ compose_operator up -d 2>&1 | tail -3
 wait_for_app "${PROJECT}"
 
 APP_B="$(app_container "${PROJECT}")"
-WORKER_B="$(compose_operator ps -q email-worker)"
 DB_B="$(db_container "${PROJECT}")"
 echo "  app recreated: $([ "${APP_A}" != "${APP_B}" ] && echo yes || echo NO)"
-echo "  worker recreated: $([ "${WORKER_A}" != "${WORKER_B}" ] && echo yes || echo NO)"
 echo "  db untouched: $([ "${DB_A}" = "${DB_B}" ] && echo yes || echo NO)"
-[ "${APP_A}" != "${APP_B}" ] && [ "${WORKER_A}" != "${WORKER_B}" ] || {
-  echo "[upgrade-flip] FAIL: app/email-worker containers were not recreated."; exit 1; }
+[ "${APP_A}" != "${APP_B}" ] || {
+  echo "[upgrade-flip] FAIL: app container was not recreated."; exit 1; }
 [ "${DB_A}" = "${DB_B}" ] || {
   echo "[upgrade-flip] FAIL: db container was recreated (must be untouched)."; exit 1; }
 

@@ -156,7 +156,7 @@ docker exec "$(db_container "${PROJECT_SRC}")" sh -c "rm -f /tmp/idem-source /tm
 # ── 2. Bootstrap + base backup + deterministic state markers ─────────────
 echo ""
 echo "--- 2. bootstrap first Admin; write State A; take physical base backup ---"
-run_compose "${PROJECT_SRC}" up -d --quiet-pull app email-worker >/dev/null
+run_compose "${PROJECT_SRC}" up -d --quiet-pull app >/dev/null
 wait_for_app "${PROJECT_SRC}"
 bootstrap_admin "${PROJECT_SRC}" "${ADMIN_USER}" "${ADMIN_PASS}" "PITR Admin" "PITR Org"
 psql_exec "${PROJECT_SRC}" "CREATE SCHEMA IF NOT EXISTS pitr_probe;"

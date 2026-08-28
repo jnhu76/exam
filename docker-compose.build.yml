@@ -11,8 +11,3 @@ services:
     build: .
     image: exam-local:dev
     pull_policy: build
-
-  email-worker:
-    build: .
-    image: exam-local:dev
-    pull_policy: build

@@ -30,6 +30,22 @@ services:
       REDIS_URL: ${REDIS_URL:-}
       REDIS_MODE: ${REDIS_MODE:-}
       LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-fake}
+      EMAIL_FAKE_MODE: ${EMAIL_FAKE_MODE:-success}
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@example.local}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Exam Platform}
+      EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-3}
+      EMAIL_RETRY_BASE_SECONDS: ${EMAIL_RETRY_BASE_SECONDS:-60}
+      EMAIL_WORKER_POLL_INTERVAL_MS: ${EMAIL_WORKER_POLL_INTERVAL_MS:-5000}
+      EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-20}
+      EMAIL_WORKER_LOCK_TIMEOUT_MS: ${EMAIL_WORKER_LOCK_TIMEOUT_MS:-300000}
+      EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: ${EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-30000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -104,43 +120,13 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Outbox drainer (ADR-011). The entrypoint override is required (the image
-  # ENTRYPOINT runs the API server); app-health gating serializes migrations.
-  # Image authority: same prebuilt pin as app (see the app service comment).
-  email-worker:
-    image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
-    entrypoint: ["node"]
-    command: ["dist/workers/emailDeliveryWorker.js"]
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-exam}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
-      NODE_ENV: production
-      APP_MODE: production
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
-      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
-      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
-      TZ: ${TZ:-Asia/Shanghai}
-      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
-      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-fake}
-      EMAIL_FROM: ${EMAIL_FROM:-no-reply@example.local}
-      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Exam Platform}
-      EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-3}
-      EMAIL_RETRY_BASE_SECONDS: ${EMAIL_RETRY_BASE_SECONDS:-60}
-      EMAIL_WORKER_POLL_INTERVAL_MS: ${EMAIL_WORKER_POLL_INTERVAL_MS:-5000}
-      EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-20}
-      EMAIL_WORKER_LOCK_TIMEOUT_MS: ${EMAIL_WORKER_LOCK_TIMEOUT_MS:-300000}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - exam-net
-    restart: unless-stopped
+  # Outbox delivery (#320 CONVERGE): the email outbox loop runs in-process
+  # inside the app container (plugins/emailOutboxLoop.ts) — same PostgreSQL
+  # semantics as the former dedicated worker (durable outbox, SKIP LOCKED,
+  # retry/backoff, lock-timeout recovery, at-least-once). The standalone
+  # worker entrypoint (`worker:email`) remains available as an escape hatch.
+  # The app's EMAIL_* environment variables configure the loop's sender; the
+  # app container is the sole migration owner (see ADR-011 §8.6/#320).
 
 networks:
   exam-net:

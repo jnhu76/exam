@@ -220,6 +220,7 @@ export async function main(): Promise<void> {
       from: config.email.from,
       fromName: config.email.fromName,
       fakeMode: config.email.fakeMode,
+      fakeDelayMs: config.email.fakeDelayMs,
       smtp: config.email.smtp,
     });
 

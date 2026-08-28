@@ -55,11 +55,12 @@ Stages, each with a tagged failure (`[env]` `[smoke]` `[persist]` `[cleanup]`):
    appended; any later stage that stops consuming the file fails the port
    assertion — the env-authority contract is executable, not prose.
 2. `[smoke]` — the authoritative `compose-smoke.sh` runs under the
-   generated file: required-secret expansion, default topology (app + db +
-   email-worker), first migration applied exactly once, worker
-   `bootstrap_pending → success` transition on the same container, first
-   Admin bootstrap + second-Admin refusal, admin login, SPA served as
-   `text/html`, baseline-seed production refusal, redis profile guards.
+   generated file: required-secret expansion, default topology (app + db,
+   in-process email outbox loop — #320 CONVERGE), first migration applied
+   exactly once, outbox loop `bootstrap_pending → success` heartbeat
+   transition, first Admin bootstrap + second-Admin refusal, admin login,
+   SPA served as `text/html`, baseline-seed production refusal, redis
+   profile guards.
 3. `[persist]` — second stack on a unique data root: `up --build`, first
    Admin bootstrap, login; `down` WITHOUT deleting data (bind-mounted
    `EXAM_DATA_ROOT` persists); `up --build` again with new container

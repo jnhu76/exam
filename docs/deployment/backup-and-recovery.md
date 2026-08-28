@@ -165,7 +165,7 @@ development/drills only and is NOT host-loss protection).
 | `docker compose down -v` | With bind mounts this is a no-op for `data/` (it only removes named volumes; there are none). `data/` is retained. |
 | `rm -rf data/postgres` | **Authoritative state destroyed.** Nothing left to restore from unless you have a backup. |
 | `rm -rf data/redis` | Rate-limit counters reset; no Exam truth change. |
-| Delete the `app`/`email-worker` containers | No state in them; recreate with `docker compose up -d`. |
+| Delete the `app` container | No state in it; recreate with `docker compose up -d`. |
 | Delete the `db` container | `data/postgres` is retained; recreate with `docker compose up -d`. |
 
 ---
@@ -353,8 +353,8 @@ domain**.
 ### 7.2 Clean restore (exact historical replacement)
 
 ```bash
-# 1. Stop the API + worker (avoid writes during restore):
-docker compose --env-file .env.deploy stop app email-worker
+# 1. Stop the API (avoid writes during restore):
+docker compose --env-file .env.deploy stop app
 
 # 2. Restore into a CLEAN target (DROP + recreate from template0, then
 #    pg_restore). No target-only schema/data from the previous database
@@ -362,8 +362,8 @@ docker compose --env-file .env.deploy stop app email-worker
 #    merge). The script requires you to type the target DB name to confirm.
 scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
 
-# 3. Restart the API + worker to use the restored database:
-docker compose --env-file .env.deploy up -d app email-worker
+# 3. Restart the API to use the restored database:
+docker compose --env-file .env.deploy up -d app
 
 # 4. Run your Exam business-invariant checks after restart.
 ```
