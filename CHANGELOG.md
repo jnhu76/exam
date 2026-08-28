@@ -10,7 +10,34 @@ for repository releases from `v0.0.1` onward.
 
 ### Added
 
+- Added the Teacher-to-Course scoped authority model (#286): a persisted
+  `teacher_course_assignments` carrier (migration 0036, episode semantics
+  with a partial-unique one-active constraint and composite course FK),
+  an Admin assignment API
+  (`GET/POST /admin/users/:userId/course-assignments`, revoke subpath),
+  course/question scope resolvers plus a
+  `teacherAccess: "course_assignment_scoped"` enforcement stage on the
+  scoped-capability gate, and SQL-side LIST scope filtering for courses,
+  questions (and the tag vocabulary), exams, candidates, and score lists —
+  every filter applied before pagination/count and re-resolved from the DB
+  per request, so assignment revocation is effective on the next request.
+  Authority remains `capability × assignment`: the scope row alone grants
+  zero capabilities, Admin keeps its org-wide short-circuit, and
+  out-of-scope direct-ID probes fold into the canonical 404
+  (anti-enumeration). Non-Admin creators self-assign their new course in
+  the same transaction with an atomic `course.teacher_assigned` audit;
+  assignment/revoke write atomic `course.teacher_assigned` /
+  `course.teacher_revoked` audit facts. Admin UI: a per-Teacher
+  course-assignment dialog in UsersPage (assign, list, revoke).
+
 ### Changed
+
+- Course/question/exam authoring routes and exam enrollment management now
+  require, for non-Admin actors, an active Teacher-to-Course assignment to
+  the target course (create-style routes source the parent course from the
+  request body); a question move additionally requires an assignment to the
+  destination course. Missing parent courses on create now answer the
+  canonical 404 instead of the legacy 400 (ADR §3.9 anti-enumeration).
 
 ### Fixed
 
