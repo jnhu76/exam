@@ -38,14 +38,17 @@ import type { Database } from "@exam/db/src/types.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import {
   Permission,
+  Role,
   type PermissionKey,
   type ResolverContext,
 } from "@exam/authz";
+import type { RuntimeRequestContext } from "../types/requestContext.js";
 import {
   resolveScoreScope,
   isScoreDenied,
   type ScoreResolution,
 } from "./resolvers/scoreResolver.js";
+import type { TeacherCourseAssignmentGate } from "./scopedCapability.js";
 
 /**
  * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
@@ -69,6 +72,15 @@ export interface ScoreCapabilityInput {
    * source as {@link requireCapability} — not a role-name branch.
    */
   allows: ScoreCapabilityAllows;
+  /**
+   * Issue #286: Teacher-to-Course assignment gate. A non-Admin actor whose
+   * `ScoreAllView` grant is course-scoped (Teacher preset) may only use the
+   * "all" path for attempts whose DURABLE parent course carries an ACTIVE
+   * assignment; the course id comes from the resolver's chain — never a
+   * client-supplied courseId. Missing assignment folds into the canonical
+   * 404 (anti-enumeration, same contract as the scopedCapability gate).
+   */
+  teacherCourseGate?: TeacherCourseAssignmentGate;
 }
 
 /** The route param key carrying the attempt id (fixed for the score route). */
@@ -82,7 +94,7 @@ const ATTEMPT_ID_PARAM = "attemptId";
 export function buildScoreCapabilityPreHandler(
   input: ScoreCapabilityInput,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  const { db, logger, allows } = input;
+  const { db, logger, allows, teacherCourseGate } = input;
   return async (request, reply) => {
     const ctx = request.ctx;
     if (!ctx) {
@@ -149,6 +161,53 @@ export function buildScoreCapabilityPreHandler(
     // ScoreAllView wins (strictly broader) — matching the prior arbitration
     // order. A multi-role actor reaching here via ScoreAllView gets "all".
     if (allows(request, Permission.ScoreAllView)) {
+      // Issue #286: ScoreAllView is course-scoped for non-Admin actors
+      // (Teacher preset). The Admin short-circuit mirrors the
+      // scopedCapability teacherAccess stage; a missing gate wiring fails
+      // closed (503) rather than silently restoring org-wide reach.
+      const runtimeCtx = ctx as RuntimeRequestContext;
+      if (!runtimeCtx.roles?.includes(Role.Admin)) {
+        if (!teacherCourseGate) {
+          request.log.error(
+            { route: request.url },
+            "authz score capability teacher course gate not wired",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        const courseNode = resolution.chain.find((n) => n.type === "course");
+        if (!courseNode) {
+          // The resolution produced no Course identity — the enforcement
+          // cannot run. Fail closed (mis-declared route/resolver).
+          request.log.error(
+            { route: request.url, attemptId },
+            "authz score capability enforcement: no resolved Course id",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        let assigned: boolean;
+        try {
+          assigned = await teacherCourseGate.check(request, courseNode.id);
+        } catch (error) {
+          // Operational failure: never fail open, never masquerade as
+          // 403/404 — the same 503 AUTHZ_UNAVAILABLE contract as everywhere.
+          request.log.error(
+            { err: error, route: request.url, attemptId },
+            "authz score capability teacher-assignment lookup failed",
+          );
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        if (!assigned) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+      }
       request.scoreView = "all";
       return;
     }

@@ -167,11 +167,14 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Own/all is resolved from the actor's capability set (ScoreAllView /
   // ScoreOwnView) plus the resolved attempt ownership — never from a role-name
   // branch. Emits request.scoreView for the publication handler (P1-4).
+  // Issue #286: the ScoreAllView path is course-scoped for non-Admin actors
+  // through the same Teacher-to-Course gate the scoped routes use.
   const scoreHandler = buildScoreCapabilityPreHandler({
     db: fastify.db,
     logger: fastify.log,
     allows: (request: FastifyRequest, perm: PermissionKey) =>
       ctxAllows(request, perm),
+    teacherCourseGate: teacherAssignmentGate,
   });
   fastify.decorate("requireScoreCapability", () => {
     // P4-C1: attach an introspection-only `_isScoreCapability: true` tag so the

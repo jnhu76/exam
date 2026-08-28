@@ -5,6 +5,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import courseRoutes from "../routes/course.js";
 import questionRoutes from "../routes/question.js";
 import examRoutes from "../routes/exam.js";
+import attemptRoutes from "../routes/attempts.js";
 import candidateRoutes from "../routes/candidate.js";
 import scoreRoutes from "../routes/scores.js";
 import {
@@ -90,6 +91,7 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
       await fastify.register(courseRoutes);
       await fastify.register(questionRoutes);
       await fastify.register(examRoutes);
+      await fastify.register(attemptRoutes);
       await fastify.register(candidateRoutes);
       await fastify.register(scoreRoutes);
     });
@@ -484,6 +486,134 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
   it("Teacher+Grader multi-role → the Grader role grants NO course authority (Course B still 404)", async () => {
     const detail = await tGet(`/api/courses/${courseBId}`, teacherGraderToken);
     expect(detail.statusCode).toBe(404);
+  });
+
+  // ── Single-attempt score route (review r1 P1-1) ──
+
+  /**
+   * Drives the full attempt lifecycle (publish → enroll → start → answer →
+   * submit) for a fresh exam under `courseId` and returns the attempt id.
+   * Backs the GET /scores/attempts/:attemptId scope cases below.
+   */
+  async function createGradedAttemptFixture(
+    courseId: string,
+    candidateToken: string,
+    candidateProfileId: string,
+  ): Promise<string> {
+    const now = new Date();
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: `Score fixture ${uniquePrefix()}`,
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(qRes.statusCode).toBe(201);
+    const questionId = (qRes.json() as { id: string }).id;
+
+    const examRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: `Score scope exam ${uniquePrefix()}`,
+        courseId,
+        durationMinutes: 60,
+        openAt: now.toISOString(),
+        closeAt: new Date(now.getTime() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(examRes.statusCode).toBe(201);
+    const examId = (examRes.json() as { id: string }).id;
+
+    expect(
+      (
+        await ctx.app.inject({
+          method: "POST",
+          url: `/api/exams/${examId}/publish`,
+          cookies: { "auth-token": ctx.adminToken },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await ctx.app.inject({
+          method: "POST",
+          url: `/api/exams/${examId}/enrollments`,
+          payload: { candidateIds: [candidateProfileId] },
+          cookies: { "auth-token": ctx.adminToken },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidateToken },
+    });
+    expect(startRes.statusCode).toBe(201);
+    const attemptId = (startRes.json() as { id: string }).id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${questionId}`,
+      payload: {
+        attemptId,
+        questionId,
+        answer: "true",
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": candidateToken },
+    });
+    const submitRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/submit`,
+      cookies: { "auth-token": candidateToken },
+    });
+    expect(submitRes.statusCode).toBe(200);
+    return attemptId;
+  }
+
+  it("GET /scores/attempts/:id — in-scope attempt (Exam A course) readable with scoreView=all", async () => {
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      ctx.adminToken,
+      `matrix-score-a-${uniquePrefix()}`,
+      ctx.org.id,
+    );
+    const attemptId = await createGradedAttemptFixture(
+      courseAId,
+      candidate.token,
+      candidate.candidateProfileId,
+    );
+    const res = await tGet(`/api/scores/attempts/${attemptId}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().attemptId ?? res.json().id ?? "").toBeTruthy();
+  });
+
+  it("GET /scores/attempts/:id — out-of-scope attempt (Exam B course) → 404 (anti-enumeration)", async () => {
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      ctx.adminToken,
+      `matrix-score-b-${uniquePrefix()}`,
+      ctx.org.id,
+    );
+    const attemptId = await createGradedAttemptFixture(
+      courseBId,
+      candidate.token,
+      candidate.candidateProfileId,
+    );
+    const res = await tGet(`/api/scores/attempts/${attemptId}`);
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
   });
 
   // ── Revocation ──

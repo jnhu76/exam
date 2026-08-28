@@ -85,6 +85,7 @@ export function createCandidateRepo(db: Database) {
             .where(
               and(
                 eq(examEnrollments.organizationId, orgId),
+                eq(exams.organizationId, orgId),
                 eq(examEnrollments.candidateId, candidateProfiles.id),
                 inArray(exams.courseId, courseIds),
               ),

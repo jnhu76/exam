@@ -153,6 +153,9 @@ export async function registerAdminTeacherAssignmentRoutes(
           200: AssignmentWriteResponseSchema,
           400: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          // A concurrent duplicate assign loses the partial-unique race and
+          // surfaces through the global 23505 → 409 RESOURCE_CONFLICT mapping.
+          409: ErrorResponseSchema,
         },
       },
     },

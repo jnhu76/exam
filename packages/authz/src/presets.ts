@@ -6,14 +6,13 @@
  * resource is a SEPARATE enforcement layer, NOT applied here:
  *   - Proctor@exam: ENFORCED (exam_proctor_assignments + ProctorAssignmentGate
  *     on scoped proctor routes).
- *   - Teacher@course: TARGET ONLY, NOT enforced today — the F-04 finding
- *     (P7-RBAC-ROLE-REALITY-AUDIT); see the Teacher section comment below.
+ *   - Teacher@course: ENFORCED (issue #286 — teacher_course_assignments
+ *     carrier + teacherAccess gate + SQL-side LIST filtering; see the
+ *     Teacher section comment below).
  *   - Grader@exam: SEPARATE deferred scope status (NOT F-04). The grading
  *     queue LIST is org-wide today (`GradingQueueView` flat gate); detail
  *     reads are attempt-scoped by the existing attempt resolver, but there is
- *     no Grader↔Exam assignment scope carrier. Tracked with the same
- *     dedicated scoped-RBAC milestone that owns the scope carrier, resolver
- *     family, scoped route gates, and LIST filtering.
+ *     no Grader↔Exam assignment scope carrier. Tracked as issue #296.
  *
  * Boundary invariants encoded here (ADR §7 review checklist):
  *  - Admin is a compatibility superset (no Candidate-own, no System-only).

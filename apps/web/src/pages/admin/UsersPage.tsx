@@ -251,7 +251,7 @@ export function UsersPage() {
     try {
       const [assignmentRes, courseRes] = await Promise.all([
         api.get<{ items: CourseAssignment[] }>(
-          `/api/users/${user.id}/course-assignments?status=all`,
+          `/api/admin/users/${user.id}/course-assignments?status=all`,
         ),
         api.get<Page<CourseOption>>("/api/courses?page=1&pageSize=100"),
       ]);
@@ -273,7 +273,7 @@ export function UsersPage() {
     setAssignmentsBusy(true);
     try {
       const res = await api.post<{ outcome: "applied" | "no_change" }>(
-        `/api/users/${assignmentsUser.id}/course-assignments`,
+        `/api/admin/users/${assignmentsUser.id}/course-assignments`,
         { courseId: selectedCourseId },
       );
       if (res.outcome === "no_change") {
@@ -296,7 +296,7 @@ export function UsersPage() {
     setAssignmentsBusy(true);
     try {
       await api.post(
-        `/api/users/${assignmentsUser.id}/course-assignments/${assignment.courseId}/revoke`,
+        `/api/admin/users/${assignmentsUser.id}/course-assignments/${assignment.courseId}/revoke`,
       );
       await openAssignments(assignmentsUser);
     } catch (err) {
