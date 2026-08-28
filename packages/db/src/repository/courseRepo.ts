@@ -1,5 +1,5 @@
 import type { Database, TenantContext } from "../types.js";
-import { courses } from "../schema/pg.js";
+import { courses, organizations } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOrganizationId,
@@ -29,6 +29,29 @@ export function createCourseRepo(db: Database) {
 
   return {
     ...repo,
+    /**
+     * Authorization chain for the course scope resolver (issue #286): the
+     * course row + its organization anchor, org-scoped. Mirrors
+     * examRepo.findAuthorizationChain — single query, `.limit(1)`, no
+     * error surfacing (the resolver maps null to resource_not_found).
+     */
+    async findAuthorizationChain(
+      ctx: TenantContext | RequestContext,
+      courseId: string,
+    ) {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          courseId: courses.id,
+          courseOrganizationId: courses.organizationId,
+          organizationId: organizations.id,
+        })
+        .from(courses)
+        .leftJoin(organizations, eq(courses.organizationId, organizations.id))
+        .where(and(eq(courses.organizationId, orgId), eq(courses.id, courseId)))
+        .limit(1);
+      return rows[0] ?? null;
+    },
     /**
      * Lists courses with optional DB-level filter and pagination.
      * Supports case-insensitive search on `name` and `code`.

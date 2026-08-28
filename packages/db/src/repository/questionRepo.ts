@@ -1,5 +1,5 @@
 import type { Database } from "../types.js";
-import { questions } from "../schema/pg.js";
+import { courses, organizations, questions } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOrganizationId,
@@ -37,6 +37,38 @@ export function createQuestionRepo(db: Database) {
 
   return {
     ...repo,
+    /**
+     * Authorization chain for the question scope resolver (issue #286):
+     * question → course → organization, org-scoped. Mirrors
+     * examRepo.findAuthorizationChain; a null course id surfaces through the
+     * resolver as a broken parent chain (never silently allowed).
+     */
+    async findAuthorizationChain(
+      ctx: TenantContext | RequestContext,
+      questionId: string,
+    ) {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          questionId: questions.id,
+          questionOrganizationId: questions.organizationId,
+          linkedCourseId: questions.courseId,
+          courseId: courses.id,
+          courseOrganizationId: courses.organizationId,
+          organizationId: organizations.id,
+        })
+        .from(questions)
+        .leftJoin(courses, eq(questions.courseId, courses.id))
+        .leftJoin(organizations, eq(courses.organizationId, organizations.id))
+        .where(
+          and(
+            eq(questions.organizationId, orgId),
+            eq(questions.id, questionId),
+          ),
+        )
+        .limit(1);
+      return rows[0] ?? null;
+    },
     /**
      * Lists questions with optional DB-level filters and pagination.
      * Filtering is done in SQL rather than in-memory for performance.
