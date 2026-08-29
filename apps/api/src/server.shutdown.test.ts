@@ -15,7 +15,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPostgresDatabase } from "@exam/db/src/postgres.js";
@@ -24,8 +23,7 @@ import { addSearchPathToUrl } from "@exam/db/src/testIsolation.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = resolve(__dirname, "server.ts");
-const require = createRequire(import.meta.url);
-const TSX_CLI = require.resolve("tsx/cli");
+const TSX_IMPORT_SPECIFIER = import.meta.resolve("tsx");
 
 /** A leaked shutdown timer would hold the exit for the FULL budget. */
 const CHILD_SHUTDOWN_TIMEOUT_MS = 6_000;
@@ -66,26 +64,38 @@ async function runServerLifecycle(): Promise<ChildRun> {
     ? addSearchPathToUrl(baseUrl, iso.schemaName)
     : baseUrl;
 
-  const child = spawn(process.execPath, [TSX_CLI, SERVER_PATH], {
-    env: {
-      // The server is env-driven; neutralize inherited test-mode vars so the
-      // explicit values below are the only inputs (same contract as the
-      // rollback CLI subprocess tests).
-      APP_MODE: "",
-      TEST_DATABASE_URL: undefined,
-      TEST_DB_URL: undefined,
-      ALLOW_UNSAFE_TEST_DATABASE_URL: undefined,
-      NODE_ENV: "development",
-      DATABASE_URL: childDbUrl,
-      JWT_SECRET: "shutdown-test-jwt-secret-0123456789abcdef",
-      APP_PORT: "0",
-      HOST: "127.0.0.1",
-      EMAIL_ENABLED: "false",
-      EMAIL_WORKER_POLL_INTERVAL_MS: "250",
-      EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: String(CHILD_SHUTDOWN_TIMEOUT_MS),
+  // INVARIANT: spawn via `node --import tsx` — NOT `node tsx/cli`. The tsx
+  // CLI runs the script in a GRANDCHILD process and its signal relay
+  // SIGKILLs that grandchild ~60ms after forwarding SIGTERM when no IPC
+  // signal comes back (verified against tsx@4.22.3 dist): a server whose
+  // graceful close takes longer than that window dies 143 with no shutdown
+  // logs — exactly the CI failure this test first hit. `--import tsx` runs
+  // the script in the direct child, so the signal reaches OUR handler.
+  const childPort = 20_000 + Math.floor(Math.random() * 20_000);
+  const child = spawn(
+    process.execPath,
+    ["--import", TSX_IMPORT_SPECIFIER, SERVER_PATH],
+    {
+      env: {
+        // The server is env-driven; neutralize inherited test-mode vars so the
+        // explicit values below are the only inputs (same contract as the
+        // rollback CLI subprocess tests).
+        APP_MODE: "",
+        TEST_DATABASE_URL: undefined,
+        TEST_DB_URL: undefined,
+        ALLOW_UNSAFE_TEST_DATABASE_URL: undefined,
+        NODE_ENV: "development",
+        DATABASE_URL: childDbUrl,
+        JWT_SECRET: "shutdown-test-jwt-secret-0123456789abcdef",
+        APP_PORT: String(childPort),
+        HOST: "127.0.0.1",
+        EMAIL_ENABLED: "false",
+        EMAIL_WORKER_POLL_INTERVAL_MS: "250",
+        EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: String(CHILD_SHUTDOWN_TIMEOUT_MS),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
     },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  );
 
   let stdout = "";
   let stderr = "";
