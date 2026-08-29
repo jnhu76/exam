@@ -184,20 +184,26 @@ PG_DESCRIBE("server SIGTERM lifecycle (child process)", () => {
   it("exits naturally with code 0 after SIGTERM, bounded under the shutdown budget", async () => {
     const run = await runServerLifecycle();
 
-    expect(run.code).toBe(0);
-    expect(run.signal).toBeNull();
+    // Diagnostic context on every failure: the child's own logs explain
+    // WHERE in boot/shutdown it died (exit 143 = default SIGTERM
+    // disposition — a mid-close listener window or pre-listener death).
+    const diag = `\ncode=${run.code} signal=${run.signal} exitAfterSigtermMs=${run.exitAfterSigtermMs}\n--- child stdout tail ---\n${run.stdout.split("\n").slice(-15).join("\n")}\n--- child stderr tail ---\n${run.stderr.split("\n").slice(-15).join("\n")}`;
+    expect(run.code, diag).toBe(0);
+    expect(run.signal, diag).toBeNull();
     // The bound is the regression signal: a leaked, ref'ed shutdown race
     // timer would delay natural exit by the full CHILD_SHUTDOWN_TIMEOUT_MS.
-    expect(run.exitAfterSigtermMs).toBeLessThan(MAX_EXIT_AFTER_SIGTERM_MS);
+    expect(run.exitAfterSigtermMs, diag).toBeLessThan(
+      MAX_EXIT_AFTER_SIGTERM_MS,
+    );
     // NATURAL exit: the bounded exit assist must NOT have fired — on the
     // clean-drain path the event loop drains by itself. If the assist warn
     // appears here, a lifecycle leak is being cut off instead of fixed
     // (with the leaked race timer restored, the assist fires at 2s).
-    expect(run.stdout).not.toContain("event loop still busy");
+    expect(run.stdout, diag).not.toContain("event loop still busy");
     // The email loop drained (supervised won the shutdown race) — proves
     // the loop's onClose path ran to completion, not that the process was
     // cut short.
-    expect(run.stdout).toContain("email outbox loop stopped cleanly");
-    expect(run.stderr).not.toContain("Graceful shutdown failed");
+    expect(run.stdout, diag).toContain("email outbox loop stopped cleanly");
+    expect(run.stderr, diag).not.toContain("Graceful shutdown failed");
   }, 120_000);
 });

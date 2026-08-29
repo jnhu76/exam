@@ -87,12 +87,13 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
   const onSignal = () => {
     void close();
   };
+  // INVARIANT: the signal listeners stay installed for the process's whole
+  // lifetime. The `shutdownStarted` guard already makes re-entry a no-op;
+  // removing the listeners mid-shutdown (as an earlier version did in an
+  // onClose hook) would re-open the DEFAULT SIGTERM disposition for any
+  // second signal — an instant exit 143 mid-graceful-close (#351).
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
-  app.addHook("onClose", async () => {
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
-  });
 }
 
 /**
