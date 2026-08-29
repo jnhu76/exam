@@ -24,6 +24,10 @@
  *     it; the outbox loop is in-process);
  *   - the `app` service stops forwarding the EMAIL_ENABLED switch (the
  *     in-process loop's sender/loop configuration rides on the app env);
+ *   - the #351 shutdown budget contract breaks: `app` must declare an
+ *     explicit `stop_grace_period` that strictly dominates the serial
+ *     graceful-shutdown worst case (email loop drain + audit drain + DB
+ *     pool close), or a stuck email send ends in SIGKILL (exit 137);
  *   - the production compose file accepts a default database password
  *     (POSTGRES_PASSWORD must use `${...:?...}` required-expansion on db
  *      and app) — P6-007;
@@ -312,6 +316,9 @@ if (!servicesBlock) {
             "enabled in the deployment).",
         );
       }
+      // #351: the container stop grace must strictly dominate the app's
+      // whole graceful-shutdown worst case.
+      assertShutdownBudgetContract(appNoComments, appEnvNoComments);
     }
   }
 
@@ -659,6 +666,137 @@ function assertNoRedisDependency(block, serviceName) {
       `'${serviceName}' service must NOT depend on 'redis: service_healthy' ` +
         "(P6-010: Redis is optional in the implemented MVP).",
     );
+  }
+}
+
+/**
+ * #351 shutdown budget contract: the app container's stop_grace_period must
+ * strictly dominate the app's whole graceful-shutdown worst case. Fastify
+ * onClose hooks run SERIALLY in reverse registration order, so the bound is
+ * the SUM of the per-component budgets (no parallelism credit):
+ *
+ *   stop_grace_period
+ *     > email loop drain (EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS compose default)
+ *     + audit drain (AUDIT_DRAIN_TIMEOUT_MS, read from auditLifecycle.ts)
+ *     + DB pool close (sql.end timeout = ceil(AUDIT_DRAIN_TIMEOUT_MS/1000),
+ *       read from db.ts)
+ *     + bounded exit assist (BOUNDED_EXIT_ASSIST_MS, read from server.ts —
+ *       the post-close grace before a forced exit cuts off work ABANDONED
+ *       by the bounded shutdown, e.g. an in-flight send past the loop
+ *       budget)
+ *
+ * If the relation breaks, a stuck in-flight email send turns SIGTERM into
+ * SIGKILL (exit 137) — the exact #349 post-merge failure this guards. The
+ * component budgets are parsed from their real sources (not duplicated
+ * constants): if either source moves, this guard fails until it is
+ * consciously reconciled.
+ */
+function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
+  const graceMatch = appNoComments.match(
+    /^\s*stop_grace_period:\s*(\d+)s\s*$/m,
+  );
+  const loopMatch = appEnvNoComments.match(
+    /^\s*EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:\s*\$\{EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-(\d+)\}\s*$/m,
+  );
+
+  let auditMs = null;
+  try {
+    const auditSrc = readFileSync(
+      join(ROOT, "apps/api/src/plugins/auditLifecycle.ts"),
+      "utf-8",
+    );
+    const m = auditSrc.match(/AUDIT_DRAIN_TIMEOUT_MS\s*=\s*([\d_]+)/);
+    if (m) auditMs = Number(m[1].replace(/_/g, ""));
+  } catch {
+    // missing file → null → reported below
+  }
+
+  let assistMs = null;
+  try {
+    const serverSrc = readFileSync(
+      join(ROOT, "apps/api/src/server.ts"),
+      "utf-8",
+    );
+    const m = serverSrc.match(/BOUNDED_EXIT_ASSIST_MS\s*=\s*([\d_]+)/);
+    if (m) assistMs = Number(m[1].replace(/_/g, ""));
+  } catch {
+    // missing file → null → reported below
+  }
+
+  const dbSrc = (() => {
+    try {
+      return readFileSync(join(ROOT, "apps/api/src/plugins/db.ts"), "utf-8");
+    } catch {
+      return null;
+    }
+  })();
+  // The DB close budget is coupled to the audit drain timeout in db.ts;
+  // if that coupling is refactored away, fail here rather than silently
+  // reading a stale budget.
+  const dbCoupled =
+    dbSrc !== null &&
+    /sql\.end\(\{\s*timeout:\s*Math\.ceil\(AUDIT_DRAIN_TIMEOUT_MS\s*\/\s*1000\)\s*\}\)/.test(
+      dbSrc,
+    );
+
+  if (!graceMatch) {
+    errors.push(
+      "'app' service must declare an explicit 'stop_grace_period: <N>s' " +
+        "(#351: Docker's default 10s grace is shorter than the app's " +
+        "graceful-shutdown worst case, so a stuck email send ends in " +
+        "SIGKILL/137).",
+    );
+  }
+  if (!loopMatch) {
+    errors.push(
+      "'app' environment must forward " +
+        "'EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: ${EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-<N>}' " +
+        "with an explicit numeric default (#351 budget contract).",
+    );
+  }
+  if (auditMs === null) {
+    errors.push(
+      "#351 budget contract: cannot parse AUDIT_DRAIN_TIMEOUT_MS from " +
+        "apps/api/src/plugins/auditLifecycle.ts — reconcile this guard with " +
+        "the audit shutdown budget's real source.",
+    );
+  }
+  if (assistMs === null) {
+    errors.push(
+      "#351 budget contract: cannot parse BOUNDED_EXIT_ASSIST_MS from " +
+        "apps/api/src/server.ts — the post-close exit assist is a budget " +
+        "term and must stay visible to this guard.",
+    );
+  }
+  if (!dbCoupled) {
+    errors.push(
+      "#351 budget contract: apps/api/src/plugins/db.ts no longer derives " +
+        "its sql.end timeout from AUDIT_DRAIN_TIMEOUT_MS — the DB pool close " +
+        "budget must stay an explicit term of this contract; update the " +
+        "guard and the compose budget comment together.",
+    );
+  }
+
+  if (
+    graceMatch &&
+    loopMatch &&
+    auditMs !== null &&
+    assistMs !== null &&
+    dbCoupled
+  ) {
+    const graceMs = Number(graceMatch[1]) * 1000;
+    const loopMs = Number(loopMatch[1]);
+    const dbCloseMs = Math.ceil(auditMs / 1000) * 1000;
+    const sumMs = loopMs + auditMs + dbCloseMs + assistMs;
+    if (sumMs >= graceMs) {
+      errors.push(
+        `#351 shutdown budget violation: stop_grace_period (${graceMatch[1]}s) ` +
+          `must strictly dominate the serial shutdown worst case — email loop ` +
+          `(${loopMs}ms) + audit drain (${auditMs}ms) + DB pool close ` +
+          `(${dbCloseMs}ms) + exit assist (${assistMs}ms) = ${sumMs}ms. Raise ` +
+          `the grace or lower a component budget.`,
+      );
+    }
   }
 }
 

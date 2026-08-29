@@ -410,7 +410,8 @@ Rubric is absent from the Candidate result contract.
 - Send: OUTSIDE the claim transaction (SMTP never inside a DB transaction).
 - Retry: exponential backoff (`baseSeconds * 2^(attempts-1)`).
 - Terminal: `sent` (success) or `dead` (max attempts exceeded).
-- Shutdown: bounded by `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS`; abandoned
+- Shutdown: bounded by `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 8s; one
+  term of the #351 shutdown budget contract — see ADR-011 §8.6); abandoned
   `processing` rows are redelivered via lock-timeout recovery.
 
 ### 11.3 Email delivery semantics

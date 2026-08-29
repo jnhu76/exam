@@ -33,6 +33,7 @@ services:
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-fake}
       EMAIL_FAKE_MODE: ${EMAIL_FAKE_MODE:-success}
+      EMAIL_FAKE_DELAY_MS: ${EMAIL_FAKE_DELAY_MS:-0}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@example.local}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Exam Platform}
       EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-3}
@@ -40,7 +41,7 @@ services:
       EMAIL_WORKER_POLL_INTERVAL_MS: ${EMAIL_WORKER_POLL_INTERVAL_MS:-5000}
       EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-20}
       EMAIL_WORKER_LOCK_TIMEOUT_MS: ${EMAIL_WORKER_LOCK_TIMEOUT_MS:-300000}
-      EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: ${EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-30000}
+      EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: ${EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-8000}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
@@ -65,6 +66,15 @@ services:
     networks:
       - exam-net
     restart: unless-stopped
+    # INVARIANT (#351 shutdown budget contract): stop_grace_period MUST
+    # dominate the app's whole graceful-shutdown worst case — email loop
+    # drain (EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS, default 8s) + audit drain
+    # (AUDIT_DRAIN_TIMEOUT_MS, 10s) + DB pool close (10s) + bounded exit
+    # assist (BOUNDED_EXIT_ASSIST_MS, 2s) = 30s — or a stuck in-flight
+    # email send turns SIGTERM into SIGKILL (exit 137). Keep the margin
+    # when changing any term; enforced by
+    # scripts/repository-contract/deployment-topology-contract.mjs.
+    stop_grace_period: 45s
 
   db:
     image: postgres:18.4-bookworm

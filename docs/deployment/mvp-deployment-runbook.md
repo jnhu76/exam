@@ -121,7 +121,7 @@ if any is unset. There is NO default database password in production
 | `EMAIL_WORKER_POLL_INTERVAL_MS` | 5000 | outbox loop poll interval |
 | `EMAIL_WORKER_BATCH_SIZE` | 20 | max rows per poll |
 | `EMAIL_WORKER_LOCK_TIMEOUT_MS` | 300000 (5 min) | abandoned-lock recovery threshold |
-| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | 30000 | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery |
+| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | 8000 | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery. One term of the shutdown budget contract: loop (8s) + audit drain (10s) + DB close (10s) must stay below `stop_grace_period` (45s) |
 | `EMAIL_WORKER_HEARTBEAT_STALE_MS` | 60000 | diagnostics staleness threshold |
 | `EMAIL_FAKE_DELAY_MS` | 0 | fake-transport only: simulated send latency (tests/deployment rehearsal) |
 
@@ -540,7 +540,7 @@ The loop:
 - is supervised: a loop crash (e.g. a database hiccup) is retried after the
   poll interval with an error heartbeat instead of crashing the API,
 - shuts down bounded: on SIGTERM the loop stops within
-  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 30s); rows still `processing`
+  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 8s); rows still `processing`
   are redelivered via lock-timeout recovery (documented at-least-once).
 
 With `EMAIL_ENABLED=false` (default), `DisabledEmailSender` drains outbox
@@ -695,18 +695,31 @@ docker compose --env-file .env.deploy down -v # with bind mounts there are no na
                        # rm — see upgrade-and-uninstall.md §3.2.
 ```
 
-Graceful shutdown behavior:
+Graceful shutdown behavior (#351 budget contract):
 
 ```text
-app container (SIGTERM):
+app container (SIGTERM, stop_grace_period: 45s):
   - auditWrites.stopAccepting() (no new audit writes accepted)
-  - drain in-flight audit writes (10s timeout, best-effort)
-  - email outbox loop stops: waits up to EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS
-    (default 30s) for the current poll cycle, then abandons it
-  - app.close() (releases DB pool, Redis client if configured, sender)
-  - exit 0
+  - app.close() runs onClose hooks serially in reverse registration order:
+    - email outbox loop stops: waits up to EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS
+      (default 8s) for the current poll cycle, then abandons it
+    - sender / scanners / redis close
+    - in-flight audit writes drain (10s timeout, best-effort, overlapping)
+    - DB pool released (sql.end, 10s timeout)
+  - whole-shutdown worst case: 8s + 10s + 10s + 2s (bounded exit assist)
+    = 30s < stop_grace_period 45s
+  - exit is then NATURAL on the clean path; if work abandoned by the
+    bounded shutdown (the in-flight send) still holds the event loop, a
+    bounded assist (2s) logs the remaining owners and exits with the
+    settled code — never a Docker SIGKILL
   - any processing row left behind is recovered by the next app start
     via recoverAbandoned after EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s)
+```
+
+A container exit code of **137 after `docker stop` is a FAILURE**, not
+normal: it means Docker SIGKILLed the app because graceful shutdown
+exceeded the grace period (budget regression — enforced by
+`scripts/repository-contract/deployment-topology-contract.mjs`).
 
 ---
 

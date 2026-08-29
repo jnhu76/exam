@@ -26,6 +26,10 @@
 #   - login succeeds; no default Candidate accounts.
 #   - baseline seed refuses APP_MODE=production.
 #   - SIGTERM stops the app (and the in-process loop) cleanly.
+#   - #351 budget contract: with a send stuck in flight (fake transport,
+#     60s delay ≫ the 8s loop shutdown budget), `docker stop` still exits
+#     0 BEFORE stop_grace_period (never 137), the abandoned row stays
+#     `processing`, and a restart recovers + re-claims it (at-least-once).
 #
 # Usage: ./compose-smoke.sh <run-number>
 set -euo pipefail
@@ -595,6 +599,149 @@ fi
 
 compose_down_best_effort "${REDIS_PROJECT}" --profile redis
 echo "  PASS: authenticated redis profile started, probed, and was torn down."
+
+# ── Test 17: stuck in-flight email send — bounded docker stop, no 137 ────
+# #351 acceptance: with an email send that can NEVER finish inside the loop
+# shutdown budget, `docker stop` must still end in the app's OWN graceful
+# exit (code 0) BEFORE stop_grace_period — not a Docker SIGKILL (137).
+# Also proves the abandoned row stays `processing` and is recovered and
+# re-claimed by the next app start (at-least-once redelivery).
+echo "--- TEST 17: stuck in-flight email send: bounded stop, exit 0, not 137 (#351) ---"
+STUCK_PROJECT="compose-smoke-stuck-${RUN_NUM}"
+STUCK_DATA_ROOT="${EXAM_DATA_ROOT}/stuck-stack"
+STUCK_PORT=3211
+STUCK_ORIGIN="http://localhost:${STUCK_PORT}"
+# 60s fake send latency ≫ the 8s loop shutdown budget: the send is still
+# in flight when SIGTERM arrives. 6s lock timeout makes the post-restart
+# recoverAbandoned check fast (fake transport skips the SMTP lease guard).
+(
+  export EXAM_DATA_ROOT="${STUCK_DATA_ROOT}" EXAM_PORT="${STUCK_PORT}" \
+    EMAIL_ENABLED=true EMAIL_TRANSPORT=fake EMAIL_FAKE_MODE=success \
+    EMAIL_FAKE_DELAY_MS=60000 EMAIL_WORKER_POLL_INTERVAL_MS=1000 \
+    EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS=8000 EMAIL_WORKER_LOCK_TIMEOUT_MS=6000 \
+    CORS_ORIGIN="${STUCK_ORIGIN}" PUBLIC_WEB_ORIGIN="${STUCK_ORIGIN}"
+  run_compose "${STUCK_PROJECT}" up -d --quiet-pull >/dev/null
+)
+STUCK_APP="$(app_container "${STUCK_PROJECT}")"
+STUCK_DB="$(db_container "${STUCK_PROJECT}")"
+STUCK_HEALTH=""
+for i in $(seq 1 90); do
+  STUCK_HEALTH=$(docker inspect "${STUCK_APP}" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  if [ "${STUCK_HEALTH}" = "healthy" ]; then break; fi
+  sleep 2
+done
+if [ "${STUCK_HEALTH}" != "healthy" ]; then
+  echo "  FAIL: stuck-send app never became healthy (health=${STUCK_HEALTH})."
+  run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+echo "  stack up (fresh data root, email fake transport, 60s send delay)."
+
+docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
+  -e DATABASE_URL="postgresql://exam:${PG_PASSWORD}@db:5432/exam" \
+  -e PUBLIC_WEB_ORIGIN="${STUCK_ORIGIN}" -e CORS_ORIGIN="${STUCK_ORIGIN}" \
+  "${STUCK_APP}" node dist/scripts/bootstrap-admin.js \
+  --username "stuckadmin${RUN_NUM}" --password "${ADMIN_PASS}" \
+  --name "Stuck Admin ${RUN_NUM}" --organization-name "Stuck Org ${RUN_NUM}" >/dev/null
+
+# One due outbox row; wait until the loop claims it (send now in flight).
+# (id has no DB-side default — the app layer generates it; supply one.)
+docker exec "${STUCK_DB}" psql -U exam -d exam -qc \
+  "INSERT INTO email_outbox (id, organization_id, type, recipient_email, subject, body_text, status, attempt_count, max_attempts) SELECT gen_random_uuid()::text, id, 'test_email', 'stuck@example.com', 's', 't', 'pending', 0, 3 FROM organizations LIMIT 1;"
+STUCK_STATE=""
+for i in $(seq 1 30); do
+  STUCK_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
+    "SELECT status || '|' || COALESCE(locked_by, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1" 2>/dev/null || true)
+  case "${STUCK_STATE}" in
+    processing\|*) break ;;
+  esac
+  sleep 1
+done
+case "${STUCK_STATE}" in
+  processing\|*)
+    echo "  row claimed and send in flight (${STUCK_STATE%%|*})."
+    ;;
+  *)
+    echo "  FAIL: outbox row never reached status=processing (state=${STUCK_STATE})."
+    run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
+    compose_down_best_effort "${STUCK_PROJECT}"
+    exit 1
+    ;;
+esac
+STUCK_ORIGINAL_LOCKED_BY="${STUCK_STATE#processing|}"
+
+STUCK_T0=$(date +%s)
+docker stop "${STUCK_APP}" >/dev/null
+STUCK_T1=$(date +%s)
+STUCK_ELAPSED=$(( STUCK_T1 - STUCK_T0 ))
+STUCK_EXIT=$(docker inspect "${STUCK_APP}" --format '{{.State.ExitCode}}')
+if [ "${STUCK_EXIT}" != "0" ]; then
+  echo "  FAIL: app exit code is ${STUCK_EXIT} (expected 0; 137 = SIGKILL past stop_grace_period — budget regression)."
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+if [ "${STUCK_ELAPSED}" -ge 45 ]; then
+  echo "  FAIL: docker stop took ${STUCK_ELAPSED}s (>= stop_grace_period 45s): the app did not exit inside the grace window."
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+echo "  PASS: docker stop → app exited ${STUCK_EXIT} in ${STUCK_ELAPSED}s (< 45s grace; not 137)."
+
+if ! run_compose "${STUCK_PROJECT}" logs --tail=60 app 2>&1 | grep -q 'email outbox loop shutdown timeout'; then
+  echo "  FAIL: app logs do not contain the bounded-abandon warning — the stuck-send path was not exercised."
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+echo "  PASS: email loop logged the bounded shutdown-timeout abandonment."
+
+STUCK_ROW_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
+  "SELECT status FROM email_outbox ORDER BY created_at DESC LIMIT 1")
+if [ "${STUCK_ROW_STATE}" != "processing" ]; then
+  echo "  FAIL: abandoned row status is '${STUCK_ROW_STATE}' (expected 'processing')."
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+echo "  PASS: abandoned row remains 'processing' (at-least-once boundary)."
+
+# Restart: lock timeout (6s) elapses, the next poll cycle's recoverAbandoned
+# re-queues the row and the NEW instance claims it — proof that the stuck
+# send's data is not lost.
+docker start "${STUCK_APP}" >/dev/null
+STUCK_HEALTH=""
+for i in $(seq 1 90); do
+  STUCK_HEALTH=$(docker inspect "${STUCK_APP}" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  if [ "${STUCK_HEALTH}" = "healthy" ]; then break; fi
+  sleep 2
+done
+if [ "${STUCK_HEALTH}" != "healthy" ]; then
+  echo "  FAIL: stuck-send app never became healthy after restart (health=${STUCK_HEALTH})."
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+STUCK_RECLAIMED=""
+for i in $(seq 1 60); do
+  STUCK_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
+    "SELECT status || '|' || COALESCE(locked_by, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1" 2>/dev/null || true)
+  case "${STUCK_STATE}" in
+    processing\|*)
+      if [ "${STUCK_STATE#processing|}" != "${STUCK_ORIGINAL_LOCKED_BY}" ]; then
+        STUCK_RECLAIMED="yes"
+        break
+      fi
+      ;;
+  esac
+  sleep 1
+done
+if [ "${STUCK_RECLAIMED}" != "yes" ]; then
+  echo "  FAIL: abandoned row was not recovered and re-claimed by the restarted instance (state=${STUCK_STATE})."
+  run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+echo "  PASS: row recovered and re-claimed by the new instance (at-least-once redelivery)."
+
+compose_down_best_effort "${STUCK_PROJECT}"
 
 echo ""
 echo "=== RUN #${RUN_NUM}: ALL CHECKS PASSED ==="

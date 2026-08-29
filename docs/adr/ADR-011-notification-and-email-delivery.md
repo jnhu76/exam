@@ -545,12 +545,30 @@ Process-boundary differences by design:
   wait or a poll cycle) is logged with an error heartbeat and retried after
   the poll interval instead of crashing the API process. The API is NOT
   the loop's failure container.
-- **Bounded shutdown**: on SIGTERM the loop stops within
-  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 30s). Rows left `processing`
+- **Bounded shutdown** (revised by #351): on SIGTERM the loop stops within
+  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 8s). Rows left `processing`
   past the bound are redelivered via lock-timeout recovery (documented
   at-least-once). The standalone worker instead finishes its current batch
   unbounded; the in-process bound prevents SIGTERM latency from scaling
   with batch size × SMTP latency.
+
+  The loop budget is one term of the deployment shutdown budget contract
+  (#351): Fastify onClose hooks run serially in reverse registration
+  order, so the app's whole graceful-shutdown worst case is
+  **email loop drain (8s) + audit drain (`AUDIT_DRAIN_TIMEOUT_MS`, 10s) +
+  DB pool close (`sql.end`, 10s) + bounded exit assist
+  (`BOUNDED_EXIT_ASSIST_MS`, 2s) = 30s**, and the app container's
+  `stop_grace_period` (45s) must strictly dominate that sum — otherwise a
+  stuck in-flight send turns SIGTERM into SIGKILL (exit 137). The exit
+  assist exists because work ABANDONED by the bounded shutdown (the
+  in-flight send itself) keeps ref'ed timers/sockets that would hold the
+  process open past the grace after `app.close()` has settled; it waits
+  briefly for natural exit, then logs the remaining owners and exits with
+  the settled code. On the clean-drain path the process exits naturally
+  (regression-tested by `server.shutdown.test.ts`). The relation is
+  enforced by
+  `scripts/repository-contract/deployment-topology-contract.mjs`; raise the
+  grace if any component budget grows.
 - **Startup**: the loop starts in the background (it does not block
   `listen`) and waits for the internal default organization the same way
   the worker does (`bootstrap_pending` heartbeats before bootstrap).
@@ -1271,3 +1289,9 @@ query cost at 10k backlog: 11.9 ms per 100-row claim (EXPLAIN ANALYZE).
 - New runtime knob: `EMAIL_FAKE_DELAY_MS` (non-negative, default 0) —
   simulated transport latency on the fake sender for tests/deployment
   rehearsal.
+- #351 post-merge remediation (same amendment window): the loop's shutdown
+  race timer is explicitly owned and cleared (a cleared-less ref'ed timer
+  held the event loop open for the whole budget after a clean drain, which
+  an unconditional `process.exit()` in `server.ts` had been masking); the
+  default shutdown budget dropped 30s → 8s and the app container declares
+  `stop_grace_period: 45s` per the shutdown budget contract in §8.6.

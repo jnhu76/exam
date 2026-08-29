@@ -171,6 +171,17 @@ if [ ! -d "${BASEBACKUP_DIR}" ] || [ ! -f "${BASEBACKUP_DIR}/backup_manifest" ];
   exit 1
 fi
 echo "  PASS: pg_basebackup produced a verified base backup (manifest present)."
+# #351 fail-closed evidence contract: the verified-success ledger row for
+# this physical base backup must exist with a STRICTLY POSITIVE artifact
+# size — a 0-byte success row is the fail-open this suite must catch.
+BB_EVIDENCE_SIZE="$(psql_exec "${PROJECT_SRC}" \
+  "SELECT COALESCE(artifact_size_bytes, -1) FROM backup_runs WHERE backup_type = 'physical_base' AND status = 'succeeded' ORDER BY started_at DESC LIMIT 1" \
+  | tr -d '[:space:]')"
+if ! [[ "${BB_EVIDENCE_SIZE}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "FAIL: physical_base success evidence missing or size not strictly positive (got '${BB_EVIDENCE_SIZE}') — #351 fail-closed evidence contract." >&2
+  exit 1
+fi
+echo "  PASS: base-backup evidence row recorded with artifact size ${BB_EVIDENCE_SIZE} bytes (#351)."
 
 echo ""
 echo "--- 3. post-base State A, State B + explicit target LSN, State C ---"

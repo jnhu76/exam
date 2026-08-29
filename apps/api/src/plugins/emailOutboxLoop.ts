@@ -171,19 +171,37 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
 
   fastify.addHook("onClose", async () => {
     stopping = true;
-    const drained = await Promise.race([
-      supervised.then(
-        () => true,
-        (err) => {
-          log("error", "email outbox loop failed during shutdown", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-          return true;
-        },
-      ),
-      new Promise<void>((resolve) => setTimeout(resolve, shutdownTimeoutMs)),
-    ]);
-    if (drained) {
+    // OWNERSHIP: this hook owns the shutdown-timeout timer. It is unref'd
+    // (a bound, not a liveness owner) and MUST be cleared once the race
+    // settles — a cleared-less loser keeps a ref'ed timer that holds the
+    // event loop open for the whole budget after a clean drain (#351).
+    let timedOut = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, shutdownTimeoutMs);
+      timeout.unref();
+    });
+    let drained: boolean;
+    try {
+      drained = await Promise.race([
+        supervised.then(
+          () => true,
+          (err) => {
+            log("error", "email outbox loop failed during shutdown", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return true;
+          },
+        ),
+        timeoutPromise.then(() => false),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (drained && !timedOut) {
       log("info", "email outbox loop stopped cleanly");
     } else {
       log(
