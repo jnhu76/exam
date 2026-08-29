@@ -4,6 +4,7 @@ export * from "./launchpad.js";
 export * from "./settings.js";
 export * from "./organization.js";
 export * from "./user.js";
+export * from "./invitation.js";
 export * from "./candidate.js";
 export * from "./course.js";
 export * from "./question.js";

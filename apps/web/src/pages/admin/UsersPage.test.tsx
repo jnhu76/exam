@@ -61,6 +61,10 @@ function mockApiGet(usersOverride?: {
 }) {
   apiGet.mockImplementation(async (url: string) => {
     if (url === "/api/roles/assignable") return { items: mockAssignableRoles };
+    // #297: the invitations panel loads its own list inside the page.
+    if (url.startsWith("/api/invitations")) {
+      return { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
+    }
     return (
       usersOverride ?? {
         items: mockUsers,

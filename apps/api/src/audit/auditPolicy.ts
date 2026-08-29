@@ -193,6 +193,32 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "credential",
     "low",
   ),
+  // #297 email password reset. The request event records the routing outcome
+  // only — no token, no email body. Consumption is an atomic credential
+  // mutation with the same shape as a self-service password change.
+  [AuditAction.AuthPasswordResetRequested]: definition(
+    "active",
+    "best_effort",
+    "credential",
+    "burst",
+    z
+      .object({
+        outcome: z.enum([
+          "issued",
+          "unknown_user",
+          "no_email",
+          "disabled_user",
+          "cooldown",
+        ]),
+      })
+      .strict(),
+  ),
+  [AuditAction.AuthPasswordReset]: definition(
+    "active",
+    "atomic",
+    "credential",
+    "low",
+  ),
   [AuditAction.AttemptStart]: definition(
     "deprecated",
     "domain_history",
@@ -605,6 +631,49 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
   ),
   [AuditAction.UserDelete]: definition("active", "atomic", "authority", "low"),
+  // #297 staff invitation lifecycle. Payloads carry the invitation id, the
+  // invited email, and the role — never the raw token (only its hash exists
+  // server-side, and that is not part of any audit payload either).
+  [AuditAction.UserInvited]: definition(
+    "active",
+    "atomic",
+    "authority",
+    "low",
+    z
+      .object({
+        invitationId: shortText,
+        email: shortText,
+        role: shortText,
+      })
+      .strict(),
+  ),
+  [AuditAction.UserInvitationRevoked]: definition(
+    "active",
+    "atomic",
+    "authority",
+    "low",
+    z
+      .object({
+        invitationId: shortText,
+        email: shortText,
+        role: shortText,
+      })
+      .strict(),
+  ),
+  [AuditAction.UserInvitationAccepted]: definition(
+    "active",
+    "atomic",
+    "authority",
+    "low",
+    z
+      .object({
+        invitationId: shortText,
+        email: shortText,
+        role: shortText,
+        userId: shortText,
+      })
+      .strict(),
+  ),
   [AuditAction.ExportScores]: definition(
     "active",
     "synchronous_sensitive_read",

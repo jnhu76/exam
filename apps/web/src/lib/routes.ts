@@ -2,6 +2,11 @@
 export const routes = {
   login: "/login",
   launchpad: "/launchpad",
+  // Public identity-lifecycle pages (#297): token-carrier URLs, never behind
+  // the admin layout.
+  inviteAccept: "/invite/accept",
+  forgotPassword: "/forgot-password",
+  resetPassword: "/reset-password",
   admin: {
     root: "/admin",
     dashboard: "/admin/dashboard",

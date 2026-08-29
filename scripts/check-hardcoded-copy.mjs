@@ -167,6 +167,17 @@ const CJK_ALLOWLIST = [
     removal:
       "When a backend Email template engine + i18n is introduced (P5-N1-R0 §23 deferred capability).",
   },
+  // #297 identity lifecycle: staff-invitation + password-reset Email copy is
+  // rendered server-side (same boundary as gradeNotificationEmail) and never
+  // passes through the web i18n catalog. Template engine + backend i18n
+  // remains deferred (#300).
+  {
+    path: "apps/api/src/identity/identityEmails.ts",
+    reason:
+      "Server-generated identity Email subject/bodyText/bodyHtml (账号邀请 / 重置密码). Email is rendered server-side and never routed through the web i18n catalog.",
+    removal:
+      "When a backend Email template engine + i18n is introduced (#300).",
+  },
   {
     path: "apps/api/src/notifications/notificationService.ts",
     reason:

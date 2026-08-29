@@ -211,11 +211,10 @@ Implemented items are marked ✅; open items are Issue-tracked:
 - ⏳ Scoped role assignment UI + Teacher-like scoped product activation — **Issues #286/#296**.
 - ⏳ Course / Exam / CandidateGroup scopes — **Issue #286** (Teacher@Course).
 - ✅ Proctor / Grader / ContentManager role bundles (presets exist; product activation open — **#296**).
-- ⏳ Staff invitation — **Issue #297**.
-- ⏳ SMTP email management — **Issue #297**.
-- ⏳ Email password reset — **Issue #297**.
-- ⏳ Invitation token lifecycle — **Issue #297**.
-- ⏳ User activation / deactivation — **Issue #297**.
+- ✅ Staff invitation — **Issue #297** (implemented at current master; PR-pending).
+- ✅ Email password reset — **Issue #297** (implemented at current master; PR-pending).
+- ✅ Invitation token lifecycle — **Issue #297** (implemented at current master; PR-pending).
+- ✅ User activation / deactivation — **Issue #297** (Admin toggle existed; #297 added auth-epoch revocation + outstanding-token burn).
 - ⏳ Permission audit — **Issue #298**.
 - ⏳ Audit log search / export UI — **Issue #298**.
 - ✅ Fill-blank answer protocol, auto-grading, result flow, and E2E closeout (auto-graded exact/keyword matching).

@@ -130,6 +130,24 @@ The authorization **infrastructure** is live (not "not started"):
 - ✅ ADR-011 accepted as the Notification and Email delivery architecture
   authority (two-channel Inbox + asynchronous Email outbox, resident worker,
   atomic business transaction, validated `PUBLIC_WEB_ORIGIN` / `actionPath`).
+- ✅ Identity lifecycle (#297): staff invitation + Email password reset +
+  account lifecycle hardening. Staff invitations are single-use, expiring,
+  revocable token rows (`staff_invitations`, one OPEN invitation per
+  org+email); the user account is created only at acceptance (no
+  `is_active=false` "pending" overload). Email password reset uses per-user
+  single-use tokens (`password_reset_tokens`, newest-token-wins, ≤1 open per
+  user by partial unique index) with per-IP route limits and a per-account
+  cooldown; request/consume responses are uniform (anti-enumeration). Raw
+  tokens are 256-bit CSPRNG, only their SHA-256 hashes are stored, and they
+  appear solely in the delivered email body (never in audit payloads, logs,
+  or later API responses; the invitation acceptance URL is returned once to
+  the inviting Admin so email-disabled deployments remain usable per ADR-011
+  §12). Every identity mutation commits (authoritative state + audit fact +
+  outbox row) in one transaction; SMTP failure only produces retryable
+  outbox rows. Deactivation advances `auth_epoch` and burns outstanding
+  reset tokens, so pre-deactivation JWTs/tokens cannot outlive a
+  deactivate/reactivate cycle. Admin UI: UsersPage invitations panel;
+  public UI: /invite/accept, /forgot-password, /reset-password.
 
 See [`docs/architecture/authorization.md`](../architecture/authorization.md)
 for the model details and
@@ -145,8 +163,7 @@ GitHub Issues index (each item links to its Issue):
   resource-relationship slices are implemented (Proctor→Exam ADR-015;
   Teacher→Course #286 / PR #347; Grader→Exam #296 — scoped assignment
   carriers, Admin assignment APIs + UsersPage dialogs, per-request scope
-  enforcement); staff invitation + SMTP account lifecycle remains open
-  (#297).
+  enforcement).
 
 
 The remaining Phase 3 product work is sequenced as a hard module execution
@@ -188,8 +205,9 @@ notification onto the now-stable result-publication transaction (P5-N1).
 
 - P2-1 Exam Authoring UI Flow has been removed from the active Phase 3 plan by
   scope decision.
-- Staff invitation, SMTP password reset, and account lifecycle UI remain
-  Phase 3 scope but are separate future work (not silently included in P5-N1).
+- Staff invitation, Email password reset, and account lifecycle are
+  implemented (#297 — see *Identity lifecycle* below); the Email template
+  engine + backend i18n stay separate (#300).
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
   (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
   rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit

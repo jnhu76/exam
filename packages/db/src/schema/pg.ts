@@ -2399,6 +2399,113 @@ export const attemptCommandReceipts = pgTable(
 );
 
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
+/**
+ * Staff invitations (#297) — pending-membership facts for email-invited staff.
+ *
+ * The invited person has NO user row until acceptance succeeds; this table IS
+ * the pending state. `users.is_active` is therefore never overloaded with
+ * "invitation pending". Lifecycle columns are nullable timestamps;
+ * `StaffInvitationStatus` (computed, @exam/domain/identity) is never stored.
+ *
+ * INVARIANT: one OPEN invitation per (organization, email) — enforced by the
+ * partial unique index; re-inviting supersedes (revokes) the open row in the
+ * same transaction that inserts the new one. Emails are stored normalized to
+ * lower case (CHECK backstop) so dedupe is case-insensitive at the DB.
+ * `token_hash` is the hex SHA-256 of the raw token; the raw token exists only
+ * in the delivered email body. Role is restricted to the staff subset of the
+ * assignable set — candidates have their own creation flow.
+ */
+export const staffInvitations = pgTable(
+  "staff_invitations",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    email: text("email").notNull(),
+    role: text("role").notNull().$type<Exclude<AssignableRole, "Candidate">>(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("staff_invitations_token_hash_unique").on(table.tokenHash),
+    uniqueIndex("staff_invitations_org_email_open_unique")
+      .on(table.organizationId, table.email)
+      .where(sql`consumed_at IS NULL AND revoked_at IS NULL`),
+    index("staff_invitations_org_created_at_idx").on(
+      table.organizationId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "staff_invitations_email_normalized_check",
+      sql`${table.email} = lower(${table.email})`,
+    ),
+    check(
+      "staff_invitations_role_check",
+      sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Maintainer')`,
+    ),
+    check(
+      "staff_invitations_token_hash_shape_check",
+      sql`char_length(${table.tokenHash}) = 64`,
+    ),
+    check(
+      "staff_invitations_consumed_not_revoked_check",
+      sql`NOT (${table.consumedAt} IS NOT NULL AND ${table.revokedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/**
+ * Password-reset tokens (#297) — single-use, expiring email-reset tokens for
+ * an EXISTING user. At most one unconsumed token per user exists (partial
+ * unique index); issuing a new token consumes the previous open token in the
+ * same transaction (newest-token-wins). Consumption additionally requires the
+ * user to still be active and in the same organization (enforced by the
+ * consume statement's EXISTS guard, fail-closed on deactivation).
+ * `token_hash` is the hex SHA-256 of the raw token; the raw token exists only
+ * in the delivered email body.
+ */
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_token_hash_unique").on(table.tokenHash),
+    uniqueIndex("password_reset_tokens_user_open_unique")
+      .on(table.userId)
+      .where(sql`consumed_at IS NULL`),
+    index("password_reset_tokens_user_created_at_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    check(
+      "password_reset_tokens_token_hash_shape_check",
+      sql`char_length(${table.tokenHash}) = 64`,
+    ),
+  ],
+);
+
 export const schema = {
   organizations,
   organizationSettings,
@@ -2434,4 +2541,6 @@ export const schema = {
   backupRunEvents,
   backupOperationalPolicy,
   restoreDrillRuns,
+  staffInvitations,
+  passwordResetTokens,
 };

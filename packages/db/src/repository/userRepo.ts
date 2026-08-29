@@ -302,5 +302,29 @@ export function createUserRepo(db: Database) {
         .returning();
       return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
     },
+    /**
+     * #297: unconditionally advance the credential epoch WITHOUT touching the
+     * password. Deactivation is a credential-revocation-grade event — every
+     * JWT issued before it must fail closed, and re-activation must never
+     * resurrect pre-deactivation tokens. Unlike {@link advanceAuthEpochIfCurrent}
+     * there is no expected-epoch CAS: the admin command owns the account, and
+     * concurrent logins racing the deactivation are blocked by `is_active`
+     * anyway.
+     */
+    async advanceAuthEpoch(
+      ctx: TenantContext | RequestContext,
+      userId: string,
+    ): Promise<number | null> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .update(users)
+        .set({
+          authEpoch: sql`${users.authEpoch} + 1`,
+          updatedAt: now(),
+        })
+        .where(and(eq(users.organizationId, orgId), eq(users.id, userId)))
+        .returning({ authEpoch: users.authEpoch });
+      return rows[0]?.authEpoch ?? null;
+    },
   };
 }

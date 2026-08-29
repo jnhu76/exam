@@ -7,6 +7,12 @@ import {
   ChangePasswordRequestSchema,
   UpdateProfileRequestSchema,
   ErrorResponseSchema,
+  AcceptInvitationRequestSchema,
+  AcceptInvitationResponseSchema,
+  PasswordResetRequestSchema,
+  PasswordResetRequestAcceptedSchema,
+  PasswordResetConsumeRequestSchema,
+  PasswordResetConsumeResponseSchema,
 } from "@exam/contracts";
 
 /** Generic success response schema used for mutation endpoints that return only a confirmation. */
@@ -19,12 +25,32 @@ import {
   verifyPassword,
   verifyPasswordOrDummy,
 } from "@exam/auth/src/password.js";
+import { generateToken, hashToken } from "@exam/auth/src/tokens.js";
 import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
+import { createStaffInvitationRepo } from "@exam/db/src/repository/staffInvitationRepo.js";
+import { createPasswordResetTokenRepo } from "@exam/db/src/repository/passwordResetTokenRepo.js";
+import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
-import { NotFoundError } from "@exam/domain";
+import { NotFoundError, PasswordResetCooldownError } from "@exam/domain";
+import {
+  buildInviteAcceptLink,
+  buildPasswordResetLink,
+} from "../identity/identityLinks.js";
+import {
+  INVITATION_TTL_DAYS,
+  INVITATION_TTL_MS,
+  PASSWORD_RESET_TTL_MINUTES,
+  PASSWORD_RESET_TTL_MS,
+  PASSWORD_RESET_COOLDOWN_MS,
+} from "../identity/identityPolicy.js";
+import {
+  renderStaffInvitationEmail,
+  renderPasswordResetEmail,
+} from "../identity/identityEmails.js";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
@@ -677,6 +703,331 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       };
       const validated = MeResponseSchema.safeParse(profile);
       return validated.success ? validated.data : profile;
+    },
+  );
+
+  // ── Identity lifecycle (#297): invitation acceptance + email password
+  // reset. All three endpoints are public (token IS the credential) and
+  // per-IP rate-limited. Every mutation is a single PostgreSQL transaction:
+  // token CAS consumption + authoritative state + audit fact (+ durable
+  // outbox row) commit atomically; SMTP is never called here (ADR-011 §5).
+
+  /**
+   * Resolves the single default organization for public identity flows, or
+   * null when the deployment has no default tenant yet (uniform failure —
+   * these flows must not reveal deployment state).
+   */
+  async function resolveDefaultOrgForIdentity() {
+    try {
+      return await createOrganizationRepo(fastify.db).resolveBrandingTenant(
+        { purpose: "public_branding" } as PublicBrandingContext,
+        getRuntimeConfig().tenancy.defaultTenantSlug,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  fastify.post(
+    "/invitations/accept",
+    {
+      config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } },
+      schema: {
+        body: AcceptInvitationRequestSchema,
+        response: {
+          201: AcceptInvitationResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
+    },
+    /**
+     * POST /invitations/accept — consume an invitation token and activate
+     * the account. The invitation CAS-consumes first; on any invalid,
+     * expired, or revoked token the response is one generic 400 and no
+     * state changes. Username uniqueness is enforced by the repository: a
+     * conflict rolls the whole transaction back, leaving the invitation
+     * open for a retry with a different username.
+     *
+     * No Admin↔Maintainer invariant wrapper here: the actor is anonymous,
+     * and the authority decision (role) was made and audited at invite time.
+     */
+    async (request, reply) => {
+      const data = AcceptInvitationRequestSchema.parse(request.body);
+      const passwordHash = await hashPassword(data.password);
+      const org = await resolveDefaultOrgForIdentity();
+      if (!org) {
+        return reply
+          .code(400)
+          .send(buildErrorResponse(request.id, "INVITATION_INVALID"));
+      }
+      const anonCtx = {
+        organizationId: org.id,
+        actorId: "anonymous",
+        role: "Candidate" as Role,
+        permissions: [],
+        sessionId: "anonymous",
+      };
+
+      const created = await executeInTransaction(fastify.db, async (tx) => {
+        const invitation = await createStaffInvitationRepo(
+          tx,
+        ).consumeByTokenHashWithinTransaction(
+          anonCtx,
+          hashToken(data.token),
+          fastify.now(),
+        );
+        if (!invitation) return null;
+
+        const user = await createUserRepo(tx).createUnique(anonCtx, {
+          username: data.username,
+          passwordHash,
+          name: data.name,
+          role: invitation.role,
+          isActive: true,
+          email: invitation.email,
+        });
+        await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+          tx,
+          anonCtx,
+          {
+            userId: user.id,
+            role: invitation.role,
+            isPrimary: true,
+            isActive: true,
+          },
+        );
+        await recordAtomicHttpAudit(tx, request, anonCtx, {
+          action: "user.invitation_accepted",
+          targetType: "user",
+          targetId: user.id,
+          metadata: {
+            invitationId: invitation.id,
+            email: invitation.email,
+            role: invitation.role,
+            userId: user.id,
+          },
+        });
+        return user;
+      });
+
+      if (!created) {
+        return reply
+          .code(400)
+          .send(buildErrorResponse(request.id, "INVITATION_INVALID"));
+      }
+      return reply.code(201).send({
+        user: {
+          id: created.id,
+          username: created.username,
+          name: created.name,
+          role: created.role,
+        },
+      });
+    },
+  );
+
+  fastify.post(
+    "/password-reset/request",
+    {
+      config: { rateLimit: { max: 5, timeWindow: 10 * 60 * 1000 } },
+      schema: {
+        body: PasswordResetRequestSchema,
+        response: { 200: PasswordResetRequestAcceptedSchema },
+      },
+    },
+    /**
+     * POST /password-reset/request — begin an email password reset.
+     *
+     * The response is CONSTANT for every input (anti-enumeration): account
+     * unknown, no email on file, account disabled, cooldown, and success all
+     * return `{ ok: true }`. The audit fact records the internal routing
+     * outcome for security review. Only an active user with an email on file
+     * and no open token inside the cooldown window gets a token + outbox row,
+     * committed atomically.
+     */
+    async (request, reply) => {
+      const data = PasswordResetRequestSchema.parse(request.body);
+      const uniform = () => reply.code(200).send({ ok: true as const });
+      const org = await resolveDefaultOrgForIdentity();
+      if (!org) return uniform();
+      const anonCtx = {
+        organizationId: org.id,
+        actorId: "anonymous",
+        role: "Candidate" as Role,
+        permissions: [],
+        sessionId: "anonymous",
+      };
+      const auditOutcome = (
+        outcome:
+          | "issued"
+          | "unknown_user"
+          | "no_email"
+          | "disabled_user"
+          | "cooldown",
+        userId: string | null,
+      ) => {
+        const ctxForAudit: RequestContext = {
+          ...anonCtx,
+          sessionId: "anonymous",
+          targetOrganizationId: org.id,
+          ...(userId ? { actorId: userId } : {}),
+        };
+        recordBestEffortAudit(fastify, request, ctxForAudit, {
+          action: "auth.password_reset_requested",
+          targetType: "user",
+          targetId: userId ?? "anonymous",
+          metadata: { outcome },
+        });
+      };
+
+      const user = await createUserRepo(
+        fastify.db,
+      ).findByOrganizationAndUsername(anonCtx, data.username);
+      if (!user) {
+        auditOutcome("unknown_user", null);
+        return uniform();
+      }
+      if (!user.isActive) {
+        auditOutcome("disabled_user", user.id);
+        return uniform();
+      }
+      if (!user.email) {
+        auditOutcome("no_email", user.id);
+        return uniform();
+      }
+
+      const resetRepo = createPasswordResetTokenRepo(fastify.db);
+      const latest = await resetRepo.getLatestCreatedAt(anonCtx, user.id);
+      if (
+        latest &&
+        fastify.now().getTime() - latest.getTime() < PASSWORD_RESET_COOLDOWN_MS
+      ) {
+        auditOutcome("cooldown", user.id);
+        return uniform();
+      }
+
+      const recipientEmail = user.email;
+      const rawToken = generateToken();
+      const config = getRuntimeConfig();
+      const content = renderPasswordResetEmail({
+        resetUrl: buildPasswordResetLink(
+          rawToken,
+          config.publicWebOrigin.origin,
+        ),
+        expiresInMinutes: PASSWORD_RESET_TTL_MINUTES,
+      });
+      try {
+        await executeInTransaction(fastify.db, async (tx) => {
+          await createPasswordResetTokenRepo(tx).issueWithinTransaction(
+            anonCtx,
+            {
+              userId: user.id,
+              tokenHash: hashToken(rawToken),
+              expiresAt: new Date(
+                fastify.now().getTime() + PASSWORD_RESET_TTL_MS,
+              ),
+              now: fastify.now(),
+            },
+          );
+          await createEmailOutboxRepo(tx).create(anonCtx, {
+            type: "password_reset",
+            recipientEmail,
+            subject: content.subject,
+            bodyText: content.bodyText,
+            bodyHtml: content.bodyHtml,
+            maxAttempts: config.email.maxAttempts,
+            recipientUserId: user.id,
+          });
+        });
+      } catch (err) {
+        if (err instanceof PasswordResetCooldownError) {
+          // Concurrent duplicate request lost the one-open-token race.
+          auditOutcome("cooldown", user.id);
+          return uniform();
+        }
+        throw err;
+      }
+      auditOutcome("issued", user.id);
+      return uniform();
+    },
+  );
+
+  fastify.post(
+    "/password-reset/consume",
+    {
+      config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } },
+      schema: {
+        body: PasswordResetConsumeRequestSchema,
+        response: {
+          200: PasswordResetConsumeResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
+    },
+    /**
+     * POST /password-reset/consume — set a new password with a reset token.
+     *
+     * The token CAS-consumes inside the same transaction as the password
+     * write + auth-epoch advance, so concurrent double-submit yields exactly
+     * one success and any deactivated-user race fails closed inside the
+     * consume statement. Expired, consumed, revoked-by-deactivation, and
+     * unknown tokens are one generic 400.
+     */
+    async (request, reply) => {
+      const data = PasswordResetConsumeRequestSchema.parse(request.body);
+      const passwordHash = await hashPassword(data.password);
+      const org = await resolveDefaultOrgForIdentity();
+      if (!org) {
+        return reply
+          .code(400)
+          .send(buildErrorResponse(request.id, "PASSWORD_RESET_INVALID"));
+      }
+      const anonCtx = {
+        organizationId: org.id,
+        actorId: "anonymous",
+        role: "Candidate" as Role,
+        permissions: [],
+        sessionId: "anonymous",
+      };
+
+      const reset = await executeInTransaction(fastify.db, async (tx) => {
+        const consumed = await createPasswordResetTokenRepo(
+          tx,
+        ).consumeByTokenHashWithinTransaction(
+          anonCtx,
+          hashToken(data.token),
+          fastify.now(),
+        );
+        if (!consumed) return null;
+        const tokenCtx = {
+          organizationId: consumed.organizationId,
+          actorId: consumed.userId,
+          role: "Candidate" as Role,
+          permissions: [],
+          sessionId: "anonymous",
+        };
+        const updated = await createUserRepo(
+          tx,
+        ).updatePasswordAndAdvanceAuthEpoch(
+          tokenCtx,
+          consumed.userId,
+          passwordHash,
+        );
+        if (!updated) return null;
+        await recordAtomicHttpAudit(tx, request, tokenCtx, {
+          action: "auth.password_reset",
+          targetType: "user",
+          targetId: consumed.userId,
+        });
+        return updated;
+      });
+
+      if (!reset) {
+        return reply
+          .code(400)
+          .send(buildErrorResponse(request.id, "PASSWORD_RESET_INVALID"));
+      }
+      return reply.code(200).send({ ok: true as const });
     },
   );
 };

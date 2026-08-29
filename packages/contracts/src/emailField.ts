@@ -63,3 +63,18 @@ export function optionalEmailField() {
 export function nullableEmailField() {
   return z.string().email().max(EMAIL_MAX_LENGTH).nullable();
 }
+
+/**
+ * Zod schema for a REQUIRED write-side email field (#297 invitation flow).
+ *
+ * Same normalization as {@link optionalEmailField} (trim; blank → invalid)
+ * but the field must be present and valid — an invitation without a
+ * recipient address has no delivery path.
+ */
+export function requiredEmailField() {
+  return z
+    .string()
+    .max(EMAIL_MAX_LENGTH)
+    .transform((v) => normalizeEmailInput(v))
+    .pipe(z.string().email().max(EMAIL_MAX_LENGTH));
+}

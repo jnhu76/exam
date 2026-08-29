@@ -11,6 +11,7 @@ import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
+import { createPasswordResetTokenRepo } from "@exam/db/src/repository/passwordResetTokenRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
@@ -297,6 +298,19 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
                 role: newRole,
               },
             );
+          }
+
+          // #297: deactivation is credential-revocation-grade. Advance the
+          // auth epoch so JWTs issued before deactivation stay dead even if
+          // the account is re-activated later, and burn outstanding email
+          // password-reset tokens so a link sent before deactivation cannot
+          // outlive a deactivate/reactivate cycle. Both are atomic with the
+          // isActive flip.
+          if (activeChanged && data.isActive === false) {
+            await txUserRepo.advanceAuthEpoch(ctx, id);
+            await createPasswordResetTokenRepo(
+              tx,
+            ).deleteAllForUserWithinTransaction(ctx, id);
           }
 
           await syncUsersRoleFromPrimary(tx, ctx, id);

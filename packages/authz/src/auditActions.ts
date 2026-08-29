@@ -25,6 +25,11 @@ export const AuditAction = {
   Logout: "logout",
   AuthProfileUpdate: "auth.profile_update",
   AuthPasswordUpdate: "auth.password_update",
+  // #297 identity lifecycle. The request event is best-effort and carries an
+  // outcome (issued / unknown_user / no_email / cooldown) — the outcome is
+  // admin-internal audit truth, never a client-visible signal.
+  AuthPasswordResetRequested: "auth.password_reset_requested",
+  AuthPasswordReset: "auth.password_reset",
 
   // ── Attempt lifecycle (candidate runtime) ──
   AttemptStart: "attempt.start",
@@ -105,6 +110,10 @@ export const AuditAction = {
   UserDisabled: "user.disabled",
   UserReactivated: "user.reactivated",
   UserDelete: "user.delete",
+  // #297 staff invitation lifecycle.
+  UserInvited: "user.invited",
+  UserInvitationRevoked: "user.invitation_revoked",
+  UserInvitationAccepted: "user.invitation_accepted",
 
   // ── Exports ──
   ExportScores: "export_scores",
