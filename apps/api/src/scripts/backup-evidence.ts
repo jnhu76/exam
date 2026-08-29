@@ -110,10 +110,25 @@ function assertExecutor(v: string): BackupExecutorType {
   return assertOneOf(v, EXECUTOR_TYPES, "executor");
 }
 
-function parsePositiveInt(v: string, flag: string): number {
+/** Counters where 0 is a legitimate value (duration-ms, pruned-*). */
+export function parseNonNegativeInt(v: string, flag: string): number {
   const n = Number(v);
   if (!Number.isInteger(n) || n < 0)
     fail(`--${flag} must be a non-negative integer`);
+  return n;
+}
+
+/**
+ * Artifact sizes for VERIFIED successes (#351): a real backup artifact is
+ * never 0 bytes, and a 0 has historically been the fingerprint of a
+ * failed measurement upstream (pg-basebackup.sh `|| true` + `:-0`). The
+ * evidence CLI must reject it instead of writing a 0-byte verified-success
+ * ledger row.
+ */
+export function parseStrictPositiveInt(v: string, flag: string): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0)
+    fail(`--${flag} must be a positive integer (> 0)`);
   return n;
 }
 
@@ -336,7 +351,7 @@ async function main(): Promise<void> {
         const operationId = required(args, "operation-id");
         const backupType = assertBackupType(required(args, "type"));
         const artifactLabel = required(args, "artifact-label");
-        const sizeBytes = parsePositiveInt(
+        const sizeBytes = parseStrictPositiveInt(
           required(args, "size-bytes"),
           "size-bytes",
         );
@@ -421,6 +436,11 @@ async function main(): Promise<void> {
           fail("spool: artifactLabel missing");
         const backupType = assertOneOf(spool.backupType, BACKUP_TYPES, "type");
         let sizeBytes = 0;
+        // #351 boundary: unlike `complete`, the cold spool stays
+        // non-negative — legacy spools may omit artifactSizeBytes entirely
+        // and defaulting to 0 is their documented shape. Tightening this is
+        // a spool schema decision, not part of the measurement fail-closed
+        // remediation.
         if (spool.artifactSizeBytes !== undefined) {
           if (
             typeof spool.artifactSizeBytes !== "number" ||
@@ -503,7 +523,7 @@ async function main(): Promise<void> {
           "source",
         );
         const durationMs = args["duration-ms"]
-          ? parsePositiveInt(args["duration-ms"], "duration-ms")
+          ? parseNonNegativeInt(args["duration-ms"], "duration-ms")
           : undefined;
         // An automated SUCCESS drill is the only evidence that can prove RTO,
         // and RTO is measured from its duration — so a duration is REQUIRED on
@@ -567,10 +587,10 @@ async function main(): Promise<void> {
           startedAt: now,
           completedAt: now,
           prunedBackups: args["pruned-backups"]
-            ? parsePositiveInt(args["pruned-backups"], "pruned-backups")
+            ? parseNonNegativeInt(args["pruned-backups"], "pruned-backups")
             : null,
           prunedWalArchives: args["pruned-wal-archives"]
-            ? parsePositiveInt(
+            ? parseNonNegativeInt(
                 args["pruned-wal-archives"],
                 "pruned-wal-archives",
               )

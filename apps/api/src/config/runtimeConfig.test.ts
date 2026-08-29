@@ -1108,6 +1108,17 @@ describe("runtimeConfig", () => {
       expect(config.email.smtp).toBeNull();
     });
 
+    it("defaults the loop shutdown budget to the #351 contract value (8s)", () => {
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      // INVARIANT (#351 shutdown budget contract): loop 8s + audit drain
+      // 10s + DB close 10s must stay below compose stop_grace_period (45s).
+      // The deployment-side relation is enforced by
+      // scripts/repository-contract/deployment-topology-contract.mjs; this
+      // pins the in-app default that the compose default mirrors.
+      expect(config.emailWorker.shutdownTimeoutMs).toBe(8000);
+    });
+
     it("parses EMAIL_FAKE_DELAY_MS as a non-negative integer", () => {
       process.env.EMAIL_FAKE_DELAY_MS = "750";
       resetRuntimeConfigForTest();

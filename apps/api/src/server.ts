@@ -31,6 +31,9 @@ loadRootEnv();
 
 const { port, host } = getRuntimeConfig();
 
+/** #351 shutdown budget term: grace for natural exit after app.close(). */
+const BOUNDED_EXIT_ASSIST_MS = 2_000;
+
 function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
   let shutdownStarted = false;
   const close = async () => {
@@ -58,21 +61,39 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
       app.log.error({ err }, "Graceful shutdown failed");
       process.exitCode = 1;
     }
-    // Exit deterministically once graceful close has settled. Background
-    // scanners keep non-unref'ed timers that would otherwise hold the event
-    // loop open past the container runtime's stop grace period, turning a
-    // clean SIGTERM shutdown into a SIGKILL (exit 137).
-    process.exit(process.exitCode || 0);
+    // Bounded exit assist (#351): after app.close() settles, work ABANDONED
+    // by a bounded shutdown (e.g. an in-flight email send past the loop's
+    // EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS budget) can still hold ref'ed
+    // timers/sockets, so natural exit would wait for it — past the
+    // container stop grace, turning a clean bounded shutdown into SIGKILL
+    // (137). Give the event loop a short grace to drain naturally (the
+    // normal clean path — regression-tested by server.shutdown.test.ts),
+    // then log the remaining owners and exit with the settled code. This
+    // is NOT the old unconditional process.exit(): it fires only after
+    // graceful close has settled, it is bounded, and it names what it cuts.
+    // INVARIANT: BOUNDED_EXIT_ASSIST_MS is a term of the #351 shutdown
+    // budget contract (loop 8s + audit 10s + DB 10s + this 2s = 30s <
+    // compose stop_grace_period 45s; enforced by
+    // scripts/repository-contract/deployment-topology-contract.mjs).
+    const assist = setTimeout(() => {
+      app.log.warn(
+        { activeResources: process.getActiveResourcesInfo() },
+        `event loop still busy ${BOUNDED_EXIT_ASSIST_MS}ms after graceful close — exiting with settled code (abandoned background work cut off)`,
+      );
+      process.exit(process.exitCode ?? 0);
+    }, BOUNDED_EXIT_ASSIST_MS);
+    assist.unref();
   };
   const onSignal = () => {
     void close();
   };
+  // INVARIANT: the signal listeners stay installed for the process's whole
+  // lifetime. The `shutdownStarted` guard already makes re-entry a no-op;
+  // removing the listeners mid-shutdown (as an earlier version did in an
+  // onClose hook) would re-open the DEFAULT SIGTERM disposition for any
+  // second signal — an instant exit 143 mid-graceful-close (#351).
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
-  app.addHook("onClose", async () => {
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
-  });
 }
 
 /**

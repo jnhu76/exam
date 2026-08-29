@@ -815,8 +815,14 @@ function resolveEmailWorkerConfig(
   const heartbeatStaleThresholdMs = positiveIntSchema.parse(
     env.EMAIL_WORKER_HEARTBEAT_STALE_MS ?? "60000",
   );
+  // INVARIANT (#351 shutdown budget contract): this default is one term of
+  // the deployment budget hierarchy —
+  //   container stop grace (compose stop_grace_period, 45s)
+  //     > email loop drain (this, 8s) + audit drain (10s) + DB pool close (10s)
+  //     > each individual component budget.
+  // Do not raise it without raising stop_grace_period in docker-compose.yml.
   const shutdownTimeoutMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS ?? "30000",
+    env.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS ?? "8000",
   );
   // Concurrency is fixed at 1 for Phase 1 (single worker instance).
   // The config field exists for forward compatibility.

@@ -174,21 +174,31 @@ evidence_fail() {
 }
 evidence_complete() {
   local size_bytes
-  # Compute the size FIRST, then default to 0 — `du | cut || echo 0` would
-  # bind the fallback to `cut` (which succeeds with empty output when du
-  # fails), producing an invalid empty --size-bytes that the evidence CLI
-  # rejects and fails a REAL, verified backup.
-  #
   # du runs INSIDE the postgres container (as root), not on the host:
   # pg_basebackup writes root-owned 0700 subdirectories, which a host-side
   # du cannot traverse on native-Linux bind mounts (e.g. WSL2) — it exits 1
-  # with an UNDERSTATED size, and under `set -euo pipefail` that failure
-  # kills the script after a fully verified backup.
-  size_bytes="$(docker run --rm \
-    -v "${DEST}:/backup:ro" \
-    postgres:18.4-bookworm \
-    du -sb /backup 2>/dev/null | cut -f1 || true)"
-  size_bytes="${size_bytes:-0}"
+  # with an UNDERSTATED size.
+  #
+  # #351 fail-closed contract: the artifact size is part of the SUCCESS
+  # evidence. A measurement that fails, comes back empty/non-numeric, or is
+  # zero must NOT be recorded as a verified success (previously `|| true` +
+  # `:-0` turned measurement failure into a 0-byte success ledger row).
+  # Instead the run is recorded as failed evidence and the script exits 1 —
+  # the backup itself exists and passed pg_verifybackup; re-run the
+  # measurement/evidence step after fixing the cause.
+  if ! size_bytes="$(docker run --rm \
+      -v "${DEST}:/backup:ro" \
+      postgres:18.4-bookworm \
+      du -sb /backup 2>/dev/null | cut -f1)" \
+    || [ -z "${size_bytes}" ] \
+    || ! [[ "${size_bytes}" =~ ^[0-9]+$ ]] \
+    || [ "${size_bytes}" -eq 0 ]; then
+    echo "FAIL: artifact size measurement failed (or produced no positive size)." >&2
+    echo "       The backup at ${DEST} exists and passed pg_verifybackup, but a" >&2
+    echo "       verified-success ledger row requires a real artifact size (#351)." >&2
+    evidence_fail "artifact size measurement failed (fail-closed evidence, #351)"
+    exit 1
+  fi
   if ! evidence complete --operation-id "${EVIDENCE_OPERATION_ID}" \
       --type physical_base --artifact-label "${ARTIFACT_LABEL}" \
       --size-bytes "${size_bytes}" --verification-method pg_verifybackup \
