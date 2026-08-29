@@ -54,9 +54,7 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 
 ## 4. 信息权威与任务路由
 
-文档的唯一入口和冲突处理规则是 [`docs/README.md`](docs/README.md)。不要把 Archive、审计报告、Issue、PR、注释或旧阶段计划当作当前契约。
-
-不同信息由不同载体负责：
+文档入口和冲突处理规则见 [`docs/README.md`](docs/README.md)。不同类型的事实由不同载体负责，不使用一个全局优先级比较所有信息。
 
 | 信息 | 权威来源 |
 | --- | --- |
@@ -64,15 +62,29 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 | 对外行为和数据格式 | `docs/contracts/`、OpenAPI 和契约测试 |
 | 产品不变量与领域模型 | `docs/SPEC.md` |
 | 当前实现架构 | `docs/architecture/` 与生产代码 |
-| 阶段边界与未来范围 | `docs/roadmap/phase-roadmap.md`、当前 Roadmap/Issue 索引 |
-| 当前实现状态 | `docs/status/implementation-status.md` |
+| 阶段边界 | `docs/roadmap/phase-roadmap.md` |
+| 当前施工顺序与 disposition | 当前 roadmap tracker；现阶段为 GitHub Issue #333 |
+| 当前任务的 scope / acceptance / non-goals | 被当前 roadmap 指定的 OPEN Issue |
+| 当前实现状态 | `docs/status/implementation-status.md` 与 as-built evidence |
 | 测试、环境变量和数据库生命周期 | `docs/standards/testing.md` |
 | 代码质量和依赖边界 | `docs/standards/code-quality.md` |
 | 前端视觉系统 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md` |
 | 实际命令与 CI 接线 | `package.json` scripts、`.github/workflows/` |
-| 修改历史 | Git、Issue、PR 与 `docs/archive/` |
+| 修改历史 | Git、已关闭 Issue、已合并 PR 与 `docs/archive/` |
+
+OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前必须用 current master 对 Issue 做 reality audit；Issue body、评论或旧 checkpoint 与当前实现冲突时，先刻画 as-built，再更新任务契约。Closed Issue、merged PR、审计报告和 Archive 只作为历史证据，不得覆盖当前代码、Accepted ADR 或产品契约。
 
 如果同一事实在两个来源中不一致，必须把冲突视为缺陷：先用代码、测试或精确静态论证描述 as-built 行为，再确认哪个权威来源过期或被违反，最后一起收敛。禁止挑选最方便的一份，也禁止为了让文字一致而伪造实现状态。
+
+### Issue 同步协议
+
+有对应 GitHub Issue 的施工必须保持 Issue 与代码同步：
+
+1. 开工前记录 current-master reality；Issue 明显过时时先更新 scope、acceptance 或 disposition。
+2. 施工中若 root cause、contract、scope 或决策发生实质变化，及时更新 Issue，不等最终 closeout。
+3. 新发现但不属于当前 closure 的问题，不静默塞进当前 PR；关联已有 Issue 或建立 focused follow-up。
+4. PR ready 前确认代码、测试、长期文档、Issue 和 PR 描述表达同一个系统现实。
+5. merge 后写 closeout；只有 acceptance criteria 完整满足才关闭 Issue。若存在当前 roadmap tracker，再写一次 campaign checkpoint，不逐 commit spam。
 
 按任务只加载相关文档，不需要遍历全部 `docs/`：
 
@@ -92,7 +104,7 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 
 - PostgreSQL 是唯一支持的数据库。
 - 所有业务数据访问必须通过 repository；repository 方法显式接收 `RequestContext`，route 禁止直接查询数据库。
-- `organizationId` 来自当前请求的内部组织边界；禁止暴露 `organizationSlug` 登录、租户切换器、SuperAdmin 或可运行的 `multiTenant` 模式，除非 Phase 4 任务得到明确批准。
+- `organizationId` 来自当前请求的内部组织边界；禁止暴露 `organizationSlug` 登录、租户切换器、SuperAdmin 或可运行的 `multiTenant` 模式，除非对应平台化任务得到明确批准。
 - Exam 和 ExamAttempt 不是普通 CRUD；状态变化必须通过领域 command/engine，禁止直接写 status 绕过状态机、授权、审计或事务。
 - 服务端是时间与考试规则权威；客户端倒计时仅用于显示。
 - 发布/开始考试后的题目、评分规则和相关策略必须使用冻结快照，不能被题库或配置的后续修改反向改变。
