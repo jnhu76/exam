@@ -885,7 +885,7 @@ data volume — it must be measured, not copied unmeasured.
 ## 10. Responsive / accessibility baseline (inherited authority)
 
 The Recovery Center inherits the existing frontend visual authority (see
-`AGENTS.md` → "Frontend Visual Authority" and `docs/standards/ui-system.md`):
+`AGENTS.md` → “前端任务路由” and `docs/standards/ui-system.md`):
 
 ```text
 - Tailwind + shadcn/ui substrate

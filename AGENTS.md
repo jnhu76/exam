@@ -1,569 +1,222 @@
-# Exam Platform - Agent Instructions
+# Exam 项目代理协作契约
 
-## Project Context
+本文件规定整个仓库内编码代理必须遵守的工作方式、项目边界和文档路由。它不是第二份产品规格、架构文档、测试手册或阶段状态表。更具体的目录级 `AGENTS.md` 可以增加局部约束，但不得静默削弱本文件、Accepted ADR、产品契约或安全边界。
 
-Configurable **LAN/on-premise exam and assessment platform**. It is not hardcoded to a university, school, lab, or single course scenario. Deployments may include departments, training centers, labs, enterprises, associations, or any organization that needs internal exams or certification workflows.
+规范词“必须”“禁止”“应当”“可以”具有约束含义。
 
-**Phase 1 is a single-tenant, multi-user Minimal Deliverable Exam System.** One deployment represents one organization. The current Phase 1 product path is Admin + Candidate only: Admin configures candidates, courses, questions, exams, assignments, grading, diagnostics, and exports; Candidate logs in, takes assigned exams, submits attempts, and views allowed results.
+## 1. 项目定位
 
-Strict closed-book proctored exam operation is Phase 2+. Teacher-like roles, Proctor, Grader, scoped permissions, invitation, and email account lifecycle are Phase 3. Pass-to-proceed APIs, service tokens, external integrations, optional multiTenant, and SuperAdmin are Phase 4 platformization/integration.
+Exam 是面向局域网和本地部署的通用考试与测评平台。一个部署代表一个机构；当前运行模式是单租户、多用户，`organizationId` 是内部数据归属边界，不代表已经提供多租户产品能力。
 
-**Read `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` first** — they are the specification and phase authority documents. If implementation conflicts with them, the spec and roadmap win.
+项目不得硬编码学校、大学、学生、学号、工号或某一门课程等单一使用场景：
 
-## Product Generalization Rules
+- 产品标题、机构名称和品牌信息来自部署设置；
+- 考试名称来自领域数据；
+- Candidate 是通用考生身份，其字段由 `CandidateField` 定义；
+- Course 可以表示课程、培训模块、认证类别或准入领域；
+- 场景化文字只能出现在文档、测试、Story 或明确的演示数据中。
 
-- Do not hardcode product title such as "校内考试", "校园内网考试平台", "University LAN exam system", or any single deployment scenario.
-- Product title, subtitle, footer, and organization display name come from deployment settings / `OrganizationSettings`; organization display name falls back to the internal default `Organization.displayName`. This must not imply an organization creation UI in Phase 1.
-- Exam titles come from `Exam.title`, set by Admin in Phase 1. Teacher-like roles are Phase 3 scoped role bundles.
-- Candidate identity comes from the internal default organization's `CandidateField`; never assume Student, 学生, 学号, 工号, department, or class.
-- Course may mean course, training module, certification category, access qualification, or assessment domain. Keep the code generic.
-- Scenario-specific words may appear only in docs, tests, stories, or demo seed data.
+运行时必须保持 LAN/on-premise 和离线可用，不得顺手加入云端 API、CDN、外部遥测服务或在线服务依赖。外部工具可以用于代理侧研究，不能因此成为产品运行依赖。
 
-## Phase 1.x Single-Tenant Rule
+## 2. 工作模式与授权
 
-- Phase 1.x is single-tenant, multi-user.
-- Phase 1 product roles are Admin and Candidate only.
-- Teacher / Proctor / Grader are future role bundles, not Phase 1 product roles.
-- organization table and organizationId are kept as internal data boundary.
-- default organization is kept as the only organization.
-- Do not expose organizationSlug login.
-- Do not implement tenant switcher.
-- Do not expose SuperAdmin.
-- Do not allow DEPLOYMENT_MODE=multiTenant as current runnable mode.
-- multiTenant / SuperAdmin / cross-tenant management can only be implemented in Phase 4 platformization, not in current tasks.
+开始任务时先判断当前处于哪一种模式：
 
-## Tech Stack
+- **调查/审计**：只读取、复现、测量和报告，不修改文件；
+- **设计**：提出边界、备选方案、风险和验证方法，不实施；
+- **施工**：只有得到明确修改授权后才进入；`/tdd` 可以作为施工授权；
+- **评审**：检查现有 diff、证据和风险，不擅自替作者继续扩展功能。
 
-| Layer    | Tech                                                               |
-| -------- | ------------------------------------------------------------------ |
-| Frontend | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4          |
-| Backend  | Node.js LTS + Fastify + TypeScript + Zod validation                |
-| Database | PostgreSQL via Drizzle ORM |
-| Auth     | HTTP-only Cookie + JWT, argon2/bcrypt password hashing             |
-| Monorepo | pnpm workspace: `apps/`, `packages/`                               |
+施工前必须：
 
-### Database Notes
+1. 检查 `git status --short`、当前分支和基线，保护已有改动；
+2. 阅读相关代码、测试以及本文件第 4 节路由到的权威文档；
+3. 明确预期行为、改动边界和验证信号；
+4. 如果存在会实质改变产品或架构的多个合理方案，先等待人类确认；
+5. 对根因未知的问题先建立可重复证据，不猜测后直接改代码。
 
-- PostgreSQL is the only supported database.
-- Repository and service code must remain database-agnostic.
-- Run migrations, integration tests, and smoke tests against PostgreSQL before any release.
+未经明确要求，禁止 commit、push、merge、rebase、force-push、切换他人分支或执行破坏性 Git 操作。不得使用 `git reset --hard`、`git clean` 或整仓恢复来处理不属于当前任务的文件。
 
-### Local Database Discipline (READ THIS BEFORE TOUCHING ANY DB)
+## 3. 长期修改原则
 
-The local dev Postgres container (`pnpm db:up`) intentionally runs **three databases**. They have **separate, non-overlapping purposes**. An agent MUST keep them separate — mixing them corrupts dev state or breaks tests.
+- 优化项目全生命周期的正确性、可维护性、认知复杂度和变更风险。
+- AI 写代码快不代表代码没有成本；代码量、抽象、依赖、迁移和理解成本都是真实成本。
+- 先寻找和扩展已有正确结构，避免为同一职责建立第二条实现路径。
+- 同一种事实只保留一个权威写入口；派生信息应由代码生成、引用权威来源或删除。
+- 结构性问题在结构层解决，不用特例、吞错、无界重试或宽泛兜底掩盖根因。
+- 替换完成后删除旧实现，不长期保留新旧双轨、兼容壳和无调用代码。
+- 遵循 KISS；选择满足当前需求的最小长期正确设计，不为了理论纯粹性扩大系统。
+- 只修改完成当前任务所必需的邻近结构；无关问题记录为后续工作，不顺手扩大范围。
+- 优先使用清晰的类型、Schema、状态机和模块边界表达约束，禁止用 `any`、类型断言或重复 DTO 绕过设计问题。
+- 单一调用不是禁止 helper 的理由；仅在 helper 形成清晰语义边界、隔离生命周期/错误边界或显著降低认知负担时抽取。
+- 单文件超过 2000 行触发结构审查，不触发机械拆分。按独立变化原因、生命周期、领域边界和可测试性决定是否拆分；生成文件和声明式表格单独判断。
+- 成熟第三方库能显著降低自维护复杂度，且依赖成本合理时优先复用；简单稳定的能力不为“禁止造轮子”而强行引入依赖。
 
-| Database | Env var | Purpose | Seeded by | Used by |
-| --- | --- | --- | --- | --- |
-| `exam` | `DATABASE_URL` | **Dev runtime** — what `pnpm dev` and humans read/write | `pnpm db:seed:demo` (full demo data) | API/web dev servers, manual UI testing |
-| `exam_test` | `TEST_DATABASE_URL` | **vitest runtime only** — isolated, disposable | nothing persistent (tests create/truncate their own data via worker-DB isolation) | `pnpm test`, `pnpm test:integration`, `pnpm verify`, `pnpm coverage` |
-| `exam_e2e` | `DATABASE_URL` (only inside `run-wsl.sh`) | **WSL Playwright E2E only** — fast local e2e without building the Docker image; reseeded every run | `scripts/e2e/run-wsl.sh` (baseline + demo seed, idempotent; `--no-reseed` to skip) | `bash scripts/e2e/run-wsl.sh` |
+## 4. 信息权威与任务路由
 
-> **Why `exam_e2e` is a third DB:** WSL E2E reseeds every run to a known demo state. Pointing it at `exam` would clobber the human's manual dev data; pointing it at `exam_test` would collide with vitest's worker-DB isolation. A dedicated `exam_e2e` keeps fast-iteration e2e, dev, and unit tests all isolated. The Docker E2E path (`scripts/e2e/run.sh` + `docker-compose.test.yml`) uses its own throwaway container volume instead and does NOT touch any of these host databases.
+文档入口和冲突处理规则见 [`docs/README.md`](docs/README.md)。不同类型的事实由不同载体负责，不使用一个全局优先级比较所有信息。
 
-> **E2E reseed contract (issue #330):** the reseed CONVERGES the target database to the canonical baseline (guarded truncate of business tables, then migrate + seed — `packages/db/src/e2eReset.ts`); it is not an additive upsert. A parallel worker DB that survived a failed run (`E2E_KEEP_WORKER_DB_ON_FAILURE=1` retention, or a crash leak) is renamed to `exam_e2e_w<N>_prior` at the next run's startup — a forensic artifact kept exactly one generation per worker slot, inspectable, never reused as execution state, and never touched by run cleanup. Drop stale archives manually if disk matters.
+| 信息 | 权威来源 |
+| --- | --- |
+| 特定架构决策 | Accepted ADR |
+| 对外行为和数据格式 | `docs/contracts/`、OpenAPI 和契约测试 |
+| 产品不变量与领域模型 | `docs/SPEC.md` |
+| 当前实现架构 | `docs/architecture/` 与生产代码 |
+| 阶段边界 | `docs/roadmap/phase-roadmap.md` |
+| 当前施工顺序与 disposition | 当前 roadmap tracker；现阶段为 GitHub Issue #333 |
+| 当前任务的 scope / acceptance / non-goals | 被当前 roadmap 指定的 OPEN Issue |
+| 当前实现状态 | `docs/status/implementation-status.md` 与 as-built evidence |
+| 测试、环境变量和数据库生命周期 | `docs/standards/testing.md` |
+| 代码质量和依赖边界 | `docs/standards/code-quality.md` |
+| 前端视觉系统 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md` |
+| 实际命令与 CI 接线 | `package.json` scripts、`.github/workflows/` |
+| 修改历史 | Git、已关闭 Issue、已合并 PR 与 `docs/archive/` |
 
-**Connection facts:**
+OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前必须用 current master 对 Issue 做 reality audit；Issue body、评论或旧 checkpoint 与当前实现冲突时，先刻画 as-built，再更新任务契约。Closed Issue、merged PR、审计报告和 Archive 只作为历史证据，不得覆盖当前代码、Accepted ADR 或产品契约。
 
-- Container: `exam-db-1` (postgres:18.4), host port `DB_HOST_PORT` (default `5432`) → container `5432`, user/pass `exam`/`exam`. Port ownership map: `docs/development/ports.md`.
-- `exam_test` is self-provisioned by the test harness (`packages/db/src/testDbBootstrap.ts`, wired into both vitest globalSetups) on the implicit local URL — created/recreated whenever missing, no Docker initdb script involved. An explicit `TEST_DATABASE_URL`/`TEST_DB_URL` is operator-owned instead: it must already exist (fail fast, never auto-created). The test name-safety guard in `packages/db/src/testDb.ts` still refuses any DB name without `test`/`e2e`/`ci`.
-- The DB name is resolved by APP_MODE: `test`/`ci`/`e2e` → `TEST_DATABASE_URL` when set; otherwise a LOCAL test URL is constructed from `DB_HOST_PORT` (`postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_test`, the single source — an explicit value always wins). Never falls back to `DATABASE_URL`. Otherwise → `DATABASE_URL` (dev: unset `DATABASE_URL` is constructed from `DB_HOST_PORT` by `packages/db/src/databaseUrl.ts`).
+如果同一事实在两个来源中不一致，必须把冲突视为缺陷：先用代码、测试或精确静态论证描述 as-built 行为，再确认哪个权威来源过期或被违反，最后一起收敛。禁止挑选最方便的一份，也禁止为了让文字一致而伪造实现状态。
 
-**Agent rules — do NOT deviate:**
+### Issue 同步协议
 
-1. **`pnpm dev` uses `exam`, period.** Do not point the dev server at `exam_test`. The human's manual data lives in `exam`; polluting it with test fixtures or truncating it is a bug.
-2. **`pnpm test` / `verify` use `exam_test`, period.** They never read or write `exam`. Tests manage their own data (worker-DB isolation / per-test truncate); an agent must not pre-seed `exam_test` with demo data.
-3. **`pnpm db:seed:demo` seeds `exam` only.** It is the one command that fills the dev DB with the demo dataset (org, users, courses, questions, exams, settings). Never run it against `exam_test`.
-4. **Do not invent a fourth database.** The three-DB split (`exam` / `exam_test` / `exam_e2e`) is the contract. Do not create `exam_dev`, `exam_local`, or any other name.
-5. **Env-var priority (SOTA: shell > `.env.local` > `.env`).** This is Vite/dotenv native behavior and is NOT negotiable:
-   - `process.env` (shell export) always wins; `.env` files never overwrite it.
-   - `.env` defines runtime/dev config (`DATABASE_URL`, Redis, JWT, etc.). Copy from `.env.example`.
-   - `.env.test.local` defines test config (`TEST_DATABASE_URL`, isolation vars). Copy from `.env.test.example`:
-     ```bash
-     cp .env.example .env              # runtime/dev (one-time)
-     cp .env.test.example .env.test.local  # test config (one-time)
-     ```
-   - A bare `pnpm dev` reads `.env`; a bare `pnpm test` / `pnpm verify` reads `.env` + `.env.test.local`. Both should work with zero shell setup after the two copies above.
-   - Deployment env is a SEPARATE file: `.env.deploy` (from `.env.deploy.example`, filled by `node scripts/generate-env.mjs`), read via `docker compose --env-file .env.deploy`. Dev tooling never reads it; the flag replaces the default `.env` as Compose's interpolation file, so deployment Compose never reads `.env` when it is passed (host shell exports still win over both files).
-   - An agent must NOT rely on a shell `export` to fix a missing `.env` value. If `.env` is missing a required DB URL, fix `.env`, not the shell.
-   - Shell env residue is per-session only and does not persist; treat any inherited `DATABASE_URL`/`TEST_DATABASE_URL`/`APP_MODE` as suspect. When in doubt, prefix the command with an explicit `unset` or the intended values, e.g.:
+有对应 GitHub Issue 的施工必须保持 Issue 与代码同步：
 
-     ```bash
-     # Bare run (relies on .env — preferred):
-     pnpm verify
-     # Force dev DB explicitly when a stale shell var is present
-     # (an explicit DATABASE_URL wins over the DB_HOST_PORT-constructed one):
-     DATABASE_URL="postgresql://exam:exam@localhost:5432/exam" pnpm dev
-     ```
+1. 开工前记录 current-master reality；Issue 明显过时时先更新 scope、acceptance 或 disposition。
+2. 施工中若 root cause、contract、scope 或决策发生实质变化，及时更新 Issue，不等最终 closeout。
+3. 新发现但不属于当前 closure 的问题，不静默塞进当前 PR；关联已有 Issue 或建立 focused follow-up。
+4. PR ready 前确认代码、测试、长期文档、Issue 和 PR 描述表达同一个系统现实。
+5. merge 后写 closeout；只有 acceptance criteria 完整满足才关闭 Issue。若存在当前 roadmap tracker，再写一次 campaign checkpoint，不逐 commit spam。
 
-6. **Always verify the resolved DB, never assume.** Before trusting that dev uses `exam` or tests use `exam_test`, prove it:
+按任务只加载相关文档，不需要遍历全部 `docs/`：
 
-   ```bash
-   # Which DB does a process actually see? Query it, don't guess from .env:
-   docker exec exam-db-1 psql -U exam -d exam -tAc "SELECT current_database(), count(*) FROM exams;"
-   docker exec exam-db-1 psql -U exam -d exam_test -tAc "SELECT current_database(), count(*) FROM exams;"
-   ```
+| 任务类型 | 施工前必须阅读 |
+| --- | --- |
+| 产品范围、角色、领域语义 | `docs/SPEC.md`、`docs/roadmap/phase-roadmap.md`、当前状态文档 |
+| 状态机、答题、恢复、批改 | `docs/architecture/exam-runtime.md`、相关 Accepted ADR/契约 |
+| 权限、角色、scope | `docs/architecture/authorization.md`、相关 Accepted ADR |
+| 数据库、测试隔离、CI、flake | `docs/standards/testing.md`、`docs/standards/test-flakes.md` |
+| 前端结构和视觉修改 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md`、`DESIGN.md` |
+| 产品文案与 i18n | `docs/standards/i18n-copy-policy.md`、部署设置与 locale 的权威实现 |
+| 部署、备份、升级 | `docs/deployment/` 中对应 runbook/contract |
+| 形式化模型 | `formal/AGENTS.md`、`formal/README.md` 和相应模型说明 |
+| Docker、pnpm、Node、框架升级 | 本地配置与锁文件；行为仍不确定时再查对应版本的官方文档 |
 
-7. **Resetting `exam_test` is allowed and expected** (tests are disposable). Resetting `exam` wipes the human's working demo data — only do it if explicitly asked, and re-run `pnpm db:seed:demo` afterward.
-8. **If unsure which DB a running process is using, prove it by querying the API or the DB directly** — never guess from `.env` alone.
+## 5. 不可绕过的产品与架构边界
 
-## Commands
+- PostgreSQL 是唯一支持的数据库。
+- 所有业务数据访问必须通过 repository；repository 方法显式接收 `RequestContext`，route 禁止直接查询数据库。
+- `organizationId` 来自当前请求的内部组织边界；禁止暴露 `organizationSlug` 登录、租户切换器、SuperAdmin 或可运行的 `multiTenant` 模式，除非对应平台化任务得到明确批准。
+- Exam 和 ExamAttempt 不是普通 CRUD；状态变化必须通过领域 command/engine，禁止直接写 status 绕过状态机、授权、审计或事务。
+- 服务端是时间与考试规则权威；客户端倒计时仅用于显示。
+- 发布/开始考试后的题目、评分规则和相关策略必须使用冻结快照，不能被题库或配置的后续修改反向改变。
+- 答案保存遵循版本化、幂等和冲突检测协议；不得用最后写入覆盖、仅在交卷时保存或客户端时间替代服务端版本。
+- API 输入/输出 Schema 和 DTO 来自 `@exam/contracts`；领域类型来自 `@exam/domain`，不得重新定义同义类型。
+- `packages/domain` 不依赖 Fastify、React、Drizzle 或其他内部 package；`apps/web` 不得直接依赖数据库或服务端 package。完整依赖图以代码质量文档和 `pnpm lint:arch` 为准。
+- 安全相关业务变更必须保持统一错误、结构化日志、权限边界和所需审计，不通过隐藏错误或降低校验来换取绿灯。
+
+## 6. 数据库与真实资源安全
+
+数据库生命周期的唯一完整契约是 [`docs/standards/testing.md` §2](docs/standards/testing.md#2-environment-variable-contract)，尤其是 §2.8。代理不得在本文件中维护另一套环境变量或数据库创建/清理流程。
+
+执行迁移、seed、truncate、drop、reset 或 E2E 清理前必须：
+
+1. 确认命令的生命周期所有者和允许目标；
+2. 解析并查询进程实际连接的数据库，不能只根据 `.env` 文件名猜测；
+3. 证明目标是测试/E2E 数据库，或取得清理人工开发数据的明确授权；
+4. 使用仓库已有脚本和名称安全保护，不发明第四套数据库或临时清理协议。
+
+禁止让测试读写人工开发数据库，禁止用 demo seed 污染测试数据库，禁止以静默 `|| true`、吞错或后台遗留连接掩盖清理失败。
+
+## 7. 开发与测试策略
+
+默认使用 TDD，但不把它变成仪式：
+
+- 行为已知的新功能和 Bug：先建立会在修改前失败的测试或最小复现，再实现和重构；
+- 根因未知、性能、并发、时序或工具链问题：先调查、测量和建立 characterization，再进入修复；
+- 测试必须覆盖真实契约，不通过过度 mock 复刻实现；优先把 mock 放在架构外部边界；
+- 单元/组件测试可以覆盖下一层真实依赖，更深的外部边界再隔离；数据库语义使用真实 PostgreSQL；
+- 时间和并发测试使用可控时钟、barrier、deferred promise 或显式生命周期信号，禁止用长 sleep、重试和扩大 timeout 证明正确性；
+- 修复 flake 时必须找到非确定性来源和生命周期所有者，不以增加等待、重跑或降低并发作为完成条件。
+
+开发循环运行最小相关测试，不在每次局部修改后机械执行全量门禁。完成后依据变更影响逐级扩大：
+
+1. 相关测试文件或 package；
+2. 相关 lint、typecheck、架构/契约检查；
+3. 涉及数据库、E2E、部署或真实用户路径时运行对应真实资源验证；
+4. 公共契约、共享基础设施、发布候选或合并门禁要求时运行 `pnpm verify`/E2E。
+
+命令以根 `package.json` 为唯一来源。常用入口包括：
 
 ```bash
-pnpm install
-pnpm --filter api dev
-pnpm --filter web dev
-pnpm dev
-
 pnpm format:check
-pnpm lint              # code-quality checker (not ESLint)
-pnpm lint:eslint       # ESLint on the web package
-pnpm lint:copy
+pnpm lint
+pnpm lint:eslint
 pnpm lint:arch
 pnpm typecheck
 pnpm test
-pnpm coverage
-pnpm test:integration  # compatibility alias of `pnpm test`
-pnpm test:e2e          # existing-env-only: needs migrated DB + seeded E2E data + running API/web
-pnpm e2e:docker        # managed Docker E2E lifecycle
-pnpm smoke             # lightweight PR smoke gate (single E2E spec)
-pnpm build
+pnpm verify:static
 pnpm verify
+bash scripts/e2e/run-wsl.sh
+pnpm e2e:docker
 ```
 
-- `pnpm lint` runs `scripts/check-code-quality.mjs` (copy, architecture, UI
-  guards). It is **not** ESLint; use `pnpm lint:eslint` for ESLint.
-- `pnpm lint:quality` is the canonical alias for `pnpm lint`.
-- `pnpm test:integration` is a compatibility alias for `pnpm test`; both invoke
-  `vitest run` with the same files.
-- `pnpm test:e2e` and `pnpm smoke` are **existing-environment-only**: they assume
-  an already-running API + web server and a migrated, E2E-seeded database. For a
-  managed lifecycle, use `pnpm e2e:docker` or `bash scripts/e2e/run-wsl.sh`.
+不得把未执行的门禁报告为 PASS；工具不可用或测试不适用时，明确记录 `SKIPPED` 和原因。
 
-## MCP / External Research Rules
+## 8. 前端任务路由
 
-MCP tools are for agent-side research, verification, and codebase navigation only. They must not introduce runtime cloud dependencies into the product. The exam platform itself must remain LAN/on-premise and offline-capable.
+前端视觉事实不在本文件重复。修改业务页面前按顺序检查：
 
-### Required MCP Usage
+1. `apps/web/src/components/ui/` 中的 shadcn/Radix primitive；
+2. `apps/web/src/components/shared/` 中的权威业务组件；
+3. `apps/web/src/typography/`、`apps/web/src/surface/` 和语义 token；
+4. `docs/standards/ui-system.md` 的组件职责和 Tailwind 边界。
 
-Before modifying files, the agent must use available MCP/search tools when the task involves any of the following:
+存在同一语义角色的组件时必须扩展其权威实现，不得局部复制第二套。业务页面可以使用 Tailwind 负责布局和响应式结构，但受治理的排版、surface、elevation 和 domain status 必须经过相应 recipe、component 或 mapping。不得手写 Radix/shadcn 已负责的 focus trap、Dialog、Select、Popover 等复杂交互 primitive。
 
-- Docker, Docker Compose, multi-stage builds, image size, cache behavior, or runtime entrypoints
-- pnpm workspace behavior, `pnpm deploy`, lockfile issues, package filters, or workspace symlinks
-- Node.js ESM/CJS resolution, `package.json` `exports`, `main`, `type`, or module resolution errors
-- TypeScript build configuration, tsconfig output, test files leaking into `dist`, or declaration/map generation
-- Vite, React, Tailwind, shadcn/ui, Fastify, Drizzle, Zod, argon2/bcrypt, or PostgreSQL behavior
-- CI, GitHub Actions, lint/test/build failures, dependency upgrades, or package manager changes
-- Any error message that the agent cannot fully explain from the current repository evidence
+前端可见权限只改善 UX；后端授权始终是安全权威。
 
-### MCP Tool Priority
-
-Use tools in this order:
-
-1. **Local repository search / filesystem tools**
-   Inspect the actual project files first: `package.json`, `pnpm-workspace.yaml`, Dockerfile, compose files, entrypoints, tsconfig files, source imports, generated `dist`, and relevant docs.
-
-2. **Context7 or official documentation search**
-   Use this for framework/tool behavior. Prefer official docs over memory.
-
-3. **GitHub code search / gh_grep**
-   Use this only for implementation examples and patterns. Do not copy external code blindly.
-
-4. **General web search**
-   Use only when official docs and repo evidence are insufficient.
-
-### Mandatory Research Workflow
-
-For Docker, pnpm, Node module resolution, CI, dependency, or build-system problems, do not edit first. The agent must first produce:
-
-1. Current error symptom
-2. Root-cause hypothesis
-3. Repository evidence
-4. Official documentation or MCP search finding, when applicable
-5. Minimal proposed change
-6. Verification commands
-7. Expected success signal
-
-Only after this analysis should files be modified.
-
-### No Guessing Rules
-
-The agent must not:
-
-- Guess Docker, pnpm, Node ESM, or package manager behavior from memory when MCP/search tools are available.
-- Hand-write workspace dependency closure in Dockerfile unless `pnpm deploy` or the package manager solution has been proven unsuitable.
-- Use fragile one-line shell pipelines that hide failure causes.
-- Use `tail`, `grep`, or `|| true` in a way that masks the real error during diagnosis.
-- Treat external GitHub examples as authoritative over this repository or `docs/SPEC.md`.
-- Add cloud services, CDN usage, external APIs, telemetry, or online-only behavior to the product runtime.
-
-### If MCP Is Unavailable
-
-If MCP/search tools are unavailable, the agent must say so explicitly and continue using local repository evidence only. It must not pretend that official behavior has been verified.
-
-### Verification Requirements for Build / Docker Changes
-
-For Docker, pnpm workspace, or runtime image changes, verification must include:
-
-```bash
-docker build -t exam-app:latest .
-docker run --rm --entrypoint sh exam-app:latest -lc 'pwd; find /app -maxdepth 3 -type d | sort | head -100'
-docker run --rm --entrypoint sh exam-app:latest -lc 'node -e "console.log(require.resolve(\"@exam/db/package.json\"))"'
-# Operator path (prebuilt image; needs .env.deploy via generate-env):
-docker compose --env-file .env.deploy up -d
-docker compose --env-file .env.deploy logs app --tail=100
-# Source-build acceptance (contributors / PR verification):
-docker compose --env-file .env.deploy \
-  -f docker-compose.yml -f docker-compose.build.yml up -d --build
-```
-
-If the entrypoint path changes, also verify the actual runtime files:
-
-```bash
-docker run --rm --entrypoint sh exam-app:latest -lc 'test -f /app/dist/server.js && test -f /app/dist/scripts/migrate.js'
-```
-
-For image-size work, verification must include:
-
-```bash
-docker image inspect exam-app:latest --format '{{.Size}}'
-docker history exam-app:latest
-docker run --rm --entrypoint sh exam-app:latest -lc 'du -sh /app /app/node_modules 2>/dev/null || true'
-```
-
-Do not mix image-size inspection and application smoke tests into one fragile command.
-
-## Project Structure
-
-```txt
-apps/
-  web/src/
-    components/ui/       # shadcn/ui components (generated, do not hand-edit)
-    components/shared/   # shared business components
-    components/layout/   # layout components (sidebar, header)
-    components/settings/ # platform & organization settings components
-    pages/               # route-level components
-    lib/                 # utilities, API client
-    hooks/               # shared React hooks
-  api/src/
-    routes/              # Fastify route handlers, one file per domain
-    plugins/             # Fastify plugins (auth, CORS, security headers)
-    server.ts            # Fastify entry point
-  desktop/               # Electron shell (Phase 2, not started)
-
-packages/
-  domain/src/
-    types.ts             # domain types (ExamAttempt, ExamEnrollment, etc.)
-    errors.ts            # domain error types (AppError, NotFoundError, etc.)
-    examStateMachine.ts  # exam state machine commands
-    gradingEngine.ts     # auto-grading logic
-    retakePolicy.ts      # retake/score strategy logic
-  contracts/src/
-    *.ts                 # Zod schemas, DTO types, API contracts
-  db/src/
-    schema.ts            # Drizzle schema mirrors domain types
-    migrations/          # Drizzle migrations
-    repository/          # data access layer — every method must receive ctx
-  auth/src/
-    session.ts           # session/JWT management
-    rbac.ts              # role-based access control
-    tenantGuard.ts       # organization data boundary guard
-  exam-engine/src/
-    timer.ts             # server-side time authority
-    answerProtocol.ts    # answer save protocol (versioned, idempotent)
-    grading.ts           # grading engine integration
-  import-export/src/     # CSV/Excel/PDF import/export
-
-docs/                    # design documents
-```
-
-## Key Constraints
-
-- **LAN/on-premise deployment**: no cloud dependencies, no CDN, no external APIs
-- **Offline-capable**: system must work when external internet is unavailable
-- **Single-tenant data boundary**: all business tables have `organizationId`; all repo methods must receive `ctx` — never access db directly from routes. organizationId comes from internal default organization.
-- **Security is core**: exam system security is not optional — see SPEC.md §6
-- **Server is time authority**: never trust client timestamps for exam logic
-- **Question snapshot**: ExamAttempt copies questions at creation time via `QuestionSnapshot`; QuestionBank edits don't affect existing attempts
-- **"Pass to proceed"**: external systems can query exam results via API (e.g., access control) [Phase 4]
-- **Candidate is a configurable examinee identity**, not Student — defined by the internal default organization's `CandidateField`
-- **Exam is not CRUD**: all state changes go through command functions (`publishExam`, `startAttempt`, `submitAttempt`, etc.) — never mutate status directly
-- **Answer Save Protocol**: answers use versioned, idempotent saves with conflict detection — see SPEC.md §3.5
-- **Repository pattern**: all db access through `repo.method(ctx, ...)` — `db.select()` directly in routes is forbidden
-
-## Exam-Specific Gotchas
-
-- Answers must be saved to server on every change via Answer Save Protocol (not just on submit)
-- Exam timer is server-side; client countdown is cosmetic only
-- `ExamAttempt` (not ExamPaper) is the core entity — supports multiple attempts per exam
-- `ExamEnrollment` tracks qualification + attempt count + final score (selected by scoreStrategy)
-- Fill-blank grading has configurable matching (exact vs. keyword) — not just string equality
-- Multi-select scoring: all-correct = full, partial = half, any-wrong = zero (configurable per exam)
-- `standardAnswer` on Question is required for auto-grading; questions without it cannot be used in auto-graded exams
-- Open-book vs closed-book is a spectrum — control flags can be overridden independently
-- ExamAttempt has a `disrupted` state — client heartbeat timeout auto-triggers it; recovery restores answers + remaining time from server
-- `lastActivityAt` on ExamAttempt is the heartbeat field — server uses it to detect disconnected examinees
-- Phase 1 only implements `timed_window` timing mode; other modes deferred to Phase 2
-- Queued entry (`requireQueue` + `batchSize` + `batchInterval`) is Phase 2 exam operation, not Phase 1
-- Degradation deferred to Phase 2; Phase 1 only does basic health check
-- Candidate identity fields come from the internal default organization's `CandidateField` — import templates are dynamically generated
-
-## Dependency Rules
-
-- `packages/domain` cannot depend on `fastify`, React, Drizzle, or internal packages
-- `packages/contracts` cannot depend on `fastify`
-- `packages/exam-engine` cannot depend on `fastify`
-- `fastify` can only appear in `apps/api`
-- `packages/db` repository methods must receive `ctx` — no bare SQL in routes
-- `packages/domain` has no internal package dependency (leaf node)
-- `apps/web` cannot import from `packages/db` directly
-- See `docs/standards/code-quality.md` §6 for full dependency graph
-
-## Code Quality
-
-**Read `docs/standards/code-quality.md` before implementing any Job.** Key rules:
-
-- **TypeScript strict mode** — no `any`, no `as any`, see `tsconfig.base.json`
-- **Prettier + ESLint** — `pnpm verify` must pass
-- **Architecture lint** — `pnpm lint:arch` checks dependency boundaries
-- **Copy guard** — `pnpm lint:copy` prevents hardcoded deployment-specific business copy
-- **Repository pattern** — no bare `db.select()` in routes; all repo methods take `ctx`
-- **Command functions** — no direct status mutation; state changes via `publishExam()`, `startAttempt()`, etc.
-- **Unified errors** — use `packages/domain/src/errors.ts` domain error types, not `throw new Error()`
-- **Structured logging** — pino in api, no `console.log` anywhere in packages
-- **No duplicate DTOs** — import from `@exam/domain` or `@exam/contracts`, never redefine
-- **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
-- **AI coding rules** — see `docs/standards/code-quality.md` §17
-- **Research before toolchain changes** — Docker, pnpm, Node module resolution, CI, package manager, and build-system changes require MCP/doc search + local repo verification before editing. Do not guess.
-- **Frontend visual authority** — see the "Frontend Visual Authority" section below
-
-Every Job completion requires:
-
-1. List of modified files
-2. List of new tests
-3. Coverage result
-4. `pnpm verify` result
-5. Any known limitations
-
-## Conventions
-
-- Use path aliases: `@/` maps to `apps/web/src/`
-- Domain types live in `packages/domain/src/types.ts` — import from `@exam/domain`, never redefine
-- API contracts live in `packages/contracts/src/` — Zod schemas for request/response validation
-- API routes: `apps/api/src/routes/<domain>.ts` (e.g., `routes/exam.ts`, `routes/question.ts`)
-- DB schema: `packages/db/src/schema.ts` — Drizzle schema mirrors domain types
-- DB repository: `packages/db/src/repository/<entity>Repo.ts` — each repo method takes ctx as first arg
-- All user-facing strings in Chinese (zh-CN), code and comments in English
-- No comments in code unless asked
-
----
-
-## Frontend Visual Authority
-
-**Authority documents** (read before any frontend visual work):
-
-- `docs/architecture/frontend.md` — as-built frontend architecture (shell, routing, layouts, API client, auth projection, state/data ownership, page composition, package boundaries, tech stack, responsive structure).
-- `docs/standards/ui-system.md` — as-built UI system constraints (design tokens, fonts, typography recipes, surface/elevation, component authority, Tailwind boundary, status color, icons, tables, accessibility, forbidden dependencies, active `exam-ui/*` lint).
-- `docs/roadmap/ui-open-items.md` — unfinished visual-authority migration work (blocked on UI-PILOT-1 / UI-MIGRATE-N).
-
-The historical construction-stage UI documents (`P3-UI-*`, audits, recons, closures, plans) live under `docs/archive/frontend/` and are not current guidance. Do **not** treat `docs/ui/*` or `docs/frontend/P3-UI-*` paths as current authority — those directories no longer exist in the active tree; references to them are historical/archive only.
-
-### Authority chain
-
-```text
-semantic tokens
-    ↓
-semantic recipes
-    ↓
-authoritative components
-    ↓
-business pages
-```
-
-Tailwind remains the implementation substrate. This model makes Tailwind a substrate, not the business-facing visual language. It does **not** mean "business pages must not use Tailwind" (see the boundary below).
-
-### Component discovery rule
-
-Before creating or locally recreating a visual structure, inspect these in order:
-
-```text
-apps/web/src/components/ui          # shadcn primitives (generated, do not hand-edit)
-apps/web/src/components/shared      # authoritative shared business components
-existing semantic recipes           # apps/web/src/typography/recipes.css (type-*) + apps/web/src/surface/recipes.css (surface-*)
-the recipe ownership registry       # apps/web/src/typography/recipeRegistry.ts (single canonical source)
-```
-
-The per-component role → owner mapping is documented in `docs/standards/ui-system.md` §Component authority.
-
-Distinguish **component does not exist** from **component exists but appears insufficient**. The latter triggers the insufficiency protocol below — it is **not** a license to bypass the authority. Writing local Tailwind is never, by itself, justification to bypass an existing visual authority.
-
-### Component insufficiency protocol
-
-When an existing authoritative component or recipe appears insufficient:
-
-1. identify the missing semantic, structural, interaction, or accessibility requirement;
-2. determine whether the requirement belongs to the existing visual role;
-3. extend the existing authority when the semantic role is unchanged;
-4. introduce a distinct role only when the semantics genuinely differ.
-
-Do not create a second implementation of the same visual role. Known collision groups to reconcile (not duplicate): `PageSection` / `ContentCard` / `DataTableShell` (titled content containers), the multiple "stat/KPI" presentations, `ListToolbar` / `DataToolbar`, `ConfirmDialog` / `ConfirmActionDialog`.
-
-### Tailwind boundary
-
-Business pages **may** use Tailwind for structural layout and responsive behavior. Normal structural Tailwind includes:
-
-```text
-flex / grid / block / hidden
-relative / absolute / fixed / sticky
-items-* / justify-* / grid-cols-* / col-span-*
-w-* / h-* / min-* / max-* / overflow-* / gap-* / space-* / responsive variants
-```
-
-Business pages **must not** independently compose reusable governed appearance recipes from primitive typography, surface, elevation, or domain-status utilities when a semantic recipe, variant, or authoritative component owns that role. Do not recreate, with primitive utilities, a recipe that an authority already owns.
-
-### Typography guidance
-
-- Chinese font selection is intentional and centrally owned in `apps/web/src/index.css` (`--font-sans`). Agents must **not** introduce page-local `font-family` stacks.
-- Agents must **not** invent one-off typography recipes in business pages. The semantic typography recipe layer (`apps/web/src/typography/recipes.css`) exists and owns governed font-size / weight / line-height combinations per role (`type-page-title`, `type-section-title`, `type-body`, `type-metric`, etc.). Select a recipe by name; do not recompose a role it owns from primitive text / font / leading / tracking utilities.
-- Serif usage is restricted to explicitly approved reading roles; none are approved yet.
-
-### Status authority
-
-Domain status presentation must use the authoritative status mapping and components:
-
-- `apps/web/src/lib/statusMeta.ts` — the status → tone authority.
-- `apps/web/src/components/shared/StatusBadge.tsx` — the status presentation component.
-
-Distinguish **domain status** (must flow through `statusMeta` + `StatusBadge`) from **generic UI feedback** (field errors, form-submit alerts, validation messages). Destructive / error colors remain valid for genuine field-error or alert feedback — this rule does not prohibit them there.
-
-### Elevation guidance
-
-Ordinary business content must **not** invent shadow-based elevation. Shadows are reserved for visual roles that intentionally own elevation — especially overlay / floating surfaces and the sticky topbar. This is a forward authority rule. The business-shadow baseline is empty, and any business-page `shadow-*` utility is a real, unshielded error. Elevation in ordinary content must come from an authoritative component primitive (e.g. the `Card` primitive, which owns `shadow-sm`) or be absent when the surface is flat (e.g. `surface-content`). Do not add `shadow-*` to business pages, and do not assume all current shadow usage is already compliant — `components/ui` (generated primitives) and `components/layout` (sticky topbar) are the only exempt scopes.
-
-### Enforcement
-
-Deterministic enforcement of the high-confidence boundaries above is provided by the `exam-ui/*` ESLint rules (see `apps/web/src/lint/exam-ui/`), wired as errors in `apps/web/eslint.config.ts` for business / feature / layout source.
-
-**Active enforcement** (rules wired as errors today):
-
-- `exam-ui/prefer-inline-error-banner` — a `<div role="alert">` carrying a rounded utility + multiple destructive-surface utilities must use `InlineErrorBanner` (narrowed in UI-MIGRATE-N-W2 to require `role="alert"`, which excludes destructive control-state/status surfaces that merely reuse the color).
-- `exam-ui/no-business-shadow` — no `shadow-*` in ordinary business content. The business-shadow baseline is **empty** (UI-MIGRATE-N-W4B closed all 7 registered signatures: 28 redundant Card `shadow-sm` removed via the Card primitive authority, 1 TakeExam `shadow-sm` removed via the flat `surface-content` contract). The detector is variant-aware (W4B): it matches `shadow-sm`, `shadow-md/lg/xl/2xl`, variant-prefixed forms (`hover:shadow-md`, `md:shadow-lg`, `data-[state=open]:shadow-lg`, `group-hover:shadow-lg`), and the arbitrary-bracket form (`shadow-[0_2px_8px_…]`) via the shared bracket-aware candidate parser (RECON-1). `drop-shadow-*` (a CSS filter, not elevation) is NOT matched.
-- `exam-ui/no-arbitrary-typography` — no new arbitrary typography values: `text-[…]` (font-size, excl. color), `leading-[…]`, `tracking-[…]`, `font-[…]` (weight/family), arbitrary-property forms (`[font-size:…]`, `[line-height:…]`, …), slash line-height modifiers, under all variant forms. Built on a shared bracket-aware Tailwind candidate parser (RECON-1). Text-color arbitrary values are OUT of policy here (color/token authority); ambiguous `var(--x)`/`calc()` are review-only.
-- `exam-ui/no-arbitrary-inline-typography` — no one-off typography via inline `style={{fontSize/lineHeight/letterSpacing/fontWeight/fontFamily/…}}` (static literal values; dynamic is review-only). De-dups against the conflict rule.
-- `exam-ui/no-typography-authority-conflict` — when a `type-*` recipe is selected on a JSX node, a sibling self-target utility (or inline-style key) that touches a recipe-OWNED property is a conflict (RECON-1). Semantic-free: the recipe class IS the declaration; no role inference. Cascade policy A (proven): unlayered recipes WIN over layered utilities, so a self-target owned-property utility is dead (or, with `!`, authority-piercing). Descendant/pseudo-element variants do not conflict; color participates (most recipes own `color`).
-
-**Deferred enforcement** (semantic roles that still lack migration coverage or deterministic static detection):
-
-- Broader typography recipes (`type-metric`, `type-body`, `type-secondary`, …) — authority exists, migration coverage does not (`StatsCard` has one consumer; ~20 metric bypasses unmigrated). Blocked on UI-PILOT-1 / UI-MIGRATE-N.
-- Component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) — authority exists, migration coverage does not. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
-- Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. The semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary) is documented in `docs/standards/ui-system.md` §Status color.
-- Field-error authority (`FieldError`) — authority exists and is the canonical owner of "form field validation error", but the former `exam-ui/prefer-field-error` structural lint rule was **retired** in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8): its recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles (4/4 remaining hits were false-semantic-overlap). All known same-role bypasses have been migrated; ownership is now enforced by semantic migration review + `FieldError.test.tsx`, not a structural lint proxy. Do **not** re-introduce a structural field-error lint rule without a proven deterministic ownership detector.
-- `type-section-title` / `surface-content` recipe recomposition — authority exists and is canonical, but the structural lint proxies (`exam-ui/no-raw-typography`, `exam-ui/no-raw-surface-recipe`) were **retired** in UI-MIGRATE-N-W3 (§12-§13): after the proven same-role migrations every remaining hit was false-semantic-overlap (TOPBAR / QUESTION / RUNTIME / OVERLAY titles; SIDEBAR surface), and no sound NARROW AST boundary could distinguish the owner role from those distinct roles. All known same-role bypasses have been migrated; recipe/component ownership is enforced by semantic migration review + the recipe authority tests, not a structural lint proxy. Do **not** re-introduce these structural recipe lint rules without a proven deterministic ownership detector. (Note: RECON-1 added `exam-ui/no-typography-authority-conflict`, which is a DIFFERENT, sound rule — it fires only when a `type-*` recipe IS explicitly selected, so there is no role-inference surface. It does not replace the retired raw-node proxies, which remain retired.)
-
-Do **not** claim that all typography or all surface recipes are lint-enforced — they are not. The wired ESLint config is the implementation fact; these docs must match it.
-
----
-
-## Current Roadmap Authority
-
-- **E2E is enabled and runs as blocking CI.** The `e2e` job in `.github/workflows/ci.yml` (sharded) gates every PR; the three named blocking specs (candidate-happy-path, resume-attempt, submit-flush) run and pass.
-- **Phase 2 (Exam Operation) gate items are implemented** — proctor visibility/event-stream/polling/incident-logging, force-submit, extend-time, misconduct flag, attempt timeline, manual grading queue, retake policy, score strategy, diagnostics, result publishing, telemetry, and the candidate/admin permission boundary are in place. `timed_window` is the only timing mode.
-- **Phase 3 is partially implemented.** The authorization *infrastructure* (permission catalog, role presets, scoped/scored capability resolvers, assignment-backed runtime authority, candidate/admin permission boundary) is live. The Phase 3 *product* work (scoped Teacher/Proctor/Grader role bundles as product roles, staff invitation, SMTP reset, account lifecycle UI, WYSIWYG submit) is not done — fill_blank runtime (auto-graded exact/keyword matching), text_response authoring/manual grading, and candidate self-service restore ARE implemented. See `docs/roadmap/phase3-open-items.md`.
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24, re-verified during P4-R1 closeout on `b4dc1d6`; see `docs/status/implementation-status.md` §Gate 0.5).
-- **Phase plans control implementation schedule.**
-- **SPEC and `docs/roadmap/phase-roadmap.md` win over implementation details.**
-- **Phase 2 does NOT implement multi-tenant.** Multi-tenant is Phase 4 platformization only.
-
----
-
-## Phase1.4 UI Foundation Reset (Historical / Reference)
-
-### Purpose
-
-Phase1.4 UI Foundation Reset is a **UI foundation stabilization reference**, not the current roadmap authority. It is NOT:
-
-- A visual beautification task
-- A Phase2 implementation task
-- A full site rewrite
-
-### Problems Being Solved
-
-1. Title remains loading forever
-2. Direct refresh shows blank page
-3. Sidebar/nav/collapse instability
-4. Logo slot and collapse icon conflict
-5. No stable BrandMark / logo fallback
-6. Scattered CSS / Tailwind status colors
-7. Inconsistent page loading/error states
-8. Admin Console vs Exam Runtime layout boundary unclear
-9. SVG/icon usage inconsistent
-
-### Documentation Reference (Historical / Archive)
-
-The `docs/ui/` paths below were the Phase1.4 reference set. **That directory no longer exists** — these entries are retained as historical pointers only; archived copies may exist under `docs/archive/`. For current frontend visual authority, use the documents named in the "Frontend Visual Authority" section above (`docs/architecture/frontend.md`, `docs/standards/ui-system.md`, `docs/roadmap/ui-open-items.md`).
-
-Historical Phase1.4 reference filenames (archive only, not current authority):
-
-- `docs/ui/00-ui-constitution.md` — UI constitution and invariant principles
-- `docs/ui/01-design-tokens.md` — CSS variables and Tailwind tokens
-- `docs/ui/02-layout-system.md` — Shell, sidebar, topbar, and layout rules
-- `docs/ui/03-component-boundaries.md` — Component layer boundaries
-- `docs/ui/04-state-grammar.md` — Status grammar and central management
-- `docs/ui/05-page-templates.md` — Page templates (list, detail, form, exam runtime)
-- `docs/ui/06-accessibility-rules.md` — Accessibility rules
-- `docs/ui/07-ui-bug-inventory.md` — Known UI bugs
-- `docs/ui/08-migration-plan.md` — PR migration plan
-- `docs/ui/09-phase2-readiness.md` — Phase2 documentation readiness
-
-### Migration Plan (Historical / Archive)
-
-The Phase1.4 migration plan below is retained for history. It references the now-archived `docs/ui/` set; it is **not** the current UI foundation sequence. The current authority is `docs/architecture/frontend.md` + `docs/standards/ui-system.md`.
-
-Historical Phase1.4 PR split:
-
-- PR 1: Documentation convergence only
-- PR 2: Route refresh / title loading / ErrorBoundary / App bootstrap
-- PR 3: Sidebar / BrandMark / navigation collapse rebuild
-- PR 4: Design tokens / CSS cleanup / status grammar implementation
-- PR 5: Shared components implementation
-- PR 6: One admin list page migration
-- PR 7: One admin detail/settings page migration
-- PR 8: Exam runtime shell migration
-- PR 9: UI consistency pass
-
----
-
-## Phase2-Ready, Not Phase2-Implemented
-
-### Allowed in Documentation
-
-- Shared status grammar
-- Page templates (AdminShell / ExamShell rules)
-- Future proctor panel template documentation
-- Future export/integration template documentation
-
-### Forbidden During UI Reset
-
-Do NOT implement or expose:
-
-- Real ExamRoom management
-- Real IP range enforcement UI
-- Real proctor WebSocket dashboard
-- Real candidate live status cards
-- Real force-submit / extend-time / misconduct actions
-- Real random paper builder
-- Real timed_sync / deadline / untimed workflows
-- Real Pass Gate API UI
-- Real API key / service token management
-- Real PDF export workflow
-- Real Electron lockdown UI
-- Real AI grading UI
-- Real adaptive degradation UI
-
-### Phase2 Modules (Documentation Only)
-
-| Module | Scope |
-|--------|-------|
-| Phase2A Exam Operation | Detail page + right-side status panel + audit timeline |
-| Phase2B Proctor Panel | Dashboard page + status cards + event stream + action confirmation |
-| Phase2C Exam Flexibility | Form sections + rule builder + snapshot preview |
-| Phase2D Integration Export | Settings page + key management table + export job status |
+## 9. 注释与文档
+
+代理必须阅读修改区域附近的现有注释，但应结合类型、代码、测试和契约验证，不能无条件相信注释。
+
+禁止：
+
+- 复述显然控制流、类型或变量名的注释；
+- Issue、PR、Job、Phase、修复记录和版本迁移等历史型生产注释；
+- 用长注释弥补职责混乱、命名不清或无法测试的结构。
+
+应当保留：
+
+- `WHY`：无法从实现可靠推导的设计原因；
+- `INVARIANT`：状态、顺序、边界和必须始终成立的条件；
+- `OWNERSHIP`：资源、事务、任务和生命周期所有者；
+- `LOCK ORDER`：并发锁序、唤醒和 happens-before 约束；
+- `PROTOCOL` / `INTENTIONAL`：协议限制以及看似可简化但不能修改的原因。
+
+能够通过类型、Schema、assertion、测试或静态检查表达的约束应优先可执行化；注释只保留不可执行的原因和边界。修改相关代码时必须同步审查附近注释，失效注释属于缺陷。
+
+文档负责概念、架构、契约、导航和代码无法自然表达的唯一信息，不复述实现流程。产品代码和长期文档描述当前完整状态，不包含施工报告、补丁说明或“本次修改了什么”；历史和过程属于 Git、Issue、PR 或 Archive。
+
+## 10. 依赖与外部研究
+
+先检查本仓库的实际版本、配置、锁文件、生成产物和错误输出。以下情况应查询对应版本的官方文档，而不是凭记忆猜测：
+
+- Docker/Compose、pnpm workspace/deploy、Node ESM/CJS、TypeScript 输出；
+- Vite、React、Tailwind、Fastify、Drizzle、Zod、PostgreSQL 的版本特定行为；
+- CI、包管理器、依赖升级或无法由仓库证据完整解释的错误。
+
+外部示例只是参考，不能高于仓库契约；禁止盲目复制。若无法访问官方资料，明确说明只使用了本地证据。
+
+密钥、令牌和生产凭证不得进入版本控制，即使仓库是私有的；使用环境变量、密钥管理或被忽略的本地配置。
+
+## 11. 交付与复核
+
+每个可交付变更必须语义内聚、可独立回滚，并保持仓库可构建、可运行。提交前至少检查：
+
+- 是否产生架构分叉、重复真相源或新旧双轨；
+- 是否混合职责、遗留无效代码或引入无价值抽象；
+- 是否扩大任务范围、增加过度兜底或隐藏失败；
+- 类型、契约、实现、测试、注释和文档是否一致；
+- 最终 diff 是否只包含授权范围内的修改；
+- 工作树中的既有文件是否完整保留。
+
+非平凡任务的完成报告应简洁列出：范围、根因/设计、修改文件、实际执行的命令与结果、跳过项和剩余风险。不得用“应该通过”“看起来正确”或“CI 会检查”代替证据。
