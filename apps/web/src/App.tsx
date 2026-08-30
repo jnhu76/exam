@@ -17,6 +17,9 @@ import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { getDocumentTitle } from "@/lib/pageMeta";
 import { LoginPage } from "@/pages/LoginPage";
 import { LaunchpadPage } from "@/pages/LaunchpadPage";
+import { InviteAcceptPage } from "@/pages/InviteAcceptPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
 import { CandidateFieldsPage } from "@/pages/admin/CandidateFieldsPage";
@@ -73,6 +76,9 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/launchpad" element={<LaunchpadPage />} />
+      <Route path="/invite/accept" element={<InviteAcceptPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminIndexRoute />} />
         <Route path="dashboard" element={<DashboardPage />} />

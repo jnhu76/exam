@@ -40,6 +40,7 @@ import {
 } from "@/components/shared/DataTableContract";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
+import { InvitationsCard } from "@/pages/admin/InvitationsCard";
 
 /** User row shape as returned by the users list API. */
 interface UserRow {
@@ -411,6 +412,7 @@ export function UsersPage() {
           </Button>
         }
       />
+      <InvitationsCard roles={selectableRoles} />
       {users.length === 0 ? (
         <EmptyState
           icon={<AppIcon icon={Users} size="state" />}

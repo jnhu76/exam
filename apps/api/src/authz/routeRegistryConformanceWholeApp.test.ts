@@ -331,6 +331,13 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       // a token oracle nor a completed-installation oracle.
       ["GET", "/api/launchpad/status"],
       ["POST", "/api/launchpad/bootstrap"],
+      // #297 identity lifecycle: the token IS the credential, exactly like
+      // the login credential itself. Acceptance/reset fail closed on any
+      // invalid, expired, or revoked token with one generic error, and all
+      // three are per-IP rate-limited.
+      ["POST", "/api/auth/invitations/accept"],
+      ["POST", "/api/auth/password-reset/request"],
+      ["POST", "/api/auth/password-reset/consume"],
     ];
     return set.some(([m, u]) => m === method && u === url);
   }
@@ -353,7 +360,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 126 primary routes (110 protected + 16 non-protected)", () => {
+  it("the full composition reconciles to 138 primary routes (119 protected + 19 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -395,11 +402,11 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(116);
+    ).toBe(119);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
-      16,
+      19,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(132);
+    expect(capturedRoutes.length, "total primary routes").toBe(138);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

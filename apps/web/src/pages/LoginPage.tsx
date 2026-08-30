@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { BrandHeader } from "@/components/layout/BrandHeader";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { FieldError } from "@/components/shared/FieldError";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { routes } from "@/lib/routes";
 
 /**
  * Login page with username/password form, field validation,
@@ -101,6 +103,12 @@ export function LoginPage() {
                     ? t("auth.login.submitting")
                     : t("auth.login.submit")}
                 </Button>
+                <Link
+                  to={routes.forgotPassword}
+                  className="type-secondary text-center hover:underline"
+                >
+                  {t("auth.login.forgotPassword")}
+                </Link>
               </FieldGroup>
             </form>
           </CardContent>

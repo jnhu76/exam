@@ -192,8 +192,11 @@ direct-ID out-of-scope probes fold into the canonical 404
   narrow carrier table instead.
 - Full scoped Proctor product workflows; the Proctor Recovery Center UI is
   J6.
-- Staff invitation, SMTP password reset, and account-lifecycle UI (#297 —
-  this, not scoping, is the remaining Grader product work).
+- Staff invitation and Email password reset are implemented (#297):
+  identity tokens are single-use hashed-token rows consumed by CAS in the
+  identity commands; deactivation revokes via `auth_epoch` plus the
+  per-request `is_active` check. Permission/audit visibility surfaces stay
+  with #298.
 - Custom roles, permission-management UI, multi-tenant switching,
   SuperAdmin, and cross-tenant authorization.
 

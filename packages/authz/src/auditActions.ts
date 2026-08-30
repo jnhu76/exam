@@ -25,6 +25,14 @@ export const AuditAction = {
   Logout: "logout",
   AuthProfileUpdate: "auth.profile_update",
   AuthPasswordUpdate: "auth.password_update",
+  // #297 identity lifecycle. Issuance of a reset capability is an atomic
+  // credential fact (committed with token + outbox); rejected/burst request
+  // observations are best-effort under a separate action. Both record the
+  // routing outcome only — never a client-visible signal, and the actor is
+  // always the anonymous requester, never the target account.
+  AuthPasswordResetRequested: "auth.password_reset_requested",
+  AuthPasswordResetRequestRejected: "auth.password_reset_request_rejected",
+  AuthPasswordReset: "auth.password_reset",
 
   // ── Attempt lifecycle (candidate runtime) ──
   AttemptStart: "attempt.start",
@@ -105,6 +113,10 @@ export const AuditAction = {
   UserDisabled: "user.disabled",
   UserReactivated: "user.reactivated",
   UserDelete: "user.delete",
+  // #297 staff invitation lifecycle.
+  UserInvited: "user.invited",
+  UserInvitationRevoked: "user.invitation_revoked",
+  UserInvitationAccepted: "user.invitation_accepted",
 
   // ── Exports ──
   ExportScores: "export_scores",

@@ -4,6 +4,7 @@ import authRoutes from "./auth.js";
 import launchpadRoutes from "./launchpad.js";
 import settingsRoutes from "./settings.js";
 import candidateFieldRoutes from "./candidateField.js";
+import invitationRoutes from "./invitation.js";
 import userRoutes from "./user.js";
 import roleAssignmentRoutes from "./roleAssignments.js";
 import candidateRoutes from "./candidate.js";
@@ -47,6 +48,7 @@ export async function registerApiRoutes(
   await app.register(settingsRoutes, { prefix });
   await app.register(candidateFieldRoutes, { prefix });
   await app.register(userRoutes, { prefix });
+  await app.register(invitationRoutes, { prefix });
   await app.register(roleAssignmentRoutes, { prefix });
   await app.register(candidateRoutes, { prefix });
   await app.register(courseRoutes, { prefix });

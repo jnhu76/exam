@@ -193,6 +193,42 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "credential",
     "low",
   ),
+  // #297 email password reset. Issuing a reset capability is an
+  // authority-grade credential fact: recorded ATOMICALLY in the same
+  // transaction as the token + outbox row. Rejected/burst request
+  // observations (unknown user, no email, disabled, cooldown) are
+  // diagnostic only and stay best-effort under the separate _rejected
+  // action. The actor on both is the anonymous HTTP requester — never the
+  // target account. No token, no email body.
+  [AuditAction.AuthPasswordResetRequested]: definition(
+    "active",
+    "atomic",
+    "credential",
+    "low",
+    z.object({ outcome: z.literal("issued") }).strict(),
+  ),
+  [AuditAction.AuthPasswordResetRequestRejected]: definition(
+    "active",
+    "best_effort",
+    "credential",
+    "burst",
+    z
+      .object({
+        outcome: z.enum([
+          "unknown_user",
+          "no_email",
+          "disabled_user",
+          "cooldown",
+        ]),
+      })
+      .strict(),
+  ),
+  [AuditAction.AuthPasswordReset]: definition(
+    "active",
+    "atomic",
+    "credential",
+    "low",
+  ),
   [AuditAction.AttemptStart]: definition(
     "deprecated",
     "domain_history",
@@ -605,6 +641,49 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
   ),
   [AuditAction.UserDelete]: definition("active", "atomic", "authority", "low"),
+  // #297 staff invitation lifecycle. Payloads carry the invitation id, the
+  // invited email, and the role — never the raw token (only its hash exists
+  // server-side, and that is not part of any audit payload either).
+  [AuditAction.UserInvited]: definition(
+    "active",
+    "atomic",
+    "authority",
+    "low",
+    z
+      .object({
+        invitationId: shortText,
+        email: shortText,
+        role: shortText,
+      })
+      .strict(),
+  ),
+  [AuditAction.UserInvitationRevoked]: definition(
+    "active",
+    "atomic",
+    "authority",
+    "low",
+    z
+      .object({
+        invitationId: shortText,
+        email: shortText,
+        role: shortText,
+      })
+      .strict(),
+  ),
+  [AuditAction.UserInvitationAccepted]: definition(
+    "active",
+    "atomic",
+    "authority",
+    "low",
+    z
+      .object({
+        invitationId: shortText,
+        email: shortText,
+        role: shortText,
+        userId: shortText,
+      })
+      .strict(),
+  ),
   [AuditAction.ExportScores]: definition(
     "active",
     "synchronous_sensitive_read",

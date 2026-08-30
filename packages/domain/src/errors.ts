@@ -410,3 +410,19 @@ export class AuthzUnavailableError extends AppError {
     super(message, "AUTHZ_UNAVAILABLE", 503);
   }
 }
+
+/**
+ * A password-reset request hit the per-account cooldown: an unconsumed token
+ * for the same user already exists, serialized by the
+ * `password_reset_tokens_user_open_unique` partial unique index (HTTP 409).
+ *
+ * Identity reset-request endpoints MUST NOT surface this as a distinct
+ * client-visible outcome (anti-enumeration): the HTTP adapter folds it into
+ * the same uniform generic response as every other reset request. The typed
+ * error exists so the swallow is explicit and testable, never accidental.
+ */
+export class PasswordResetCooldownError extends AppError {
+  constructor(message = "A password reset was requested too recently") {
+    super(message, "PASSWORD_RESET_COOLDOWN", 409);
+  }
+}

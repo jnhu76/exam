@@ -61,6 +61,10 @@ function mockApiGet(usersOverride?: {
 }) {
   apiGet.mockImplementation(async (url: string) => {
     if (url === "/api/roles/assignable") return { items: mockAssignableRoles };
+    // #297: the invitations panel loads its own list inside the page.
+    if (url.startsWith("/api/invitations")) {
+      return { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
+    }
     return (
       usersOverride ?? {
         items: mockUsers,
@@ -457,21 +461,26 @@ describe("UsersPage", () => {
               { key: "Candidate", label: "Candidate", purpose: "x" },
             ],
           }
-        : {
-            items: [
-              {
-                id: "u10",
-                username: "aud1",
-                name: "Aud One",
-                role: "Auditor",
-                isActive: true,
-              },
-            ],
-            total: 1,
-            page: 1,
-            pageSize: 20,
-            totalPages: 1,
-          },
+        : url.startsWith("/api/invitations")
+          ? // #297: the invitations panel renders its own role badges; keep
+            // the list empty so the single-fallback assertion below only sees
+            // the users-table badge.
+            { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+          : {
+              items: [
+                {
+                  id: "u10",
+                  username: "aud1",
+                  name: "Aud One",
+                  role: "Auditor",
+                  isActive: true,
+                },
+              ],
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
     );
     renderPage();
     await screen.findByText("aud1");

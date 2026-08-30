@@ -69,6 +69,8 @@ export const errorMessages = {
   LAUNCHPAD_ALREADY_INITIALIZED: "系统已完成初始化，请直接登录",
   LAUNCHPAD_INVALID_SETUP_TOKEN: "初始化令牌无效或未配置",
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",
+  INVITATION_INVALID: "邀请链接无效或已过期",
+  PASSWORD_RESET_INVALID: "重置链接无效或已过期",
   AUTHZ_UNAVAILABLE: "授权服务暂不可用，请稍后重试",
   RATE_LIMIT_UNAVAILABLE: "限流服务暂不可用，请稍后重试",
 } as const;

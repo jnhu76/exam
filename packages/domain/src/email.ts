@@ -43,6 +43,7 @@ export type EmailType =
   | "registration_welcome"
   | "password_reset"
   | "admin_created_user"
+  | "staff_invitation"
   | "exam_notification"
   | "grade_notification"
   | "system_alert"

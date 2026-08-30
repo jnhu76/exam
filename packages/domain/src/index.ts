@@ -8,3 +8,4 @@ export * from "./attemptCommandPayload.js";
 export * from "./examPolicy.js";
 export * from "./examProfile.js";
 export * from "./examProfileRecipes.js";
+export * from "./identity.js";
