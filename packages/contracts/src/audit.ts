@@ -1,29 +1,137 @@
 import { z } from "zod";
-import { PaginationParamsSchema } from "./common.js";
 
 /**
- * Query schema for listing audit log entries, extending pagination with
- * optional action / targetType string filters and an inclusive `createdAt`
- * date range (`from` / `to` as ISO 8601 datetime strings).
+ * Query contract for audit-log search/export.
  *
- * - `action`, `targetType`: exact-match filters.
- * - `from`: inclusive lower bound on `createdAt` (ISO datetime, e.g.
- *   `2026-01-01T00:00:00.000Z`).
- * - `to`: inclusive upper bound on `createdAt` (ISO datetime).
+ * The audit search is a bounded KEYSET-cursor projection of the audit_logs
+ * table: `ORDER BY (created_at DESC, id DESC)` with an opaque `cursor` that
+ * encodes the last-seen `(createdAt, id)` pair. There is deliberately NO
+ * offset pagination here — page/pageSize were removed when the route migrated
+ * to the cursor (the generic {@link PaginationParamsSchema} remains for the
+ * other list endpoints that still use it).
  *
- * The route parses `from`/`to` into JS `Date` objects before reaching the repo.
- * A bare date (`2026-01-01`) is rejected on purpose so callers must supply an
- * unambiguous instant.
+ * Every search and export consumer parses the SAME {@link AuditLogFiltersSchema}
+ * so a filter cannot mean different things in the page vs the CSV.
  */
-export const AuditLogQuerySchema = PaginationParamsSchema.extend({
+
+/** Default page size for audit search pages. */
+export const AUDIT_SEARCH_DEFAULT_LIMIT = 20;
+/** Hard upper bound on a single audit search page. */
+export const AUDIT_SEARCH_MAX_LIMIT = 100;
+/** Hard upper bound on a single audit CSV export. */
+export const AUDIT_EXPORT_MAX_ROWS = 10_000;
+
+/** Filter fields shared by the page query and the export query. */
+const AuditLogFilterFields = {
+  /** Exact-match action (closed AuditAction vocabulary, enforced at write). */
   action: z.string().min(1).max(120).optional(),
+  /** Exact-match target type (e.g. `exam`, `user`). */
   targetType: z.string().min(1).max(120).optional(),
+  /** Exact-match target resource id. */
+  targetId: z.string().min(1).max(128).optional(),
+  /** Exact-match actor (user) id. */
+  actorId: z.string().min(1).max(128).optional(),
+  /** Inclusive lower bound on `createdAt` (ISO datetime). */
   from: z.string().datetime().optional(),
+  /** Inclusive upper bound on `createdAt` (ISO datetime). */
   to: z.string().datetime().optional(),
+} satisfies Record<string, z.ZodTypeAny>;
+
+/** Shared filter schema for audit search and export. */
+export const AuditLogFiltersSchema = z.object(AuditLogFilterFields);
+
+/** Type for the shared audit filter fields. */
+export type AuditLogFilters = z.infer<typeof AuditLogFiltersSchema>;
+
+/**
+ * Query schema for `GET /admin/audit-logs`: bounded keyset page.
+ * `cursor` is opaque (see {@link encodeAuditCursor} / {@link decodeAuditCursor});
+ * a malformed cursor is rejected by the route with 400.
+ */
+export const AuditLogQuerySchema = AuditLogFiltersSchema.extend({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AUDIT_SEARCH_MAX_LIMIT)
+    .default(AUDIT_SEARCH_DEFAULT_LIMIT),
+  cursor: z.string().min(1).max(512).optional(),
 });
 
-/** Type for audit log listing query parameters. */
+/** Type for audit search query parameters. */
 export type AuditLogQuery = z.infer<typeof AuditLogQuerySchema>;
+
+/**
+ * Query schema for `GET /admin/audit-logs/export`. The same filter vocabulary
+ * as the page, with the export's own (stricter) row cap. No cursor — export is
+ * a single bounded read of the matching rows in the same `(created_at, id) DESC`
+ * order as the page.
+ */
+export const AuditLogExportQuerySchema = AuditLogFiltersSchema.extend({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AUDIT_EXPORT_MAX_ROWS)
+    .default(AUDIT_EXPORT_MAX_ROWS),
+});
+
+/** Type for audit export query parameters. */
+export type AuditLogExportQuery = z.infer<typeof AuditLogExportQuerySchema>;
+
+// ── Keyset cursor ────────────────────────────────────────────────────
+
+/**
+ * Cursor format: `v1|<createdAt ISO>|<audit row id>`. Version-prefixed so a
+ * future encoding change can be detected instead of silently mis-parsed.
+ * URL-unfriendly characters are handled by the client's URLSearchParams /
+ * the server's query decoding — the same convention the existing `from`/`to`
+ * ISO datetime filters already rely on.
+ */
+export const AUDIT_CURSOR_VERSION = "v1";
+
+/** Decoded keyset cursor — the last row of the previous page. */
+export interface AuditCursor {
+  /** ISO datetime of the last-seen row's `createdAt`. */
+  createdAt: string;
+  /** Id of the last-seen audit row. */
+  id: string;
+}
+
+const AUDIT_CURSOR_SEPARATOR = "|";
+const AUDIT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isISODatetime(value: string): boolean {
+  return z.string().datetime().safeParse(value).success;
+}
+
+/** Encodes a row's `(createdAt, id)` into an opaque cursor string. */
+export function encodeAuditCursor(
+  createdAt: Date | string,
+  id: string,
+): string {
+  const iso =
+    typeof createdAt === "string" ? createdAt : createdAt.toISOString();
+  return [AUDIT_CURSOR_VERSION, iso, id].join(AUDIT_CURSOR_SEPARATOR);
+}
+
+/**
+ * Decodes an audit cursor. Returns `null` when the cursor is malformed
+ * (wrong version, wrong segment count, non-datetime, non-uuid id) so the
+ * route can answer 400 instead of 500.
+ */
+export function decodeAuditCursor(cursor: string): AuditCursor | null {
+  const parts = cursor.split(AUDIT_CURSOR_SEPARATOR);
+  if (parts.length !== 3) return null;
+  const [version, createdAt, id] = parts;
+  if (version !== AUDIT_CURSOR_VERSION) return null;
+  if (!createdAt || !isISODatetime(createdAt)) return null;
+  if (!id || !AUDIT_ID_PATTERN.test(id)) return null;
+  return { createdAt, id };
+}
+
+// ── Responses ─────────────────────────────────────────────────────────
 
 /**
  * Response schema for a single audit log entry, recording an actor's action on a target resource.
@@ -44,6 +152,19 @@ export const AuditLogResponseSchema = z.object({
 
 /** Type for a single audit log entry. */
 export type AuditLogResponse = z.infer<typeof AuditLogResponseSchema>;
+
+/**
+ * Response schema for a keyset-paginated audit log page. `nextCursor` is the
+ * opaque cursor for the NEXT page (or null when this is the last page); the
+ * client never needs to decode it.
+ */
+export const AuditLogPageResponseSchema = z.object({
+  items: z.array(AuditLogResponseSchema),
+  nextCursor: z.string().nullable(),
+});
+
+/** Type for an audit log page response. */
+export type AuditLogPageResponse = z.infer<typeof AuditLogPageResponseSchema>;
 
 /**
  * Response schema for a single timeline event. A timeline event is a
