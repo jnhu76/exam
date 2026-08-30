@@ -7,6 +7,8 @@ import type {
   BackupRunStatus,
   BackupType,
   BackupVerificationStatus,
+  ContentDocumentV1,
+  ContentMode,
   ControlFlags,
   EmailOutboxStatus,
   EmailType,
@@ -216,8 +218,24 @@ export const questions = pgTable(
       .references(() => courses.id),
     type: text("type").notNull(),
     content: text("content").notNull(),
+    // #301 B′ dual-mode content authority. NULL → Plain (`content` is the
+    // authority); non-null → Rich (the document is the authority and
+    // `content` is the server-derived plainTextProjection). Nullable so the
+    // migration adds the column without touching historical rows.
+    contentDocument: jsonb("content_document").$type<ContentDocumentV1>(),
+    // #301 author-defined answer input mode for text_response. NULL → plain
+    // (legacy rows and plain-default); CHECK guards the stored value while
+    // staying null-safe for the plain default.
+    answerMode: text("answer_mode").$type<ContentMode>(),
     options: jsonb("options")
-      .$type<Array<{ id: string; content: string; isCorrect?: boolean }>>()
+      .$type<
+        Array<{
+          id: string;
+          content: string;
+          contentDocument?: ContentDocumentV1 | null;
+          isCorrect?: boolean;
+        }>
+      >()
       .notNull(),
     // Nullable: a null/undefined standardAnswer marks the question as
     // subjective (manually graded). Objective questions keep a typed answer.
@@ -240,6 +258,10 @@ export const questions = pgTable(
   },
   (table) => [
     index("questions_org_course_idx").on(table.organizationId, table.courseId),
+    check(
+      "questions_answer_mode_check",
+      sql`${table.answerMode} in ('plain', 'rich')`,
+    ),
   ],
 );
 
