@@ -30,6 +30,10 @@ import type {
   GraderExamAssignmentStatus,
   GraderExamAssignmentOutcome,
 } from "./enums.js";
+import type {
+  ContentDocumentV1,
+  ContentMode,
+} from "./content/contentDocument.js";
 
 // ── Organization ──────────────────────────────────────────────────
 
@@ -131,6 +135,17 @@ export interface Question {
   courseId: string;
   type: QuestionType;
   content: string;
+  /**
+   * #301 B′ dual-mode content authority. null → Plain (`content` is the
+   * authority); non-null → Rich (the document is the authority and `content`
+   * is the server-derived plainTextProjection). Legacy rows read as null.
+   */
+  contentDocument: ContentDocumentV1 | null;
+  /**
+   * #301 author-defined answer input mode, only meaningful for
+   * text_response. null → plain. Frozen into QuestionSnapshot at publish.
+   */
+  answerMode: ContentMode | null;
   options: Option[];
   standardAnswer: unknown;
   attachments: Attachment[];
@@ -153,7 +168,13 @@ export interface Question {
 export interface Option {
   id: string;
   content: string;
-  isCorrect?: boolean;
+  /**
+   * #301 rich option content. Same B′ authority rules as
+   * Question.contentDocument: non-null → document authoritative, content is
+   * the server-derived projection.
+   */
+  contentDocument?: ContentDocumentV1 | null | undefined;
+  isCorrect?: boolean | undefined;
 }
 
 /** File or image attachment linked to a question. */
@@ -175,6 +196,17 @@ export interface QuestionSnapshot {
   originalQuestionId: string;
   type: QuestionType;
   content: string;
+  /**
+   * #301 frozen rich prompt authority (null = Plain). Historical JSONB rows
+   * omit the key — readers normalize missing to null (QuestionSnapshotSchema
+   * transform), so legacy snapshots are Plain.
+   */
+  contentDocument: ContentDocumentV1 | null;
+  /**
+   * #301 frozen author-defined answer input mode (text_response only;
+   * null = plain). Historical rows omit the key — readers normalize to null.
+   */
+  answerMode: ContentMode | null;
   attachments: Attachment[];
   options: OptionSnapshot[];
   standardAnswer: unknown;
@@ -194,6 +226,11 @@ export interface QuestionSnapshot {
 export interface OptionSnapshot {
   id: string;
   content: string;
+  /**
+   * #301 frozen rich option content (null = Plain). Historical rows omit
+   * the key — readers normalize missing to null.
+   */
+  contentDocument?: ContentDocumentV1 | null | undefined;
 }
 
 // ── Grading Rule ──────────────────────────────────────────────────

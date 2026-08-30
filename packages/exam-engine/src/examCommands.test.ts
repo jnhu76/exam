@@ -13,7 +13,11 @@ import {
   type ExamRepository,
 } from "./examCommands.js";
 import type { Exam, Question } from "@exam/domain";
-import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
+import {
+  InvalidStateTransitionError,
+  ValidationError,
+  plainTextProjection,
+} from "@exam/domain";
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -64,6 +68,8 @@ function makeQuestion(id: string, overrides: Partial<Question> = {}): Question {
     courseId: "course-1",
     type: "single_choice",
     content: `Question ${id}`,
+    contentDocument: null,
+    answerMode: null,
     options: [
       { id: "a", content: "A" },
       { id: "b", content: "B" },
@@ -102,6 +108,24 @@ function makeRepo(initial: Exam): ExamRepository {
   };
 }
 
+const RICH_DOC = {
+  docVersion: 1 as const,
+  type: "doc" as const,
+  content: [
+    {
+      type: "paragraph" as const,
+      content: [
+        { type: "text" as const, text: "Solve ", marks: ["bold" as const] },
+        { type: "inlineMath" as const, latex: "x^2-1=0" },
+      ],
+    },
+  ],
+};
+
+function makeRichDoc() {
+  return RICH_DOC;
+}
+
 describe("examCommands", () => {
   describe("buildQuestionSnapshot", () => {
     it("creates snapshot from questions", () => {
@@ -110,8 +134,8 @@ describe("examCommands", () => {
       expect(snapshot[0]?.originalQuestionId).toBe("q1");
       expect(snapshot[0]?.content).toBe("Question q1");
       expect(snapshot[0]?.options).toEqual([
-        { id: "a", content: "A" },
-        { id: "b", content: "B" },
+        { id: "a", content: "A", contentDocument: null },
+        { id: "b", content: "B", contentDocument: null },
       ]);
     });
 
@@ -138,9 +162,75 @@ describe("examCommands", () => {
       const snapshot = buildQuestionSnapshot(["q1"], testQuestions);
       expect(snapshot[0]?.rubric).toBeNull();
     });
+
+    it("freezes rich content document, answer mode, and rich option documents (#301)", () => {
+      const doc = makeRichDoc();
+      const richQuestion = makeQuestion("q-rich", {
+        type: "text_response",
+        content: plainTextProjection(doc),
+        contentDocument: doc,
+        answerMode: "rich",
+        options: [],
+        standardAnswer: null,
+      });
+      const snapshot = buildQuestionSnapshot(["q-rich"], [richQuestion]);
+      expect(snapshot[0]?.contentDocument).toEqual(doc);
+      expect(snapshot[0]?.answerMode).toBe("rich");
+      expect(snapshot[0]?.content).toBe(plainTextProjection(doc));
+    });
   });
 
   describe("publishExam", () => {
+    it("rejects publish of a rich fill_blank (hard rule, #301)", async () => {
+      const richFillBlank = makeQuestion("q-rfb", {
+        type: "fill_blank",
+        content: "____ + 1 = 2",
+        contentDocument: makeRichDoc(),
+        options: [],
+      });
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-rfb"], totalScore: 50, passingScore: 0 }),
+      );
+      await expect(
+        publishExam(repo, "exam-1", [richFillBlank]),
+      ).rejects.toThrow(/must not carry rich content/);
+    });
+
+    it("rejects publish of answerMode on a non-text_response question (#301)", async () => {
+      const wrongMode = makeQuestion("q-mode", {
+        type: "single_choice",
+        answerMode: "rich",
+      });
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-mode"], totalScore: 50, passingScore: 0 }),
+      );
+      await expect(publishExam(repo, "exam-1", [wrongMode])).rejects.toThrow(
+        /answerMode but is not text_response/,
+      );
+    });
+
+    it("rejects publish when rich content diverges from its projection (#301)", async () => {
+      const doc = makeRichDoc();
+      const divergent = makeQuestion("q-diverge", {
+        type: "text_response",
+        content: "stale projection",
+        contentDocument: doc,
+        answerMode: null,
+        options: [],
+        standardAnswer: null,
+      });
+      const repo = makeRepo(
+        makeExam({
+          questionIds: ["q-diverge"],
+          totalScore: 50,
+          passingScore: 0,
+        }),
+      );
+      await expect(publishExam(repo, "exam-1", [divergent])).rejects.toThrow(
+        /plainTextProjection/,
+      );
+    });
+
     it("transitions draft → published", async () => {
       const repo = makeRepo(makeExam());
       const result = await publishExam(repo, "exam-1", testQuestions);

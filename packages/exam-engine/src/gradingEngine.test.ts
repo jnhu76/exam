@@ -9,6 +9,8 @@ function makeQuestion(
     originalQuestionId: "q1",
     type: "single_choice",
     content: "Question",
+    contentDocument: null,
+    answerMode: null,
     attachments: [],
     options: [],
     standardAnswer: "a",
