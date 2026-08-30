@@ -3,6 +3,7 @@ import type { RequestContext } from "@exam/domain";
 import { ConflictError } from "@exam/domain";
 import { and, count, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Database, TenantContext } from "../types.js";
+import { hasPostgresErrorCode } from "../types.js";
 import { staffInvitations, type AssignableRole } from "../schema/pg.js";
 import { now, resolveOrganizationId } from "./baseRepo.js";
 
@@ -26,6 +27,19 @@ export interface CreateStaffInvitationInput {
 }
 
 /**
+ * Maps a unique-violation (SQLSTATE 23505) on the INSERT to a typed
+ * conflict. The only reachable unique violations on this INSERT are the
+ * open-invitation partial index `staff_invitations_org_email_open_unique`
+ * (concurrent duplicate invite) and the token-hash unique index (a SHA-256
+ * collision — cryptographically impossible); both surface the same 409.
+ * The constraint NAME is not matched because the postgres-js driver does
+ * not expose it on the error object — the SQLSTATE is the stable signal.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return hasPostgresErrorCode(err, "23505");
+}
+
+/**
  * Creates a repository for the `staff_invitations` table (#297).
  *
  * The invitation IS the pending-membership state: the invited person has no
@@ -43,9 +57,11 @@ export function createStaffInvitationRepo(db: Database) {
    * created row.
    *
    * Concurrent duplicate invites for the same email serialize on the partial
-   * unique index: the loser's INSERT blocks until the winner commits and then
-   * fails with {@link ConflictError} (the supersede statement cannot see the
-   * winner's uncommitted row, so the index is the only serialization point).
+   * unique index: the loser's INSERT blocks until the winner commits and
+   * then fails with {@link ConflictError} (the supersede statement cannot
+   * see the winner's uncommitted row, so the index is the only
+   * serialization point). The violation is mapped HERE — a raw PostgreSQL
+   * unique error must never escape to the route layer as a 500.
    */
   async function createWithinTransaction(
     ctx: TenantContext | RequestContext,
@@ -63,24 +79,33 @@ export function createStaffInvitationRepo(db: Database) {
           isNull(staffInvitations.revokedAt),
         ),
       );
-    const inserted = await db
-      .insert(staffInvitations)
-      .values({
-        id: randomUUID(),
-        organizationId: orgId,
-        email: input.email,
-        role: input.role,
-        tokenHash: input.tokenHash,
-        expiresAt: input.expiresAt,
-        createdBy: input.createdBy,
-      })
-      .returning();
-    if (!inserted[0]) {
-      throw new ConflictError(
-        "An open invitation for this email already exists",
-      );
+    try {
+      const inserted = await db
+        .insert(staffInvitations)
+        .values({
+          id: randomUUID(),
+          organizationId: orgId,
+          email: input.email,
+          role: input.role,
+          tokenHash: input.tokenHash,
+          expiresAt: input.expiresAt,
+          createdBy: input.createdBy,
+        })
+        .returning();
+      if (!inserted[0]) {
+        throw new ConflictError(
+          "An open invitation for this email already exists",
+        );
+      }
+      return inserted[0];
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictError(
+          "An open invitation for this email already exists",
+        );
+      }
+      throw err;
     }
-    return inserted[0];
   }
 
   /**

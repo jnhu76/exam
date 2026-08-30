@@ -306,6 +306,13 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           // password-reset tokens so a link sent before deactivation cannot
           // outlive a deactivate/reactivate cycle. Both are atomic with the
           // isActive flip.
+          //
+          // LOCK ORDER: the UPDATE above already holds the user row lock;
+          // the token burn below is the PASSWORD_RESET_TOKEN(S) step of the
+          // canonical order USER → PASSWORD_RESET_TOKEN(S) → credential
+          // mutation shared with reset issuance/consume (see
+          // passwordResetTokenRepo). This ordering is what makes
+          // in-flight resets fail closed instead of deadlocking.
           if (activeChanged && data.isActive === false) {
             await txUserRepo.advanceAuthEpoch(ctx, id);
             await createPasswordResetTokenRepo(

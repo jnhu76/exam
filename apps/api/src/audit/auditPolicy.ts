@@ -193,10 +193,21 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "credential",
     "low",
   ),
-  // #297 email password reset. The request event records the routing outcome
-  // only — no token, no email body. Consumption is an atomic credential
-  // mutation with the same shape as a self-service password change.
+  // #297 email password reset. Issuing a reset capability is an
+  // authority-grade credential fact: recorded ATOMICALLY in the same
+  // transaction as the token + outbox row. Rejected/burst request
+  // observations (unknown user, no email, disabled, cooldown) are
+  // diagnostic only and stay best-effort under the separate _rejected
+  // action. The actor on both is the anonymous HTTP requester — never the
+  // target account. No token, no email body.
   [AuditAction.AuthPasswordResetRequested]: definition(
+    "active",
+    "atomic",
+    "credential",
+    "low",
+    z.object({ outcome: z.literal("issued") }).strict(),
+  ),
+  [AuditAction.AuthPasswordResetRequestRejected]: definition(
     "active",
     "best_effort",
     "credential",
@@ -204,7 +215,6 @@ export const AUDIT_ACTION_DEFINITIONS = {
     z
       .object({
         outcome: z.enum([
-          "issued",
           "unknown_user",
           "no_email",
           "disabled_user",

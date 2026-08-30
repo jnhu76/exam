@@ -67,6 +67,56 @@ export function createUserRepo(db: Database) {
   }
 
   /**
+   * LOCK ORDER (#297 credential lifecycle): these row locks are the USER
+   * node of the canonical order USER → PASSWORD_RESET_TOKEN(S) → credential
+   * mutation. Every password-reset issuance, reset consume, and account
+   * deactivation transaction must acquire the user row lock FIRST (see
+   * passwordResetTokenRepo); acquiring token rows before the user row is a
+   * deadlock against deactivation. Callers revalidate user state AFTER the
+   * lock returns — a pre-transaction read is never authority.
+   */
+
+  /**
+   * Locks the user row (SELECT ... FOR UPDATE) for a credential-lifecycle
+   * transaction. Returns the locked row, or null when no user with this
+   * username exists in the organization. The row stays locked until the
+   * surrounding transaction ends.
+   */
+  async function lockByUsernameWithinTransaction(
+    ctx: TenantContext | RequestContext,
+    username: string,
+  ) {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.organizationId, orgId), eq(users.username, username)))
+      .for("update")
+      .limit(1);
+    return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
+  }
+
+  /**
+   * Locks the user row (SELECT ... FOR UPDATE) by id for a credential
+   * mutation (reset-consume path: the token identifies the user, then the
+   * user row serializes the credential change). Returns null when the user
+   * does not exist in the organization.
+   */
+  async function lockByIdWithinTransaction(
+    ctx: TenantContext | RequestContext,
+    userId: string,
+  ) {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.organizationId, orgId), eq(users.id, userId)))
+      .for("update")
+      .limit(1);
+    return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
+  }
+
+  /**
    * Batch-loads users by id, scoped to the tenant. Empty input returns [].
    * Used by the result_published recipient composition (P5-N1-I2) to resolve
    * userId -> email without an N+1.
@@ -87,6 +137,8 @@ export function createUserRepo(db: Database) {
   return {
     ...repo,
     findByOrganizationAndUsername,
+    lockByUsernameWithinTransaction,
+    lockByIdWithinTransaction,
     findByIds,
     /**
      * Finds a user by organization ID and user ID, scoped to the tenant.

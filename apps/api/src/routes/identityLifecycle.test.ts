@@ -316,6 +316,54 @@ describe("staff invitation flow (#297)", () => {
     expect(listed.status).toBe("accepted");
     expect(listed.consumedAt).not.toBeNull();
   });
+
+  it("invited Admin and invited Maintainer traverse the canonical authority seam (same assignment shape as POST /users)", async () => {
+    for (const role of ["Admin", "Maintainer"] as const) {
+      const email = `seam-${role.toLowerCase()}@example.com`;
+      const inviteRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/invitations",
+        cookies: adminAuth(ctx),
+        payload: { email, role },
+      });
+      expect(inviteRes.statusCode).toBe(201);
+      const acceptRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/invitations/accept",
+        payload: {
+          token: extractTokenFromLink(inviteRes.json().acceptUrl),
+          username: `seam-invitee-${role.toLowerCase()}`,
+          name: " seam",
+          password: "Sup3rSecret!",
+        },
+      });
+      expect(acceptRes.statusCode).toBe(201);
+      const userId = acceptRes.json().user.id as string;
+
+      // Exactly one primary active assignment of the invited role — the
+      // shape POST /users produces — and the seam's Admin∩Maintainer
+      // post-condition left no second authority.
+      const assignments = await ctx.db
+        .select()
+        .from(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.userId, userId));
+      expect(assignments).toHaveLength(1);
+      expect(assignments[0]).toMatchObject({
+        role,
+        isPrimary: true,
+        isActive: true,
+        organizationId: ctx.org.id,
+      });
+      const user = (
+        await ctx.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, userId))
+      )[0]!;
+      expect(user.role).toBe(role);
+      expect(user.isActive).toBe(true);
+    }
+  });
 });
 
 describe("email password reset flow (#297)", () => {
@@ -414,14 +462,50 @@ describe("email password reset flow (#297)", () => {
     const audits = await ctx.db
       .select()
       .from(schema.auditLogs)
-      .where(eq(schema.auditLogs.action, "auth.password_reset_requested"));
+      .where(
+        eq(schema.auditLogs.action, "auth.password_reset_request_rejected"),
+      );
     const outcomes = audits
       .map((a) => a.metadata)
       .map((m) => (m as { outcome: string }).outcome);
     expect(outcomes).toContain("unknown_user");
     expect(outcomes).toContain("no_email");
     expect(outcomes).toContain("disabled_user");
+    // Rejections are observations about an anonymous requester — the actor
+    // is never the (known or guessed) target account.
+    for (const row of audits) {
+      expect(row.actorId).toBe("anonymous");
+    }
     void staffUser;
+  });
+
+  it("issued reset-request audit: actor is the anonymous requester, target is the account (never actor=target)", async () => {
+    const staffUser = await createStaffWithEmail("reset-actor");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/password-reset/request",
+      payload: { username: staffUser.username },
+    });
+    expect(res.statusCode).toBe(200);
+
+    // The issuance audit is an atomic fact committed with token + outbox —
+    // no drain needed.
+    const audits = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.action, "auth.password_reset_requested"));
+    const row = audits.at(-1)!;
+    expect(row).toBeDefined();
+    expect(row.actorId).not.toBe(staffUser.userId);
+    expect(row.actorId).toBe("anonymous");
+    expect(row.targetId).toBe(staffUser.userId);
+    expect(row.metadata).toMatchObject({
+      outcome: "issued",
+      requestId: expect.any(String),
+    });
+    expect(row.ipAddress).toBe("127.0.0.1");
+    // The target account's identity is not leaked in the HTTP response.
+    expect(res.json()).toEqual({ ok: true });
   });
 
   it("full reset: request → email link → consume; old password dies, epoch revokes", async () => {

@@ -3,6 +3,7 @@ import { PasswordResetCooldownError } from "@exam/domain";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, exists, gt, isNull, lt, sql } from "drizzle-orm";
 import type { Database, TenantContext } from "../types.js";
+import { hasPostgresErrorCode } from "../types.js";
 import { passwordResetTokens, users } from "../schema/pg.js";
 import { now, resolveOrganizationId } from "./baseRepo.js";
 
@@ -10,9 +11,6 @@ import { now, resolveOrganizationId } from "./baseRepo.js";
  * Password-reset token row — the `password_reset_tokens` select shape (#297).
  */
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
-
-/** Error-detail constraint name for the ≤1-open-token-per-user backstop. */
-const USER_OPEN_UNIQUE_CONSTRAINT = "password_reset_tokens_user_open_unique";
 
 /** Input for issuing a password-reset token (state only — no raw token). */
 export interface IssuePasswordResetTokenInput {
@@ -24,24 +22,39 @@ export interface IssuePasswordResetTokenInput {
   now: Date;
 }
 
-/** Maps a unique-violation on the open-token index to the typed cooldown error. */
-function isUserOpenUniqueViolation(err: unknown): boolean {
-  let current: unknown = err;
-  while (typeof current === "object" && current !== null) {
-    const record = current as Record<string, unknown>;
-    if (
-      typeof record.constraint === "string" &&
-      record.constraint === USER_OPEN_UNIQUE_CONSTRAINT
-    ) {
-      return true;
-    }
-    current = record.cause;
-  }
-  return false;
+/**
+ * Maps a unique-violation (SQLSTATE 23505) on the INSERT to the typed
+ * cooldown error. The only reachable unique violations on this INSERT are
+ * the ≤1-open-token partial index `password_reset_tokens_user_open_unique`
+ * (a concurrent issuer won the slot) and the token-hash unique index (a
+ * SHA-256 collision — cryptographically impossible). The constraint NAME is
+ * not matched because the postgres-js driver does not expose it on the
+ * error object — the SQLSTATE is the stable signal.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return hasPostgresErrorCode(err, "23505");
 }
 
 /**
  * Creates a repository for the `password_reset_tokens` table (#297).
+ *
+ * LOCK ORDER (canonical, #297 credential lifecycle):
+ *
+ *   USER row lock (userRepo.lockBy{Username,Id}WithinTransaction)
+ *     → PASSWORD_RESET_TOKEN(S) statements
+ *       → credential/auth_epoch mutation
+ *
+ * Reset-request issuance, reset consume, and account deactivation ALL
+ * follow this order. Deactivation locks the user row (its UPDATE) before
+ * burning tokens; issuance and consume lock the user row via userRepo
+ * before touching token rows. A transaction that mutated token rows before
+ * acquiring the user row would deadlock against deactivation. There is no
+ * retry/mutex layer — PostgreSQL row locks are the only serialization.
+ *
+ * Revalidation invariant: every gate (user exists, org matches, account
+ * active, cooldown, email eligibility) is evaluated INSIDE the transaction
+ * after the user row lock is held. Observations read before the
+ * transaction are advisory only.
  *
  * Invariants enforced HERE (not in callers):
  *  - newest-token-wins: issuing consumes any open token for the user in the
@@ -50,17 +63,20 @@ function isUserOpenUniqueViolation(err: unknown): boolean {
  *    a losing concurrent issuer surfaces as
  *    {@link PasswordResetCooldownError});
  *  - consumption requires an unconsumed, unexpired token whose user is still
- *    ACTIVE in the same organization — deactivation fail-closes outstanding
- *    tokens inside the single CAS statement, so no separate user re-read is
- *    needed and no race window exists.
+ *    ACTIVE in the same organization — the CAS re-checks the user-state
+ *    guard even though callers hold the user row lock (defense in depth),
+ *    so deactivation fail-closes outstanding tokens in every schedule.
  *
  * @param db - Drizzle database connection (or an open transaction).
  */
 export function createPasswordResetTokenRepo(db: Database) {
   /**
    * Issues a new token for `userId`, invalidating the previous open token.
-   * Throws {@link PasswordResetCooldownError} when a concurrent issuer won
-   * the open-token slot.
+   * MUST be called with the user row lock held (canonical order — see the
+   * module header), after the caller revalidated user state under that
+   * lock. Throws {@link PasswordResetCooldownError} when a concurrent
+   * issuer won the open-token slot (reachable only for callers that skip
+   * the lock discipline; the partial unique index is the backstop).
    */
   async function issueWithinTransaction(
     ctx: TenantContext | RequestContext,
@@ -108,7 +124,7 @@ export function createPasswordResetTokenRepo(db: Database) {
       }
       return inserted[0];
     } catch (err) {
-      if (isUserOpenUniqueViolation(err)) {
+      if (isUniqueViolation(err)) {
         throw new PasswordResetCooldownError();
       }
       throw err;
@@ -116,18 +132,51 @@ export function createPasswordResetTokenRepo(db: Database) {
   }
 
   /**
-   * Single-statement CAS consumption with an embedded user-state guard: the
-   * token must be unconsumed and unexpired, and its user must still be
-   * active in the token's organization. The UPDATE re-evaluates its
-   * predicate after any row-lock wait (READ COMMITTED), so concurrent
-   * double-submit yields exactly one consumed row; the loser gets
-   * `undefined`. Returns the consumed row (carrying `userId` and
-   * `organizationId` for the password mutation), or `undefined` on any
-   * failure — callers must return one generic error for all outcomes.
+   * Identifies the owner of an OPEN, unexpired token WITHOUT mutating any
+   * state (plain read, no row locks). Step 1 of the canonical consume order:
+   * identify → lock the user row (userRepo.lockByIdWithinTransaction) →
+   * CAS-consume via {@link consumeByTokenHashForUserWithinTransaction}.
+   * Returns `{ userId, organizationId }`, or undefined when the token does
+   * not exist in the organization or is no longer open. The result is only
+   * a lock target — the CAS re-evaluates the full predicate.
    */
-  async function consumeByTokenHashWithinTransaction(
+  async function findOpenUserIdByTokenHash(
     ctx: TenantContext | RequestContext,
     tokenHash: string,
+    nowArg: Date,
+  ): Promise<{ userId: string; organizationId: string } | undefined> {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select({
+        userId: passwordResetTokens.userId,
+        organizationId: passwordResetTokens.organizationId,
+      })
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          eq(passwordResetTokens.organizationId, orgId),
+          isNull(passwordResetTokens.consumedAt),
+          gt(passwordResetTokens.expiresAt, nowArg),
+        ),
+      )
+      .limit(1);
+    return rows[0];
+  }
+
+  /**
+   * CAS consumption for an ALREADY-IDENTIFIED token, to be called with the
+   * user row lock held (canonical order — see the module header). The
+   * UPDATE re-evaluates its predicate after any row-lock wait (READ
+   * COMMITTED): the token must still be unconsumed and unexpired, belong to
+   * the locked user, and its user must still be active in the token's
+   * organization. Concurrent double-submit yields exactly one consumed row;
+   * every other outcome returns `undefined` — callers must fold all
+   * failures into one generic error.
+   */
+  async function consumeByTokenHashForUserWithinTransaction(
+    ctx: TenantContext | RequestContext,
+    input: { tokenHash: string; userId: string },
     nowArg: Date,
   ): Promise<PasswordResetTokenRow | undefined> {
     const orgId = resolveOrganizationId(ctx);
@@ -136,8 +185,9 @@ export function createPasswordResetTokenRepo(db: Database) {
       .set({ consumedAt: nowArg })
       .where(
         and(
-          eq(passwordResetTokens.tokenHash, tokenHash),
+          eq(passwordResetTokens.tokenHash, input.tokenHash),
           eq(passwordResetTokens.organizationId, orgId),
+          eq(passwordResetTokens.userId, input.userId),
           isNull(passwordResetTokens.consumedAt),
           gt(passwordResetTokens.expiresAt, nowArg),
           exists(
@@ -207,7 +257,8 @@ export function createPasswordResetTokenRepo(db: Database) {
 
   return {
     issueWithinTransaction,
-    consumeByTokenHashWithinTransaction,
+    findOpenUserIdByTokenHash,
+    consumeByTokenHashForUserWithinTransaction,
     getLatestCreatedAt,
     deleteAllForUserWithinTransaction,
   };

@@ -35,7 +35,8 @@ import { createPasswordResetTokenRepo } from "@exam/db/src/repository/passwordRe
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
-import { NotFoundError, PasswordResetCooldownError } from "@exam/domain";
+import { NotFoundError } from "@exam/domain";
+import { mutateWithAuthorityInvariants } from "../authz/adminMaintainerExclusion.js";
 import {
   buildInviteAcceptLink,
   buildPasswordResetLink,
@@ -81,6 +82,16 @@ const ASSIGNABLE_LOGIN_ROLES = new Set([
   "Candidate",
   "Maintainer",
 ]);
+
+/**
+ * Reset-request outcomes that did NOT issue a capability. Internal audit
+ * routing only — every one of them produces the same uniform HTTP response.
+ */
+type PasswordResetRequestRejection =
+  | "unknown_user"
+  | "no_email"
+  | "disabled_user"
+  | "cooldown";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
@@ -716,6 +727,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
    * Resolves the single default organization for public identity flows, or
    * null when the deployment has no default tenant yet (uniform failure —
    * these flows must not reveal deployment state).
+   *
+   * INVARIANT: only the expected "no default tenant" domain failure folds
+   * into the uniform public result (mirrors POST /login). Operational or
+   * programming errors propagate to the canonical error handling path — a
+   * database outage must never masquerade as an invalid token or a fake
+   * success.
    */
   async function resolveDefaultOrgForIdentity() {
     try {
@@ -723,8 +740,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         { purpose: "public_branding" } as PublicBrandingContext,
         getRuntimeConfig().tenancy.defaultTenantSlug,
       );
-    } catch {
-      return null;
+    } catch (error) {
+      if (error instanceof NotFoundError) return null;
+      throw error;
     }
   }
 
@@ -748,8 +766,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
      * conflict rolls the whole transaction back, leaving the invitation
      * open for a retry with a different username.
      *
-     * No Admin↔Maintainer invariant wrapper here: the actor is anonymous,
-     * and the authority decision (role) was made and audited at invite time.
+     * The user + primary role assignment creation runs inside
+     * {@link mutateWithAuthorityInvariants} — the canonical authority
+     * mutation seam (org advisory lock + Admin∩Maintainer post-condition).
+     * The HTTP actor is anonymous and the role was decided at invite time,
+     * but account creation IS authority creation: it must traverse the same
+     * fence as POST /users, never a second path.
      */
     async (request, reply) => {
       const data = AcceptInvitationRequestSchema.parse(request.body);
@@ -768,47 +790,51 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         sessionId: "anonymous",
       };
 
-      const created = await executeInTransaction(fastify.db, async (tx) => {
-        const invitation = await createStaffInvitationRepo(
-          tx,
-        ).consumeByTokenHashWithinTransaction(
-          anonCtx,
-          hashToken(data.token),
-          fastify.now(),
-        );
-        if (!invitation) return null;
+      const created = await mutateWithAuthorityInvariants(
+        fastify.db,
+        anonCtx,
+        async (tx) => {
+          const invitation = await createStaffInvitationRepo(
+            tx,
+          ).consumeByTokenHashWithinTransaction(
+            anonCtx,
+            hashToken(data.token),
+            fastify.now(),
+          );
+          if (!invitation) return null;
 
-        const user = await createUserRepo(tx).createUnique(anonCtx, {
-          username: data.username,
-          passwordHash,
-          name: data.name,
-          role: invitation.role,
-          isActive: true,
-          email: invitation.email,
-        });
-        await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
-          tx,
-          anonCtx,
-          {
-            userId: user.id,
+          const user = await createUserRepo(tx).createUnique(anonCtx, {
+            username: data.username,
+            passwordHash,
+            name: data.name,
             role: invitation.role,
-            isPrimary: true,
             isActive: true,
-          },
-        );
-        await recordAtomicHttpAudit(tx, request, anonCtx, {
-          action: "user.invitation_accepted",
-          targetType: "user",
-          targetId: user.id,
-          metadata: {
-            invitationId: invitation.id,
             email: invitation.email,
-            role: invitation.role,
-            userId: user.id,
-          },
-        });
-        return user;
-      });
+          });
+          await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+            tx,
+            anonCtx,
+            {
+              userId: user.id,
+              role: invitation.role,
+              isPrimary: true,
+              isActive: true,
+            },
+          );
+          await recordAtomicHttpAudit(tx, request, anonCtx, {
+            action: "user.invitation_accepted",
+            targetType: "user",
+            targetId: user.id,
+            metadata: {
+              invitationId: invitation.id,
+              email: invitation.email,
+              role: invitation.role,
+              userId: user.id,
+            },
+          });
+          return user;
+        },
+      );
 
       if (!created) {
         return reply
@@ -840,10 +866,22 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
      *
      * The response is CONSTANT for every input (anti-enumeration): account
      * unknown, no email on file, account disabled, cooldown, and success all
-     * return `{ ok: true }`. The audit fact records the internal routing
-     * outcome for security review. Only an active user with an email on file
-     * and no open token inside the cooldown window gets a token + outbox row,
-     * committed atomically.
+     * return `{ ok: true }`.
+     *
+     * LOCK ORDER: the transaction locks the user row FIRST (canonical order
+     * USER → PASSWORD_RESET_TOKEN(S) → credential mutation — see
+     * passwordResetTokenRepo) and re-evaluates EVERY gate under that lock:
+     * existence, organization, active state, cooldown, email eligibility.
+     * A user snapshot read before the transaction is never trusted, so an
+     * in-flight issuance cannot interleave between a deactivation commit
+     * and its own token insert (deactivation burns what issuance wins; a
+     * committed deactivation fail-closes what issuance would issue).
+     *
+     * Issuing a reset capability is an authority-grade credential fact: the
+     * atomic audit row commits in the same transaction as token + outbox.
+     * Rejected/burst observations are best-effort under the separate
+     * `auth.password_reset_request_rejected` action. The actor on both is
+     * the anonymous HTTP requester — never the target account.
      */
     async (request, reply) => {
       const data = PasswordResetRequestSchema.parse(request.body);
@@ -857,56 +895,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         permissions: [],
         sessionId: "anonymous",
       };
-      const auditOutcome = (
-        outcome:
-          | "issued"
-          | "unknown_user"
-          | "no_email"
-          | "disabled_user"
-          | "cooldown",
-        userId: string | null,
-      ) => {
-        const ctxForAudit: RequestContext = {
-          ...anonCtx,
-          sessionId: "anonymous",
-          targetOrganizationId: org.id,
-          ...(userId ? { actorId: userId } : {}),
-        };
-        recordBestEffortAudit(fastify, request, ctxForAudit, {
-          action: "auth.password_reset_requested",
-          targetType: "user",
-          targetId: userId ?? "anonymous",
-          metadata: { outcome },
-        });
-      };
 
-      const user = await createUserRepo(
-        fastify.db,
-      ).findByOrganizationAndUsername(anonCtx, data.username);
-      if (!user) {
-        auditOutcome("unknown_user", null);
-        return uniform();
-      }
-      if (!user.isActive) {
-        auditOutcome("disabled_user", user.id);
-        return uniform();
-      }
-      if (!user.email) {
-        auditOutcome("no_email", user.id);
-        return uniform();
-      }
-
-      const resetRepo = createPasswordResetTokenRepo(fastify.db);
-      const latest = await resetRepo.getLatestCreatedAt(anonCtx, user.id);
-      if (
-        latest &&
-        fastify.now().getTime() - latest.getTime() < PASSWORD_RESET_COOLDOWN_MS
-      ) {
-        auditOutcome("cooldown", user.id);
-        return uniform();
-      }
-
-      const recipientEmail = user.email;
       const rawToken = generateToken();
       const config = getRuntimeConfig();
       const content = renderPasswordResetEmail({
@@ -916,12 +905,48 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         ),
         expiresInMinutes: PASSWORD_RESET_TTL_MINUTES,
       });
-      try {
-        await executeInTransaction(fastify.db, async (tx) => {
+
+      // "read committed" is LOAD-BEARING (same rationale as
+      // mutateWithAuthorityInvariants / mutateWithEffectiveAdminPostcondition):
+      // the transaction blocks on the user row lock held by a concurrent
+      // deactivation and must see the POST-wait committed account state when
+      // it revalidates. Under the default repeatable read its snapshot would
+      // predate that deactivation and a disabled account could receive a
+      // fresh reset capability.
+      const result = await executeInTransaction(
+        fastify.db,
+        async (
+          tx,
+        ): Promise<{
+          outcome: "issued" | PasswordResetRequestRejection;
+          userId: string | null;
+        }> => {
+          // First statement of the transaction: acquire the user row lock
+          // (canonical order), then revalidate everything under it.
+          const locked = await createUserRepo(
+            tx,
+          ).lockByUsernameWithinTransaction(anonCtx, data.username);
+          if (!locked) return { outcome: "unknown_user", userId: null };
+          if (!locked.isActive) {
+            return { outcome: "disabled_user", userId: locked.id };
+          }
+          if (!locked.email) return { outcome: "no_email", userId: locked.id };
+          const latest = await createPasswordResetTokenRepo(
+            tx,
+          ).getLatestCreatedAt(anonCtx, locked.id);
+          if (
+            latest &&
+            fastify.now().getTime() - latest.getTime() <
+              PASSWORD_RESET_COOLDOWN_MS
+          ) {
+            return { outcome: "cooldown", userId: locked.id };
+          }
+
+          const recipientEmail = locked.email;
           await createPasswordResetTokenRepo(tx).issueWithinTransaction(
             anonCtx,
             {
-              userId: user.id,
+              userId: locked.id,
               tokenHash: hashToken(rawToken),
               expiresAt: new Date(
                 fastify.now().getTime() + PASSWORD_RESET_TTL_MS,
@@ -936,18 +961,27 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             bodyText: content.bodyText,
             bodyHtml: content.bodyHtml,
             maxAttempts: config.email.maxAttempts,
-            recipientUserId: user.id,
+            recipientUserId: locked.id,
           });
+          await recordAtomicHttpAudit(tx, request, anonCtx, {
+            action: "auth.password_reset_requested",
+            targetType: "user",
+            targetId: locked.id,
+            metadata: { outcome: "issued" },
+          });
+          return { outcome: "issued", userId: locked.id };
+        },
+        "read committed",
+      );
+
+      if (result.outcome !== "issued") {
+        recordBestEffortAudit(fastify, request, anonCtx, {
+          action: "auth.password_reset_request_rejected",
+          targetType: "user",
+          targetId: result.userId ?? "anonymous",
+          metadata: { outcome: result.outcome },
         });
-      } catch (err) {
-        if (err instanceof PasswordResetCooldownError) {
-          // Concurrent duplicate request lost the one-open-token race.
-          auditOutcome("cooldown", user.id);
-          return uniform();
-        }
-        throw err;
       }
-      auditOutcome("issued", user.id);
       return uniform();
     },
   );
@@ -967,11 +1001,20 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * POST /password-reset/consume — set a new password with a reset token.
      *
-     * The token CAS-consumes inside the same transaction as the password
-     * write + auth-epoch advance, so concurrent double-submit yields exactly
-     * one success and any deactivated-user race fails closed inside the
-     * consume statement. Expired, consumed, revoked-by-deactivation, and
-     * unknown tokens are one generic 400.
+     * LOCK ORDER: the transaction first identifies the token's owner with a
+     * read-only lookup (no mutation, no locks), then locks the USER row —
+     * the canonical USER → PASSWORD_RESET_TOKEN(S) → credential mutation
+     * order — and only then CAS-consumes the token and writes the new
+     * password + auth epoch. Because deactivation takes the same order
+     * (user row first, then token burn), the two commands serialize without
+     * any retry layer: if deactivation commits first the reset fails
+     * closed; if the reset commits first the subsequent deactivation still
+     * deactivates the account and advances the epoch, so both final states
+     * are safe and no schedule can deadlock.
+     *
+     * Concurrent double-submit yields exactly one success; expired,
+     * consumed, revoked-by-deactivation, and unknown tokens are one generic
+     * 400.
      */
     async (request, reply) => {
       const data = PasswordResetConsumeRequestSchema.parse(request.body);
@@ -990,37 +1033,62 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         sessionId: "anonymous",
       };
 
-      const reset = await executeInTransaction(fastify.db, async (tx) => {
-        const consumed = await createPasswordResetTokenRepo(
-          tx,
-        ).consumeByTokenHashWithinTransaction(
-          anonCtx,
-          hashToken(data.token),
-          fastify.now(),
-        );
-        if (!consumed) return null;
-        const tokenCtx = {
-          organizationId: consumed.organizationId,
-          actorId: consumed.userId,
-          role: "Candidate" as Role,
-          permissions: [],
-          sessionId: "anonymous",
-        };
-        const updated = await createUserRepo(
-          tx,
-        ).updatePasswordAndAdvanceAuthEpoch(
-          tokenCtx,
-          consumed.userId,
-          passwordHash,
-        );
-        if (!updated) return null;
-        await recordAtomicHttpAudit(tx, request, tokenCtx, {
-          action: "auth.password_reset",
-          targetType: "user",
-          targetId: consumed.userId,
-        });
-        return updated;
-      });
+      // "read committed" is LOAD-BEARING (see the reset-request handler):
+      // the consume must observe the freshest committed account state after
+      // its user-row-lock wait so a concurrently committed deactivation
+      // fail-closes the reset, and deactivation must see tokens this
+      // transaction commits if it follows us.
+      const reset = await executeInTransaction(
+        fastify.db,
+        async (tx) => {
+          const tokenRepo = createPasswordResetTokenRepo(tx);
+          // 1. Identify the owner without mutating state (advisory only).
+          const identified = await tokenRepo.findOpenUserIdByTokenHash(
+            anonCtx,
+            hashToken(data.token),
+            fastify.now(),
+          );
+          if (!identified) return null;
+          // 2. Acquire the user row lock (canonical order) and revalidate the
+          // account state under it.
+          const locked = await createUserRepo(tx).lockByIdWithinTransaction(
+            anonCtx,
+            identified.userId,
+          );
+          if (!locked || !locked.isActive) return null;
+          // 3. CAS-consume under the user lock; the statement re-checks the
+          // full open/unexpired/active predicate (defense in depth).
+          const consumed =
+            await tokenRepo.consumeByTokenHashForUserWithinTransaction(
+              anonCtx,
+              { tokenHash: hashToken(data.token), userId: identified.userId },
+              fastify.now(),
+            );
+          if (!consumed) return null;
+          const tokenCtx = {
+            organizationId: consumed.organizationId,
+            actorId: consumed.userId,
+            role: "Candidate" as Role,
+            permissions: [],
+            sessionId: "anonymous",
+          };
+          const updated = await createUserRepo(
+            tx,
+          ).updatePasswordAndAdvanceAuthEpoch(
+            tokenCtx,
+            consumed.userId,
+            passwordHash,
+          );
+          if (!updated) return null;
+          await recordAtomicHttpAudit(tx, request, tokenCtx, {
+            action: "auth.password_reset",
+            targetType: "user",
+            targetId: consumed.userId,
+          });
+          return updated;
+        },
+        "read committed",
+      );
 
       if (!reset) {
         return reply
