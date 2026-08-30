@@ -8,5 +8,6 @@ export * from "./catalog.js";
 export * from "./legacyMap.js";
 export * from "./presets.js";
 export * from "./auditActions.js";
+export * from "./permissionMetadata.js";
 export * from "./resolver.js";
 export * from "./systemActor.js";
