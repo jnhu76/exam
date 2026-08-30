@@ -1,51 +1,127 @@
 import { z } from "zod";
 import type { FastifyPluginAsync } from "fastify";
-import { AuditLogQuerySchema } from "@exam/contracts";
-import { createAuditLogQueryRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import {
+  AuditActionMetadataResponseSchema,
+  AuditLogExportQuerySchema,
+  AuditLogPageResponseSchema,
+  AuditLogQuerySchema,
+  AUDIT_EXPORT_MAX_ROWS,
+  ErrorResponseSchema,
+  decodeAuditCursor,
+  encodeAuditCursor,
+} from "@exam/contracts";
+import type { AuditLogFilters } from "@exam/contracts";
+import { AuditAction, Permission, type AuditActionKey } from "@exam/authz";
+import {
+  createAuditLogQueryRepo,
+  type AuditLogRowWithActor,
+} from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { Permission } from "@exam/authz";
+import { buildErrorResponse } from "../lib/errorResponse.js";
+import { generateCSV } from "@exam/import-export";
+import { recordSensitiveReadAudit } from "../audit/auditWriter.js";
+import { AUDIT_ACTION_DEFINITIONS } from "../audit/auditPolicy.js";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
-/**
- * Zod schema for a single audit log item in API responses.
- */
-const auditLogItemSchema = z.object({
-  id: z.string().uuid(),
-  organizationId: z.string().uuid(),
-  actorId: z.string(),
-  actorName: z.string().nullable().optional(),
-  action: z.string(),
-  targetType: z.string(),
-  targetId: z.string(),
-  metadata: z.record(z.unknown()),
-  ipAddress: z.string().nullable(),
-  userAgent: z.string().nullable(),
-  createdAt: z.string(),
-});
-/**
- * Zod schema for the paginated audit log list response.
- */
-const auditLogListResponseSchema = z.object({
-  items: z.array(auditLogItemSchema),
-  total: z.number().int(),
-  page: z.number().int(),
-  pageSize: z.number().int(),
-  totalPages: z.number().int(),
-});
+/** Route params for `GET /admin/users/:id/effective-authority`. */
+const idParamsSchema = z.object({ id: z.string().uuid() });
 
 /**
- * Fastify plugin that registers the audit log routes.
- * Currently exposes `GET /admin/audit-logs` for querying paginated,
- * filterable audit log entries.
+ * Builds the repository filter from the shared search/export query fields.
+ * `from`/`to` arrive as ISO datetime strings and are parsed to JS `Date` here
+ * — the SAME filter object feeds both the page query and the CSV export so a
+ * filter can never mean different things in the two serializations.
+ */
+function buildAuditFilter(query: AuditLogFilters): {
+  action?: string;
+  targetType?: string;
+  targetId?: string;
+  actorId?: string;
+  from?: Date;
+  to?: Date;
+} {
+  const filter: {
+    action?: string;
+    targetType?: string;
+    targetId?: string;
+    actorId?: string;
+    from?: Date;
+    to?: Date;
+  } = {};
+  if (query.action) filter.action = query.action;
+  if (query.targetType) filter.targetType = query.targetType;
+  if (query.targetId) filter.targetId = query.targetId;
+  if (query.actorId) filter.actorId = query.actorId;
+  if (query.from) filter.from = new Date(query.from);
+  if (query.to) filter.to = new Date(query.to);
+  return filter;
+}
+
+/** Projects one audit row into the shared `AuditLogResponseSchema` shape. */
+function toAuditLogResponse(row: AuditLogRowWithActor) {
+  return {
+    id: row.auditLog.id,
+    organizationId: row.auditLog.organizationId,
+    actorId: row.auditLog.actorId,
+    actorName: row.actorName,
+    action: row.auditLog.action,
+    targetType: row.auditLog.targetType,
+    targetId: row.auditLog.targetId,
+    metadata: row.auditLog.metadata,
+    ipAddress: row.auditLog.ipAddress,
+    userAgent: row.auditLog.userAgent,
+    createdAt: row.auditLog.createdAt.toISOString(),
+  };
+}
+
+/**
+ * CSV export columns. Deliberately NOT the raw metadata JSON: the
+ * metadata payload can embed PII (e.g. `email` in user.invited) and has no
+ * stable column shape. Export carries safe operational fields only — the same
+ * redaction rule as the underlying audit data (no secrets, no plaintext
+ * credentials, no raw personal payloads).
+ */
+const EXPORT_HEADERS = [
+  "时间",
+  "操作",
+  "操作者",
+  "操作者ID",
+  "对象类型",
+  "对象ID",
+  "IP地址",
+  "请求ID",
+] as const;
+
+function toExportRow(row: AuditLogRowWithActor): Record<string, unknown> {
+  const metadata = row.auditLog.metadata ?? {};
+  return {
+    时间: row.auditLog.createdAt.toISOString(),
+    操作: row.auditLog.action,
+    操作者: row.actorName ?? "",
+    操作者ID: row.auditLog.actorId,
+    对象类型: row.auditLog.targetType,
+    对象ID: row.auditLog.targetId,
+    IP地址: row.auditLog.ipAddress ?? "",
+    请求ID: typeof metadata.requestId === "string" ? metadata.requestId : "",
+  };
+}
+
+/**
+ * Fastify plugin that registers the audit routes:
+ *   - `GET /admin/audit-logs`            — bounded keyset search (cursor)
+ *   - `GET /admin/audit-logs/export`     — bounded CSV export of the SAME query
+ *   - `GET /admin/audit-log/actions`     — active action vocabulary for the UI
  */
 const auditRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /admin/audit-logs
    *
-   * Returns a paginated list of audit log entries for the current
-   * organization. Admin-only. Supports filtering by action type.
+   * Bounded keyset-paginated audit log search for the current organization.
+   * Ordered `(created_at DESC, id DESC)`; `nextCursor` is opaque and encodes
+   * the last row of the page (the client never decodes it). A malformed
+   * cursor is rejected with 400 INVALID_CURSOR.
    */
   fastify.get(
     "/admin/audit-logs",
@@ -58,53 +134,149 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
         querystring: AuditLogQuerySchema,
         security: cookieAuth,
         "x-role": ["Admin"],
-        response: { 200: auditLogListResponseSchema },
+        response: { 200: AuditLogPageResponseSchema, 400: ErrorResponseSchema },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
-      const { page, pageSize, action, targetType, from, to } =
-        AuditLogQuerySchema.parse(request.query);
+      const query = AuditLogQuerySchema.parse(request.query);
       const repo = createAuditLogQueryRepo(fastify.db);
-      // Build the filter object conditionally — only carry keys that are set,
-      // matching the established `action ? { action } : {}` pattern. `from`/
-      // `to` arrive as ISO datetime strings and are parsed to JS `Date` here.
-      const filter: {
-        action?: string;
-        targetType?: string;
-        from?: Date;
-        to?: Date;
-      } = {};
-      if (action) filter.action = action;
-      if (targetType) filter.targetType = targetType;
-      if (from) filter.from = new Date(from);
-      if (to) filter.to = new Date(to);
-      const { items, total } = await repo.listPaginatedFiltered(
-        ctx,
-        page,
-        pageSize,
-        filter,
+
+      let after: { createdAt: Date; id: string } | undefined;
+      if (query.cursor) {
+        const decoded = decodeAuditCursor(query.cursor);
+        if (!decoded) {
+          return reply
+            .code(400)
+            .send(buildErrorResponse(request.id, "INVALID_CURSOR"));
+        }
+        after = { createdAt: new Date(decoded.createdAt), id: decoded.id };
+      }
+
+      const params: {
+        limit: number;
+        filter: ReturnType<typeof buildAuditFilter>;
+        after?: { createdAt: Date; id: string };
+      } = { limit: query.limit, filter: buildAuditFilter(query) };
+      if (after) params.after = after;
+
+      const { items, hasMore } = await repo.listKeysetFiltered(ctx, params);
+
+      const last = items[items.length - 1];
+      const nextCursor =
+        hasMore && last
+          ? encodeAuditCursor(last.auditLog.createdAt, last.auditLog.id)
+          : null;
+
+      return { items: items.map(toAuditLogResponse), nextCursor };
+    },
+  );
+
+  /**
+   * GET /admin/audit-logs/export
+   *
+   * CSV export of the SAME search query (same filters, same ordering, same
+   * row cap enforced) — export is another serialization of the search, never
+   * a second query path. Matching rows beyond the export cap are refused
+   * (409 EXPORT_EXCEEDS_LIMIT) rather than silently truncated. Every
+   * successful export is itself audited under `audit_log.exported`.
+   */
+  fastify.get(
+    "/admin/audit-logs/export",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AuditLogView),
+      ],
+      schema: {
+        querystring: AuditLogExportQuerySchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: z.string(),
+          400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const query = AuditLogExportQuerySchema.parse(request.query);
+      const repo = createAuditLogQueryRepo(fastify.db);
+
+      const { items, hasMore } = await repo.listKeysetFiltered(ctx, {
+        limit: query.limit,
+        filter: buildAuditFilter(query),
+      });
+
+      if (hasMore) {
+        return reply.code(409).send(
+          buildErrorResponse(request.id, "EXPORT_EXCEEDS_LIMIT", {
+            maxRows: AUDIT_EXPORT_MAX_ROWS,
+          }),
+        );
+      }
+
+      const csv =
+        "\uFEFF" + generateCSV([...EXPORT_HEADERS], items.map(toExportRow));
+
+      reply.header("Content-Type", "text/csv; charset=utf-8");
+      reply.header(
+        "Content-Disposition",
+        `attachment; filename="audit-logs-${Date.now()}.csv"`,
       );
 
-      return {
-        items: items.map((row) => ({
-          id: row.auditLog.id,
-          organizationId: row.auditLog.organizationId,
-          actorId: row.auditLog.actorId,
-          actorName: row.actorName,
-          action: row.auditLog.action,
-          targetType: row.auditLog.targetType,
-          targetId: row.auditLog.targetId,
-          metadata: row.auditLog.metadata,
-          ipAddress: row.auditLog.ipAddress,
-          userAgent: row.auditLog.userAgent,
-          createdAt: row.auditLog.createdAt.toISOString(),
-        })),
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize),
-      };
+      await recordSensitiveReadAudit(fastify.db, request, ctx, {
+        action: AuditAction.AuditLogExported,
+        targetType: "organization",
+        targetId: ctx.organizationId,
+        metadata: { format: "csv", rowCount: items.length },
+      });
+
+      return reply.send(csv);
+    },
+  );
+
+  /**
+   * GET /admin/audit-log/actions
+   *
+   * The ACTIVE audit action vocabulary, projected from the single audit
+   * policy registry (lifecycle === "active"). The web action dropdown renders
+   * from this list — it can never become a stale hardcoded duplicate when a
+   * new action ships. Text stays in web i18n; `durability`/`obligation`/
+   * `frequency` are the canonical policy facts.
+   */
+  fastify.get(
+    "/admin/audit-log/actions",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AuditLogView),
+      ],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: AuditActionMetadataResponseSchema },
+      },
+    },
+    async () => {
+      const actions = (
+        Object.keys(AUDIT_ACTION_DEFINITIONS) as AuditActionKey[]
+      )
+        .filter(
+          (action) => AUDIT_ACTION_DEFINITIONS[action].lifecycle === "active",
+        )
+        .map((action) => {
+          const def = AUDIT_ACTION_DEFINITIONS[action];
+          return {
+            action,
+            durability: def.durability,
+            obligation: def.obligation,
+            frequency: def.frequency,
+          };
+        })
+        .sort((a, b) => a.action.localeCompare(b.action));
+      return { actions };
     },
   );
 };

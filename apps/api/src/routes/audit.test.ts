@@ -10,10 +10,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";
-import {
-  recordAtomicHttpAudit,
-  recordSensitiveReadAudit,
-} from "../audit/auditWriter.js";
+import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 import type { ActiveAuditActionForDurability } from "../audit/auditPolicy.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
@@ -343,13 +340,12 @@ describe("audit log baseline (S06-lite)", () => {
       });
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body).toMatchObject({
-        page: 1,
-        pageSize: 20,
-        total: expect.any(Number),
-        totalPages: expect.any(Number),
-        items: expect.any(Array),
-      });
+      expect(body).toMatchObject({ items: expect.any(Array) });
+      // nextCursor is null on the last page (fewer rows than limit) or an
+      // opaque string when more rows remain.
+      expect(
+        body.nextCursor === null || typeof body.nextCursor === "string",
+      ).toBe(true);
       expect(body.items.length).toBeGreaterThanOrEqual(3);
       const ours = body.items.filter(
         (i: { actorId: string }) => i.actorId === adminId,
@@ -563,46 +559,211 @@ describe("audit log baseline (S06-lite)", () => {
       ).toBe(false);
     });
 
-    it("respects pageSize parameter", async () => {
+    it("supports keyset cursor pagination without overlap or skip", async () => {
+      await clearAudits();
+      // Five rows with distinct, deterministic timestamps so the (created_at,
+      // id) ordering is fully controlled.
+      for (let i = 0; i < 5; i += 1) {
+        await ctx.db.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "cursor.marker",
+          targetType: "cursor_test",
+          targetId: `cursor-${i}`,
+          metadata: { requestId: "t" },
+          createdAt: new Date(Date.UTC(2026, 0, i + 1, 12, 0, 0, 0)),
+        });
+      }
+
+      const page = async (cursor?: string) => {
+        const qs = `targetType=cursor_test&limit=2${
+          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+        }`;
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/audit-logs?${qs}`,
+          cookies: { "auth-token": adminToken },
+        });
+        expect(res.statusCode).toBe(200);
+        return res.json() as {
+          items: Array<{ targetId: string }>;
+          nextCursor: string | null;
+        };
+      };
+
+      const p1 = await page();
+      expect(p1.items).toHaveLength(2);
+      expect(typeof p1.nextCursor).toBe("string");
+      const p2 = await page(p1.nextCursor ?? undefined);
+      expect(p2.items).toHaveLength(2);
+      const p3 = await page(p2.nextCursor ?? undefined);
+      expect(p3.items).toHaveLength(1);
+      expect(p3.nextCursor).toBeNull();
+
+      const ids = [...p1.items, ...p2.items, ...p3.items].map(
+        (i) => i.targetId,
+      );
+      expect(new Set(ids).size).toBe(5);
+    });
+
+    it("rejects a malformed cursor with 400 INVALID_CURSOR", async () => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-logs?cursor=garbage",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("INVALID_CURSOR");
+    });
+
+    it("filters by actorId query param", async () => {
       await clearAudits();
       const fakeReq = {
         id: "t",
         ip: "127.0.0.1",
         headers: { "user-agent": "vitest" },
       } as unknown as FastifyRequest;
-      for (let i = 0; i < 5; i += 1) {
-        await recordSensitiveReadAudit(
-          ctx.db,
-          fakeReq,
-          {
-            actorId: adminId,
-            organizationId: orgId,
-            role: "Admin",
-            permissions: [],
-            sessionId: "test",
-          },
-          {
-            action: "attempt.exported",
-            targetType: "attempt",
-            targetId: adminId,
-            metadata: { format: "csv" },
-          },
-        );
-      }
+      const actorTarget = crypto.randomUUID();
+      await writeTransactionalAudit(
+        fakeReq,
+        {
+          actorId: adminId,
+          organizationId: orgId,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        "user.role_changed",
+        "user",
+        actorTarget,
+      );
       await waitForAudit(
-        async () => (await readAuditsForTarget(adminId)).length >= 5,
+        async () => (await readAuditsForTarget(actorTarget)).length >= 1,
       );
 
       const response = await ctx.app.inject({
         method: "GET",
-        url: "/api/admin/audit-logs?pageSize=2&page=1",
+        url: `/api/admin/audit-logs?actorId=${adminId}&targetType=user`,
         cookies: { "auth-token": adminToken },
       });
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.pageSize).toBe(2);
-      expect(body.items.length).toBe(2);
-      expect(body.total).toBeGreaterThanOrEqual(5);
+      expect(
+        body.items.every(
+          (item: { actorId: string }) => item.actorId === adminId,
+        ),
+      ).toBe(true);
+      expect(
+        body.items.some(
+          (i: { targetId: string }) => i.targetId === actorTarget,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("GET /api/admin/audit-log/actions", () => {
+    it("requires authentication", async () => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-log/actions",
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns only ACTIVE actions with their policy facts", async () => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-log/actions",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(Array.isArray(body.actions)).toBe(true);
+      const actions = body.actions.map((a: { action: string }) => a.action);
+      // #297 identity actions are present (the stale hardcoded dropdown
+      // regression this projection kills).
+      expect(actions).toContain("user.invited");
+      expect(actions).toContain("user.invitation_revoked");
+      expect(actions).toContain("auth.password_reset_requested");
+      // The #298 export action is present.
+      expect(actions).toContain("audit_log.exported");
+      // Deprecated actions are excluded.
+      expect(actions).not.toContain("attempt.saveAnswer");
+      expect(actions).not.toContain("attempt.start");
+      // Every entry carries the canonical policy facts.
+      expect(body.actions[0]).toMatchObject({
+        action: expect.any(String),
+        durability: expect.any(String),
+        obligation: expect.any(String),
+        frequency: expect.any(String),
+      });
+    });
+  });
+
+  describe("GET /api/admin/audit-logs/export", () => {
+    it("exports matching rows as CSV and audits audit_log.exported", async () => {
+      await clearAudits();
+      for (let i = 0; i < 2; i += 1) {
+        await ctx.db.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "export.marker",
+          targetType: "export_test",
+          targetId: `export-${i}`,
+          metadata: { requestId: "req-123" },
+          createdAt: new Date("2026-05-01T00:00:00.000Z"),
+        });
+      }
+
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-logs/export?targetType=export_test",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(response.statusCode).toBe(200);
+      const text = response.body;
+      // UTF-8 BOM + formula-injection-safe CSV.
+      expect(text.startsWith("\uFEFF")).toBe(true);
+      expect(text).toContain("时间");
+      expect(text).toContain("export.marker");
+      expect(text).toContain("req-123");
+      // The export itself is audited under audit_log.exported, org-scoped.
+      const rows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.action, "audit_log.exported"));
+      const exported = rows.find((r) => r.targetId === orgId);
+      expect(exported).toBeDefined();
+      expect(exported!.actorId).toBe(adminId);
+      expect(exported!.metadata).toMatchObject({
+        format: "csv",
+        rowCount: 2,
+      });
+    });
+
+    it("refuses an export that exceeds the row cap instead of truncating", async () => {
+      await clearAudits();
+      for (let i = 0; i < 2; i += 1) {
+        await ctx.db.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "export.marker",
+          targetType: "export_cap_test",
+          targetId: `cap-${i}`,
+          metadata: {},
+          createdAt: new Date("2026-05-02T00:00:00.000Z"),
+        });
+      }
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-logs/export?targetType=export_cap_test&limit=1",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe("EXPORT_EXCEEDS_LIMIT");
     });
   });
 

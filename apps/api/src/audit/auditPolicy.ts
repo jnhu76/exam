@@ -696,6 +696,22 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
+  // Audit-log CSV export is a sensitive-read projection — audited under
+  // its own action at synchronous_sensitive_read durability (the same contract
+  // as export_scores). Target is the organization (the export is org-wide);
+  // the payload records format + row count only, never the exported rows.
+  [AuditAction.AuditLogExported]: definition(
+    "active",
+    "synchronous_sensitive_read",
+    "privacy_access",
+    "low",
+    z
+      .object({
+        format: z.literal("csv"),
+        rowCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+  ),
   [AuditAction.GradingScoreEntered]: definition(
     "active",
     "atomic",
