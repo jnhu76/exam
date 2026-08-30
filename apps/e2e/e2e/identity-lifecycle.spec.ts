@@ -140,9 +140,15 @@ test.describe("password reset pages (#297)", () => {
   }) => {
     await page.goto(`${BASE_URL}/login`);
     await page.getByRole("link", { name: "忘记密码？" }).click();
-
-    await page.getByLabel("用户名").fill("e2e-no-such-account");
-    await page.getByRole("button", { name: "发送重置链接" }).click();
+    // The login page has an identically-labeled 用户名 input; scope to the
+    // forgot-page form so the fill cannot land on the login page during the
+    // SPA route transition, and prove the value stuck before submitting.
+    const forgotForm = page.getByTestId("forgot-password-field-group");
+    await forgotForm.getByLabel("用户名").fill("e2e-no-such-account");
+    await expect(forgotForm.getByLabel("用户名")).toHaveValue(
+      "e2e-no-such-account",
+    );
+    await forgotForm.getByRole("button", { name: "发送重置链接" }).click();
     await expect(page.getByTestId("forgot-password-sent")).toBeVisible();
     await expect(page.getByTestId("forgot-password-sent")).toContainText(
       "如果该账号存在且已绑定邮箱",
