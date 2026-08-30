@@ -336,7 +336,7 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
                     <SelectContent>
                       {roles.map((r) => (
                         <SelectItem key={r.key} value={r.key}>
-                          {r.label}
+                          {roleLabel(r.key)}
                         </SelectItem>
                       ))}
                     </SelectContent>
