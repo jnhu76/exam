@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import i18n from "@/i18n";
+import { routes } from "@/lib/routes";
 import {
   getMessageForLocale,
   isErrorCode,
@@ -10,6 +11,21 @@ import {
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 let navigateFn: ((path: string) => void) | null = null;
+
+/**
+ * Anonymous-legal surfaces: the session-restore probe (`/api/auth/me`) 401s
+ * BY DESIGN for a visitor without a cookie (#297 added several such public
+ * pages). Redirecting them to /login would bounce the very page they opened;
+ * protected-route entry is owned by the admin layout guard, not by this
+ * global interceptor.
+ */
+const ANONYMOUS_LEGAL_PATHS = new Set<string>([
+  routes.login,
+  routes.launchpad,
+  routes.inviteAccept,
+  routes.forgotPassword,
+  routes.resetPassword,
+]);
 
 /**
  * Registers a navigation callback so the API layer can redirect to
@@ -74,7 +90,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       if (!message) {
         message = `${response.status} Request failed`;
       }
-      if (response.status === 401) {
+      if (
+        response.status === 401 &&
+        !ANONYMOUS_LEGAL_PATHS.has(window.location.pathname)
+      ) {
         navigateFn?.("/login");
       }
       throw new ApiError(response.status, message, code, details, requestId);

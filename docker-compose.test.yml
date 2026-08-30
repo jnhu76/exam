@@ -21,6 +21,11 @@ services:
       COOKIE_SECURE: "false"
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
+      # Identity one-time links (#297: invitation accept, password reset) are
+      # built from PUBLIC_WEB_ORIGIN and must carry the origin the browser
+      # actually uses — the published EXAM_PORT, same as E2E_BASE_URL — not
+      # the dev default, or the e2e links point at a closed port.
+      PUBLIC_WEB_ORIGIN: http://localhost:${EXAM_PORT:-3000}
       # ADR-006: runtime timezone (display/log/diagnostics only; does not
       # change business-time comparison semantics).
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}

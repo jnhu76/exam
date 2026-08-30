@@ -80,11 +80,18 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [oneTimeUrl, setOneTimeUrl] = useState<string | null>(null);
 
+  /**
+   * Same display contract as UsersPage: the local i18n `roleLabels` entry
+   * wins; the backend assignable-roles catalog decides MEMBERSHIP only. Its
+   * `label` is an English catalog string and must never leak into the UI
+   * (P7 review #5), including in the invite-role dropdown options.
+   */
   const roleLabel = useCallback(
     (key: string) =>
-      roles.find((r) => r.key === key)?.label ??
-      t("admin.users.roleLabels.unknown"),
-    [roles, t],
+      t(`admin.users.roleLabels.${key}`, {
+        defaultValue: t("admin.users.roleLabels.unknown"),
+      }),
+    [t],
   );
 
   const loadInvitations = useCallback(async () => {
