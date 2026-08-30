@@ -46,6 +46,7 @@ Currently allowed:
 - `apps/web/src/pages/admin/QuestionImportPage.tsx` — CSV template headers, parser tokens, example rows
 - `apps/api/src/routes/export.ts` — scores CSV column headers + row values (考生姓名/成绩/及格状态/…). Data-format contract.
 - `apps/api/src/routes/attempts.admin.ts` — attempt-detail CSV column headers + row values (题号/题型/题目内容/…). Data-format contract.
+- `apps/api/src/routes/audit.ts` — audit-log export CSV column headers + row values (时间/操作/操作者/操作者ID/对象类型/对象ID/IP地址/请求ID). Data-format contract.
 
 These are documented in `scripts/check-hardcoded-copy.mjs` with justification.
 

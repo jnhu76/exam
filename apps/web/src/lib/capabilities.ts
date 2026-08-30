@@ -137,6 +137,17 @@ export function canSeeSettings(
 }
 
 /**
+ * Permission-registry / effective-authority visibility — Admin-only.
+ * Gated by `user.role.assign` (the capability whose domain IS role
+ * assignment), never by a role label. Backend remains authoritative.
+ */
+export function canSeePermissionRegistry(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.UserRoleAssign);
+}
+
+/**
  * Business-owner summary dashboard — Admin-only business observation
  * (P7-E2C). The Maintainer preset does not hold system.business_summary.view.
  */

@@ -8,6 +8,7 @@ import {
   canSeeGradingQueue,
   canSeeManagement,
   canSeeOperations,
+  canSeePermissionRegistry,
   canSeeProctor,
   canSeeQuestions,
   canSeeRecovery,
@@ -32,6 +33,7 @@ import {
   Monitor,
   ScrollText,
   Settings,
+  ShieldCheck,
   Tags,
   Upload,
   UserRoundCheck,
@@ -223,6 +225,15 @@ const managementItems: NavItem[] = [
     to: routes.admin.auditLogs,
     icon: ScrollText,
     visible: (user) => user.capabilities.includes(Permission.AuditLogView),
+  },
+  {
+    // Permission-registry + effective-authority surface — gated by the
+    // role-assignment capability (never by a role label), so visibility
+    // tracks the capability kernel rather than a hard-coded role.
+    labelKey: "nav.items.permissions",
+    to: routes.admin.permissions,
+    icon: ShieldCheck,
+    visible: canSeePermissionRegistry,
   },
   {
     labelKey: "nav.items.settings",

@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { downloadFile } from "@/lib/download";
+import type { AuditActionMetadataEntry } from "@exam/contracts";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   DataTableCell,
@@ -25,7 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ScrollText, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  ScrollText,
+  X,
+} from "lucide-react";
 
 interface AuditLogItem {
   id: string;
@@ -41,68 +49,13 @@ interface AuditLogItem {
   createdAt: string;
 }
 
-interface AuditLogResponse {
+/** Keyset-paginated audit log page response. */
+interface AuditLogPageData {
   items: AuditLogItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  nextCursor: string | null;
 }
 
-const ACTION_FILTER_KEYS = [
-  "all",
-  "exam.create",
-  "exam.update",
-  "exam.publish",
-  "exam.open",
-  "exam.close",
-  "exam.closed",
-  "exam.unpublish",
-  "exam.extend",
-  "exam.cancel",
-  "exam.archive",
-  "exam.publish_results",
-  "exam.delete",
-  "attempt.start",
-  "attempt.restore",
-  "attempt.saveAnswer",
-  "attempt.submit",
-  "attempt.autoSubmit",
-  "attempt.disrupted",
-  "attempt.misconductFlagged",
-  "attempt.forceSubmit",
-  "attempt.extendTime",
-  "attempt.timeGrant",
-  "attempt.exported",
-  "grading.score_entered",
-  "grading.finalized",
-  "candidate.create",
-  "candidate.update",
-  "candidate.import",
-  "candidate.password_reset",
-  "candidate_field.create",
-  "candidate_field.update",
-  "candidate_field.delete",
-  "question.create",
-  "question.update",
-  "question.delete",
-  "question.import",
-  "course.create",
-  "course.update",
-  "course.delete",
-  "enrollment.add",
-  "enrollment.remove",
-  "user.create",
-  "user.update",
-  "user.delete",
-  "login.success",
-  "login.failure",
-  "logout",
-  "export_scores",
-  "branding.update",
-  "admin.bootstrap",
-  "admin.password_reset.local",
-] as const;
+const PAGE_SIZE = 20;
 
 const TARGET_FILTER_KEYS = [
   "all",
@@ -127,19 +80,112 @@ function endOfDayISO(date: Date): string {
   return d.toISOString();
 }
 
+/** Builds the shared search/export query string for the current filters. */
+function buildQuery(filters: {
+  action: string;
+  target: string;
+  from?: Date;
+  to?: Date;
+  cursor?: string;
+}): string {
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+  if (filters.cursor) params.set("cursor", filters.cursor);
+  if (filters.action !== "all") params.set("action", filters.action);
+  if (filters.target !== "all") params.set("targetType", filters.target);
+  // Date bounds: inclusive on the server. `from` is the start-of-day of the
+  // picked date; `to` is pushed to end-of-day so the same day is included.
+  if (filters.from) params.set("from", startOfDayISO(filters.from));
+  if (filters.to) params.set("to", endOfDayISO(filters.to));
+  return params.toString();
+}
+
+/**
+ * Audit log search + export.
+ *
+ * The action dropdown is rendered from the BACKEND action vocabulary
+ * (`GET /admin/audit-log/actions`) — the web never owns "which actions exist",
+ * so a newly shipped action appears automatically. Pagination is a bounded
+ * keyset cursor (`nextCursor` is opaque); the page tracks the cursor path so
+ * prev/next never skip or repeat rows. Export is the same query serialized as
+ * CSV (same filters, same ordering) with a hard row cap enforced by the API.
+ */
 export function AuditLogPage() {
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
-  const [data, setData] = useState<AuditLogResponse | null>(null);
+
+  const [data, setData] = useState<AuditLogPageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+
+  // Backend-driven action vocabulary.
+  const [actionOptions, setActionOptions] = useState<
+    AuditActionMetadataEntry[]
+  >([]);
+
   const [actionFilter, setActionFilter] = useState("all");
   const [targetFilter, setTargetFilter] = useState("all");
   const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
+
+  // Keyset cursor path: `currentCursor` fetched the current page (null = the
+  // first page); `pastCursors` is the stack of cursors used to get here, with
+  // null entries marking the first page (so prev can return to it).
+  const [currentCursor, setCurrentCursor] = useState<string | null>(null);
+  const [pastCursors, setPastCursors] = useState<(string | null)[]>([]);
+
+  const [exporting, setExporting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const pageSize = 20;
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ actions: AuditActionMetadataEntry[] }>(
+        "/api/admin/audit-log/actions",
+      )
+      .then((result) => {
+        if (!cancelled) setActionOptions(result.actions);
+      })
+      .catch(() => {
+        // The vocabulary endpoint is best-effort for rendering: the log list
+        // still loads; the action filter degrades to "all actions".
+        if (!cancelled) setActionOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadLogs = useCallback(
+    async (cursor?: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await api.get<AuditLogPageData>(
+          `/api/admin/audit-logs?${buildQuery({
+            action: actionFilter,
+            target: targetFilter,
+            from: fromDate,
+            to: toDate,
+            cursor,
+          })}`,
+        );
+        setData(result);
+      } catch {
+        setError(t("admin.audit.loadFailed"));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [actionFilter, targetFilter, fromDate, toDate, t],
+  );
+
+  // Initial load + whenever filters change (resets to the first page).
+  useEffect(() => {
+    setCurrentCursor(null);
+    setPastCursors([]);
+    loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadLogs]);
 
   const handleDateChange = useCallback(
     (newDate: Date | undefined, isStartDate: boolean) => {
@@ -154,7 +200,6 @@ export function AuditLogPage() {
       } else {
         setToDate(newDate);
       }
-      setPage(1);
     },
     [fromDate, toDate],
   );
@@ -170,42 +215,54 @@ export function AuditLogPage() {
     setTargetFilter("all");
     setFromDate(undefined);
     setToDate(undefined);
-    setPage(1);
   }, []);
 
-  const loadLogs = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-      });
-      if (actionFilter !== "all") params.set("action", actionFilter);
-      if (targetFilter !== "all") params.set("targetType", targetFilter);
-      // Date bounds: inclusive on the server. `from` is the start-of-day of the
-      // picked date; `to` is pushed to end-of-day so the same day is included.
-      if (fromDate) params.set("from", startOfDayISO(fromDate));
-      if (toDate) params.set("to", endOfDayISO(toDate));
-      const result = await api.get<AuditLogResponse>(
-        `/api/admin/audit-logs?${params}`,
-      );
-      setData(result);
-    } catch {
-      setError(t("admin.audit.loadFailed"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, actionFilter, targetFilter, fromDate, toDate]);
+  const goNext = useCallback(() => {
+    if (!data?.nextCursor) return;
+    // Remember how to get back to the current page (null = the first page).
+    setPastCursors((stack) => [...stack, currentCursor]);
+    setCurrentCursor(data.nextCursor);
+    setExpandedId(null);
+    loadLogs(data.nextCursor);
+  }, [data, currentCursor, loadLogs]);
 
-  useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
+  const goPrev = useCallback(() => {
+    if (pastCursors.length === 0) return;
+    const prev = pastCursors[pastCursors.length - 1] ?? null;
+    setPastCursors((stack) => stack.slice(0, -1));
+    setCurrentCursor(prev);
+    setExpandedId(null);
+    loadLogs(prev ?? undefined);
+  }, [pastCursors, loadLogs]);
+
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await downloadFile(
+        `/api/admin/audit-logs/export?${buildQuery({
+          action: actionFilter,
+          target: targetFilter,
+          from: fromDate,
+          to: toDate,
+        })}`,
+        `audit-logs-${Date.now()}.csv`,
+      );
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : t("admin.audit.exportFailed");
+      toast.error(message);
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, actionFilter, targetFilter, fromDate, toDate, t]);
 
   const items = data?.items ?? [];
+  const hasPrev = pastCursors.length > 0;
+  const hasNext = data?.nextCursor != null;
 
   if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadLogs} />;
+  if (error) return <ErrorState message={error} onRetry={() => loadLogs()} />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -214,34 +271,25 @@ export function AuditLogPage() {
         description={t("admin.audit.description")}
       />
       <DataToolbar>
-        <Select
-          value={actionFilter}
-          onValueChange={(v) => {
-            setActionFilter(v);
-            setPage(1);
-          }}
-        >
+        <Select value={actionFilter} onValueChange={(v) => setActionFilter(v)}>
           <SelectTrigger
-            className="w-[180px]"
+            className="w-[220px]"
             aria-label={t("admin.audit.filterActions.all")}
           >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ACTION_FILTER_KEYS.map((key) => (
-              <SelectItem key={key} value={key}>
-                {t(`admin.audit.filterActions.${key}` as any)}
+            <SelectItem key="all" value="all">
+              {t("admin.audit.filterActions.all")}
+            </SelectItem>
+            {actionOptions.map(({ action }) => (
+              <SelectItem key={action} value={action}>
+                {t(`admin.audit.filterActions.${action}` as never, action)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select
-          value={targetFilter}
-          onValueChange={(v) => {
-            setTargetFilter(v);
-            setPage(1);
-          }}
-        >
+        <Select value={targetFilter} onValueChange={(v) => setTargetFilter(v)}>
           <SelectTrigger
             className="w-[150px]"
             aria-label={t("admin.audit.filterTargets.all")}
@@ -251,7 +299,7 @@ export function AuditLogPage() {
           <SelectContent>
             {TARGET_FILTER_KEYS.map((key) => (
               <SelectItem key={key} value={key}>
-                {t(`admin.audit.filterTargets.${key}` as any)}
+                {t(`admin.audit.filterTargets.${key}` as never)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -279,6 +327,16 @@ export function AuditLogPage() {
             {t("admin.audit.clearFilter")}
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting}
+          className="ml-auto"
+        >
+          <AppIcon icon={Download} size="inline" className="mr-1" />
+          {exporting ? t("admin.audit.exporting") : t("admin.audit.export")}
+        </Button>
       </DataToolbar>
       {items.length === 0 ? (
         <EmptyState
@@ -376,14 +434,29 @@ export function AuditLogPage() {
                 </div>
               );
             })()}
-          {data && (
-            <DataTablePagination
-              page={data.page}
-              pageSize={data.pageSize}
-              total={data.total}
-              onPageChange={setPage}
-            />
-          )}
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{t("admin.audit.pageInfo", { count: items.length })}</span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!hasPrev}
+                onClick={goPrev}
+              >
+                <AppIcon icon={ChevronLeft} size="inline" className="mr-1" />
+                {t("common.table.prev")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!hasNext}
+                onClick={goNext}
+              >
+                {t("common.table.next")}
+                <AppIcon icon={ChevronRight} size="inline" className="ml-1" />
+              </Button>
+            </div>
+          </div>
         </>
       )}
     </div>
