@@ -395,6 +395,10 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // assignment routes (POST/GET /admin/users/:userId/exam-assignments +
     // POST …/:examId/revoke, Admin-only flat gates) → 132 primary = 116
     // protected + 16 non-protected.
+    // Issue 298 adds 5 capability-gated read/projection routes (audit search
+    // keyset migration stays on the existing route; NEW: audit-logs export,
+    // audit-log actions, permission-registry, users/:id/effective-authority)
+    // → 142 primary = 123 protected + 19 non-protected.
     // This is a regression anchor, not a
     // hard-coded PASS: if a route is added/removed the counts move and the
     // failure message names the delta so the regression is triaged, not
@@ -402,11 +406,11 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(119);
+    ).toBe(123);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       19,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(138);
+    expect(capturedRoutes.length, "total primary routes").toBe(142);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

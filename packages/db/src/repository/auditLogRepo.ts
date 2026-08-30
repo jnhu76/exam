@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, lte, or } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs, users } from "../schema/pg.js";
@@ -12,9 +12,9 @@ export interface AuditLogRowWithActor {
 }
 
 /**
- * Filter options for {@link createAuditLogQueryRepo}.listPaginatedFiltered.
+ * Filter options for the audit-log query repo.
  *
- * - `action` / `targetType` / `targetId`: exact-match string filters.
+ * - `action` / `targetType` / `targetId` / `actorId`: exact-match filters.
  * - `from` / `to`: inclusive `createdAt` bounds (JS `Date` against the
  *   `timestamptz` column). Either or both may be omitted.
  */
@@ -22,6 +22,7 @@ export interface AuditLogListFilter {
   action?: string;
   targetType?: string;
   targetId?: string;
+  actorId?: string;
   from?: Date;
   to?: Date;
 }
@@ -87,6 +88,9 @@ export function createAuditLogQueryRepo(db: Database) {
       if (filter.targetId) {
         conditions.push(eq(auditLogs.targetId, filter.targetId));
       }
+      if (filter.actorId) {
+        conditions.push(eq(auditLogs.actorId, filter.actorId));
+      }
       if (filter.from) {
         conditions.push(gte(auditLogs.createdAt, filter.from));
       }
@@ -112,6 +116,81 @@ export function createAuditLogQueryRepo(db: Database) {
         .from(auditLogs)
         .where(where);
       return { items, total: Number(countResult?.total ?? 0) };
+    },
+    /**
+     * Lists audit log entries with bounded KEYSET-cursor pagination.
+     *
+     * Ordering is `(created_at DESC, id DESC)` — the `id` tiebreaker makes the
+     * order total and stable even for rows sharing an exact `created_at`
+     * instant. `after` is the decoded cursor of the last row of the previous
+     * page; rows strictly before it (in the ordering) are returned. Fetches
+     * `limit + 1` rows so the caller learns `hasMore` without a second query
+     * and never skips/duplicates rows when new inserts land between pages.
+     */
+    async listKeysetFiltered(
+      ctx: TenantContext | RequestContext,
+      params: {
+        limit: number;
+        filter?: AuditLogListFilter;
+        after?: { createdAt: Date; id: string };
+      },
+    ): Promise<{
+      items: AuditLogRowWithActor[];
+      hasMore: boolean;
+    }> {
+      const orgId = resolveOrganizationId(ctx);
+      const filter = params.filter ?? {};
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.action) {
+        conditions.push(eq(auditLogs.action, filter.action));
+      }
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      if (filter.actorId) {
+        conditions.push(eq(auditLogs.actorId, filter.actorId));
+      }
+      if (filter.from) {
+        conditions.push(gte(auditLogs.createdAt, filter.from));
+      }
+      if (filter.to) {
+        conditions.push(lte(auditLogs.createdAt, filter.to));
+      }
+      if (params.after) {
+        // Keyset predicate: strictly "before" the cursor row in the
+        // (created_at DESC, id DESC) ordering.
+        const after = params.after;
+        const afterPredicate = or(
+          lt(auditLogs.createdAt, after.createdAt),
+          and(
+            eq(auditLogs.createdAt, after.createdAt),
+            lt(auditLogs.id, after.id),
+          ),
+        );
+        if (afterPredicate) {
+          conditions.push(afterPredicate);
+        }
+      }
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const rows = await db
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
+        .where(where)
+        .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+        .limit(params.limit + 1);
+      const hasMore = rows.length > params.limit;
+      return {
+        items: hasMore ? rows.slice(0, params.limit) : rows,
+        hasMore,
+      };
     },
     /**
      * Lists all audit log entries for a given target within the tenant's

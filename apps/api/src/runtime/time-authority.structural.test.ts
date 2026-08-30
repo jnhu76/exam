@@ -112,6 +112,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
       "Date.now() is used only to generate a unique CSV download filename suffix (cache-busting); not an exam business-time decision.",
   },
   {
+    path: "apps/api/src/routes/audit.ts",
+    reason:
+      "Date.now() is used only to generate a unique CSV download filename suffix (cache-busting) for the audit-log export (#298); not an exam business-time decision. Mirrors the export.ts allowlist entry.",
+  },
+  {
     path: "apps/api/src/routes/testHelpers.ts",
     reason:
       "Test/factory helpers (fixture generation: openAt/closeAt/clientSavedAt, unique-id suffix); never asserts business-time authority of the server.",

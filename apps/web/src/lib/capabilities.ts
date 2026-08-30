@@ -137,6 +137,18 @@ export function canSeeSettings(
 }
 
 /**
+ * Permission-registry / effective-authority visibility. Gated by
+ * `user.view` — the same READ capability the backend gate uses, matching the
+ * other user-read surfaces (viewing authority must not require the ability
+ * to change it). Never by a role label. Backend remains authoritative.
+ */
+export function canSeePermissionRegistry(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.UserView);
+}
+
+/**
  * Business-owner summary dashboard — Admin-only business observation
  * (P7-E2C). The Maintainer preset does not hold system.business_summary.view.
  */

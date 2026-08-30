@@ -45,47 +45,101 @@ vi.mock("@/components/shared/DatePicker", () => ({
 
 const getMock = vi.mocked(api.get);
 
-const mockAuditData = {
-  items: [
+/**
+ * Backend-driven action vocabulary (#298): the page renders the dropdown from
+ * this endpoint, never from a hardcoded list.
+ */
+const actionsMock = {
+  actions: [
     {
-      id: "log-1",
-      organizationId: "org-1",
-      actorId: "admin-1",
-      actorName: "管理员张三",
       action: "grading.score_entered",
-      targetType: "attempt",
-      targetId: "att-1",
-      metadata: {
-        questionId: "q1",
-        score: 8,
-        maxScore: 10,
-        graderId: "admin-1",
-      },
-      ipAddress: "127.0.0.1",
-      userAgent: "Mozilla/5.0",
-      createdAt: "2025-01-15T10:00:00Z",
+      durability: "atomic",
+      obligation: "privileged_mutation",
+      frequency: "medium",
     },
     {
-      id: "log-2",
-      organizationId: "org-1",
-      actorId: "admin-1",
       action: "exam.publish_results",
-      targetType: "exam",
-      targetId: "exam-1",
-      metadata: {
-        alreadyPublished: false,
-        resultsPublishedAt: "2025-01-15T10:05:00Z",
-      },
-      ipAddress: "127.0.0.1",
-      userAgent: "Mozilla/5.0",
-      createdAt: "2025-01-15T10:05:00Z",
+      durability: "atomic",
+      obligation: "privileged_mutation",
+      frequency: "low",
+    },
+    {
+      action: "exam.cancel",
+      durability: "atomic",
+      obligation: "privileged_mutation",
+      frequency: "low",
+    },
+    {
+      action: "attempt.timeGrant",
+      durability: "atomic",
+      obligation: "privileged_mutation",
+      frequency: "low",
+    },
+    {
+      action: "user.invited",
+      durability: "atomic",
+      obligation: "authority",
+      frequency: "low",
+    },
+    {
+      action: "audit_log.exported",
+      durability: "synchronous_sensitive_read",
+      obligation: "privacy_access",
+      frequency: "low",
     },
   ],
-  total: 2,
-  page: 1,
-  pageSize: 20,
-  totalPages: 1,
 };
+
+const auditItems = [
+  {
+    id: "log-1",
+    organizationId: "org-1",
+    actorId: "admin-1",
+    actorName: "管理员张三",
+    action: "grading.score_entered",
+    targetType: "attempt",
+    targetId: "att-1",
+    metadata: {
+      questionId: "q1",
+      score: 8,
+      maxScore: 10,
+      graderId: "admin-1",
+    },
+    ipAddress: "127.0.0.1",
+    userAgent: "Mozilla/5.0",
+    createdAt: "2025-01-15T10:00:00Z",
+  },
+  {
+    id: "log-2",
+    organizationId: "org-1",
+    actorId: "admin-1",
+    action: "exam.publish_results",
+    targetType: "exam",
+    targetId: "exam-1",
+    metadata: {
+      alreadyPublished: false,
+      resultsPublishedAt: "2025-01-15T10:05:00Z",
+    },
+    ipAddress: "127.0.0.1",
+    userAgent: "Mozilla/5.0",
+    createdAt: "2025-01-15T10:05:00Z",
+  },
+];
+
+const mockAuditData = {
+  items: auditItems,
+  nextCursor: "v1|2025-01-15T10:05:00.000Z|log-2",
+};
+
+/** Routes api.get by URL: actions vocabulary vs the keyset log page. */
+function mockApi() {
+  getMock.mockImplementation((path: string) => {
+    if (path.includes("/api/admin/audit-log/actions")) {
+      return Promise.resolve(actionsMock);
+    }
+    return Promise.resolve(mockAuditData);
+  });
+}
 
 function renderPage() {
   return render(
@@ -113,7 +167,7 @@ function renderPage() {
 describe("AuditLogPage", () => {
   beforeEach(() => {
     getMock.mockReset();
-    getMock.mockResolvedValue(mockAuditData);
+    mockApi();
   });
 
   it("renders audit log table with entries", async () => {
@@ -132,12 +186,11 @@ describe("AuditLogPage", () => {
   });
 
   it("shows empty state when no logs", async () => {
-    getMock.mockResolvedValue({
-      items: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/api/admin/audit-log/actions")) {
+        return Promise.resolve(actionsMock);
+      }
+      return Promise.resolve({ items: [], nextCursor: null });
     });
     renderPage();
     expect(await screen.findByText("暂无审计日志")).toBeInTheDocument();
@@ -152,28 +205,54 @@ describe("AuditLogPage", () => {
   });
 
   it("shows error state on fetch failure", async () => {
-    getMock.mockRejectedValue(new Error("Network error"));
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/api/admin/audit-log/actions")) {
+        return Promise.resolve(actionsMock);
+      }
+      return Promise.reject(new Error("Network error"));
+    });
     renderPage();
     expect(await screen.findByText("加载审计日志失败")).toBeInTheDocument();
   });
 
-  it("renders pagination", async () => {
-    getMock.mockResolvedValue({
-      ...mockAuditData,
-      total: 50,
-      totalPages: 3,
-    });
+  it("navigates pages with keyset next/prev", async () => {
+    const user = userEvent.setup();
     renderPage();
     await screen.findByText("grading.score_entered");
-    expect(screen.getByText(/共 50 条/)).toBeInTheDocument();
+
+    // A non-null nextCursor enables the next button.
+    const nextButton = screen.getByRole("button", { name: /下一页/ });
+    expect(nextButton).toBeEnabled();
+    await user.click(nextButton);
+
+    // The next request carries the opaque cursor.
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("cursor=");
+    });
+
+    // After navigating forward, the prev button becomes enabled.
+    const prevButton = screen.getByRole("button", { name: /上一页/ });
+    expect(prevButton).toBeEnabled();
+  });
+
+  it("disables the prev button on the first page", async () => {
+    renderPage();
+    await screen.findByText("grading.score_entered");
+    expect(screen.getByRole("button", { name: /上一页/ })).toBeDisabled();
   });
 
   it("retry button re-fetches data on error", async () => {
-    getMock.mockRejectedValueOnce(new Error("fail"));
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/api/admin/audit-log/actions")) {
+        return Promise.resolve(actionsMock);
+      }
+      return Promise.reject(new Error("fail"));
+    });
     renderPage();
     await screen.findByText("加载审计日志失败");
 
-    getMock.mockResolvedValue(mockAuditData);
+    mockApi();
     await userEvent.setup().click(screen.getByText("重试"));
     expect(
       await screen.findByText("grading.score_entered"),
@@ -197,7 +276,6 @@ describe("AuditLogPage", () => {
     renderPage();
     await screen.findByText("grading.score_entered");
 
-    // Open the target filter and pick 考试 (exam).
     const targetTrigger = screen.getByRole("combobox", {
       name: /全部目标/,
     });
@@ -252,35 +330,36 @@ describe("AuditLogPage", () => {
 
   it("renders resolved actorName instead of raw actorId when present", async () => {
     renderPage();
-    // log-1 has actorName "管理员张三"; that should show, not the raw "admin-1".
     expect(await screen.findByText("管理员张三")).toBeInTheDocument();
   });
 
   it("falls back to raw actorId when actorName is absent", async () => {
     renderPage();
     await screen.findByText("管理员张三");
-    // log-2 has no actorName → its raw actorId "admin-1" is shown.
-    // (log-1 also has actorId admin-1 but renders the name; there will be at
-    // least one "admin-1" cell from log-2.)
     expect(screen.getAllByText("admin-1").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("includes expanded audit actions in the action filter", async () => {
+  it("renders the action dropdown FROM the backend vocabulary, not a hardcoded list", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("管理员张三");
-    // Open the action filter and verify a previously-missing action is present.
+    // A #297 action shipped after the old hardcoded list: present because the
+    // dropdown is backend-driven, with a Chinese label from i18n.
     await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
-    expect(await screen.findByText("取消考试")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: "邀请用户" }),
+    ).toBeInTheDocument();
+    // The export action is present with its label too.
+    expect(
+      screen.getByRole("option", { name: "导出审计日志" }),
+    ).toBeInTheDocument();
   });
 
-  it("includes attempt.timeGrant in the action filter with a Chinese label and sends the exact action value", async () => {
+  it("sends the exact action value when a backend-driven action is selected", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("管理员张三");
 
-    // Open the action filter and verify the time-grant action is present with
-    // its Chinese label (not the raw action key).
     await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
     const grantOption = await screen.findByRole("option", {
       name: "授予考试时间",
@@ -289,7 +368,6 @@ describe("AuditLogPage", () => {
     // The raw action key must not appear as a visible label.
     expect(screen.queryByText("attempt.timeGrant")).not.toBeInTheDocument();
 
-    // Selecting it sends the exact action value to the API.
     await user.click(grantOption);
     await waitFor(() => {
       const lastCall = getMock.mock.calls.at(-1)?.[0] as string;

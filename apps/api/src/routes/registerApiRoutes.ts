@@ -17,6 +17,7 @@ import scoreRoutes from "./scores.js";
 import { exportRoutes } from "./export.js";
 import systemRoutes from "./system.js";
 import auditRoutes from "./audit.js";
+import { permissionRegistryRoutes } from "./permissionRegistry.js";
 import importLogRoutes from "./importLogs.js";
 import clientEventRoutes from "./clientEvents.js";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
@@ -60,6 +61,7 @@ export async function registerApiRoutes(
   await app.register(exportRoutes, { prefix });
   await app.register(systemRoutes, { prefix });
   await app.register(auditRoutes, { prefix });
+  await app.register(permissionRegistryRoutes, { prefix });
   await app.register(importLogRoutes, { prefix });
   await app.register(clientEventRoutes, { prefix });
   await app.register(proctorMonitoringRoutes, { prefix });

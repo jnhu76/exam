@@ -120,6 +120,7 @@ export const AuditAction = {
 
   // ── Exports ──
   ExportScores: "export_scores",
+  AuditLogExported: "audit_log.exported",
 
   // ── Grading ──
   GradingScoreEntered: "grading.score_entered",

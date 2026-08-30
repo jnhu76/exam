@@ -52,6 +52,7 @@ import { OperationsPage } from "@/pages/admin/OperationsPage";
 import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
 import { GradingDetailPage } from "@/pages/admin/GradingDetailPage";
 import { AuditLogPage } from "@/pages/admin/AuditLogPage";
+import { PermissionRegistryPage } from "@/pages/admin/PermissionRegistryPage";
 import { ImportLogsPage } from "@/pages/admin/ImportLogsPage";
 import { RecoveryQueuePage } from "@/pages/admin/RecoveryQueuePage";
 import { RecoveryIncidentDetailPage } from "@/pages/admin/RecoveryIncidentDetailPage";
@@ -118,6 +119,7 @@ export function AppRoutes() {
         <Route path="grading-queue" element={<GradingQueuePage />} />
         <Route path="grading-queue/:id" element={<GradingDetailPage />} />
         <Route path="audit-logs" element={<AuditLogPage />} />
+        <Route path="permissions" element={<PermissionRegistryPage />} />
         <Route path="import-logs" element={<ImportLogsPage />} />
         <Route path="attempts/:id" element={<AttemptDetailPage />} />
         <Route path="recovery" element={<RecoveryQueuePage />} />

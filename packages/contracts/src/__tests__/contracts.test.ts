@@ -33,6 +33,11 @@ import {
 import {
   ScoreListQuerySchema,
   AuditLogQuerySchema,
+  AuditLogExportQuerySchema,
+  AuditLogPageResponseSchema,
+  AUDIT_SEARCH_DEFAULT_LIMIT,
+  encodeAuditCursor,
+  decodeAuditCursor,
   SaveAnswerRequestSchema,
   SaveAnswerResponseSchema,
   CandidateExamDetailResponseSchema,
@@ -1347,19 +1352,33 @@ describe("manual grading contracts", () => {
 });
 
 describe("audit contracts", () => {
-  it("AuditLogQuerySchema coerces pagination and defaults page/pageSize", () => {
-    const result = AuditLogQuerySchema.parse({ page: "2" });
-    expect(result.page).toBe(2);
-    expect(result.pageSize).toBe(20);
+  it("AuditLogQuerySchema coerces limit and defaults to the search default", () => {
+    const result = AuditLogQuerySchema.parse({ limit: "2" });
+    expect(result.limit).toBe(2);
+    const byDefault = AuditLogQuerySchema.parse({});
+    expect(byDefault.limit).toBe(AUDIT_SEARCH_DEFAULT_LIMIT);
   });
 
-  it("AuditLogQuerySchema accepts action + targetType optional string filters", () => {
+  it("AuditLogQuerySchema rejects a limit above the hard search bound", () => {
+    expect(AuditLogQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
+  });
+
+  it("AuditLogQuerySchema accepts action + targetType + actorId + targetId filters", () => {
     const result = AuditLogQuerySchema.parse({
       action: "exam.publish",
       targetType: "exam",
+      actorId: "11111111-1111-1111-1111-111111111111",
+      targetId: "22222222-2222-2222-2222-222222222222",
     });
     expect(result.action).toBe("exam.publish");
     expect(result.targetType).toBe("exam");
+    expect(result.actorId).toBe("11111111-1111-1111-1111-111111111111");
+    expect(result.targetId).toBe("22222222-2222-2222-2222-222222222222");
+  });
+
+  it("AuditLogQuerySchema accepts an opaque cursor string", () => {
+    const result = AuditLogQuerySchema.parse({ cursor: "v1|x|y" });
+    expect(result.cursor).toBe("v1|x|y");
   });
 
   it("AuditLogQuerySchema accepts optional from/to ISO datetime bounds", () => {
@@ -1374,8 +1393,11 @@ describe("audit contracts", () => {
     const result = AuditLogQuerySchema.parse({});
     expect(result.action).toBeUndefined();
     expect(result.targetType).toBeUndefined();
+    expect(result.actorId).toBeUndefined();
+    expect(result.targetId).toBeUndefined();
     expect(result.from).toBeUndefined();
     expect(result.to).toBeUndefined();
+    expect(result.cursor).toBeUndefined();
   });
 
   it("AuditLogQuerySchema rejects a non-datetime from value", () => {
@@ -1383,6 +1405,65 @@ describe("audit contracts", () => {
       from: "2026-01-01",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("AuditLogExportQuerySchema has no client limit and takes an optional snapshotTo", () => {
+    const parsed = AuditLogExportQuerySchema.parse({
+      snapshotTo: "2026-08-30T00:00:00.000Z",
+    });
+    expect(parsed.snapshotTo).toBe("2026-08-30T00:00:00.000Z");
+    // The export cap is server-owned (AUDIT_EXPORT_MAX_ROWS): a client
+    // `limit` key is stripped, never honored.
+    expect("limit" in AuditLogExportQuerySchema.parse({ limit: 5 })).toBe(
+      false,
+    );
+    expect(
+      AuditLogExportQuerySchema.safeParse({ snapshotTo: "2026-08-30" }).success,
+    ).toBe(false);
+  });
+
+  it("AuditLogPageResponseSchema requires the snapshot bound", () => {
+    const base = { items: [], nextCursor: null };
+    expect(AuditLogPageResponseSchema.safeParse(base).success).toBe(false);
+    expect(
+      AuditLogPageResponseSchema.safeParse({
+        ...base,
+        snapshotTo: "2026-08-30T10:00:00.000Z",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("audit cursor round-trips the snapshot bound and the last row", () => {
+    const snapshotTo = "2026-08-30T10:00:00.000Z";
+    const createdAt = "2026-08-30T09:36:21.000Z";
+    const id = "33333333-3333-4333-8333-333333333333";
+    const cursor = encodeAuditCursor(snapshotTo, createdAt, id);
+    expect(decodeAuditCursor(cursor)).toEqual({ snapshotTo, createdAt, id });
+  });
+
+  it("audit cursor accepts Dates and decodes to the same ISO instants", () => {
+    const snapshotTo = new Date("2026-08-30T10:00:00.000Z");
+    const createdAt = new Date("2026-08-30T09:36:21.000Z");
+    const id = "44444444-4444-4444-8444-444444444444";
+    const cursor = encodeAuditCursor(snapshotTo, createdAt, id);
+    expect(decodeAuditCursor(cursor)).toEqual({
+      snapshotTo: "2026-08-30T10:00:00.000Z",
+      createdAt: "2026-08-30T09:36:21.000Z",
+      id,
+    });
+  });
+
+  it("audit cursor rejects malformed values and stale versions", () => {
+    const id = "55555555-5555-4555-8555-555555555555";
+    const ts = "2026-08-30T00:00:00.000Z";
+    expect(decodeAuditCursor("garbage")).toBeNull();
+    // Pre-snapshot v1 cursors carry no window bound and must never parse.
+    expect(decodeAuditCursor(`v1|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|not-a-date|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|not-a-date|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${ts}|not-an-id`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${ts}|${id}|extra`)).toBeNull();
   });
 });
 

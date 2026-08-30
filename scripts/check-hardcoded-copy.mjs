@@ -94,6 +94,12 @@ const CJK_ALLOWLIST = [
       "Attempt-detail CSV column headers + row values (题号/题型/题目内容/...). Data-format contract, not UI copy.",
     removal: "Never — CSV export header/row format is a data contract.",
   },
+  {
+    path: "apps/api/src/routes/audit.ts",
+    reason:
+      "Audit-log export CSV column headers + row values (时间/操作/操作者/操作者ID/对象类型/对象ID/IP地址/请求ID). Data-format contract, not UI copy. Mirrors the export.ts allowlist entry.",
+    removal: "Never — CSV export header/row format is a data contract.",
+  },
   // ── Backend: API-provided status-reason strings (rendered verbatim by
   //    the web client today; code+web-i18n mapping is a tracked follow-up). ──
   {

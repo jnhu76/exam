@@ -29,6 +29,8 @@ export const errorMessages = {
   VALIDATION_ERROR: "请求参数无效",
   RESOURCE_NOT_FOUND: "资源不存在",
   RESOURCE_CONFLICT: "资源状态冲突",
+  INVALID_CURSOR: "无效的分页游标",
+  EXPORT_EXCEEDS_LIMIT: "匹配记录超过单次导出上限，请缩小查询范围",
   RATE_LIMITED: "请求过于频繁，请稍后重试",
   INTERNAL_ERROR: "服务器内部错误",
   CURRENT_PASSWORD_INVALID: "当前密码不正确",
