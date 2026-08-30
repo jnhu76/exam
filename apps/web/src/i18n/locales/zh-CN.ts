@@ -1097,9 +1097,9 @@ const zhCN = {
     },
     permissions: {
       title: "权限注册表",
-      description: "查看权限目录、角色预设与用户的有效权限及来源",
+      description: "查看权限目录、角色预设与用户角色授予的能力集合",
       loadFailed: "加载权限注册表失败",
-      loadAuthorityFailed: "加载用户有效权限失败",
+      loadAuthorityFailed: "加载用户能力授予失败",
       catalog: {
         title: "权限目录",
         description: "系统全部权限，按语义域分组。权限键是权威标识。",
@@ -1135,12 +1135,15 @@ const zhCN = {
         },
       },
       effective: {
-        title: "用户有效权限",
-        description: "选择用户查看其最终拥有的能力，以及能力来自哪条分配。",
-        userSelect: "选择用户",
+        title: "用户角色能力",
+        description:
+          "选择员工用户，查看其当前角色分配授予的能力集合。能力集合是资格，不等于逐资源授权。",
+        userSelect: "选择员工用户",
         noActive: "无生效分配",
-        capabilities: "有效能力",
-        assignments: "来源分配",
+        capabilities: "授予的能力集合",
+        assignments: "当前角色分配",
+        scopeNote:
+          "以上为当前活跃角色预设能力的并集（资格），不构成逐能力与分配的对应关系；实际可访问的资源仍由课程、考试等 scope assignment 在各资源边界单独限制。",
         primary: "主角色",
         inactive: "已停用",
         reason: "原因：{{reason}}",

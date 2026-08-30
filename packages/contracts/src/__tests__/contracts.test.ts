@@ -34,8 +34,8 @@ import {
   ScoreListQuerySchema,
   AuditLogQuerySchema,
   AuditLogExportQuerySchema,
+  AuditLogPageResponseSchema,
   AUDIT_SEARCH_DEFAULT_LIMIT,
-  AUDIT_EXPORT_MAX_ROWS,
   encodeAuditCursor,
   decodeAuditCursor,
   SaveAnswerRequestSchema,
@@ -1407,43 +1407,63 @@ describe("audit contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  it("AuditLogExportQuerySchema defaults to the export row cap and bounds it", () => {
-    const byDefault = AuditLogExportQuerySchema.parse({});
-    expect(byDefault.limit).toBe(AUDIT_EXPORT_MAX_ROWS);
+  it("AuditLogExportQuerySchema has no client limit and takes an optional snapshotTo", () => {
+    const parsed = AuditLogExportQuerySchema.parse({
+      snapshotTo: "2026-08-30T00:00:00.000Z",
+    });
+    expect(parsed.snapshotTo).toBe("2026-08-30T00:00:00.000Z");
+    // The export cap is server-owned (AUDIT_EXPORT_MAX_ROWS): a client
+    // `limit` key is stripped, never honored.
+    expect("limit" in AuditLogExportQuerySchema.parse({ limit: 5 })).toBe(
+      false,
+    );
     expect(
-      AuditLogExportQuerySchema.safeParse({ limit: AUDIT_EXPORT_MAX_ROWS + 1 })
-        .success,
+      AuditLogExportQuerySchema.safeParse({ snapshotTo: "2026-08-30" }).success,
     ).toBe(false);
   });
 
-  it("audit cursor round-trips a row (createdAt, id)", () => {
-    const createdAt = "2026-08-30T09:36:21.000Z";
-    const id = "33333333-3333-4333-8333-333333333333";
-    const cursor = encodeAuditCursor(createdAt, id);
-    expect(decodeAuditCursor(cursor)).toEqual({ createdAt, id });
+  it("AuditLogPageResponseSchema requires the snapshot bound", () => {
+    const base = { items: [], nextCursor: null };
+    expect(AuditLogPageResponseSchema.safeParse(base).success).toBe(false);
+    expect(
+      AuditLogPageResponseSchema.safeParse({
+        ...base,
+        snapshotTo: "2026-08-30T10:00:00.000Z",
+      }).success,
+    ).toBe(true);
   });
 
-  it("audit cursor accepts a Date and decodes to the same ISO instant", () => {
-    const date = new Date("2026-08-30T09:36:21.000Z");
+  it("audit cursor round-trips the snapshot bound and the last row", () => {
+    const snapshotTo = "2026-08-30T10:00:00.000Z";
+    const createdAt = "2026-08-30T09:36:21.000Z";
+    const id = "33333333-3333-4333-8333-333333333333";
+    const cursor = encodeAuditCursor(snapshotTo, createdAt, id);
+    expect(decodeAuditCursor(cursor)).toEqual({ snapshotTo, createdAt, id });
+  });
+
+  it("audit cursor accepts Dates and decodes to the same ISO instants", () => {
+    const snapshotTo = new Date("2026-08-30T10:00:00.000Z");
+    const createdAt = new Date("2026-08-30T09:36:21.000Z");
     const id = "44444444-4444-4444-8444-444444444444";
-    const cursor = encodeAuditCursor(date, id);
+    const cursor = encodeAuditCursor(snapshotTo, createdAt, id);
     expect(decodeAuditCursor(cursor)).toEqual({
+      snapshotTo: "2026-08-30T10:00:00.000Z",
       createdAt: "2026-08-30T09:36:21.000Z",
       id,
     });
   });
 
-  it("audit cursor rejects malformed values", () => {
+  it("audit cursor rejects malformed values and stale versions", () => {
     const id = "55555555-5555-4555-8555-555555555555";
+    const ts = "2026-08-30T00:00:00.000Z";
     expect(decodeAuditCursor("garbage")).toBeNull();
-    expect(decodeAuditCursor(`v2|2026-08-30T00:00:00.000Z|${id}`)).toBeNull();
-    expect(decodeAuditCursor(`v1|not-a-date|${id}`)).toBeNull();
-    expect(
-      decodeAuditCursor(`v1|2026-08-30T00:00:00.000Z|not-an-id`),
-    ).toBeNull();
-    expect(
-      decodeAuditCursor(`v1|2026-08-30T00:00:00.000Z|${id}|extra`),
-    ).toBeNull();
+    // Pre-snapshot v1 cursors carry no window bound and must never parse.
+    expect(decodeAuditCursor(`v1|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|not-a-date|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|not-a-date|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${ts}|not-an-id`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${ts}|${id}|extra`)).toBeNull();
   });
 });
 

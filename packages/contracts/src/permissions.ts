@@ -51,6 +51,15 @@ export type PermissionRegistryResponse = z.infer<
  * the existing `deriveAssignmentAuthority` kernel, projected verbatim. An
  * `ok:false` result is a NORMAL outcome (e.g. `no_active_assignments`), not an
  * error.
+ *
+ * SEMANTICS BOUNDARY: `capabilities` is the union of the active roles' preset
+ * permissions — capability ELIGIBILITY, not final per-resource authority.
+ * Preset capability × scoped resource assignment = actual authority, and the
+ * resource-narrowing half (Teacher@Course, Grader@Exam, Proctor@Exam) is
+ * enforced separately at each capability check. This projection deliberately
+ * does NOT claim a capability→assignment provenance mapping: several active
+ * assignments can carry the same role, so the kernel's flat union cannot say
+ * which assignment "grants" which capability.
  */
 export const EffectiveAuthoritySchema = z.discriminatedUnion("ok", [
   z.object({
@@ -70,7 +79,10 @@ export const EffectiveAuthoritySchema = z.discriminatedUnion("ok", [
 
 export type EffectiveAuthority = z.infer<typeof EffectiveAuthoritySchema>;
 
-/** One user-role-assignment row (the authoritative source for the "why"). */
+/**
+ * One user-role-assignment row, displayed ALONGSIDE the capability union —
+ * it is the input to the kernel, not a per-capability provenance source.
+ */
 export const UserAssignmentEntrySchema = z.object({
   id: z.string(),
   role: z.string(),
@@ -81,7 +93,11 @@ export const UserAssignmentEntrySchema = z.object({
 
 export type UserAssignmentEntry = z.infer<typeof UserAssignmentEntrySchema>;
 
-/** Response for `GET /admin/users/:id/effective-authority`. */
+/**
+ * Response for `GET /admin/users/:id/effective-authority`: the user, the
+ * capability grants derived from their active role assignments, and the
+ * assignment rows — three co-present facts, not a capability→assignment map.
+ */
 export const EffectiveAuthorityResponseSchema = z.object({
   user: z.object({
     id: z.string(),

@@ -164,6 +164,49 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
     expect(hasMore).toBe(false);
   });
 
+  it("combines the snapshot `to` bound with the cursor (window + keyset)", async () => {
+    const repo = createAuditLogTestRepo(db);
+    // #298 corrective: every continuation page runs the keyset predicate AND
+    // the frozen snapshot upper bound together — this combination is the
+    // load-bearing path, not an edge case.
+    const snapshotTo = new Date("2026-07-01T12:00:00.000Z");
+    for (const [ts, tag] of [
+      ["2026-07-01T00:00:00.000Z", "early"],
+      ["2026-07-02T00:00:00.000Z", "late"],
+    ] as const) {
+      const created = await repo.create(ctx, {
+        actorId: ctx.actorId,
+        action: "keyset.snapshot",
+        targetType: "keyset_snapshot",
+        targetId: tag,
+        metadata: {},
+      });
+      await db
+        .update(auditLogs)
+        .set({ createdAt: new Date(ts) })
+        .where(eq(auditLogs.id, created.id));
+    }
+
+    const bounded = await repo.listKeysetFiltered(ctx, {
+      limit: 10,
+      filter: { targetType: "keyset_snapshot", to: snapshotTo },
+    });
+    expect(bounded.items.map((r) => r.auditLog.targetId)).toEqual(["early"]);
+
+    // The bound still holds on the continuation page past the early row:
+    // the `late` row is newer than the snapshot and must stay invisible.
+    const afterEarly = await repo.listKeysetFiltered(ctx, {
+      limit: 10,
+      filter: { targetType: "keyset_snapshot", to: snapshotTo },
+      after: {
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        id: bounded.items[0]!.auditLog.id,
+      },
+    });
+    expect(afterEarly.items).toHaveLength(0);
+    expect(afterEarly.hasMore).toBe(false);
+  });
+
   it("scopes strictly to the organization (cross-org rows are invisible)", async () => {
     const repo = createAuditLogTestRepo(db);
     const otherOrg = await createOrganizationRepo(db).create(rootContext, {

@@ -25,29 +25,32 @@ const idParamsSchema = z.object({ id: z.string().uuid() });
 /**
  * Read-projection routes for the authorization surfaces.
  *
- * Both endpoints are Admin-only VISIBILITY projections over existing
- * authority — they never mutate and never re-derive a second authority:
+ * Both endpoints are VISIBILITY projections over existing authority — they
+ * never mutate and never re-derive a second authority:
  *   - `GET /admin/permission-registry` projects the @exam/authz catalog +
  *     role presets verbatim (the closed unions ARE the authority);
  *   - `GET /admin/users/:id/effective-authority` reuses the canonical
- *     `deriveAssignmentAuthority` kernel and returns the assignment rows so
- *     the UI can answer "who has which capability and why".
+ *     `deriveAssignmentAuthority` kernel and returns the assignment rows.
+ *
+ * Read gates use `user.view`, matching the other user-read surfaces — viewing
+ * authority must not require the ability to change it. The presets currently
+ * grant both only to Admin, so this does not move the access matrix.
  */
 export const permissionRegistryRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /admin/permission-registry
    *
-   * Admin-only. Returns every permission (key + semantic category) and every
-   * role preset (label, purpose, default scope, permission union, sensitive
-   * subset). Pure projection of `@exam/authz` constants — no DB table, no
-   * frontend registry, no second role→permission mapping.
+   * Returns every permission (key + semantic category) and every role preset
+   * (label, purpose, default scope, permission union, sensitive subset). Pure
+   * projection of `@exam/authz` constants — no DB table, no frontend
+   * registry, no second role→permission mapping.
    */
   fastify.get(
     "/admin/permission-registry",
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.UserRoleAssign),
+        fastify.requireCapability(Permission.UserView),
       ],
       schema: {
         security: cookieAuth,
@@ -80,12 +83,19 @@ export const permissionRegistryRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /admin/users/:id/effective-authority
    *
-   * Admin-only. Answers "which capabilities does this user hold and why" by
-   * reusing the canonical assignment-authority kernel:
-   *   - `assignments` are the authoritative source rows (org-scoped);
+   * Returns the user's capability GRANTS — the union of their active roles'
+   * preset permissions — by reusing the canonical assignment-authority
+   * kernel, alongside the raw assignment rows:
    *   - `authority` is `deriveAssignmentAuthority`'s discriminated result —
    *     the SAME derivation the login/authenticate path runs, never a
-   *     re-computed preset union in this route.
+   *     re-computed preset union in this route;
+   *   - `assignments` are the kernel's input rows (org-scoped), displayed
+   *     alongside — NOT a per-capability provenance mapping. Preset
+   *     capability × scoped resource assignment = actual authority, and the
+   *     scope-narrowing half (Teacher@Course, Grader@Exam, Proctor@Exam) is
+   *     enforced separately at each capability check, so this projection
+   *     answers "which capabilities do the active roles grant", never
+   *     "which resources can this user reach".
    * A user outside the current organization answers 404 (no cross-org
    * enumeration); a user with no active assignment is a NORMAL result
    * (`ok:false, reason:"no_active_assignments"`), not an error.
@@ -95,7 +105,7 @@ export const permissionRegistryRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.UserRoleAssign),
+        fastify.requireCapability(Permission.UserView),
       ],
       schema: {
         params: idParamsSchema,

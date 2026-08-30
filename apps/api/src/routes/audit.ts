@@ -142,7 +142,13 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       const query = AuditLogQuerySchema.parse(request.query);
       const repo = createAuditLogQueryRepo(fastify.db);
 
+      // SNAPSHOT: the server owns the audit window's upper bound. A first
+      // page freezes it (`to` filter, else server-now) and returns it as
+      // `snapshotTo`; a continuation page takes it from the cursor so rows
+      // written mid-pagination never appear, and a stale client-echoed `to`
+      // can never widen the window back open.
       let after: { createdAt: Date; id: string } | undefined;
+      let snapshotTo: Date;
       if (query.cursor) {
         const decoded = decodeAuditCursor(query.cursor);
         if (!decoded) {
@@ -151,35 +157,51 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
             .send(buildErrorResponse(request.id, "INVALID_CURSOR"));
         }
         after = { createdAt: new Date(decoded.createdAt), id: decoded.id };
+        snapshotTo = new Date(decoded.snapshotTo);
+      } else {
+        snapshotTo = query.to ? new Date(query.to) : new Date();
       }
 
-      const params: {
-        limit: number;
-        filter: ReturnType<typeof buildAuditFilter>;
-        after?: { createdAt: Date; id: string };
-      } = { limit: query.limit, filter: buildAuditFilter(query) };
-      if (after) params.after = after;
+      const filter = buildAuditFilter(query);
+      filter.to = snapshotTo;
 
-      const { items, hasMore } = await repo.listKeysetFiltered(ctx, params);
+      const { items, hasMore } = await repo.listKeysetFiltered(ctx, {
+        limit: query.limit,
+        filter,
+        ...(after ? { after } : {}),
+      });
 
       const last = items[items.length - 1];
       const nextCursor =
         hasMore && last
-          ? encodeAuditCursor(last.auditLog.createdAt, last.auditLog.id)
+          ? encodeAuditCursor(
+              snapshotTo,
+              last.auditLog.createdAt,
+              last.auditLog.id,
+            )
           : null;
 
-      return { items: items.map(toAuditLogResponse), nextCursor };
+      return {
+        items: items.map(toAuditLogResponse),
+        nextCursor,
+        snapshotTo: snapshotTo.toISOString(),
+      };
     },
   );
 
   /**
    * GET /admin/audit-logs/export
    *
-   * CSV export of the SAME search query (same filters, same ordering, same
-   * row cap enforced) — export is another serialization of the search, never
-   * a second query path. Matching rows beyond the export cap are refused
-   * (409 EXPORT_EXCEEDS_LIMIT) rather than silently truncated. Every
-   * successful export is itself audited under `audit_log.exported`.
+   * CSV export of the SAME search query (same filters, same ordering) —
+   * export is another serialization of the search, never a second query
+   * path. `snapshotTo` binds the export to the exact audit window the search
+   * pages projected (echo the page response's `snapshotTo`); omitting it
+   * opens a fresh window at server-now. The row cap is the single
+   * server-owned AUDIT_EXPORT_MAX_ROWS constant — there is deliberately no
+   * client `limit` parameter to compete with it — and matching rows beyond
+   * the cap are refused (409 EXPORT_EXCEEDS_LIMIT, details.maxRows) rather
+   * than silently truncated. Every successful export is itself audited under
+   * `audit_log.exported`.
    */
   fastify.get(
     "/admin/audit-logs/export",
@@ -204,9 +226,17 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       const query = AuditLogExportQuerySchema.parse(request.query);
       const repo = createAuditLogQueryRepo(fastify.db);
 
+      const snapshotTo = query.snapshotTo
+        ? new Date(query.snapshotTo)
+        : new Date();
+      const filter = buildAuditFilter(query);
+      filter.to = snapshotTo;
+
+      // Fetch one row beyond the cap: hasMore is the refusal signal, so the
+      // client never receives a silently truncated CSV.
       const { items, hasMore } = await repo.listKeysetFiltered(ctx, {
-        limit: query.limit,
-        filter: buildAuditFilter(query),
+        limit: AUDIT_EXPORT_MAX_ROWS,
+        filter,
       });
 
       if (hasMore) {

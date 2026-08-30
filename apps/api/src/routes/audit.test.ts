@@ -12,6 +12,7 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 import type { ActiveAuditActionForDurability } from "../audit/auditPolicy.js";
+import { AUDIT_EXPORT_MAX_ROWS } from "@exam/contracts";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -617,6 +618,93 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.json().error.code).toBe("INVALID_CURSOR");
     });
 
+    it("freezes the audit window: rows written after page 1 stay invisible to later pages and a snapshot export", async () => {
+      await clearAudits();
+      for (let i = 0; i < 4; i += 1) {
+        await ctx.db.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "snapshot.marker",
+          targetType: "snapshot_test",
+          targetId: `snapshot-${i}`,
+          metadata: {},
+          createdAt: new Date(Date.UTC(2026, 0, i + 1, 12, 0, 0, 0)),
+        });
+      }
+
+      const windowEnd = encodeURIComponent("2026-01-05T12:00:00.000Z");
+      const page1 = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?targetType=snapshot_test&limit=2&to=${windowEnd}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(page1.statusCode).toBe(200);
+      const p1 = page1.json() as {
+        items: Array<{ targetId: string }>;
+        nextCursor: string | null;
+        snapshotTo: string;
+      };
+      expect(p1.items.map((i) => i.targetId)).toEqual([
+        "snapshot-3",
+        "snapshot-2",
+      ]);
+      // The caller's `to` filter IS the first page's snapshot bound.
+      expect(p1.snapshotTo).toBe("2026-01-05T12:00:00.000Z");
+
+      // A row written after the window opened — a fixed PAST instant one
+      // second beyond the bound, so the proof never depends on test speed.
+      await ctx.db.insert(schema.auditLogs).values({
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        actorId: adminId,
+        action: "snapshot.marker",
+        targetType: "snapshot_test",
+        targetId: "snapshot-late",
+        metadata: {},
+        createdAt: new Date("2026-01-05T12:00:01.000Z"),
+      });
+
+      // Continuation page: the cursor owns the snapshot — no `to` is sent
+      // and the late row must not leak in.
+      const page2 = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?targetType=snapshot_test&limit=2&cursor=${encodeURIComponent(p1.nextCursor!)}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(page2.statusCode).toBe(200);
+      const p2 = page2.json() as {
+        items: Array<{ targetId: string }>;
+        nextCursor: string | null;
+        snapshotTo: string;
+      };
+      expect(p2.items.map((i) => i.targetId)).toEqual([
+        "snapshot-1",
+        "snapshot-0",
+      ]);
+      expect(p2.snapshotTo).toBe(p1.snapshotTo);
+
+      // Export bound to the SAME window: no late row.
+      const boundExport = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs/export?targetType=snapshot_test&snapshotTo=${encodeURIComponent(p1.snapshotTo)}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(boundExport.statusCode).toBe(200);
+      expect(boundExport.body).toContain("snapshot-0");
+      expect(boundExport.body).not.toContain("snapshot-late");
+
+      // A FRESH export window (no snapshotTo) does see the late row — the
+      // bound, not the filter, is what hid it above.
+      const freshExport = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-logs/export?targetType=snapshot_test",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(freshExport.statusCode).toBe(200);
+      expect(freshExport.body).toContain("snapshot-late");
+    });
+
     it("filters by actorId query param", async () => {
       await clearAudits();
       const fakeReq = {
@@ -743,10 +831,13 @@ describe("audit log baseline (S06-lite)", () => {
       });
     });
 
-    it("refuses an export that exceeds the row cap instead of truncating", async () => {
+    it("refuses an export that exceeds the server row cap instead of truncating", async () => {
       await clearAudits();
-      for (let i = 0; i < 2; i += 1) {
-        await ctx.db.insert(schema.auditLogs).values({
+      // The cap is server-owned (no client `limit` parameter), so this proof
+      // runs against the real AUDIT_EXPORT_MAX_ROWS constant.
+      const rows = Array.from(
+        { length: AUDIT_EXPORT_MAX_ROWS + 1 },
+        (_, i) => ({
           id: crypto.randomUUID(),
           organizationId: orgId,
           actorId: adminId,
@@ -755,15 +846,21 @@ describe("audit log baseline (S06-lite)", () => {
           targetId: `cap-${i}`,
           metadata: {},
           createdAt: new Date("2026-05-02T00:00:00.000Z"),
-        });
+        }),
+      );
+      for (let i = 0; i < rows.length; i += 500) {
+        await ctx.db.insert(schema.auditLogs).values(rows.slice(i, i + 500));
       }
       const response = await ctx.app.inject({
         method: "GET",
-        url: "/api/admin/audit-logs/export?targetType=export_cap_test&limit=1",
+        url: "/api/admin/audit-logs/export?targetType=export_cap_test",
         cookies: { "auth-token": adminToken },
       });
       expect(response.statusCode).toBe(409);
       expect(response.json().error.code).toBe("EXPORT_EXCEEDS_LIMIT");
+      expect(response.json().error.details).toMatchObject({
+        maxRows: AUDIT_EXPORT_MAX_ROWS,
+      });
     });
   });
 

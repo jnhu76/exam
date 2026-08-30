@@ -53,6 +53,8 @@ interface AuditLogItem {
 interface AuditLogPageData {
   items: AuditLogItem[];
   nextCursor: string | null;
+  /** Frozen upper bound of the window these results were read from. */
+  snapshotTo: string;
 }
 
 const PAGE_SIZE = 20;
@@ -80,22 +82,32 @@ function endOfDayISO(date: Date): string {
   return d.toISOString();
 }
 
-/** Builds the shared search/export query string for the current filters. */
-function buildQuery(filters: {
+/** Builds the shared filter query string for the current filters. */
+function buildFilterQuery(filters: {
   action: string;
   target: string;
   from?: Date;
   to?: Date;
-  cursor?: string;
-}): string {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
-  if (filters.cursor) params.set("cursor", filters.cursor);
+}): URLSearchParams {
+  const params = new URLSearchParams();
   if (filters.action !== "all") params.set("action", filters.action);
   if (filters.target !== "all") params.set("targetType", filters.target);
   // Date bounds: inclusive on the server. `from` is the start-of-day of the
   // picked date; `to` is pushed to end-of-day so the same day is included.
+  // The server freezes `to` into the snapshot on the first page.
   if (filters.from) params.set("from", startOfDayISO(filters.from));
   if (filters.to) params.set("to", endOfDayISO(filters.to));
+  return params;
+}
+
+/** Builds the search query string: shared filters + keyset page params. */
+function buildSearchQuery(
+  filters: Parameters<typeof buildFilterQuery>[0],
+  cursor?: string,
+): string {
+  const params = buildFilterQuery(filters);
+  params.set("limit", String(PAGE_SIZE));
+  if (cursor) params.set("cursor", cursor);
   return params.toString();
 }
 
@@ -106,8 +118,12 @@ function buildQuery(filters: {
  * (`GET /admin/audit-log/actions`) — the web never owns "which actions exist",
  * so a newly shipped action appears automatically. Pagination is a bounded
  * keyset cursor (`nextCursor` is opaque); the page tracks the cursor path so
- * prev/next never skip or repeat rows. Export is the same query serialized as
- * CSV (same filters, same ordering) with a hard row cap enforced by the API.
+ * prev/next never skip or repeat rows. Search pages and export are
+ * projections of ONE audit window: the server freezes the window's upper
+ * bound into `snapshotTo` (and every cursor), and the export echoes that
+ * `snapshotTo` so the CSV matches what the admin is looking at — rows
+ * written after the list loaded never leak into it. A hard row cap is
+ * enforced by the API (no client `limit` on export).
  */
 export function AuditLogPage() {
   const { t } = useTranslation();
@@ -161,13 +177,15 @@ export function AuditLogPage() {
       setError(null);
       try {
         const result = await api.get<AuditLogPageData>(
-          `/api/admin/audit-logs?${buildQuery({
-            action: actionFilter,
-            target: targetFilter,
-            from: fromDate,
-            to: toDate,
+          `/api/admin/audit-logs?${buildSearchQuery(
+            {
+              action: actionFilter,
+              target: targetFilter,
+              from: fromDate,
+              to: toDate,
+            },
             cursor,
-          })}`,
+          )}`,
         );
         setData(result);
       } catch {
@@ -239,13 +257,18 @@ export function AuditLogPage() {
     if (exporting) return;
     setExporting(true);
     try {
+      // Echo the snapshot bound of the result set the admin is viewing so
+      // the CSV is the same window; before the first successful load there
+      // is no window yet and the server opens a fresh one.
+      const params = buildFilterQuery({
+        action: actionFilter,
+        target: targetFilter,
+        from: fromDate,
+        to: toDate,
+      });
+      if (data?.snapshotTo) params.set("snapshotTo", data.snapshotTo);
       await downloadFile(
-        `/api/admin/audit-logs/export?${buildQuery({
-          action: actionFilter,
-          target: targetFilter,
-          from: fromDate,
-          to: toDate,
-        })}`,
+        `/api/admin/audit-logs/export?${params.toString()}`,
         `audit-logs-${Date.now()}.csv`,
       );
     } catch (err) {
@@ -255,7 +278,7 @@ export function AuditLogPage() {
     } finally {
       setExporting(false);
     }
-  }, [exporting, actionFilter, targetFilter, fromDate, toDate, t]);
+  }, [exporting, data, actionFilter, targetFilter, fromDate, toDate, t]);
 
   const items = data?.items ?? [];
   const hasPrev = pastCursors.length > 0;

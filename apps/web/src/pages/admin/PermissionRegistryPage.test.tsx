@@ -156,7 +156,7 @@ describe("PermissionRegistryPage", () => {
     renderPage();
     await screen.findAllByText("exam.publish");
 
-    await user.click(screen.getByRole("combobox", { name: /选择用户/ }));
+    await user.click(screen.getByRole("combobox", { name: /选择员工用户/ }));
     await user.click(await screen.findByRole("option", { name: "Alice" }));
 
     // The primary role badge + assignment row role are both "Teacher".
@@ -167,7 +167,9 @@ describe("PermissionRegistryPage", () => {
     expect(screen.getAllByText("exam.publish").length).toBeGreaterThanOrEqual(
       1,
     );
-    // The assignment is the authoritative "why" source.
+    // The capability list carries the eligibility-vs-resource-reach caveat.
+    expect(screen.getByText(/scope assignment/)).toBeInTheDocument();
+    // The assignment is displayed alongside, not as a per-capability source.
     expect(screen.getByText("主角色")).toBeInTheDocument();
   });
 });

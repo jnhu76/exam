@@ -213,11 +213,11 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     capability: Permission.AuditLogView,
     label: "audit-logs",
   },
-  // Permission registry + effective-authority — Admin-only visibility
-  // surface, gated by the role-assignment capability.
+  // Permission registry + effective-authority — visibility surface gated by
+  // the user-READ capability, matching the backend gates.
   {
     pattern: "permissions",
-    capability: Permission.UserRoleAssign,
+    capability: Permission.UserView,
     label: "permission-registry",
   },
   {

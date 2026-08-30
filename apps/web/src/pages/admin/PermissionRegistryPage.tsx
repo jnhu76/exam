@@ -307,7 +307,9 @@ export function PermissionRegistryPage() {
         </div>
       </section>
 
-      {/* 3. Effective authority of a user — who has which capability and why. */}
+      {/* 3. Capability grants of a staff user — role-preset union, NOT
+          per-resource authority; resource reach is narrowed by scope
+          assignments at the enforcement layer. */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <AppIcon icon={UsersRound} size="inline" />
@@ -382,6 +384,9 @@ export function PermissionRegistryPage() {
                         </span>
                       ))}
                     </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t("admin.permissions.effective.scopeNote")}
+                    </p>
                   </div>
                   <div>
                     <p className="mb-2 text-xs font-medium text-muted-foreground">

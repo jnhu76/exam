@@ -221,7 +221,7 @@ describe("#298 permission registry + effective authority", () => {
       expect(response.statusCode).toBe(403);
     });
 
-    it("answers which capabilities a Teacher holds and why (Admin)", async () => {
+    it("answers which capabilities a Teacher's active roles grant (Admin)", async () => {
       const response = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/users/${teacherId}/effective-authority`,
@@ -238,7 +238,8 @@ describe("#298 permission registry + effective authority", () => {
       expect(body.authority.authority.capabilities).not.toContain(
         Permission.ScoreExport,
       );
-      // The assignment rows are the authoritative "why" source.
+      // The assignment rows are displayed alongside the capability union —
+      // the kernel's input, not a per-capability provenance map.
       expect(body.assignments).toHaveLength(1);
       expect(body.assignments[0]).toMatchObject({
         role: "Teacher",
