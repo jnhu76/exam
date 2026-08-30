@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ContentDocumentV1Schema } from "./contentDocument.js";
 
 // ── Score List ────────────────────────────────────────────────────
 
@@ -112,6 +113,12 @@ export const GradingDetailsQuestionSchema = z.object({
     "text_response",
   ]),
   content: z.string(),
+  /**
+   * Frozen rich prompt from the QuestionSnapshot (#301). Null = Plain
+   * (content is authoritative). Grader rendering basis only — never surfaced
+   * to candidates via CandidateTakeSnapshot.
+   */
+  contentDocument: ContentDocumentV1Schema.nullable(),
   maxScore: z.number(),
   /**
    * Frozen reference answer from the QuestionSnapshot (not the live question

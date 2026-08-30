@@ -49,7 +49,8 @@ const EXCLUSIVE_MARKS: readonly ContentMarkType[] = ["inlineCode"];
 export interface ContentTextRun {
   type: "text";
   text: string;
-  marks?: ContentMarkType[];
+  /** `| undefined` stays assignable from Zod `.optional()` output under exactOptionalPropertyTypes. */
+  marks?: ContentMarkType[] | undefined;
 }
 
 export interface ContentHardBreak {

@@ -3,6 +3,7 @@ import type { AttemptCommandType as DomainAttemptCommandType } from "@exam/domai
 import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 import { InterruptionTimePolicySchema } from "./interruption.js";
+import { AnswerModeEnum, ContentDocumentV1Schema } from "./contentDocument.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
@@ -34,6 +35,9 @@ export type AttemptStatusValue = z.infer<typeof AttemptStatusEnum>;
 
 /**
  * Zod enum of reasons a save-answer request may be rejected by the server.
+ * INVALID_ANSWER (#301) is additive: the payload shape failed validation
+ * against the frozen question's answer grammar (e.g. a rich text_response
+ * answer that is not a valid ContentDocumentV1).
  */
 export const SaveAnswerRejectReasonEnum = z.enum([
   "STALE_VERSION",
@@ -42,6 +46,7 @@ export const SaveAnswerRejectReasonEnum = z.enum([
   "ATTEMPT_CLOSED",
   "DEADLINE_EXCEEDED",
   "CONFLICTING_PAYLOAD",
+  "INVALID_ANSWER",
 ] as const);
 
 /** Discriminated reason why the server rejected a save-answer request. */
@@ -50,6 +55,13 @@ export type SaveAnswerRejectReason = z.infer<typeof SaveAnswerRejectReasonEnum>;
 /**
  * Schema for a frozen snapshot of a question copied into an attempt at creation time.
  * Edits to the original question do not affect existing snapshots.
+ *
+ * Rich fields (#301): `contentDocument` freezes the authoritative rich prompt
+ * and `options[].contentDocument` freezes rich option content; `answerMode`
+ * freezes the author-defined answer input mode for text_response. Historical
+ * JSONB rows predating these fields omit them — the transforms normalize
+ * missing to null so legacy snapshots parse as Plain without migration
+ * (same schema-evolution precedent as `rubric`).
  */
 export const QuestionSnapshotSchema = z.object({
   originalQuestionId: z.string(),
@@ -61,6 +73,10 @@ export const QuestionSnapshotSchema = z.object({
     "text_response",
   ]),
   content: z.string(),
+  contentDocument: ContentDocumentV1Schema.nullish().transform(
+    (v) => v ?? null,
+  ),
+  answerMode: AnswerModeEnum.nullish().transform((v) => v ?? null),
   attachments: z.array(
     z.object({
       url: z.string(),
@@ -72,6 +88,9 @@ export const QuestionSnapshotSchema = z.object({
     z.object({
       id: z.string(),
       content: z.string(),
+      contentDocument: ContentDocumentV1Schema.nullish().transform(
+        (v) => v ?? null,
+      ),
     }),
   ),
   standardAnswer: z.unknown(),
@@ -1025,6 +1044,12 @@ export type LockReason = z.infer<typeof LockReasonEnum>;
 /**
  * Candidate-safe question with derived inputMode and answerValue/answerSource.
  * Part of CandidateTakeSnapshot (L0 §6.1).
+ *
+ * Rich fields (#301): `promptDocument` carries the frozen rich prompt (null
+ * = Plain), `options[].contentDocument` the rich option content, and
+ * `answerMode` the frozen answer input mode for text_response (missing →
+ * "plain" so legacy snapshots drive the plain editor path). Still free of
+ * standardAnswer/rubric/gradingMode/correctOption.
  */
 export const CandidateTakeQuestionSchema = z.object({
   id: z.string(),
@@ -1036,10 +1061,15 @@ export const CandidateTakeQuestionSchema = z.object({
     "text_response",
   ]),
   prompt: z.string(),
+  promptDocument: ContentDocumentV1Schema.nullish().transform((v) => v ?? null),
+  answerMode: AnswerModeEnum.nullish().transform((v) => v ?? "plain"),
   options: z.array(
     z.object({
       id: z.string(),
       content: z.string(),
+      contentDocument: ContentDocumentV1Schema.nullish().transform(
+        (v) => v ?? null,
+      ),
     }),
   ),
   inputMode: InputModeEnum,
