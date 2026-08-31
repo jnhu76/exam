@@ -13,15 +13,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import {
+  plainTextProjection,
+  plainTextToDocument,
+  type ContentDocumentV1,
+} from "@exam/domain";
+import { RichContentEditorLazy } from "@/components/shared/content/RichContentEditorLazy";
 import { CourseSearchSelect } from "./CourseSearchSelect";
 
 /** A single option within a question, with an ID, display content, and correctness flag. */
 interface Option {
   id: string;
   content: string;
+  contentDocument?: ContentDocumentV1 | null;
   isCorrect?: boolean;
 }
 
@@ -35,6 +52,17 @@ export interface QuestionFormData {
     | "true_false"
     | "text_response";
   content: string;
+  /**
+   * Rich prompt document (issue 301). null → Plain mode (`content` is the
+   * authority); non-null → Rich mode (`content` mirrors the plain-text
+   * projection for search/display and is re-derived server-side on write).
+   */
+  contentDocument: ContentDocumentV1 | null;
+  /**
+   * text_response only: how candidates answer — plain text or the rich
+   * editor. Independent of the prompt's Plain/Rich mode.
+   */
+  answerMode: "plain" | "rich";
   options: Option[];
   standardAnswer: unknown;
   score: number;
@@ -62,6 +90,8 @@ const defaultForm: QuestionFormData = {
   courseId: "",
   type: "single_choice",
   content: "",
+  contentDocument: null,
+  answerMode: "plain",
   options: [
     { id: "A", content: "" },
     { id: "B", content: "" },
@@ -79,9 +109,26 @@ const defaultForm: QuestionFormData = {
 };
 
 /**
- * Full-featured form for creating or editing questions, supporting
- * single-choice, multiple-choice, fill-blank, and true/false types
- * with options, standard answers, scoring, and grading rules.
+ * True when the document carries anything the plain textarea cannot
+ * represent (structure, math, marks). hardBreak projects to a newline, so it
+ * is not lossy.
+ */
+function hasFormatting(document: ContentDocumentV1): boolean {
+  return document.content.some((block) => {
+    if (block.type !== "paragraph") return true;
+    return block.content.some(
+      (inline) =>
+        inline.type === "inlineMath" ||
+        (inline.type === "text" && (inline.marks?.length ?? 0) > 0),
+    );
+  });
+}
+
+/**
+ * Full-featured form for creating or editing questions, supporting all five
+ * question types with Plain/Rich content modes (issue 301), options, standard
+ * answers, scoring, and grading rules. Rich mode edits the prompt/options in
+ * a lazy WYSIWYG editor; the plain textarea remains the Plain-mode editor.
  */
 export function QuestionForm({
   courses,
@@ -93,6 +140,14 @@ export function QuestionForm({
     ...defaultForm,
     ...initial,
   });
+  /**
+   * Pending lossy downgrade awaiting confirmation: either the prompt going
+   * plain, the prompt collapsing for a fill_blank switch (plain-only), or an
+   * option index going plain.
+   */
+  const [pendingToPlain, setPendingToPlain] = useState<
+    "content" | "fillBlankSwitch" | number | null
+  >(null);
 
   function update(partial: Partial<QuestionFormData>) {
     const next = { ...form, ...partial };
@@ -111,11 +166,84 @@ export function QuestionForm({
     update({ options: next });
   }
 
-  function updateOption(index: number, content: string) {
+  function updateOption(index: number, patch: Partial<Option>) {
     const next = form.options.map((o, i) =>
-      i === index ? { ...o, content } : o,
+      i === index ? { ...o, ...patch } : o,
     );
     update({ options: next });
+  }
+
+  /** Plain → Rich: never lossy (textarea newlines become paragraphs). */
+  function upgradePromptToRich() {
+    update({ contentDocument: plainTextToDocument(form.content) });
+  }
+
+  function upgradeOptionToRich(index: number) {
+    const opt = form.options[index];
+    if (!opt) return;
+    updateOption(index, {
+      contentDocument: plainTextToDocument(opt.content),
+    });
+  }
+
+  /** Rich → Plain: lossy when formatting exists → requires confirmation. */
+  function requestPromptToPlain() {
+    if (!form.contentDocument) return;
+    if (hasFormatting(form.contentDocument)) {
+      setPendingToPlain("content");
+      return;
+    }
+    downgradePromptToPlain();
+  }
+
+  function downgradePromptToPlain() {
+    if (!form.contentDocument) return;
+    update({
+      content: plainTextProjection(form.contentDocument),
+      contentDocument: null,
+    });
+  }
+
+  function requestOptionToPlain(index: number) {
+    const opt = form.options[index];
+    if (!opt?.contentDocument) return;
+    if (hasFormatting(opt.contentDocument)) {
+      setPendingToPlain(index);
+      return;
+    }
+    downgradeOptionToPlain(index);
+  }
+
+  function downgradeOptionToPlain(index: number) {
+    const opt = form.options[index];
+    if (!opt?.contentDocument) return;
+    updateOption(index, {
+      content: plainTextProjection(opt.contentDocument),
+      contentDocument: null,
+    });
+  }
+
+  /** Applies the pending lossy downgrade after the user confirms. */
+  function confirmPendingToPlain() {
+    if (pendingToPlain === "content") {
+      downgradePromptToPlain();
+    } else if (pendingToPlain === "fillBlankSwitch") {
+      const content = form.contentDocument
+        ? plainTextProjection(form.contentDocument)
+        : form.content;
+      const type = "fill_blank" as const;
+      update({
+        type,
+        content,
+        contentDocument: null,
+        options: [],
+        standardAnswer: "",
+        rubric: null,
+      });
+    } else if (typeof pendingToPlain === "number") {
+      downgradeOptionToPlain(pendingToPlain);
+    }
+    setPendingToPlain(null);
   }
 
   function toggleCorrect(optionId: string) {
@@ -133,6 +261,9 @@ export function QuestionForm({
       update({ standardAnswer: next });
     }
   }
+
+  const optionTypesWithRich =
+    form.type === "single_choice" || form.type === "multiple_choice";
 
   return (
     <div className="flex flex-col gap-6">
@@ -163,6 +294,19 @@ export function QuestionForm({
                 // Objective types never carry a rubric.
                 defaults.rubric = null;
               } else if (type === "fill_blank") {
+                // fill_blank is Plain-only (issue 301): an in-flight rich prompt
+                // degrades through the confirmation dialog, not silently.
+                if (
+                  form.contentDocument &&
+                  hasFormatting(form.contentDocument)
+                ) {
+                  setPendingToPlain("fillBlankSwitch");
+                  return;
+                }
+                defaults.content = form.contentDocument
+                  ? plainTextProjection(form.contentDocument)
+                  : form.content;
+                defaults.contentDocument = null;
                 defaults.options = [];
                 defaults.standardAnswer = "";
                 defaults.rubric = null;
@@ -217,13 +361,49 @@ export function QuestionForm({
       </div>
 
       <Field>
-        <Label>{t("admin.forms.question.content")}</Label>
+        <div className="flex items-center justify-between">
+          <Label>{t("admin.forms.question.content")}</Label>
+          {form.type !== "fill_blank" && (
+            <Select
+              value={form.contentDocument ? "rich" : "plain"}
+              onValueChange={(v) => {
+                if (v === "rich" && !form.contentDocument) {
+                  upgradePromptToRich();
+                } else if (v === "plain" && form.contentDocument) {
+                  requestPromptToPlain();
+                }
+              }}
+            >
+              <SelectTrigger
+                className="h-8 w-28 text-sm"
+                aria-label={t("content.mode.label")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="plain">{t("content.mode.plain")}</SelectItem>
+                <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         {form.type === "fill_blank" ? (
           <Textarea
             value={form.content}
             onChange={(e) => update({ content: e.target.value })}
             placeholder={t("admin.forms.question.contentFillBlankPlaceholder")}
             rows={3}
+          />
+        ) : form.contentDocument ? (
+          <RichContentEditorLazy
+            initialDocument={form.contentDocument}
+            onChange={(document) =>
+              update({
+                contentDocument: document,
+                content: plainTextProjection(document),
+              })
+            }
+            ariaLabel={t("admin.forms.question.content")}
           />
         ) : (
           <Textarea
@@ -280,14 +460,60 @@ export function QuestionForm({
                 <span className="w-8 text-sm text-muted-foreground">
                   {opt.id}.
                 </span>
-                <Input
-                  value={opt.content}
-                  onChange={(e) => updateOption(i, e.target.value)}
-                  placeholder={t("admin.forms.question.optionPlaceholder", {
-                    id: opt.id,
-                  })}
-                  disabled={form.type === "true_false"}
-                />
+                {opt.contentDocument ? (
+                  <div className="flex-1 flex flex-col gap-1">
+                    <RichContentEditorLazy
+                      initialDocument={opt.contentDocument}
+                      onChange={(document) =>
+                        updateOption(i, {
+                          contentDocument: document,
+                          content: plainTextProjection(document),
+                        })
+                      }
+                      ariaLabel={t("admin.forms.question.optionContent", {
+                        id: opt.id,
+                      })}
+                    />
+                  </div>
+                ) : (
+                  <Input
+                    value={opt.content}
+                    onChange={(e) =>
+                      updateOption(i, { content: e.target.value })
+                    }
+                    placeholder={t("admin.forms.question.optionPlaceholder", {
+                      id: opt.id,
+                    })}
+                    disabled={form.type === "true_false"}
+                  />
+                )}
+                {optionTypesWithRich && (
+                  <Select
+                    value={opt.contentDocument ? "rich" : "plain"}
+                    onValueChange={(v) => {
+                      if (v === "rich" && !opt.contentDocument) {
+                        upgradeOptionToRich(i);
+                      } else if (v === "plain" && opt.contentDocument) {
+                        requestOptionToPlain(i);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-8 w-20 text-sm"
+                      aria-label={t("content.mode.optionLabel", { id: opt.id })}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="plain">
+                        {t("content.mode.plain")}
+                      </SelectItem>
+                      <SelectItem value="rich">
+                        {t("content.mode.rich")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 {form.type !== "true_false" && form.options.length > 2 && (
                   <Button
                     type="button"
@@ -332,6 +558,27 @@ export function QuestionForm({
             />
             <p className="text-xs text-muted-foreground">
               {t("admin.forms.question.rubricHint")}
+            </p>
+          </Field>
+
+          <Field>
+            <Label>{t("admin.forms.question.answerMode")}</Label>
+            <Select
+              value={form.answerMode}
+              onValueChange={(v) =>
+                update({ answerMode: v as QuestionFormData["answerMode"] })
+              }
+            >
+              <SelectTrigger aria-label={t("admin.forms.question.answerMode")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="plain">{t("content.mode.plain")}</SelectItem>
+                <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t("admin.forms.question.answerModeHint")}
             </p>
           </Field>
 
@@ -470,6 +717,32 @@ export function QuestionForm({
           </label>
         </div>
       )}
+
+      <AlertDialog
+        open={pendingToPlain !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingToPlain(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("content.confirmToPlain.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("content.confirmToPlain.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {t("content.confirmToPlain.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPendingToPlain}>
+              {t("content.confirmToPlain.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

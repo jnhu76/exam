@@ -958,6 +958,8 @@ export function TakeExamPage() {
     originalQuestionId: currentQuestionView.id,
     type: currentQuestionView.type,
     content: currentQuestionView.prompt,
+    contentDocument: currentQuestionView.promptDocument,
+    answerMode: currentQuestionView.answerMode,
     attachments: [],
     options: currentQuestionView.options,
     score: currentQuestionView.maxScore,

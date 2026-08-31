@@ -1,26 +1,36 @@
 import { useTranslation } from "react-i18next";
+import type { ContentDocumentV1 } from "@exam/domain";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 
 /** Props for the QuestionPreview component. */
 interface QuestionPreviewProps {
   type: string;
   content: string;
-  options: Array<{ id: string; content: string }>;
+  contentDocument?: ContentDocumentV1 | null;
+  options: Array<{
+    id: string;
+    content: string;
+    contentDocument?: ContentDocumentV1 | null;
+  }>;
   standardAnswer: unknown;
 }
 
 /**
  * Read-only preview of a question as it would appear to candidates,
  * rendering options as disabled radio/checkbox inputs or blank fields.
+ * Rich prompts/options render through the same static ContentRenderer the
+ * candidate sees (issue 301) — the preview never diverges from runtime.
  */
 export function QuestionPreview({
   type,
   content,
+  contentDocument,
   options,
   standardAnswer,
 }: QuestionPreviewProps) {
@@ -33,9 +43,11 @@ export function QuestionPreview({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-sm">
-          {content || t("admin.questionPreview.emptyContent")}
-        </p>
+        <ContentRenderer
+          content={content || t("admin.questionPreview.emptyContent")}
+          document={contentDocument}
+          className="text-sm"
+        />
 
         {(type === "single_choice" || type === "true_false") && (
           <RadioGroup disabled>
@@ -46,7 +58,10 @@ export function QuestionPreview({
                   htmlFor={`preview-${opt.id}`}
                   className="text-sm font-normal"
                 >
-                  {opt.content}
+                  <ContentRenderer
+                    content={opt.content}
+                    document={opt.contentDocument}
+                  />
                 </Label>
               </div>
             ))}
@@ -62,7 +77,10 @@ export function QuestionPreview({
                   htmlFor={`preview-${opt.id}`}
                   className="text-sm font-normal"
                 >
-                  {opt.content}
+                  <ContentRenderer
+                    content={opt.content}
+                    document={opt.contentDocument}
+                  />
                 </Label>
               </div>
             ))}

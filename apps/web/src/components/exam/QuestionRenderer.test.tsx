@@ -13,6 +13,8 @@ import { QuestionRenderer } from "./QuestionRenderer";
 const baseQuestion = {
   originalQuestionId: "q-text",
   content: "请阐述你的观点",
+  contentDocument: null,
+  answerMode: "plain" as const,
   attachments: [],
   options: [],
   score: 20,

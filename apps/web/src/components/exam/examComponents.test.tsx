@@ -25,6 +25,8 @@ describe("QuestionRenderer", () => {
           {
             type: "unknown_type",
             content: "test",
+            contentDocument: null,
+            answerMode: "plain",
             options: [],
           } as never
         }
@@ -41,6 +43,8 @@ describe("QuestionRenderer", () => {
         question={{
           type: "true_false",
           content: "Is 1+1=2?",
+          contentDocument: null,
+          answerMode: "plain",
           options: [],
           attachments: [],
           score: 10,

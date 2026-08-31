@@ -1,4 +1,8 @@
 import katex from "katex";
+// KaTeX's stylesheet is REQUIRED for its HTML output to lay out correctly.
+// Imported here (inside the lazy math chunk), not at app root: the plain
+// content path must not download any KaTeX cost — CSS included (issue 301).
+import "katex/dist/katex.min.css";
 
 /**
  * Renders LaTeX to KaTeX's HTML string. Kept in its own module so `katex`
