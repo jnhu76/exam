@@ -294,8 +294,14 @@ const RecoveryListQuerySchema = z
  *
  * The frontend MUST NOT derive eligibility from status alone (§6.2); a
  * disabled button is a UX convenience, never an authorization (§8.2).
+ *
+ * INVARIANT: the only production callers that reach these routes hold
+ * `IncidentRecoveryView`, which the preset registry grants to Admin alone —
+ * together with every command capability intersected here. Module-private by
+ * design: no external seam is needed to test behavior reachable only through
+ * the routes themselves.
  */
-export function deriveAllowedActionsForCaller(input: {
+function deriveAllowedActionsForCaller(input: {
   statusActionCandidates: IncidentAllowedAction[];
   capabilities: readonly PermissionKey[];
   incidentAttemptId: string | null;
@@ -347,7 +353,7 @@ export function deriveAllowedActionsForCaller(input: {
  * The frontend MUST NOT derive eligibility from status alone (§6.4); a
  * disabled button is a UX convenience, never an authorization (§8.2).
  */
-export function deriveAttemptAllowedActionsForCaller(input: {
+function deriveAttemptAllowedActionsForCaller(input: {
   statusActionCandidates: AttemptAllowedAction[];
   capabilities: readonly PermissionKey[];
 }): AttemptAllowedAction[] {

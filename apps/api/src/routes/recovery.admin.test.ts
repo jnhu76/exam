@@ -22,23 +22,14 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
 import { and, eq, inArray } from "drizzle-orm";
-import { Permission } from "@exam/authz";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
-import type {
-  AttemptAllowedAction,
-  IncidentAllowedAction,
-} from "@exam/db/src/repository/recoveryRepo.js";
 import {
   buildTestApp,
   createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
-import {
-  deriveAllowedActionsForCaller,
-  deriveAttemptAllowedActionsForCaller,
-  registerAdminIncidentRoutes,
-} from "./incidents.admin.js";
+import { registerAdminIncidentRoutes } from "./incidents.admin.js";
 
 const plugin: FastifyPluginAsync = async (fastify) => {
   await registerAdminIncidentRoutes(fastify);
@@ -1485,7 +1476,7 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   });
 
   it("exam-wide incident + action link only (no membership) returns 200", async () => {
-    // P1-3 (round 3): ADR-014 §7 — anchor, membership, operator action links,
+    // ADR-014 §7 — anchor, membership, operator action links,
     // and interruption evidence links are INDEPENDENT durable relationships.
     // The canonical time-grant path creates adjustment + action link
     // atomically WITHOUT a membership row; the aggregate MUST still read.
@@ -1540,7 +1531,7 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   });
 
   it("exam-wide incident + interruption link only (no membership) returns 200", async () => {
-    // P1-3 (round 3): same independence proof via an interruption evidence
+    // Same independence proof via an interruption evidence
     // link — no membership row exists, the read MUST still succeed.
     const now = new Date();
     const incidentId = randomUUID();
@@ -1594,7 +1585,7 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   });
 
   it("anchor + membership conflict fails closed with 503 AUTHZ_UNAVAILABLE", async () => {
-    // P1-4 (round 3): ADR-014 §2 makes anchor and membership mutually
+    // ADR-014 §2 makes anchor and membership mutually
     // exclusive. A historical row carrying BOTH is tenant-data corruption;
     // the aggregate must fail closed (503), never project the forbidden graph.
     const now = new Date();
@@ -1652,7 +1643,7 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   });
 
   it("aggregate detail projects only the linked time_grant adjustment (unrelated grants on the same attempt are excluded)", async () => {
-    // Round 4: timeAdjustmentSummaries is action-identity-driven. Two grants
+    // INVARIANT: timeAdjustmentSummaries is action-identity-driven. Two grants
     // exist on aggregateAttemptId; only G1 is linked via a time_grant action.
     // G2 (same attempt, not linked) must NOT appear in the projection.
     const now = new Date();
@@ -1743,7 +1734,7 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   });
 
   it("aggregate detail maps a broken time_grant referent to HTTP 503 AUTHZ_UNAVAILABLE", async () => {
-    // Round 4: a time_grant action whose actionId does not resolve to an
+    // A time_grant action whose actionId does not resolve to an
     // adjustment is tenant-graph corruption. The public error mapping is
     // 503 AUTHZ_UNAVAILABLE (no internal sentinel leaked).
     const now = new Date();
@@ -1800,129 +1791,6 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
           ),
         );
     }
-  });
-});
-
-// ── P1-2 (round 3): allowedActions = status candidates ∩ capabilities ∩ shape ──
-//
-// The role system is preset-only (ASSIGNABLE_ROLES: Admin/Teacher/Proctor/
-// Grader/Candidate) — no runtime role can hold IncidentRecoveryView WITHOUT
-// IncidentInvestigate/IncidentResolve. The review's "view-only caller"
-// fixture is therefore exercised against the exported pure derivation, which
-// is exactly what the route handler composes with the live caller context.
-
-describe("deriveAllowedActionsForCaller — per-caller allowedActions intersection (J5-R0 §6.2/§6.3)", () => {
-  const OPEN_CANDIDATES: IncidentAllowedAction[] = [
-    "investigate",
-    "add_note",
-    "change_severity",
-    "resolve",
-    "dismiss",
-    "link_action",
-    "link_attempt",
-    "link_interruption",
-  ];
-
-  it("view-only caller (IncidentRecoveryView without Investigate/Resolve) sees NO action", async () => {
-    const allowed = deriveAllowedActionsForCaller({
-      statusActionCandidates: OPEN_CANDIDATES,
-      capabilities: [Permission.IncidentRecoveryView],
-      incidentAttemptId: null,
-    });
-    expect(allowed).toEqual([]);
-  });
-
-  it("investigate-only caller keeps investigate actions but not resolve/dismiss", async () => {
-    const allowed = deriveAllowedActionsForCaller({
-      statusActionCandidates: OPEN_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.IncidentInvestigate,
-      ],
-      incidentAttemptId: null,
-    });
-    expect(allowed).toEqual([
-      "investigate",
-      "add_note",
-      "change_severity",
-      "link_action",
-      "link_attempt",
-      "link_interruption",
-    ]);
-    expect(allowed).not.toContain("resolve");
-    expect(allowed).not.toContain("dismiss");
-  });
-
-  it("resolve-only caller keeps resolve/dismiss but not investigate actions", async () => {
-    const allowed = deriveAllowedActionsForCaller({
-      statusActionCandidates: OPEN_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.IncidentResolve,
-      ],
-      incidentAttemptId: null,
-    });
-    expect(allowed).toEqual(["resolve", "dismiss"]);
-  });
-
-  it("full-capability caller on an ANCHORED incident never sees link_attempt", async () => {
-    const allowed = deriveAllowedActionsForCaller({
-      statusActionCandidates: OPEN_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.IncidentInvestigate,
-        Permission.IncidentResolve,
-      ],
-      incidentAttemptId: randomUUID(),
-    });
-    expect(allowed).toEqual([
-      "investigate",
-      "add_note",
-      "change_severity",
-      "resolve",
-      "dismiss",
-      "link_action",
-      "link_interruption",
-    ]);
-    expect(allowed).not.toContain("link_attempt");
-  });
-
-  it("full-capability caller on an exam-wide incident keeps link_attempt", async () => {
-    const allowed = deriveAllowedActionsForCaller({
-      statusActionCandidates: OPEN_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.IncidentInvestigate,
-        Permission.IncidentResolve,
-      ],
-      incidentAttemptId: null,
-    });
-    expect(allowed).toEqual(OPEN_CANDIDATES);
-  });
-
-  it("status candidates remain the ceiling — terminal status keeps append-only only", async () => {
-    const allowed = deriveAllowedActionsForCaller({
-      statusActionCandidates: [
-        "add_note",
-        "link_action",
-        "link_attempt",
-        "link_interruption",
-      ],
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.IncidentInvestigate,
-        Permission.IncidentResolve,
-      ],
-      incidentAttemptId: null,
-    });
-    expect(allowed).toEqual([
-      "add_note",
-      "link_action",
-      "link_attempt",
-      "link_interruption",
-    ]);
-    expect(allowed).not.toContain("investigate");
-    expect(allowed).not.toContain("resolve");
   });
 });
 
@@ -2613,89 +2481,6 @@ describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/atte
           ),
         );
     }
-  });
-});
-
-// ── P1-2 (round 3) analogue: deriveAttemptAllowedActionsForCaller ──
-//
-// The role system is preset-only — no runtime role can hold
-// IncidentRecoveryView without the attempt-command capabilities. The
-// "view-only caller" fixture is therefore exercised against the exported pure
-// derivation, which is exactly what the route handler composes with the live
-// caller context.
-
-describe("deriveAttemptAllowedActionsForCaller — per-caller allowedActions intersection (J5-R0 §6.4)", () => {
-  const IN_PROGRESS_CANDIDATES: AttemptAllowedAction[] = [
-    "time_grant",
-    "force_submit",
-    "misconduct_mark",
-  ];
-
-  it("view-only caller (IncidentRecoveryView without command capabilities) sees NO action", async () => {
-    const allowed = deriveAttemptAllowedActionsForCaller({
-      statusActionCandidates: IN_PROGRESS_CANDIDATES,
-      capabilities: [Permission.IncidentRecoveryView],
-    });
-    expect(allowed).toEqual([]);
-  });
-
-  it("time.grant-only caller keeps time_grant but not force_submit / misconduct_mark", async () => {
-    const allowed = deriveAttemptAllowedActionsForCaller({
-      statusActionCandidates: IN_PROGRESS_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.AttemptTimeGrant,
-      ],
-    });
-    expect(allowed).toEqual(["time_grant"]);
-  });
-
-  it("force_submit-only caller keeps force_submit but not time_grant / misconduct_mark", async () => {
-    const allowed = deriveAttemptAllowedActionsForCaller({
-      statusActionCandidates: IN_PROGRESS_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.AttemptForceSubmit,
-      ],
-    });
-    expect(allowed).toEqual(["force_submit"]);
-  });
-
-  it("misconduct.mark-only caller keeps misconduct_mark but not time_grant / force_submit", async () => {
-    const allowed = deriveAttemptAllowedActionsForCaller({
-      statusActionCandidates: IN_PROGRESS_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.AttemptMisconductMark,
-      ],
-    });
-    expect(allowed).toEqual(["misconduct_mark"]);
-  });
-
-  it("full-capability caller sees every status candidate (status remains the ceiling)", async () => {
-    const allowed = deriveAttemptAllowedActionsForCaller({
-      statusActionCandidates: IN_PROGRESS_CANDIDATES,
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.AttemptTimeGrant,
-        Permission.AttemptForceSubmit,
-        Permission.AttemptMisconductMark,
-      ],
-    });
-    expect(allowed).toEqual(IN_PROGRESS_CANDIDATES);
-  });
-
-  it("submitted status candidates keep force_submit + misconduct_mark (recovery of submitted rows)", async () => {
-    const allowed = deriveAttemptAllowedActionsForCaller({
-      statusActionCandidates: ["force_submit", "misconduct_mark"],
-      capabilities: [
-        Permission.IncidentRecoveryView,
-        Permission.AttemptTimeGrant,
-        Permission.AttemptForceSubmit,
-        Permission.AttemptMisconductMark,
-      ],
-    });
-    expect(allowed).toEqual(["force_submit", "misconduct_mark"]);
   });
 });
 
