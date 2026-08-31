@@ -46,7 +46,22 @@ export default defineConfig(({ mode }) => {
             if (id.includes("node_modules/react-dom/"))
               return "vendor-react-dom";
             if (id.includes("node_modules/react/")) return "vendor-react";
-            if (id.includes("node_modules/")) return "vendor";
+            if (id.includes("node_modules/")) {
+              // Edit-only heavy deps (issue 301) must keep their dynamic
+              // import boundaries: Tiptap/ProseMirror/KaTeX are reachable
+              // ONLY through the lazy editor and math chunks, so the plain
+              // READ path never downloads them. Returning undefined lets
+              // them follow the async chunk graph instead of the eager
+              // vendor bundle.
+              if (
+                id.includes("@tiptap/") ||
+                id.includes("/prosemirror-") ||
+                id.includes("node_modules/katex/")
+              ) {
+                return undefined;
+              }
+              return "vendor";
+            }
           },
         },
       },

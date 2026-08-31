@@ -158,3 +158,57 @@ describe("QuestionRenderer — rich text_response (issue 301)", () => {
     expect(textarea.getAttribute("contenteditable")).toBeNull();
   });
 });
+
+describe("QuestionRenderer — mount isolation (issue 301)", () => {
+  it("never mounts an editor surface for objective questions, even with rich options", () => {
+    render(
+      <QuestionRenderer
+        question={
+          {
+            ...baseQuestion,
+            type: "single_choice",
+            options: [
+              { id: "a", content: "A", contentDocument: null },
+              { id: "b", content: "B", contentDocument: null },
+            ],
+          } as never
+        }
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(document.querySelector(".ProseMirror")).toBeNull();
+  });
+
+  it("never mounts an editor for a rich PROMPT (READ path renders statically)", async () => {
+    const { ContentDocumentRenderer } =
+      await import("@/components/shared/content/ContentDocumentRenderer");
+    expect(ContentDocumentRenderer).toBeDefined();
+    render(
+      <QuestionRenderer
+        question={
+          {
+            ...baseQuestion,
+            type: "text_response",
+            contentDocument: {
+              docVersion: 1,
+              type: "doc",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "rich prompt" }],
+                },
+              ],
+            },
+          } as never
+        }
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    // The prompt itself is not rendered by QuestionRenderer (owned by the
+    // page), so no editor may appear for prompt display either.
+    expect(document.querySelector(".ProseMirror")).toBeNull();
+  });
+});
