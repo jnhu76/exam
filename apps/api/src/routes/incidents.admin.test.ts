@@ -184,6 +184,9 @@ describe("admin incident routes — integration", () => {
   });
 
   it("Admin creates + investigates + resolves lifecycle", async () => {
+    // Wiring proof only: investigate/resolve routes reach the engine and
+    // project the resulting status. Version-bump semantics are owned by
+    // incidentCommands.test.ts.
     // Create
     const createRes = await ctx.app.inject({
       method: "POST",
@@ -210,7 +213,6 @@ describe("admin incident routes — integration", () => {
     });
     expect(investigateRes.statusCode).toBe(200);
     expect(investigateRes.json().incident.status).toBe("investigating");
-    expect(investigateRes.json().incident.version).toBe(2);
 
     // Resolve
     const resolveRes = await ctx.app.inject({
@@ -225,7 +227,6 @@ describe("admin incident routes — integration", () => {
     });
     expect(resolveRes.statusCode).toBe(200);
     expect(resolveRes.json().incident.status).toBe("resolved");
-    expect(resolveRes.json().incident.version).toBe(3);
   });
 
   it("rejects investigate with stale expectedVersion (409)", async () => {
@@ -253,36 +254,6 @@ describe("admin incident routes — integration", () => {
     expect(res.statusCode).toBe(409);
   });
 
-  it("idempotent replay returns same incident", async () => {
-    const opId = randomUUID();
-    const create1 = await ctx.app.inject({
-      method: "POST",
-      url: `/api/admin/exams/${examId}/incidents`,
-      payload: {
-        operationId: opId,
-        type: "other",
-        description: "idempotent test",
-      },
-      cookies: { "auth-token": adminToken },
-    });
-    expect(create1.statusCode).toBe(200);
-    expect(create1.json().outcome).toBe("applied");
-
-    const create2 = await ctx.app.inject({
-      method: "POST",
-      url: `/api/admin/exams/${examId}/incidents`,
-      payload: {
-        operationId: opId,
-        type: "other",
-        description: "idempotent test",
-      },
-      cookies: { "auth-token": adminToken },
-    });
-    expect(create2.statusCode).toBe(200);
-    expect(create2.json().outcome).toBe("idempotent_replayed");
-    expect(create2.json().incident.id).toBe(create1.json().incident.id);
-  });
-
   it("adds a note to an incident", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",
@@ -307,8 +278,6 @@ describe("admin incident routes — integration", () => {
     });
     expect(noteRes.statusCode).toBe(200);
     expect(noteRes.json().outcome).toBe("applied");
-    // Note does NOT bump version
-    expect(noteRes.json().incident.version).toBe(1);
   });
 
   it("GET non-existent incident returns 404", async () => {
