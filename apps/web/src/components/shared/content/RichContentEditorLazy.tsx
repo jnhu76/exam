@@ -13,7 +13,8 @@ const RichContentEditor = lazy(() => import("./RichContentEditor"));
 
 /** Props for the lazy rich editor. */
 export type RichContentEditorLazyProps = {
-  initialDocument: ContentDocumentV1;
+  /** The authoritative document (mount value + every external replacement). */
+  document: ContentDocumentV1;
   onChange: (document: ContentDocumentV1) => void;
   disabled?: boolean;
   ariaLabel?: string;

@@ -7,6 +7,7 @@ import {
   normalizeContentDocument,
   plainTextProjection,
   plainTextToDocument,
+  preflightContentDocumentStructure,
   type ContentBlock,
   type ContentBulletList,
   type ContentDocumentV1,
@@ -315,5 +316,84 @@ describe("contentModeOf", () => {
     expect(contentModeOf(null)).toBe("plain");
     expect(contentModeOf(undefined)).toBe("plain");
     expect(contentModeOf(doc(paragraph("x")))).toBe("rich");
+  });
+});
+
+describe("preflightContentDocumentStructure (#301 corrective pass)", () => {
+  it("accepts a grammar-valid document", () => {
+    expect(preflightContentDocumentStructure(doc(paragraph("hello")))).toEqual(
+      [],
+    );
+  });
+
+  it("rejects a non-envelope value", () => {
+    expect(preflightContentDocumentStructure("plain")).not.toEqual([]);
+    expect(preflightContentDocumentStructure(42)).not.toEqual([]);
+    expect(preflightContentDocumentStructure({ type: "doc" })).not.toEqual([]);
+    expect(
+      preflightContentDocumentStructure({
+        docVersion: 2,
+        type: "doc",
+        content: [],
+      }),
+    ).not.toEqual([]);
+  });
+
+  function nestedArrays(depth: number): unknown {
+    let node: unknown = "leaf";
+    for (let i = 0; i < depth; i++) node = [node];
+    return { docVersion: 1, type: "doc", content: node };
+  }
+
+  it.each([100, 500, 1000])(
+    "rejects %i-level hostile nesting without recursing (controlled violations, no stack overflow)",
+    (depth) => {
+      const violations = preflightContentDocumentStructure(nestedArrays(depth));
+      expect(violations.length).toBeGreaterThan(0);
+      expect(violations.some((v) => v.includes("nesting exceeds"))).toBe(true);
+    },
+  );
+
+  it("rejects a huge array fan-out without iterating every element", () => {
+    // 200k elements is ~100× the preflight node budget (4064): large enough
+    // that iterating it would be the measurable cost, small enough that the
+    // fixture itself allocates fast under parallel test load.
+    const hostile = {
+      docVersion: 1,
+      type: "doc",
+      content: new Array(200_000).fill(0).map(() => ({})),
+    };
+    // Budget-bounded: must return long before touching all elements.
+    const violations = preflightContentDocumentStructure(hostile);
+    expect(violations.length).toBeGreaterThan(0);
+  });
+
+  it("rejects a cyclic structure instead of throwing", () => {
+    const cyclic: Record<string, unknown> = { docVersion: 1, type: "doc" };
+    cyclic["self"] = cyclic;
+    expect(() => preflightContentDocumentStructure(cyclic)).not.toThrow();
+    expect(
+      preflightContentDocumentStructure(cyclic).some((v) =>
+        v.includes("JSON-representable"),
+      ),
+    ).toBe(true);
+  });
+
+  it("accepts a deep-but-legal document (depth-limited list nesting) far below the preflight budget", () => {
+    // Each nested list consumes two tree levels (list + listItem), so the
+    // depth limit (16) binds before the listDepth limit: 7 nested lists put
+    // the leaf paragraph at depth 15 — the deepest legal document. The raw
+    // walk sees it ~2 levels higher and must still accept it with room to
+    // spare against the hostile-depth budget.
+    let node: ContentBlock = paragraph("leaf");
+    for (let i = 0; i < 7; i++) {
+      node = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [node as never] }],
+      };
+    }
+    const legal = doc(node);
+    expect(checkContentDocumentLimits(legal)).toEqual([]);
+    expect(preflightContentDocumentStructure(legal)).toEqual([]);
   });
 });

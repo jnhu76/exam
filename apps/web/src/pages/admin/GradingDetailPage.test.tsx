@@ -1229,6 +1229,117 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     // No `[object Object]` leakage.
     expect(refEl).not.toHaveTextContent("[object Object]");
   });
+
+  it("renders a rich answer through the rich renderer when the frozen answerMode is rich (#301 corrective pass)", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          answerMode: "rich",
+          candidateAnswer: {
+            docVersion: 1,
+            type: "doc",
+            content: [
+              {
+                type: "bulletList",
+                content: [
+                  {
+                    type: "listItem",
+                    content: [
+                      {
+                        type: "paragraph",
+                        content: [{ type: "text", text: "要点甲" }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    const answerEl = screen.getByTestId("grading-candidate-answer-q1");
+    // The rich renderer (not the legacy object-join formatter) drew the
+    // answer: list markup + the document text.
+    expect(answerEl.querySelector("ul")).not.toBeNull();
+    expect(answerEl).toHaveTextContent("要点甲");
+  });
+
+  it("shows the controlled fallback for an envelope-shaped but corrupt rich answer (#301 corrective pass)", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          answerMode: "rich",
+          candidateAnswer: {
+            docVersion: 1,
+            type: "doc",
+            content: [{ type: "image", attrs: { src: "x" } }],
+          },
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    const answerEl = screen.getByTestId("grading-candidate-answer-q1");
+    // The deep document validation refused the corrupt payload; the page
+    // shows the controlled unsupported message instead of crashing.
+    expect(answerEl).toHaveTextContent("此作答内容无法以富文本安全显示");
+  });
+
+  it("keeps the legacy formatter for a document-looking payload on a non-rich answer (#301 corrective pass)", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          candidateAnswer: {
+            docVersion: 1,
+            type: "doc",
+            content: [
+              {
+                type: "bulletList",
+                content: [
+                  {
+                    type: "listItem",
+                    content: [
+                      {
+                        type: "paragraph",
+                        content: [{ type: "text", text: "要点甲" }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    const answerEl = screen.getByTestId("grading-candidate-answer-q1");
+    // The frozen mode is the render authority: without answerMode="rich" the
+    // rich renderer must NOT activate — no list markup, no crash.
+    expect(answerEl.querySelector("ul")).toBeNull();
+  });
 });
 
 describe("parseScoreInput", () => {

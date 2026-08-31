@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ContentDocumentV1 } from "@exam/domain";
 import { ContentRenderer } from "./ContentRenderer";
 import { ContentDocumentRenderer } from "./ContentDocumentRenderer";
+import { contentDocumentsEqual } from "./contentAdapter";
 
 /**
  * Synthetic workload evidence for the issue 301 READ path (measured
@@ -193,5 +194,81 @@ describe("content READ path — synthetic workloads", () => {
     // Memoized identical-prop updates stay an order cheaper than full child
     // re-renders — loose bound so jsdom noise cannot flake the gate.
     expect(memoMs).toBeLessThan(churnMs);
+  });
+
+  it("editor sync: the structural-equality classification stays cheap on a representative answer (typing path)", () => {
+    // Every keystroke routes the parent-echoed document through one
+    // contentDocumentsEqual walk (RichContentEditor sync effect). The walk is
+    // O(answer size); a representative rich answer with marks, math, a list
+    // and a table must classify far under a frame budget.
+    const doc: ContentDocumentV1 = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "结论：", marks: ["bold"] },
+            { type: "inlineMath", latex: "a^2+b^2=c^2" },
+            { type: "text", text: "成立" },
+          ],
+        },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "第一步" }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [{ type: "text", text: "单元" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const mutated = structuredClone(doc);
+    (
+      mutated.content[0] as { content: Array<{ text?: string }> }
+    ).content[2]!.text = "不成立";
+
+    const EQUAL_WALKS = 200;
+    const t0 = performance.now();
+    for (let i = 0; i < EQUAL_WALKS; i++) {
+      expect(contentDocumentsEqual(doc, doc)).toBe(true);
+    }
+    const equalMs = performance.now() - t0;
+
+    const t1 = performance.now();
+    for (let i = 0; i < EQUAL_WALKS; i++) {
+      expect(contentDocumentsEqual(doc, mutated)).toBe(false);
+    }
+    const diffMs = performance.now() - t1;
+
+    // Loose catastrophic-regression bounds for jsdom; the measured numbers
+    // feed the PR report.
+    expect(equalMs).toBeLessThan(1000);
+    expect(diffMs).toBeLessThan(1000);
   });
 });

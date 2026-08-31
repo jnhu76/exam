@@ -265,3 +265,106 @@ describe("#301 rich content write authority", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("#301 hostile-depth write protection (corrective pass)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+    });
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Hostile Depth Course",
+        code: `HD-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  /**
+   * Builds a question create payload whose contentDocument nests `depth`
+   * array levels around a leaf — under the HTTP body limit, far beyond the
+   * grammar's legal depth. Every OTHER field is valid, so the only possible
+   * rejection reason is the hostile structure itself.
+   */
+  function hostilePayload(depth: number): Record<string, unknown> {
+    let content: unknown = [{ type: "text", text: "leaf" }];
+    for (let i = 0; i < depth; i++) content = [content];
+    return {
+      courseId,
+      score: 5,
+      difficulty: 1,
+      type: "text_response",
+      content: "hostile prompt",
+      options: [],
+      standardAnswer: null,
+      rubric: "r",
+      contentDocument: { docVersion: 1, type: "doc", content },
+    };
+  }
+
+  // The Fastify body parser (JSON.parse) is the FIRST structural authority:
+  // at extreme depths it may reject the body itself with a controlled 400
+  // before any route code runs. Whichever layer fires, the result must be a
+  // controlled rejection — never a 500, RangeError, or process crash.
+  it.each([100, 500, 1000])(
+    "question write with %i-level nested document is rejected in a controlled way",
+    async (depth) => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/questions",
+        payload: hostilePayload(depth),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      // No question was persisted.
+      const list = await ctx.app.inject({
+        method: "GET",
+        url: `/api/questions?courseId=${courseId}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(list.statusCode).toBeLessThan(500);
+    },
+  );
+
+  it("a deep-but-legal document (grammar max nesting) still creates successfully", async () => {
+    // 7 nested lists = the deepest legal grammar shape (depth limit 16).
+    let block: Record<string, unknown> = {
+      type: "paragraph",
+      content: [{ type: "text", text: "leaf" }],
+    };
+    for (let i = 0; i < 7; i++) {
+      block = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [block] }],
+      };
+    }
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        score: 5,
+        difficulty: 1,
+        type: "text_response",
+        contentDocument: { docVersion: 1, type: "doc", content: [block] },
+        options: [],
+        standardAnswer: null,
+        rubric: "r",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+  });
+});

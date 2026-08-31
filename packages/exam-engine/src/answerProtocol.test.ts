@@ -604,3 +604,170 @@ describe("answerProtocol", () => {
     });
   });
 });
+
+describe("processSaveAnswer — canonical rejection precedence matrix (#301 corrective pass)", () => {
+  // A canonicalizer standing in for the frozen-question shape validation: it
+  // rejects the "malformed" payload regardless of attempt state. Every matrix
+  // row proves the STATE/deadline rejection wins over canonicalization —
+  // a malformed payload must never change the protocol precedence.
+  const rejectingCanonicalize = () =>
+    ({ ok: false, reason: "malformed" }) as const;
+
+  function resultFor(
+    status: AttemptStatus,
+    overrides: Partial<AnswerState> = {},
+    canonicalize?: Parameters<typeof processSaveAnswer>[2],
+  ) {
+    return processSaveAnswer(
+      makeState({ attemptStatus: status, ...overrides }),
+      makeRequest({ answer: "malformed" }),
+      canonicalize,
+    );
+  }
+
+  it("voided + malformed → ATTEMPT_CLOSED (canonicalization never runs)", () => {
+    const result = resultFor("voided", {}, rejectingCanonicalize);
+    expect(result.accepted).toBe(false);
+    expect(result.conflict?.reason).toBe("ATTEMPT_CLOSED");
+  });
+
+  it.each(["submitted", "grading", "graded"] as AttemptStatus[])(
+    "%s + malformed → ATTEMPT_ALREADY_SUBMITTED (canonicalization never runs)",
+    (status) => {
+      const result = resultFor(status, {}, rejectingCanonicalize);
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+    },
+  );
+
+  it.each(["in_progress", "disrupted"] as AttemptStatus[])(
+    "expired %s + malformed → DEADLINE_EXCEEDED (canonicalization never runs)",
+    (status) => {
+      const result = resultFor(
+        status,
+        {
+          deadlineAt: new Date("2025-01-01T09:00:00Z"),
+          now: new Date("2025-01-01T10:00:00Z"),
+        },
+        rejectingCanonicalize,
+      );
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("DEADLINE_EXCEEDED");
+    },
+  );
+
+  it("editable + malformed → INVALID_ANSWER (after status/deadline guards)", () => {
+    const result = resultFor("in_progress", {}, rejectingCanonicalize);
+    expect(result.accepted).toBe(false);
+    expect(result.conflict?.reason).toBe("INVALID_ANSWER");
+    expect(result.serverVersion).toBe(0);
+  });
+
+  it("editable + malformed reports the existing answer's serverVersion", () => {
+    const existing = makeAnswerRecord({ version: 3 });
+    const result = resultFor(
+      "in_progress",
+      { answers: [existing] },
+      rejectingCanonicalize,
+    );
+    expect(result.accepted).toBe(false);
+    expect(result.conflict?.reason).toBe("INVALID_ANSWER");
+    expect(result.serverVersion).toBe(3);
+  });
+
+  it("editable + valid stale version → STALE_VERSION (canonicalization runs first, equality sees canonical values)", () => {
+    // The canonicalizer maps BOTH the persisted and the incoming payload into
+    // the same canonical form, so equality/idempotency decisions are made on
+    // canonical data — a raw transient difference cannot hide a version gap.
+    const canonicalizing = (answer: unknown) =>
+      typeof answer === "string"
+        ? { ok: true as const, value: answer.trim().toUpperCase() }
+        : { ok: false as const, reason: "malformed" };
+    const existing = makeAnswerRecord({ version: 3, answer: "CANONICAL" });
+    const result = processSaveAnswer(
+      makeState({ answers: [existing] }),
+      makeRequest({ answer: "canonical ", clientSeq: 4, baseVersion: 1 }),
+      canonicalizing,
+    );
+    expect(result.accepted).toBe(false);
+    expect(result.conflict?.reason).toBe("STALE_VERSION");
+  });
+
+  it("editable + valid future version → FUTURE_VERSION", () => {
+    const canonicalizing = (answer: unknown) =>
+      ({ ok: true as const, value: answer }) as const;
+    const future = processSaveAnswer(
+      makeState({}),
+      makeRequest({ answer: "fine", baseVersion: 999 }),
+      canonicalizing,
+    );
+    expect(future.accepted).toBe(false);
+    expect(future.conflict?.reason).toBe("FUTURE_VERSION");
+  });
+
+  it("same clientSeq + canonically-equivalent transient payloads → accepted idempotent replay", () => {
+    // Rich canonicalization seam: two transient decompositions of the same
+    // logical content collapse to one canonical value, so the replay is the
+    // SAFE idempotent one (not CONFLICTING_PAYLOAD).
+    const canonicalizing = (answer: unknown) => {
+      const raw = answer as { text?: string; parts?: string[] };
+      const text = raw.text ?? (raw.parts ?? []).join("");
+      return { ok: true as const, value: { kind: "doc", text } };
+    };
+    const first = makeAnswerRecord({
+      answer: { kind: "doc", text: "hello" },
+    });
+    const replay = processSaveAnswer(
+      makeState({
+        answers: [first],
+        clientSeqMap: new Map([["q1:2", first]]),
+      }),
+      makeRequest({
+        answer: { parts: ["hel", "lo"] },
+        clientSeq: 2,
+        baseVersion: 1,
+      }),
+      canonicalizing,
+    );
+    expect(replay.accepted).toBe(true);
+    expect(replay.serverVersion).toBe(1);
+  });
+
+  it("same clientSeq + different canonical content → CONFLICTING_PAYLOAD", () => {
+    const canonicalizing = (answer: unknown) => {
+      const raw = answer as { text?: string };
+      return { ok: true as const, value: { kind: "doc", text: raw.text } };
+    };
+    const first = makeAnswerRecord({
+      answer: { kind: "doc", text: "hello" },
+    });
+    const conflict = processSaveAnswer(
+      makeState({
+        answers: [first],
+        clientSeqMap: new Map([["q1:2", first]]),
+      }),
+      makeRequest({
+        answer: { text: "DIFFERENT" },
+        clientSeq: 2,
+        baseVersion: 1,
+      }),
+      canonicalizing,
+    );
+    expect(conflict.accepted).toBe(false);
+    expect(conflict.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
+  });
+
+  it("accepted save persists the CANONICAL value (newAnswer carries canonicalized payload)", () => {
+    const canonicalizing = (answer: unknown) =>
+      typeof answer === "string"
+        ? { ok: true as const, value: answer.trim() }
+        : { ok: false as const, reason: "malformed" };
+    const result = processSaveAnswer(
+      makeState({}),
+      makeRequest({ answer: "  padded  ", clientSeq: 1, baseVersion: 0 }),
+      canonicalizing,
+    );
+    expect(result.accepted).toBe(true);
+    expect(result.newAnswer?.answer).toBe("padded");
+  });
+});

@@ -256,3 +256,173 @@ describe("rich answer save protocol (#301)", () => {
     expect(await draftAnswer(choiceQId)).toBe("a");
   });
 });
+
+describe("#301 save-answer corrective pass — hostile depth & deadline precedence", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let richQuestionId: string;
+  let examId: string;
+  let attemptId: string;
+  let richQId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(questionRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+    });
+
+    courseId = crypto.randomUUID();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Corrective Course",
+      code: `CC-${uniquePrefix()}`,
+      description: "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        score: 50,
+        difficulty: 1,
+        type: "text_response",
+        contentDocument: {
+          docVersion: 1,
+          type: "doc",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "Explain" }] },
+          ],
+        },
+        answerMode: "rich",
+        options: [],
+        standardAnswer: null,
+        rubric: "按要点给分",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    richQuestionId = res.json().id as string;
+
+    const examRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: buildExamPayload({
+        title: "Corrective Exam",
+        courseId,
+        questionIds: [richQuestionId],
+        totalScore: 50,
+        passingScore: 0,
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    examId = examRes.json().id as string;
+    const pub = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(pub.statusCode, pub.body).toBeLessThan(300);
+    const candidateProfileId = await ensureCandidateProfile(ctx);
+    await enrollCandidateForExam(ctx, candidateProfileId, examId);
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(startRes.statusCode).toBe(201);
+    attemptId = startRes.json().id as string;
+    richQId = (
+      startRes.json().questionSnapshot as Array<{ originalQuestionId: string }>
+    )[0]!.originalQuestionId;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  function nestedDoc(depth: number): unknown {
+    let content: unknown = [{ type: "text", text: "leaf" }];
+    for (let i = 0; i < depth; i++) content = [content];
+    return { docVersion: 1, type: "doc", content };
+  }
+
+  it.each([100, 500, 1000])(
+    "rich SaveAnswer with a %i-level nested payload is rejected in a controlled way (no 500, no crash)",
+    async (depth) => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${richQId}`,
+        payload: {
+          attemptId,
+          questionId: richQId,
+          answer: nestedDoc(depth),
+          clientSeq: 10 + depth,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      // Either the Fastify body parser rejects the hostile body (400) or the
+      // answer protocol rejects the shape (200 + INVALID_ANSWER). Both are
+      // controlled; a 500 / RangeError / crash is the failure this pins.
+      if (res.statusCode === 200) {
+        expect(res.json().accepted).toBe(false);
+        expect(res.json().reason).toBe("INVALID_ANSWER");
+      } else {
+        expect(res.statusCode).toBe(400);
+      }
+    },
+  );
+
+  it("an expired attempt rejects a malformed payload with the RECONCILIATION precedence (ATTEMPT_ALREADY_SUBMITTED), not INVALID_ANSWER", async () => {
+    // Save a valid rich draft first (version 1).
+    const validDoc = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "before" }] },
+      ],
+    };
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${richQId}`,
+      payload: {
+        attemptId,
+        questionId: richQId,
+        answer: validDoc,
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(first.json().accepted).toBe(true);
+
+    // Push the wall clock past the attempt deadline.
+    ctx.setNow(new Date(Date.now() + 3 * 60 * 60 * 1000));
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${richQId}`,
+      payload: {
+        attemptId,
+        questionId: richQId,
+        answer: { docVersion: 1, type: "doc", content: "MALFORMED" },
+        clientSeq: 2,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 1,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(res.statusCode).toBe(200);
+    // Lazy deadline reconciliation freezes the expired attempt at the save
+    // entry point; the lifecycle rejection — not the payload shape — decides.
+    expect(res.json().accepted).toBe(false);
+    expect(res.json().reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+  });
+});

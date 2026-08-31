@@ -274,6 +274,111 @@ function pushBlockViolations(
   }
 }
 
+// ── Hostile-structure preflight ───────────────────────────────────
+//
+// The wire schema (ContentDocumentV1Schema) is recursive (z.lazy over the
+// list/table grammar). A hostile payload nested thousands of levels deep can
+// overflow the RECURSIVE parser before the post-parse limit check ever runs.
+// This preflight runs BEFORE any schema parse: it is iterative (explicit
+// stack, no recursion → no stack overflow) and bounded, so the recursive
+// parser never sees a structure deeper/larger than these budgets.
+
+/** Raw-walk node budget. Grammar-valid documents stay far below it (arrays and envelope included). */
+const PREFLIGHT_NODE_BUDGET = CONTENT_LIMITS.totalNodes * 2 + 64;
+/**
+ * Raw nesting budget. The raw walk counts the ARRAY levels interleaved
+ * between the object levels, so a document at grammar depth g peaks at raw
+ * depth ≈ 2g + 1 (every grammar node sits inside a container array). The
+ * deepest legal document (grammar depth ≤ 16 + envelope) lands well below
+ * (depth + 2) * 2 + 3; anything deeper can only be hostile.
+ */
+const PREFLIGHT_RAW_DEPTH_BUDGET = (CONTENT_LIMITS.depth + 2) * 2 + 3;
+
+/**
+ * Cheap, iterative, bounded structural preflight for an UNKNOWN value about
+ * to enter the recursive ContentDocumentV1Schema parse. Returns every
+ * violation (empty array = safe to parse). Pure; does not replace the schema
+ * — it only makes sure the recursive parser never receives a structure that
+ * is dangerously deep, oversized, or cyclic.
+ */
+export function preflightContentDocumentStructure(value: unknown): string[] {
+  const violations: string[] = [];
+
+  // Serialized size. JSON.stringify also detects cycles — a cyclic value can
+  // never be a document and would break downstream serialization anyway.
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    violations.push(
+      "document is not JSON-representable (cyclic or otherwise hostile structure)",
+    );
+  }
+  if (serialized !== undefined) {
+    if (serialized.length > CONTENT_LIMITS.serializedChars) {
+      violations.push(
+        `serialized document exceeds ${CONTENT_LIMITS.serializedChars} chars`,
+      );
+    }
+  }
+
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    violations.push("document must be a ContentDocumentV1 object");
+    return violations;
+  }
+  const envelope = value as Record<string, unknown>;
+  if (envelope.docVersion !== CONTENT_DOC_VERSION) {
+    violations.push(`docVersion must be ${CONTENT_DOC_VERSION}`);
+  }
+  if (envelope.type !== "doc") {
+    violations.push('type must be "doc"');
+  }
+  if (!Array.isArray(envelope.content)) {
+    violations.push("content must be an array");
+  }
+
+  // Iterative DFS over the RAW value (every object/array, regardless of node
+  // type): the recursive Zod parser's depth is driven by raw JSON nesting,
+  // not by grammar-correct nesting, so the bound must apply to both.
+  const stack: Array<{ node: unknown; depth: number }> = [
+    { node: value, depth: 0 },
+  ];
+  let nodes = 0;
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
+    nodes += 1;
+    if (nodes > PREFLIGHT_NODE_BUDGET) {
+      violations.push(
+        `document exceeds ${PREFLIGHT_NODE_BUDGET} structural nodes`,
+      );
+      return violations;
+    }
+    if (depth > PREFLIGHT_RAW_DEPTH_BUDGET) {
+      violations.push(
+        `document nesting exceeds ${PREFLIGHT_RAW_DEPTH_BUDGET} levels`,
+      );
+      return violations;
+    }
+    if (Array.isArray(node)) {
+      // Fan-out bound: reject a huge array without iterating its elements.
+      if (node.length > PREFLIGHT_NODE_BUDGET) {
+        violations.push(
+          `document array fan-out exceeds ${PREFLIGHT_NODE_BUDGET} elements`,
+        );
+        return violations;
+      }
+      for (const child of node) {
+        stack.push({ node: child, depth: depth + 1 });
+      }
+    } else if (typeof node === "object" && node !== null) {
+      for (const child of Object.values(node as Record<string, unknown>)) {
+        stack.push({ node: child, depth: depth + 1 });
+      }
+    }
+  }
+  return violations;
+}
+
 /**
  * Returns every structural-limit violation of the document (empty array =
  * within limits). Pure; the authoritative limit source is CONTENT_LIMITS.

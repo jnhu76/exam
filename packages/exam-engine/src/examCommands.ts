@@ -192,6 +192,20 @@ export async function publishExam(
         );
       }
     }
+    // #301 corrective pass: the SAME projection invariant holds for rich
+    // OPTIONS — a divergent frozen option would show candidates one text
+    // (plain projection) while the rich renderer draws another. Publish is
+    // the freeze gate: fail closed, never auto-repair.
+    for (const option of question.options) {
+      if (option.contentDocument != null) {
+        const optionProjection = plainTextProjection(option.contentDocument);
+        if (option.content !== optionProjection) {
+          throw new ValidationError(
+            `rich option ${option.id} of question ${question.id} content must equal plainTextProjection(contentDocument) at publish`,
+          );
+        }
+      }
+    }
     if (question.type === "text_response") {
       if (isEmptyOrPlaceholder(question.rubric)) {
         throw new ValidationError(

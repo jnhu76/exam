@@ -113,6 +113,9 @@ function buildQuestionResults(
       type: question.type,
       content: question.content,
       contentDocument: question.contentDocument ?? null,
+      // #301 corrective pass: frozen answer input mode — the candidate-view
+      // render authority for candidateAnswer (never JOIN live rows).
+      answerMode: question.answerMode ?? null,
       order: question.order,
       // Computed BEFORE the own-view standardAnswer stripping: the candidate
       // DTO drops standardAnswer for every question, so the UI needs an

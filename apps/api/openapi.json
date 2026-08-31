@@ -33583,6 +33583,12 @@
                             "additionalProperties": false,
                             "nullable": true
                           },
+                          "answerMode": {
+                            "type": "string",
+                            "enum": ["plain", "rich"],
+                            "nullable": true,
+                            "default": null
+                          },
                           "maxScore": {
                             "type": "number"
                           },
@@ -34997,6 +35003,12 @@
                                 "required": ["docVersion", "type", "content"],
                                 "additionalProperties": false,
                                 "nullable": true
+                              },
+                              "answerMode": {
+                                "type": "string",
+                                "enum": ["plain", "rich"],
+                                "nullable": true,
+                                "default": null
                               },
                               "order": {
                                 "type": "integer"

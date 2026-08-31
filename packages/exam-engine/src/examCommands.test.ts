@@ -231,6 +231,33 @@ describe("examCommands", () => {
       );
     });
 
+    it("rejects publish when a rich OPTION diverges from its projection (#301 corrective pass)", async () => {
+      // DB/manual-writer bypass scenario: option.content says one thing while
+      // the frozen document renders another. Publish is the freeze gate —
+      // fail closed, never auto-repair.
+      const doc = makeRichDoc();
+      const divergentOption = makeQuestion("q-opt-diverge", {
+        type: "single_choice",
+        content: "plain prompt",
+        contentDocument: null,
+        options: [
+          { id: "a", content: "A", contentDocument: null },
+          // content "A" but the document projects different text.
+          { id: "b", content: "A", contentDocument: doc },
+        ],
+      });
+      const repo = makeRepo(
+        makeExam({
+          questionIds: ["q-opt-diverge"],
+          totalScore: 50,
+          passingScore: 0,
+        }),
+      );
+      await expect(
+        publishExam(repo, "exam-1", [divergentOption]),
+      ).rejects.toThrow(/rich option b .*plainTextProjection/s);
+    });
+
     it("transitions draft → published", async () => {
       const repo = makeRepo(makeExam());
       const result = await publishExam(repo, "exam-1", testQuestions);

@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import type { ContentDocumentV1 } from "@exam/domain";
 import {
   contentDocumentToTiptap,
+  contentDocumentsEqual,
   tiptapToContentDocument,
 } from "./contentAdapter";
 
@@ -36,16 +37,31 @@ import {
  * authority: every change is mapped through contentAdapter into the canonical
  * grammar and surfaced via onChange; the server re-validates on write.
  *
+ * Two-way ownership protocol (issue 301 corrective pass): after mount the
+ * Tiptap instance owns its state, but the `document` prop stays the
+ * AUTHORITATIVE answer and may be externally replaced (server reconciliation
+ * after STALE_VERSION, draft restore, parent reset). Each render therefore
+ * classifies the incoming prop:
+ *   - structurally equal to the document this editor last emitted (local-edit
+ *     echo from the parent state round-trip) → skip, never setContent (which
+ *     would reset the caret and fight the user's keystrokes);
+ *   - structurally equal to the document already applied → skip, no-op sync;
+ *   - otherwise an authoritative replacement → editor.commands.setContent
+ *     with emitUpdate disabled, so the reset does not echo back through
+ *     onUpdate into a save → setContent loop.
+ * The component must still be keyed by question identity at the call site so
+ * a question switch never reuses a Tiptap document across questions.
+ *
  * Math nodes render through the Mathematics extension with trust disabled —
  * same posture as the read-side KaTeX seam.
  */
 export default function RichContentEditor({
-  initialDocument,
+  document,
   onChange,
   disabled = false,
   ariaLabel,
 }: {
-  initialDocument: ContentDocumentV1;
+  document: ContentDocumentV1;
   onChange: (document: ContentDocumentV1) => void;
   disabled?: boolean;
   ariaLabel?: string;
@@ -55,6 +71,12 @@ export default function RichContentEditor({
   // re-render — keystrokes must not re-render this component's React tree.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Canonical document last pushed up through onChange (LOCAL EDIT marker).
+  const lastEmittedRef = useRef<ContentDocumentV1 | null>(null);
+  // Canonical document the editor currently holds (mount + every applied
+  // replacement). useRef's initializer captures the FIRST render's document —
+  // exactly the one useEditor consumed at creation.
+  const appliedRef = useRef<ContentDocumentV1 | null>(document);
 
   const editor = useEditor({
     extensions: [
@@ -85,11 +107,13 @@ export default function RichContentEditor({
         // Grammar tables are unspanned; never offer header rows.
       }),
     ],
-    content: contentDocumentToTiptap(initialDocument),
+    content: contentDocumentToTiptap(document),
     editable: !disabled,
     onUpdate: ({ editor }) => {
       try {
-        onChangeRef.current(tiptapToContentDocument(editor.getJSON()));
+        const next = tiptapToContentDocument(editor.getJSON());
+        lastEmittedRef.current = next;
+        onChangeRef.current(next);
       } catch {
         // Unmappable node (extension regression): keep the last good
         // document instead of emitting out-of-grammar data.
@@ -107,6 +131,25 @@ export default function RichContentEditor({
   useEffect(() => {
     editor?.setEditable(!disabled);
   }, [editor, disabled]);
+
+  useEffect(() => {
+    if (!editor) return;
+    if (
+      (lastEmittedRef.current &&
+        contentDocumentsEqual(document, lastEmittedRef.current)) ||
+      (appliedRef.current &&
+        contentDocumentsEqual(document, appliedRef.current))
+    ) {
+      return;
+    }
+    // Authoritative external replacement — server reconciliation, restore,
+    // or parent reset. The editor adopts it as its new baseline.
+    appliedRef.current = document;
+    lastEmittedRef.current = document;
+    editor.commands.setContent(contentDocumentToTiptap(document), {
+      emitUpdate: false,
+    });
+  }, [editor, document]);
 
   const mathInputRef = useRef<HTMLInputElement>(null);
 

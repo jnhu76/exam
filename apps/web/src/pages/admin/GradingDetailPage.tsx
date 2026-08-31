@@ -5,6 +5,7 @@ import type { ContentDocumentV1 } from "@exam/domain";
 import { isContentDocumentV1 } from "@exam/domain";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
+import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
 import i18n from "@/i18n";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -143,6 +144,9 @@ interface GradingQuestion {
   content: string;
   /** Rich prompt document (issue 301); null in Plain mode. */
   contentDocument?: ContentDocumentV1 | null;
+  /** Frozen answer input mode (issue 301 corrective pass) — the render authority
+   * for candidateAnswer. */
+  answerMode?: string | null;
   maxScore: number;
   standardAnswer: unknown;
   rubric: string | null;
@@ -489,11 +493,33 @@ export function GradingDetailPage() {
                   data-testid={`grading-candidate-answer-${q.questionId}`}
                   className="type-long-response min-h-16 rounded-md border bg-muted/30 p-3"
                 >
-                  {isContentDocumentV1(q.candidateAnswer) ? (
-                    <ContentDocumentRenderer document={q.candidateAnswer} />
-                  ) : (
-                    formatAnswer(q.candidateAnswer)
-                  )}
+                  {(() => {
+                    // issue 301 corrective pass: the frozen answerMode is the
+                    // render authority. Only a rich-mode answer that also
+                    // passes the deep document validation renders through
+                    // the rich renderer; anything else keeps the safe
+                    // legacy formatter.
+                    const richDocument = resolveRichAnswerDocument(
+                      q.candidateAnswer,
+                      q.answerMode,
+                    );
+                    if (richDocument) {
+                      return (
+                        <ContentDocumentRenderer document={richDocument} />
+                      );
+                    }
+                    if (
+                      q.answerMode === "rich" &&
+                      isContentDocumentV1(q.candidateAnswer)
+                    ) {
+                      return (
+                        <span className="text-muted-foreground">
+                          {i18n.t("content.unsupportedAnswer" as never)}
+                        </span>
+                      );
+                    }
+                    return formatAnswer(q.candidateAnswer);
+                  })()}
                 </div>
               </div>
               <div className="space-y-2">

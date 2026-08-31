@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ContentBlock, ContentDocumentV1 } from "@exam/domain";
 import {
   contentDocumentToTiptap,
+  contentDocumentsEqual,
   tiptapToContentDocument,
 } from "./contentAdapter";
 
@@ -263,5 +264,84 @@ describe("tiptapToContentDocument", () => {
       { type: "text", text: "wer", marks: ["bold"] },
       { type: "hardBreak" },
     ]);
+  });
+});
+
+describe("contentDocumentsEqual — editor two-way ownership sync (#301 corrective pass)", () => {
+  // Canonical documents, the shape the editor emits and the parent echoes.
+  function canonicalDoc(): ContentDocumentV1 {
+    return {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "solve ", marks: ["bold"] },
+            { type: "inlineMath", latex: "x^2" },
+          ],
+        },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "step" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("is true for structurally identical canonical documents", () => {
+    expect(contentDocumentsEqual(canonicalDoc(), canonicalDoc())).toBe(true);
+  });
+
+  it("is false when a text run or its marks differ", () => {
+    const other = canonicalDoc();
+    (
+      other.content[0] as { content: Array<{ text?: string }> }
+    ).content[0]!.text = "solve";
+    expect(contentDocumentsEqual(canonicalDoc(), other)).toBe(false);
+
+    const markShifted = canonicalDoc();
+    const marks = (
+      markShifted.content[0] as { content: Array<{ marks?: string[] }> }
+    ).content[0];
+    marks!.marks = ["italic"];
+    expect(contentDocumentsEqual(canonicalDoc(), markShifted)).toBe(false);
+  });
+
+  it("is false when math, code, block math, or list structure differs", () => {
+    const math = canonicalDoc();
+    (
+      math.content[0] as { content: Array<{ latex?: string }> }
+    ).content[1]!.latex = "y^2";
+    expect(contentDocumentsEqual(canonicalDoc(), math)).toBe(false);
+
+    const listItemAdded = canonicalDoc();
+    (
+      listItemAdded.content[1] as { content: Array<{ content: unknown[] }> }
+    ).content[0]!.content.push({
+      type: "paragraph",
+      content: [{ type: "text", text: "extra" }],
+    });
+    expect(contentDocumentsEqual(canonicalDoc(), listItemAdded)).toBe(false);
+  });
+
+  it("is true for a codeBlock whose only difference is null vs undefined language (canonical both ways)", () => {
+    const withCode = (language: string | null): ContentDocumentV1 => ({
+      docVersion: 1,
+      type: "doc",
+      content: [{ type: "codeBlock", language, text: "let x = 1" }],
+    });
+    expect(contentDocumentsEqual(withCode("js"), withCode("js"))).toBe(true);
+    expect(contentDocumentsEqual(withCode(null), withCode(null))).toBe(true);
   });
 });

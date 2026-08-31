@@ -51,13 +51,13 @@ interface ExamIds {
   examId: string;
 }
 
-/** Assembles + publishes + enrolls a one-question exam. */
+/** Assembles + publishes + enrolls an exam over the given question ids. */
 async function assembleExam(
   request: APIRequestContext,
   adminToken: string,
   courseId: string,
   title: string,
-  questionId: string,
+  questionIds: string[],
   candidateProfileId: string,
   totalScore: number,
 ): Promise<ExamIds> {
@@ -72,7 +72,7 @@ async function assembleExam(
     passingScore: 0,
     totalScore,
     questionSelectionMode: "manual",
-    questionIds: [questionId],
+    questionIds,
     controlFlags: {
       shuffleQuestions: false,
       shuffleOptions: false,
@@ -204,7 +204,7 @@ test.describe("issue 301 rich content product loop", () => {
       adminToken,
       courseId,
       `301富文本产品环-${STAMP}`,
-      questionId,
+      [questionId],
       candidate.profileId,
       20,
     );
@@ -358,7 +358,7 @@ test.describe("issue 301 rich content product loop", () => {
       adminToken,
       courseId,
       `301数学单选产品环-${STAMP}`,
-      questionId,
+      [questionId],
       candidate.profileId,
       10,
     );
@@ -378,5 +378,212 @@ test.describe("issue 301 rich content product loop", () => {
     await section.getByRole("radio").first().check();
     await waitForSaveSaved(page);
     await submitExam(page);
+  });
+});
+
+test.describe("issue 301 corrective pass — editor identity, reconciliation, grading closure", () => {
+  /** Creates a rich text_response question via API (UI authoring is proven
+   *  above; these tests focus on the candidate/read paths). */
+  async function createRichQuestion(
+    request: APIRequestContext,
+    adminToken: string,
+    courseId: string,
+    prompt: string,
+  ): Promise<string> {
+    const res = await adminPost(request, adminToken, "/api/questions", {
+      courseId,
+      score: 20,
+      difficulty: 1,
+      type: "text_response",
+      contentDocument: {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: prompt }] },
+        ],
+      },
+      answerMode: "rich",
+      options: [],
+      standardAnswer: null,
+      rubric: RUBRIC,
+    });
+    expect(res.status(), await res.text()).toBe(201);
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  function answerDoc(text: string): unknown {
+    return {
+      docVersion: 1,
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+    };
+  }
+
+  test("two rich questions keep separate WYSIWYG documents across navigation, and both render in grading", async ({
+    page,
+    request,
+  }) => {
+    const adminToken = await adminApiToken(request);
+    const courseId = await seedCourseId(request, adminToken);
+    const candidate = await provisionCandidate(request, `iso-${STAMP}`);
+    const prompt1 = `隔离题一-${STAMP}`;
+    const prompt2 = `隔离题二-${STAMP}`;
+    const q1 = await createRichQuestion(request, adminToken, courseId, prompt1);
+    const q2 = await createRichQuestion(request, adminToken, courseId, prompt2);
+    const { examId } = await assembleExam(
+      request,
+      adminToken,
+      courseId,
+      `301隔离-${STAMP}`,
+      [q1, q2],
+      candidate.profileId,
+      40,
+    );
+
+    await candidateLogin(page, candidate);
+    const startResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+      { timeout: 15_000 },
+    );
+    await startExamFromList(page, examId);
+    const attemptId = ((await (await startResponse).json()) as { id: string })
+      .id;
+
+    const section = page.getByTestId("take-question-section");
+    await expect(section.getByText(prompt1)).toBeVisible();
+    let editor = section.locator(".ProseMirror");
+    await expect(editor).toHaveCount(1);
+    await editor.click();
+    await page.keyboard.type("甲作答");
+    await waitForSaveSaved(page);
+
+    // Switch to Q2: the editor MUST remount empty — the identity key fix
+    // (P0) prevents reusing Q1's Tiptap document for Q2.
+    await page.getByRole("button", { name: "下一题" }).click();
+    await expect(section.getByText(prompt2)).toBeVisible();
+    editor = section.locator(".ProseMirror");
+    await expect(editor).toHaveCount(1);
+    await expect(editor).not.toContainText("甲作答");
+    await editor.click();
+    await page.keyboard.type("乙作答");
+    await waitForSaveSaved(page);
+
+    // Back to Q1: the draft restores from the server into a remounted editor.
+    await page.getByRole("button", { name: "上一题" }).click();
+    await expect(section.getByText(prompt1)).toBeVisible();
+    const q1Editor = section.locator(".ProseMirror");
+    await expect(q1Editor).toContainText("甲作答");
+    await expect(q1Editor).not.toContainText("乙作答");
+
+    // Server-side separation: each question holds its own canonical doc.
+    const candidateToken = await candidateApiToken(request, candidate);
+    const take = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    const questions = (
+      (await take.json()) as {
+        questions: Array<{ answerValue: unknown; answerMode?: string }>;
+      }
+    ).questions;
+    expect(questions).toHaveLength(2);
+    const texts = questions.map((q) =>
+      JSON.stringify(q.answerValue).includes("甲作答") ? "甲" : "乙",
+    );
+    expect(texts).toContain("甲");
+    expect(texts).toContain("乙");
+
+    // Grading closure: submit, then the admin detail page renders BOTH rich
+    // answers through the rich renderer (frozen answerMode round-trip).
+    await submitExam(page);
+    await loginAsAdmin(page);
+    await page.goto(`/admin/grading-queue/${attemptId}`);
+    await expect(page.getByText(prompt1)).toBeVisible();
+    await expect(page.getByText(prompt2)).toBeVisible();
+    await expect(
+      page.getByTestId(`grading-candidate-answer-${q1}`),
+    ).toContainText("甲作答");
+    await expect(
+      page.getByTestId(`grading-candidate-answer-${q2}`),
+    ).toContainText("乙作答");
+  });
+
+  test("stale server answer replaces the editor content (two-way ownership reconciliation)", async ({
+    page,
+    request,
+  }) => {
+    const adminToken = await adminApiToken(request);
+    const courseId = await seedCourseId(request, adminToken);
+    const candidate = await provisionCandidate(request, `rec-${STAMP}`);
+    const prompt = `回调节-${STAMP}`;
+    const q = await createRichQuestion(request, adminToken, courseId, prompt);
+    const { examId } = await assembleExam(
+      request,
+      adminToken,
+      courseId,
+      `301回调节-${STAMP}`,
+      [q],
+      candidate.profileId,
+      20,
+    );
+
+    await candidateLogin(page, candidate);
+    const startResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+      { timeout: 15_000 },
+    );
+    await startExamFromList(page, examId);
+    const attemptId = ((await (await startResponse).json()) as { id: string })
+      .id;
+
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+    await expect(editor).toHaveCount(1);
+    await editor.click();
+    await page.keyboard.type("甲作答");
+    await waitForSaveSaved(page); // client caches version 1
+
+    // A concurrent session (API) writes version 2 behind the UI's back.
+    const candidateToken = await candidateApiToken(request, candidate);
+    const apiSave = await request.post(
+      `${BASE_URL}/api/attempts/${attemptId}/answers/${q}`,
+      {
+        headers: { Cookie: `auth-token=${candidateToken}` },
+        data: {
+          attemptId,
+          questionId: q,
+          answer: answerDoc("乙作答"),
+          clientSeq: 900 + Number(STAMP.slice(-4)),
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 1,
+        },
+      },
+    );
+    expect(apiSave.status()).toBe(200);
+    expect(((await apiSave.json()) as { accepted: boolean }).accepted).toBe(
+      true,
+    );
+
+    // The UI keeps typing — its baseVersion (1) is now stale, so the save
+    // returns STALE_VERSION and the SERVER's authoritative document must
+    // replace the editor content (the two-way ownership protocol).
+    await editor.click();
+    await page.keyboard.type("丙作答");
+    await expect(editor).toContainText("乙作答");
+    await expect(editor).not.toContainText("丙作答");
+
+    // Server still holds the authoritative version 2 document.
+    const take = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    const answerValue = (
+      (await take.json()) as { questions: Array<{ answerValue: unknown }> }
+    ).questions[0]?.answerValue;
+    expect(JSON.stringify(answerValue)).toContain("乙作答");
   });
 });

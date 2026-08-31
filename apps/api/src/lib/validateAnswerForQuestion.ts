@@ -1,5 +1,9 @@
 import { ContentDocumentV1Schema } from "@exam/contracts";
-import { normalizeContentDocument, type QuestionSnapshot } from "@exam/domain";
+import {
+  normalizeContentDocument,
+  preflightContentDocumentStructure,
+  type QuestionSnapshot,
+} from "@exam/domain";
 
 /**
  * Per-question answer payload validation (#301 §21).
@@ -118,6 +122,16 @@ export function validateAnswerForQuestion(
           };
         }
         return { ok: true, value: answer };
+      }
+      // Hostile-structure preflight BEFORE the recursive schema parse (#301
+      // corrective pass): a deeply nested payload must be rejected by the
+      // bounded iterative walker, never by a stack overflow inside z.lazy.
+      const preflight = preflightContentDocumentStructure(answer);
+      if (preflight.length > 0) {
+        return {
+          ok: false,
+          reason: `rich text_response answer is not a valid ContentDocumentV1: ${preflight[0]}`,
+        };
       }
       const parsed = ContentDocumentV1Schema.safeParse(answer);
       if (!parsed.success) {

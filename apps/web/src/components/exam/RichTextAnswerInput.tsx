@@ -9,12 +9,15 @@ import { RichContentEditorLazy } from "@/components/shared/content/RichContentEd
  * Rich answer input for `text_response` questions authored with
  * `answerMode: "rich"` (issue 301). The saved answer is a canonical
  * ContentDocumentV1; a legacy plain-string draft (saved before the mode
- * switch) is upgraded into a document on mount so nothing the candidate
- * typed is lost.
+ * switch) is upgraded into a document so nothing the candidate typed is lost.
  *
- * The initial document is consumed at mount; like Tiptap itself, the editor
- * owns its state afterwards and pushes canonical documents up through
- * onChange (the server re-validates the shape on save).
+ * OWNERSHIP (issue 301 corrective pass): the caller MUST key this component
+ * by question identity — a question switch must remount the editor, never
+ * reuse the previous question's Tiptap document. The `value` prop is the
+ * authoritative answer: it seeds the editor at mount and is re-applied
+ * whenever it is externally replaced (e.g. STALE_VERSION server
+ * reconciliation), while local-edit echoes from the parent state round-trip
+ * are recognized and ignored (see RichContentEditor).
  */
 export function RichTextAnswerInput({
   value,
@@ -27,12 +30,12 @@ export function RichTextAnswerInput({
   disabled?: boolean;
   ariaLabel?: string;
 }) {
-  const initialDocument: ContentDocumentV1 = isContentDocumentV1(value)
+  const document: ContentDocumentV1 = isContentDocumentV1(value)
     ? value
     : plainTextToDocument(typeof value === "string" ? value : "");
   return (
     <RichContentEditorLazy
-      initialDocument={initialDocument}
+      document={document}
       onChange={onChange}
       disabled={disabled}
       ariaLabel={ariaLabel}

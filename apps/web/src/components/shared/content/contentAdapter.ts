@@ -133,16 +133,16 @@ function marksFromTiptap(
 function inlinesFromTiptap(nodes: JSONContent[] | undefined): ContentInline[] {
   return (nodes ?? []).flatMap((node): ContentInline[] => {
     switch (node.type) {
-      case "text":
+      case "text": {
+        const marks = marksFromTiptap(node.marks);
         return [
           {
             type: "text",
             text: node.text ?? "",
-            ...(marksFromTiptap(node.marks)
-              ? { marks: marksFromTiptap(node.marks) }
-              : {}),
+            ...(marks ? { marks } : {}),
           },
         ];
+      }
       case "hardBreak":
         return [{ type: "hardBreak" }];
       case "inlineMath":
@@ -159,6 +159,97 @@ function inlinesFromTiptap(nodes: JSONContent[] | undefined): ContentInline[] {
         throw new Error(`unmappable inline node: ${node.type ?? "missing"}`);
     }
   });
+}
+
+/** Structural equality of two canonical documents' mark lists. */
+function marksEqual(
+  a: ContentMarkType[] | undefined,
+  b: ContentMarkType[] | undefined,
+): boolean {
+  if (a === undefined || a.length === 0) return !b || b.length === 0;
+  if (!b || b.length !== a.length) return false;
+  return a.every((mark, index) => mark === b[index]);
+}
+
+function inlinesEqual(a: ContentInline[], b: ContentInline[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((inline, index) => {
+    const other = b[index];
+    if (!other || inline.type !== other.type) return false;
+    switch (inline.type) {
+      case "text": {
+        const otherText = other as typeof inline;
+        return (
+          inline.text === otherText.text &&
+          marksEqual(inline.marks, otherText.marks)
+        );
+      }
+      case "inlineMath":
+        return inline.latex === (other as typeof inline).latex;
+      case "hardBreak":
+        return true;
+    }
+  });
+}
+
+function blocksEqual(a: ContentBlock[], b: ContentBlock[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((block, index) => {
+    const other = b[index];
+    if (!other || block.type !== other.type) return false;
+    switch (block.type) {
+      case "paragraph":
+        return inlinesEqual(block.content, (other as typeof block).content);
+      case "bulletList":
+      case "orderedList":
+        return (block as typeof block).content.every((item, itemIndex) => {
+          const otherItem = (other as typeof block).content[itemIndex];
+          return (
+            otherItem !== undefined &&
+            blocksEqual(item.content, otherItem.content)
+          );
+        });
+      case "codeBlock": {
+        const otherCode = other as typeof block;
+        return (
+          block.language === otherCode.language && block.text === otherCode.text
+        );
+      }
+      case "blockMath":
+        return block.latex === (other as typeof block).latex;
+      case "table":
+        return (block as typeof block).content.every((row, rowIndex) => {
+          const otherRow = (other as typeof block).content[rowIndex];
+          if (!otherRow || row.content.length !== otherRow.content.length) {
+            return false;
+          }
+          return row.content.every((cell, cellIndex) => {
+            const otherCell = otherRow.content[cellIndex];
+            return (
+              otherCell !== undefined &&
+              blocksEqual(cell.content, otherCell.content)
+            );
+          });
+        });
+    }
+  });
+}
+
+/**
+ * Structural equality of two ContentDocumentV1 values. Both inputs are
+ * expected to be canonical (normalized) documents — e.g. one produced by
+ * `tiptapToContentDocument` and one echoed back from parent state — so
+ * structural equality is semantic equality. Depth is bounded by the grammar
+ * itself (canonical documents pass the kernel's depth limit), so plain
+ * recursion is safe here. Used by the editor's two-way ownership protocol to
+ * tell a local-edit echo (parent state round-tripping the emitted document)
+ * apart from an authoritative external replacement.
+ */
+export function contentDocumentsEqual(
+  a: ContentDocumentV1,
+  b: ContentDocumentV1,
+): boolean {
+  return blocksEqual(a.content, b.content);
 }
 
 function blocksFromTiptap(nodes: JSONContent[] | undefined): ContentBlock[] {

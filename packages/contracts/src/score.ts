@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ContentDocumentV1Schema } from "./contentDocument.js";
+import { AnswerModeEnum, ContentDocumentV1Schema } from "./contentDocument.js";
 
 // ── Score List ────────────────────────────────────────────────────
 
@@ -119,6 +119,12 @@ export const GradingDetailsQuestionSchema = z.object({
    * to candidates via CandidateTakeSnapshot.
    */
   contentDocument: ContentDocumentV1Schema.nullable(),
+  /**
+   * Frozen answer input mode for text_response (#301 corrective pass): the
+   * render authority for `candidateAnswer`. Only `answerMode === "rich"`
+   * answers may render through the rich document renderer.
+   */
+  answerMode: AnswerModeEnum.nullable().default(null),
   maxScore: z.number(),
   /**
    * Frozen reference answer from the QuestionSnapshot (not the live question
@@ -232,6 +238,12 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
   // Rich prompt document (issue 301): null in Plain mode. Candidate result
   // views render it through the static content renderer.
   contentDocument: ContentDocumentV1Schema.nullable(),
+  /**
+   * Frozen answer input mode for text_response (#301 corrective pass): the
+   * render authority for `candidateAnswer`. Only `answerMode === "rich"`
+   * answers may render through the rich document renderer.
+   */
+  answerMode: AnswerModeEnum.nullable().default(null),
   order: z.number().int(),
 });
 

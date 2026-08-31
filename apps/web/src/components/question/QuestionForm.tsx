@@ -396,7 +396,7 @@ export function QuestionForm({
           />
         ) : form.contentDocument ? (
           <RichContentEditorLazy
-            initialDocument={form.contentDocument}
+            document={form.contentDocument}
             onChange={(document) =>
               update({
                 contentDocument: document,
@@ -463,7 +463,7 @@ export function QuestionForm({
                 {opt.contentDocument ? (
                   <div className="flex-1 flex flex-col gap-1">
                     <RichContentEditorLazy
-                      initialDocument={opt.contentDocument}
+                      document={opt.contentDocument}
                       onChange={(document) =>
                         updateOption(i, {
                           contentDocument: document,

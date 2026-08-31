@@ -62,9 +62,13 @@ export function QuestionRenderer({
       );
     case "text_response":
       // answerMode ("plain" | "rich", frozen in the snapshot) decides the
-      // input; it is independent of the prompt's Plain/Rich mode.
+      // input; it is independent of the prompt's Plain/Rich mode. The rich
+      // input is keyed by question identity (issue 301 corrective pass): a
+      // question switch MUST remount the Tiptap editor — reusing the
+      // instance across questions would answer Q2 with Q1's document.
       return question.answerMode === "rich" ? (
         <RichTextAnswerInput
+          key={question.originalQuestionId}
           value={answer}
           onChange={onChange}
           disabled={disabled}
