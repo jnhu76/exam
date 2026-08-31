@@ -84,7 +84,13 @@ describe("pendingForceSubmitAuthority", () => {
 
     it.each([
       ["schemaVersion", { schemaVersion: 1 }],
-      ["createdAt not finite", { createdAt: Number.NaN }],
+      // JSON.stringify serializes NaN to null, so this stored-value case
+      // exercises the not-a-number path; the Number.isFinite guard itself is
+      // reached save-side, before serialization.
+      [
+        "createdAt serialized from a non-finite value",
+        { createdAt: Number.NaN },
+      ],
       [
         "operationId not uuid",
         { command: { ...validAuthority().command, operationId: "not-a-uuid" } },
@@ -180,6 +186,24 @@ describe("pendingForceSubmitAuthority", () => {
       expect(result).toEqual({ ok: false, error: "invalid_authority" });
       expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     });
+
+    // In-memory non-finite createdAt reaches the validator BEFORE
+    // serialization — the load-side case above cannot cover this branch,
+    // because JSON.stringify has already degraded NaN to null by the time the
+    // loader parses it.
+    it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+      "rejects non-finite createdAt before writing (%s)",
+      (createdAt) => {
+        const authority = validAuthority({ createdAt });
+
+        expect(savePendingForceSubmit(authority)).toEqual({
+          ok: false,
+          error: "invalid_authority",
+        });
+
+        expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      },
+    );
 
     it("returns readback_mismatch when the storage returns different bytes and removes them", () => {
       const authority = validAuthority();
