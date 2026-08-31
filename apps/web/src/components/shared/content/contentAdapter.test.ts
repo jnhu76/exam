@@ -1,6 +1,13 @@
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
-import type { ContentBlock, ContentDocumentV1 } from "@exam/domain";
+import type {
+  ContentBlock,
+  ContentBulletList,
+  ContentDocumentV1,
+  ContentListItem,
+  ContentOrderedList,
+  ContentParagraph,
+} from "@exam/domain";
 import {
   contentDocumentToTiptap,
   contentDocumentsEqual,
@@ -343,5 +350,118 @@ describe("contentDocumentsEqual — editor two-way ownership sync (#301 correcti
     });
     expect(contentDocumentsEqual(withCode("js"), withCode("js"))).toBe(true);
     expect(contentDocumentsEqual(withCode(null), withCode(null))).toBe(true);
+  });
+});
+
+describe("contentDocumentsEqual — collection-length equality (corrective pass)", () => {
+  // The comparator is the editor ownership protocol's correctness boundary: a
+  // prefix bug (iterating only `a` and ignoring extra trailing elements of `b`)
+  // would classify [A] == [A,B] and skip a required external replacement. Every
+  // collection in the grammar must compare full lengths, both directions.
+
+  const item = (text: string): ContentListItem => ({
+    type: "listItem",
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  });
+  const bullet = (...items: ContentListItem[]): ContentBulletList => ({
+    type: "bulletList",
+    content: items,
+  });
+  const ordered = (...items: ContentListItem[]): ContentOrderedList => ({
+    type: "orderedList",
+    content: items,
+  });
+  const cell = (text: string) => ({
+    type: "tableCell" as const,
+    content: [
+      {
+        type: "paragraph" as const,
+        content: [{ type: "text" as const, text }],
+      },
+    ],
+  });
+  const row = (...cells: ReturnType<typeof cell>[]) => ({
+    type: "tableRow" as const,
+    content: cells,
+  });
+  const table = (...rows: ReturnType<typeof row>[]): ContentBlock => ({
+    type: "table",
+    content: rows,
+  });
+  const doc = (content: ContentBlock[]): ContentDocumentV1 => ({
+    docVersion: 1,
+    type: "doc",
+    content,
+  });
+  const nestedItem = (
+    ...blocks: Array<ContentParagraph | ContentBulletList | ContentOrderedList>
+  ): ContentListItem => ({
+    type: "listItem",
+    content: blocks,
+  });
+
+  it.each([
+    ["bullet list item count", bullet(item("a")), bullet(item("a"), item("b"))],
+    [
+      "ordered list item count",
+      ordered(item("a")),
+      ordered(item("a"), item("b")),
+    ],
+    [
+      "table row count",
+      table(row(cell("a"))),
+      table(row(cell("a")), row(cell("b"))),
+    ],
+    [
+      "table cell count",
+      table(row(cell("a"))),
+      table(row(cell("a"), cell("b"))),
+    ],
+    [
+      "nested list item count",
+      bullet(nestedItem(bullet(item("a")))),
+      bullet(nestedItem(bullet(item("a"), item("b")))),
+    ],
+  ])("rejects a trailing extra element: %s ([A] != [A,B])", (_name, a, b) => {
+    expect(contentDocumentsEqual(doc([a]), doc([b]))).toBe(false);
+    // Symmetric: [A,B] != [A] too — length is compared on both sides.
+    expect(contentDocumentsEqual(doc([b]), doc([a]))).toBe(false);
+  });
+
+  it("keeps equal-length collections with identical elements equal", () => {
+    expect(
+      contentDocumentsEqual(
+        doc([bullet(item("a"), item("b"))]),
+        doc([bullet(item("a"), item("b"))]),
+      ),
+    ).toBe(true);
+    expect(
+      contentDocumentsEqual(
+        doc([table(row(cell("a"), cell("b")), row(cell("c"), cell("d")))]),
+        doc([table(row(cell("a"), cell("b")), row(cell("c"), cell("d")))]),
+      ),
+    ).toBe(true);
+  });
+
+  it("is symmetric over representative canonical docs (equal(a,b) == equal(b,a))", () => {
+    const pairs: Array<[ContentDocumentV1, ContentDocumentV1]> = [
+      [doc([bullet(item("x"))]), doc([bullet(item("x"))])],
+      [doc([bullet(item("x"))]), doc([bullet(item("x")), bullet(item("y"))])],
+      [
+        doc([ordered(item("1")), ordered(item("1"), item("2"))]),
+        doc([ordered(item("1")), ordered(item("2"))]),
+      ],
+      [
+        doc([table(row(cell("a")), row(cell("b"), cell("c")))]),
+        doc([table(row(cell("a"), cell("b")))]),
+      ],
+      [
+        doc([bullet(nestedItem(bullet(item("inner")), ordered(item("deep"))))]),
+        doc([{ type: "paragraph", content: [{ type: "text", text: "tail" }] }]),
+      ],
+    ];
+    for (const [a, b] of pairs) {
+      expect(contentDocumentsEqual(a, b)).toBe(contentDocumentsEqual(b, a));
+    }
   });
 });

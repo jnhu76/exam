@@ -28,6 +28,30 @@ import {
 } from "./contentAdapter";
 
 /**
+ * Two-way ownership protocol (issue 301 corrective pass round-2): the Tiptap
+ * instance owns its state after mount, but the `document` prop stays the
+ * AUTHORITATIVE answer and may be externally replaced (server reconciliation
+ * after STALE_VERSION, draft restore, parent reset). `currentEditorDocument`
+ * is the canonical document the editor currently holds; a structurally equal
+ * incoming prop is the parent's local-edit echo and must be skipped (setContent
+ * would reset the caret and fight the user's keystrokes); anything else is an
+ * authoritative replacement.
+ *
+ * This is the correctness boundary of the ownership protocol, extracted pure so
+ * the rollback-to-empty / null-clear regressions are unit-testable without a
+ * ProseMirror instance (which cannot be typed in jsdom).
+ */
+export function isAuthoritativeReplacement(
+  incoming: ContentDocumentV1,
+  currentEditorDocument: ContentDocumentV1 | null,
+): boolean {
+  return (
+    currentEditorDocument === null ||
+    !contentDocumentsEqual(incoming, currentEditorDocument)
+  );
+}
+
+/**
  * WYSIWYG rich-text editor (issue 301). The EDIT surface — the ONLY place
  * Tiptap/ProseMirror is imported, always reached through the lazy wrapper
  * (RichContentEditorLazy) so plain-mode bundles never download it.
@@ -37,18 +61,27 @@ import {
  * authority: every change is mapped through contentAdapter into the canonical
  * grammar and surfaced via onChange; the server re-validates on write.
  *
- * Two-way ownership protocol (issue 301 corrective pass): after mount the
+ * Two-way ownership protocol (issue 301 corrective passes): after mount the
  * Tiptap instance owns its state, but the `document` prop stays the
  * AUTHORITATIVE answer and may be externally replaced (server reconciliation
- * after STALE_VERSION, draft restore, parent reset). Each render therefore
- * classifies the incoming prop:
- *   - structurally equal to the document this editor last emitted (local-edit
- *     echo from the parent state round-trip) → skip, never setContent (which
- *     would reset the caret and fight the user's keystrokes);
- *   - structurally equal to the document already applied → skip, no-op sync;
- *   - otherwise an authoritative replacement → editor.commands.setContent
- *     with emitUpdate disabled, so the reset does not echo back through
- *     onUpdate into a save → setContent loop.
+ * after STALE_VERSION, draft restore, parent reset). One ref —
+ * `currentEditorDocumentRef` — tracks the canonical document the editor
+ * CURRENTLY holds, with the invariant
+ *   ref === canonical document currently held by Tiptap.
+ *   - LOCAL EDIT        : onUpdate maps Tiptap JSON → canonical `next`,
+ *                         re-anchors the ref, then onChange(next).
+ *   - PARENT LOCAL ECHO : document == ref → no-op (never setContent, which
+ *                         would reset the caret and fight the user's keys).
+ *   - AUTHORITATIVE     : document != ref → setContent(document,
+ *     REPLACEMENT         emitUpdate:false) so the reset never echoes back
+ *                         through onUpdate into a save → setContent loop;
+ *                         then the ref is re-anchored to the document.
+ * The old model kept a separate "last applied" baseline and skipped any
+ * incoming document that had ever been applied — a stale-baseline bug: after a
+ * local edit the editor held LOCAL but the baseline still said EMPTY, so an
+ * authoritative replacement back to EMPTY was skipped and the editor kept
+ * showing LOCAL. Never treat "was applied once" as "is what the editor holds".
+ *
  * The component must still be keyed by question identity at the call site so
  * a question switch never reuses a Tiptap document across questions.
  *
@@ -71,12 +104,11 @@ export default function RichContentEditor({
   // re-render — keystrokes must not re-render this component's React tree.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  // Canonical document last pushed up through onChange (LOCAL EDIT marker).
-  const lastEmittedRef = useRef<ContentDocumentV1 | null>(null);
-  // Canonical document the editor currently holds (mount + every applied
-  // replacement). useRef's initializer captures the FIRST render's document —
-  // exactly the one useEditor consumed at creation.
-  const appliedRef = useRef<ContentDocumentV1 | null>(document);
+  // INVARIANT: currentEditorDocumentRef === canonical document currently held
+  // by Tiptap. useRef's initializer captures the FIRST render's document —
+  // exactly the one useEditor consumed at creation — and every local edit or
+  // applied replacement below re-anchors it.
+  const currentEditorDocumentRef = useRef<ContentDocumentV1 | null>(document);
 
   const editor = useEditor({
     extensions: [
@@ -112,7 +144,10 @@ export default function RichContentEditor({
     onUpdate: ({ editor }) => {
       try {
         const next = tiptapToContentDocument(editor.getJSON());
-        lastEmittedRef.current = next;
+        // LOCAL EDIT: re-anchor the ownership ref to the document Tiptap now
+        // holds BEFORE surfacing it, so a later authoritative replacement back
+        // to an older baseline is never skipped as a stale "already applied".
+        currentEditorDocumentRef.current = next;
         onChangeRef.current(next);
       } catch {
         // Unmappable node (extension regression): keep the last good
@@ -135,17 +170,17 @@ export default function RichContentEditor({
   useEffect(() => {
     if (!editor) return;
     if (
-      (lastEmittedRef.current &&
-        contentDocumentsEqual(document, lastEmittedRef.current)) ||
-      (appliedRef.current &&
-        contentDocumentsEqual(document, appliedRef.current))
+      !isAuthoritativeReplacement(document, currentEditorDocumentRef.current)
     ) {
+      // PARENT LOCAL ECHO: the prop is the document this editor just emitted —
+      // structurally equal to what Tiptap holds. Skip; setContent here would
+      // reset the caret and fight the user's keystrokes.
       return;
     }
-    // Authoritative external replacement — server reconciliation, restore,
-    // or parent reset. The editor adopts it as its new baseline.
-    appliedRef.current = document;
-    lastEmittedRef.current = document;
+    // AUTHORITATIVE EXTERNAL REPLACEMENT — server reconciliation, restore, or
+    // parent reset. The editor adopts it as its new baseline; emitUpdate:false
+    // so the reset does not echo back through onUpdate into a save loop.
+    currentEditorDocumentRef.current = document;
     editor.commands.setContent(contentDocumentToTiptap(document), {
       emitUpdate: false,
     });

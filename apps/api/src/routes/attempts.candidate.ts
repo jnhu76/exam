@@ -1035,15 +1035,20 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           throw new NotFoundError("尝试不存在");
         }
 
-        // #301 §21 + canonical Save ordering (corrective pass §5): the route
-        // delegates the WHOLE Save Answer action — status guards, effective
-        // deadline guard, question membership, answer shape validation and
-        // rich canonicalization, idempotency/version semantics, persist — to
-        // the engine. It supplies only the frozen-question-bound canonicalizer
-        // and inspects the returned semantic result to translate it to the
-        // wire contract. It does NOT gate validation on attempt status, does
-        // NOT validate membership, compute the effective deadline,
-        // reconstruct AnswerState, or write attempt.answers itself.
+        // #301 §21 + canonical Save ordering (corrective pass §5, order
+        // clarified in round-2): the route delegates the WHOLE Save Answer
+        // action to the engine, whose actual order is
+        //   attempt identity → frozen question membership (P1)
+        //     → reconstruct AnswerState → status guards → effective-deadline
+        //     guard → answer canonicalization (frozen-question-bound) →
+        //     idempotency/version semantics → persist.
+        // Question membership therefore precedes the status/deadline guards
+        // (it is a ValidationError in saveAnswer, not a protocol rejection).
+        // The route supplies only the frozen-question-bound canonicalizer and
+        // inspects the returned semantic result to translate it to the wire
+        // contract. It does NOT gate validation on attempt status, does NOT
+        // validate membership, compute the effective deadline, reconstruct
+        // AnswerState, or write attempt.answers itself.
         const saved = await saveAnswer(
           attempts,
           mutationContext,

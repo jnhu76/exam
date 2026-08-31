@@ -411,3 +411,88 @@ describe("question contract evolution (#301)", () => {
     expect(parsed.options[0]?.contentDocument).toEqual(rich.contentDocument);
   });
 });
+
+describe("ContentDocumentV1Schema — preflight-safe parse entry (corrective pass round-2)", () => {
+  /**
+   * Real recursive grammar bomb: doc → bulletList → listItem → bulletList →
+   * listItem … to `depth` list levels, with a paragraph leaf. The grammar is
+   * mutually recursive, so WITHOUT the iterative preflight the recursive
+   * parser would overflow the stack on these. The public schema must reject
+   * them with a controlled failure, never a RangeError.
+   */
+  function grammarBomb(depth: number): unknown {
+    let block: Record<string, unknown> = {
+      type: "paragraph",
+      content: [{ type: "text", text: "leaf" }],
+    };
+    for (let i = 0; i < depth; i++) {
+      block = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [block] }],
+      };
+    }
+    return { docVersion: 1, type: "doc", content: [block] };
+  }
+
+  it.each([100, 500, 1000])(
+    "rejects a %i-level recursive grammar bomb in a controlled way (no RangeError)",
+    (depth) => {
+      expect(() =>
+        ContentDocumentV1Schema.safeParse(grammarBomb(depth)),
+      ).not.toThrow();
+      const parsed = ContentDocumentV1Schema.safeParse(grammarBomb(depth));
+      expect(parsed.success).toBe(false);
+    },
+  );
+
+  it("rejects the bomb inside a CreateQuestionRequestSchema body (Fastify validator path)", () => {
+    const body = {
+      ...RICH_TEXT_RESPONSE_CREATE,
+      contentDocument: grammarBomb(500),
+    };
+    expect(() => CreateQuestionRequestSchema.safeParse(body)).not.toThrow();
+    expect(CreateQuestionRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it("rejects the bomb inside an UpdateQuestionRequestSchema body", () => {
+    expect(
+      UpdateQuestionRequestSchema.safeParse({
+        contentDocument: grammarBomb(500),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("proves the preflight fired: the rejection names the structural limit, not a grammar mismatch", () => {
+    const parsed = ContentDocumentV1Schema.safeParse(grammarBomb(500));
+    const message = parsed.error?.issues[0]?.message ?? "";
+    expect(message).toMatch(/nesting exceeds|depth exceeds|structural/);
+  });
+
+  it("still accepts the deepest legal grammar document (7 nested lists = tree depth 16)", () => {
+    let block: Record<string, unknown> = {
+      type: "paragraph",
+      content: [{ type: "text", text: "leaf" }],
+    };
+    for (let i = 0; i < 7; i++) {
+      block = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [block] }],
+      };
+    }
+    const parsed = ContentDocumentV1Schema.safeParse({
+      docVersion: 1,
+      type: "doc",
+      content: [block],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("keeps null/undefined handling intact for the composed schema", () => {
+    expect(ContentDocumentV1Schema.nullable().safeParse(null).success).toBe(
+      true,
+    );
+    expect(ContentDocumentV1Schema.nullish().safeParse(undefined).success).toBe(
+      true,
+    );
+  });
+});

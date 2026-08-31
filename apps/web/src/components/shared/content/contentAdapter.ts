@@ -202,7 +202,10 @@ function blocksEqual(a: ContentBlock[], b: ContentBlock[]): boolean {
         return inlinesEqual(block.content, (other as typeof block).content);
       case "bulletList":
       case "orderedList":
-        return (block as typeof block).content.every((item, itemIndex) => {
+        if (block.content.length !== (other as typeof block).content.length) {
+          return false;
+        }
+        return block.content.every((item, itemIndex) => {
           const otherItem = (other as typeof block).content[itemIndex];
           return (
             otherItem !== undefined &&
@@ -218,7 +221,10 @@ function blocksEqual(a: ContentBlock[], b: ContentBlock[]): boolean {
       case "blockMath":
         return block.latex === (other as typeof block).latex;
       case "table":
-        return (block as typeof block).content.every((row, rowIndex) => {
+        if (block.content.length !== (other as typeof block).content.length) {
+          return false;
+        }
+        return block.content.every((row, rowIndex) => {
           const otherRow = (other as typeof block).content[rowIndex];
           if (!otherRow || row.content.length !== otherRow.content.length) {
             return false;

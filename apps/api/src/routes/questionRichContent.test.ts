@@ -294,13 +294,24 @@ describe("#301 hostile-depth write protection (corrective pass)", () => {
 
   /**
    * Builds a question create payload whose contentDocument nests `depth`
-   * array levels around a leaf — under the HTTP body limit, far beyond the
-   * grammar's legal depth. Every OTHER field is valid, so the only possible
+   * REAL grammar levels — bulletList → listItem → bulletList → listItem … to
+   * a paragraph leaf (corrective pass round-2: a grammar-shaped bomb, not a
+   * raw array nest). The grammar is mutually recursive, so without the
+   * schema-level iterative preflight the recursive parser would overflow the
+   * stack on these. Every OTHER field is valid, so the only possible
    * rejection reason is the hostile structure itself.
    */
-  function hostilePayload(depth: number): Record<string, unknown> {
-    let content: unknown = [{ type: "text", text: "leaf" }];
-    for (let i = 0; i < depth; i++) content = [content];
+  function hostileGrammarPayload(depth: number): Record<string, unknown> {
+    let block: Record<string, unknown> = {
+      type: "paragraph",
+      content: [{ type: "text", text: "leaf" }],
+    };
+    for (let i = 0; i < depth; i++) {
+      block = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [block] }],
+      };
+    }
     return {
       courseId,
       score: 5,
@@ -310,24 +321,30 @@ describe("#301 hostile-depth write protection (corrective pass)", () => {
       options: [],
       standardAnswer: null,
       rubric: "r",
-      contentDocument: { docVersion: 1, type: "doc", content },
+      contentDocument: { docVersion: 1, type: "doc", content: [block] },
     };
   }
 
-  // The Fastify body parser (JSON.parse) is the FIRST structural authority:
-  // at extreme depths it may reject the body itself with a controlled 400
-  // before any route code runs. Whichever layer fires, the result must be a
-  // controlled rejection — never a 500, RangeError, or process crash.
+  // Hostile-depth protection is a schema-level closure (corrective pass
+  // round-2): ContentDocumentV1Schema pipes an iterative preflight in front of
+  // the recursive grammar, and Fastify validates the body BEFORE the handler.
+  // A grammar bomb must be rejected with a controlled 400 — never a 500,
+  // RangeError, or process crash — and the rejection must be the PREFLIGHT
+  // (bounded nesting message), proving the recursive parser never saw it.
   it.each([100, 500, 1000])(
-    "question write with %i-level nested document is rejected in a controlled way",
+    "question write with a %i-level recursive grammar bomb is rejected in a controlled way",
     async (depth) => {
       const res = await ctx.app.inject({
         method: "POST",
         url: "/api/questions",
-        payload: hostilePayload(depth),
+        payload: hostileGrammarPayload(depth),
         cookies: { "auth-token": ctx.adminToken },
       });
       expect(res.statusCode).toBe(400);
+      // The rejection names the structural limit — the iterative preflight
+      // fired before the recursive grammar could be reached (or reject).
+      const body = res.json();
+      expect(JSON.stringify(body)).toMatch(/nesting exceeds|depth exceeds/);
       // No question was persisted.
       const list = await ctx.app.inject({
         method: "GET",

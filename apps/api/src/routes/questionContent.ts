@@ -1,42 +1,11 @@
 import {
   normalizeContentDocument,
   plainTextProjection,
-  preflightContentDocumentStructure,
   type ContentDocumentV1,
   type ContentMode,
   type QuestionType,
 } from "@exam/domain";
 import { ValidationError } from "@exam/domain";
-
-/**
- * Hostile-depth preflight for a raw question write body (#301 corrective
- * pass §7/§8). Runs BEFORE the recursive Zod parse of
- * Create/UpdateQuestionRequestSchema: a payload nested thousands of levels
- * deep must be rejected by the bounded iterative walker, not by a stack
- * overflow inside the recursive schema. Only the rich slots are walked — the
- * rest of the body cannot drive recursive parsing.
- */
-export function assertRichContentWriteBodySafe(body: unknown): void {
-  if (typeof body !== "object" || body === null) return;
-  const slots: unknown[] = [(body as Record<string, unknown>).contentDocument];
-  const options = (body as Record<string, unknown>).options;
-  if (Array.isArray(options)) {
-    for (const option of options) {
-      if (typeof option === "object" && option !== null) {
-        slots.push((option as Record<string, unknown>).contentDocument);
-      }
-    }
-  }
-  for (const slot of slots) {
-    if (slot == null) continue;
-    const violations = preflightContentDocumentStructure(slot);
-    if (violations.length > 0) {
-      throw new ValidationError(
-        `contentDocument is not a valid ContentDocumentV1: ${violations[0]}`,
-      );
-    }
-  }
-}
 
 /**
  * B′ server-side content write authority (#301 §2).
@@ -47,6 +16,12 @@ export function assertRichContentWriteBodySafe(body: unknown): void {
  * plain-text projection; the client's `content`, if any, is never trusted.
  * For a Plain write `content_document` is persisted as NULL so legacy and
  * plain rows stay indistinguishable.
+ *
+ * Hostile-depth protection is a schema-level closure (corrective pass
+ * round-2): `ContentDocumentV1Schema` — which types every rich slot in the
+ * create/update request schemas — runs the bounded iterative preflight before
+ * its recursive grammar, so Fastify's own body validation rejects a deep bomb
+ * before any handler code runs. No route-level preflight duplicate exists.
  */
 
 /** An option payload after request-schema parsing (content optional for rich). */

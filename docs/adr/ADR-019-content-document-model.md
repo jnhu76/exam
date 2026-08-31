@@ -63,18 +63,26 @@ Adopt the **B′ additive dual-mode model** for question content:
    only and is frozen through the QuestionSnapshot like every other grading
    input. Rich answers are validated (shape), canonicalized (normalize), and
    compared (idempotency equality) AFTER canonicalization. Canonical Save
-   ordering (review round-1): the frozen-question-bound canonicalizer runs
-   INSIDE the decision core at the canonical precedence point — after the
-   status and effective-deadline guards and question membership, before
-   idempotency/version semantics — so lifecycle guards keep precedence
-   structurally: a malformed payload can never mask (or be masked by) a
-   protocol rejection, and idempotency/equality/persistence only ever see
-   canonical values. A hostile deep document is rejected by a bounded,
-   iterative preflight before the recursive schema parse, at every write and
-   render boundary. Persisted answers activate the rich renderer only when
-   the frozen `answerMode` is rich AND the value passes the preflight + deep
-   schema validation; document-looking payloads on plain/legacy answers keep
-   the safe legacy formatter.
+   ordering (review round-1, corrected in round-2): the engine's `saveAnswer`
+   establishes, in order, attempt identity → frozen question membership (P1,
+   local legality) → reconstructed AnswerState → then the pure decision core's
+   status guards → effective-deadline guard → the frozen-question-bound
+   canonicalizer → idempotency/version semantics on canonical values. Question
+   membership therefore precedes the status/deadline guards (it is a
+   ValidationError in `saveAnswer`, not a protocol rejection); the canonicalizer
+   runs after membership AND the lifecycle guards, so lifecycle guards keep
+   precedence structurally: a malformed payload can never mask (or be masked
+   by) a protocol rejection, and idempotency/equality/persistence only ever see
+   canonical values. Hostile-depth protection is a schema-level closure
+   (corrective pass round-2): the public `ContentDocumentV1Schema` pipes a
+   bounded iterative preflight in front of its recursive grammar, so every
+   write and render parse entry — Fastify route validation, SaveAnswer
+   canonicalization, client-side guards, read-side re-validation — is
+   preflight-safe by construction, with no route-level duplicate. Persisted
+   answers activate the rich renderer only when the frozen `answerMode` is rich
+   AND the value passes the preflight + deep schema validation;
+   document-looking payloads on plain/legacy answers keep the safe legacy
+   formatter.
 6. **Renderer is static.** The candidate/grader READ path renders documents
    with a pure-React component over the closed grammar — never Tiptap, never
    `contentEditable`, never `dangerouslySetInnerHTML` — with a controlled

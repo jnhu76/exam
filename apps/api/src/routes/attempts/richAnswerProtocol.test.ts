@@ -379,6 +379,44 @@ describe("#301 save-answer corrective pass — hostile depth & deadline preceden
     },
   );
 
+  it("rich SaveAnswer with a grammar-shaped nested-list bomb reaches the recursive branch and is rejected", async () => {
+    // Corrective pass round-2: the raw-array bombs above never reach the
+    // recursive grammar (they fail the preflight's shape gate immediately).
+    // This is a REAL grammar bomb — bulletList → listItem → bulletList → … —
+    // that only the depth/length preflight can stop. It must be rejected in a
+    // controlled way (200 INVALID_ANSWER through the canonicalizer's
+    // preflight, or a Fastify 400), never a 500/RangeError/crash.
+    let block: Record<string, unknown> = {
+      type: "paragraph",
+      content: [{ type: "text", text: "leaf" }],
+    };
+    for (let i = 0; i < 500; i++) {
+      block = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [block] }],
+      };
+    }
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${richQId}`,
+      payload: {
+        attemptId,
+        questionId: richQId,
+        answer: { docVersion: 1, type: "doc", content: [block] },
+        clientSeq: 10_000 + 500,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    if (res.statusCode === 200) {
+      expect(res.json().accepted).toBe(false);
+      expect(res.json().reason).toBe("INVALID_ANSWER");
+    } else {
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
   it("an expired attempt rejects a malformed payload with the RECONCILIATION precedence (ATTEMPT_ALREADY_SUBMITTED), not INVALID_ANSWER", async () => {
     // Save a valid rich draft first (version 1).
     const validDoc = {

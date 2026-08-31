@@ -4,6 +4,7 @@ import {
   CONTENT_DOC_VERSION,
   CONTENT_LIMITS,
   checkContentDocumentLimits,
+  preflightContentDocumentStructure,
   type ContentBlockMath,
   type ContentBlock,
   type ContentBulletList,
@@ -173,7 +174,15 @@ const ContentBlockSchema = z.union([
   TableSchema,
 ]);
 
-export const ContentDocumentV1Schema = z
+/**
+ * The recursive ContentDocumentV1 grammar + post-parse structural limits.
+ * Exported only so the public entry can pipe the iterative preflight in front
+ * of it. NEVER parse raw unknown input with this schema directly: the grammar
+ * is mutually recursive (z.lazy over lists/tables), so a hostile payload
+ * nested thousands of levels deep would overflow the parser here before any
+ * limit check runs. Use `ContentDocumentV1Schema`.
+ */
+export const RecursiveContentDocumentV1Schema = z
   .object({
     docVersion: z.literal(CONTENT_DOC_VERSION),
     type: z.literal("doc"),
@@ -187,6 +196,41 @@ export const ContentDocumentV1Schema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: violation });
     }
   });
+
+/**
+ * Iterative, bounded structural preflight for an UNKNOWN value about to enter
+ * the recursive grammar (issue 301 corrective pass round-2). Runs BEFORE any
+ * recursive descent so a deep/large/cyclic payload is rejected by the bounded
+ * walker instead of overflowing the recursive parser. The check function keeps
+ * this schema's output equal to its input (unknown), so piping it in front of
+ * the recursive grammar adds no transform — type identity is preserved.
+ */
+export const RawPreflightSchema: z.ZodType<unknown, z.ZodTypeDef, unknown> =
+  z.custom<unknown>(
+    (value) => preflightContentDocumentStructure(value).length === 0,
+    (value) => ({
+      message:
+        preflightContentDocumentStructure(value)[0] ??
+        "document failed structural preflight",
+    }),
+  );
+
+/**
+ * Public ContentDocumentV1 wire schema — the ONLY parse entry for raw unknown
+ * input. It is preflight-safe by construction:
+ *
+ *   raw unknown
+ *     ↓ RawPreflightSchema (iterative, bounded — rejects hostile depth/size)
+ *     ↓ RecursiveContentDocumentV1Schema (grammar + limits)
+ *
+ * Any `parse` / `safeParse` call (Fastify route validation, SaveAnswer
+ * canonicalization, client-side guards, read-side re-validation) is safe
+ * against deep hostile payloads, so no caller can forget to add its own
+ * preflight step.
+ */
+export const ContentDocumentV1Schema = RawPreflightSchema.pipe(
+  RecursiveContentDocumentV1Schema,
+);
 
 export type ContentDocumentV1DTO = z.infer<typeof ContentDocumentV1Schema>;
 

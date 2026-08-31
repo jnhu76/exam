@@ -508,6 +508,45 @@ test.describe("issue 301 corrective pass — editor identity, reconciliation, gr
     await expect(
       page.getByTestId(`grading-candidate-answer-${q2}`),
     ).toContainText("乙作答");
+
+    // ── Manual grading closure: score + finalize BOTH rich answers ────────
+    await page.getByTestId(`grading-score-input-${q1}`).fill("15");
+    await page.getByTestId(`grading-comment-input-${q1}`).fill("完整清晰");
+    await page.getByTestId(`grading-submit-btn-${q1}`).click();
+    await page.getByRole("button", { name: "确认提交" }).click();
+    // First of two manual entries → non-terminal save toast (评分已保存).
+    await expect(page.getByText("评分已保存", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.getByTestId(`grading-score-input-${q2}`).fill("15");
+    await page.getByTestId(`grading-comment-input-${q2}`).fill("论证到位");
+    await page.getByTestId(`grading-submit-btn-${q2}`).click();
+    await page.getByRole("button", { name: "确认提交" }).click();
+    // Last pending-manual entry → finalizeTerminalGrading → 评分已完成.
+    await expect(page.getByText("评分已完成", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // ── Terminal: attempt graded + fully_graded ──────────────────────────
+    const takeAfter = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(takeAfter.status()).toBe(200);
+    const takeAfterBody = (await takeAfter.json()) as {
+      attemptStatus: string;
+      gradingStatus: string;
+    };
+    expect(takeAfterBody.attemptStatus).toBe("graded");
+    expect(takeAfterBody.gradingStatus).toBe("fully_graded");
+
+    // ── Candidate result: visible, total 30, rich answers render safely ──
+    await candidateLogin(page, candidate);
+    await page.goto(`/exam/${attemptId}/result`);
+    await expect(page.getByTestId("result-total-score")).toHaveText("30");
+    await expect(page.getByText("甲作答")).toBeVisible();
+    await expect(page.getByText("乙作答")).toBeVisible();
   });
 
   test("stale server answer replaces the editor content (two-way ownership reconciliation)", async ({
@@ -585,5 +624,95 @@ test.describe("issue 301 corrective pass — editor identity, reconciliation, gr
       (await take.json()) as { questions: Array<{ answerValue: unknown }> }
     ).questions[0]?.answerValue;
     expect(JSON.stringify(answerValue)).toContain("乙作答");
+  });
+
+  test("server rollback to an EMPTY authoritative answer clears the editor; typing resumes from empty", async ({
+    page,
+    request,
+  }) => {
+    // Ownership regression (round-2): initial = EMPTY; local edit → LOCAL; the
+    // server's authoritative value becomes EMPTY again. The editor must become
+    // EMPTY (the old appliedRef-baseline model skipped this and kept showing
+    // LOCAL), and the next local edit must start from the EMPTY baseline.
+    const adminToken = await adminApiToken(request);
+    const courseId = await seedCourseId(request, adminToken);
+    const candidate = await provisionCandidate(request, `rb-${STAMP}`);
+    const prompt = `清空回调节-${STAMP}`;
+    const q = await createRichQuestion(request, adminToken, courseId, prompt);
+    const { examId } = await assembleExam(
+      request,
+      adminToken,
+      courseId,
+      `301清空回调节-${STAMP}`,
+      [q],
+      candidate.profileId,
+      20,
+    );
+
+    await candidateLogin(page, candidate);
+    const startResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+      { timeout: 15_000 },
+    );
+    await startExamFromList(page, examId);
+    const attemptId = ((await (await startResponse).json()) as { id: string })
+      .id;
+
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+    await expect(editor).toHaveCount(1);
+
+    // initial = EMPTY; local edit → LOCAL (version 1).
+    await editor.click();
+    await page.keyboard.type("LOCAL");
+    await waitForSaveSaved(page);
+
+    // The server's authoritative answer becomes EMPTY behind the UI's back.
+    const candidateToken = await candidateApiToken(request, candidate);
+    const emptyDoc = { docVersion: 1, type: "doc", content: [] };
+    const apiSave = await request.post(
+      `${BASE_URL}/api/attempts/${attemptId}/answers/${q}`,
+      {
+        headers: { Cookie: `auth-token=${candidateToken}` },
+        data: {
+          attemptId,
+          questionId: q,
+          answer: emptyDoc,
+          clientSeq: 6000 + Number(STAMP.slice(-4)),
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 1,
+        },
+      },
+    );
+    expect(apiSave.status()).toBe(200);
+    expect(((await apiSave.json()) as { accepted: boolean }).accepted).toBe(
+      true,
+    );
+
+    // The UI keeps typing — its baseVersion (1) is now stale; STALE_VERSION
+    // returns the server's EMPTY authoritative document, which must REPLACE
+    // the editor content. The editor becomes EMPTY — never keeps showing LOCAL.
+    await editor.click();
+    await page.keyboard.type("丙作答");
+    await expect(editor).not.toContainText("丙作答");
+    await expect(editor).not.toContainText("LOCAL");
+
+    // The next local edit starts from the EMPTY baseline and saves cleanly.
+    await editor.click();
+    await page.keyboard.type("SERVER-NEXT");
+    await waitForSaveSaved(page);
+
+    const take = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    const finalAnswer = (
+      (await take.json()) as { questions: Array<{ answerValue: unknown }> }
+    ).questions[0]?.answerValue;
+    expect(JSON.stringify(finalAnswer)).toContain("SERVER-NEXT");
+    expect(JSON.stringify(finalAnswer)).not.toContain("LOCAL");
+    expect(JSON.stringify(finalAnswer)).not.toContain("丙作答");
   });
 });

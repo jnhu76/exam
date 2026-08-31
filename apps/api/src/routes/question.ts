@@ -23,7 +23,6 @@ import {
 import { resolveTeacherCourseScope } from "./teacherScope.js";
 import {
   assertRichContentUpdateAllowed,
-  assertRichContentWriteBodySafe,
   resolveQuestionContentWrite,
 } from "./questionContent.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
@@ -277,9 +276,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     /** Create a new question. Validates that the referenced courseId exists. Returns 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
-      // Hostile-depth preflight BEFORE the recursive schema parse (#301
-      // corrective pass §8). The CSV import path carries no rich slots.
-      assertRichContentWriteBodySafe(request.body);
+      // Hostile-depth protection is schema-level (corrective pass round-2):
+      // ContentDocumentV1Schema preflights every rich slot before its
+      // recursive grammar, and Fastify validates the body BEFORE this handler,
+      // so a deep bomb never reaches handler code.
       const parsed = CreateQuestionRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
@@ -383,10 +383,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      // Hostile-depth preflight BEFORE the recursive schema parse (#301
-      // corrective pass §8); covers both the update parse and the merged
-      // re-validation parse below, which replays the raw document slots.
-      assertRichContentWriteBodySafe(request.body);
+      // Hostile-depth protection is schema-level (corrective pass round-2):
+      // ContentDocumentV1Schema preflights every rich slot before its
+      // recursive grammar — this covers both Fastify's body validation and the
+      // merged re-validation parse below, which replays the raw document slots.
       const data = UpdateQuestionRequestSchema.parse(request.body);
       const repo = createQuestionRepo(fastify.db);
       const existing = await repo.findById(ctx, id);
