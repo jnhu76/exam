@@ -112,6 +112,7 @@ function buildQuestionResults(
       ...result,
       type: question.type,
       content: question.content,
+      contentDocument: question.contentDocument ?? null,
       order: question.order,
       // Computed BEFORE the own-view standardAnswer stripping: the candidate
       // DTO drops standardAnswer for every question, so the UI needs an

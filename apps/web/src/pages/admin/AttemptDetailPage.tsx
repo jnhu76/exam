@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { isContentDocumentV1, plainTextProjection } from "@exam/domain";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
@@ -226,9 +227,10 @@ interface MisconductFlag {
   severity: "warning" | "serious";
 }
 
-/** Converts an answer value to a display-friendly string. */
+/** Converts an answer value to a display-friendly string. Rich documents (issue 301) collapse to their plain-text projection for the compact table cells. */
 function formatAnswer(value: unknown): string {
   if (value == null) return "—";
+  if (isContentDocumentV1(value)) return plainTextProjection(value);
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.join(", ");
   return String(value);

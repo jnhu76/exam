@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import type { ContentDocumentV1 } from "@exam/domain";
+import { isContentDocumentV1 } from "@exam/domain";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
+import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
 import i18n from "@/i18n";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -137,6 +141,8 @@ interface GradingQuestion {
   questionId: string;
   type: string;
   content: string;
+  /** Rich prompt document (issue 301); null in Plain mode. */
+  contentDocument?: ContentDocumentV1 | null;
   maxScore: number;
   standardAnswer: unknown;
   rubric: string | null;
@@ -458,7 +464,12 @@ export function GradingDetailPage() {
         return (
           <Card key={q.questionId}>
             <CardHeader>
-              <CardTitle className="text-base">{q.content}</CardTitle>
+              <CardTitle className="text-base">
+                <ContentRenderer
+                  content={q.content}
+                  document={q.contentDocument}
+                />
+              </CardTitle>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>
                   {t("admin.gradingDetail.question.maxScore", {
@@ -478,7 +489,11 @@ export function GradingDetailPage() {
                   data-testid={`grading-candidate-answer-${q.questionId}`}
                   className="type-long-response min-h-16 rounded-md border bg-muted/30 p-3"
                 >
-                  {formatAnswer(q.candidateAnswer)}
+                  {isContentDocumentV1(q.candidateAnswer) ? (
+                    <ContentDocumentRenderer document={q.candidateAnswer} />
+                  ) : (
+                    formatAnswer(q.candidateAnswer)
+                  )}
                 </div>
               </div>
               <div className="space-y-2">

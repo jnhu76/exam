@@ -229,6 +229,9 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
     "text_response",
   ]),
   content: z.string(),
+  // Rich prompt document (issue 301): null in Plain mode. Candidate result
+  // views render it through the static content renderer.
+  contentDocument: ContentDocumentV1Schema.nullable(),
   order: z.number().int(),
 });
 

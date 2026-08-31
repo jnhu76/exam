@@ -4,6 +4,9 @@ import { CircleCheck, CircleX } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
 import type { AttemptResultResponse } from "@exam/contracts";
+import { isContentDocumentV1 } from "@exam/domain";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
+import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
@@ -43,7 +46,7 @@ function formatQuestionType(type: string, t: (key: string) => string): string {
   return label === key ? type : label;
 }
 
-/** Renders an answer value as text, with optional truncation for long fill-blank answers. */
+/** Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer (issue 301). */
 function AnswerText({
   answer,
   truncate,
@@ -53,6 +56,9 @@ function AnswerText({
   truncate?: boolean;
   t: (key: string) => string;
 }) {
+  if (isContentDocumentV1(answer)) {
+    return <ContentDocumentRenderer document={answer} />;
+  }
   const text = formatAnswer(answer, t);
   return (
     <span className={truncate ? "block max-w-48 truncate" : ""} title={text}>
@@ -177,7 +183,10 @@ export function ResultPage() {
                             {question.order + 1}
                           </DataTableCell>
                           <DataTableCell role="long-text">
-                            {question.content}
+                            <ContentRenderer
+                              content={question.content}
+                              document={question.contentDocument}
+                            />
                           </DataTableCell>
                           <DataTableCell role="type">
                             {formatQuestionType(
