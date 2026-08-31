@@ -52,6 +52,19 @@
 
 ## 已修复事故
 
+### 2026-09-01 — CI API coverage 4-worker 并行下 DB 生命周期钩子漂移超时（PR #362 S1 anti-decay）
+
+- **现象**：CI run 33425276029（2026-08-31T18:29Z，pull_request，`chore/recovery-anti-decay-s1` @ cdafbd38）的 API coverage job（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`）失败；同 run 其余 job（Build / Static / E2E×2 / Web / Package / fresh-install）全部通过。3 个文件 6 个错误，全部为 DB 生命周期钩子超时，无任何断言失败：
+  - `src/routes/clientEvents.test.ts:20` — `beforeAll` 内 `buildTestApp` `Hook timed out in 10000ms` → `:29` afterAll 次生 `TypeError: Cannot read properties of undefined (reading 'db')`；7 tests skipped
+  - `src/routes/importLogs.test.ts:11` — 同上 10000ms → `:37` 次生 `(reading 'cleanup')`；10 tests skipped
+  - `src/email/emailDeliveryService.test.ts:155` — BUSINESS SAFETY 用例 `Test timed out in 5000ms` + `:50` afterAll `cleanup` `Hook timed out in 10000ms`
+- **证据（同代码再跑就过，登记规则 #1）**：本地同一 commit 用与 CI 完全相同的命令（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage`）全绿：184 文件 / 2447 passed + 12 skipped（总数 2459 与 CI 一致），0 超时，EXIT=0。
+- **排除回归**：3 个失败文件不导入该 PR 改动的任何模块（recoveryRepo / incidents.admin / pending*Authority）；同一 CI run 中导入这些模块的测试（incidents.admin.test.ts、pendingForceSubmitAuthority.test.ts 等）全部通过；Package coverage（含 recoveryRepo 生命周期矩阵）通过。
+- **失败签名**：3 个文件的钩子在 ~23s 窗口（18:34:41–18:35:04）内同时漂移越界，而同窗口其他 worker 的 DB 测试正常完成（settings 847ms、api-smoke 639ms、submitAndGradeAttempt 1273ms）—— PG 服务健康，是 runner 负载（4 vCPU 上 4 个 coverage-instrumented worker + PG + Redis；import 阶段 137.97s）下的调度漂移，失败点落在 DB 生命周期钩子（10s hookTimeout / 5s testTimeout）。
+- **根因假设**：BUG-FLAKE-001 I/O contention / 宿主负载家族（见 2026-08-31、2026-08-26 条目）在 CI runner 上的首次发生；CI 4-worker worker-database 模式放大了单 runner 上的 CPU/IO 争用。注：2026-08-29 fix/351 分支的 API coverage 失败为 `server.shutdown.test.ts` 断言失败，不属于本家族。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry）；推送本登记提交触发新 CI run 验证转绿。
+- **后续动作**：CI API coverage 同家族失败累计 ≥3 次时，按登记规则升级为正式跟踪条目（届时再评估结构性减负；worker-DB bootstrap 已有 per-process memo，warm 路径无重复全局锁获取）。
+
 ### 2026-08-31 — 并行跑 api + web 两个独立测试套件引发的宿主负载型 5s 超时（#301 deletion audit 观察）
 
 - **现象**：`pnpm --filter @exam/api test` 与 `pnpm --filter @exam/web test` 作为两个独立 pnpm 进程**同时**在后台运行（同一 WSL2 8-core 主机），api 出现 4 个、web 出现 1 个 `Test timed out in 5000ms`。失败位置互不相干，且与本次改动的 rich-content 相关测试文件无任何交集：

@@ -1,5 +1,5 @@
 /**
- * J5-I1C Slice 2 review P1-2 — Same-tab pending force-submit authority.
+ * Same-tab pending force-submit authority.
  *
  * A force-submit is an operationId-keyed durable command: a lost response
  * after the server committed must NOT cause a blind retry to mint a NEW
@@ -8,32 +8,31 @@
  * and reuse the SAME operationId + reason on every retry until a confirmed
  * outcome (success or definitive rejection) arrives.
  *
- * Scope (per the review's stated minimum): SAME-TAB persistence via
- * sessionStorage. At most ONE pending force-submit per (organizationId,
- * actorId). Cross-tab parity (the time-grant coordinator's
- * localStorage + navigator.locks + BroadcastChannel machinery) is explicitly
- * out of scope here; a second tab can still mint a new operationId, which
- * matches the reviewer's "minimum" bar.
+ * Scope: SAME-TAB persistence via sessionStorage. At most ONE pending
+ * force-submit per (organizationId, actorId). Cross-tab parity (the time-grant
+ * coordinator's localStorage + navigator.locks + BroadcastChannel machinery)
+ * is explicitly out of scope here; a second tab can still mint a new
+ * operationId.
  *
- * Fail-closed persistence (re-review P1-2): `savePendingForceSubmit` returns
- * an explicit result and VERIFIES the write by reading it back and requiring
- * byte-for-byte equality with the exact string written (re-review P2: a
- * hand-picked field comparison would silently accept damage to fields the
- * loader treats as mandatory — schemaVersion, createdAt — so the strongest
- * fail-closed check is full-string equality, which covers every field). A
+ * Fail-closed persistence: `savePendingForceSubmit` returns an explicit
+ * result and VERIFIES the write by reading it back and requiring
+ * byte-for-byte equality with the exact string written. Full-string equality
+ * is the strongest fail-closed check: a hand-picked field comparison would
+ * silently accept damage to fields the loader treats as mandatory
+ * (schemaVersion, createdAt), while byte equality covers every field. A
  * command that cannot be durably persisted must NOT be sent — the retry-
  * identity contract includes refresh recovery, so an unpersisted operationId
  * would be lost on reload and a later retry would mint a duplicate identity.
  * Callers must not POST when the save result is not ok.
  *
- * Strict authority validation (re-review P2-2): `loadPendingForceSubmit`
- * validates the FULL record — schema version, query-key match (the record's
+ * Strict authority validation: `loadPendingForceSubmit` validates the FULL
+ * record — schema version, query-key match (the record's
  * organizationId/actorId must equal the lookup key), finite createdAt,
  * non-empty attemptId, RFC-4122 operationId, a canonical (already-trimmed,
  * 1..500) reason mirroring the wire schema (`z.string().uuid()` +
  * `z.string().trim().min(1).max(500)` in `@exam/contracts`), and the command's
- * exam scope + candidate label (P1-2: a pending command without its target
- * exam identity cannot be safely surfaced). A damaged record is cleared AND
+ * exam scope + candidate label: a pending command without its target exam
+ * identity cannot be safely surfaced. A damaged record is cleared AND
  * surfaced via `{ kind: "corrupt" }` — never silently treated as "no pending"
  * (a hidden corrupt command could block every other force-submit for the
  * admin without any way to reach it).
@@ -44,9 +43,9 @@
  * The wire payload is `{ operationId, reason }` with `attemptId` in the URL;
  * `examId` / `candidateName` are NOT sent — they are stored context that lets
  * a recovery surface identify the command's target. A pending command for a
- * DIFFERENT exam must never be retried from the current exam's page (review
- * P1: a contextless destructive retry on the wrong exam would force-submit
- * the other exam's candidate).
+ * DIFFERENT exam must never be retried from the current exam's page: a
+ * contextless destructive retry on the wrong exam would force-submit the
+ * other exam's candidate.
  */
 export interface PendingForceSubmitCommand {
   attemptId: string;
@@ -84,13 +83,13 @@ export type SavePendingForceSubmitError =
   | "readback_mismatch"
   | "invalid_authority";
 
-/** Explicit result of {@link savePendingForceSubmit} (re-review P1-2). */
+/** Explicit result of {@link savePendingForceSubmit}. */
 export type SavePendingForceSubmitResult =
   | { ok: true }
   | { ok: false; error: SavePendingForceSubmitError };
 
 /**
- * Explicit result of {@link clearPendingForceSubmit} (re-review P2). The UI
+ * Explicit result of {@link clearPendingForceSubmit}. The UI
  * must never assume a clear succeeded silently — a record that is still
  * present must keep its recovery surface (banner / indeterminate state), or
  * the admin would believe the slot is free while a stale command reappears
@@ -124,7 +123,7 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Strict full-record validation (re-review P2-2). The record's
+ * Strict full-record validation. The record's
  * organizationId/actorId must equal the lookup key — a record written for
  * another org/actor is a damaged identity, not a valid pending command.
  * `reason` must be canonical: already trimmed (the wire schema trims), non-
@@ -220,19 +219,19 @@ export function loadPendingForceSubmit(
 /**
  * Persists a pending force-submit command BEFORE the POST is sent, then
  * read-backs and VERIFIES the write by requiring byte-for-byte equality with
- * the exact serialized string that was written (re-review P1-2 + P2). A
- * string-level comparison is strictly stronger than comparing individual
- * fields: it also covers `schemaVersion` and `createdAt`, which the loader
- * treats as mandatory authority fields (`isValidAuthority`), and any future
- * field — no field can be damaged without breaking equality.
+ * the exact serialized string that was written. A string-level comparison is
+ * strictly stronger than comparing individual fields: it also covers
+ * `schemaVersion` and `createdAt`, which the loader treats as mandatory
+ * authority fields (`isValidAuthority`), and any future field — no field can
+ * be damaged without breaking equality.
  *
  * The authority is ALSO validated with the SAME full validator the loader
- * uses BEFORE the write (re-review P1): the byte read-back only proves the
- * write stuck — it cannot catch a semantically invalid record (e.g. an empty
- * candidateName snapshot from a stale candidate projection), which the loader
- * would then treat as corrupt and DELETE, silently destroying the operation
- * identity this save was meant to protect. "Writer can write" and "reader
- * can read" can never diverge: a record that passes here always passes
+ * uses BEFORE the write: the byte read-back only proves the write stuck — it
+ * cannot catch a semantically invalid record (e.g. an empty candidateName
+ * snapshot from a stale candidate projection), which the loader would then
+ * treat as corrupt and DELETE, silently destroying the operation identity
+ * this save was meant to protect. "Writer can write" and "reader can read"
+ * can never diverge: a record that passes here always passes
  * `loadPendingForceSubmit`.
  *
  * Returns `{ ok: true }` only when the verified record is durably stored.
@@ -249,8 +248,8 @@ export function loadPendingForceSubmit(
  *
  * Callers MUST NOT send the POST when the result is not ok — the retry-
  * identity contract includes refresh recovery, so an unpersisted command
- * cannot be safely retried (review P1-2: "不能以当前 React state 里还有
- * command 为理由继续发送"). Never throws.
+ * cannot be safely retried (React state holding the command is not
+ * persistence). Never throws.
  */
 export function savePendingForceSubmit(
   authority: PendingForceSubmitAuthority,
@@ -289,10 +288,10 @@ export function savePendingForceSubmit(
 /**
  * Clears the pending force-submit authority for (organizationId, actorId).
  * Called on a confirmed outcome (success or definitive rejection) or on an
- * explicit user dismissal. Returns an explicit result (re-review P2): the
- * caller must NOT switch the UI to "cleared" when the removal failed — a
- * stale record that is still present would otherwise resurface on the next
- * load and block every later force-submit. Never throws.
+ * explicit user dismissal. Returns an explicit result: the caller must NOT
+ * switch the UI to "cleared" when the removal failed — a stale record that is
+ * still present would otherwise resurface on the next load and block every
+ * later force-submit. Never throws.
  */
 export function clearPendingForceSubmit(
   organizationId: string,
@@ -306,7 +305,7 @@ export function clearPendingForceSubmit(
   } catch {
     return { ok: false, error: "remove_failed" };
   }
-  // Re-review P2: verify the record is actually gone — a removeItem that
+  // Verify the record is actually gone — a removeItem that
   // reports success but silently fails (storage eviction, quota rollback,
   // or restrictive sandbox) would leave a stale record that resurfaces on
   // the next load and blocks every later force-submit.

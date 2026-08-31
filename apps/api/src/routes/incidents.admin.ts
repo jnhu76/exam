@@ -7,10 +7,16 @@ import {
   ExamRecoveryContextSchema,
   IncidentResponseSchema,
   RecoveryAggregateResponseSchema,
+  RecoveryIncidentSeveritySchema,
+  RecoveryIncidentStatusSchema,
+  RecoveryIncidentTypeSchema,
   RecoveryQueueResponseSchema,
 } from "@exam/contracts";
-import { NotFoundError } from "@exam/domain";
-import type { IncidentActionType } from "@exam/domain";
+import {
+  IncidentActionType,
+  IncidentRelationshipType,
+  NotFoundError,
+} from "@exam/domain";
 import { Permission, type PermissionKey } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import {
@@ -55,21 +61,13 @@ const ExamIdParamsSchema = z.object({ examId: z.string() });
 
 const CreateIncidentBodySchema = z.object({
   operationId: z.string().uuid(),
-  type: z.enum([
-    "network_interruption",
-    "device_failure",
-    "power_failure",
-    "candidate_unable_to_continue",
-    "suspected_misconduct",
-    "operator_error",
-    "system_outage",
-    "environmental_disruption",
-    "other",
-  ]),
+  // Closed universes from the canonical authorities (`@exam/contracts`, which
+  // derives them from the `@exam/domain` tuples) — never re-declared here.
+  type: RecoveryIncidentTypeSchema,
   description: z.string().trim().min(1).max(1000),
   attemptId: z.string().uuid().optional().nullable(),
   candidateId: z.string().optional().nullable(),
-  severity: z.enum(["info", "minor", "major", "critical"]).optional(),
+  severity: RecoveryIncidentSeveritySchema.optional(),
   occurredAt: z.string().datetime().optional().nullable(),
 });
 
@@ -88,7 +86,7 @@ const AddNoteBodySchema = z.object({
 const ChangeSeverityBodySchema = z.object({
   operationId: z.string().uuid(),
   expectedVersion: z.number().int().positive(),
-  severity: z.enum(["info", "minor", "major", "critical"]),
+  severity: RecoveryIncidentSeveritySchema,
   reasonCode: z.string().max(100).optional().nullable(),
   reasonText: z.string().max(1000).optional().nullable(),
 });
@@ -107,16 +105,32 @@ const DismissBodySchema = z.object({
   reasonCode: z.string().max(100).optional().nullable(),
 });
 
+// Link-request closed universes derive from the `@exam/domain` constants —
+// the same Object.values derivation `@exam/contracts` uses for the Incident
+// enums — so a value outside the domain set can never enter a link command.
+const LinkActionTypeSchema = z.enum(
+  Object.values(IncidentActionType) as [
+    IncidentActionType,
+    ...IncidentActionType[],
+  ],
+);
+const LinkRelationshipTypeSchema = z.enum(
+  Object.values(IncidentRelationshipType) as [
+    IncidentRelationshipType,
+    ...IncidentRelationshipType[],
+  ],
+);
+
 const LinkActionBodySchema = z.object({
   operationId: z.string().uuid(),
-  actionType: z.enum(["time_grant", "force_submit"]),
+  actionType: LinkActionTypeSchema,
   actionId: z.string(),
 });
 
 const LinkAttemptBodySchema = z.object({
   operationId: z.string().uuid(),
   attemptId: z.string(),
-  relationshipType: z.enum(["affected", "referenced"]),
+  relationshipType: LinkRelationshipTypeSchema,
 });
 
 const LinkInterruptionBodySchema = z.object({
@@ -194,31 +208,10 @@ function encodeRecoveryCursor(
   return cursor ? `${cursor.createdAtExact}|${cursor.id}` : null;
 }
 
-// Strict filter enums — invalid values are rejected at the API boundary as
-// 400 VALIDATION_ERROR, never pushed into a PostgreSQL comparison.
-const RecoveryStatusQuerySchema = z.enum([
-  "open",
-  "investigating",
-  "resolved",
-  "dismissed",
-]);
-const RecoverySeverityQuerySchema = z.enum([
-  "info",
-  "minor",
-  "major",
-  "critical",
-]);
-const RecoveryIncidentTypeQuerySchema = z.enum([
-  "network_interruption",
-  "device_failure",
-  "power_failure",
-  "candidate_unable_to_continue",
-  "suspected_misconduct",
-  "operator_error",
-  "system_outage",
-  "environmental_disruption",
-  "other",
-]);
+// Strict filter enums — the canonical closed universes from `@exam/contracts`
+// (derived from `@exam/domain`), reused instead of re-declared. Invalid values
+// are rejected at the API boundary as 400 VALIDATION_ERROR, never pushed into
+// a PostgreSQL comparison.
 // z.coerce.boolean() would turn the non-empty string "false" into true;
 // explicit parsing keeps `?unresolvedOnly=false` actually false. The union
 // with z.boolean() makes the schema idempotent: Fastify validates the raw
@@ -245,9 +238,9 @@ const RecoveryListQuerySchema = z
     examId: RecoveryIdQuerySchema.optional(),
     candidateId: RecoveryIdQuerySchema.optional(),
     attemptId: z.string().uuid().optional(),
-    status: RecoveryStatusQuerySchema.optional(),
-    severity: RecoverySeverityQuerySchema.optional(),
-    incidentType: RecoveryIncidentTypeQuerySchema.optional(),
+    status: RecoveryIncidentStatusSchema.optional(),
+    severity: RecoveryIncidentSeveritySchema.optional(),
+    incidentType: RecoveryIncidentTypeSchema.optional(),
     createdFrom: RecoveryDatetimeQuerySchema,
     createdTo: RecoveryDatetimeQuerySchema,
     unresolvedOnly: RecoveryBooleanQuerySchema.optional(),

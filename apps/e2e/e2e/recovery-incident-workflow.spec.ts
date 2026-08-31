@@ -1,7 +1,7 @@
 /**
- * J5-I1D — Recovery Incident Detail operations workflows.
+ * Recovery Incident Detail operations workflows.
  *
- * Drives the REAL Recovery Incident Detail page (J5-I1C1 operations UI) +
+ * Drives the REAL Recovery Incident Detail page operations UI +
  * the REAL incident command routes, asserting against the REAL recovery
  * aggregate API (server snapshot = authority, no client-side optimism):
  *
@@ -65,7 +65,7 @@ async function createIncident(
   });
 }
 
-test.describe("Recovery incident detail operations (J5-I1D)", () => {
+test.describe("Recovery incident detail operations", () => {
   test.describe.configure({ mode: "serial" });
 
   let adminToken: string;
