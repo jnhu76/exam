@@ -233,7 +233,7 @@ export const questions = pgTable(
           id: string;
           content: string;
           contentDocument?: ContentDocumentV1 | null;
-          isCorrect?: boolean;
+          isCorrect?: boolean | undefined;
         }>
       >()
       .notNull(),

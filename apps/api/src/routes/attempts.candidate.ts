@@ -942,7 +942,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // ADR-006: one operation now for the whole save-answer request, reused
       // by the answer protocol and the heartbeat lastActivityAt stamp.
       const now = fastify.now();
-      const body = parsedBody.data;
+      let body = parsedBody.data;
       if (body.attemptId !== attemptId || body.questionId !== questionId) {
         throw new ValidationError("Path and body identifiers must match");
       }
@@ -1029,6 +1029,39 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           throw new NotFoundError("尝试不存在");
         }
 
+        // #301 §21: the frozen snapshot question is the authority for the
+        // answer payload shape. Validation (and rich canonicalization) runs
+        // BEFORE the engine so equality/idempotency only ever see canonical
+        // values. Attempt-STATE guards keep precedence: on a submitted /
+        // graded / closed attempt the payload shape is irrelevant and the
+        // engine's status rejection must win, so shape validation only runs
+        // for editable statuses. A snapshot without this question still
+        // reaches the engine, whose P1 membership check preserves the
+        // existing error semantics.
+        const editableStatus =
+          currentAttempt.status === "in_progress" ||
+          currentAttempt.status === "disrupted";
+        const snapshotQuestion = (currentAttempt.questionSnapshot ?? []).find(
+          (q) => q.originalQuestionId === questionId,
+        );
+        if (snapshotQuestion && editableStatus) {
+          const validation = validateAnswerForQuestion(
+            snapshotQuestion,
+            body.answer,
+          );
+          if (!validation.ok) {
+            const currentVersion =
+              (currentAttempt.answers ?? []).find(
+                (a) => a.questionId === questionId,
+              )?.version ?? 0;
+            return {
+              kind: "invalidAnswer" as const,
+              serverVersion: currentVersion,
+            };
+          }
+          body = { ...body, answer: validation.value };
+        }
+
         // P3-ANSWER-CLOSURE-0 + PRECONDITION-CORRECTIVE-0: the canonical Save
         // Answer action owns load → P1 membership → reconstruct AnswerState →
         // decide (processSaveAnswer, using the canonical effective deadline
@@ -1044,24 +1077,35 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           clientSavedAt: body.clientSavedAt,
           baseVersion: body.baseVersion,
         });
-        return saved;
+        return { kind: "engine" as const, result: saved };
       });
 
-      if (result.accepted) {
-        return SaveAnswerAcceptedSchema.parse({
-          accepted: true,
+      if (result.kind === "invalidAnswer") {
+        return SaveAnswerRejectedSchema.parse({
+          accepted: false,
+          reason: "INVALID_ANSWER",
+          message: getSaveAnswerMessage("INVALID_ANSWER"),
           serverVersion: result.serverVersion,
-          savedAt: result.savedAt,
+          savedAt: now.toISOString(),
         });
       }
 
-      const conflict = result.conflict;
+      const saved = result.result;
+      if (saved.accepted) {
+        return SaveAnswerAcceptedSchema.parse({
+          accepted: true,
+          serverVersion: saved.serverVersion,
+          savedAt: saved.savedAt,
+        });
+      }
+
+      const conflict = saved.conflict;
       return SaveAnswerRejectedSchema.parse({
         accepted: false,
         reason: conflict.reason,
         message: getSaveAnswerMessage(conflict.reason),
-        serverVersion: result.serverVersion,
-        savedAt: result.savedAt,
+        serverVersion: saved.serverVersion,
+        savedAt: saved.savedAt,
         details:
           conflict.reason === "STALE_VERSION"
             ? { serverAnswer: conflict.latestAnswer }
@@ -1311,3 +1355,4 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
     },
   );
 }
+import { validateAnswerForQuestion } from "../lib/validateAnswerForQuestion.js";

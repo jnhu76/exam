@@ -424,6 +424,8 @@ describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () =
           courseId: course.id,
           type: "single_choice",
           content: "test",
+          contentDocument: null,
+          answerMode: null,
           options: [
             { id: "a", content: "1" },
             { id: "b", content: "2" },
@@ -532,6 +534,8 @@ describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () =
               originalQuestionId: t.questionId,
               type: "single_choice",
               content: "test",
+              contentDocument: null,
+              answerMode: null,
               attachments: [],
               options: [
                 { id: "a", content: "1" },

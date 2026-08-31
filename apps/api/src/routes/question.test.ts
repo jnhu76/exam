@@ -835,8 +835,8 @@ describe("question routes", () => {
         check: (body: Record<string, unknown>) => {
           expect(body.standardAnswer).toBe("a");
           expect(body.options).toEqual([
-            { id: "a", content: "A" },
-            { id: "b", content: "B" },
+            { id: "a", content: "A", contentDocument: null },
+            { id: "b", content: "B", contentDocument: null },
           ]);
           expect(body.rubric).toBeNull();
         },

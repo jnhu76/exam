@@ -21,6 +21,10 @@ import {
   resolveImportStatus,
 } from "./helpers.js";
 import { resolveTeacherCourseScope } from "./teacherScope.js";
+import {
+  assertRichContentUpdateAllowed,
+  resolveQuestionContentWrite,
+} from "./questionContent.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
@@ -134,6 +138,8 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           courseId: q.courseId,
           type: q.type,
           content: q.content,
+          contentDocument: q.contentDocument ?? null,
+          answerMode: q.answerMode ?? null,
           options: q.options,
           standardAnswer: q.standardAnswer,
           attachments: q.attachments,
@@ -222,6 +228,8 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         courseId: question.courseId,
         type: question.type,
         content: question.content,
+        contentDocument: question.contentDocument ?? null,
+        answerMode: question.answerMode ?? null,
         options: question.options,
         standardAnswer: question.standardAnswer,
         attachments: question.attachments,
@@ -289,15 +297,24 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
+      // #301: the B′ write authority derives `content` from the normalized
+      // document for Rich writes and persists content_document = NULL for
+      // Plain writes. Client-supplied projections are never persisted.
+      const resolved = resolveQuestionContentWrite({
+        type: data.type,
+        content: data.content,
+        contentDocument: data.contentDocument,
+        answerMode: data.answerMode,
+        options: data.options,
+      });
+
       const question = await createQuestionRepo(fastify.db).create(ctx, {
         courseId: data.courseId,
         type: data.type,
-        content: data.content,
-        options: (data.options ?? []).map((o) => ({
-          id: o.id,
-          content: o.content,
-          ...(o.isCorrect !== undefined ? { isCorrect: o.isCorrect } : {}),
-        })),
+        content: resolved.content,
+        contentDocument: resolved.contentDocument,
+        answerMode: resolved.answerMode,
+        options: resolved.options,
         standardAnswer: data.standardAnswer,
         attachments: data.attachments,
         score: data.score,
@@ -318,6 +335,8 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         courseId: question.courseId,
         type: question.type,
         content: question.content,
+        contentDocument: question.contentDocument ?? null,
+        answerMode: question.answerMode ?? null,
         options: question.options,
         standardAnswer: question.standardAnswer,
         attachments: question.attachments,
@@ -408,15 +427,38 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           );
         }
       }
+      // #301 route-level projection-authority guard: a bare `content` edit on
+      // a rich question is rejected — the client must send a new document or
+      // explicitly clear it (contentDocument: null).
+      assertRichContentUpdateAllowed({
+        storedDocument: existing.contentDocument ?? null,
+        updateContent: data.content,
+        updateDocument: data.contentDocument,
+      });
+      // #301: merged re-validation (existing + data through the create
+      // schema) already rejects a rich fill_blank and answerMode/type
+      // mismatches; the seam then re-derives the authoritative slots.
+      const resolved = resolveQuestionContentWrite({
+        type: validated.type,
+        content: validated.content,
+        contentDocument: validated.contentDocument,
+        answerMode: validated.answerMode,
+        options: validated.options,
+      });
       const updated = await createQuestionRepo(fastify.db).update(ctx, id, {
-        ...validated,
-        options: (validated.options ?? []).map((option) => ({
-          id: option.id,
-          content: option.content,
-          ...(option.isCorrect !== undefined
-            ? { isCorrect: option.isCorrect }
-            : {}),
-        })),
+        courseId: validated.courseId,
+        type: validated.type,
+        content: resolved.content,
+        contentDocument: resolved.contentDocument,
+        answerMode: resolved.answerMode,
+        options: resolved.options,
+        standardAnswer: validated.standardAnswer,
+        attachments: validated.attachments,
+        score: validated.score,
+        difficulty: validated.difficulty,
+        tags: validated.tags,
+        gradingRule: validated.gradingRule,
+        rubric: validated.rubric,
       });
       if (updated) {
         recordBestEffortAudit(fastify, request, ctx, {
@@ -437,6 +479,8 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         courseId: updated.courseId,
         type: updated.type,
         content: updated.content,
+        contentDocument: updated.contentDocument ?? null,
+        answerMode: updated.answerMode ?? null,
         options: updated.options,
         standardAnswer: updated.standardAnswer,
         attachments: updated.attachments,
@@ -623,17 +667,23 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
 
           const data = parsedRow.data;
           if (body.confirm) {
+            // #301: import is Plain-only BY CONSTRUCTION — the seam persists
+            // content_document = NULL and derives contents from the plain
+            // strings; CSV carries no rich payloads.
+            const resolved = resolveQuestionContentWrite({
+              type: data.type,
+              content: data.content,
+              contentDocument: null,
+              answerMode: null,
+              options: data.options,
+            });
             await repo.create(ctx, {
               courseId: data.courseId,
               type: data.type,
-              content: data.content,
-              options: (data.options ?? []).map((option) => ({
-                id: option.id,
-                content: option.content,
-                ...(option.isCorrect !== undefined
-                  ? { isCorrect: option.isCorrect }
-                  : {}),
-              })),
+              content: resolved.content,
+              contentDocument: resolved.contentDocument,
+              answerMode: resolved.answerMode,
+              options: resolved.options,
               standardAnswer: data.standardAnswer,
               attachments: data.attachments,
               score: data.score,

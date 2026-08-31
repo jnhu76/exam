@@ -169,6 +169,8 @@ describe("attempt routes", () => {
         originalQuestionId: questionId,
         type: "single_choice" as const,
         content: "Q",
+        contentDocument: null,
+        answerMode: null,
         attachments: [] as never[],
         options: [{ id: "a", content: "A" }],
         standardAnswer: "a",

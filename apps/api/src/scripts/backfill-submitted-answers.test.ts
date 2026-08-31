@@ -17,6 +17,8 @@ const QUESTION_SNAPSHOT = [
     originalQuestionId: "q1",
     type: "single_choice" as const,
     content: "Q1",
+    contentDocument: null,
+    answerMode: null,
     attachments: [],
     options: [],
     standardAnswer: "b",

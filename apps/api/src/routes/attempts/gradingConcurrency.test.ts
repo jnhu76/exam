@@ -208,6 +208,8 @@ async function buildFixture(
       originalQuestionId: questionId,
       type: "single_choice",
       content: "1+1=?",
+      contentDocument: null,
+      answerMode: null,
       attachments: [],
       options: [
         { id: "a", content: "1" },

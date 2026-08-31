@@ -392,6 +392,8 @@ describe("ADR-006 audit durability and atomicity", () => {
       originalQuestionId: "manual-question",
       type: "text_response",
       content: "Manual question",
+      contentDocument: null,
+      answerMode: null,
       options: [],
       standardAnswer: null,
       attachments: [],

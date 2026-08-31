@@ -223,6 +223,8 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
             questionId: q.originalQuestionId,
             type: q.type,
             content: q.content,
+            // #301: frozen rich prompt + answer mode (never JOIN live rows).
+            contentDocument: q.contentDocument ?? null,
             maxScore: q.score,
             // Frozen grading metadata from QuestionSnapshot (never JOIN live
             // questions). standardAnswer is the applicable reference answer;
