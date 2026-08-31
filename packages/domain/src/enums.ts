@@ -256,6 +256,8 @@ export const ConflictReason = {
   AttemptClosed: "ATTEMPT_CLOSED",
   DeadlineExceeded: "DEADLINE_EXCEEDED",
   ConflictingPayload: "CONFLICTING_PAYLOAD",
+  /** Answer payload failed the frozen question's shape validation (#301). */
+  InvalidAnswer: "INVALID_ANSWER",
 } as const;
 export type ConflictReason =
   (typeof ConflictReason)[keyof typeof ConflictReason];

@@ -487,7 +487,10 @@ describe("attempt routes", () => {
         payload: {
           attemptId,
           questionId: qId,
-          answer: "late",
+          // #301: a well-shaped but stale payload (valid option id, old
+          // baseVersion) — garbage shapes are now rejected with
+          // INVALID_ANSWER before the version check.
+          answer: "a",
           clientSeq: 5,
           clientSavedAt: new Date().toISOString(),
           baseVersion: 2,

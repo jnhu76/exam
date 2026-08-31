@@ -87,6 +87,8 @@ function makeAttempt(overrides: Partial<ExamAttempt> = {}): ExamAttempt {
         originalQuestionId: "q1",
         type: "single_choice",
         content: "Question",
+        contentDocument: null,
+        answerMode: null,
         attachments: [],
         options: [],
         standardAnswer: "a",

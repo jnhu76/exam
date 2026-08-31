@@ -14,6 +14,7 @@ import {
   type QuestionFormData,
 } from "@/components/question/QuestionForm";
 import { QuestionPreview } from "@/components/question/QuestionPreview";
+import type { ContentDocumentV1, ContentMode } from "@exam/domain";
 
 /** Minimal course representation used to populate the course selector. */
 /** A course record used in the course selector dropdown. */
@@ -56,7 +57,14 @@ export function QuestionEditPage() {
           courseId: string;
           type: string;
           content: string;
-          options: Array<{ id: string; content: string; isCorrect?: boolean }>;
+          contentDocument?: ContentDocumentV1 | null;
+          answerMode?: ContentMode | null;
+          options: Array<{
+            id: string;
+            content: string;
+            contentDocument?: ContentDocumentV1 | null;
+            isCorrect?: boolean;
+          }>;
           standardAnswer: unknown;
           score: number;
           difficulty: number;
@@ -87,6 +95,8 @@ export function QuestionEditPage() {
           courseId: q.courseId,
           type: q.type as QuestionFormData["type"],
           content: q.content,
+          contentDocument: q.contentDocument ?? null,
+          answerMode: q.answerMode ?? "plain",
           options: q.options,
           standardAnswer: q.standardAnswer,
           score: q.score,
@@ -103,6 +113,8 @@ export function QuestionEditPage() {
           courseId: loadedCourses[0]?.id ?? "",
           type: "single_choice",
           content: "",
+          contentDocument: null,
+          answerMode: "plain",
           options: [
             { id: "A", content: "" },
             { id: "B", content: "" },
@@ -152,19 +164,52 @@ export function QuestionEditPage() {
     //   a non-empty plain-text string is forwarded as-is, while a blank /
     //   whitespace-only value is normalized to null so no meaningless "   "
     //   is persisted.
+    // - Rich content (issue 301): the prompt document is sent explicitly (null in
+    //   Plain mode — the explicit null is what upgrades Rich→Plain on the
+    //   server). Option documents are OPTIONAL on the wire: plain options
+    //   omit the key entirely. answerMode only exists for text_response.
     const referenceAnswer =
       formData.type === "text_response" &&
       typeof formData.standardAnswer === "string" &&
       formData.standardAnswer.trim() !== ""
         ? formData.standardAnswer
         : null;
-    const payload: QuestionFormData = {
-      ...formData,
+    // Wire shape built explicitly: answerMode exists ONLY for text_response,
+    // plain options OMIT the optional contentDocument key, and the prompt
+    // document is sent explicitly (null = Plain / Rich→Plain upgrade).
+    const common = {
+      courseId: formData.courseId,
+      type: formData.type,
+      content: formData.content,
+      contentDocument: formData.contentDocument ?? null,
+      options:
+        formData.type === "text_response"
+          ? []
+          : formData.options.map((o) =>
+              o.contentDocument
+                ? { ...o, contentDocument: o.contentDocument }
+                : {
+                    id: o.id,
+                    content: o.content,
+                    ...(o.isCorrect !== undefined
+                      ? { isCorrect: o.isCorrect }
+                      : {}),
+                  },
+            ),
+      score: formData.score,
+      difficulty: formData.difficulty,
+      tags: formData.tags,
+      gradingRule: formData.gradingRule,
       rubric: formData.type === "text_response" ? formData.rubric : null,
-      ...(formData.type === "text_response"
-        ? { options: [], standardAnswer: referenceAnswer }
-        : {}),
     };
+    const payload =
+      formData.type === "text_response"
+        ? {
+            ...common,
+            answerMode: formData.answerMode,
+            standardAnswer: referenceAnswer,
+          }
+        : { ...common, standardAnswer: formData.standardAnswer };
 
     setSaving(true);
     try {
@@ -207,6 +252,7 @@ export function QuestionEditPage() {
           <QuestionPreview
             type={formData.type}
             content={formData.content}
+            contentDocument={formData.contentDocument}
             options={formData.options}
             standardAnswer={formData.standardAnswer}
           />

@@ -74,6 +74,12 @@ import {
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { formatZodError, getRequestContext } from "./helpers.js";
 import { reconcileExamForRead } from "./reconciliation.js";
+// #301 §21: the frozen snapshot question is the authority for the answer
+// payload shape. The route only supplies the HOW (per-question validation +
+// rich canonicalization); the engine owns WHEN it runs — after the
+// lifecycle/deadline guards, before idempotency/version semantics — so a
+// malformed payload can never change the protocol rejection precedence.
+import { validateAnswerForQuestion } from "../lib/validateAnswerForQuestion.js";
 import {
   cookieAuth,
   toCandidateAttemptResponse,
@@ -947,7 +953,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new ValidationError("Path and body identifiers must match");
       }
 
-      const result = await executeInTransaction(fastify.db, async (tx) => {
+      const saved = await executeInTransaction(fastify.db, async (tx) => {
         const txRepo = createAttemptRepo(tx);
         const candidateProfile = await createCandidateRepo(tx).findByUserId(
           ctx,
@@ -1029,39 +1035,51 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           throw new NotFoundError("尝试不存在");
         }
 
-        // P3-ANSWER-CLOSURE-0 + PRECONDITION-CORRECTIVE-0: the canonical Save
-        // Answer action owns load → P1 membership → reconstruct AnswerState →
-        // decide (processSaveAnswer, using the canonical effective deadline
-        // from the context) → apply → persist. The route delegates and only
+        // #301 §21 + canonical Save ordering (corrective pass §5, order
+        // clarified in round-2): the route delegates the WHOLE Save Answer
+        // action to the engine, whose actual order is
+        //   attempt identity → frozen question membership (P1)
+        //     → reconstruct AnswerState → status guards → effective-deadline
+        //     guard → answer canonicalization (frozen-question-bound) →
+        //     idempotency/version semantics → persist.
+        // Question membership therefore precedes the status/deadline guards
+        // (it is a ValidationError in saveAnswer, not a protocol rejection).
+        // The route supplies only the frozen-question-bound canonicalizer and
         // inspects the returned semantic result to translate it to the wire
-        // contract. It does NOT validate membership, compute the effective
-        // deadline, reconstruct AnswerState, or write attempt.answers itself.
-        const saved = await saveAnswer(attempts, mutationContext, {
-          attemptId,
-          questionId,
-          answer: body.answer,
-          clientSeq: body.clientSeq,
-          clientSavedAt: body.clientSavedAt,
-          baseVersion: body.baseVersion,
-        });
+        // contract. It does NOT gate validation on attempt status, does NOT
+        // validate membership, compute the effective deadline, reconstruct
+        // AnswerState, or write attempt.answers itself.
+        const saved = await saveAnswer(
+          attempts,
+          mutationContext,
+          {
+            attemptId,
+            questionId,
+            answer: body.answer,
+            clientSeq: body.clientSeq,
+            clientSavedAt: body.clientSavedAt,
+            baseVersion: body.baseVersion,
+          },
+          validateAnswerForQuestion,
+        );
         return saved;
       });
 
-      if (result.accepted) {
+      if (saved.accepted) {
         return SaveAnswerAcceptedSchema.parse({
           accepted: true,
-          serverVersion: result.serverVersion,
-          savedAt: result.savedAt,
+          serverVersion: saved.serverVersion,
+          savedAt: saved.savedAt,
         });
       }
 
-      const conflict = result.conflict;
+      const conflict = saved.conflict;
       return SaveAnswerRejectedSchema.parse({
         accepted: false,
         reason: conflict.reason,
         message: getSaveAnswerMessage(conflict.reason),
-        serverVersion: result.serverVersion,
-        savedAt: result.savedAt,
+        serverVersion: saved.serverVersion,
+        savedAt: saved.savedAt,
         details:
           conflict.reason === "STALE_VERSION"
             ? { serverAnswer: conflict.latestAnswer }

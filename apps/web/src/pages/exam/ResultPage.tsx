@@ -4,6 +4,10 @@ import { CircleCheck, CircleX } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
 import type { AttemptResultResponse } from "@exam/contracts";
+import { isContentDocumentV1 } from "@exam/domain";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
+import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
+import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
@@ -43,16 +47,35 @@ function formatQuestionType(type: string, t: (key: string) => string): string {
   return label === key ? type : label;
 }
 
-/** Renders an answer value as text, with optional truncation for long fill-blank answers. */
+/**
+ * Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer (issue 301).
+ *
+ * issue 301 corrective pass: the frozen `answerMode` is the render authority —
+ * a payload that merely looks like a ContentDocumentV1 envelope on a
+ * non-rich (or corrupt) answer keeps the safe legacy formatter.
+ */
 function AnswerText({
   answer,
+  answerMode,
   truncate,
   t,
 }: {
   answer: unknown;
+  answerMode?: string | null;
   truncate?: boolean;
   t: (key: string) => string;
 }) {
+  const richDocument = resolveRichAnswerDocument(answer, answerMode);
+  if (richDocument) {
+    return <ContentDocumentRenderer document={richDocument} />;
+  }
+  if (answerMode === "rich" && isContentDocumentV1(answer)) {
+    return (
+      <span className="text-muted-foreground">
+        {t("content.unsupportedAnswer")}
+      </span>
+    );
+  }
   const text = formatAnswer(answer, t);
   return (
     <span className={truncate ? "block max-w-48 truncate" : ""} title={text}>
@@ -177,7 +200,10 @@ export function ResultPage() {
                             {question.order + 1}
                           </DataTableCell>
                           <DataTableCell role="long-text">
-                            {question.content}
+                            <ContentRenderer
+                              content={question.content}
+                              document={question.contentDocument}
+                            />
                           </DataTableCell>
                           <DataTableCell role="type">
                             {formatQuestionType(
@@ -206,6 +232,7 @@ export function ResultPage() {
                               )}
                               <AnswerText
                                 answer={question.candidateAnswer}
+                                answerMode={question.answerMode}
                                 truncate={question.type === "fill_blank"}
                                 t={t as (key: string) => string}
                               />

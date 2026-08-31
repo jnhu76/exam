@@ -272,6 +272,13 @@
       "when": 1788900000003,
       "tag": "0038_identity_lifecycle_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788900000004,
+      "tag": "0039_question_rich_content_slots",
+      "breakpoints": true
     }
   ]
 }

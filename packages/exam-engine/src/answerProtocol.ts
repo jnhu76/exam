@@ -79,10 +79,26 @@ export type ProcessSaveResult = SaveAnswerResponse & {
   newClientSeqMap?: Map<string, AnswerRecord>;
 };
 
+/**
+ * Canonical answer-shape validation/canonicalization seam, supplied by the
+ * caller and invoked by the decision core at the CANONICAL precedence point:
+ * after the status and effective-deadline guards, before idempotency and
+ * version semantics (#301 corrective pass). The caller (API route) binds the
+ * FROZEN QuestionSnapshot into this callback; the engine owns WHEN it runs,
+ * so a malformed payload can never change the status/deadline rejection
+ * precedence. The returned value replaces the request answer for every
+ * downstream decision (equality, persistence) — rich answers arrive here in
+ * canonical form.
+ */
+export type CanonicalizeAnswer = (
+  answer: unknown,
+) => { ok: true; value: unknown } | { ok: false; reason: string };
+
 /** Processes a single answer save request using versioned, idempotent conflict detection. */
 export function processSaveAnswer(
   state: AnswerState,
   request: SaveAnswerRequest,
+  canonicalize?: CanonicalizeAnswer,
 ): ProcessSaveResult {
   // ADR-006: the exam-engine layer never reads the wall clock. The operation
   // `now` arrives via `state.now` from the API layer (fastify.now()). It is the
@@ -128,6 +144,28 @@ export function processSaveAnswer(
     };
   }
 
+  // Canonical ordering (#301 corrective pass §5): shape validation and rich
+  // canonicalization run AFTER the lifecycle/deadline guards and BEFORE
+  // idempotency/version semantics, so an INVALID payload cannot mask (or be
+  // masked by) a protocol rejection, and equality/idempotency/persistence
+  // only ever see canonical values.
+  let answer = request.answer;
+  if (canonicalize) {
+    const validation = canonicalize(answer);
+    if (!validation.ok) {
+      const existingAnswer = state.answers.find(
+        (a) => a.questionId === request.questionId,
+      );
+      return {
+        accepted: false,
+        serverVersion: existingAnswer?.version ?? 0,
+        savedAt: savedAtIso,
+        conflict: { reason: "INVALID_ANSWER" },
+      };
+    }
+    answer = validation.value;
+  }
+
   const idempotencyKey = `${request.questionId}:${request.clientSeq}`;
   const existingBySeq = state.clientSeqMap.get(idempotencyKey);
   if (existingBySeq) {
@@ -135,7 +173,7 @@ export function processSaveAnswer(
     // it's a safe replay — return the prior result.
     // If the payload differs, the client is misusing this key — reject
     // as a conflicting payload to prevent silent data loss.
-    if (answersEqual(existingBySeq.answer, request.answer)) {
+    if (answersEqual(existingBySeq.answer, answer)) {
       return {
         accepted: true,
         serverVersion: existingBySeq.version,
@@ -191,7 +229,7 @@ export function processSaveAnswer(
   const newVersion = currentVersion + 1;
   const newAnswer: AnswerRecord = {
     questionId: request.questionId,
-    answer: request.answer,
+    answer,
     version: newVersion,
     savedAt: now,
   };
@@ -353,6 +391,9 @@ function applyAcceptedResult(
  *     → reconstruct AnswerState (normalize + build clientSeqMap)
  *     → invoke the pure `processSaveAnswer` decision core using the CANONICAL
  *       effective deadline from the mutation context (P3), not attempt.deadlineAt
+ *       → status guards → deadline guard → canonical answer shape validation /
+ *         canonicalization (caller-supplied, frozen-question-bound) →
+ *         idempotency / version semantics
  *     → on accept: apply the result and persist `attempt.answers` + heartbeat,
  *       stamped with the context's authoritative checkedAt
  *     → return the semantic result
@@ -395,6 +436,10 @@ export async function saveAnswer(
   attemptRepo: AttemptRepository,
   mutationContext: ReconciledAttemptMutationContext,
   request: SaveAnswerRequest,
+  canonicalizeAnswer?: (
+    question: QuestionSnapshot,
+    answer: unknown,
+  ) => { ok: true; value: unknown } | { ok: false; reason: string },
 ): Promise<ProcessSaveResult> {
   // P2 — mechanical precondition evidence. Assert the context was minted against
   // the exact AttemptRepository object this action is now using. This proves the
@@ -423,10 +468,10 @@ export async function saveAnswer(
   // Preserved error semantics: ValidationError, matching the old route throw.
   // Defensive guard: questionSnapshot may be null/undefined on legacy rows.
   const snapshot = attempt.questionSnapshot ?? [];
-  const isMember = snapshot.some(
+  const snapshotQuestion = snapshot.find(
     (q) => q.originalQuestionId === request.questionId,
   );
-  if (!isMember) {
+  if (!snapshotQuestion) {
     throw new ValidationError("问题不在此尝试中");
   }
 
@@ -453,6 +498,12 @@ export async function saveAnswer(
       now: mutationContext.checkedAt,
     },
     request,
+    // The frozen snapshot question is the shape authority (#301 §21); the
+    // engine owns WHEN canonicalization runs (after status/deadline, before
+    // idempotency), the caller owns HOW a question's answers are validated.
+    canonicalizeAnswer
+      ? (answer) => canonicalizeAnswer(snapshotQuestion, answer)
+      : undefined,
   );
 
   // Apply ONLY on an accepted NEW answer. An idempotent replay returns

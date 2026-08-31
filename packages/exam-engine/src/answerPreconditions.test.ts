@@ -451,3 +451,75 @@ describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — type opacity + direct-call r
     expect(true).toBe(true);
   });
 });
+
+describe("saveAnswer — frozen-question canonicalization seam (#301 corrective pass)", () => {
+  it("5.1 the canonicalizer receives the FROZEN snapshot question and only an accepted save persists its canonical value", async () => {
+    const now = new Date("2025-01-01T10:05:00Z");
+    // answerMode "rich" on the frozen snapshot — the shape authority the
+    // canonicalizer must be invoked with.
+    const snapshotQuestion = {
+      ...makeManualSnapshot()[0]!,
+      answerMode: "rich" as const,
+    };
+    const h = await prepare(
+      makeExam(),
+      makeAttempt({ questionSnapshot: [snapshotQuestion] }),
+      makeEnrollment(),
+      now,
+    );
+
+    const seenQuestions: unknown[] = [];
+    const result = await saveAnswer(
+      h.attemptRepo,
+      h.mutationContext,
+      {
+        attemptId: "attempt-1",
+        questionId: "q1",
+        answer: { raw: "transient form" },
+        clientSeq: 1,
+        clientSavedAt: now.toISOString(),
+        baseVersion: 0,
+      },
+      (question, answer) => {
+        seenQuestions.push(question);
+        return {
+          ok: true,
+          value: { canonical: (answer as { raw: string }).raw },
+        };
+      },
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(seenQuestions).toHaveLength(1);
+    expect(seenQuestions[0]).toBe(snapshotQuestion);
+    // The persisted draft carries the CANONICAL value, not the raw payload.
+    const stored = h.attemptRepo.get("attempt-1").answers.at(-1);
+    expect(stored?.answer).toEqual({ canonical: "transient form" });
+  });
+
+  it("5.2 editable attempt + canonicalizer rejection → INVALID_ANSWER with zero write", async () => {
+    const now = new Date("2025-01-01T10:05:00Z");
+    const h = await prepare(makeExam(), makeAttempt(), makeEnrollment(), now);
+    const before = h.attemptRepo.get("attempt-1").answers;
+
+    const result = await saveAnswer(
+      h.attemptRepo,
+      h.mutationContext,
+      {
+        attemptId: "attempt-1",
+        questionId: "q1",
+        answer: "malformed",
+        clientSeq: 1,
+        clientSavedAt: now.toISOString(),
+        baseVersion: 0,
+      },
+      () => ({ ok: false, reason: "malformed" }),
+    );
+
+    expect(result.accepted).toBe(false);
+    expect(result.conflict?.reason).toBe("INVALID_ANSWER");
+    expect(result.serverVersion).toBe(0);
+    expect(h.attemptRepo.draftAnswerWriteCount()).toBe(0);
+    expect(h.attemptRepo.get("attempt-1").answers).toBe(before);
+  });
+});

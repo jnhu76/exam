@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { QuestionRenderer } from "./QuestionRenderer";
+import { isContentDocumentV1 } from "@exam/domain";
 
 /**
  * P3-MOD-P0-2 — text_response rendering.
@@ -13,6 +14,8 @@ import { QuestionRenderer } from "./QuestionRenderer";
 const baseQuestion = {
   originalQuestionId: "q-text",
   content: "请阐述你的观点",
+  contentDocument: null,
+  answerMode: "plain" as const,
   attachments: [],
   options: [],
   score: 20,
@@ -89,5 +92,122 @@ describe("QuestionRenderer — text_response", () => {
     expect(container.querySelector("script")).toBeNull();
     // The literal string is rendered as text, not HTML.
     expect(screen.getByText("<script>alert(1)</script>")).toBeInTheDocument();
+  });
+});
+
+describe("QuestionRenderer — rich text_response (issue 301)", () => {
+  it("mounts the lazy rich editor when answerMode is rich and emits a canonical document", async () => {
+    const onChange = vi.fn();
+    render(
+      <QuestionRenderer
+        question={{
+          ...baseQuestion,
+          type: "text_response",
+          answerMode: "rich",
+        }}
+        answer={undefined}
+        onChange={onChange}
+      />,
+    );
+    // Lazy chunk resolves and Tiptap mounts its editable surface.
+    const editor = await screen.findByRole("textbox", {}, { timeout: 5000 });
+
+    // Any transaction (here: the mount/focus transaction jsdom produces)
+    // must surface a canonical ContentDocumentV1 — never raw Tiptap JSON.
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+    for (const [emitted] of onChange.mock.calls) {
+      expect(isContentDocumentV1(emitted)).toBe(true);
+    }
+  }, 15000);
+
+  it("upgrades a legacy plain-string draft into the editor instead of dropping it", async () => {
+    render(
+      <QuestionRenderer
+        question={{
+          ...baseQuestion,
+          type: "text_response",
+          answerMode: "rich",
+        }}
+        answer={"旧草稿"}
+        onChange={() => {}}
+      />,
+    );
+    const editor = await vi.waitFor(() => {
+      const el = document.querySelector<HTMLElement>(".ProseMirror");
+      if (!el) throw new Error("ProseMirror surface not mounted yet");
+      return el;
+    });
+    expect(editor.textContent).toContain("旧草稿");
+  }, 15000);
+
+  it("keeps the plain textarea when answerMode is plain", () => {
+    render(
+      <QuestionRenderer
+        question={{
+          ...baseQuestion,
+          type: "text_response",
+          answerMode: "plain",
+        }}
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.tagName).toBe("TEXTAREA");
+    expect(textarea.getAttribute("contenteditable")).toBeNull();
+  });
+});
+
+describe("QuestionRenderer — mount isolation (issue 301)", () => {
+  it("never mounts an editor surface for objective questions, even with rich options", () => {
+    render(
+      <QuestionRenderer
+        question={
+          {
+            ...baseQuestion,
+            type: "single_choice",
+            options: [
+              { id: "a", content: "A", contentDocument: null },
+              { id: "b", content: "B", contentDocument: null },
+            ],
+          } as never
+        }
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(document.querySelector(".ProseMirror")).toBeNull();
+  });
+
+  it("never mounts an editor for a rich PROMPT (READ path renders statically)", async () => {
+    const { ContentDocumentRenderer } =
+      await import("@/components/shared/content/ContentDocumentRenderer");
+    expect(ContentDocumentRenderer).toBeDefined();
+    render(
+      <QuestionRenderer
+        question={
+          {
+            ...baseQuestion,
+            type: "text_response",
+            contentDocument: {
+              docVersion: 1,
+              type: "doc",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "rich prompt" }],
+                },
+              ],
+            },
+          } as never
+        }
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    // The prompt itself is not rendered by QuestionRenderer (owned by the
+    // page), so no editor may appear for prompt display either.
+    expect(document.querySelector(".ProseMirror")).toBeNull();
   });
 });

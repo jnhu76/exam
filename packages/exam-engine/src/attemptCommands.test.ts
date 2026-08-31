@@ -82,6 +82,8 @@ function makeSnapshot(): QuestionSnapshot[] {
       originalQuestionId: "q1",
       type: "single_choice",
       content: "Q1",
+      contentDocument: null,
+      answerMode: null,
       attachments: [],
       options: [{ id: "a", content: "A" }],
       standardAnswer: "a",

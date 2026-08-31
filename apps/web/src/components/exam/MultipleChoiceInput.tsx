@@ -1,6 +1,11 @@
+import type { ContentDocumentV1 } from "@exam/domain";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
+
 /**
  * Checkbox-based input for multiple-choice questions.
- * Allows toggling individual options and returns a sorted array of selected IDs.
+ * Allows toggling individual options and returns a sorted array of selected
+ * IDs. Option labels render through the static ContentRenderer so rich
+ * option content (issue 301) displays exactly as in the read path.
  */
 export function MultipleChoiceInput({
   options,
@@ -8,7 +13,11 @@ export function MultipleChoiceInput({
   onChange,
   disabled = false,
 }: {
-  options: { id: string; content: string }[];
+  options: {
+    id: string;
+    content: string;
+    contentDocument?: ContentDocumentV1 | null;
+  }[];
   value: string[];
   onChange: (answer: unknown) => void;
   disabled?: boolean;
@@ -40,7 +49,10 @@ export function MultipleChoiceInput({
             disabled={disabled}
             className="size-4 accent-primary"
           />
-          <span>{option.content}</span>
+          <ContentRenderer
+            content={option.content}
+            document={option.contentDocument}
+          />
         </label>
       ))}
     </div>

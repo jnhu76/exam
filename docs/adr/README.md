@@ -47,10 +47,11 @@ Every ADR carries this metadata (in its Status section or header):
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future Offline-Resilient Client Data and Recovery Model | DEFERRED | Current | none | none |
 | [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | **ACCEPTED through revision 4** (rev 1–3: 2026-08-12, PR #281 — Hybrid Maintainer Model + Admin↔Maintainer mutual exclusion; rev 4: ACCEPTED 2026-08-14, P7 final program closeout — Maintainer = read-only Operational Observer; Configurer does not exist; ops policy = reliability objective; D5 tightened) | Current | none | none |
 | [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | **ACCEPTED** (2026-08-14, P7 final program closeout — read-only runtime-data contract: read-only / redacted / domain-separated / bounded / source-aware / truthful; Metrics/Logs/Events/Materials taxonomy) | Current | none | none |
+| [ADR-019](ADR-019-content-document-model.md) | Content Document Model: Dual-Mode Question Content and Rich Answer Authority | PROPOSED (pending human audit) | Current | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-019**.
+ADR numbers are stable and never reused. The next free number is **ADR-020**.
 Two files previously in `docs/adr/` used the `ADR-007` prefix
 (`ADR-007-flake-and-speed-audit.md`, `ADR-007-phase6-evidence-gap-audit.md`)
 but were **audit reports about** ADR-007, not ADRs themselves — they have been

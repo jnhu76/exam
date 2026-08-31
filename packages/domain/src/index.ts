@@ -9,3 +9,4 @@ export * from "./examPolicy.js";
 export * from "./examProfile.js";
 export * from "./examProfileRecipes.js";
 export * from "./identity.js";
+export * from "./content/contentDocument.js";

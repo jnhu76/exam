@@ -564,6 +564,8 @@ describe("system routes", () => {
         originalQuestionId: "q-legacy-1",
         type: "single_choice",
         content: "Q",
+        contentDocument: null,
+        answerMode: null,
         attachments: [],
         options: [],
         standardAnswer: "a",

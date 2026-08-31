@@ -38,6 +38,8 @@ describe("P3-FSM-0 refresh-restore integration", () => {
           id: "q1",
           type: "text_response",
           prompt: "free text",
+          promptDocument: null,
+          answerMode: "plain",
           options: [],
           inputMode: "multi_line",
           maxScore: 20,

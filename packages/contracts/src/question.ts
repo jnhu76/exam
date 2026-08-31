@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { plainTextProjection } from "@exam/domain";
+import { AnswerModeEnum, ContentSlotSchema } from "./contentDocument.js";
+import type { AnswerMode, ContentSlot } from "./contentDocument.js";
 
 // ── Question ──────────────────────────────────────────────────────
 
@@ -10,10 +13,24 @@ const QuestionTypeEnum = z.enum([
   "text_response",
 ]);
 
+/**
+ * A stored option. `contentDocument == null` → Plain (content authoritative);
+ * non-null → Rich (document authoritative, `content` is the server-derived
+ * plain-text projection — never a client-trusted second authority).
+ */
 const OptionSchema = z.object({
   id: z.string(),
   content: z.string(),
+  contentDocument: ContentSlotSchema,
   isCorrect: z.boolean().optional(),
+});
+
+/**
+ * Write-side option: when a rich document is present the server derives
+ * `content` from it, so the client is not required to send a projection.
+ */
+const OptionInputSchema = OptionSchema.extend({
+  content: z.string().optional(),
 });
 
 const AttachmentSchema = z.object({
@@ -53,16 +70,71 @@ const StandardAnswerSchema = z
  * Internal validation function that enforces type-specific constraints on questions.
  * Validates option uniqueness, minimum option count for choice questions, standardAnswer
  * format per type, and fill-blank placeholder requirements.
+ *
+ * #301 additions: fill_blank is Plain-only (hard rule), rich slots must carry
+ * a non-empty projection, plain slots require content, and `answerMode` is
+ * only meaningful for text_response.
  */
 function validateQuestionType(
   question: {
     type: z.infer<typeof QuestionTypeEnum>;
-    content: string;
-    options?: z.infer<typeof OptionSchema>[] | undefined;
+    content?: string | undefined;
+    contentDocument?: ContentSlot;
+    answerMode?: AnswerMode | null | undefined;
+    options?:
+      | Array<{
+          id: string;
+          content?: string | undefined;
+          contentDocument?: ContentSlot;
+          isCorrect?: boolean | undefined;
+        }>
+      | undefined;
     standardAnswer: unknown;
   },
   ctx: z.RefinementCtx,
 ) {
+  // #301 §16 HARD RULE: fill_blank's `____` syntax simultaneously drives
+  // display, blank count, key generation, and grading keys. Rich content
+  // would break that coupling, so it is rejected outright (Structured
+  // fill_blank is a separate follow-up).
+  if (question.type === "fill_blank" && question.contentDocument != null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "fill_blank questions do not support rich content",
+      path: ["contentDocument"],
+    });
+  }
+
+  if (
+    question.answerMode !== undefined &&
+    question.answerMode !== null &&
+    question.type !== "text_response"
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "answerMode is only meaningful for text_response questions",
+      path: ["answerMode"],
+    });
+  }
+
+  if (question.contentDocument != null) {
+    // Rich write: the document is the authority; the server derives the
+    // projection. A rich question with an empty projection is meaningless.
+    if (plainTextProjection(question.contentDocument).trim() === "") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "rich question content must not be empty",
+        path: ["contentDocument"],
+      });
+    }
+  } else if (question.content === undefined || question.content.length < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "content is required",
+      path: ["content"],
+    });
+  }
+
   const options = question.options ?? [];
   const optionIds = options.map((option) => option.id);
   if (new Set(optionIds).size !== optionIds.length) {
@@ -71,6 +143,16 @@ function validateQuestionType(
       message: "option ids must be unique",
       path: ["options"],
     });
+  }
+
+  for (const [index, option] of options.entries()) {
+    if (option.contentDocument == null && option.content === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "plain option requires content",
+        path: ["options", index, "content"],
+      });
+    }
   }
 
   if (
@@ -85,7 +167,11 @@ function validateQuestionType(
     });
   }
 
-  if (question.type === "fill_blank" && !question.content.includes("____")) {
+  if (
+    question.type === "fill_blank" &&
+    question.content !== undefined &&
+    !question.content.includes("____")
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "fill blank questions require a ____ placeholder",
@@ -154,6 +240,11 @@ function validateQuestionType(
 /**
  * Schema for a question entity in the question bank, including content, options,
  * standard answer, attachments, scoring, difficulty, tags, and grading rules.
+ *
+ * `contentDocument` carries the B′ dual-mode authority: null → Plain
+ * (content authoritative), non-null → Rich (document authoritative, content
+ * is the server-derived plain-text projection). `answerMode` (plain/rich) is
+ * the author-defined answer input mode — only set for text_response.
  */
 export const QuestionSchema = z.object({
   id: z.string().uuid(),
@@ -161,6 +252,8 @@ export const QuestionSchema = z.object({
   courseId: z.string().uuid(),
   type: QuestionTypeEnum,
   content: z.string(),
+  contentDocument: ContentSlotSchema,
+  answerMode: AnswerModeEnum.nullable().default(null),
   options: z.array(OptionSchema),
   standardAnswer: StandardAnswerSchema,
   attachments: z.array(AttachmentSchema),
@@ -217,13 +310,19 @@ export const QuestionTagsSchema = z
 /**
  * Request schema for creating a new question, with type-specific validation
  * enforced via superRefine (option counts, standardAnswer format, etc.).
+ *
+ * Content modes (#301): send `content` for Plain (default) or
+ * `contentDocument` for Rich — a rich write's `content`, if sent, is ignored
+ * because the server derives the projection from the document.
  */
 export const CreateQuestionRequestSchema = z
   .object({
     courseId: z.string().uuid(),
     type: QuestionTypeEnum,
-    content: z.string().min(1),
-    options: z.array(OptionSchema).optional(),
+    content: z.string().optional(),
+    contentDocument: ContentSlotSchema,
+    answerMode: AnswerModeEnum.nullable().optional(),
+    options: z.array(OptionInputSchema).optional(),
     standardAnswer: StandardAnswerSchema,
     attachments: z.array(AttachmentSchema).default([]),
     score: z.number().positive(),
@@ -241,21 +340,88 @@ export const CreateQuestionRequestSchema = z
 export type CreateQuestionRequest = z.infer<typeof CreateQuestionRequestSchema>;
 
 /**
- * Request schema for updating an existing question. All fields are optional.
+ * Partial-data cross-field rules for question updates. Type-dependent rules
+ * only fire when `type` is present in the payload; the route re-checks the
+ * type-dependent rules against the stored question when only one side of the
+ * pair is being updated.
  */
-export const UpdateQuestionRequestSchema = z.object({
-  courseId: z.string().uuid().optional(),
-  type: QuestionTypeEnum.optional(),
-  content: z.string().min(1).optional(),
-  options: z.array(OptionSchema).optional(),
-  standardAnswer: StandardAnswerSchema.optional(),
-  attachments: z.array(AttachmentSchema).optional(),
-  score: z.number().positive().optional(),
-  difficulty: z.number().int().min(1).max(5).optional(),
-  tags: QuestionTagsSchema.optional(),
-  gradingRule: GradingRuleSchema.optional(),
-  rubric: z.string().nullable().optional(),
-});
+function validateQuestionUpdate(
+  question: {
+    type?: z.infer<typeof QuestionTypeEnum> | undefined;
+    contentDocument?: ContentSlot;
+    answerMode?: AnswerMode | null | undefined;
+    options?: Array<z.infer<typeof OptionInputSchema>> | undefined;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (question.type === "fill_blank" && question.contentDocument != null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "fill_blank questions do not support rich content",
+      path: ["contentDocument"],
+    });
+  }
+
+  if (
+    question.answerMode !== undefined &&
+    question.answerMode !== null &&
+    question.type !== undefined &&
+    question.type !== "text_response"
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "answerMode is only meaningful for text_response questions",
+      path: ["answerMode"],
+    });
+  }
+
+  if (
+    question.contentDocument != null &&
+    plainTextProjection(question.contentDocument).trim() === ""
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "rich question content must not be empty",
+      path: ["contentDocument"],
+    });
+  }
+
+  for (const [index, option] of (question.options ?? []).entries()) {
+    if (option.contentDocument == null && option.content === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "plain option requires content",
+        path: ["options", index, "content"],
+      });
+    }
+  }
+}
+
+/**
+ * Update semantics for the content slots (#301):
+ *   contentDocument undefined → mode unchanged; null → clear to Plain;
+ *   document → set Rich (content is re-derived server-side).
+ * `answerMode` is only meaningful for text_response. Cross-field rules that
+ * need the stored row (e.g. switching a rich question to fill_blank without
+ * clearing the document) are enforced by the route against the live question.
+ */
+export const UpdateQuestionRequestSchema = z
+  .object({
+    courseId: z.string().uuid().optional(),
+    type: QuestionTypeEnum.optional(),
+    content: z.string().min(1).optional(),
+    contentDocument: ContentSlotSchema,
+    answerMode: AnswerModeEnum.nullable().optional(),
+    options: z.array(OptionInputSchema).optional(),
+    standardAnswer: StandardAnswerSchema.optional(),
+    attachments: z.array(AttachmentSchema).optional(),
+    score: z.number().positive().optional(),
+    difficulty: z.number().int().min(1).max(5).optional(),
+    tags: QuestionTagsSchema.optional(),
+    gradingRule: GradingRuleSchema.optional(),
+    rubric: z.string().nullable().optional(),
+  })
+  .superRefine(validateQuestionUpdate);
 
 /** Type for an update-question request. */
 export type UpdateQuestionRequest = z.infer<typeof UpdateQuestionRequestSchema>;

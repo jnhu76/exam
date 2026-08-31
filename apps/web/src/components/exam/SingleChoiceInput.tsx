@@ -1,6 +1,11 @@
+import type { ContentDocumentV1 } from "@exam/domain";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
+
 /**
  * Radio-button input for single-choice questions.
- * Renders a list of options and reports the selected option ID.
+ * Renders a list of options and reports the selected option ID. Option
+ * labels render through the static ContentRenderer so rich option content
+ * (issue 301) displays exactly as in the read path.
  */
 export function SingleChoiceInput({
   options,
@@ -8,7 +13,11 @@ export function SingleChoiceInput({
   onChange,
   disabled = false,
 }: {
-  options: { id: string; content: string }[];
+  options: {
+    id: string;
+    content: string;
+    contentDocument?: ContentDocumentV1 | null;
+  }[];
   value: string | undefined;
   onChange: (answer: unknown) => void;
   disabled?: boolean;
@@ -29,7 +38,10 @@ export function SingleChoiceInput({
             disabled={disabled}
             className="size-4 accent-primary"
           />
-          <span>{option.content}</span>
+          <ContentRenderer
+            content={option.content}
+            document={option.contentDocument}
+          />
         </label>
       ))}
     </div>

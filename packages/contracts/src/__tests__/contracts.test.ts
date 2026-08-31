@@ -1110,7 +1110,7 @@ describe("SaveAnswerResponseSchema (A01 discriminated union)", () => {
 });
 
 describe("SaveAnswerRejectReasonEnum", () => {
-  it("has exactly 6 values", () => {
+  it("has exactly 7 values (INVALID_ANSWER added by #301)", () => {
     const values = SaveAnswerRejectReasonEnum.options;
     expect(values).toEqual([
       "STALE_VERSION",
@@ -1119,6 +1119,7 @@ describe("SaveAnswerRejectReasonEnum", () => {
       "ATTEMPT_CLOSED",
       "DEADLINE_EXCEEDED",
       "CONFLICTING_PAYLOAD",
+      "INVALID_ANSWER",
     ]);
   });
 });
@@ -1473,6 +1474,7 @@ describe("grading detail contracts", () => {
     questionId: "q-essay-1",
     type: "fill_blank" as const,
     content: "请简述光合作用的过程",
+    contentDocument: null,
     maxScore: 10,
     // P3-MOD-P1-1: frozen grading metadata projected from QuestionSnapshot.
     standardAnswer: "参考答案：光反应与暗反应",

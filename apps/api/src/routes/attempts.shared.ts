@@ -113,8 +113,16 @@ export function toCandidateAttemptResponse(
       originalQuestionId: q.originalQuestionId,
       type: q.type,
       content: q.content,
+      // #301: frozen rich prompt/answer mode are candidate-safe (no grading
+      // secrets); options carry their frozen rich documents too.
+      contentDocument: q.contentDocument ?? null,
+      answerMode: q.answerMode ?? null,
       attachments: q.attachments,
-      options: q.options,
+      options: q.options.map((o) => ({
+        id: o.id,
+        content: o.content,
+        contentDocument: o.contentDocument ?? null,
+      })),
       score: q.score,
       gradingRule: q.gradingRule,
       order: q.order,
@@ -245,7 +253,16 @@ export function buildCandidateTakeSnapshot(
       id: q.originalQuestionId,
       type: q.type,
       prompt: q.content,
-      options: q.options,
+      // #301: frozen rich prompt + the author-defined answer input mode.
+      // Legacy/plain snapshots project null/"plain" so the client keeps the
+      // plain fast path.
+      promptDocument: q.contentDocument ?? null,
+      answerMode: q.answerMode ?? "plain",
+      options: q.options.map((o) => ({
+        id: o.id,
+        content: o.content,
+        contentDocument: o.contentDocument ?? null,
+      })),
       inputMode: getInputMode(q.type),
       maxScore: q.score,
       answerValue,

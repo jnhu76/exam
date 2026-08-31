@@ -644,6 +644,9 @@ export async function seedDemo(
         originalQuestionId: q.id,
         type: q.type as QuestionSnapshot["type"],
         content: q.content,
+        contentDocument:
+          (q.contentDocument as QuestionSnapshot["contentDocument"]) ?? null,
+        answerMode: (q.answerMode as QuestionSnapshot["answerMode"]) ?? null,
         attachments: (q.attachments as QuestionSnapshot["attachments"]) ?? [],
         options: (
           (q.options as Array<{ id: string; content: string }>) ?? []

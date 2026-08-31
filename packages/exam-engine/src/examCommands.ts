@@ -1,5 +1,6 @@
 import type { Exam, Question, QuestionSnapshot } from "@exam/domain";
 import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
+import { plainTextProjection } from "@exam/domain";
 import { assertTransition } from "./examStateMachine.js";
 import { assertExamPolicyValid } from "./examPolicy.js";
 
@@ -70,8 +71,16 @@ export function buildQuestionSnapshot(
       originalQuestionId: q.id,
       type: q.type,
       content: q.content,
+      // #301: freeze the B′ rich-content authority alongside its derived
+      // projection. Null (Plain) on legacy rows.
+      contentDocument: q.contentDocument ?? null,
+      answerMode: q.answerMode ?? null,
       attachments: q.attachments,
-      options: q.options.map((o) => ({ id: o.id, content: o.content })),
+      options: q.options.map((o) => ({
+        id: o.id,
+        content: o.content,
+        contentDocument: o.contentDocument ?? null,
+      })),
       standardAnswer: q.standardAnswer,
       score: q.score,
       gradingRule: q.gradingRule,
@@ -157,6 +166,46 @@ export async function publishExam(
     "fill_blank",
   ]);
   for (const question of questions) {
+    // #301 §16 HARD RULE (publish-side defense in depth): fill_blank is
+    // Plain-only. Create/update validation already rejects rich fill_blank;
+    // publish is the freeze gate, so stale or bypassing rows fail closed
+    // here before any attempt can freeze them.
+    if (question.type === "fill_blank" && question.contentDocument != null) {
+      throw new ValidationError(
+        `fill_blank question ${question.id} must not carry rich content at publish`,
+      );
+    }
+    // #301: answerMode is only meaningful for text_response.
+    if (question.answerMode != null && question.type !== "text_response") {
+      throw new ValidationError(
+        `question ${question.id} carries answerMode but is not text_response`,
+      );
+    }
+    // #301 B′ projection invariant: for Rich questions the stored `content`
+    // must be exactly the deterministic projection of the frozen document.
+    // A mismatch means a writer bypassed the server-side derivation seam.
+    if (question.contentDocument != null) {
+      const projection = plainTextProjection(question.contentDocument);
+      if (question.content !== projection) {
+        throw new ValidationError(
+          `rich question ${question.id} content must equal plainTextProjection(contentDocument) at publish`,
+        );
+      }
+    }
+    // #301 corrective pass: the SAME projection invariant holds for rich
+    // OPTIONS — a divergent frozen option would show candidates one text
+    // (plain projection) while the rich renderer draws another. Publish is
+    // the freeze gate: fail closed, never auto-repair.
+    for (const option of question.options) {
+      if (option.contentDocument != null) {
+        const optionProjection = plainTextProjection(option.contentDocument);
+        if (option.content !== optionProjection) {
+          throw new ValidationError(
+            `rich option ${option.id} of question ${question.id} content must equal plainTextProjection(contentDocument) at publish`,
+          );
+        }
+      }
+    }
     if (question.type === "text_response") {
       if (isEmptyOrPlaceholder(question.rubric)) {
         throw new ValidationError(

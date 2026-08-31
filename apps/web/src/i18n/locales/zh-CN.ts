@@ -125,6 +125,45 @@ const zhCN = {
   },
 
   /**
+   * Rich content rendering (#301). The static ContentDocumentRenderer is a
+   * closed-vocabulary fail-safe renderer: unknown nodes degrade to a notice,
+   * they never reach raw HTML.
+   */
+  content: {
+    unsupportedBlock: "此内容包含当前版本不支持的元素",
+    unsupportedAnswer: "此作答内容无法以富文本安全显示",
+    mathLoading: "公式加载中",
+    mode: {
+      label: "内容模式",
+      optionLabel: "选项 {{id}} 内容模式",
+      plain: "纯文本",
+      rich: "富文本",
+    },
+    confirmToPlain: {
+      title: "转换为纯文本？",
+      description:
+        "富文本格式（列表、表格、公式、加粗等）将丢失，仅保留文字内容。",
+      confirm: "转换并丢弃格式",
+      cancel: "取消",
+    },
+    editor: {
+      label: "富文本编辑器",
+      loading: "编辑器加载中…",
+      bold: "加粗",
+      italic: "斜体",
+      underline: "下划线",
+      inlineCode: "行内代码",
+      bulletList: "无序列表",
+      orderedList: "有序列表",
+      codeBlock: "代码块",
+      table: "表格",
+      inlineMath: "行内公式",
+      blockMath: "独立公式",
+      latexPlaceholder: "输入 LaTeX",
+    },
+  },
+
+  /**
    * Global error / toast / notify messages. API error *codes* stay machine
    * semantic (contracts/messageRegistry); these are the generic UI-facing
    * fallbacks and common mutation success/failure toasts.
@@ -1700,6 +1739,10 @@ const zhCN = {
         options: "选项",
         addOption: "添加选项",
         optionPlaceholder: "选项 {{id}}",
+        optionContent: "选项 {{id}} 内容",
+        answerMode: "作答模式",
+        answerModeHint:
+          "选择考生作答此题时使用纯文本输入框还是富文本编辑器（支持公式与排版）",
         standardAnswer: "标准答案",
         standardAnswerPlaceholder: "输入标准答案，多个答案用 | 分隔",
         standardAnswerHint: "多个可接受答案用 | 分隔，如：原子|atom",

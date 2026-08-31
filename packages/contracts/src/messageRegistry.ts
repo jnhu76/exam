@@ -149,6 +149,7 @@ export const saveAnswerMessages: Record<SaveAnswerRejectReason, string> = {
   ATTEMPT_CLOSED: "考试已结束",
   DEADLINE_EXCEEDED: "考试时间已到",
   CONFLICTING_PAYLOAD: "答案数据冲突，请刷新页面后重试",
+  INVALID_ANSWER: "答案格式不符合此题要求，请检查作答内容",
 };
 
 /**

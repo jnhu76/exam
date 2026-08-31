@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { plainTextProjection } from "@exam/domain";
+import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
@@ -189,6 +191,9 @@ interface QuestionResult {
   standardAnswer: unknown;
   type: string;
   content: string;
+  /** Frozen answer input mode (issue 301 corrective pass) — the render authority
+   * for candidateAnswer. */
+  answerMode?: string | null;
   order: number;
 }
 
@@ -226,9 +231,11 @@ interface MisconductFlag {
   severity: "warning" | "serious";
 }
 
-/** Converts an answer value to a display-friendly string. */
-function formatAnswer(value: unknown): string {
+/** Converts an answer value to a display-friendly string. Rich documents (issue 301) collapse to their plain-text projection for the compact table cells — but only when the FROZEN answerMode is rich (issue 301 corrective pass), and only after the document passes the bounded preflight (the projection itself recurses). */
+function formatAnswer(value: unknown, answerMode?: string | null): string {
   if (value == null) return "—";
+  const richDocument = resolveRichAnswerDocument(value, answerMode);
+  if (richDocument) return plainTextProjection(richDocument);
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.join(", ");
   return String(value);
@@ -827,7 +834,7 @@ export function AttemptDetailPage() {
                             className="text-muted-foreground"
                           />
                         )}
-                        {formatAnswer(q.candidateAnswer)}
+                        {formatAnswer(q.candidateAnswer, q.answerMode)}
                       </Badge>
                     </DataTableCell>
                     <DataTableCell role="secondary-text">

@@ -64,8 +64,9 @@ Course (课程/科目)
 QuestionBank (题库)
   └── 按 Course 组织
        └── Question (题目)
-            ├── type: single_choice | multiple_choice | fill_blank | true_false
-            ├── content: 题干（支持文字 + 图片引用）
+            ├── type: single_choice | multiple_choice | fill_blank | true_false | text_response
+            ├── content: 题干文本（Rich 题下为服务端派生的纯文本投影）
+            ├── contentDocument: 富文本题干文档（可空；null=Plain 模式，见 ADR-019）
             ├── attachments[]: 图片/附件 URL
             ├── options[]: 选项（选择题）
             ├── standardAnswer: 标准答案（自动批改的依据）

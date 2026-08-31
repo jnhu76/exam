@@ -130,6 +130,8 @@ function objectiveSnapshot(
     originalQuestionId: id,
     type: "single_choice",
     content: "Objective question",
+    contentDocument: null,
+    answerMode: null,
     attachments: [],
     options: [],
     standardAnswer,
@@ -148,6 +150,8 @@ function textResponseSnapshot(id: string, score: number): QuestionSnapshot {
     originalQuestionId: id,
     type: "text_response",
     content: "Subjective question",
+    contentDocument: null,
+    answerMode: null,
     attachments: [],
     options: [],
     // Protocol §1.4: standardAnswer is optional/null for text_response;
