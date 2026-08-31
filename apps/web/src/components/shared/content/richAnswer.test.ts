@@ -9,8 +9,8 @@ const validDoc = {
 
 /**
  * resolveRichAnswerDocument is the FROZEN-SEMANTICS render authority for
- * persisted answers (#301 corrective pass §10/§11): the frozen `answerMode`
- * decides, never the envelope shape alone.
+ * persisted answers: the frozen `answerMode` decides, never the envelope
+ * shape alone.
  */
 describe("resolveRichAnswerDocument — render authority for persisted answers", () => {
   it("renders a valid canonical document only when answerMode is rich", () => {

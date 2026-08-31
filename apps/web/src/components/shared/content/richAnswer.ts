@@ -6,10 +6,9 @@ import {
 } from "@exam/domain";
 
 /**
- * FROZEN-SEMANTICS render authority for persisted answers (issue 301 corrective
- * pass §10/§11). Historical saves accepted arbitrary JSON, so a payload that
- * merely LOOKS like a ContentDocumentV1 envelope must never activate the rich
- * renderer on its own:
+ * FROZEN-SEMANTICS render authority for persisted answers. Historical saves
+ * accepted arbitrary JSON, so a payload that merely LOOKS like a
+ * ContentDocumentV1 envelope must never activate the rich renderer on its own:
  *
  *   1. the FROZEN question's `answerMode` must be "rich" — the envelope shape
  *      of the answer itself is only a cheap hint, never the authority;

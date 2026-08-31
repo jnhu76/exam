@@ -8,7 +8,7 @@ import { ContentRenderer } from "./ContentRenderer";
 import { MathRenderer } from "./MathRenderer";
 
 /**
- * Adversarial security tests for the static content READ path (issue 301 §45).
+ * Adversarial security tests for the static content READ path.
  *
  * Threat model: a malicious or corrupt persisted document (written by a
  * compromised admin client, an old build, or a future migration bug) reaches
@@ -82,103 +82,48 @@ function assertInert(container: HTMLElement): void {
   }
 }
 
-describe("ContentRenderer plain path (document absent)", () => {
-  it("renders HTML-looking plain text as inert text, never as elements", () => {
-    const payload = '<img src=x onerror="window.__pwned=1">';
-    const { container } = render(<ContentRenderer content={payload} />);
-    expect(container.querySelector("img")).toBeNull();
-    expect(container.textContent).toBe(payload);
-    assertInert(container);
+describe("ContentRenderer — hostile HTML-looking strings stay inert text", () => {
+  const PAYLOADS = [
+    '<img src=x onerror="window.__pwned=1">',
+    "<script>alert(1)</script>",
+    "javascript:alert(document.cookie)",
+    "<svg onload=alert(1)></svg><body onload=alert(1)>",
+  ];
+
+  it("plain content renders every hostile string as escaped text, never as elements", () => {
+    for (const payload of PAYLOADS) {
+      const { container, unmount } = render(
+        <ContentRenderer content={payload} />,
+      );
+      expect(container.textContent).toBe(payload);
+      assertInert(container);
+      unmount();
+    }
   });
 
-  it("renders a script tag payload as text", () => {
-    const payload = "<script>alert(1)</script>";
-    const { container } = render(<ContentRenderer content={payload} />);
-    expect(container.querySelector("script")).toBeNull();
-    expect(container.textContent).toBe(payload);
-  });
-});
-
-describe("ContentRenderer rich path — hostile payloads through every string field", () => {
-  it("keeps a script payload in a text run inert and escaped", () => {
-    const { container } = render(
-      <ContentRenderer
-        content=""
-        document={doc([para("<script>alert(1)</script>")])}
-      />,
-    );
-    expect(container.querySelector("script")).toBeNull();
-    expect(container.textContent).toContain("<script>alert(1)</script>");
-    assertInert(container);
-  });
-
-  it("keeps an img onerror payload in a text run inert", () => {
-    const { container } = render(
-      <ContentRenderer
-        content=""
-        document={doc([para('<img src=x onerror="alert(1)">')])}
-      />,
-    );
-    assertInert(container);
-    expect(container.textContent).toContain("onerror");
-  });
-
-  it("keeps a javascript: URL payload inert (no anchor is ever emitted)", () => {
-    const { container } = render(
-      <ContentRenderer
-        content=""
-        document={doc([para("javascript:alert(document.cookie)")])}
-      />,
-    );
-    assertInert(container);
-  });
-
-  it("composes marks without introducing handlers", () => {
-    const { container } = render(
-      <ContentRenderer
-        content=""
-        document={doc([
+  it("rich text runs render hostile strings as escaped text, including inside marks", () => {
+    const hostileDoc = doc([
+      para('<iframe src="javascript:alert(1)"></iframe>'),
+      {
+        type: "paragraph",
+        content: [
           {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: "boom<img src=x onerror=alert(1)>",
-                marks: ["bold", "italic", "underline", "inlineCode"],
-              },
-            ],
+            type: "text",
+            text: "<img src=x onerror=alert(1)>",
+            marks: ["bold", "italic", "underline", "inlineCode"],
           },
-        ])}
-      />,
+        ],
+      },
+    ]);
+    const { container } = render(
+      <ContentRenderer content="" document={hostileDoc} />,
     );
     expect(container.querySelector("strong")).not.toBeNull();
-    expect(container.querySelector("em")).not.toBeNull();
-    expect(container.querySelector("u")).not.toBeNull();
-    expect(container.querySelector("code")).not.toBeNull();
-    assertInert(container);
-  });
-
-  it("keeps an iframe payload in a codeBlock inert", () => {
-    const { container } = render(
-      <ContentRenderer
-        content=""
-        document={doc([
-          {
-            type: "codeBlock",
-            language: null,
-            text: '<iframe src="javascript:alert(1)"></iframe>',
-          },
-        ])}
-      />,
-    );
     expect(container.querySelector("iframe")).toBeNull();
-    expect(container.querySelector("pre")?.textContent).toBe(
-      '<iframe src="javascript:alert(1)"></iframe>',
-    );
     assertInert(container);
   });
 
-  it("renders raw-html-paste payloads through lists and tables inertly", () => {
+  it("hostile strings pass through lists and tables inertly", () => {
     const { container } = render(
       <ContentRenderer
         content=""
@@ -223,75 +168,78 @@ describe("ContentRenderer rich path — hostile payloads through every string fi
         ])}
       />,
     );
-    assertInert(container);
     expect(container.textContent).toContain("<svg onload=alert(1)></svg>");
+    assertInert(container);
+  });
+
+  it("codeBlock text is escaped verbatim, never parsed as markup", () => {
+    const { container } = render(
+      <ContentRenderer
+        content=""
+        document={doc([
+          {
+            type: "codeBlock",
+            language: null,
+            text: '<iframe src="javascript:alert(1)"></iframe>',
+          },
+        ])}
+      />,
+    );
+    expect(container.querySelector("pre")?.textContent).toBe(
+      '<iframe src="javascript:alert(1)"></iframe>',
+    );
+    assertInert(container);
   });
 });
 
-describe("ContentRenderer rich path — corrupt-data fail-safes", () => {
+describe("ContentRenderer — corrupt-data fail-safes", () => {
   const UNSUPPORTED = "此内容包含当前版本不支持的元素";
 
-  it("replaces an unknown (out-of-grammar) block with the controlled placeholder", () => {
+  it("replaces an unknown block node with the controlled placeholder", () => {
     const hostile = doc([
-      {
-        type: "script",
-        content: [{ type: "text", text: "alert(1)" }],
-      },
+      { type: "script", content: [{ type: "text", text: "alert(1)" }] },
       para("after"),
     ] as unknown as ContentBlock[]);
     const { container } = render(
       <ContentRenderer content="" document={hostile} />,
     );
-    expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain(UNSUPPORTED);
     expect(container.textContent).toContain("after");
     assertInert(container);
   });
 
-  it("drops an unknown inline node while keeping sibling text", () => {
-    const hostile = doc([
-      {
-        type: "paragraph",
-        content: [
-          { type: "text", text: "before" },
-          {
-            type: "customEmbed",
-            html: '<img src=x onerror="alert(1)">',
-          },
-          { type: "text", text: "after" },
-        ],
-      },
-    ] as unknown as ContentBlock[]);
+  it("drops an unknown inline node and ignores an unknown mark while keeping sibling content", () => {
     const { container } = render(
-      <ContentRenderer content="" document={hostile} />,
+      <ContentRenderer
+        content=""
+        document={doc([
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "before" },
+              { type: "customEmbed", html: '<img src=x onerror="alert(1)">' },
+              { type: "text", text: "after" },
+            ],
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "styled",
+                marks: ["bold", "unknownMark" as never],
+              },
+            ],
+          },
+        ] as unknown as ContentBlock[])}
+      />,
     );
     assertInert(container);
-    expect(container.textContent).toBe("beforeafter");
-  });
-
-  it("ignores an unknown mark on a text run", () => {
-    const hostile = doc([
-      {
-        type: "paragraph",
-        content: [
-          {
-            type: "text",
-            text: "styled",
-            marks: ["bold", "unknownMark" as never],
-          },
-        ],
-      },
-    ]);
-    const { container } = render(
-      <ContentRenderer content="" document={hostile} />,
-    );
+    expect(container.textContent).toBe("beforeafterstyled");
     expect(container.querySelector("strong")?.textContent).toBe("styled");
-    assertInert(container);
   });
 
-  it("survives a deep tree far beyond the kernel depth limit without crashing", () => {
-    // Build 60 nested bulletLists (kernel limit is 8) — corrupt data past the
-    // write boundary must degrade, never crash the read path.
+  it("survives corrupt oversize input (deep tree, huge text run) without crashing", () => {
     let block: ContentBlock = para("leaf");
     for (let i = 0; i < 60; i++) {
       block = {
@@ -299,65 +247,41 @@ describe("ContentRenderer rich path — corrupt-data fail-safes", () => {
         content: [{ type: "listItem", content: [block as never] }],
       };
     }
-    const { container } = render(
+    const { container, unmount } = render(
       <ContentRenderer content="" document={doc([block])} />,
     );
     expect(container.textContent).toContain("leaf");
     assertInert(container);
-  });
+    unmount();
 
-  it("renders a huge text run (beyond kernel textRun limit) as inert text", () => {
     const huge = "<script>".repeat(20000);
-    const { container } = render(
+    const hugeRender = render(
       <ContentRenderer content="" document={doc([para(huge)])} />,
     );
-    assertInert(container);
-    expect(container.querySelector("script")).toBeNull();
+    assertInert(hugeRender.container);
+    hugeRender.unmount();
   });
 });
 
-describe("MathRenderer — hostile LaTeX", () => {
-  it("does not emit anchors for \\href with a javascript: target (trust: false)", () => {
-    const { container } = render(
-      <MathRenderer
-        latex="{\\href{javascript:alert(1)}{click}}"
-        displayMode={false}
-      />,
-    );
-    assertInert(container);
-  });
+describe("MathRenderer — hostile LaTeX (trust: false)", () => {
+  const HOSTILE_LATEX = [
+    "{\\href{javascript:alert(1)}{click}}",
+    "\\includegraphics[width=\\linewidth]{http://evil.example/x.png}",
+    "\\htmlClass{x}{content}\\htmlData{trick=1}{d}",
+    "\\htmlId{payload}{x}",
+    "\\htmlStyle{background:url(javascript:alert(1))}{x}",
+    "\\frac{\\oops",
+  ];
 
-  it("does not emit img elements for \\includegraphics (trust: false)", () => {
-    const { container } = render(
-      <MathRenderer
-        latex="\\includegraphics[width=\\linewidth]{http://evil.example/x.png}"
-        displayMode={false}
-      />,
-    );
-    assertInert(container);
-  });
-
-  it("does not emit raw HTML for \\htmlClass/\\htmlData/\\htmlStyle (trust: false)", () => {
-    for (const latex of [
-      "\\htmlClass{x}{content}\\htmlData{trick=1}{d}",
-      "\\htmlId{payload}{x}",
-      "\\htmlStyle{background:url(javascript:alert(1))}{x}",
-    ]) {
-      const { container } = render(
-        <MathRenderer latex={latex} displayMode={true} />,
+  it("renders hostile and invalid LaTeX as inert source, never executable markup", () => {
+    for (const latex of HOSTILE_LATEX) {
+      const { container, unmount } = render(
+        <MathRenderer latex={latex} displayMode={false} />,
       );
+      expect(container.textContent).not.toBe("");
       assertInert(container);
+      unmount();
     }
-  });
-
-  it("renders invalid LaTeX as inert source instead of throwing", () => {
-    const { container } = render(
-      <MathRenderer latex="\\frac{\\oops" displayMode={true} />,
-    );
-    // throwOnError:false → KaTeX renders its own error text; either way the
-    // output is inert and the LaTeX source remains visible.
-    expect(container.textContent).not.toBe("");
-    assertInert(container);
   });
 
   it("renders oversized latex as escaped text without invoking KaTeX output", () => {

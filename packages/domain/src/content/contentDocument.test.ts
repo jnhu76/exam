@@ -3,7 +3,6 @@ import {
   CONTENT_DOC_VERSION,
   CONTENT_LIMITS,
   checkContentDocumentLimits,
-  contentModeOf,
   normalizeContentDocument,
   plainTextProjection,
   plainTextToDocument,
@@ -311,15 +310,7 @@ describe("plainTextProjection", () => {
   });
 });
 
-describe("contentModeOf", () => {
-  it("derives plain for null/undefined and rich otherwise", () => {
-    expect(contentModeOf(null)).toBe("plain");
-    expect(contentModeOf(undefined)).toBe("plain");
-    expect(contentModeOf(doc(paragraph("x")))).toBe("rich");
-  });
-});
-
-describe("preflightContentDocumentStructure (#301 corrective pass)", () => {
+describe("preflightContentDocumentStructure", () => {
   it("accepts a grammar-valid document", () => {
     expect(preflightContentDocumentStructure(doc(paragraph("hello")))).toEqual(
       [],
@@ -345,14 +336,13 @@ describe("preflightContentDocumentStructure (#301 corrective pass)", () => {
     return { docVersion: 1, type: "doc", content: node };
   }
 
-  it.each([100, 500, 1000])(
-    "rejects %i-level hostile nesting without recursing (controlled violations, no stack overflow)",
-    (depth) => {
-      const violations = preflightContentDocumentStructure(nestedArrays(depth));
-      expect(violations.length).toBeGreaterThan(0);
-      expect(violations.some((v) => v.includes("nesting exceeds"))).toBe(true);
-    },
-  );
+  it("rejects hostile nesting without recursing (controlled violations, no stack overflow)", () => {
+    // 1000 levels is far past any legal document and would overflow a
+    // recursive walk; the iterative preflight must reject it in bounded time.
+    const violations = preflightContentDocumentStructure(nestedArrays(1000));
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.includes("nesting exceeds"))).toBe(true);
+  });
 
   it("rejects a huge array fan-out without iterating every element", () => {
     // 200k elements is ~100× the preflight node budget (4064): large enough

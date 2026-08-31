@@ -52,6 +52,19 @@
 
 ## 已修复事故
 
+### 2026-08-31 — 并行跑 api + web 两个独立测试套件引发的宿主负载型 5s 超时（#301 deletion audit 观察）
+
+- **现象**：`pnpm --filter @exam/api test` 与 `pnpm --filter @exam/web test` 作为两个独立 pnpm 进程**同时**在后台运行（同一 WSL2 8-core 主机），api 出现 4 个、web 出现 1 个 `Test timed out in 5000ms`。失败位置互不相干，且与本次改动的 rich-content 相关测试文件无任何交集：
+  - `apps/api/src/routes/auth.test.ts:126` — `non-e2e mode enforces the route-level login limiter`（5 轮 login + audit）
+  - `apps/api/src/scripts/backup-evidence.test.ts:303 / 334` — `--size-bytes` reject/accept 两个用例（CLI + ledger 写入）
+  - `apps/api/tests/concurrency/ea-lock-order.test.ts:292` — `repaired contention schedule is stable across 100 consecutive runs`（100 轮真实锁竞争）
+  - `apps/web/src/pages/admin/QuestionPage.test.tsx:153` — `clears filters and keeps the page shell visible during table reload`（debounce + 异步 reload）
+- **错误片段**：全部为 `Error: Test timed out in 5000ms.`，无任何断言失败。
+- **证据（同代码再跑就过，登记规则 #1）**：改为**串行**重跑（web 跑完才跑 api），web 123 文件 / 1706 测试全过、api 184 文件 / 2460 passed + 12 skipped 全过，两次 EXIT=0。同一工作树、同一 PG 容器，唯一变量是去掉了两个套件的并发。
+- **根因假设**：与 BUG-FLAKE-001 的 I/O contention / WSL2 host-performance 家族同机制（见 2026-07-20 复发记录）——两个 vitest 进程同时占满 CPU，瞬时调度无法在 5s 默认 testTimeout 内收敛；失败点落在已知的时序敏感用例（login limiter、CLI 证据写入、100 轮 lock 竞争、带 debounce 的页面 reload）。是**操作方式引入的负载**，不是产品代码 / 测试代码回归。
+- **当前缓解**：开发机重套件**串行**执行，不并行跑两个独立测试进程；CI 各 job 独立 runner，不受此操作模式影响。
+- **后续动作**：无代码改动（不调 timeout、不 skip、不 retry）。若在**串行**执行下同一批用例再次出现 ≥3 次，按登记规则升级为正式跟踪条目。
+
 ### 2026-08-26 — 漂移型 5s/10s 超时的根因链：worker identity 错绑（第一层）→ DDL advisory-lock 队列负载（第二层）（S0 审计 follow-up ×2 轮审查）
 
 - **现象**：`pnpm verify` / coverage 下漂移型超时，victim 位置不固定：auth.test.ts
