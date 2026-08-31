@@ -125,6 +125,16 @@ const zhCN = {
   },
 
   /**
+   * Rich content rendering (#301). The static ContentDocumentRenderer is a
+   * closed-vocabulary fail-safe renderer: unknown nodes degrade to a notice,
+   * they never reach raw HTML.
+   */
+  content: {
+    unsupportedBlock: "此内容包含当前版本不支持的元素",
+    mathLoading: "公式加载中",
+  },
+
+  /**
    * Global error / toast / notify messages. API error *codes* stay machine
    * semantic (contracts/messageRegistry); these are the generic UI-facing
    * fallbacks and common mutation success/failure toasts.

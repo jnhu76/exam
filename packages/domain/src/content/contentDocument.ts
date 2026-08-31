@@ -581,3 +581,22 @@ export function plainTextToDocument(text: string): ContentDocumentV1 {
     })),
   };
 }
+
+/**
+ * Structural guard for persisted answer payloads: true when `value` looks
+ * like a ContentDocumentV1 envelope (correct version tag + node array).
+ * Deliberately shallow — deep validation stays at the write boundary; this
+ * exists so read-side consumers (renderer answer branch) can route rich
+ * answers to ContentDocumentRenderer without importing the wire schema.
+ */
+export function isContentDocumentV1(
+  value: unknown,
+): value is ContentDocumentV1 {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { docVersion?: unknown }).docVersion === CONTENT_DOC_VERSION &&
+    (value as { type?: unknown }).type === "doc" &&
+    Array.isArray((value as { content?: unknown }).content)
+  );
+}
