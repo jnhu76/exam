@@ -1426,6 +1426,56 @@ describe("recovery incident queue repository", () => {
         );
     }
   });
+
+  it("fails closed when an anchored incident also carries a membership row (ADR-014 §2)", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2027-11-01T00:00:00.000Z");
+    const id = await insertIncident(db, alpha, {
+      examId: alpha.examId,
+      attemptId: alpha.attemptId,
+      candidateId: alpha.candidateId,
+      createdAt: t,
+      description: "queue-anchor-membership-conflict",
+    });
+    // The membership row points at a RESOLVABLE attempt — only the
+    // anchor/membership exclusivity rule is violated. The aggregate and
+    // attempt-operations surfaces already fail closed on this corruption;
+    // the queue must not project the forbidden graph either.
+    await db.insert(schema.examIncidentAttempts).values({
+      id: randomUUID(),
+      organizationId: alpha.organizationId,
+      incidentId: id,
+      attemptId: alpha.attemptId,
+      relationshipType: "affected",
+      linkedBy: alpha.actorId,
+      operationId: randomUUID(),
+      linkedAt: t,
+    });
+    try {
+      await expect(
+        repo.listIncidentQueue(alpha.ctx, { limit: 50 }),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining(
+          "RECOVERY_QUEUE_ANCHOR_MEMBERSHIP_CONFLICT",
+        ),
+      });
+    } finally {
+      await db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, alpha.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
 });
 
 // ── J5-I1A2 — Recovery Incident Aggregate Detail (contract §6.3) ──
@@ -1652,7 +1702,7 @@ describe("recovery incident aggregate detail repository", () => {
     expect(agg).toBeNull();
   });
 
-  // ── P1-1: statusActionCandidates matches ADR-014 §3 exactly per status ──
+  // ── statusActionCandidates matches ADR-014 §3 exactly per status ──
   // The repo derives the STATUS candidates only; the route intersects them
   // with the caller's capabilities + incident shape to produce the wire
   // `allowedActions` (J5-R0 §6.2 / §6.3).
@@ -1736,7 +1786,7 @@ describe("recovery incident aggregate detail repository", () => {
     ]);
   });
 
-  // ── P1-3: candidate-focused exam-wide incident (attemptId=null, candidateId=set) ──
+  // ── candidate-focused exam-wide incident (attemptId=null, candidateId=set) ──
 
   it("candidate-focused exam-wide incident projects its focus candidate even with zero memberships", async () => {
     const repo = createRecoveryRepo(db);
@@ -1843,7 +1893,7 @@ describe("recovery incident aggregate detail repository", () => {
     }
   });
 
-  // ── P1-4: full relationship-graph scope validation (fail-closed 503) ──
+  // ── full relationship-graph scope validation (fail-closed 503) ──
 
   it("fails closed when a membership attempt belongs to a different exam", async () => {
     const repo = createRecoveryRepo(db);
@@ -2394,7 +2444,7 @@ describe("recovery incident aggregate detail repository", () => {
       // time_grant action identity (actionId = adjustment id), so the canonical
       // atomic time-grant path (adjustment + action link, no membership) still
       // projects its ledger row. Unrelated grants on the same attempt would be
-      // excluded (see the round-4 linked-only regression test).
+      // excluded (only action-linked adjustments are projected).
       expect(agg!.timeAdjustmentSummaries.length).toBe(1);
       expect(agg!.timeAdjustmentSummaries[0]!.id).toBe(adjustmentId);
       expect(agg!.timeAdjustmentSummaries[0]!.attemptId).toBe(fx.attemptId);
@@ -2443,7 +2493,7 @@ describe("recovery incident aggregate detail repository", () => {
     }
   });
 
-  // ── P1-3 (round 3): link-referenced attempts are validated, membership NOT required ──
+  // ── link-referenced attempts are validated, membership NOT required ──
 
   it("fails closed when an action link's attempt belongs to a different exam", async () => {
     const repo = createRecoveryRepo(db);
@@ -2662,7 +2712,7 @@ describe("recovery incident aggregate detail repository", () => {
     }
   });
 
-  // ── P1-4 (round 3): anchor/membership mutual exclusion (ADR-014 §2) ──
+  // ── Anchor/membership mutual exclusion (ADR-014 §2) ──
 
   it("fails closed when an anchored incident also carries membership rows", async () => {
     const repo = createRecoveryRepo(db);
@@ -2713,7 +2763,58 @@ describe("recovery incident aggregate detail repository", () => {
     }
   });
 
-  // ── Round 4: action-identity-driven timeAdjustmentSummaries ──
+  // ADR-014 §7: an anchored incident's action / interruption links must point
+  // at the anchor attempt (incident.attemptId null-or-matching) — the same leg
+  // the write path enforces at link time and the attempt-operations read model
+  // re-verifies. The aggregate must fail closed on a link that skips the
+  // anchor, even when the target attempt is on the same exam.
+
+  it("fails closed when an anchored incident's action link points at a different attempt of the same exam", async () => {
+    const repo = createRecoveryRepo(db);
+    const t = new Date("2028-04-15T00:00:00.000Z");
+    const id = await insertIncident(db, fx, {
+      examId: fx.examId,
+      attemptId: fx.attemptId,
+      candidateId: fx.candidateId,
+      createdAt: t,
+      description: "agg-anchored-action-link-anchor-skip",
+    });
+    await db.insert(schema.examIncidentActions).values({
+      id: randomUUID(),
+      organizationId: fx.organizationId,
+      incidentId: id,
+      actionType: "force_submit",
+      actionId: randomUUID(),
+      attemptId: attemptId2,
+      actorId: fx.actorId,
+      linkedAt: t,
+      operationId: randomUUID(),
+    });
+    try {
+      await expect(repo.getIncidentAggregate(fx.ctx, id)).rejects.toMatchObject(
+        {
+          name: "AuthzUnavailableError",
+          code: "AUTHZ_UNAVAILABLE",
+          statusCode: 503,
+          message: expect.stringContaining("RECOVERY_AGG_ACTION_ATTEMPT_SCOPE"),
+        },
+      );
+    } finally {
+      await db
+        .delete(schema.examIncidentActions)
+        .where(eq(schema.examIncidentActions.incidentId, id));
+      await db
+        .delete(schema.examIncidents)
+        .where(
+          and(
+            eq(schema.examIncidents.organizationId, fx.organizationId),
+            eq(schema.examIncidents.id, id),
+          ),
+        );
+    }
+  });
+
+  // ── Action-identity-driven timeAdjustmentSummaries ──
   // (ADR-014 §7: time_grant.actionId = attempt_time_adjustments.id;
   //  force_submit.actionId = attemptId. J5-R0 §6.1: "linked time grants /
   //  actions" — NOT a referenced Attempt's full ledger.)

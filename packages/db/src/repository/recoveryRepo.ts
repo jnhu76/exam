@@ -849,15 +849,13 @@ export function createRecoveryRepo(db: Database) {
               `RECOVERY_AGG_ANCHOR_BROKEN: incident ${incident.id} attempt ${incident.attemptId}`,
             );
           }
-          if (a.examId !== incident.examId) {
+          const violation = incidentScopeViolation(incident, a);
+          if (violation === "EXAM_MISMATCH") {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_ANCHOR_EXAM_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} exam ${a.examId}`,
             );
           }
-          if (
-            incident.candidateId != null &&
-            a.candidateId !== incident.candidateId
-          ) {
+          if (violation === "CANDIDATE_MISMATCH") {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_ANCHOR_CANDIDATE_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} candidate ${a.candidateId}`,
             );
@@ -873,22 +871,20 @@ export function createRecoveryRepo(db: Database) {
               `RECOVERY_AGG_MEMBERSHIP_BROKEN: incident ${incident.id} membership ${m.id} attempt ${m.attemptId}`,
             );
           }
-          if (a.examId !== incident.examId) {
+          const violation = incidentScopeViolation(incident, a);
+          if (violation === "EXAM_MISMATCH") {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_MEMBERSHIP_EXAM_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} exam ${a.examId}`,
             );
           }
-          if (
-            incident.candidateId != null &&
-            a.candidateId !== incident.candidateId
-          ) {
+          if (violation === "CANDIDATE_MISMATCH") {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_MEMBERSHIP_CANDIDATE_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} candidate ${a.candidateId}`,
             );
           }
         }
         // Action links and interruption links each carry an attemptId that
-        // MUST resolve in-org and satisfy the same scope quadruple — but the
+        // MUST resolve in-org and satisfy the scope quadruple — but the
         // attempt does NOT need to be a membership (the relationships are
         // independent, ADR-014 §7). An anchored incident rejects membership,
         // but its action / interruption links still MUST point at the anchor
@@ -907,11 +903,15 @@ export function createRecoveryRepo(db: Database) {
         // adjustment's own createdAt), so actions[i] maps to its fact.
         for (const act of actions) {
           const a = attemptById.get(act.attemptId);
+          // Full quadruple: resolution + incident.attemptId null-or-matching
+          // (a link on an anchored incident points at the anchor) + exam +
+          // candidate focus — the same legs the write path enforces at link
+          // time and the attempt-operations read model re-verifies.
           if (
             !a ||
-            a.examId !== incident.examId ||
-            (incident.candidateId != null &&
-              a.candidateId !== incident.candidateId)
+            (incident.attemptId != null &&
+              act.attemptId !== incident.attemptId) ||
+            incidentScopeViolation(incident, a) != null
           ) {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_ACTION_ATTEMPT_SCOPE: incident ${incident.id} action ${act.id} attempt ${act.attemptId}`,
@@ -971,9 +971,9 @@ export function createRecoveryRepo(db: Database) {
           const a = attemptById.get(link.attemptId);
           if (
             !a ||
-            a.examId !== incident.examId ||
-            (incident.candidateId != null &&
-              a.candidateId !== incident.candidateId)
+            (incident.attemptId != null &&
+              link.attemptId !== incident.attemptId) ||
+            incidentScopeViolation(incident, a) != null
           ) {
             throw new AuthzUnavailableError(
               `RECOVERY_AGG_INTERRUPTION_ATTEMPT_SCOPE: incident ${incident.id} interruptionLink ${link.id} attempt ${link.attemptId}`,
@@ -1621,46 +1621,37 @@ export function createRecoveryRepo(db: Database) {
           }
         }
 
-        // candidateId focus helper: incident.candidateId is null-or-matching
-        // the attempt's candidate (candidate-focused exam-wide incident).
-        const candidateOk = (incidentCandidateId: string | null) =>
-          incidentCandidateId == null ||
-          incidentCandidateId === attempt.candidateId;
-
-        // Validate EVERY edge independently. Any broken edge → 503.
+        // Validate EVERY edge independently. Any broken edge → 503. The exam +
+        // candidate legs of each edge are the shared scope-quadruple kernel;
+        // the incident.attemptId leg is edge-shape-specific and stays here.
         for (const edge of edges) {
           const inc = incidentById.get(edge.incidentId)!;
           if (edge.kind === "anchor") {
-            // Anchor: incident.attemptId == this attempt, same exam, candidate
-            // null-or-matching.
+            // Anchor: incident.attemptId == this attempt.
             if (
               inc.attemptId !== attemptId ||
-              inc.examId !== attempt.examId ||
-              !candidateOk(inc.candidateId)
+              incidentScopeViolation(inc, attempt) != null
             ) {
               throw new AuthzUnavailableError(
                 `RECOVERY_OP_ANCHOR_SCOPE_MISMATCH: attempt ${attemptId} incident ${inc.id}`,
               );
             }
           } else if (edge.kind === "membership") {
-            // Membership: incident is exam-wide (attemptId null), same exam,
-            // candidate null-or-matching.
+            // Membership: incident is exam-wide (attemptId null).
             if (
               inc.attemptId !== null ||
-              inc.examId !== attempt.examId ||
-              !candidateOk(inc.candidateId)
+              incidentScopeViolation(inc, attempt) != null
             ) {
               throw new AuthzUnavailableError(
                 `RECOVERY_OP_MEMBERSHIP_SCOPE_MISMATCH: attempt ${attemptId} incident ${inc.id}`,
               );
             }
           } else if (edge.kind === "action") {
-            // Action: same exam, incident.attemptId null-or-this, candidate
-            // null-or-matching, AND referent integrity on the action itself.
+            // Action: incident.attemptId null-or-this, AND referent integrity
+            // on the action itself.
             if (
-              inc.examId !== attempt.examId ||
               (inc.attemptId !== null && inc.attemptId !== attemptId) ||
-              !candidateOk(inc.candidateId)
+              incidentScopeViolation(inc, attempt) != null
             ) {
               throw new AuthzUnavailableError(
                 `RECOVERY_OP_ACTION_INCIDENT_SCOPE_MISMATCH: attempt ${attemptId} incident ${inc.id}`,
@@ -1702,13 +1693,12 @@ export function createRecoveryRepo(db: Database) {
               );
             }
           } else {
-            // Interruption: same exam, incident.attemptId null-or-this,
-            // candidate null-or-matching, the link's attempt is this attempt,
-            // AND the interruption resolves to one of this attempt's episodes.
+            // Interruption: incident.attemptId null-or-this, the link's
+            // attempt is this attempt, AND the interruption resolves to one
+            // of this attempt's episodes.
             if (
-              inc.examId !== attempt.examId ||
               (inc.attemptId !== null && inc.attemptId !== attemptId) ||
-              !candidateOk(inc.candidateId)
+              incidentScopeViolation(inc, attempt) != null
             ) {
               throw new AuthzUnavailableError(
                 `RECOVERY_OP_INTERRUPTION_INCIDENT_SCOPE_MISMATCH: attempt ${attemptId} incident ${inc.id}`,
@@ -1732,9 +1722,8 @@ export function createRecoveryRepo(db: Database) {
         for (const incidentId of adjustmentIncidentIds) {
           const inc = incidentById.get(incidentId)!;
           if (
-            inc.examId !== attempt.examId ||
             (inc.attemptId !== null && inc.attemptId !== attemptId) ||
-            !candidateOk(inc.candidateId)
+            incidentScopeViolation(inc, attempt) != null
           ) {
             throw new AuthzUnavailableError(
               `RECOVERY_OP_ADJUSTMENT_INCIDENT_SCOPE_MISMATCH: attempt ${attemptId} incident ${incidentId}`,
@@ -2142,6 +2131,32 @@ function deriveAttemptStatusActionCandidates(
 export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;
 
 /**
+ * Exam + candidate legs of the ADR-014 §7 link scope quadruple — the frozen
+ * incident→attempt relationship invariant shared by the queue enrichment, the
+ * aggregate relationship graph, and the attempt-operations edge validation:
+ * a referenced attempt must belong to the incident's exam and, when the
+ * incident carries a candidate focus, to that candidate. Attempt resolution
+ * and the incident.attemptId leg (anchor/membership exclusivity, null-or-
+ * matching link target) stay caller-owned: they depend on the surface's row
+ * shape and direction. Returns the violated leg so each caller maps it to its
+ * own RECOVERY_QUEUE_* / RECOVERY_AGG_* / RECOVERY_OP_* error — this kernel
+ * never throws and never formats surface-specific codes.
+ */
+function incidentScopeViolation(
+  incident: { examId: string; candidateId: string | null },
+  attempt: { examId: string; candidateId: string | null },
+): "EXAM_MISMATCH" | "CANDIDATE_MISMATCH" | null {
+  if (attempt.examId !== incident.examId) return "EXAM_MISMATCH";
+  if (
+    incident.candidateId != null &&
+    attempt.candidateId !== incident.candidateId
+  ) {
+    return "CANDIDATE_MISMATCH";
+  }
+  return null;
+}
+
+/**
  * Enriches a whole queue page with a FIXED number of SQL queries (contract
  * §5.1 "NO N+1 architecture"): base incidents + exams + memberships +
  * attempts + candidates + proctors, then assembles per-incident projections
@@ -2150,7 +2165,8 @@ export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;
  * Broken parent chains (an Incident whose Exam is missing or not in the org)
  * fail closed with {@link AuthzUnavailableError} — the API layer surfaces it
  * as 503 AUTHZ_UNAVAILABLE. An admin audit surface must never silently drop
- * rows it cannot project.
+ * rows it cannot project, nor project a relationship graph the authority
+ * forbids (anchor/membership exclusivity, scope quadruple).
  */
 async function enrichPage(
   db: Database,
@@ -2189,6 +2205,25 @@ async function enrichPage(
         inArray(examIncidentAttempts.incidentId, incidentIds),
       ),
     );
+
+  // 2b. Anchor/membership exclusivity (ADR-014 §2) — whole-incident rule: an
+  //     anchored incident must not carry membership rows for ANY attempt. The
+  //     aggregate and attempt-operations reads fail closed on this; the queue
+  //     must not project the forbidden graph either. Uses only the membership
+  //     rows already fetched — no extra query.
+  const anchoredIncidentIds = new Set(
+    incidents.filter((i) => i.attemptId != null).map((i) => i.id),
+  );
+  if (anchoredIncidentIds.size > 0) {
+    const conflict = memberRows.find((m) =>
+      anchoredIncidentIds.has(m.incidentId),
+    );
+    if (conflict) {
+      throw new AuthzUnavailableError(
+        `RECOVERY_QUEUE_ANCHOR_MEMBERSHIP_CONFLICT: incident ${conflict.incidentId}`,
+      );
+    }
+  }
 
   // 3. Linked attempt ids = anchor attempt (if set) ∪ membership rows; then a
   //    single batch fetch resolves their exam/candidate/status/deadline.
@@ -2268,15 +2303,13 @@ async function enrichPage(
           `RECOVERY_QUEUE_ATTEMPT_BROKEN: incident ${incident.id} attempt ${incident.attemptId}`,
         );
       }
-      if (a.examId !== incident.examId) {
+      const violation = incidentScopeViolation(incident, a);
+      if (violation === "EXAM_MISMATCH") {
         throw new AuthzUnavailableError(
           `RECOVERY_QUEUE_ANCHOR_EXAM_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} exam ${a.examId}`,
         );
       }
-      if (
-        incident.candidateId != null &&
-        a.candidateId !== incident.candidateId
-      ) {
+      if (violation === "CANDIDATE_MISMATCH") {
         throw new AuthzUnavailableError(
           `RECOVERY_QUEUE_ANCHOR_CANDIDATE_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} candidate ${a.candidateId}`,
         );
