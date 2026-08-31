@@ -111,7 +111,6 @@ describe("QuestionRenderer — rich text_response (issue 301)", () => {
     );
     // Lazy chunk resolves and Tiptap mounts its editable surface.
     const editor = await screen.findByRole("textbox", {}, { timeout: 5000 });
-    console.log("DEBUG-HTML:", editor.outerHTML.slice(0, 400));
 
     // Any transaction (here: the mount/focus transaction jsdom produces)
     // must surface a canonical ContentDocumentV1 — never raw Tiptap JSON.

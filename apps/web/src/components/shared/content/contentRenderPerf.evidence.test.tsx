@@ -6,7 +6,9 @@ import { ContentRenderer } from "./ContentRenderer";
 import { ContentDocumentRenderer } from "./ContentDocumentRenderer";
 
 /**
- * Synthetic workload evidence for the #301 READ path (issue 301 §52).
+ * Synthetic workload evidence for the issue 301 READ path (measured
+ * numbers are recorded in the PR report; this file asserts only the loose
+ * regression bounds) (issue 301 §52).
  *
  * These are MEASURED evidence runs, not flake-tight gates: they assert only
  * loose sanity bounds (catastrophic regressions) and log the measured
@@ -109,15 +111,11 @@ function renderRichList(n: number): number {
 describe("content READ path — synthetic workloads", () => {
   it("workload A: 100 plain choice prompts render fast (no editor/math cost)", () => {
     const ms = renderPlainList(100);
-    // eslint-disable-next-line no-console
-    console.log(`[EVIDENCE] A: 100 plain prompts in ${ms.toFixed(1)}ms`);
     expect(ms).toBeLessThan(5000);
   });
 
   it("workload B: 100 rich mixed documents render fast via the static renderer", () => {
     const ms = renderRichList(100);
-    // eslint-disable-next-line no-console
-    console.log(`[EVIDENCE] B: 100 rich mixed docs in ${ms.toFixed(1)}ms`);
     expect(ms).toBeLessThan(30000);
   });
 
@@ -140,10 +138,6 @@ describe("content READ path — synthetic workloads", () => {
     );
     const ms = performance.now() - t0;
     unmount();
-    // eslint-disable-next-line no-console
-    console.log(
-      `[EVIDENCE] C: 50 questions (10 rich prompts + 10 rich answers) in ${ms.toFixed(1)}ms`,
-    );
     expect(ms).toBeLessThan(30000);
   });
 
@@ -196,10 +190,6 @@ describe("content READ path — synthetic workloads", () => {
     }
     const churnMs = performance.now() - c0;
     c.unmount();
-    // eslint-disable-next-line no-console
-    console.log(
-      `[EVIDENCE] memo: ${UPDATES} parent updates over 100 identical rich docs in ${memoMs.toFixed(1)}ms vs re-rendered docs ${churnMs.toFixed(1)}ms`,
-    );
     // Memoized identical-prop updates stay an order cheaper than full child
     // re-renders — loose bound so jsdom noise cannot flake the gate.
     expect(memoMs).toBeLessThan(churnMs);

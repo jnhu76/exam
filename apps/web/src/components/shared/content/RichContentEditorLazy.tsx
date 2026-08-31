@@ -26,7 +26,7 @@ export function RichContentEditorLazy(props: RichContentEditorLazyProps) {
       fallback={
         <div
           role="status"
-          className="type-body min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-muted-foreground"
+          className="type-body min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2"
         >
           {t("content.editor.loading")}
         </div>

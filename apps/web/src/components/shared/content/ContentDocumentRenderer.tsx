@@ -160,11 +160,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
     default:
       // Controlled fail-safe for invalid persisted data (issue 301 §28): never a
       // raw-HTML fallback.
-      return (
-        <p className="type-body text-muted-foreground">
-          {t("content.unsupportedBlock")}
-        </p>
-      );
+      return <p className="type-body">{t("content.unsupportedBlock")}</p>;
   }
 }
 
