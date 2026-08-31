@@ -176,13 +176,14 @@ const ContentBlockSchema = z.union([
 
 /**
  * The recursive ContentDocumentV1 grammar + post-parse structural limits.
- * Exported only so the public entry can pipe the iterative preflight in front
- * of it. NEVER parse raw unknown input with this schema directly: the grammar
- * is mutually recursive (z.lazy over lists/tables), so a hostile payload
- * nested thousands of levels deep would overflow the parser here before any
- * limit check runs. Use `ContentDocumentV1Schema`.
+ * Module-private: only `ContentDocumentV1Schema` (below) pipes the iterative
+ * preflight in front of it, and nothing else may parse with this schema.
+ * NEVER parse raw unknown input with this schema directly: the grammar is
+ * mutually recursive (z.lazy over lists/tables), so a hostile payload nested
+ * thousands of levels deep would overflow the parser here before any limit
+ * check runs. Use `ContentDocumentV1Schema`.
  */
-export const RecursiveContentDocumentV1Schema = z
+const RecursiveContentDocumentV1Schema = z
   .object({
     docVersion: z.literal(CONTENT_DOC_VERSION),
     type: z.literal("doc"),
@@ -205,7 +206,7 @@ export const RecursiveContentDocumentV1Schema = z
  * this schema's output equal to its input (unknown), so piping it in front of
  * the recursive grammar adds no transform — type identity is preserved.
  */
-export const RawPreflightSchema: z.ZodType<unknown, z.ZodTypeDef, unknown> =
+const RawPreflightSchema: z.ZodType<unknown, z.ZodTypeDef, unknown> =
   z.custom<unknown>(
     (value) => preflightContentDocumentStructure(value).length === 0,
     (value) => ({
