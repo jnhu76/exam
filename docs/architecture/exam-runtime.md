@@ -108,8 +108,32 @@ function getGradingMode(type: QuestionType): GradingMode {
 | ---- | -------------- |
 | auto 题（非 text_response） | standardAnswer 非空且不是占位符（如"暂无"） |
 | text_response | rubric 非空且不是占位符；standardAnswer 可选 |
+| fill_blank | 必须为 Plain（禁止 content_document / 富文本内容） |
+| 全部题型 | answerMode 仅允许出现在 text_response；Rich 题的 content 必须等于服务端派生的 plainTextProjection |
 
 创建草稿时允许空值；发布时强制校验。
+
+### 1.7 Content 双模式（issue 301，ADR-019）
+
+题目内容采用 **B′ additive 双槽模型**：`questions.content` TEXT 恒在；
+`questions.content_document` JSONB 可空。
+
+- `content_document == null` → **Plain**：`content` 是唯一权威。
+- `content_document != null` → **Rich**：document 是权威，`content` 是服务端
+  派生的 `plainTextProjection`（搜索/展示文本）。Rich 写入时客户端提供的
+  content 一律忽略，由唯一服务端写入口（`resolveQuestionContentWrite`）规范化
+  文档并重算投影。
+- `contentMode` 是派生事实（document 的空性），不建列、不存储。
+- 语法 `ContentDocumentV1`：版本化封闭词汇（block/inline/marks），带结构上限
+  （节点数/深度/表格形状/latex 长度等）。未知节点在所有写入边界被拒绝。
+  规范化（normalize）确定性且幂等；内核在 `@exam/domain`，wire schema 在
+  `@exam/contracts` 与内核做类型同一性检查。
+- `answerMode: "plain" | "rich"` 仅用于 text_response（与题干模式独立），
+  随 QuestionSnapshot 冻结；rich 答案是规范化后的 ContentDocumentV1。
+- 读路径渲染为纯 React 静态渲染器（非 Tiptap / 非 contentEditable /
+  无 dangerouslySetInnerHTML；唯一 HTML seam 是 trust=false 的 KaTeX 封装）。
+  编辑器（Tiptap）只在编辑面挂载，且为懒加载 chunk：Plain 读路径不下载
+  Tiptap/KaTeX。
 
 ---
 
@@ -613,6 +637,7 @@ interface GradingDetailsQuestion {
   questionId: string;          // 来自冻结 QuestionSnapshot.originalQuestionId
   type: QuestionType;          // 来自冻结 QuestionSnapshot
   content: string;             // 题目 prompt，来自冻结 QuestionSnapshot
+  contentDocument: ContentDocumentV1 | null; // Rich 题干文档；Plain 为 null
   maxScore: number;            // 来自冻结 QuestionSnapshot.score
   candidateAnswer: unknown | null;   // 来自 attempt_grading_entries.candidateAnswer
   entry: {                     // null 直到该题已评分
