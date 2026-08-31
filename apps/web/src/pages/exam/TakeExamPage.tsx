@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { toast } from "sonner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -1159,7 +1160,10 @@ export function TakeExamPage() {
                 )}
               </div>
               <div className="type-reading mb-8">
-                {currentQuestionView.prompt}
+                <ContentRenderer
+                  content={currentQuestionView.prompt}
+                  document={currentQuestionView.promptDocument}
+                />
               </div>
               <QuestionRenderer
                 question={rendererQuestion}

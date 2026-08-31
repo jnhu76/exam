@@ -4,6 +4,7 @@ import { MultipleChoiceInput } from "./MultipleChoiceInput";
 import { FillBlankInput } from "./FillBlankInput";
 import { TrueFalseInput } from "./TrueFalseInput";
 import { TextResponseInput } from "./TextResponseInput";
+import { RichTextAnswerInput } from "./RichTextAnswerInput";
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 
 /**
@@ -60,7 +61,15 @@ export function QuestionRenderer({
         />
       );
     case "text_response":
-      return (
+      // answerMode ("plain" | "rich", frozen in the snapshot) decides the
+      // input; it is independent of the prompt's Plain/Rich mode.
+      return question.answerMode === "rich" ? (
+        <RichTextAnswerInput
+          value={answer}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      ) : (
         <TextResponseInput
           value={answer as string | undefined}
           onChange={onChange}
