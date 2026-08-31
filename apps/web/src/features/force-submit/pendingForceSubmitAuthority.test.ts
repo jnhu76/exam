@@ -38,317 +38,104 @@ describe("pendingForceSubmitAuthority", () => {
     vi.restoreAllMocks();
   });
 
-  // ── Save ──────────────────────────────────────────────────────────────
-
-  describe("savePendingForceSubmit", () => {
-    it("persists a valid authority and read-back matches", () => {
-      const auth = validAuthority();
-      const result = savePendingForceSubmit(auth);
-      expect(result).toEqual({ ok: true });
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      expect(stored).not.toBeNull();
-      const parsed = JSON.parse(stored!);
-      expect(parsed.schemaVersion).toBe(2);
-      expect(parsed.command.attemptId).toBe(auth.command.attemptId);
-      expect(parsed.command.operationId).toBe(auth.command.operationId);
-    });
-
-    it("returns storage_unavailable when sessionStorage is inaccessible", () => {
-      // getStorage() checks `window.sessionStorage` directly; make it return
-      // null so getStorage() returns null → storage_unavailable.
-      const real = Object.getOwnPropertyDescriptor(window, "sessionStorage")!;
-      Object.defineProperty(window, "sessionStorage", {
-        value: null,
-        configurable: true,
-      });
-      try {
-        const result = savePendingForceSubmit(validAuthority());
-        expect(result.ok).toBe(false);
-        if (!result.ok) expect(result.error).toBe("storage_unavailable");
-      } finally {
-        Object.defineProperty(window, "sessionStorage", real);
-      }
-    });
-
-    it("returns write_failed when setItem throws", () => {
-      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-        throw new DOMException("quota exceeded", "QuotaExceededError");
-      });
-      const result = savePendingForceSubmit(validAuthority());
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("write_failed");
-    });
-
-    it("returns write_failed when read-back is absent", () => {
-      const origGetItem = Storage.prototype.getItem;
-      vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-      ) {
-        if (key === STORAGE_KEY) return null;
-        return origGetItem.call(this, key);
-      });
-      const result = savePendingForceSubmit(validAuthority());
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("write_failed");
-    });
-
-    it("returns readback_mismatch when read-back bytes differ", () => {
-      const origGetItem = Storage.prototype.getItem;
-      vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-      ) {
-        const value = origGetItem.call(this, key);
-        if (key === STORAGE_KEY && value !== null) {
-          return JSON.stringify(JSON.parse(value), null, 2);
-        }
-        return value;
-      });
-      const result = savePendingForceSubmit(validAuthority());
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("readback_mismatch");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
-    });
-
-    it("covers schemaVersion in byte-equal check", () => {
-      const origSetItem = Storage.prototype.setItem;
-      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-        value: string,
-      ) {
-        origSetItem.call(this, key, value);
-        // Corrupt schemaVersion after write
-        const corrupted = JSON.parse(value);
-        corrupted.schemaVersion = 99;
-        origSetItem.call(this, key, JSON.stringify(corrupted));
-      });
-      const result = savePendingForceSubmit(validAuthority());
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("readback_mismatch");
-    });
-
-    it("covers createdAt in byte-equal check", () => {
-      const origSetItem = Storage.prototype.setItem;
-      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-        value: string,
-      ) {
-        origSetItem.call(this, key, value);
-        const corrupted = JSON.parse(value);
-        corrupted.createdAt = corrupted.createdAt + 99999;
-        origSetItem.call(this, key, JSON.stringify(corrupted));
-      });
-      const result = savePendingForceSubmit(validAuthority());
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("readback_mismatch");
-    });
-
-    // ── Re-review P1: the save path runs the SAME full validator the loader
-    //    uses BEFORE writing. The byte read-back only proves the write stuck —
-    //    it cannot catch a semantically invalid record (e.g. an empty
-    //    candidateName snapshot), which the loader would treat as corrupt and
-    //    DELETE on the next load, destroying the operation identity this save
-    //    was meant to protect. "Writer can write" and "reader can read" can
-    //    never diverge: invalid records fail closed with NOTHING written.
-
-    it("returns invalid_authority (nothing written) when candidateName is empty", () => {
-      const auth = validAuthority();
-      auth.command.candidateName = "";
-      const result = savePendingForceSubmit(auth);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("invalid_authority");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
-    });
-
-    it("returns invalid_authority when examId is missing", () => {
-      const auth = validAuthority() as unknown as {
-        command: Record<string, unknown>;
-      };
-      delete auth.command.examId;
-      const result = savePendingForceSubmit(
-        auth as unknown as PendingForceSubmitAuthority,
-      );
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("invalid_authority");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
-    });
-
-    it("returns invalid_authority when schemaVersion is not 2", () => {
-      const auth = validAuthority() as unknown as Record<string, unknown>;
-      auth.schemaVersion = 1;
-      const result = savePendingForceSubmit(
-        auth as unknown as PendingForceSubmitAuthority,
-      );
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("invalid_authority");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
-    });
-
-    it("returns invalid_authority when operationId is not a UUID", () => {
-      const auth = validAuthority();
-      auth.command.operationId = "not-a-uuid";
-      const result = savePendingForceSubmit(auth);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("invalid_authority");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
-    });
-
-    it("returns invalid_authority when reason is not canonical", () => {
-      const auth = validAuthority();
-      auth.command.reason = " 管理员强制交卷";
-      const result = savePendingForceSubmit(auth);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("invalid_authority");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
-    });
-  });
-
-  // ── Load ──────────────────────────────────────────────────────────────
-
   describe("loadPendingForceSubmit", () => {
-    it("returns authority for a valid stored record", () => {
-      const auth = validAuthority();
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("authority");
-      if (result.kind === "authority") {
-        expect(result.authority.command.attemptId).toBe(auth.command.attemptId);
-        expect(result.authority.command.operationId).toBe(
-          auth.command.operationId,
-        );
-      }
-    });
-
     it("returns none when nothing is stored", () => {
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("none");
+      expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+        kind: "none",
+      });
     });
 
-    it("returns corrupt + clears when JSON is invalid", () => {
-      sessionStorage.setItem(STORAGE_KEY, "not-valid-json{{{");
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
+    it("returns authority for a valid stored record", () => {
+      const authority = validAuthority();
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(authority));
+      expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+        kind: "authority",
+        authority,
+      });
+    });
+
+    it("clears and surfaces corrupt when the JSON is unparseable", () => {
+      sessionStorage.setItem(STORAGE_KEY, "{not json");
+      expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+        kind: "corrupt",
+        cleared: true,
+      });
       expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
-    it("returns corrupt when organizationId does not match", () => {
-      const auth = validAuthority({ organizationId: "wrong-org" });
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
+    it("clears and surfaces corrupt for a different organizationId", () => {
+      const authority = validAuthority({ organizationId: "other-org" });
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(authority));
+      expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+        kind: "corrupt",
+        cleared: true,
+      });
       expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
-    it("returns corrupt when actorId does not match", () => {
-      const auth = validAuthority({ actorId: "wrong-actor" });
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    it("clears and surfaces corrupt for a different actorId", () => {
+      const authority = validAuthority({ actorId: "other-actor" });
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(authority));
+      expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+        kind: "corrupt",
+        cleared: true,
+      });
     });
 
-    it("returns corrupt when schemaVersion is not 2", () => {
-      const auth = validAuthority() as unknown as Record<string, unknown>;
-      auth.schemaVersion = 3;
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when attemptId is empty", () => {
-      const auth = validAuthority();
-      auth.command.attemptId = "";
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when operationId is not a valid UUID", () => {
-      const auth = validAuthority();
-      auth.command.operationId = "not-a-uuid";
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when reason is empty", () => {
-      const auth = validAuthority();
-      auth.command.reason = "";
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when reason has leading whitespace", () => {
-      const auth = validAuthority();
-      auth.command.reason = " 管理员强制交卷";
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when examId is missing", () => {
-      const auth = validAuthority() as unknown as {
-        command: Record<string, unknown>;
-      };
-      delete auth.command.examId;
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when examId is empty", () => {
-      const auth = validAuthority();
-      auth.command.examId = "";
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when candidateName is missing", () => {
-      const auth = validAuthority() as unknown as {
-        command: Record<string, unknown>;
-      };
-      delete auth.command.candidateName;
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when candidateName is empty", () => {
-      const auth = validAuthority();
-      auth.command.candidateName = "";
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when candidateName exceeds 200 chars", () => {
-      const auth = validAuthority();
-      auth.command.candidateName = "名".repeat(201);
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when createdAt is NaN", () => {
-      const auth = validAuthority();
-      (auth as unknown as Record<string, unknown>).createdAt = NaN;
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
-
-    it("returns corrupt when createdAt is Infinity", () => {
-      const auth = validAuthority();
-      (auth as unknown as Record<string, unknown>).createdAt = Infinity;
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.kind).toBe("corrupt");
-    });
+    it.each([
+      ["schemaVersion", { schemaVersion: 1 }],
+      ["createdAt not finite", { createdAt: Number.NaN }],
+      [
+        "operationId not uuid",
+        { command: { ...validAuthority().command, operationId: "not-a-uuid" } },
+      ],
+      [
+        "attemptId empty",
+        { command: { ...validAuthority().command, attemptId: "" } },
+      ],
+      [
+        "reason blank",
+        { command: { ...validAuthority().command, reason: "   " } },
+      ],
+      [
+        "reason untrimmed",
+        { command: { ...validAuthority().command, reason: " x" } },
+      ],
+      // `undefined` is dropped by JSON.stringify, so this exercises the
+      // missing-field path, not just the empty-string path.
+      [
+        "examId missing",
+        { command: { ...validAuthority().command, examId: undefined } },
+      ],
+      [
+        "candidateName missing",
+        { command: { ...validAuthority().command, candidateName: undefined } },
+      ],
+      [
+        "candidateName empty",
+        { command: { ...validAuthority().command, candidateName: "" } },
+      ],
+      [
+        "candidateName too long",
+        {
+          command: {
+            ...validAuthority().command,
+            candidateName: "名".repeat(201),
+          },
+        },
+      ],
+    ] as Array<[string, Partial<PendingForceSubmitAuthority>]>)(
+      "clears and surfaces corrupt when %s is invalid",
+      (_label, overrides) => {
+        const authority = validAuthority(overrides);
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(authority));
+        expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+          kind: "corrupt",
+          cleared: true,
+        });
+        expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      },
+    );
 
     it("returns none when sessionStorage is inaccessible", () => {
       const real = Object.getOwnPropertyDescriptor(window, "sessionStorage")!;
@@ -357,35 +144,137 @@ describe("pendingForceSubmitAuthority", () => {
         configurable: true,
       });
       try {
-        const result = loadPendingForceSubmit(ORG_ID, ACTOR_ID);
-        expect(result.kind).toBe("none");
+        expect(loadPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+          kind: "none",
+        });
       } finally {
         Object.defineProperty(window, "sessionStorage", real);
       }
     });
   });
 
-  // ── Clear ─────────────────────────────────────────────────────────────
-
-  describe("clearPendingForceSubmit", () => {
-    it("removes the record and read-back confirms null", () => {
-      const auth = validAuthority();
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-      const result = clearPendingForceSubmit(ORG_ID, ACTOR_ID);
+  describe("savePendingForceSubmit", () => {
+    it("persists a valid authority and verifies the write", () => {
+      // Capture the authority ONCE — the byte comparison must use the exact
+      // record that was written (createdAt is Date.now()-based, so a second
+      // validAuthority() call would drift by milliseconds).
+      const authority = validAuthority();
+      const result = savePendingForceSubmit(authority);
       expect(result).toEqual({ ok: true });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBe(
+        JSON.stringify(authority),
+      );
+    });
+
+    it("returns invalid_authority for a semantically invalid record without writing", () => {
+      // The save path runs the SAME full validator the loader uses BEFORE
+      // writing: the byte read-back only proves the write stuck, it cannot
+      // catch a record the loader would treat as corrupt and DELETE —
+      // silently destroying the operation identity this save was meant to
+      // protect. Per-rule validation coverage lives in the load matrix above;
+      // this case owns "invalid → nothing written".
+      const invalid = validAuthority({
+        command: { ...validAuthority().command, candidateName: "" },
+      });
+      const result = savePendingForceSubmit(invalid);
+      expect(result).toEqual({ ok: false, error: "invalid_authority" });
       expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
-    it("returns storage_unavailable when sessionStorage is inaccessible", () => {
+    it("returns readback_mismatch when the storage returns different bytes and removes them", () => {
+      const authority = validAuthority();
+      // Real setItem must run, then getItem read-back returns different bytes.
+      const getItemSpy = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockReturnValueOnce('{"different":true}');
+      const result = savePendingForceSubmit(authority);
+      expect(result).toEqual({ ok: false, error: "readback_mismatch" });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      getItemSpy.mockRestore();
+    });
+
+    it("returns write_failed when setItem throws (quota-style exception)", () => {
+      const setItemSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {
+          throw new DOMException("QuotaExceededError", "QuotaExceededError");
+        });
+      const result = savePendingForceSubmit(validAuthority());
+      expect(result).toEqual({ ok: false, error: "write_failed" });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      setItemSpy.mockRestore();
+    });
+
+    it("returns write_failed when the read-back returns null (write did not stick)", () => {
+      const setItemSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {});
+      const getItemSpy = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockReturnValueOnce(null);
+      const result = savePendingForceSubmit(validAuthority());
+      expect(result).toEqual({ ok: false, error: "write_failed" });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      setItemSpy.mockRestore();
+      getItemSpy.mockRestore();
+    });
+
+    it("returns write_failed when the read-back getItem throws", () => {
+      const setItemSpy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(() => {});
+      const getItemSpy = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockImplementationOnce(() => {
+          throw new Error("storage blocked");
+        });
+      const result = savePendingForceSubmit(validAuthority());
+      expect(result).toEqual({ ok: false, error: "write_failed" });
+      getItemSpy.mockRestore();
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+      setItemSpy.mockRestore();
+    });
+
+    it("returns storage_unavailable when sessionStorage is absent", () => {
       const real = Object.getOwnPropertyDescriptor(window, "sessionStorage")!;
       Object.defineProperty(window, "sessionStorage", {
         value: null,
         configurable: true,
       });
       try {
-        const result = clearPendingForceSubmit(ORG_ID, ACTOR_ID);
-        expect(result.ok).toBe(false);
-        if (!result.ok) expect(result.error).toBe("storage_unavailable");
+        expect(savePendingForceSubmit(validAuthority())).toEqual({
+          ok: false,
+          error: "storage_unavailable",
+        });
+      } finally {
+        Object.defineProperty(window, "sessionStorage", real);
+      }
+    });
+  });
+
+  describe("clearPendingForceSubmit", () => {
+    it("removes a stored record and returns ok", () => {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(validAuthority()));
+      const result = clearPendingForceSubmit(ORG_ID, ACTOR_ID);
+      expect(result).toEqual({ ok: true });
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+
+    it("returns ok when nothing is stored", () => {
+      expect(clearPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({ ok: true });
+    });
+
+    it("returns storage_unavailable when sessionStorage is absent", () => {
+      const real = Object.getOwnPropertyDescriptor(window, "sessionStorage")!;
+      Object.defineProperty(window, "sessionStorage", {
+        value: null,
+        configurable: true,
+      });
+      try {
+        expect(clearPendingForceSubmit(ORG_ID, ACTOR_ID)).toEqual({
+          ok: false,
+          error: "storage_unavailable",
+        });
       } finally {
         Object.defineProperty(window, "sessionStorage", real);
       }
@@ -393,39 +282,28 @@ describe("pendingForceSubmitAuthority", () => {
 
     it("returns remove_failed when removeItem throws", () => {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(validAuthority()));
-      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-      ) {
-        if (key === STORAGE_KEY) {
+      const removeItemSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {
           throw new DOMException("blocked", "SecurityError");
-        }
-      });
+        });
       const result = clearPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("remove_failed");
+      expect(result).toEqual({ ok: false, error: "remove_failed" });
+      removeItemSpy.mockRestore();
     });
 
-    it("returns remove_failed when read-back still finds the record after removeItem", () => {
+    it("returns remove_failed when the record is still present after removal", () => {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(validAuthority()));
-      // Mock removeItem to not actually remove (simulate silent failure)
-      const origRemoveItem = Storage.prototype.removeItem;
-      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-      ) {
-        if (key === STORAGE_KEY) return; // Don't actually remove
-        origRemoveItem.call(this, key);
-      });
+      // Silent removal failure: removeItem reports success but leaves the
+      // record in place — the caller must keep the recovery surface instead
+      // of trusting a clear that did not happen.
+      const removeItemSpy = vi
+        .spyOn(Storage.prototype, "removeItem")
+        .mockImplementation(() => {});
       const result = clearPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("remove_failed");
+      expect(result).toEqual({ ok: false, error: "remove_failed" });
       expect(sessionStorage.getItem(STORAGE_KEY)).not.toBeNull();
-    });
-
-    it("returns ok when nothing to clear (idempotent)", () => {
-      const result = clearPendingForceSubmit(ORG_ID, ACTOR_ID);
-      expect(result).toEqual({ ok: true });
+      removeItemSpy.mockRestore();
     });
   });
 });

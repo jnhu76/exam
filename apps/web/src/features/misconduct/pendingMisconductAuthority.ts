@@ -1,17 +1,17 @@
 /**
- * J5-I1C Slice 3 — Same-tab pending misconduct-mark authority.
+ * Same-tab pending misconduct-mark authority.
  *
- * Mirrors {@link pendingForceSubmitAuthority} (J5-I1C Slice 2 review P1-2).
- * A misconduct mark is now an operationId-keyed durable command: a lost
- * response after the server committed must NOT cause a blind retry to mint a
- * NEW operationId (the server would treat the retry as a fresh append receipt
- * + a second audit row). The fix is to freeze the command before the first
- * POST and reuse the SAME operationId + severity + notes on every retry until
- * a confirmed outcome (success or definitive rejection) arrives.
+ * Mirrors {@link pendingForceSubmitAuthority}. A misconduct mark is now an
+ * operationId-keyed durable command: a lost response after the server
+ * committed must NOT cause a blind retry to mint a NEW operationId (the
+ * server would treat the retry as a fresh append receipt + a second audit
+ * row). The fix is to freeze the command before the first POST and reuse the
+ * SAME operationId + severity + notes on every retry until a confirmed
+ * outcome (success or definitive rejection) arrives.
  *
  * Scope: SAME-TAB persistence via sessionStorage. At most ONE pending
- * misconduct mark per (organizationId, actorId). Cross-tab parity is the same
- * P2 follow-up as force-submit (Issue #263), explicitly out of scope here.
+ * misconduct mark per (organizationId, actorId). Cross-tab parity is
+ * explicitly out of scope here, as it is for force-submit.
  *
  * Fail-closed persistence: `savePendingMisconduct` returns an explicit result
  * and VERIFIES the write by reading it back and requiring byte-for-byte
