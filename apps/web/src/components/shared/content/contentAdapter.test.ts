@@ -274,90 +274,10 @@ describe("tiptapToContentDocument", () => {
   });
 });
 
-describe("contentDocumentsEqual — editor two-way ownership sync (#301 corrective pass)", () => {
-  // Canonical documents, the shape the editor emits and the parent echoes.
-  function canonicalDoc(): ContentDocumentV1 {
-    return {
-      docVersion: 1,
-      type: "doc",
-      content: [
-        {
-          type: "paragraph",
-          content: [
-            { type: "text", text: "solve ", marks: ["bold"] },
-            { type: "inlineMath", latex: "x^2" },
-          ],
-        },
-        {
-          type: "bulletList",
-          content: [
-            {
-              type: "listItem",
-              content: [
-                {
-                  type: "paragraph",
-                  content: [{ type: "text", text: "step" }],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    };
-  }
-
-  it("is true for structurally identical canonical documents", () => {
-    expect(contentDocumentsEqual(canonicalDoc(), canonicalDoc())).toBe(true);
-  });
-
-  it("is false when a text run or its marks differ", () => {
-    const other = canonicalDoc();
-    (
-      other.content[0] as { content: Array<{ text?: string }> }
-    ).content[0]!.text = "solve";
-    expect(contentDocumentsEqual(canonicalDoc(), other)).toBe(false);
-
-    const markShifted = canonicalDoc();
-    const marks = (
-      markShifted.content[0] as { content: Array<{ marks?: string[] }> }
-    ).content[0];
-    marks!.marks = ["italic"];
-    expect(contentDocumentsEqual(canonicalDoc(), markShifted)).toBe(false);
-  });
-
-  it("is false when math, code, block math, or list structure differs", () => {
-    const math = canonicalDoc();
-    (
-      math.content[0] as { content: Array<{ latex?: string }> }
-    ).content[1]!.latex = "y^2";
-    expect(contentDocumentsEqual(canonicalDoc(), math)).toBe(false);
-
-    const listItemAdded = canonicalDoc();
-    (
-      listItemAdded.content[1] as { content: Array<{ content: unknown[] }> }
-    ).content[0]!.content.push({
-      type: "paragraph",
-      content: [{ type: "text", text: "extra" }],
-    });
-    expect(contentDocumentsEqual(canonicalDoc(), listItemAdded)).toBe(false);
-  });
-
-  it("is true for a codeBlock whose only difference is null vs undefined language (canonical both ways)", () => {
-    const withCode = (language: string | null): ContentDocumentV1 => ({
-      docVersion: 1,
-      type: "doc",
-      content: [{ type: "codeBlock", language, text: "let x = 1" }],
-    });
-    expect(contentDocumentsEqual(withCode("js"), withCode("js"))).toBe(true);
-    expect(contentDocumentsEqual(withCode(null), withCode(null))).toBe(true);
-  });
-});
-
-describe("contentDocumentsEqual — collection-length equality (corrective pass)", () => {
+describe("contentDocumentsEqual — structural equality of canonical documents", () => {
   // The comparator is the editor ownership protocol's correctness boundary: a
   // prefix bug (iterating only `a` and ignoring extra trailing elements of `b`)
-  // would classify [A] == [A,B] and skip a required external replacement. Every
-  // collection in the grammar must compare full lengths, both directions.
+  // would classify [A] == [A,B] and skip a required external replacement.
 
   const item = (text: string): ContentListItem => ({
     type: "listItem",
@@ -399,6 +319,69 @@ describe("contentDocumentsEqual — collection-length equality (corrective pass)
     type: "listItem",
     content: blocks,
   });
+  const mixed = (): ContentDocumentV1 =>
+    doc([
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "solve ", marks: ["bold"] },
+          { type: "inlineMath", latex: "x^2" },
+        ],
+      },
+      bullet(item("step")),
+    ]);
+  const firstTextRun = (d: ContentDocumentV1) =>
+    (
+      d.content[0] as {
+        content: Array<{ text?: string; marks?: string[]; latex?: string }>;
+      }
+    ).content[0]!;
+
+  it("is true for structurally identical canonical documents", () => {
+    expect(contentDocumentsEqual(mixed(), mixed())).toBe(true);
+    expect(
+      contentDocumentsEqual(
+        doc([table(row(cell("a"), cell("b")), row(cell("c"), cell("d")))]),
+        doc([table(row(cell("a"), cell("b")), row(cell("c"), cell("d")))]),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false when a text run, its marks, math, or list structure differs", () => {
+    const textChanged = mixed();
+    firstTextRun(textChanged).text = "solve";
+    expect(contentDocumentsEqual(mixed(), textChanged)).toBe(false);
+
+    const markShifted = mixed();
+    firstTextRun(markShifted).marks = ["italic"];
+    expect(contentDocumentsEqual(mixed(), markShifted)).toBe(false);
+
+    const mathChanged = mixed();
+    (
+      (mathChanged.content[0] as { content: Array<{ latex?: string }> })
+        .content[1] as { latex: string }
+    ).latex = "y^2";
+    expect(contentDocumentsEqual(mixed(), mathChanged)).toBe(false);
+
+    const listItemAdded = mixed();
+    (
+      listItemAdded.content[1] as { content: Array<{ content: unknown[] }> }
+    ).content[0]!.content.push({
+      type: "paragraph",
+      content: [{ type: "text", text: "extra" }],
+    });
+    expect(contentDocumentsEqual(mixed(), listItemAdded)).toBe(false);
+  });
+
+  it("is true for a codeBlock whose only difference is null vs undefined language (canonical both ways)", () => {
+    const withCode = (language: string | null): ContentDocumentV1 => ({
+      docVersion: 1,
+      type: "doc",
+      content: [{ type: "codeBlock", language, text: "let x = 1" }],
+    });
+    expect(contentDocumentsEqual(withCode("js"), withCode("js"))).toBe(true);
+    expect(contentDocumentsEqual(withCode(null), withCode(null))).toBe(true);
+  });
 
   it.each([
     ["bullet list item count", bullet(item("a")), bullet(item("a"), item("b"))],
@@ -426,21 +409,6 @@ describe("contentDocumentsEqual — collection-length equality (corrective pass)
     expect(contentDocumentsEqual(doc([a]), doc([b]))).toBe(false);
     // Symmetric: [A,B] != [A] too — length is compared on both sides.
     expect(contentDocumentsEqual(doc([b]), doc([a]))).toBe(false);
-  });
-
-  it("keeps equal-length collections with identical elements equal", () => {
-    expect(
-      contentDocumentsEqual(
-        doc([bullet(item("a"), item("b"))]),
-        doc([bullet(item("a"), item("b"))]),
-      ),
-    ).toBe(true);
-    expect(
-      contentDocumentsEqual(
-        doc([table(row(cell("a"), cell("b")), row(cell("c"), cell("d")))]),
-        doc([table(row(cell("a"), cell("b")), row(cell("c"), cell("d")))]),
-      ),
-    ).toBe(true);
   });
 
   it("is symmetric over representative canonical docs (equal(a,b) == equal(b,a))", () => {

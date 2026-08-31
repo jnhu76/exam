@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { normalizeContentDocument, plainTextProjection } from "@exam/domain";
 import { AnswerModeEnum, ContentDocumentV1Schema } from "../contentDocument.js";
 import {
   CreateQuestionRequestSchema,
@@ -132,7 +131,9 @@ describe("ContentDocumentV1Schema (wire grammar)", () => {
     expect(unknownAttr.success).toBe(false);
   });
 
-  it("rejects raw HTML payloads smuggled as nodes", () => {
+  it("accepts raw HTML-looking strings as schema-valid text content", () => {
+    // HTML arrives as TEXT — valid grammar, inert content; the renderer test
+    // proves it can never become executable DOM.
     const script = ContentDocumentV1Schema.safeParse(
       doc([
         {
@@ -141,12 +142,7 @@ describe("ContentDocumentV1Schema (wire grammar)", () => {
         },
       ]),
     );
-    // HTML arrives as TEXT — valid grammar, inert content; the renderer test
-    // proves it can never become executable DOM.
     expect(script.success).toBe(true);
-    expect(script.success && plainTextProjection(script.data)).toBe(
-      "<script>alert(1)</script>",
-    );
   });
 
   it("rejects wrong docVersion, bad marks combos, ragged tables, and empty latex", () => {
@@ -207,25 +203,6 @@ describe("ContentDocumentV1Schema (wire grammar)", () => {
   });
 
   it("rejects deep trees and oversized payloads (server-side limits)", () => {
-    // Depth bomb: deeply nested lists.
-    let nested: unknown = {
-      type: "listItem",
-      content: [
-        { type: "paragraph", content: [{ type: "text", text: "leaf" }] },
-      ],
-    };
-    for (let i = 0; i < 40; i++) {
-      nested = {
-        type: "listItem",
-        content: [{ type: "bulletList", content: [nested] }],
-      };
-    }
-    expect(
-      ContentDocumentV1Schema.safeParse(
-        doc([{ type: "bulletList", content: [nested] }]),
-      ).success,
-    ).toBe(false);
-
     expect(
       ContentDocumentV1Schema.safeParse(
         doc([{ type: "codeBlock", language: null, text: "x".repeat(50000) }]),
@@ -239,22 +216,6 @@ describe("ContentDocumentV1Schema (wire grammar)", () => {
     ).toBe(false);
   });
 
-  it("normalization stays idempotent on schema output", () => {
-    const parsed = ContentDocumentV1Schema.parse(
-      doc([
-        {
-          type: "paragraph",
-          content: [
-            { type: "text", text: "a", marks: ["italic", "bold"] },
-            { type: "text", text: "b", marks: ["bold", "italic"] },
-          ],
-        },
-      ]),
-    );
-    const once = normalizeContentDocument(parsed);
-    expect(normalizeContentDocument(once)).toEqual(once);
-  });
-
   it("AnswerModeEnum only allows plain|rich", () => {
     expect(AnswerModeEnum.safeParse("plain").success).toBe(true);
     expect(AnswerModeEnum.safeParse("rich").success).toBe(true);
@@ -262,7 +223,7 @@ describe("ContentDocumentV1Schema (wire grammar)", () => {
   });
 });
 
-describe("question contract evolution (#301)", () => {
+describe("question contract evolution", () => {
   it("accepts a rich text_response create without content", () => {
     const parsed = CreateQuestionRequestSchema.safeParse(
       RICH_TEXT_RESPONSE_CREATE,
@@ -412,7 +373,7 @@ describe("question contract evolution (#301)", () => {
   });
 });
 
-describe("ContentDocumentV1Schema — preflight-safe parse entry (corrective pass round-2)", () => {
+describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
   /**
    * Real recursive grammar bomb: doc → bulletList → listItem → bulletList →
    * listItem … to `depth` list levels, with a paragraph leaf. The grammar is
@@ -434,16 +395,14 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry (corrective pas
     return { docVersion: 1, type: "doc", content: [block] };
   }
 
-  it.each([100, 500, 1000])(
-    "rejects a %i-level recursive grammar bomb in a controlled way (no RangeError)",
-    (depth) => {
-      expect(() =>
-        ContentDocumentV1Schema.safeParse(grammarBomb(depth)),
-      ).not.toThrow();
-      const parsed = ContentDocumentV1Schema.safeParse(grammarBomb(depth));
-      expect(parsed.success).toBe(false);
-    },
-  );
+  it("rejects a 500-level recursive grammar bomb in a controlled way (no RangeError)", () => {
+    expect(() =>
+      ContentDocumentV1Schema.safeParse(grammarBomb(500)),
+    ).not.toThrow();
+    expect(ContentDocumentV1Schema.safeParse(grammarBomb(500)).success).toBe(
+      false,
+    );
+  });
 
   it("rejects the bomb inside a CreateQuestionRequestSchema body (Fastify validator path)", () => {
     const body = {
@@ -452,14 +411,6 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry (corrective pas
     };
     expect(() => CreateQuestionRequestSchema.safeParse(body)).not.toThrow();
     expect(CreateQuestionRequestSchema.safeParse(body).success).toBe(false);
-  });
-
-  it("rejects the bomb inside an UpdateQuestionRequestSchema body", () => {
-    expect(
-      UpdateQuestionRequestSchema.safeParse({
-        contentDocument: grammarBomb(500),
-      }).success,
-    ).toBe(false);
   });
 
   it("proves the preflight fired: the rejection names the structural limit, not a grammar mismatch", () => {

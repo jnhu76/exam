@@ -28,18 +28,30 @@ import {
 } from "./contentAdapter";
 
 /**
- * Two-way ownership protocol (issue 301 corrective pass round-2): the Tiptap
- * instance owns its state after mount, but the `document` prop stays the
- * AUTHORITATIVE answer and may be externally replaced (server reconciliation
- * after STALE_VERSION, draft restore, parent reset). `currentEditorDocument`
- * is the canonical document the editor currently holds; a structurally equal
- * incoming prop is the parent's local-edit echo and must be skipped (setContent
- * would reset the caret and fight the user's keystrokes); anything else is an
- * authoritative replacement.
+ * Two-way ownership protocol: the Tiptap instance owns its state after mount,
+ * but the `document` prop stays the AUTHORITATIVE answer and may be externally
+ * replaced (server reconciliation after STALE_VERSION, draft restore, parent
+ * reset). One ref tracks the canonical document the editor CURRENTLY holds,
+ * with the invariant
+ *   ref === canonical document currently held by Tiptap.
+ *   - LOCAL EDIT        : onUpdate maps Tiptap JSON → canonical `next`,
+ *                         re-anchors the ref, then onChange(next).
+ *   - PARENT LOCAL ECHO : document == ref → no-op (never setContent, which
+ *                         would reset the caret and fight the user's keys).
+ *   - AUTHORITATIVE     : document != ref → setContent(document,
+ *     REPLACEMENT         emitUpdate:false) so the reset never echoes back
+ *                         through onUpdate into a save → setContent loop;
+ *                         then the ref is re-anchored to the document.
+ * The ref is the ONLY truth about what Tiptap holds: never treat "was applied
+ * once" as "is what the editor holds" — a replacement back to an earlier value
+ * (e.g. empty) must be applied again when the ref shows the editor moved on.
  *
- * This is the correctness boundary of the ownership protocol, extracted pure so
- * the rollback-to-empty / null-clear regressions are unit-testable without a
- * ProseMirror instance (which cannot be typed in jsdom).
+ * The component must still be keyed by question identity at the call site so
+ * a question switch never reuses a Tiptap document across questions.
+ *
+ * `isAuthoritativeReplacement` below is the pure correctness boundary of this
+ * protocol, extracted so the rollback-to-empty / null-clear regressions are
+ * unit-testable without a ProseMirror instance (jsdom cannot type into Tiptap).
  */
 export function isAuthoritativeReplacement(
   incoming: ContentDocumentV1,
@@ -52,7 +64,7 @@ export function isAuthoritativeReplacement(
 }
 
 /**
- * WYSIWYG rich-text editor (issue 301). The EDIT surface — the ONLY place
+ * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
  * Tiptap/ProseMirror is imported, always reached through the lazy wrapper
  * (RichContentEditorLazy) so plain-mode bundles never download it.
  *
@@ -60,30 +72,6 @@ export function isAuthoritativeReplacement(
  * no StarterKit, no image/link/mention. The editor is NOT the storage
  * authority: every change is mapped through contentAdapter into the canonical
  * grammar and surfaced via onChange; the server re-validates on write.
- *
- * Two-way ownership protocol (issue 301 corrective passes): after mount the
- * Tiptap instance owns its state, but the `document` prop stays the
- * AUTHORITATIVE answer and may be externally replaced (server reconciliation
- * after STALE_VERSION, draft restore, parent reset). One ref —
- * `currentEditorDocumentRef` — tracks the canonical document the editor
- * CURRENTLY holds, with the invariant
- *   ref === canonical document currently held by Tiptap.
- *   - LOCAL EDIT        : onUpdate maps Tiptap JSON → canonical `next`,
- *                         re-anchors the ref, then onChange(next).
- *   - PARENT LOCAL ECHO : document == ref → no-op (never setContent, which
- *                         would reset the caret and fight the user's keys).
- *   - AUTHORITATIVE     : document != ref → setContent(document,
- *     REPLACEMENT         emitUpdate:false) so the reset never echoes back
- *                         through onUpdate into a save → setContent loop;
- *                         then the ref is re-anchored to the document.
- * The old model kept a separate "last applied" baseline and skipped any
- * incoming document that had ever been applied — a stale-baseline bug: after a
- * local edit the editor held LOCAL but the baseline still said EMPTY, so an
- * authoritative replacement back to EMPTY was skipped and the editor kept
- * showing LOCAL. Never treat "was applied once" as "is what the editor holds".
- *
- * The component must still be keyed by question identity at the call site so
- * a question switch never reuses a Tiptap document across questions.
  *
  * Math nodes render through the Mathematics extension with trust disabled —
  * same posture as the read-side KaTeX seam.

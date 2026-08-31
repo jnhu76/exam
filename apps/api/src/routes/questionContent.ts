@@ -8,7 +8,7 @@ import {
 import { ValidationError } from "@exam/domain";
 
 /**
- * B′ server-side content write authority (#301 §2).
+ * B′ server-side content write authority.
  *
  * Every question/option content write — create, update, and the merged
  * update re-validation — resolves through this seam. For a Rich write the
@@ -17,11 +17,11 @@ import { ValidationError } from "@exam/domain";
  * For a Plain write `content_document` is persisted as NULL so legacy and
  * plain rows stay indistinguishable.
  *
- * Hostile-depth protection is a schema-level closure (corrective pass
- * round-2): `ContentDocumentV1Schema` — which types every rich slot in the
- * create/update request schemas — runs the bounded iterative preflight before
- * its recursive grammar, so Fastify's own body validation rejects a deep bomb
- * before any handler code runs. No route-level preflight duplicate exists.
+ * Hostile-depth protection is a schema-level closure: `ContentDocumentV1Schema`
+ * — which types every rich slot in the create/update request schemas — runs
+ * the bounded iterative preflight before its recursive grammar, so Fastify's
+ * own body validation rejects a deep bomb before any handler code runs. No
+ * route-level preflight duplicate exists.
  */
 
 /** An option payload after request-schema parsing (content optional for rich). */

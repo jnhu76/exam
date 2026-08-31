@@ -22,8 +22,8 @@ import {
 } from "@exam/domain";
 
 /**
- * Wire schema for the Exam-owned ContentDocumentV1 rich content grammar
- * (#301). Mirrors the domain kernel's TypeScript grammar exactly — the type
+ * Wire schema for the Exam-owned ContentDocumentV1 rich content grammar.
+ * Mirrors the domain kernel's TypeScript grammar exactly — the type
  * identity is asserted in contentDocument.test.ts.
  *
  * The vocabulary is closed: every object is `.strict()`, so unknown nodes,
@@ -51,10 +51,8 @@ const TextRunSchema = z
     marks: MarksSchema.optional(),
   })
   .strict();
-export const ContentTextRunSchema = TextRunSchema;
 
 const HardBreakSchema = z.object({ type: z.literal("hardBreak") }).strict();
-export const ContentHardBreakSchema = HardBreakSchema;
 
 const InlineMathSchema = z
   .object({
@@ -62,7 +60,6 @@ const InlineMathSchema = z
     latex: z.string().min(1).max(CONTENT_LIMITS.latex),
   })
   .strict();
-export const ContentInlineMathSchema = InlineMathSchema;
 
 const ContentInlineSchema = z.union([
   TextRunSchema,
@@ -200,11 +197,11 @@ const RecursiveContentDocumentV1Schema = z
 
 /**
  * Iterative, bounded structural preflight for an UNKNOWN value about to enter
- * the recursive grammar (issue 301 corrective pass round-2). Runs BEFORE any
- * recursive descent so a deep/large/cyclic payload is rejected by the bounded
- * walker instead of overflowing the recursive parser. The check function keeps
- * this schema's output equal to its input (unknown), so piping it in front of
- * the recursive grammar adds no transform — type identity is preserved.
+ * the recursive grammar. Runs BEFORE any recursive descent so a deep/large/
+ * cyclic payload is rejected by the bounded walker instead of overflowing the
+ * recursive parser. The check function keeps this schema's output equal to its
+ * input (unknown), so piping it in front of the recursive grammar adds no
+ * transform — type identity is preserved.
  */
 const RawPreflightSchema: z.ZodType<unknown, z.ZodTypeDef, unknown> =
   z.custom<unknown>(
@@ -232,8 +229,6 @@ const RawPreflightSchema: z.ZodType<unknown, z.ZodTypeDef, unknown> =
 export const ContentDocumentV1Schema = RawPreflightSchema.pipe(
   RecursiveContentDocumentV1Schema,
 );
-
-export type ContentDocumentV1DTO = z.infer<typeof ContentDocumentV1Schema>;
 
 /** Type identity between the wire schema and the domain grammar. */
 type AssertExact<A, B> = [A] extends [B]

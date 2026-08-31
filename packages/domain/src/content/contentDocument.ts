@@ -1,5 +1,5 @@
 /**
- * ContentDocumentV1 — the Exam-owned canonical rich content grammar (#301).
+ * ContentDocumentV1 — the Exam-owned canonical rich content grammar.
  *
  * This module is the single server-side authority for the V1 document shape:
  * structural limits, canonical normalization, and the deterministic plain-text
@@ -7,7 +7,7 @@
  * consumer (contracts wire schemas, API routes, the exam engine, and the web
  * renderer/editor adapter) shares one implementation.
  *
- * Authority model (B′ additive projection, #301 §2):
+ * Authority model (B′ additive projection):
  *   contentDocument == null  → Plain  → `content` is authoritative.
  *   contentDocument != null  → Rich   → the document is authoritative and
  *                                       `content` MUST equal
@@ -137,7 +137,7 @@ export interface ContentDocumentV1 {
   content: ContentBlock[];
 }
 
-// ── Structural limits (#301 §20) ──────────────────────────────────
+// ── Structural limits ─────────────────────────────────────────────
 //
 // Bounded well under the Fastify default 1 MiB body limit so a rich question
 // or a rich answer can never approach the transport ceiling on its own, while
@@ -407,7 +407,7 @@ export function checkContentDocumentLimits(doc: ContentDocumentV1): string[] {
 // ── Normalization ─────────────────────────────────────────────────
 //
 // Canonicalization runs AFTER schema validation and BEFORE any equality,
-// idempotency, persistence, or projection decision (#301 §22/§40). It must be
+// idempotency, persistence, or projection decision. It must be
 // deterministic and idempotent: normalize(normalize(x)) === normalize(x). It
 // never alters user-visible text semantics — code and math whitespace is
 // preserved verbatim.
@@ -591,7 +591,7 @@ export function normalizeContentDocument(
 
 // ── Plain-text projection ─────────────────────────────────────────
 //
-// Deterministic plain-text view of a rich document. Frozen mapping (#301 §18):
+// Deterministic plain-text view of a rich document. Frozen mapping:
 //   paragraph / list items / table rows → "\n" separated
 //   table cells → single-space separated
 //   inline math / block math → LaTeX source
@@ -659,17 +659,6 @@ export function plainTextProjection(doc: ContentDocumentV1): string {
 }
 
 // ── Mode helpers ──────────────────────────────────────────────────
-
-/**
- * Resolves the content mode of a stored document slot: null/undefined is
- * Plain (content authoritative), anything else is Rich (document
- * authoritative). Single authority for the B′ discriminator.
- */
-export function contentModeOf(
-  document: ContentDocumentV1 | null | undefined,
-): ContentMode {
-  return document == null ? "plain" : "rich";
-}
 
 /**
  * Converts plain text (lines separated by "\n") into a minimal canonical
