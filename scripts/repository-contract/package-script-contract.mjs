@@ -87,15 +87,21 @@ async function walk(dir, out = []) {
 }
 
 const scriptsDir = join(ROOT, "scripts");
+// The two scope sources overlap for repository-contract/check-*.mjs files;
+// dedupe by path so a file is inventoried exactly once.
 const verifierPaths = [
-  ...(await walk(scriptsDir)).filter((f) => /[/\\]check-[^/\\]*\.mjs$/.test(f)),
-  ...(
-    await readdir(join(scriptsDir, "repository-contract"), {
-      withFileTypes: true,
-    })
-  )
-    .filter((e) => e.isFile() && e.name.endsWith(".mjs"))
-    .map((e) => join(scriptsDir, "repository-contract", e.name)),
+  ...new Set([
+    ...(await walk(scriptsDir)).filter((f) =>
+      /[/\\]check-[^/\\]*\.mjs$/.test(f),
+    ),
+    ...(
+      await readdir(join(scriptsDir, "repository-contract"), {
+        withFileTypes: true,
+      })
+    )
+      .filter((e) => e.isFile() && e.name.endsWith(".mjs"))
+      .map((e) => join(scriptsDir, "repository-contract", e.name)),
+  ]),
 ];
 
 // Guard against silent basename collisions (wiring is matched by basename).
