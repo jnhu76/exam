@@ -12,8 +12,8 @@ const has = (
 
 describe("RBAC-M2 boundary #1 — Admin is a compatibility superset", () => {
   it("Admin holds the 4 proctor trap perms (so flipping gates never denies Admin)", () => {
-    // REC-I4-I3B2: the trap perm is now AttemptTimeGrant (Admin-only), not the
-    // old AttemptTimeExtend. Admin must hold it so the new route stays accessible.
+    // REC-I4-I3B2: the trap perm is AttemptTimeGrant (Admin-only), so Admin
+    // must hold it and the time-grants route stays accessible.
     const [f, g, m, room] = has(
       Role.Admin,
       Permission.AttemptForceSubmit,

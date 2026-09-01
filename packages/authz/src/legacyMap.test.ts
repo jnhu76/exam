@@ -39,9 +39,6 @@ describe("RBAC-M1 legacy map — every legacy SCREAMING_SNAKE perm is mapped", (
     expect(legacyPermissionToKey(Legacy.VIEW_EXAM_ROOM)).toBe(
       Permission.ExamRoomView,
     );
-    expect(legacyPermissionToKey(Legacy.EXTEND_TIME)).toBe(
-      Permission.AttemptTimeExtend,
-    );
     expect(legacyPermissionToKey(Legacy.MARK_MISCONDUCT)).toBe(
       Permission.AttemptMisconductMark,
     );

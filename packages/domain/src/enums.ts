@@ -54,7 +54,6 @@ export const Permission = {
   DELETE_EXAM: "DELETE_EXAM",
   // Proctor
   VIEW_EXAM_ROOM: "VIEW_EXAM_ROOM",
-  EXTEND_TIME: "EXTEND_TIME",
   MARK_MISCONDUCT: "MARK_MISCONDUCT",
   FORCE_SUBMIT: "FORCE_SUBMIT",
   // Candidate

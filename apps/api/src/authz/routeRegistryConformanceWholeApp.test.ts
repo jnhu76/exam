@@ -468,6 +468,37 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
+  it("the removed dead AttemptTimeExtend capability (attempt.time.extend) is absent from both the catalog and every route gate", () => {
+    // REC-I4-I3B2 cut the old /extend-time route and moved operator time
+    // grants to the Admin-only AttemptTimeGrant (attempt.time.grant) seam;
+    // the leftover AttemptTimeExtend catalog identity had zero runtime
+    // consumers and was retired. Like result.publish above, this guards
+    // against silent reintroduction: the live time-grant authority is
+    // attempt.time.grant, and attempt.time.extend must not re-enter the
+    // catalog or any route gate without a new explicit product decision.
+    const DEAD = "attempt.time.extend";
+    const catalogValues = Object.values(Permission) as readonly string[];
+    expect(
+      catalogValues,
+      "Permission catalog must not contain the removed attempt.time.extend value",
+    ).not.toContain(DEAD);
+    const offenders = capturedRoutes.filter((r) =>
+      r.classified.some((c) => {
+        if (c.authz === null || !("permission" in c.authz)) return false;
+        // Same non-narrowing string scan as the result.publish guard: a
+        // literal comparison against the retired key would be a TS error
+        // once the PermissionKey union no longer contains it.
+        return (c.authz.permission as string) === DEAD;
+      }),
+    );
+    expect(
+      offenders,
+      `routes still gated by the removed dead attempt.time.extend: ${offenders
+        .map((r) => `${r.method} ${r.url}`)
+        .join(", ")}`,
+    ).toEqual([]);
+  });
+
   // ────────────────── Negative control (non-vacuity) ──────────────────
 
   /**

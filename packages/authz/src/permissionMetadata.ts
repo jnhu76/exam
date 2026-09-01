@@ -127,7 +127,6 @@ export const PERMISSION_METADATA = {
   [Permission.AttemptStatusView]: { category: PermissionCategory.Proctor },
   [Permission.AttemptTimelineView]: { category: PermissionCategory.Proctor },
   [Permission.AttemptMisconductMark]: { category: PermissionCategory.Proctor },
-  [Permission.AttemptTimeExtend]: { category: PermissionCategory.Proctor },
   [Permission.AttemptTimeGrant]: { category: PermissionCategory.Proctor },
   [Permission.AttemptForceSubmit]: { category: PermissionCategory.Proctor },
   [Permission.AttemptExport]: { category: PermissionCategory.Proctor },
