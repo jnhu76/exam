@@ -45,7 +45,6 @@ export const LEGACY_PERMISSION_MAP: Record<LegacyPermission, PermissionKey> = {
   DELETE_EXAM: Permission.ExamDelete,
   // Proctor (trap keys)
   VIEW_EXAM_ROOM: Permission.ExamRoomView,
-  EXTEND_TIME: Permission.AttemptTimeExtend,
   MARK_MISCONDUCT: Permission.AttemptMisconductMark,
   FORCE_SUBMIT: Permission.AttemptForceSubmit,
   // Candidate

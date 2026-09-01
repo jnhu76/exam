@@ -87,7 +87,6 @@ export const Permission = {
   AttemptStatusView: "attempt.status.view",
   AttemptTimelineView: "attempt.timeline.view",
   AttemptMisconductMark: "attempt.misconduct.mark",
-  AttemptTimeExtend: "attempt.time.extend",
   AttemptTimeGrant: "attempt.time.grant",
   AttemptForceSubmit: "attempt.force_submit",
   AttemptExport: "attempt.export",

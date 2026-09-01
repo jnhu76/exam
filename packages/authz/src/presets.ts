@@ -218,7 +218,6 @@ const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
   // (`proctorAccess = admin_only`) and the permissions remain valid Admin
   // grants. A future dangerous-permissions policy profile must re-add them
   // with its own activation gate — they are NOT deferred Proctor capabilities.
-  // AttemptTimeExtend removed: the old /extend-time route is cut in REC-I4-I3B2.
   // Operator time grant (AttemptTimeGrant) is Admin-only; Proctor has no grant path.
   // Explicitly NOT granted: grading.*, ExamResultPublish, ScoreAllView, ExamPublish.
 ];
