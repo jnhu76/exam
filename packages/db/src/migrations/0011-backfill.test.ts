@@ -64,11 +64,11 @@ describe("0011 backfill guard — assignable users only", () => {
 
   beforeAll(async () => {
     env = await setupIsolatedEnv();
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await teardownIsolatedEnv(env);
-  });
+  }, 30_000);
 
   it("backfill skips SuperAdmin and only backfills assignable roles", async () => {
     const now = new Date();
@@ -176,11 +176,11 @@ describe("0011 backfill guard — all legacy non-assignable roles", () => {
 
   beforeAll(async () => {
     env = await setupIsolatedEnv();
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await teardownIsolatedEnv(env);
-  });
+  }, 30_000);
 
   it("backfill with only non-assignable roles skips them all without CHECK violation", async () => {
     const now = new Date();

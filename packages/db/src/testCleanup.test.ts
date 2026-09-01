@@ -24,11 +24,11 @@ describe(
       const result = await getIsolatedTestDb("db-cleanup-org");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("removes audit logs before organizations and keeps other organizations", async () => {
       const organizationId = crypto.randomUUID();
@@ -167,11 +167,11 @@ describe(
       const result = await getIsolatedTestDb("db-cleanup-child");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("removes child rows but keeps the organization and its users intact", async () => {
       const organizationId = crypto.randomUUID();
@@ -270,11 +270,11 @@ describe(
       const result = await getIsolatedTestDb("db-cleanup-biz");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("removes exam business data but keeps org, users, and candidate data intact", async () => {
       const organizationId = crypto.randomUUID();

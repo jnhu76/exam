@@ -225,7 +225,7 @@ describe(
     afterAll(async () => {
       await conn?.sql.end();
       await iso?.cleanup();
-    });
+    }, 30_000);
 
     describe("composite FK exam_incidents_org_attempt_fk", () => {
       it("accepts a same-org existing attempt anchor", async () => {

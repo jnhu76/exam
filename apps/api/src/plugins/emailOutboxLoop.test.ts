@@ -161,7 +161,7 @@ describe("emailOutboxLoop plugin", () => {
       },
     );
     ctx = createContext(org.id);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     for (const key of LOOP_ENV_KEYS) {
@@ -170,7 +170,7 @@ describe("emailOutboxLoop plugin", () => {
     }
     resetRuntimeConfigForTest();
     await cleanup();
-  });
+  }, 30_000);
 
   it("delivers a pending row through the loop and writes a success heartbeat", async () => {
     const sentMessages: EmailMessage[] = [];

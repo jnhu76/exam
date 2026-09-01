@@ -87,11 +87,11 @@ describe("examProfileRepo — organization-scoped CRUD (P7-M2 §10/§27)", () =>
         updatedAt: now,
       },
     ]);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("creates a profile scoped to the requesting organization", async () => {
     const repo = createExamProfileRepo(db);

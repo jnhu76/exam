@@ -26,11 +26,11 @@ describe("clientEventRepo.createMany", () => {
     const result = await getIsolatedTestDb("db-clientEventRepo");
     db = result.db;
     cleanup = result.cleanup;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function seedOrg(name: string) {
     const orgRepo = createOrganizationRepo(db);
@@ -154,11 +154,11 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
     const result = await getIsolatedTestDb("db-clientEventRepo-read");
     db = result.db;
     cleanup = result.cleanup;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function seedOrg(name: string) {
     const orgRepo = createOrganizationRepo(db);

@@ -41,11 +41,11 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
       slug: `audit-tl-${suffix}`,
     });
     ctx = createContext(org.id);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("returns only rows matching (targetType, targetId) for the org, oldest-first", async () => {
     const repo = createAuditLogTestRepo(db);

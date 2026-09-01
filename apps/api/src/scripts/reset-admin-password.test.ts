@@ -78,12 +78,12 @@ describe("resetAdminPassword service", () => {
     conn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
     db = conn.db;
     await migratePostgres(db, { migrationsSchema: iso.schemaName });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await conn.sql.end();
     await cleanup();
-  });
+  }, 30_000);
 
   it("resets Admin password successfully", async () => {
     const orgId = await freshOrg(db);

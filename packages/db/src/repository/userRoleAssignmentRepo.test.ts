@@ -54,10 +54,10 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     const iso = await getIsolatedTestDb("userroleassign");
     db = iso.db;
     cleanup = iso.cleanup;
-  });
+  }, 30_000);
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("assigns a role and lists it for the user", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "alice");

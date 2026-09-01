@@ -84,11 +84,11 @@ describe("dispatchResultPublishedToRecipient (transaction integration)", () => {
       },
     );
     orgId = org.id;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("creates an Inbox row (required) and an outbox row when email exists, atomically", async () => {
     const ctx = createContext(orgId);
@@ -330,11 +330,11 @@ describe("dispatchResultPublishedFanOut", () => {
       },
     );
     orgId = org.id;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("fans out to multiple recipients in one transaction and reports counts", async () => {
     const ctx = createContext(orgId);

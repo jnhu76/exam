@@ -176,7 +176,7 @@ describe(
     afterAll(async () => {
       await conn?.sql.end();
       await iso?.cleanup();
-    });
+    }, 30_000);
 
     async function constraintsOn(table: string): Promise<string[]> {
       const rows = await sql.unsafe<{ conname: string }[]>(`

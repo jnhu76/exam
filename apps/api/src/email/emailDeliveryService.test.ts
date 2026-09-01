@@ -45,11 +45,11 @@ describe("EmailDeliveryService", () => {
     );
     ctx = createContext(org.id);
     realRepo = createEmailOutboxRepo(result.db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("enqueueEmail inserts a pending outbox row with the given recipient", async () => {
     const svc = new EmailDeliveryService({

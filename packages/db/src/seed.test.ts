@@ -31,11 +31,11 @@ describe(
       const result = await getIsolatedTestDb("db-seed");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("creates default org and Phase 1 users with real argon2 hashes", async () => {
       const result = await seed(db, hashPassword);
@@ -166,11 +166,11 @@ describe(
       const result = await getIsolatedTestDb("db-seed-authority");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterEach(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     function makeCtx(orgId: string) {
       return {

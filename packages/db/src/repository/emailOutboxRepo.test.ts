@@ -163,11 +163,11 @@ describe("emailOutboxRepo", () => {
     );
     ctx = createContext(org.id);
     orgScope = { organizationId: org.id };
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("create inserts a pending row with attemptCount=0 and no retry/sent stamps", async () => {
     const row = await emailRepo.create(ctx, {
@@ -797,7 +797,7 @@ describe("emailOutboxRepo — SKIP LOCKED with independent connections", () => {
     orgScope = { organizationId: org.id };
     repoA = createEmailOutboxRepo(connA.db);
     repoB = createEmailOutboxRepo(connB.db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     try {
@@ -811,7 +811,7 @@ describe("emailOutboxRepo — SKIP LOCKED with independent connections", () => {
       /* ignore */
     }
     await iso.cleanup();
-  });
+  }, 30_000);
 
   it("connections use distinct PostgreSQL backends", async () => {
     const rowA = (

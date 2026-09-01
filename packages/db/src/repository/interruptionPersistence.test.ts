@@ -168,11 +168,11 @@ describe("interruption persistence foundation", () => {
     cleanup = result.cleanup;
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("applies strict defaults to Exam and Attempt snapshot columns", async () => {
     const exam = await db

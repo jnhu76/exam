@@ -172,12 +172,12 @@ describe("backfill-submitted-answers (P3-L0-4)", () => {
     db = conn.db;
     await migratePostgres(db, { migrationsSchema: iso.schemaName });
     orgId = await freshOrg(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await conn.sql.end();
     await cleanup();
-  });
+  }, 30_000);
 
   it("buildSnapshotForAttempt normalizes draft answers into the frozen shape", () => {
     const attempt = {

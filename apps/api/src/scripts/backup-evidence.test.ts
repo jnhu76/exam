@@ -294,7 +294,7 @@ CLI_DESCRIBE(
           slug: `slug-${randomUUID().slice(0, 8)}`,
         },
       );
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cliCleanup?.();

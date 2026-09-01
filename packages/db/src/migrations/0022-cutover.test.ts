@@ -210,12 +210,12 @@ describe("0022 cutover — Clean I1", () => {
       VALUES ${insertAttemptSql(cleanAttemptId, 1, "in_progress", cleanDeadline)}
     `);
     await executeMigrationFile(conn.sql, "0022_engine_policy_seam");
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   it("installs the status/pointer CHECK constraint", async () => {
     const rows = await conn.sql.unsafe(`
@@ -347,12 +347,12 @@ describe("0022 cutover — Transitional I1", () => {
     `);
 
     await executeMigrationFile(conn.sql, "0022_engine_policy_seam");
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   it("disrupted + null pointer gets parent + detected + pointer", async () => {
     const attempt = await conn.db
@@ -532,12 +532,12 @@ describe("0022 cutover — Corrupt states", () => {
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
     await applyMigrationsThrough0021(conn.sql);
     await insertBaseFixture(conn.sql);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   async function expectMigrationThrows(
     setupSql: string,

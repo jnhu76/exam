@@ -408,7 +408,7 @@ PG_DESCRIBE(
 
     afterAll(async () => {
       await Promise.allSettled([cleanIso?.cleanup(), guardIso?.cleanup()]);
-    });
+    }, 30_000);
 
     it("drops the five tables on a clean schema and exits 0 (connection closed)", async () => {
       const url = addSearchPathToUrl(BASE_URL, cleanIso.schemaName);

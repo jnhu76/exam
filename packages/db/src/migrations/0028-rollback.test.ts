@@ -167,7 +167,7 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   it("drops the table when present and empty", async () => {
     iso = await setupIsolatedTestDb({ namespace: "mig0028rb-empty" });
@@ -491,7 +491,7 @@ describe(
       await connB?.sql.end();
       await connA?.sql.end();
       await iso?.cleanup();
-    });
+    }, 30_000);
 
     function insertReceiptStatement(opId: string): string {
       return `

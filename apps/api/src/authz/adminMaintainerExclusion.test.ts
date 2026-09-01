@@ -27,7 +27,7 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     const handle = await getIsolatedTestDb("admin-maintainer-exclusion");
     db = handle.db;
     cleanup = handle.cleanup;
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     orgId = randomUUID();
@@ -49,7 +49,7 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function createUser(
     username: string,

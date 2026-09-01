@@ -78,12 +78,12 @@ describe("0025 recovery-queue keyset index (J5-I1A1 §5.4)", () => {
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
     sql = conn.sql;
     await applyAllMigrations(conn.sql, iso.databaseUrl);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   it("the (organization_id, created_at, id) index exists", async () => {
     const rows = await sql.unsafe<{ indexname: string }[]>(`

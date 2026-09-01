@@ -44,11 +44,11 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
       slug: `audit-keyset-${suffix}`,
     });
     ctx = createContext(org.id);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("walks (created_at DESC, id DESC) without overlap or skip", async () => {
     const repo = createAuditLogTestRepo(db);

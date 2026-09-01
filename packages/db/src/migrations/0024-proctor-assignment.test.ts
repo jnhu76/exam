@@ -124,12 +124,12 @@ describe("0024 proctor-assignment schema contract (ADR-015 §4)", () => {
         '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, 'unlimited', 'highest', 1,
         'immediate', 'strict', ${ts(createdAt)}, ${ts(createdAt)})
     `);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   async function constraintNames(table: string): Promise<string[]> {
     const rows = await sql.unsafe<{ conname: string }[]>(`

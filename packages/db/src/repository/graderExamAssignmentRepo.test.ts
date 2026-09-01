@@ -170,11 +170,11 @@ describe("grader exam assignment persistence foundation", () => {
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
     repo = createGraderExamAssignmentRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   const now = () => new Date("2026-02-01T00:00:00.000Z");
 

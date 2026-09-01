@@ -57,11 +57,11 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
       slug: `audit-list-${suffix}`,
     });
     ctx = createContext(org.id);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("filters by targetType", async () => {
     const repo = createAuditLogTestRepo(db);
@@ -228,11 +228,11 @@ describe("auditLogRepo.listPaginatedFiltered (actorName join)", () => {
     // Stash org id on the context for the test below.
     (rootContext as unknown as { _orgId?: string })._orgId = org.id;
     (rootContext as unknown as { _ctx?: RequestContext })._ctx = ctx;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("resolves actorId → actorName via LEFT JOIN users", async () => {
     const stored = rootContext as unknown as { _ctx: RequestContext };

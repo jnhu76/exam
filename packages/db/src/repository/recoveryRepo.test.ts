@@ -251,11 +251,11 @@ describe("recovery incident queue repository", () => {
     testSchemaName = result.schemaName;
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("projects a single anchored incident with exam/attempt/candidate summaries and active proctors", async () => {
     const repo = createRecoveryRepo(db);
@@ -1615,11 +1615,11 @@ describe("recovery incident aggregate detail repository", () => {
         linkedAt: incidentAt,
       });
     }
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("projects the full aggregate from one consistent snapshot", async () => {
     const repo = createRecoveryRepo(db);
@@ -3140,11 +3140,11 @@ describe("recovery attempt operations context repository", () => {
     db = result.db;
     cleanup = result.cleanup;
     fx = await createFixture(db, "op");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   /**
    * Creates a fresh candidate (user + profile) so every attempt gets its own
@@ -4491,11 +4491,11 @@ describe("recovery exam recovery context repository", () => {
     cleanup = result.cleanup;
     fx = await createFixture(db, "examctx");
     emptyFx = await createFixture(db, "examctxempty");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("projects exam summary, incident stats, recent incidents, active proctors and attempt distribution", async () => {
     const repo = createRecoveryRepo(db);

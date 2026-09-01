@@ -215,11 +215,11 @@ describe("attempt command receipt persistence foundation", () => {
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
     repo = createAttemptCommandReceiptRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   const BASE_TIME = new Date("2026-01-01T00:00:00.000Z");
 

@@ -131,12 +131,12 @@ describe("0039 question rich content slots schema contract (#301)", () => {
       INSERT INTO "courses" ("id", "organization_id", "name", "code", "description", "created_at", "updated_at")
       VALUES ('course-0039', 'org-0039', 'Course', 'C-0039', '', ${ts(createdAt)}, ${ts(createdAt)})
     `);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   it("adds nullable content_document and answer_mode columns", async () => {
     const result = await sql.unsafe(`

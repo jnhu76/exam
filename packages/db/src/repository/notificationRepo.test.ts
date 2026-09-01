@@ -109,11 +109,11 @@ describe("notificationRepo", () => {
     orgId = org.id;
     recipientA = await createTestUser(orgId);
     recipientB = await createTestUser(orgId);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   describe("insert / dedupe", () => {
     it("creates a new notification and returns it with created=true", async () => {

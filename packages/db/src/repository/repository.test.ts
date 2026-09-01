@@ -48,11 +48,11 @@ describe("repository tenant isolation", () => {
     settingsRepo = createSettingsRepo(db);
     courseRepo = createCourseRepo(db);
     questionRepo = createQuestionRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("keeps tenant-scoped course queries isolated", async () => {
     const suffix = randomUUID().slice(0, 8);
@@ -240,11 +240,11 @@ describe("organizationRepo.resolveOptionalBrandingTenant", () => {
     db = result.db;
     cleanup = result.cleanup;
     organizationRepo = createOrganizationRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("returns null when no organization exists", async () => {
     const result = await organizationRepo.resolveOptionalBrandingTenant(
@@ -308,11 +308,11 @@ describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
     });
     orgId = org.id;
     ctx = createContext(orgId);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("returns null when no enrollment exists", async () => {
     const repo = createEnrollmentRepo(db);

@@ -20,7 +20,7 @@ describe("mutateWithEffectiveAdminPostcondition", () => {
     const handle = await getIsolatedTestDb("admin-invariant");
     db = handle.db;
     cleanup = handle.cleanup;
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     orgId = randomUUID();
@@ -42,7 +42,7 @@ describe("mutateWithEffectiveAdminPostcondition", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function createUser(
     username: string,
