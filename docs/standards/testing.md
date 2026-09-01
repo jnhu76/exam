@@ -548,6 +548,10 @@ pnpm --filter @exam/domain test
 
 - **DB required**: No (except `@exam/db`).
 - **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
+- **Stale-dist trap**: apps and tests resolve `@exam/*` via built `dist/`, not
+  `src/`. Filtered commands like `pnpm --filter <pkg> test` bypass Turbo's
+  `^build` chain, so after editing package source run `pnpm build` (root,
+  Turbo-ordered) first — otherwise the filtered run silently tests stale code.
 
 ### 5.2 API Integration Tests
 
