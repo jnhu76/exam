@@ -1,96 +1,124 @@
-{
-  "EMAIL_ENABLED": {
+[
+  {
+    "key": "EMAIL_ENABLED",
     "kind": "booleanTruthy",
-    "default": false,
-    "target": "app"
+    "default": false
   },
-  "EMAIL_TRANSPORT": {
+  {
+    "key": "EMAIL_TRANSPORT",
     "kind": "enum",
     "default": "fake",
-    "values": ["fake", "smtp"],
-    "target": "app"
+    "values": ["fake", "smtp"]
   },
-  "EMAIL_FAKE_MODE": {
+  {
+    "key": "EMAIL_FAKE_MODE",
     "kind": "enum",
     "default": "success",
-    "values": ["success", "failure"],
-    "target": "app"
+    "values": ["success", "failure"]
   },
-  "EMAIL_FAKE_DELAY_MS": {
+  {
+    "key": "EMAIL_FAKE_DELAY_MS",
     "kind": "nonNegativeInt",
-    "default": 0,
-    "target": "app"
+    "default": 0
   },
-  "EMAIL_FROM": {
+  {
+    "key": "EMAIL_FROM",
     "kind": "string",
-    "default": "no-reply@example.local",
-    "target": "app"
+    "default": "no-reply@example.local"
   },
-  "EMAIL_FROM_NAME": {
+  {
+    "key": "EMAIL_FROM_NAME",
     "kind": "string",
-    "default": "Exam Platform",
-    "target": "app"
+    "default": "Exam Platform"
   },
-  "EMAIL_MAX_ATTEMPTS": {
+  {
+    "key": "EMAIL_MAX_ATTEMPTS",
     "kind": "positiveInt",
-    "default": 3,
-    "target": "app"
+    "default": 3
   },
-  "EMAIL_RETRY_BASE_SECONDS": {
+  {
+    "key": "EMAIL_RETRY_BASE_SECONDS",
     "kind": "positiveInt",
-    "default": 60,
-    "target": "app"
+    "default": 60
   },
-  "EMAIL_WORKER_POLL_INTERVAL_MS": {
+  {
+    "key": "EMAIL_WORKER_POLL_INTERVAL_MS",
     "kind": "positiveInt",
-    "default": 5000,
-    "target": "app"
+    "default": 5000
   },
-  "EMAIL_WORKER_BATCH_SIZE": {
+  {
+    "key": "EMAIL_WORKER_BATCH_SIZE",
     "kind": "positiveInt",
-    "default": 20,
-    "target": "app"
+    "default": 20
   },
-  "EMAIL_WORKER_LOCK_TIMEOUT_MS": {
+  {
+    "key": "EMAIL_WORKER_LOCK_TIMEOUT_MS",
     "kind": "positiveInt",
-    "default": 300000,
-    "target": "app"
+    "default": 300000
   },
-  "EMAIL_WORKER_HEARTBEAT_STALE_MS": {
+  {
+    "key": "EMAIL_WORKER_HEARTBEAT_STALE_MS",
     "kind": "positiveInt",
-    "default": 60000,
-    "target": "app"
+    "default": 60000
   },
-  "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS": {
+  {
+    "key": "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
     "kind": "positiveInt",
-    "default": 8000,
-    "target": "app"
+    "default": 8000
   },
-  "SMTP_HOST": { "kind": "string", "default": "", "target": "app" },
-  "SMTP_PORT": { "kind": "positiveInt", "default": 587, "target": "app" },
-  "SMTP_SECURE": { "kind": "boolean", "default": false, "target": "app" },
-  "SMTP_REQUIRE_TLS": { "kind": "boolean", "default": true, "target": "app" },
-  "SMTP_TLS_REJECT_UNAUTHORIZED": {
+  {
+    "key": "SMTP_HOST",
+    "kind": "string",
+    "default": ""
+  },
+  {
+    "key": "SMTP_PORT",
+    "kind": "positiveInt",
+    "default": 587
+  },
+  {
+    "key": "SMTP_SECURE",
     "kind": "boolean",
-    "default": true,
-    "target": "app"
+    "default": false
   },
-  "SMTP_TLS_SERVERNAME": { "kind": "string", "default": "", "target": "app" },
-  "SMTP_CONNECTION_TIMEOUT_MS": {
+  {
+    "key": "SMTP_REQUIRE_TLS",
+    "kind": "boolean",
+    "default": true
+  },
+  {
+    "key": "SMTP_TLS_REJECT_UNAUTHORIZED",
+    "kind": "boolean",
+    "default": true
+  },
+  {
+    "key": "SMTP_TLS_SERVERNAME",
+    "kind": "string",
+    "default": ""
+  },
+  {
+    "key": "SMTP_CONNECTION_TIMEOUT_MS",
     "kind": "positiveInt",
-    "default": 10000,
-    "target": "app"
+    "default": 10000
   },
-  "SMTP_GREETING_TIMEOUT_MS": {
+  {
+    "key": "SMTP_GREETING_TIMEOUT_MS",
     "kind": "positiveInt",
-    "default": 10000,
-    "target": "app"
+    "default": 10000
   },
-  "SMTP_SOCKET_TIMEOUT_MS": {
+  {
+    "key": "SMTP_SOCKET_TIMEOUT_MS",
     "kind": "positiveInt",
-    "default": 10000,
-    "target": "app"
+    "default": 10000
   },
-  "SMTP_USER": { "kind": "secretString", "default": "", "target": "app" },
-  "SMTP_PASSWORD": { "kind": "secretString", "default": "", "target": "app" }
-}
+  {
+    "key": "SMTP_USER",
+    "kind": "secretString",
+    "default": ""
+  },
+  {
+    "key": "SMTP_PASSWORD",
+    "kind": "secretString",
+    "default": ""
+  }
+]

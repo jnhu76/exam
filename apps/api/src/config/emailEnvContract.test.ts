@@ -12,8 +12,8 @@ import {
  * Independent membership oracle: the exact 24-key production cluster. This
  * list is the frozen boundary of the Phase C experiment (Issue #367). Adding
  * a 25th Email key intentionally fails this test until the contract, the
- * Compose projection, and the independent behavior tests/docs are reviewed —
- * it is NOT derived from the contract.
+ * Compose projection, the runtime consumer, and the independent behavior
+ * tests/docs are reviewed — it is NOT derived from the contract.
  */
 const EXPECTED_KEYS = [
   "EMAIL_ENABLED",
@@ -47,76 +47,14 @@ describe("emailEnvContract membership", () => {
     expect([...EMAIL_ENV_KEYS].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 
-  it("has unique keys (no duplicates)", () => {
-    const keys = [...EMAIL_ENV_KEYS];
-    expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  it("every entry targets the app deployment target", () => {
-    for (const key of EMAIL_ENV_KEYS) {
-      expect(emailEnvContract[key].target, key).toBe("app");
-    }
-  });
-
-  it("every entry has a supported primitive kind", () => {
-    const supported = new Set([
-      "booleanTruthy",
-      "boolean",
-      "positiveInt",
-      "nonNegativeInt",
-      "string",
-      "secretString",
-      "enum",
-    ]);
-    for (const key of EMAIL_ENV_KEYS) {
-      expect(supported.has(emailEnvContract[key].kind), key).toBe(true);
-    }
-  });
-
-  it("kinds classify the cluster as frozen (no accidental reclassification)", () => {
-    const kindOf = (key: (typeof EXPECTED_KEYS)[number]) =>
-      emailEnvContract[key].kind;
-    // Strict booleans
-    for (const key of [
-      "SMTP_SECURE",
-      "SMTP_REQUIRE_TLS",
-      "SMTP_TLS_REJECT_UNAUTHORIZED",
-    ] as const) {
-      expect(kindOf(key), key).toBe("boolean");
-    }
-    expect(kindOf("EMAIL_ENABLED")).toBe("booleanTruthy");
-    // Numeric
-    for (const key of [
-      "EMAIL_MAX_ATTEMPTS",
-      "EMAIL_RETRY_BASE_SECONDS",
-      "EMAIL_WORKER_POLL_INTERVAL_MS",
-      "EMAIL_WORKER_BATCH_SIZE",
-      "EMAIL_WORKER_LOCK_TIMEOUT_MS",
-      "EMAIL_WORKER_HEARTBEAT_STALE_MS",
-      "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
-      "SMTP_PORT",
-      "SMTP_CONNECTION_TIMEOUT_MS",
-      "SMTP_GREETING_TIMEOUT_MS",
-      "SMTP_SOCKET_TIMEOUT_MS",
-    ] as const) {
-      expect(kindOf(key), key).toBe("positiveInt");
-    }
-    expect(kindOf("EMAIL_FAKE_DELAY_MS")).toBe("nonNegativeInt");
-    // Enums
-    expect(kindOf("EMAIL_TRANSPORT")).toBe("enum");
-    expect(kindOf("EMAIL_FAKE_MODE")).toBe("enum");
-    // Strings
-    for (const key of [
-      "EMAIL_FROM",
-      "EMAIL_FROM_NAME",
-      "SMTP_HOST",
-      "SMTP_TLS_SERVERNAME",
-    ] as const) {
-      expect(kindOf(key), key).toBe("string");
-    }
-    for (const key of ["SMTP_USER", "SMTP_PASSWORD"] as const) {
-      expect(kindOf(key), key).toBe("secretString");
-    }
+  it("classifies representative sensitive kinds", () => {
+    // Independent spot oracles for the kind facts that most affect product
+    // behavior. The full kind map lives in the contract (single authority)
+    // and runtimeConfig.test.ts covers the end-to-end semantics.
+    expect(emailEnvContract.EMAIL_ENABLED.kind).toBe("booleanTruthy");
+    expect(emailEnvContract.SMTP_REQUIRE_TLS.kind).toBe("boolean");
+    expect(emailEnvContract.EMAIL_FAKE_DELAY_MS.kind).toBe("nonNegativeInt");
+    expect(emailEnvContract.SMTP_PASSWORD.kind).toBe("secretString");
   });
 
   it("defaults have the correct primitive representation per kind", () => {
@@ -154,103 +92,91 @@ describe("emailEnvContract membership", () => {
 
 // ── Fail-loud contract validation ────────────────────────────────────────
 describe("validateEmailEnvContract fail-loud", () => {
-  const GOOD: Readonly<Record<string, EmailEnvEntry>> = {
-    FAKE_PORT: { kind: "positiveInt", default: 1234, target: "app" },
-    FAKE_BOOL: { kind: "boolean", default: true, target: "app" },
-  };
+  const GOOD: readonly EmailEnvEntry[] = [
+    { key: "FAKE_PORT", kind: "positiveInt", default: 1234 },
+    { key: "FAKE_BOOL", kind: "boolean", default: true },
+  ];
 
   it("accepts a valid contract", () => {
     expect(() => validateEmailEnvContract(GOOD)).not.toThrow();
   });
 
+  it("rejects a duplicate key (array form keeps both copies visible)", () => {
+    expect(() =>
+      validateEmailEnvContract([
+        ...GOOD,
+        { key: "FAKE_PORT", kind: "positiveInt", default: 1234 },
+      ]),
+    ).toThrow(/duplicate Email env contract key: FAKE_PORT/);
+  });
+
   it("rejects an unsupported kind", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        // @ts-expect-error deliberate bad kind for the fail-loud test
-        FAKE_URL: { kind: "url", default: "x", target: "app" },
-      }),
-    ).toThrow(/unsupported kind/);
+    // @ts-expect-error deliberate bad kind for the fail-loud test
+    const badEntry: EmailEnvEntry = { key: "K", kind: "url", default: "x" };
+    expect(() => validateEmailEnvContract([...GOOD, badEntry])).toThrow(
+      /unsupported kind/,
+    );
   });
 
-  it("rejects an unsupported deployment target", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        // @ts-expect-error deliberate bad target for the fail-loud test
-        FAKE_TOP: { kind: "string", default: "", target: "db" },
-      }),
-    ).toThrow(/unsupported deployment target/);
-  });
+  const BAD_DEFAULTS: ReadonlyArray<{
+    label: string;
+    entry: EmailEnvEntry;
+    error: RegExp;
+  }> = [
+    {
+      label: "a positiveInt whose default is a string",
+      entry: { key: "FAKE_BAD", kind: "positiveInt", default: "587" },
+      error: /default must be a positive integer/,
+    },
+    {
+      label: "a boolean whose default is not a boolean",
+      entry: { key: "FAKE_BAD", kind: "boolean", default: "true" },
+      error: /default must be a boolean/,
+    },
+    {
+      label: "a nonNegativeInt with a negative default",
+      entry: { key: "FAKE_BAD", kind: "nonNegativeInt", default: -1 },
+      error: /default must be a non-negative integer/,
+    },
+    {
+      label: "an enum whose default is outside its values",
+      entry: {
+        key: "FAKE_BAD",
+        kind: "enum",
+        default: "auto",
+        values: ["manual"],
+      },
+      error: /values containing its default/,
+    },
+    {
+      label: "an enum without values",
+      entry: { key: "FAKE_BAD", kind: "enum", default: "auto" },
+      error: /values containing its default/,
+    },
+  ];
 
-  it("rejects a positiveInt whose default is a string", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        FAKE_BAD: { kind: "positiveInt", default: "587", target: "app" },
-      }),
-    ).toThrow(/default must be a positive integer/);
-  });
-
-  it("rejects a boolean whose default is not a boolean", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        FAKE_BAD: { kind: "boolean", default: "true", target: "app" },
-      }),
-    ).toThrow(/default must be a boolean/);
-  });
-
-  it("rejects a nonNegativeInt with a negative default", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        FAKE_BAD: { kind: "nonNegativeInt", default: -1, target: "app" },
-      }),
-    ).toThrow(/default must be a non-negative integer/);
-  });
-
-  it("rejects an enum whose default is outside its values", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        FAKE_MODE: {
-          kind: "enum",
-          default: "auto",
-          values: ["manual"],
-          target: "app",
-        },
-      }),
-    ).toThrow(/values containing its default/);
-  });
-
-  it("rejects an enum without values", () => {
-    expect(() =>
-      validateEmailEnvContract({
-        ...GOOD,
-        FAKE_MODE: { kind: "enum", default: "auto", target: "app" },
-      }),
-    ).toThrow(/values containing its default/);
+  it.each(BAD_DEFAULTS)("rejects $label", ({ entry, error }) => {
+    expect(() => validateEmailEnvContract([...GOOD, entry])).toThrow(error);
   });
 });
 
 // ── Resolver with SYNTHETIC fixtures ─────────────────────────────────────
 // Mechanism is tested against synthetic contract fixtures so the helper tests
 // never duplicate production Email defaults (see Issue #367 Phase C §15).
-const SYNTHETIC: Readonly<Record<string, EmailEnvEntry>> = {
-  FAKE_PORT: { kind: "positiveInt", default: 1234, target: "app" },
-  FAKE_COUNT: { kind: "nonNegativeInt", default: 0, target: "app" },
-  FAKE_TLS: { kind: "boolean", default: true, target: "app" },
-  FAKE_SWITCH: { kind: "booleanTruthy", default: false, target: "app" },
-  FAKE_NAME: { kind: "string", default: "hello world", target: "app" },
-  FAKE_SECRET: { kind: "secretString", default: "", target: "app" },
-  FAKE_MODE: {
+const SYNTHETIC: readonly EmailEnvEntry[] = [
+  { key: "FAKE_PORT", kind: "positiveInt", default: 1234 },
+  { key: "FAKE_COUNT", kind: "nonNegativeInt", default: 0 },
+  { key: "FAKE_TLS", kind: "boolean", default: true },
+  { key: "FAKE_SWITCH", kind: "booleanTruthy", default: false },
+  { key: "FAKE_NAME", kind: "string", default: "hello world" },
+  { key: "FAKE_SECRET", kind: "secretString", default: "" },
+  {
+    key: "FAKE_MODE",
     kind: "enum",
     default: "auto",
     values: ["auto", "manual"],
-    target: "app",
   },
-};
+];
 
 function resolveSynthetic(env: Record<string, string>, key: string) {
   return resolveEmailEnvFrom(SYNTHETIC, env, key);
@@ -336,17 +262,16 @@ describe("resolveEmailEnvFrom synthetic fixtures", () => {
 
 // ── Production resolver spot checks (hard-coded expected values) ─────────
 // These are independent oracles — they intentionally do NOT read expected
-// values from the contract (Issue #367 §6).
+// values from the contract (Issue #367 §6). The full semantic set is asserted
+// by runtimeConfig.test.ts (the stronger end-semantic owner); this file keeps
+// only the representative values the mutation experiment keys on.
 describe("resolveEmailEnv production cluster", () => {
-  it("resolves typed values for representative keys", () => {
+  it("resolves representative product semantics", () => {
     expect(resolveEmailEnv({}, "SMTP_PORT")).toBe(587);
     expect(resolveEmailEnv({}, "SMTP_REQUIRE_TLS")).toBe(true);
     expect(resolveEmailEnv({}, "EMAIL_ENABLED")).toBe(false);
     expect(resolveEmailEnv({}, "EMAIL_TRANSPORT")).toBe("fake");
     expect(resolveEmailEnv({}, "EMAIL_FAKE_MODE")).toBe("success");
-    expect(resolveEmailEnv({}, "EMAIL_FROM")).toBe("no-reply@example.local");
-    expect(resolveEmailEnv({}, "EMAIL_MAX_ATTEMPTS")).toBe(3);
-    expect(resolveEmailEnv({}, "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS")).toBe(8000);
   });
 
   it("a temporarily changed contract default breaks this independent oracle", () => {

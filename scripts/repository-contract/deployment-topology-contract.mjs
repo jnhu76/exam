@@ -29,7 +29,7 @@
  *     C — the in-process loop's sender/loop configuration rides on the app
  *     env; `--env-file` interpolates only, it never projects into the
  *     container; the block's CONTENT parity with the contract is enforced by
- *     email-env-projection.mjs --check, this guard owns placement only);
+ *     email-env-contract.mjs --check, this guard owns placement only);
  *   - the #351 shutdown budget contract breaks: `app` must declare an
  *     explicit `stop_grace_period` that strictly dominates the serial
  *     graceful-shutdown worst case (email loop drain + audit drain + DB
@@ -75,7 +75,7 @@ const errors = [];
 // PLACEMENT facts only: the generated block exists inside app.environment,
 // every contract key is projected inside it, and no Email key leaks outside
 // the generated block. The block's CONTENT parity (defaults) is enforced by
-// email-env-projection.mjs --check.
+// email-env-contract.mjs --check.
 const EMAIL_ENV_CONTRACT_PATH = join(
   ROOT,
   "apps/api/src/config/emailEnvContract.json",
@@ -84,11 +84,27 @@ const EMAIL_ENV_BEGIN_MARKER = "# BEGIN GENERATED: EMAIL ENV CONTRACT";
 const EMAIL_ENV_END_MARKER = "# END GENERATED: EMAIL ENV CONTRACT";
 
 /** Read the Email env contract key set, or null (with an error recorded)
- * when the contract is unreadable — membership must never silently empty. */
+ * when the contract is unreadable or malformed — membership must never
+ * silently empty. */
 function readEmailEnvContractKeys() {
   try {
     const contract = JSON.parse(readFileSync(EMAIL_ENV_CONTRACT_PATH, "utf-8"));
-    return Object.keys(contract);
+    if (!Array.isArray(contract)) {
+      errors.push(
+        "#367 email env topology: apps/api/src/config/emailEnvContract.json " +
+          "must be an array of entries (key/kind/default).",
+      );
+      return null;
+    }
+    const keys = contract.map((entry) => entry.key);
+    if (keys.some((key) => typeof key !== "string")) {
+      errors.push(
+        "#367 email env topology: apps/api/src/config/emailEnvContract.json " +
+          "has an entry without a string key.",
+      );
+      return null;
+    }
+    return keys;
   } catch (err) {
     if (err && err.code === "ENOENT") {
       errors.push(
@@ -860,7 +876,7 @@ function removeGeneratedBlock(text) {
  *
  * This guard owns PLACEMENT facts only — content parity (every Compose
  * fallback equals the contract default) belongs to
- * email-env-projection.mjs --check, so the two checks stay independent:
+ * email-env-contract.mjs --check, so the two checks stay independent:
  *   1. both generated-block markers exist inside the app environment block;
  *   2. every contract Email key is projected inside the generated block;
  *   3. no Email/EmailWorker/SMTP key line appears outside the generated
@@ -886,7 +902,7 @@ function assertEmailEnvTopology(composeText, appEnvBlock) {
       "'app' service environment must contain the generated Email env block " +
         `(${EMAIL_ENV_BEGIN_MARKER} … ${EMAIL_ENV_END_MARKER}) — the Email ` +
         "cluster is projected from apps/api/src/config/emailEnvContract.json " +
-        "by scripts/repository-contract/email-env-projection.mjs (--write).",
+        "by scripts/repository-contract/email-env-contract.mjs (--write).",
     );
     return;
   }
@@ -902,7 +918,7 @@ function assertEmailEnvTopology(composeText, appEnvBlock) {
       errors.push(
         `#367 email env topology: contract key '${key}' is missing from the ` +
           "generated Email env block in app.environment — regenerate with " +
-          "email-env-projection.mjs --write.",
+          "email-env-contract.mjs --write.",
       );
     }
   }
@@ -916,7 +932,7 @@ function assertEmailEnvTopology(composeText, appEnvBlock) {
       `#367 email env topology: '${match[0].trim()}' appears OUTSIDE the ` +
         "generated Email env block — the generated block must be the only " +
         "place Email/EmailWorker/SMTP keys are forwarded " +
-        "(email-env-projection.mjs --write).",
+        "(email-env-contract.mjs --write).",
     );
   }
 }
