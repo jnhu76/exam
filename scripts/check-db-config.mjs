@@ -17,6 +17,12 @@
 //   3. vitest configs force test mode via the shared TEST_RUNTIME_ENV constant,
 //      not an inline `APP_MODE: "test"` literal. (Prevents per-config drift of
 //      the forced test mode — the "one macro per AI" failure mode.)
+//   4. Vitest configs never read process.env.DATABASE_URL directly (they go
+//      through resolveDatabaseUrl), and test files never read a bare
+//      process.env.DATABASE_URL outside the config-resolution tests that
+//      legitimately exercise the resolver itself. (Absorbed from the retired
+//      check-test-env-contract.mjs when its CI/WSL/origin obligations moved
+//      to scripts/repository-contract/config-contract.mjs — #370.)
 //   5. Queue-participant lifecycle hooks declare an explicit numeric hook
 //      budget (PR #242 rule). A hook participates in the shared test-infra DDL
 //      advisory lock queue when it directly calls a lock holder
@@ -123,6 +129,74 @@ for (const f of vitestConfigs) {
   }
 }
 
+// --- Guard 4: no direct DATABASE_URL reads in vitest configs / test files ----
+// Vitest configs must route through the single-source resolver; test files
+// must use TEST_DATABASE_URL / resolveTestDatabaseUrl. Config-resolution
+// tests (databaseUrl, runtimeConfig, settings, loadRootEnv,
+// testWorkerDatabase) legitimately exercise how DATABASE_URL is read.
+{
+  const DB_URL_EXEMPT =
+    /databaseUrl|runtimeConfig|settings|loadRootEnv|testWorkerDatabase/i;
+
+  const dirsToWalk = [join(ROOT, "packages"), join(ROOT, "apps")];
+  const vitestConfigs = [];
+  const testFiles = [];
+  const PRUNE = new Set([
+    "node_modules",
+    "dist",
+    "coverage",
+    "playwright-report",
+  ]);
+  async function walkTests(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (PRUNE.has(entry.name)) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walkTests(full);
+      } else if (/vitest\.config\.(ts|js|mjs)$/.test(entry.name)) {
+        vitestConfigs.push(full);
+      } else if (/\.test\.(ts|tsx|js|jsx)$/.test(entry.name)) {
+        testFiles.push(full);
+      }
+    }
+  }
+  for (const dir of dirsToWalk) await walkTests(dir);
+
+  for (const configPath of vitestConfigs) {
+    const lines = (await readFile(configPath, "utf8")).split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trimStart().startsWith("//")) continue;
+      if (
+        line.includes("process.env.DATABASE_URL") &&
+        !line.includes("resolveDatabaseUrl")
+      ) {
+        violations.push(
+          `${relative(ROOT, configPath)}:${i + 1} vitest config reads process.env.DATABASE_URL directly — use resolveDatabaseUrl`,
+        );
+      }
+    }
+  }
+
+  for (const testPath of testFiles) {
+    const rel = relative(ROOT, testPath);
+    if (DB_URL_EXEMPT.test(rel)) continue;
+    const lines = (await readFile(testPath, "utf8")).split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*"))
+        continue;
+      if (
+        line.includes("process.env.DATABASE_URL") &&
+        !line.includes("TEST_DATABASE_URL")
+      ) {
+        violations.push(
+          `${rel}:${i + 1} test file reads process.env.DATABASE_URL — should use TEST_DATABASE_URL or resolveTestDatabaseUrl`,
+        );
+      }
+    }
+  }
+}
 // --- Guard 5: queue-participant hooks declare an explicit hook budget ------
 // PR #242 rule (2026-08-26 audit): lifecycle hooks whose body enters the
 // shared test-infra DDL advisory lock queue must pass an explicit numeric
@@ -397,7 +471,6 @@ for (const f of vitestConfigs) {
     }
   }
 }
-
 // --- Report -----------------------------------------------------------------
 if (violations.length > 0) {
   process.stderr.write(

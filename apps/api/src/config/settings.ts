@@ -45,17 +45,17 @@ export type SettingsMode = "development" | "test" | "e2e" | "ci" | "production";
  *             legitimate because the runtime's non-production default
  *             (Vite dev port) must not leak into a deployment.
  * - container: Compose hardcodes the container identity value.
+ * - composed:  Compose composes the value from other variables
+ *              (DATABASE_URL from POSTGRES_*).
  * - dev-only:  never read inside the production container.
- * - delegated: resolution is owned by a deeper module (@exam/db); this leaf
- *             exists for enumeration/contract purposes only.
  */
 export type SettingBinding =
   | "operator"
   | "required"
   | "derived"
   | "container"
-  | "dev-only"
-  | "delegated";
+  | "composed"
+  | "dev-only";
 
 export type SettingValue = string | number | boolean | null | undefined;
 
@@ -89,6 +89,13 @@ export interface SettingLeaf<T = SettingValue> {
   /** Secret value — must never be echoed in logs/errors. */
   readonly secret: boolean;
   readonly binding: SettingBinding;
+  /**
+   * When set, resolution of this env var is owned by the named module
+   * (e.g. @exam/db); the leaf exists for enumeration/contract purposes
+   * only and resolve() always yields undefined. Orthogonal to `binding`,
+   * which describes the Compose binding regardless of who resolves.
+   */
+  readonly delegatedTo?: string;
 }
 
 export interface LeafOptions {
@@ -609,19 +616,21 @@ function nullableStringLeaf(
  * Leaf whose resolution is delegated to a deeper owning module. The leaf
  * exists so contracts can enumerate the env name and its binding; the value
  * is always `undefined` here and the delegate module owns parsing,
- * requiredness errors, and safety guards.
+ * requiredness errors, and safety guards. The Compose `binding` still
+ * applies (e.g. APP_MODE is delegated AND container-bound in production).
  */
-function delegatedLeaf(owner: string): SettingLeaf<undefined> {
-  // `owner` is documentation for humans/contracts (kept on the closure, not
-  // the leaf object, so the leaf surface stays minimal).
-  void owner;
+function delegatedLeaf(
+  owner: string,
+  opts: { binding: SettingBinding },
+): SettingLeaf<undefined> {
   return {
     kind: "delegated",
     resolve: () => undefined,
     defaultRaw: null,
     requiredIn: [],
     secret: false,
-    binding: "delegated",
+    binding: opts.binding,
+    delegatedTo: owner,
   };
 }
 
@@ -642,6 +651,7 @@ export const SETTINGS = {
     // runtimeConfig delegates; these leaves exist for contract enumeration.
     APP_MODE: delegatedLeaf(
       "@exam/db parseAppMode — APP_MODE is authoritative, NODE_ENV the fallback",
+      { binding: "container" },
     ),
     NODE_ENV: appEnvLeaf(),
     DEPLOYMENT_MODE: deploymentModeLeaf(),
@@ -682,15 +692,23 @@ export const SETTINGS = {
     // routing, construction from DB_HOST_PORT, test name-safety) is owned
     // by @exam/db databaseUrl.ts — a deep module this model delegates to
     // rather than re-implements.
-    DATABASE_URL: delegatedLeaf("@exam/db resolveDatabaseUrl"),
-    TEST_DATABASE_URL: delegatedLeaf("@exam/db resolveTestBranchUrl"),
-    TEST_DB_URL: delegatedLeaf("@exam/db resolveTestBranchUrl (legacy alias)"),
+    DATABASE_URL: delegatedLeaf("@exam/db resolveDatabaseUrl", {
+      binding: "composed",
+    }),
+    TEST_DATABASE_URL: delegatedLeaf("@exam/db resolveTestBranchUrl", {
+      binding: "dev-only",
+    }),
+    TEST_DB_URL: delegatedLeaf("@exam/db resolveTestBranchUrl (legacy alias)", {
+      binding: "dev-only",
+    }),
     // Escape hatch for the @exam/db test name-safety guard (delegated).
     ALLOW_UNSAFE_TEST_DATABASE_URL: delegatedLeaf(
       "@exam/db resolveTestBranchUrl escape hatch",
+      { binding: "dev-only" },
     ),
     DB_HOST_PORT: delegatedLeaf(
       "@exam/db constructed-URL port (dev compose publish owner)",
+      { binding: "dev-only" },
     ),
   },
   redis: {
