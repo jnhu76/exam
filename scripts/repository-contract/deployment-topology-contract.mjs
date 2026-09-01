@@ -331,6 +331,40 @@ if (!servicesBlock) {
   }
 }
 
+// ── Dockerfile pnpm pin: packageManager parity (retired test-docker-config) ─
+// The image must build with the SAME pnpm the repo declares — a drift between
+// package.json#packageManager and the Dockerfile corepack pin would ship an
+// image whose toolchain differs from CI/dev (reproducible-build contract).
+// This migrates the retired test-docker-config.mjs pin check onto the
+// deployment oracle; the fresh-install source build still catches a broken
+// pin at build time.
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const packageManager = pkg.packageManager;
+  if (
+    typeof packageManager !== "string" ||
+    !/^pnpm@\d+\.\d+\.\d+$/.test(packageManager)
+  ) {
+    errors.push(
+      "package.json#packageManager must be an exact pnpm@x.y.z pin " +
+        "(reproducible-build authority).",
+    );
+  } else {
+    const dockerfile = readFileSync(join(ROOT, "Dockerfile"), "utf-8");
+    const corepack = dockerfile.match(/corepack prepare pnpm@[\d.]+/);
+    if (
+      !corepack ||
+      corepack[0].replace("corepack prepare ", "") !== packageManager
+    ) {
+      errors.push(
+        `Dockerfile corepack pin (${corepack?.[0] ?? "missing"}) must equal ` +
+          `package.json#packageManager (${packageManager}) — the image ` +
+          "toolchain must match the repo-declared pnpm (reproducible build).",
+      );
+    }
+  }
+}
+
 // ── #329: operator lifecycle doc drift guard ─────────────────────────────
 // upgrade-and-uninstall.md is the canonical operator lifecycle contract.
 // This section fails when the OPERATOR commands in the doc drift from the

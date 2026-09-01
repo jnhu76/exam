@@ -16,8 +16,8 @@
  *     runtimeConfig (+ its own tests), keeping one consumption seam.
  *
  *   Docker production — docker-compose.yml binds every leaf according to
- *     its semantic binding class (operator forward / required expansion /
- *     derived origin / container identity / dev-only absence). Literal
+ *     its semantic supply class (operator forward / required expansion /
+ *     derived origin / fixed identity / dev-only absence). Literal
  *     Compose fallbacks may only mirror the semantic default exactly.
  *
  *   Docker test — the E2E stack derives PUBLIC_WEB_ORIGIN from the
@@ -113,7 +113,10 @@ console.log("1. Checking settings consumption by runtimeConfig...");
 }
 console.log("   Consumption check complete.");
 
-// ── 2. Docker production profile: compose binds every leaf by class ─────────
+// ── 2. Docker production profile: compose binds every leaf by supply class ──
+// This section is the ONLY place Compose/Docker constructs are named. The
+// semantic model (settings.ts) declares topology-neutral supply classes; this
+// is the per-topology mapping: which supply class → which Compose form.
 console.log("2. Checking docker-compose.yml app environment bindings...");
 {
   const composeText = readFileSync(join(ROOT, "docker-compose.yml"), "utf-8");
@@ -186,18 +189,18 @@ console.log("2. Checking docker-compose.yml app environment bindings...");
           }
           break;
         }
-        case "container": {
+        case "fixed": {
           if (!entry) {
             fail(
-              `docker-compose.yml 'app' must set ${name} (container ` +
-                "identity value).",
+              `docker-compose.yml 'app' must set ${name} (fixed identity ` +
+                "value).",
             );
             break;
           }
           if (entry.includes("${")) {
             fail(
-              `docker-compose.yml 'app' ${name} is container identity — it ` +
-                `must be a hardcoded literal (got: ${entry}).`,
+              `docker-compose.yml 'app' ${name} is a fixed identity value — ` +
+                `it must be a hardcoded literal (got: ${entry}).`,
             );
           }
           if (

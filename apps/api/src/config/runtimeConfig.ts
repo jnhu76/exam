@@ -544,7 +544,7 @@ export function loadRuntimeConfig(
 
   let s: ResolvedSettings;
   try {
-    s = resolveSettings(env, mode);
+    s = resolveSettings(env, isProduction);
   } catch (err) {
     if (err instanceof Error && err.name === "SettingsError") {
       throw new RuntimeConfigError(err.message);

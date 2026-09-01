@@ -16,7 +16,7 @@ import {
  * scripts/repository-contract/config-contract.mjs, not here.
  */
 
-const DEV = "development" as const;
+const DEV = false; // non-production context
 
 describe("settings model shape", () => {
   it("exposes exactly the six semantic groups", () => {
@@ -55,12 +55,12 @@ describe("settings model shape", () => {
     expect(binding("SMTP_PORT")).toBe("operator");
     expect(binding("PUBLIC_WEB_ORIGIN")).toBe("derived");
     expect(binding("CORS_ORIGIN")).toBe("derived");
-    expect(binding("NODE_ENV")).toBe("container");
-    expect(binding("APP_PORT")).toBe("container");
+    expect(binding("NODE_ENV")).toBe("fixed");
+    expect(binding("APP_PORT")).toBe("fixed");
     expect(binding("VITE_PORT")).toBe("dev-only");
     expect(binding("DEV_API_PORT")).toBe("dev-only");
     expect(binding("DATABASE_URL")).toBe("composed");
-    expect(binding("APP_MODE")).toBe("container");
+    expect(binding("APP_MODE")).toBe("fixed");
   });
 
   it("documents raw defaults for the leaves that have one", () => {
@@ -229,34 +229,31 @@ describe("resolveSettings primitives", () => {
 
   it("fails fast on production-required leaves, in the pinned order", () => {
     // JWT_SECRET → CORS_ORIGIN → PUBLIC_WEB_ORIGIN (historic precedence).
-    expect(() => resolveSettings({}, "production")).toThrow(
+    expect(() => resolveSettings({}, true)).toThrow(
       /JWT_SECRET is required in production/,
     );
-    expect(() => resolveSettings({ JWT_SECRET: "s" }, "production")).toThrow(
+    expect(() => resolveSettings({ JWT_SECRET: "s" }, true)).toThrow(
       /CORS_ORIGIN is required in production/,
     );
     expect(() =>
-      resolveSettings(
-        { JWT_SECRET: "s", CORS_ORIGIN: "https://a" },
-        "production",
-      ),
+      resolveSettings({ JWT_SECRET: "s", CORS_ORIGIN: "https://a" }, true),
     ).toThrow(/PUBLIC_WEB_ORIGIN is required in production/);
   });
 
   it("resolves optional ports to undefined so policy owns the fallback chain", () => {
-    const unset = resolveSettings({}, "e2e");
+    const unset = resolveSettings({}, false);
     expect(unset.app.APP_PORT).toBeUndefined();
     expect(unset.app.DEV_API_PORT).toBeUndefined();
-    expect(resolveSettings({ APP_PORT: "3000" }, "e2e").app.APP_PORT).toBe(
+    expect(resolveSettings({ APP_PORT: "3000" }, false).app.APP_PORT).toBe(
       3000,
     );
     expect(
-      resolveSettings({ DEV_API_PORT: "3100" }, "e2e").app.DEV_API_PORT,
+      resolveSettings({ DEV_API_PORT: "3100" }, false).app.DEV_API_PORT,
     ).toBe(3100);
     // Invalid port input is lenient (undefined → policy fallback), never a
     // startup failure.
     expect(
-      resolveSettings({ APP_PORT: "not-a-port" }, "e2e").app.APP_PORT,
+      resolveSettings({ APP_PORT: "not-a-port" }, false).app.APP_PORT,
     ).toBeUndefined();
   });
 
@@ -280,7 +277,7 @@ describe("resolveSettings primitives", () => {
         TEST_DATABASE_URL: "postgresql://t",
         APP_MODE: "production",
       },
-      "development",
+      false,
     );
     expect(s.database.DATABASE_URL).toBeUndefined();
     expect(s.database.TEST_DATABASE_URL).toBeUndefined();

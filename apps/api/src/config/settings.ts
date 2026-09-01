@@ -3,9 +3,9 @@
  * reads from the environment (#370).
  *
  * This module owns, per leaf: the env name (the property key), the primitive
- * parser, the semantic default, runtime requiredness, and the production
- * Docker binding classification. It deliberately owns NOTHING about
- * topologies: no WSL ports, no CI job names, no Compose service wiring —
+ * parser, the semantic default, runtime requiredness, and the value-supply
+ * class (how a deployment may supply the value). It deliberately owns NOTHING
+ * about topologies: no WSL ports, no CI job names, no Compose service wiring —
  * profiles produce environment VALUES, this module defines MEANING.
  *
  * Consumption contract:
@@ -31,29 +31,30 @@
  * POLICY and live in runtimeConfig.ts — this model stays primitive.
  */
 
-/** Modes requiredness can depend on. Structural twin of `AppMode` in @exam/db. */
-export type SettingsMode = "development" | "test" | "e2e" | "ci" | "production";
-
 /**
- * How the production Docker topology binds this leaf. A contract-facing
- * semantic fact (what KIND of binding is legitimate), never a topology
- * implementation detail.
+ * How this application setting may obtain a deployment value — a
+ * topology-neutral value-supply class. It answers "How may this setting be
+ * supplied in a deployment?", never "what must docker-compose.yml do?" — the
+ * Docker/Compose mapping of these classes lives ONLY in
+ * scripts/repository-contract/config-contract.mjs.
  *
- * - operator: Compose forwards `${KEY:-…}`; the operator may set it.
- * - required: production-required secret; Compose must use `${KEY:?…}`.
- * - derived:  Compose derives a topology value (e.g. from EXAM_PORT) —
- *             legitimate because the runtime's non-production default
- *             (Vite dev port) must not leak into a deployment.
- * - container: Compose hardcodes the container identity value.
- * - composed:  Compose composes the value from other variables
- *              (DATABASE_URL from POSTGRES_*).
- * - dev-only:  never read inside the production container.
+ * - operator: the operator supplies it through the deployment environment;
+ *             the runtime falls back to the semantic default when unset.
+ * - required: production-required — a deployment must supply it or startup
+ *             fails fast.
+ * - derived:  the deployment derives the value (e.g. from the published
+ *             port) because the runtime's own default would be a dev-time
+ *             value.
+ * - fixed:    the deployment hardcodes a stable identity value (e.g. the
+ *             production mode marker).
+ * - composed: the deployment composes the value from other variables.
+ * - dev-only: only read in non-production; never present in a deployment.
  */
-export type SettingBinding =
+export type SettingSupply =
   | "operator"
   | "required"
   | "derived"
-  | "container"
+  | "fixed"
   | "composed"
   | "dev-only";
 
@@ -68,7 +69,8 @@ export class SettingsError extends Error {
 }
 
 export interface ResolveContext {
-  readonly mode: SettingsMode;
+  /** Production runs fail fast on `requiredInProduction` leaves. */
+  readonly isProduction: boolean;
   /** The env name being resolved (the SETTINGS property key). */
   readonly envName: string;
 }
@@ -84,24 +86,25 @@ export interface SettingLeaf<T = SettingValue> {
    * compare Compose fallback literals against this — never a second copy.
    */
   readonly defaultRaw: string | null;
-  /** Modes in which a missing/empty value fails fast. */
-  readonly requiredIn: readonly SettingsMode[];
+  /** When true, a missing/empty value fails fast in production. */
+  readonly requiredInProduction: boolean;
   /** Secret value — must never be echoed in logs/errors. */
   readonly secret: boolean;
-  readonly binding: SettingBinding;
+  /** Value-supply class (how a deployment may supply this setting). */
+  readonly binding: SettingSupply;
   /**
    * When set, resolution of this env var is owned by the named module
    * (e.g. @exam/db); the leaf exists for enumeration/contract purposes
    * only and resolve() always yields undefined. Orthogonal to `binding`,
-   * which describes the Compose binding regardless of who resolves.
+   * which describes the supply class regardless of who resolves.
    */
   readonly delegatedTo?: string;
 }
 
 export interface LeafOptions {
-  readonly requiredIn?: readonly SettingsMode[];
+  readonly requiredInProduction?: boolean;
   readonly secret?: boolean;
-  readonly binding?: SettingBinding;
+  readonly binding?: SettingSupply;
 }
 
 interface LeafContext {
@@ -112,8 +115,8 @@ function isEmpty(raw: string | undefined): boolean {
   return raw === undefined || raw.trim() === "";
 }
 
-function requiredMessage(envName: string, mode: SettingsMode): string {
-  return `${envName} is required in ${mode}`;
+function requiredMessage(envName: string): string {
+  return `${envName} is required in production`;
 }
 
 // ── Primitive leaf factories ────────────────────────────────────────────────
@@ -127,7 +130,7 @@ function stringLeaf(
 ): SettingLeaf<string> {
   const {
     trim = false,
-    requiredIn = [],
+    requiredInProduction = false,
     secret = false,
     binding = "operator",
   } = opts;
@@ -135,8 +138,8 @@ function stringLeaf(
     kind: trim ? "trimmed-string" : "string",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue;
       }
@@ -144,7 +147,8 @@ function stringLeaf(
       return trim ? value.trim() : value;
     },
     defaultRaw: defaultValue,
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -159,7 +163,7 @@ function secretStringLeaf(
     trim: false,
     secret: true,
     binding: requiredInProduction ? "required" : "operator",
-    requiredIn: requiredInProduction ? (["production"] as const) : [],
+    requiredInProduction,
   });
 }
 
@@ -169,13 +173,17 @@ function secretStringLeaf(
  * not take the deployment down.
  */
 function truthyLeaf(opts: LeafOptions = {}): SettingLeaf<boolean> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "truthy-bool",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return false;
       }
@@ -183,7 +191,8 @@ function truthyLeaf(opts: LeafOptions = {}): SettingLeaf<boolean> {
       return value === "true" || value === "1";
     },
     defaultRaw: "false",
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -197,13 +206,17 @@ function strictBoolLeaf(
   defaultValue: boolean,
   opts: LeafOptions = {},
 ): SettingLeaf<boolean> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "strict-bool",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue;
       }
@@ -215,7 +228,8 @@ function strictBoolLeaf(
       );
     },
     defaultRaw: defaultValue ? "true" : "false",
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -233,13 +247,17 @@ function optionalLenientIntLeaf(
   fallback: number,
   opts: LeafOptions = {},
 ): SettingLeaf<number | undefined> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "optional-lenient-positive-int",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return undefined;
       }
@@ -250,7 +268,8 @@ function optionalLenientIntLeaf(
       return n;
     },
     defaultRaw: String(fallback),
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -264,13 +283,17 @@ function lenientIntLeaf(
   defaultValue: number,
   opts: LeafOptions = {},
 ): SettingLeaf<number> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "lenient-positive-int",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue;
       }
@@ -281,7 +304,8 @@ function lenientIntLeaf(
       return n;
     },
     defaultRaw: String(defaultValue),
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -292,13 +316,17 @@ function posIntLeaf(
   defaultValue: number,
   opts: LeafOptions = {},
 ): SettingLeaf<number> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "strict-positive-int",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue;
       }
@@ -317,7 +345,8 @@ function posIntLeaf(
       return n;
     },
     defaultRaw: String(defaultValue),
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -331,13 +360,17 @@ function posIntLeaf(
 function optionalPosIntLeaf(
   opts: LeafOptions = {},
 ): SettingLeaf<number | undefined> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "optional-positive-int",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return undefined;
       }
@@ -356,7 +389,8 @@ function optionalPosIntLeaf(
       return n;
     },
     defaultRaw: null,
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -367,13 +401,17 @@ function nonNegIntLeaf(
   defaultValue: number,
   opts: LeafOptions = {},
 ): SettingLeaf<number> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "strict-non-negative-int",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue;
       }
@@ -392,7 +430,8 @@ function nonNegIntLeaf(
       return n;
     },
     defaultRaw: String(defaultValue),
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -418,7 +457,11 @@ function enumLeaf<T extends string>(
   defaultValue: T | null,
   opts: LeafOptions = {},
 ): SettingLeaf<T | undefined> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   const quoted = values.map((v) => `"${v}"`);
   const list =
     quoted.length <= 1
@@ -428,8 +471,8 @@ function enumLeaf<T extends string>(
     kind: "enum",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue ?? undefined;
       }
@@ -438,7 +481,8 @@ function enumLeaf<T extends string>(
       throw new SettingsError(`${ctx.envName} must be ${list} (got: ${raw})`);
     },
     defaultRaw: defaultValue,
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -453,13 +497,17 @@ function timezoneLeaf(
   defaultValue: string,
   opts: LeafOptions = {},
 ): SettingLeaf<string> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "iana-timezone",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return defaultValue;
       }
@@ -475,7 +523,8 @@ function timezoneLeaf(
       return value;
     },
     defaultRaw: defaultValue,
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -493,18 +542,16 @@ function originLeaf(
     requiredMessage?: string;
   } = {},
 ): SettingLeaf<string | undefined> {
-  const requiredIn: readonly SettingsMode[] = opts.requiredInProduction
-    ? ["production"]
-    : [];
+  const requiredInProduction = opts.requiredInProduction ?? false;
   const shape =
     "must be an absolute origin (scheme + host[+port], no path, no trailing slash)";
   return {
     kind: "absolute-origin",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
+        if (requiredInProduction && ctx.isProduction) {
           throw new SettingsError(
-            opts.requiredMessage ?? requiredMessage(ctx.envName, ctx.mode),
+            opts.requiredMessage ?? requiredMessage(ctx.envName),
           );
         }
         return undefined;
@@ -530,7 +577,8 @@ function originLeaf(
       return trimmed;
     },
     defaultRaw: null,
-    requiredIn,
+
+    requiredInProduction,
     secret: false,
     binding: "derived",
   };
@@ -551,9 +599,9 @@ function appEnvLeaf(): SettingLeaf<"development" | "test" | "production"> {
       return "development";
     },
     defaultRaw: "development",
-    requiredIn: [],
+    requiredInProduction: false,
     secret: false,
-    binding: "container",
+    binding: "fixed",
   };
 }
 
@@ -581,7 +629,7 @@ function deploymentModeLeaf(): SettingLeaf<"singleTenant"> {
       );
     },
     defaultRaw: "singleTenant",
-    requiredIn: [],
+    requiredInProduction: false,
     secret: false,
     binding: "operator",
   };
@@ -593,20 +641,25 @@ function deploymentModeLeaf(): SettingLeaf<"singleTenant"> {
 function nullableStringLeaf(
   opts: LeafOptions = {},
 ): SettingLeaf<string | null> {
-  const { requiredIn = [], secret = false, binding = "operator" } = opts;
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
   return {
     kind: "nullable-string",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
-        if (requiredIn.includes(ctx.mode)) {
-          throw new SettingsError(requiredMessage(ctx.envName, ctx.mode));
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
         }
         return null;
       }
       return (raw as string).trim();
     },
     defaultRaw: "",
-    requiredIn,
+
+    requiredInProduction,
     secret,
     binding,
   };
@@ -614,20 +667,20 @@ function nullableStringLeaf(
 
 /**
  * Leaf whose resolution is delegated to a deeper owning module. The leaf
- * exists so contracts can enumerate the env name and its binding; the value
- * is always `undefined` here and the delegate module owns parsing,
- * requiredness errors, and safety guards. The Compose `binding` still
- * applies (e.g. APP_MODE is delegated AND container-bound in production).
+ * exists so contracts can enumerate the env name and its supply class; the
+ * value is always `undefined` here and the delegate module owns parsing,
+ * requiredness errors, and safety guards. The `binding` still applies
+ * (e.g. APP_MODE is delegated AND fixed-identity in production).
  */
 function delegatedLeaf(
   owner: string,
-  opts: { binding: SettingBinding },
+  opts: { binding: SettingSupply },
 ): SettingLeaf<undefined> {
   return {
     kind: "delegated",
     resolve: () => undefined,
     defaultRaw: null,
-    requiredIn: [],
+    requiredInProduction: false,
     secret: false,
     binding: opts.binding,
     delegatedTo: owner,
@@ -651,14 +704,14 @@ export const SETTINGS = {
     // runtimeConfig delegates; these leaves exist for contract enumeration.
     APP_MODE: delegatedLeaf(
       "@exam/db parseAppMode — APP_MODE is authoritative, NODE_ENV the fallback",
-      { binding: "container" },
+      { binding: "fixed" },
     ),
     NODE_ENV: appEnvLeaf(),
     DEPLOYMENT_MODE: deploymentModeLeaf(),
-    HOST: stringLeaf("0.0.0.0", { binding: "container" }),
+    HOST: stringLeaf("0.0.0.0", { binding: "fixed" }),
     // No leaf-level default: the bind-port owner switch (APP_PORT vs
     // DEV_API_PORT by mode, fallback 3000) is runtime policy.
-    APP_PORT: optionalLenientIntLeaf(3000, { binding: "container" }),
+    APP_PORT: optionalLenientIntLeaf(3000, { binding: "fixed" }),
     DEV_API_PORT: optionalLenientIntLeaf(3000, { binding: "dev-only" }),
     // VITE_PORT owns the dev web port; string-valued (used to build origins).
     VITE_PORT: stringLeaf("5173", { trim: true, binding: "dev-only" }),
@@ -677,7 +730,7 @@ export const SETTINGS = {
     DEADLINE_SCAN_INTERVAL_MS: optionalPosIntLeaf(),
     // Raw comma list; splitting/normalization is runtime policy.
     CORS_ORIGIN: stringLeaf("", {
-      requiredIn: ["production"],
+      requiredInProduction: true,
       binding: "derived",
     }),
     PUBLIC_WEB_ORIGIN: originLeaf({
@@ -776,13 +829,14 @@ type ResolvedTree<T> = {
 };
 
 /**
- * Resolve every settings leaf from `env` for the given mode, failing fast
- * on invalid primitives and production-required values. Cross-field policy
- * is layered on top by runtimeConfig — this function is pure resolution.
+ * Resolve every settings leaf from `env` for the given production/non-
+ * production context, failing fast on invalid primitives and production-
+ * required values. Cross-field policy is layered on top by runtimeConfig —
+ * this function is pure resolution.
  */
 export function resolveSettings(
   env: NodeJS.ProcessEnv,
-  mode: SettingsMode,
+  isProduction: boolean,
 ): ResolvedSettings {
   const out: Record<string, Record<string, SettingValue>> = {};
   for (const [groupName, group] of Object.entries(SETTINGS)) {
@@ -791,7 +845,7 @@ export function resolveSettings(
       group as Record<string, SettingLeaf<SettingValue>>,
     )) {
       resolvedGroup[leafName] = leaf.resolve(env[leafName], {
-        mode,
+        isProduction,
         envName: leafName,
       });
     }
@@ -800,15 +854,28 @@ export function resolveSettings(
   return out as unknown as ResolvedSettings;
 }
 
-// Re-exported for contract tooling: a flat (envName → leaf) view.
-export function settingsLeaves(): Map<string, SettingLeaf<SettingValue>> {
+// Re-exported for contract tooling: a flat (envName → leaf) view, built ONCE
+// and validated. `process.env` is a flat global namespace, so the same env
+// name in two semantic groups is a real ambiguity — a silent last-write-wins
+// flatten would hide it, so the canonical flatten fails loud at module load.
+const FLAT_LEAVES = flattenSettings();
+function flattenSettings(): Map<string, SettingLeaf<SettingValue>> {
   const leaves = new Map<string, SettingLeaf<SettingValue>>();
-  for (const group of Object.values(
+  for (const [groupName, group] of Object.entries(
     SETTINGS as Record<string, Record<string, SettingLeaf<SettingValue>>>,
   )) {
     for (const [leafName, leaf] of Object.entries(group)) {
+      if (leaves.has(leafName)) {
+        throw new SettingsError(
+          `duplicate application setting env name: ${leafName} ` +
+            `(also defined in group ${groupName})`,
+        );
+      }
       leaves.set(leafName, leaf);
     }
   }
   return leaves;
+}
+export function settingsLeaves(): Map<string, SettingLeaf<SettingValue>> {
+  return FLAT_LEAVES;
 }
