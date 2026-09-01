@@ -47,8 +47,10 @@ AppRuntimeConfig.email  ──►  createEmailSender(config)
 
 ## 2. Environment variables (complete reference)
 
-All resolved by `apps/api/src/config/runtimeConfig.ts` (`resolveEmailConfig`,
-lines ~428–501). Defaults match `.env.example` (lines 63–88).
+All resolved by the application semantic settings model
+(`apps/api/src/config/settings.ts` — the single default authority);
+`runtimeConfig.ts` (`resolveEmailConfig`) layers the transport policy
+(smtp ⇒ SMTP_HOST required, test-mode smtp→fake) on top.
 
 ### 2.1 Base email config
 
@@ -356,8 +358,8 @@ pnpm verify
   `docs/archive/phase3/email-outbox-foundation.md` is historical — its
   recorded gaps (no business integration, no worker daemon, no `users.email`
   column) predate P5-0/P5-N1 and are no longer current truth.
-- **Config loader:** `apps/api/src/config/runtimeConfig.ts` →
-  `resolveEmailConfig`.
+- **Config:** `apps/api/src/config/settings.ts` (semantic defaults) →
+  `apps/api/src/config/runtimeConfig.ts` (`resolveEmailConfig` policy).
 - **Senders:** `apps/api/src/email/senders.ts` (Disabled / Fake / Smtp +
   `createEmailSender` factory).
 - **Fastify plugin:** `apps/api/src/plugins/email.ts` (decorate `emailSender`,
@@ -365,7 +367,7 @@ pnpm verify
 - **Test-email route:** `apps/api/src/routes/email.ts` (`POST /api/email/test`).
 - **Outbox schema/repo:** `packages/db/src/schema/pg.ts` (`emailOutbox`),
   `packages/db/src/repository/emailOutboxRepo.ts`.
-- **Env template:** `.env.example` lines 63–88 (Email block).
+- **Env template:** `.env.deploy.example` (optional Email block).
 - **Local DB discipline (env-var priority rules):**
   `docs/standards/testing.md` §2 — the `env -u` pattern in §5 of this doc is
   the email-specific application of that contract.

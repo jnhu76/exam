@@ -109,34 +109,25 @@ if any is unset. There is NO default database password in production
 
 ### Email (in-process outbox loop + sender)
 
-| Variable | Default | Notes |
-|---|---|---|
-| `EMAIL_ENABLED` | false | master switch; false → DisabledEmailSender drains outbox to 'sent' |
-| `EMAIL_TRANSPORT` | fake | `fake` or `smtp`; `smtp` is force-overridden to `fake` in test/e2e/ci |
-| `EMAIL_FAKE_MODE` | success | `success` or `failure` (fake transport only) |
-| `EMAIL_FROM` | `no-reply@example.local` | Email From header |
-| `EMAIL_FROM_NAME` | Exam Platform | Email From name |
-| `EMAIL_MAX_ATTEMPTS` | 3 | max attempts before `dead` |
-| `EMAIL_RETRY_BASE_SECONDS` | 60 | exponential backoff base (base * 2^(attempts-1)) |
-| `EMAIL_WORKER_POLL_INTERVAL_MS` | 5000 | outbox loop poll interval |
-| `EMAIL_WORKER_BATCH_SIZE` | 20 | max rows per poll |
-| `EMAIL_WORKER_LOCK_TIMEOUT_MS` | 300000 (5 min) | abandoned-lock recovery threshold |
-| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | 8000 | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery. One term of the shutdown budget contract: loop (8s) + audit drain (10s) + DB close (10s) must stay below `stop_grace_period` (45s) |
-| `EMAIL_WORKER_HEARTBEAT_STALE_MS` | 60000 | diagnostics staleness threshold |
-| `EMAIL_FAKE_DELAY_MS` | 0 | fake-transport only: simulated send latency (tests/deployment rehearsal) |
+Defaults for every `EMAIL_*` / `SMTP_*` variable are defined ONCE by the
+application semantic settings model (`apps/api/src/config/settings.ts`); the
+production Compose file forwards them all with empty fallbacks, so the full
+default list is not repeated here (a second copy would only drift). The rows
+below are the ones whose behavior an operator actually needs to reason about:
 
-### SMTP (only when `EMAIL_TRANSPORT=smtp`)
+| Variable | Behavior an operator needs |
+|---|---|
+| `EMAIL_ENABLED` | master switch; false → DisabledEmailSender drains outbox to 'sent' |
+| `EMAIL_TRANSPORT` | `fake` or `smtp`; `smtp` is force-overridden to `fake` in test/e2e/ci |
+| `EMAIL_WORKER_LOCK_TIMEOUT_MS` | abandoned-lock recovery threshold (default 5 min) |
+| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery. One term of the shutdown budget contract: loop (8s) + audit drain (10s) + DB close (10s) must stay below `stop_grace_period` (45s) |
+| `SMTP_HOST` | **required** when transport=smtp (fail-fast) |
+| `SMTP_TLS_REJECT_UNAUTHORIZED` | strict bool; warns but does not hard-fail if false |
+| `SMTP_USER` / `SMTP_PASSWORD` | auth block omitted if both empty; password is scrubbed from logs/errors |
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SMTP_HOST` | (empty) | **required** when transport=smtp (fail-fast) |
-| `SMTP_PORT` | 587 | |
-| `SMTP_SECURE` | false | strict bool |
-| `SMTP_REQUIRE_TLS` | true | strict bool |
-| `SMTP_TLS_REJECT_UNAUTHORIZED` | true | strict bool; warns but does not hard-fail if false |
-| `SMTP_TLS_SERVERNAME` | (empty) | optional SNI servername |
-| `SMTP_CONNECTION_TIMEOUT_MS` / `SMTP_GREETING_TIMEOUT_MS` / `SMTP_SOCKET_TIMEOUT_MS` | 10000 each | |
-| `SMTP_USER` / `SMTP_PASSWORD` | (empty) | auth block omitted if both empty; password is scrubbed from logs/errors |
+For the full annotated leaf list (port/TLS guidance per provider), see
+`docs/architecture/email-config.md`; for the authoritative defaults, the
+settings model is the single source.
 
 > **dotenv gotcha:** dotenv does NOT overwrite inherited `process.env`. Stale
 > shell `EMAIL_*` / `SMTP_*` values silently override `.env.deploy`. Use

@@ -22,11 +22,11 @@
  *   - the production compose file loses the `app` or `db` service;
  *   - a dedicated `email-worker` service reappears (#320 CONVERGE removed
  *     it; the outbox loop is in-process);
- *   - the `app` service stops forwarding any production Email/SMTP/
- *     EmailWorker env key the runtime consumes, or a Compose fallback
- *     default drifts from the runtimeConfig semantic default (#367 — the
- *     in-process loop's sender/loop configuration rides on the app env;
- *     `--env-file` interpolates only, it never projects into the container);
+ *   - the `app` service stops forwarding an application runtime env key the
+ *     runtime consumes, or a Compose fallback default drifts from the
+ *     semantic default (verified generically from the settings model by
+ *     scripts/repository-contract/config-contract.mjs — #367/#370; this
+ *     file no longer carries an Email-specific membership table);
  *   - the #351 shutdown budget contract breaks: `app` must declare an
  *     explicit `stop_grace_period` that strictly dominates the serial
  *     graceful-shutdown worst case (email loop drain + audit drain + DB
@@ -66,38 +66,14 @@ const composePath = join(ROOT, "docker-compose.yml");
 
 const errors = [];
 
-// ── #367: Email runtime/Compose env projection oracle ───────────────────
-// Bounded membership specification: the KEY LIST defines what this contract
-// covers. It is NOT a value authority — every default is parsed from the
-// real runtimeConfig.ts source (see readRuntimeEmailDefaults) and compared
-// against the Compose fallback, so neither side's default value is
-// duplicated here.
-const EMAIL_ENV_KEYS = [
-  "EMAIL_ENABLED",
-  "EMAIL_TRANSPORT",
-  "EMAIL_FAKE_MODE",
-  "EMAIL_FAKE_DELAY_MS",
-  "EMAIL_FROM",
-  "EMAIL_FROM_NAME",
-  "EMAIL_MAX_ATTEMPTS",
-  "EMAIL_RETRY_BASE_SECONDS",
-  "EMAIL_WORKER_POLL_INTERVAL_MS",
-  "EMAIL_WORKER_BATCH_SIZE",
-  "EMAIL_WORKER_LOCK_TIMEOUT_MS",
-  "EMAIL_WORKER_HEARTBEAT_STALE_MS",
-  "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
-  "SMTP_HOST",
-  "SMTP_PORT",
-  "SMTP_SECURE",
-  "SMTP_REQUIRE_TLS",
-  "SMTP_TLS_REJECT_UNAUTHORIZED",
-  "SMTP_TLS_SERVERNAME",
-  "SMTP_CONNECTION_TIMEOUT_MS",
-  "SMTP_GREETING_TIMEOUT_MS",
-  "SMTP_SOCKET_TIMEOUT_MS",
-  "SMTP_USER",
-  "SMTP_PASSWORD",
-];
+// Semantic settings model (env membership / defaults / bindings for the
+// app container) is owned by apps/api/src/config/settings.ts and verified
+// per-topology by scripts/repository-contract/config-contract.mjs — this
+// file no longer carries any email env membership table or runtime-source
+// default parser (#370). The settings import here is read-only, for the
+// #351 shutdown budget term below.
+const { settingsLeaves } =
+  await import("../../apps/api/src/config/settings.ts");
 
 let composeText;
 try {
@@ -335,12 +311,11 @@ if (!servicesBlock) {
             "UX is inert — the token never reaches the container).",
         );
       }
-      // #320 CONVERGE + #367: the in-process email outbox loop reads its
-      // sender and polling configuration from EMAIL_*/EMAIL_WORKER_*/SMTP_*
-      // environment variables. The app service must forward every key the
-      // runtime consumes, with Compose fallback defaults that match the
-      // runtimeConfig semantic defaults (asserted by the projection oracle).
-      assertEmailEnvProjectionContract(appEnvNoComments);
+      // #320 CONVERGE + #367 + #370: the in-process email outbox loop reads
+      // its sender and polling configuration from the app environment.
+      // Forwarding completeness and default parity for EVERY runtime env
+      // key are verified generically from the settings model by
+      // scripts/repository-contract/config-contract.mjs.
       // #351: the container stop grace must strictly dominate the app's
       // whole graceful-shutdown worst case.
       assertShutdownBudgetContract(appNoComments, appEnvNoComments);
@@ -352,6 +327,40 @@ if (!servicesBlock) {
     const dbBlock = extractServiceBlock(servicesBlock, "db");
     if (dbBlock) {
       assertRequiredPostgresPasswordDb(dbBlock);
+    }
+  }
+}
+
+// ── Dockerfile pnpm pin: packageManager parity (retired test-docker-config) ─
+// The image must build with the SAME pnpm the repo declares — a drift between
+// package.json#packageManager and the Dockerfile corepack pin would ship an
+// image whose toolchain differs from CI/dev (reproducible-build contract).
+// This migrates the retired test-docker-config.mjs pin check onto the
+// deployment oracle; the fresh-install source build still catches a broken
+// pin at build time.
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const packageManager = pkg.packageManager;
+  if (
+    typeof packageManager !== "string" ||
+    !/^pnpm@\d+\.\d+\.\d+$/.test(packageManager)
+  ) {
+    errors.push(
+      "package.json#packageManager must be an exact pnpm@x.y.z pin " +
+        "(reproducible-build authority).",
+    );
+  } else {
+    const dockerfile = readFileSync(join(ROOT, "Dockerfile"), "utf-8");
+    const corepack = dockerfile.match(/corepack prepare pnpm@[\d.]+/);
+    if (
+      !corepack ||
+      corepack[0].replace("corepack prepare ", "") !== packageManager
+    ) {
+      errors.push(
+        `Dockerfile corepack pin (${corepack?.[0] ?? "missing"}) must equal ` +
+          `package.json#packageManager (${packageManager}) — the image ` +
+          "toolchain must match the repo-declared pnpm (reproducible build).",
+      );
     }
   }
 }
@@ -701,7 +710,8 @@ function assertNoRedisDependency(block, serviceName) {
  * the SUM of the per-component budgets (no parallelism credit):
  *
  *   stop_grace_period
- *     > email loop drain (EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS compose default)
+ *     > email loop drain (EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS semantic
+ *       default, read from the settings model)
  *     + audit drain (AUDIT_DRAIN_TIMEOUT_MS, read from auditLifecycle.ts)
  *     + DB pool close (sql.end timeout = ceil(AUDIT_DRAIN_TIMEOUT_MS/1000),
  *       read from db.ts)
@@ -720,9 +730,14 @@ function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
   const graceMatch = appNoComments.match(
     /^\s*stop_grace_period:\s*(\d+)s\s*$/m,
   );
-  const loopMatch = appEnvNoComments.match(
-    /^\s*EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:\s*\$\{EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-(\d+)\}\s*$/m,
-  );
+  const loopForwarded =
+    /^\s*EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:\s*\$\{EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:/m.test(
+      appEnvNoComments,
+    );
+  const loopDefaultRaw =
+    settingsLeaves().get("EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS")?.defaultRaw ??
+    null;
+  const loopMs = loopDefaultRaw === null ? null : Number(loopDefaultRaw);
 
   let auditMs = null;
   try {
@@ -772,11 +787,18 @@ function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
         "SIGKILL/137).",
     );
   }
-  if (!loopMatch) {
+  if (!loopForwarded) {
     errors.push(
       "'app' environment must forward " +
-        "'EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: ${EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-<N>}' " +
-        "with an explicit numeric default (#351 budget contract).",
+        "'EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: ${EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS:-}' " +
+        "(#351 budget contract: the loop drain budget must reach the container).",
+    );
+  }
+  if (loopMs === null || !Number.isFinite(loopMs)) {
+    errors.push(
+      "#351 budget contract: no numeric EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS " +
+        "semantic default in apps/api/src/config/settings.ts — the loop drain " +
+        "budget is a term of this contract and must stay visible.",
     );
   }
   if (auditMs === null) {
@@ -804,13 +826,14 @@ function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
 
   if (
     graceMatch &&
-    loopMatch &&
+    loopForwarded &&
+    loopMs !== null &&
+    Number.isFinite(loopMs) &&
     auditMs !== null &&
     assistMs !== null &&
     dbCoupled
   ) {
     const graceMs = Number(graceMatch[1]) * 1000;
-    const loopMs = Number(loopMatch[1]);
     const dbCloseMs = Math.ceil(auditMs / 1000) * 1000;
     const sumMs = loopMs + auditMs + dbCloseMs + assistMs;
     if (sumMs >= graceMs) {
@@ -820,96 +843,6 @@ function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
           `(${loopMs}ms) + audit drain (${auditMs}ms) + DB pool close ` +
           `(${dbCloseMs}ms) + exit assist (${assistMs}ms) = ${sumMs}ms. Raise ` +
           `the grace or lower a component budget.`,
-      );
-    }
-  }
-}
-
-/**
- * Parse the semantic runtime default of every EMAIL_ENV_KEYS member from the
- * runtimeConfig source (resolveEmailConfig / resolveEmailWorkerConfig).
- * Keys are read as `env.KEY ?? "default"`; extraction failure is reported by
- * the caller (fail loud — never silently skip a key whose read shape moved).
- *
- * EMAIL_ENABLED is the one explicit special case: the runtime reads it via
- * `isTruthy(env.EMAIL_ENABLED)`, so its semantic default is `false` without
- * a literal `?? "false"` in the source.
- */
-function readRuntimeEmailDefaults(runtimeSrc) {
-  const defaults = { EMAIL_ENABLED: "false" };
-  for (const key of EMAIL_ENV_KEYS) {
-    if (key in defaults) continue;
-    const match = runtimeSrc.match(
-      new RegExp(`env\\.${key}\\s*\\?\\?\\s*"([^"]*)"`),
-    );
-    if (match) defaults[key] = match[1];
-  }
-  return defaults;
-}
-
-/**
- * #367: the `app` service must project the whole production Email cluster —
- * `docker compose --env-file` is interpolation ONLY, so an operator value in
- * .env.deploy without an `environment:` entry never reaches the container,
- * and an independently repeated Compose fallback default silently diverges
- * from the runtime after a one-sided edit.
- *
- * For every EMAIL_ENV_KEYS member:
- *   1. forwarding completeness — `${KEY:-...}` must exist in app.environment;
- *   2. default parity — the Compose fallback must equal the runtimeConfig
- *      semantic default (string-normalized: quoted scalars, integers,
- *      booleans, and the empty string compare by value).
- */
-function assertEmailEnvProjectionContract(appEnvNoComments) {
-  let runtimeSrc = null;
-  try {
-    runtimeSrc = readFileSync(
-      join(ROOT, "apps/api/src/config/runtimeConfig.ts"),
-      "utf-8",
-    );
-  } catch {
-    // fall through — reported below
-  }
-  if (runtimeSrc === null) {
-    errors.push(
-      "#367 email env projection contract: cannot read " +
-        "apps/api/src/config/runtimeConfig.ts — the runtime default source " +
-        "of the Email/SMTP/EmailWorker cluster must stay visible to this " +
-        "guard.",
-    );
-    return;
-  }
-  const runtimeDefaults = readRuntimeEmailDefaults(runtimeSrc);
-  for (const key of EMAIL_ENV_KEYS) {
-    const runtimeDefault = runtimeDefaults[key];
-    if (runtimeDefault === undefined) {
-      errors.push(
-        `#367 email env projection contract: cannot parse the runtime ` +
-          `default of ${key} from apps/api/src/config/runtimeConfig.ts — ` +
-          "the env read shape changed; reconcile this guard with the " +
-          "runtime source instead of extending it blindly.",
-      );
-      continue;
-    }
-    const composeLine = appEnvNoComments.match(
-      new RegExp(`^\\s*${key}:\\s*\\$\\{${key}:-([^}]*)\\}\\s*$`, "m"),
-    );
-    if (!composeLine) {
-      errors.push(
-        `'app' service must forward '${key}: \${${key}:-${runtimeDefault}}' ` +
-          "(#320 CONVERGE/#367: the in-process outbox loop's configuration " +
-          "rides on the app env; --env-file interpolates only — without " +
-          "this entry the operator value never reaches the container).",
-      );
-      continue;
-    }
-    const composeDefault = composeLine[1].trim();
-    if (composeDefault !== runtimeDefault.trim()) {
-      errors.push(
-        `#367 email env parity violation: ${key} Compose fallback default ` +
-          `'${composeDefault}' diverges from the runtimeConfig default ` +
-          `'${runtimeDefault}' — bare/dev and Docker deployments must agree ` +
-          `on the semantic default; reconcile one side, not both.`,
       );
     }
   }

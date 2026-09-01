@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Regression guard: verify that the formal static gate includes the
- * environment and time contract guards.
+ * Regression guard: verify that the formal static gate includes the config
+ * and time contract guards.
  *
  * This prevents future refactors from accidentally dropping
- * check-test-env-contract.mjs or check-test-time-contract.mjs from
- * verify:static by editing the shell chain.
+ * config-contract.mjs (the semantic-settings topology binding gate) or
+ * check-test-time-contract.mjs from verify:static by editing the shell
+ * chain.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,10 +14,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dirname, "../..");
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
 
-const required = [
-  "check-test-env-contract.mjs",
-  "check-test-time-contract.mjs",
-];
+const required = ["config-contract.mjs", "check-test-time-contract.mjs"];
 
 const verifyStatic = pkg.scripts?.["verify:static"] ?? "";
 const lintEnvContract = pkg.scripts?.["lint:env-contract"] ?? "";

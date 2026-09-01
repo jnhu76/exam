@@ -35,7 +35,8 @@ Phase 1 代码质量目标：
 | Husky                     | Git hooks                  |
 | turbo                      | Monorepo runner            |
 | dependency-cruiser         | Architecture boundary lint |
-| check-db-config.mjs        | DB config consistency lint |
+| check-db-config.mjs        | DB/test config consistency lint |
+| config-contract.mjs        | Semantic-settings topology binding gate |
 | pnpm                       | Package manager            |
 
 ---
