@@ -20,11 +20,20 @@ import {
 } from "@exam/db";
 import { RuntimeConfigError } from "@exam/domain";
 import { z } from "zod";
+import {
+  resolveEmailEnv,
+  type EmailTransport,
+  type EmailFakeMode,
+} from "./emailEnvContract.js";
 
 // AppMode is sourced from the single-source resolver in @exam/db. Re-exported
 // here for backward compatibility with existing importers.
 export type AppMode = AppModeCore;
 export type AppEnv = "development" | "test" | "production";
+
+// Email transport/fake-mode domains are owned by the Email env contract
+// (emailEnvContract.json); re-exported for backward compatibility.
+export type { EmailTransport, EmailFakeMode } from "./emailEnvContract.js";
 
 /**
  * Phase 1 runtime deployment mode.
@@ -151,11 +160,6 @@ export interface HeartbeatConfig {
    */
   deadlineScanIntervalMs: number;
 }
-
-/** Email transport selection (M3 — Email Outbox). */
-export type EmailTransport = "fake" | "smtp";
-/** Fake-sender deterministic behavior (M3 — tests/dev only). */
-export type EmailFakeMode = "success" | "failure";
 
 /** SMTP-specific options. Present only when transport is `smtp`. */
 export interface SmtpConfig {
@@ -298,11 +302,6 @@ const positiveIntSchema = z
   .union([z.string(), z.number()])
   .transform((v) => Number(v))
   .pipe(z.number().int().positive());
-
-const nonNegativeIntSchema = z
-  .union([z.string(), z.number()])
-  .transform((v) => Number(v))
-  .pipe(z.number().int().min(0));
 
 /**
  * Resolve the application runtime mode from `APP_MODE`, falling back to
@@ -669,20 +668,13 @@ function resolveRedisConfig(env: NodeJS.ProcessEnv): RedisConfig {
 }
 
 /**
- * Parse a boolean env value strictly: only `"true"` and `"false"` (case-
- * sensitive) are accepted. Anything else throws, so a misconfigured boolean
- * fails fast rather than silently coercing.
- */
-function parseStrictBool(value: string | undefined, name: string): boolean {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  throw new RuntimeConfigError(
-    `${name} must be "true" or "false" (got: ${String(value)})`,
-  );
-}
-
-/**
  * Resolve the email runtime config from env (M3 — Email Outbox).
+ *
+ * Primitive defaults and parse kinds are owned by the Email env contract
+ * (`emailEnvContract.json`); this resolver keeps only the cross-field and
+ * mode-specific behavior: the test-like smtp→fake hard guard, SMTP_HOST
+ * required-when-smtp, the SMTP block assembly, and the empty→null
+ * SMTP_TLS_SERVERNAME conversion.
  *
  * Defaults are safe: disabled, fake transport, success fake mode, and (when
  * SMTP is configured) TLS-required + certificate-validation-on. Invalid
@@ -701,77 +693,56 @@ function resolveEmailConfig(
   env: NodeJS.ProcessEnv,
   opts: { isTestLike: boolean } = { isTestLike: false },
 ): EmailConfig {
-  const enabled = isTruthy(env.EMAIL_ENABLED);
-  let transportRaw = (env.EMAIL_TRANSPORT ?? "fake").trim();
+  const enabled = resolveEmailEnv(env, "EMAIL_ENABLED");
+  let transport = resolveEmailEnv(env, "EMAIL_TRANSPORT");
 
   // Test-mode hard guard: NEVER honor smtp in test/e2e/ci, even if a stale
   // or misconfigured env says so. This prevents tests from accidentally
   // constructing a real nodemailer transport (and potentially sending real
   // mail via POST /api/email/test) when a dev .env with EMAIL_TRANSPORT=smtp
   // leaks into the test runtime. See docs/architecture/email-config.md §6.
-  if (opts.isTestLike && transportRaw === "smtp") {
+  if (opts.isTestLike && transport === "smtp") {
     // TODO: replace with the app logger once one is available at config-load
     // time. Using stderr directly keeps this side-effect free of fastify.
     process.stderr.write(
       "[runtimeConfig] EMAIL_TRANSPORT=smtp ignored in test/e2e/ci mode; forcing 'fake' to prevent real SMTP/network use in tests.\n",
     );
-    transportRaw = "fake";
+    transport = "fake";
   }
 
-  if (transportRaw !== "fake" && transportRaw !== "smtp") {
-    throw new RuntimeConfigError(
-      `EMAIL_TRANSPORT must be "fake" or "smtp" (got: ${transportRaw})`,
-    );
-  }
-  const fakeModeRaw = (env.EMAIL_FAKE_MODE ?? "success").trim();
-  if (fakeModeRaw !== "success" && fakeModeRaw !== "failure") {
-    throw new RuntimeConfigError(
-      `EMAIL_FAKE_MODE must be "success" or "failure" (got: ${fakeModeRaw})`,
-    );
-  }
-
-  const maxAttempts = positiveIntSchema.parse(env.EMAIL_MAX_ATTEMPTS ?? "3");
-  const retryBaseSeconds = positiveIntSchema.parse(
-    env.EMAIL_RETRY_BASE_SECONDS ?? "60",
-  );
-  const fakeDelayMs = nonNegativeIntSchema.parse(
-    env.EMAIL_FAKE_DELAY_MS ?? "0",
-  );
+  const fakeMode = resolveEmailEnv(env, "EMAIL_FAKE_MODE");
+  const maxAttempts = resolveEmailEnv(env, "EMAIL_MAX_ATTEMPTS");
+  const retryBaseSeconds = resolveEmailEnv(env, "EMAIL_RETRY_BASE_SECONDS");
+  const fakeDelayMs = resolveEmailEnv(env, "EMAIL_FAKE_DELAY_MS");
 
   let smtp: SmtpConfig | null = null;
-  if (transportRaw === "smtp") {
-    const host = (env.SMTP_HOST ?? "").trim();
+  if (transport === "smtp") {
+    const host = resolveEmailEnv(env, "SMTP_HOST");
     if (host.length === 0) {
       throw new RuntimeConfigError(
         "EMAIL_TRANSPORT=smtp requires SMTP_HOST to be set",
       );
     }
-    const port = positiveIntSchema.parse(env.SMTP_PORT ?? "587");
-    const secure = parseStrictBool(env.SMTP_SECURE ?? "false", "SMTP_SECURE");
-    const requireTls = parseStrictBool(
-      env.SMTP_REQUIRE_TLS ?? "true",
-      "SMTP_REQUIRE_TLS",
-    );
-    const tlsRejectUnauthorized = parseStrictBool(
-      env.SMTP_TLS_REJECT_UNAUTHORIZED ?? "true",
+    const port = resolveEmailEnv(env, "SMTP_PORT");
+    const secure = resolveEmailEnv(env, "SMTP_SECURE");
+    const requireTls = resolveEmailEnv(env, "SMTP_REQUIRE_TLS");
+    const tlsRejectUnauthorized = resolveEmailEnv(
+      env,
       "SMTP_TLS_REJECT_UNAUTHORIZED",
     );
-    const servernameRaw = (env.SMTP_TLS_SERVERNAME ?? "").trim();
-    const connectionTimeoutMs = positiveIntSchema.parse(
-      env.SMTP_CONNECTION_TIMEOUT_MS ?? "10000",
+    const servernameRaw = resolveEmailEnv(env, "SMTP_TLS_SERVERNAME");
+    const connectionTimeoutMs = resolveEmailEnv(
+      env,
+      "SMTP_CONNECTION_TIMEOUT_MS",
     );
-    const greetingTimeoutMs = positiveIntSchema.parse(
-      env.SMTP_GREETING_TIMEOUT_MS ?? "10000",
-    );
-    const socketTimeoutMs = positiveIntSchema.parse(
-      env.SMTP_SOCKET_TIMEOUT_MS ?? "10000",
-    );
+    const greetingTimeoutMs = resolveEmailEnv(env, "SMTP_GREETING_TIMEOUT_MS");
+    const socketTimeoutMs = resolveEmailEnv(env, "SMTP_SOCKET_TIMEOUT_MS");
     smtp = {
       host,
       port,
       secure,
-      user: env.SMTP_USER ?? "",
-      password: env.SMTP_PASSWORD ?? "",
+      user: resolveEmailEnv(env, "SMTP_USER"),
+      password: resolveEmailEnv(env, "SMTP_PASSWORD"),
       requireTls,
       tlsRejectUnauthorized,
       tlsServername: servernameRaw.length > 0 ? servernameRaw : null,
@@ -783,10 +754,10 @@ function resolveEmailConfig(
 
   return {
     enabled,
-    transport: transportRaw,
-    from: (env.EMAIL_FROM ?? "no-reply@example.local").trim(),
-    fromName: (env.EMAIL_FROM_NAME ?? "Exam Platform").trim(),
-    fakeMode: fakeModeRaw,
+    transport,
+    from: resolveEmailEnv(env, "EMAIL_FROM"),
+    fromName: resolveEmailEnv(env, "EMAIL_FROM_NAME"),
+    fakeMode,
     fakeDelayMs,
     maxAttempts,
     retryBaseSeconds,
@@ -797,6 +768,10 @@ function resolveEmailConfig(
 /**
  * Resolve the email delivery worker runtime configuration from env (P5-0).
  *
+ * Primitive defaults and parse kinds come from the Email env contract
+ * (emailEnvContract.json); this resolver keeps the lease-sanity cross-field
+ * guard and the fixed Phase 1 concurrency.
+ *
  * All parameters have safe defaults for local development. Production
  * deployments should tune these via environment variables.
  */
@@ -804,17 +779,12 @@ function resolveEmailWorkerConfig(
   env: NodeJS.ProcessEnv,
   email: ReturnType<typeof resolveEmailConfig>,
 ): EmailWorkerConfig {
-  const pollIntervalMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_POLL_INTERVAL_MS ?? "5000",
-  );
-  const batchSize = positiveIntSchema.parse(
-    env.EMAIL_WORKER_BATCH_SIZE ?? "20",
-  );
-  const lockTimeoutMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_LOCK_TIMEOUT_MS ?? "300000",
-  );
-  const heartbeatStaleThresholdMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_HEARTBEAT_STALE_MS ?? "60000",
+  const pollIntervalMs = resolveEmailEnv(env, "EMAIL_WORKER_POLL_INTERVAL_MS");
+  const batchSize = resolveEmailEnv(env, "EMAIL_WORKER_BATCH_SIZE");
+  const lockTimeoutMs = resolveEmailEnv(env, "EMAIL_WORKER_LOCK_TIMEOUT_MS");
+  const heartbeatStaleThresholdMs = resolveEmailEnv(
+    env,
+    "EMAIL_WORKER_HEARTBEAT_STALE_MS",
   );
   // INVARIANT (#351 shutdown budget contract): this default is one term of
   // the deployment budget hierarchy —
@@ -822,8 +792,9 @@ function resolveEmailWorkerConfig(
   //     > email loop drain (this, 8s) + audit drain (10s) + DB pool close (10s)
   //     > each individual component budget.
   // Do not raise it without raising stop_grace_period in docker-compose.yml.
-  const shutdownTimeoutMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS ?? "8000",
+  const shutdownTimeoutMs = resolveEmailEnv(
+    env,
+    "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
   );
   // Concurrency is fixed at 1 for Phase 1 (single worker instance).
   // The config field exists for forward compatibility.

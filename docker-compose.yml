@@ -30,6 +30,7 @@ services:
       REDIS_URL: ${REDIS_URL:-}
       REDIS_MODE: ${REDIS_MODE:-}
       LAUNCHPAD_SETUP_TOKEN: ${LAUNCHPAD_SETUP_TOKEN:-}
+      # BEGIN GENERATED: EMAIL ENV CONTRACT
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-fake}
       EMAIL_FAKE_MODE: ${EMAIL_FAKE_MODE:-success}
@@ -54,6 +55,7 @@ services:
       SMTP_SOCKET_TIMEOUT_MS: ${SMTP_SOCKET_TIMEOUT_MS:-10000}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # END GENERATED: EMAIL ENV CONTRACT
     depends_on:
       db:
         condition: service_healthy

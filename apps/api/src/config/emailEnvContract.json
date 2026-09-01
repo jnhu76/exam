@@ -1,0 +1,96 @@
+{
+  "EMAIL_ENABLED": {
+    "kind": "booleanTruthy",
+    "default": false,
+    "target": "app"
+  },
+  "EMAIL_TRANSPORT": {
+    "kind": "enum",
+    "default": "fake",
+    "values": ["fake", "smtp"],
+    "target": "app"
+  },
+  "EMAIL_FAKE_MODE": {
+    "kind": "enum",
+    "default": "success",
+    "values": ["success", "failure"],
+    "target": "app"
+  },
+  "EMAIL_FAKE_DELAY_MS": {
+    "kind": "nonNegativeInt",
+    "default": 0,
+    "target": "app"
+  },
+  "EMAIL_FROM": {
+    "kind": "string",
+    "default": "no-reply@example.local",
+    "target": "app"
+  },
+  "EMAIL_FROM_NAME": {
+    "kind": "string",
+    "default": "Exam Platform",
+    "target": "app"
+  },
+  "EMAIL_MAX_ATTEMPTS": {
+    "kind": "positiveInt",
+    "default": 3,
+    "target": "app"
+  },
+  "EMAIL_RETRY_BASE_SECONDS": {
+    "kind": "positiveInt",
+    "default": 60,
+    "target": "app"
+  },
+  "EMAIL_WORKER_POLL_INTERVAL_MS": {
+    "kind": "positiveInt",
+    "default": 5000,
+    "target": "app"
+  },
+  "EMAIL_WORKER_BATCH_SIZE": {
+    "kind": "positiveInt",
+    "default": 20,
+    "target": "app"
+  },
+  "EMAIL_WORKER_LOCK_TIMEOUT_MS": {
+    "kind": "positiveInt",
+    "default": 300000,
+    "target": "app"
+  },
+  "EMAIL_WORKER_HEARTBEAT_STALE_MS": {
+    "kind": "positiveInt",
+    "default": 60000,
+    "target": "app"
+  },
+  "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS": {
+    "kind": "positiveInt",
+    "default": 8000,
+    "target": "app"
+  },
+  "SMTP_HOST": { "kind": "string", "default": "", "target": "app" },
+  "SMTP_PORT": { "kind": "positiveInt", "default": 587, "target": "app" },
+  "SMTP_SECURE": { "kind": "boolean", "default": false, "target": "app" },
+  "SMTP_REQUIRE_TLS": { "kind": "boolean", "default": true, "target": "app" },
+  "SMTP_TLS_REJECT_UNAUTHORIZED": {
+    "kind": "boolean",
+    "default": true,
+    "target": "app"
+  },
+  "SMTP_TLS_SERVERNAME": { "kind": "string", "default": "", "target": "app" },
+  "SMTP_CONNECTION_TIMEOUT_MS": {
+    "kind": "positiveInt",
+    "default": 10000,
+    "target": "app"
+  },
+  "SMTP_GREETING_TIMEOUT_MS": {
+    "kind": "positiveInt",
+    "default": 10000,
+    "target": "app"
+  },
+  "SMTP_SOCKET_TIMEOUT_MS": {
+    "kind": "positiveInt",
+    "default": 10000,
+    "target": "app"
+  },
+  "SMTP_USER": { "kind": "secretString", "default": "", "target": "app" },
+  "SMTP_PASSWORD": { "kind": "secretString", "default": "", "target": "app" }
+}

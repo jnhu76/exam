@@ -22,11 +22,14 @@
  *   - the production compose file loses the `app` or `db` service;
  *   - a dedicated `email-worker` service reappears (#320 CONVERGE removed
  *     it; the outbox loop is in-process);
- *   - the `app` service stops forwarding any production Email/SMTP/
- *     EmailWorker env key the runtime consumes, or a Compose fallback
- *     default drifts from the runtimeConfig semantic default (#367 — the
- *     in-process loop's sender/loop configuration rides on the app env;
- *     `--env-file` interpolates only, it never projects into the container);
+ *   - the `app` service loses the generated Email env block (projected from
+ *     the Email env contract, apps/api/src/config/emailEnvContract.json), a
+ *     contract Email/EmailWorker/SMTP key is missing from the generated
+ *     block, or any such key appears OUTSIDE the generated block (#367 Phase
+ *     C — the in-process loop's sender/loop configuration rides on the app
+ *     env; `--env-file` interpolates only, it never projects into the
+ *     container; the block's CONTENT parity with the contract is enforced by
+ *     email-env-projection.mjs --check, this guard owns placement only);
  *   - the #351 shutdown budget contract breaks: `app` must declare an
  *     explicit `stop_grace_period` that strictly dominates the serial
  *     graceful-shutdown worst case (email loop drain + audit drain + DB
@@ -66,38 +69,38 @@ const composePath = join(ROOT, "docker-compose.yml");
 
 const errors = [];
 
-// ── #367: Email runtime/Compose env projection oracle ───────────────────
-// Bounded membership specification: the KEY LIST defines what this contract
-// covers. It is NOT a value authority — every default is parsed from the
-// real runtimeConfig.ts source (see readRuntimeEmailDefaults) and compared
-// against the Compose fallback, so neither side's default value is
-// duplicated here.
-const EMAIL_ENV_KEYS = [
-  "EMAIL_ENABLED",
-  "EMAIL_TRANSPORT",
-  "EMAIL_FAKE_MODE",
-  "EMAIL_FAKE_DELAY_MS",
-  "EMAIL_FROM",
-  "EMAIL_FROM_NAME",
-  "EMAIL_MAX_ATTEMPTS",
-  "EMAIL_RETRY_BASE_SECONDS",
-  "EMAIL_WORKER_POLL_INTERVAL_MS",
-  "EMAIL_WORKER_BATCH_SIZE",
-  "EMAIL_WORKER_LOCK_TIMEOUT_MS",
-  "EMAIL_WORKER_HEARTBEAT_STALE_MS",
-  "EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS",
-  "SMTP_HOST",
-  "SMTP_PORT",
-  "SMTP_SECURE",
-  "SMTP_REQUIRE_TLS",
-  "SMTP_TLS_REJECT_UNAUTHORIZED",
-  "SMTP_TLS_SERVERNAME",
-  "SMTP_CONNECTION_TIMEOUT_MS",
-  "SMTP_GREETING_TIMEOUT_MS",
-  "SMTP_SOCKET_TIMEOUT_MS",
-  "SMTP_USER",
-  "SMTP_PASSWORD",
-];
+// ── #367 Phase C: Email env topology oracle ──────────────────────────────
+// Membership is read from the Email env contract (the single semantic
+// authority — apps/api/src/config/emailEnvContract.json). This guard owns
+// PLACEMENT facts only: the generated block exists inside app.environment,
+// every contract key is projected inside it, and no Email key leaks outside
+// the generated block. The block's CONTENT parity (defaults) is enforced by
+// email-env-projection.mjs --check.
+const EMAIL_ENV_CONTRACT_PATH = join(
+  ROOT,
+  "apps/api/src/config/emailEnvContract.json",
+);
+const EMAIL_ENV_BEGIN_MARKER = "# BEGIN GENERATED: EMAIL ENV CONTRACT";
+const EMAIL_ENV_END_MARKER = "# END GENERATED: EMAIL ENV CONTRACT";
+
+/** Read the Email env contract key set, or null (with an error recorded)
+ * when the contract is unreadable — membership must never silently empty. */
+function readEmailEnvContractKeys() {
+  try {
+    const contract = JSON.parse(readFileSync(EMAIL_ENV_CONTRACT_PATH, "utf-8"));
+    return Object.keys(contract);
+  } catch (err) {
+    if (err && err.code === "ENOENT") {
+      errors.push(
+        "#367 email env topology: apps/api/src/config/emailEnvContract.json " +
+          "is missing — the Email env contract is the membership authority " +
+          "for this guard.",
+      );
+      return null;
+    }
+    throw err;
+  }
+}
 
 let composeText;
 try {
@@ -335,12 +338,12 @@ if (!servicesBlock) {
             "UX is inert — the token never reaches the container).",
         );
       }
-      // #320 CONVERGE + #367: the in-process email outbox loop reads its
-      // sender and polling configuration from EMAIL_*/EMAIL_WORKER_*/SMTP_*
-      // environment variables. The app service must forward every key the
-      // runtime consumes, with Compose fallback defaults that match the
-      // runtimeConfig semantic defaults (asserted by the projection oracle).
-      assertEmailEnvProjectionContract(appEnvNoComments);
+      // #320 CONVERGE + #367 Phase C: the in-process email outbox loop reads
+      // its sender and polling configuration from EMAIL_*/EMAIL_WORKER_*/SMTP_*
+      // environment variables. The generated Email env block (projected from
+      // the contract) must live inside the app service environment, cover
+      // every contract key, and be the ONLY place such keys appear.
+      assertEmailEnvTopology(composeText, appEnvBlock);
       // #351: the container stop grace must strictly dominate the app's
       // whole graceful-shutdown worst case.
       assertShutdownBudgetContract(appNoComments, appEnvNoComments);
@@ -825,93 +828,96 @@ function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
   }
 }
 
-/**
- * Parse the semantic runtime default of every EMAIL_ENV_KEYS member from the
- * runtimeConfig source (resolveEmailConfig / resolveEmailWorkerConfig).
- * Keys are read as `env.KEY ?? "default"`; extraction failure is reported by
- * the caller (fail loud — never silently skip a key whose read shape moved).
- *
- * EMAIL_ENABLED is the one explicit special case: the runtime reads it via
- * `isTruthy(env.EMAIL_ENABLED)`, so its semantic default is `false` without
- * a literal `?? "false"` in the source.
- */
-function readRuntimeEmailDefaults(runtimeSrc) {
-  const defaults = { EMAIL_ENABLED: "false" };
-  for (const key of EMAIL_ENV_KEYS) {
-    if (key in defaults) continue;
-    const match = runtimeSrc.match(
-      new RegExp(`env\\.${key}\\s*\\?\\?\\s*"([^"]*)"`),
-    );
-    if (match) defaults[key] = match[1];
-  }
-  return defaults;
+/** Extract the lines between the generated-block markers (markers inclusive),
+ * or "" when either marker is missing. */
+function extractBetweenMarkers(text) {
+  const lines = text.split(/\r?\n/);
+  const beginIdx = lines.findIndex((l) => l.trim() === EMAIL_ENV_BEGIN_MARKER);
+  if (beginIdx === -1) return "";
+  const endIdx = lines.findIndex(
+    (l, i) => i > beginIdx && l.trim() === EMAIL_ENV_END_MARKER,
+  );
+  if (endIdx === -1) return "";
+  return lines.slice(beginIdx, endIdx + 1).join("\n");
+}
+
+/** Remove the marker-inclusive generated block from a full compose text. */
+function removeGeneratedBlock(text) {
+  const lines = text.split(/\r?\n/);
+  const beginIdx = lines.findIndex((l) => l.trim() === EMAIL_ENV_BEGIN_MARKER);
+  if (beginIdx === -1) return text;
+  const endIdx = lines.findIndex(
+    (l, i) => i > beginIdx && l.trim() === EMAIL_ENV_END_MARKER,
+  );
+  if (endIdx === -1) return text;
+  return [...lines.slice(0, beginIdx), ...lines.slice(endIdx + 1)].join("\n");
 }
 
 /**
- * #367: the `app` service must project the whole production Email cluster —
- * `docker compose --env-file` is interpolation ONLY, so an operator value in
- * .env.deploy without an `environment:` entry never reaches the container,
- * and an independently repeated Compose fallback default silently diverges
- * from the runtime after a one-sided edit.
+ * #367 Phase C: the generated Email env block must live inside the `app`
+ * service environment and be the ONLY place Email/EmailWorker/SMTP keys
+ * appear.
  *
- * For every EMAIL_ENV_KEYS member:
- *   1. forwarding completeness — `${KEY:-...}` must exist in app.environment;
- *   2. default parity — the Compose fallback must equal the runtimeConfig
- *      semantic default (string-normalized: quoted scalars, integers,
- *      booleans, and the empty string compare by value).
+ * This guard owns PLACEMENT facts only — content parity (every Compose
+ * fallback equals the contract default) belongs to
+ * email-env-projection.mjs --check, so the two checks stay independent:
+ *   1. both generated-block markers exist inside the app environment block;
+ *   2. every contract Email key is projected inside the generated block;
+ *   3. no Email/EmailWorker/SMTP key line appears outside the generated
+ *      block anywhere in the compose file — a leaked duplicate would split
+ *      the forwarding authority (`--env-file` interpolates only).
  */
-function assertEmailEnvProjectionContract(appEnvNoComments) {
-  let runtimeSrc = null;
-  try {
-    runtimeSrc = readFileSync(
-      join(ROOT, "apps/api/src/config/runtimeConfig.ts"),
-      "utf-8",
-    );
-  } catch {
-    // fall through — reported below
-  }
-  if (runtimeSrc === null) {
+function assertEmailEnvTopology(composeText, appEnvBlock) {
+  const keys = readEmailEnvContractKeys();
+  if (keys === null) return; // error already recorded
+
+  // 1. markers inside app.environment (markers are comments, so this uses the
+  //    comment-preserving appEnvBlock).
+  const beginMarker = new RegExp(
+    `^\\s*${escapeRegExp(EMAIL_ENV_BEGIN_MARKER)}\\s*$`,
+    "m",
+  );
+  const endMarker = new RegExp(
+    `^\\s*${escapeRegExp(EMAIL_ENV_END_MARKER)}\\s*$`,
+    "m",
+  );
+  if (!beginMarker.test(appEnvBlock) || !endMarker.test(appEnvBlock)) {
     errors.push(
-      "#367 email env projection contract: cannot read " +
-        "apps/api/src/config/runtimeConfig.ts — the runtime default source " +
-        "of the Email/SMTP/EmailWorker cluster must stay visible to this " +
-        "guard.",
+      "'app' service environment must contain the generated Email env block " +
+        `(${EMAIL_ENV_BEGIN_MARKER} … ${EMAIL_ENV_END_MARKER}) — the Email ` +
+        "cluster is projected from apps/api/src/config/emailEnvContract.json " +
+        "by scripts/repository-contract/email-env-projection.mjs (--write).",
     );
     return;
   }
-  const runtimeDefaults = readRuntimeEmailDefaults(runtimeSrc);
-  for (const key of EMAIL_ENV_KEYS) {
-    const runtimeDefault = runtimeDefaults[key];
-    if (runtimeDefault === undefined) {
-      errors.push(
-        `#367 email env projection contract: cannot parse the runtime ` +
-          `default of ${key} from apps/api/src/config/runtimeConfig.ts — ` +
-          "the env read shape changed; reconcile this guard with the " +
-          "runtime source instead of extending it blindly.",
-      );
-      continue;
-    }
-    const composeLine = appEnvNoComments.match(
-      new RegExp(`^\\s*${key}:\\s*\\$\\{${key}:-([^}]*)\\}\\s*$`, "m"),
+
+  // 2. every contract key projected inside the generated block.
+  const generated = extractBetweenMarkers(appEnvBlock);
+  for (const key of keys) {
+    const keyLine = new RegExp(
+      `^\\s*${escapeRegExp(key)}:\\s*\\$\\{${escapeRegExp(key)}:-[^}]*\\}\\s*$`,
+      "m",
     );
-    if (!composeLine) {
+    if (!keyLine.test(generated)) {
       errors.push(
-        `'app' service must forward '${key}: \${${key}:-${runtimeDefault}}' ` +
-          "(#320 CONVERGE/#367: the in-process outbox loop's configuration " +
-          "rides on the app env; --env-file interpolates only — without " +
-          "this entry the operator value never reaches the container).",
-      );
-      continue;
-    }
-    const composeDefault = composeLine[1].trim();
-    if (composeDefault !== runtimeDefault.trim()) {
-      errors.push(
-        `#367 email env parity violation: ${key} Compose fallback default ` +
-          `'${composeDefault}' diverges from the runtimeConfig default ` +
-          `'${runtimeDefault}' — bare/dev and Docker deployments must agree ` +
-          `on the semantic default; reconcile one side, not both.`,
+        `#367 email env topology: contract key '${key}' is missing from the ` +
+          "generated Email env block in app.environment — regenerate with " +
+          "email-env-projection.mjs --write.",
       );
     }
+  }
+
+  // 3. no Email key outside the generated block (whole-file strip).
+  const outside = removeGeneratedBlock(composeText);
+  const emailKeyOutside = /^\s*(EMAIL_|SMTP_)[A-Z0-9_]*:/m;
+  const match = emailKeyOutside.exec(outside);
+  if (match) {
+    errors.push(
+      `#367 email env topology: '${match[0].trim()}' appears OUTSIDE the ` +
+        "generated Email env block — the generated block must be the only " +
+        "place Email/EmailWorker/SMTP keys are forwarded " +
+        "(email-env-projection.mjs --write).",
+    );
   }
 }
 
