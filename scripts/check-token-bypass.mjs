@@ -16,6 +16,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { relative } from "node:path";
+import { BUSINESS_UI_ROOTS as roots } from "./lib/ui-scan-roots.mjs";
 
 const PALETTE =
   /(?:text|bg|border|ring|fill|stroke|from|to|via|outline|shadow|decoration)-(?:gray|slate|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-[0-9]{2,3})?\b/;
@@ -45,14 +46,6 @@ async function walk(path, out = []) {
 }
 
 const violations = [];
-const roots = [
-  "apps/web/src/pages",
-  "apps/web/src/components/shared",
-  "apps/web/src/components/exam",
-  "apps/web/src/components/layout",
-  "apps/web/src/components/settings",
-  "apps/web/src/components/question",
-];
 for (const root of roots) {
   const files = (await walk(root)).filter((f) => /\.(ts|tsx|css)$/.test(f));
   for (const f of files) {

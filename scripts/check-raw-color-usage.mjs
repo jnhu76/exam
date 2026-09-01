@@ -13,6 +13,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { relative } from "node:path";
+import { BUSINESS_UI_ROOTS as roots } from "./lib/ui-scan-roots.mjs";
 
 // Hex (#rgb / #rrggbb), rgb(), rgba(), hsl(), hsla(), oklch(), and arbitrary
 // bracket color utilities (bg-[#...], text-[rgb(...)], etc.).
@@ -47,14 +48,6 @@ async function walk(path, out = []) {
 }
 
 const violations = [];
-const roots = [
-  "apps/web/src/pages",
-  "apps/web/src/components/shared",
-  "apps/web/src/components/exam",
-  "apps/web/src/components/layout",
-  "apps/web/src/components/settings",
-  "apps/web/src/components/question",
-];
 for (const root of roots) {
   const files = (await walk(root)).filter((f) => /\.(ts|tsx|css)$/.test(f));
   for (const f of files) {
