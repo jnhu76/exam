@@ -15,7 +15,10 @@ import {
   type TransactionDatabase,
 } from "../types.js";
 import { schema } from "../schema/pg.js";
-import { createStaffInvitationRepo } from "./staffInvitationRepo.js";
+import {
+  createStaffInvitationRepo,
+  type StaffInvitationRow,
+} from "./staffInvitationRepo.js";
 import { createPasswordResetTokenRepo } from "./passwordResetTokenRepo.js";
 import { createUserRepo } from "./userRepo.js";
 import { hashToken, generateToken } from "@exam/auth/src/tokens.js";
@@ -286,13 +289,14 @@ describe("staffInvitationRepo (#297)", () => {
     expect(await repo.revokeById(ctx, invitation.id, NOW)).toBeNull();
   });
 
-  it("concurrent duplicate invite: exactly one success, the loser surfaces ConflictError (never a raw unique violation)", async () => {
+  it("concurrent duplicate invite: every interleaving leaves exactly ONE open invitation; any loser surfaces ConflictError (never a raw unique violation)", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "inviter-7");
     const aux = await auxDb();
+    const email = "dupe-race@example.com";
     const invite = (dbArg: Database, tag: string) =>
       inTx(dbArg, (tx) =>
         createStaffInvitationRepo(tx).createWithinTransaction(ctx, {
-          email: "dupe-race@example.com",
+          email,
           role: "Teacher",
           tokenHash: hashToken(`dupe-race-${tag}`),
           expiresAt: new Date(Date.now() + 3600 * 1000),
@@ -300,31 +304,128 @@ describe("staffInvitationRepo (#297)", () => {
           now: NOW,
         }),
       );
-    // Genuinely concurrent: separate connections, so the two INSERTs really
-    // contend on the partial unique index (not on a pool queue).
+    // Genuinely concurrent: separate connections. TWO interleavings are
+    // legal, and the assertions accept the full allowed outcome set instead
+    // of freezing one schedule:
+    //   a) both supersede UPDATEs run pre-commit — the loser's INSERT blocks
+    //      on the winner's uncommitted index entry and surfaces ConflictError
+    //      after the winner commits (deterministic in schedule INV-A below);
+    //   b) the second tx's supersede UPDATE runs after the winner committed —
+    //      it revokes that row and its own INSERT succeeds, which is exactly
+    //      the sequential supersede semantics. How many creates "won" is a
+    //      scheduling accident, not a contract; the ONE-OPEN-ROW storage
+    //      invariant is.
     const results = await Promise.allSettled([
       invite(db, "a"),
       invite(aux, "b"),
     ]);
-    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<StaffInvitationRow> =>
+        r.status === "fulfilled",
+    );
     const rejected = results.filter(
       (r): r is PromiseRejectedResult => r.status === "rejected",
     );
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect(rejected[0]!.reason).toBeInstanceOf(ConflictError);
-    // Exactly one OPEN invitation survives.
-    const open = await db
+    expect(fulfilled.length + rejected.length).toBe(2);
+    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
+    // A losing create, when this schedule produces one, surfaces the typed
+    // conflict — a raw SQLSTATE 23505 must never escape.
+    for (const r of rejected) {
+      expect(r.reason).toBeInstanceOf(ConflictError);
+    }
+    // Storage invariant under BOTH histories: exactly one OPEN invitation,
+    // owned by a successful create; the loser (index rejection or supersede)
+    // never leaves a second open row behind.
+    const rows = await db
       .select()
       .from(schema.staffInvitations)
-      .where(
-        and(
-          eq(schema.staffInvitations.email, "dupe-race@example.com"),
-          isNull(schema.staffInvitations.revokedAt),
-          isNull(schema.staffInvitations.consumedAt),
-        ),
-      );
+      .where(eq(schema.staffInvitations.email, email));
+    expect(rows).toHaveLength(fulfilled.length);
+    const open = rows.filter(
+      (r) => r.revokedAt === null && r.consumedAt === null,
+    );
+    const revoked = rows.filter((r) => r.revokedAt !== null);
     expect(open).toHaveLength(1);
+    expect(revoked).toHaveLength(rows.length - 1);
+    expect(fulfilled.map((r) => r.value.id)).toContain(open[0]!.id);
+  });
+
+  it("schedule INV-A — both supersede UPDATEs pre-commit: the loser's INSERT blocks on the index and surfaces ConflictError", async () => {
+    const { userId, ctx } = await seedOrgAndUser(db, "inviter-8");
+    const aux = await auxDb();
+    const email = "dupe-race-serialized@example.com";
+    const aInserted = deferred();
+    const releaseA = deferred();
+
+    // A takes the full repo path and parks AFTER its INSERT: its (org, email)
+    // entry sits in the partial unique index, still uncommitted.
+    const txA = inTx(aux, async (tx) => {
+      const row = await createStaffInvitationRepo(tx).createWithinTransaction(
+        ctx,
+        {
+          email,
+          role: "Teacher",
+          tokenHash: hashToken("dupe-race-serialized-a"),
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          createdBy: userId,
+          now: NOW,
+        },
+      );
+      aInserted.resolve(); // A now HOLDS the open-invitation index entry
+      await releaseA.promise;
+      return row;
+    });
+    await aInserted.promise;
+
+    // B: the supersede statement demonstrably runs BEFORE A commits
+    // (barrier), then the repo create path's INSERT must block on A's index
+    // entry. The manual UPDATE is the schedule control only — the same
+    // predicate as the repo's supersede statement, not a second authority.
+    const bSuperseded = deferred();
+    const txB = inTx(db, async (tx) => {
+      await tx
+        .update(schema.staffInvitations)
+        .set({ revokedAt: NOW, updatedAt: NOW })
+        .where(
+          and(
+            eq(schema.staffInvitations.organizationId, ctx.organizationId),
+            eq(schema.staffInvitations.email, email),
+            isNull(schema.staffInvitations.consumedAt),
+            isNull(schema.staffInvitations.revokedAt),
+          ),
+        );
+      bSuperseded.resolve();
+      return createStaffInvitationRepo(tx).createWithinTransaction(ctx, {
+        email,
+        role: "Grader",
+        tokenHash: hashToken("dupe-race-serialized-b"),
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+        createdBy: userId,
+        now: NOW,
+      });
+    });
+    await bSuperseded.promise;
+
+    releaseA.resolve();
+    // Both promises settling IS the no-deadlock proof (a PostgreSQL deadlock
+    // would reject one tx with SQLSTATE 40P01).
+    const results = await Promise.allSettled([txA, txB]);
+    expect(results[0]!.status).toBe("fulfilled");
+    expect(results[1]!.status).toBe("rejected");
+    expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
+      ConflictError,
+    );
+    // The winner's row survives OPEN; the loser's rolled-back tx left nothing.
+    const rows = await db
+      .select()
+      .from(schema.staffInvitations)
+      .where(eq(schema.staffInvitations.email, email));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(
+      (results[0] as PromiseFulfilledResult<StaffInvitationRow>).value.id,
+    );
+    expect(rows[0]!.revokedAt).toBeNull();
+    expect(rows[0]!.consumedAt).toBeNull();
   });
 });
 
