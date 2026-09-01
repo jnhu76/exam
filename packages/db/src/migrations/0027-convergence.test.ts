@@ -167,10 +167,10 @@ describe("0027 convergence — A. fresh schema", () => {
   let env: Env;
   beforeAll(async () => {
     env = await makeEnv("mig0027fresh");
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("runs 0027 as a no-op verify on an empty post-migrate schema", async () => {
     await run0027(env.conn);
@@ -231,10 +231,10 @@ describe("0027 convergence — B. healthy schema", () => {
         status, grading_status, question_snapshot, answers, created_at, updated_at)
       VALUES ('at-b', 'org-b', 'ex-b', 'en-b', 'cp-b', 1, 'graded', 'manual_graded', '[]', '[]', now(), now());
     `);
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("is a verify no-op: counts unchanged AND a legit non-default grading_status is preserved", async () => {
     const beforeProctor = await scalar<number>(
@@ -282,10 +282,10 @@ describe("0027 convergence — C. missing 0024 proctor tables", () => {
       DROP TABLE IF EXISTS grader_exam_assignments CASCADE;
       DROP INDEX IF EXISTS exams_org_id_unique;
     `);
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("recreates both proctor tables, indexes, FKs, and exams_org_id_unique", async () => {
     await run0027(env.conn);
@@ -356,10 +356,10 @@ describe("0027 convergence — D. missing 0022 status/pointer CHECK", () => {
     await env.conn.sql.unsafe(`
       ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_status_pointer_check;
     `);
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("installs the status/pointer CHECK on a schema missing it", async () => {
     await run0027(env.conn);
@@ -445,10 +445,10 @@ describe("0027 convergence — E. missing 0004 grading_status column", () => {
     await env.conn.sql.unsafe(`
       ALTER TABLE exam_attempts DROP COLUMN IF EXISTS grading_status;
     `);
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("re-adds grading_status as nullable text with 'auto_graded' default", async () => {
     await run0027(env.conn);
@@ -482,10 +482,10 @@ describe("0027 convergence — F. partial supported (events table absent)", () =
     await env.conn.sql.unsafe(`
       DROP TABLE IF EXISTS exam_proctor_assignment_events CASCADE;
     `);
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("recreates the events table and its FK to the existing assignments table", async () => {
     await run0027(env.conn);
@@ -535,10 +535,10 @@ describe("0027 convergence — G. partial incompatible (wrong column type)", () 
         "updated_at" timestamp with time zone DEFAULT now() NOT NULL
       );
     `);
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("fails closed with an incompatible-shape error (transaction rolls back)", async () => {
     await expect(run0027(env.conn)).rejects.toThrow(
@@ -603,10 +603,10 @@ describe("0027 convergence — H. repeat safety", () => {
   let env: Env;
   beforeAll(async () => {
     env = await makeEnv("mig0027repeat");
-  });
+  }, 120_000);
   afterAll(async () => {
     await teardown(env);
-  });
+  }, 30_000);
 
   it("re-running 0027 produces no duplicate objects or row drift", async () => {
     // First run (converged schema → verify no-op).

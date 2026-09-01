@@ -77,12 +77,12 @@ describe("bootstrapAdmin service", () => {
     conn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
     db = conn.db;
     await migratePostgres(db, { migrationsSchema: iso.schemaName });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await conn.sql.end();
     await cleanup();
-  });
+  }, 30_000);
 
   it("creates first Admin with hashed password", async () => {
     const orgId = await freshOrg(db);
@@ -242,12 +242,12 @@ describe("bootstrapAdminOnFreshDb (production bootstrap path)", () => {
     freshConn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
     freshDb = freshConn.db;
     await migratePostgres(freshDb, { migrationsSchema: iso.schemaName });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await freshConn.sql.end();
     await freshCleanup();
-  });
+  }, 30_000);
 
   it("creates the default organization when none exists", async () => {
     // Precondition: no "default" organization exists yet.
@@ -586,12 +586,12 @@ describe("resolveOrCreateDefaultOrganization", () => {
     orgConn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
     orgDb = orgConn.db;
     await migratePostgres(orgDb, { migrationsSchema: iso.schemaName });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await orgConn.sql.end();
     await orgCleanup();
-  });
+  }, 30_000);
 
   it("uses the documented non-secret default name when none is supplied", async () => {
     const result = await resolveOrCreateDefaultOrganization(orgDb);

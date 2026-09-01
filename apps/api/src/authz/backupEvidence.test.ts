@@ -25,7 +25,7 @@ describe("P7-E2B backup evidence ledger", () => {
     const handle = await getIsolatedTestDb("backup-evidence");
     db = handle.db;
     cleanup = handle.cleanup;
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     orgId = randomUUID();
@@ -47,7 +47,7 @@ describe("P7-E2B backup evidence ledger", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   const repo = () => createBackupEvidenceRepo(db);
   const opId = () => `logical:${Date.now()}`;

@@ -167,7 +167,7 @@ describe("emailOutboxRepo", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("create inserts a pending row with attemptCount=0 and no retry/sent stamps", async () => {
     const row = await emailRepo.create(ctx, {
@@ -811,7 +811,7 @@ describe("emailOutboxRepo — SKIP LOCKED with independent connections", () => {
       /* ignore */
     }
     await iso.cleanup();
-  });
+  }, 30_000);
 
   it("connections use distinct PostgreSQL backends", async () => {
     const rowA = (

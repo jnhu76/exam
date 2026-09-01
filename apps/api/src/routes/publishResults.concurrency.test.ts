@@ -233,7 +233,7 @@ describe("P7-S2-A: result publication is single-winner", () => {
       sharedSql?.end() ?? Promise.resolve(),
     ]);
     await iso?.cleanup().catch(() => {});
-  });
+  }, 30_000);
 
   for (const isolation of ["read committed", "repeatable read"] as const) {
     it(`forced overlap (${isolation}): exactly one winner, immutable timestamp`, async () => {

@@ -41,7 +41,7 @@ describe("P7-E3 operational policy intent", () => {
     databaseUrl = handle.databaseUrl;
     schemaName = handle.schemaName;
     cleanup = handle.cleanup;
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     orgId = randomUUID();
@@ -63,7 +63,7 @@ describe("P7-E3 operational policy intent", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   const repo = () => createOperationalPolicyRepo(db);
   const base = {

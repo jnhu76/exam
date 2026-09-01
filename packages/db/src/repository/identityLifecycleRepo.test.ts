@@ -100,7 +100,7 @@ describe("staffInvitationRepo (#297)", () => {
     await auxConn?.sql.end().catch(() => {});
     auxConn = null;
     await cleanup();
-  });
+  }, 30_000);
 
   it("creates a pending invitation and supersedes a prior open one", async () => {
     const { orgId, userId, ctx } = await seedOrgAndUser(db, "inviter-1");
@@ -441,7 +441,7 @@ describe("passwordResetTokenRepo (#297)", () => {
     await auxConn?.sql.end().catch(() => {});
     auxConn = null;
     await cleanup();
-  });
+  }, 30_000);
 
   it("newest token wins: issuing invalidates the previous open token", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "resetter-1");

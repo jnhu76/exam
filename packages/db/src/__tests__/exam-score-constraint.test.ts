@@ -21,12 +21,12 @@ describe("EXAM-SCORE-INV-1 DB constraints", () => {
     await sql.unsafe(
       `INSERT INTO ${testSchema}.courses (id, organization_id, name, code, description) VALUES ('course-1', 'org-1', 'Test Course', 'TC1', '')`,
     );
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await sql.end();
     await dropTestSchema(resolveTestDbUrl(), testSchema).catch(() => {});
-  });
+  }, 30_000);
 
   async function insertExam(overrides: Record<string, unknown> = {}) {
     const defaults = {

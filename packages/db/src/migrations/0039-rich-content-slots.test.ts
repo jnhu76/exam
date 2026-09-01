@@ -136,7 +136,7 @@ describe("0039 question rich content slots schema contract (#301)", () => {
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   it("adds nullable content_document and answer_mode columns", async () => {
     const result = await sql.unsafe(`

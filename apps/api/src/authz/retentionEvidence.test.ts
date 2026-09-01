@@ -24,7 +24,7 @@ describe("P7-CLOSE retention evidence ledger", () => {
     const handle = await getIsolatedTestDb("retention-evidence");
     db = handle.db;
     cleanup = handle.cleanup;
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     orgId = randomUUID();
@@ -46,7 +46,7 @@ describe("P7-CLOSE retention evidence ledger", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   const repo = () => createRetentionEvidenceRepo(db);
   const opId = () => `retention:${Date.now()}-${randomUUID().slice(0, 8)}`;

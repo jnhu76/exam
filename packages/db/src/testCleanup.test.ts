@@ -28,7 +28,7 @@ describe(
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("removes audit logs before organizations and keeps other organizations", async () => {
       const organizationId = crypto.randomUUID();
@@ -171,7 +171,7 @@ describe(
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("removes child rows but keeps the organization and its users intact", async () => {
       const organizationId = crypto.randomUUID();
@@ -274,7 +274,7 @@ describe(
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("removes exam business data but keeps org, users, and candidate data intact", async () => {
       const organizationId = crypto.randomUUID();

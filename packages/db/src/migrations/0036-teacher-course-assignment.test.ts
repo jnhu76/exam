@@ -122,7 +122,7 @@ describe("0036 teacher-course-assignment schema contract (#286 §3A)", () => {
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   async function constraintNames(table: string): Promise<string[]> {
     const rows = await sql.unsafe<{ conname: string }[]>(`

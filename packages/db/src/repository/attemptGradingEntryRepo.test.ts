@@ -156,7 +156,7 @@ describe("attemptGradingEntryRepo", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("findByAttempt returns [] when no entries exist", async () => {
     const rows = await entryRepo.findByAttempt(ctx, attemptId);

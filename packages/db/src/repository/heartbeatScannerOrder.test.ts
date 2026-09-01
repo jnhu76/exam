@@ -119,7 +119,7 @@ describe("heartbeat/scanner commit-order serialization — real PostgreSQL", () 
     if (adminSql) await adminSql.end();
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   async function seedAttempt(): Promise<void> {
     await conn.db.insert(schema.examAttempts).values({

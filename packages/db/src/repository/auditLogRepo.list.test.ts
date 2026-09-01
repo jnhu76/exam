@@ -61,7 +61,7 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("filters by targetType", async () => {
     const repo = createAuditLogTestRepo(db);
@@ -232,7 +232,7 @@ describe("auditLogRepo.listPaginatedFiltered (actorName join)", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("resolves actorId → actorName via LEFT JOIN users", async () => {
     const stored = rootContext as unknown as { _ctx: RequestContext };

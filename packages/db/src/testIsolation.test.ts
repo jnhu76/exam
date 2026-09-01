@@ -207,11 +207,11 @@ describe(
       const conn = await createDatabase(TEST_DB_URL, testSchema);
       await migratePostgres(conn.db, { migrationsSchema: testSchema });
       await conn.sql.end();
-    });
+    }, 120_000);
 
     afterAll(async () => {
       await dropTestSchema(TEST_DB_URL, testSchema).catch(() => {});
-    });
+    }, 30_000);
 
     it("creates core business tables in the isolated schema", async () => {
       const sql = postgres(TEST_DB_URL);
@@ -273,11 +273,11 @@ describe(
       await migratePostgres(conn.db, { migrationsSchema: testSchema });
       await seed(conn.db, hashPassword);
       await conn.sql.end();
-    });
+    }, 120_000);
 
     afterAll(async () => {
       await dropTestSchema(TEST_DB_URL, testSchema).catch(() => {});
-    });
+    }, 30_000);
 
     it("creates default org in isolated schema", async () => {
       const { db } = await createDatabase(TEST_DB_URL, testSchema);
@@ -339,7 +339,7 @@ describe(
 
     afterAll(async () => {
       await testDb?.cleanup().catch(() => {});
-    });
+    }, 30_000);
 
     it("returns workable info (schemaName, databaseUrl, cleanup)", async () => {
       expect(testDb.schemaName).toMatch(/^test_/);

@@ -22,12 +22,12 @@ describe("P3-L0-1 schema migration — new columns", () => {
     await migratePostgres(conn.db, { migrationsSchema: testSchema });
     await conn.sql.end();
     sql = postgres(resolveTestDbUrl());
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await sql.end();
     await dropTestSchema(resolveTestDbUrl(), testSchema).catch(() => {});
-  });
+  }, 30_000);
 
   async function columnInfo(table: string, column: string) {
     const rows = await sql`

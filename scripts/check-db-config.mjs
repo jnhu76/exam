@@ -18,11 +18,18 @@
 //      not an inline `APP_MODE: "test"` literal. (Prevents per-config drift of
 //      the forced test mode — the "one macro per AI" failure mode.)
 //   5. Queue-participant lifecycle hooks declare an explicit numeric hook
-//      budget (PR #242 rule). Hooks that acquire the shared test-infra DDL
-//      advisory lock must pass `beforeAll(fn, 30_000/120_000)` — the 10s
+//      budget (PR #242 rule). A hook participates in the shared test-infra DDL
+//      advisory lock queue when it directly calls a lock holder
+//      (setupIsolatedTestDb / getIsolatedTestDb / ensureDatabaseExists /
+//      dropDatabaseIfExists / applyAllMigrations / createTestSchema /
+//      dropTestSchema / withTestInfraLifecycleLock), tears down an isolated
+//      test schema (`.cleanup()` on a setup binding, or a bare call of a
+//      cleanup alias assigned from one), or calls a same-file helper that
+//      queues. Such hooks must pass `beforeAll(fn, 30_000/120_000)` — the 10s
 //      default silently pays the lock queue wait, and a timed-out hook is
 //      not cancelled (it keeps holding the lock → cascade). There is
-//      deliberately NO package-wide hookTimeout raise.
+//      deliberately NO package-wide hookTimeout raise. Scans both the
+//      @exam/db and @exam/api test trees (they share the same lock).
 
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -117,17 +124,38 @@ for (const f of vitestConfigs) {
 }
 
 // --- Guard 5: queue-participant hooks declare an explicit hook budget ------
-// PR #242 rule (2026-08-26 audit): lifecycle hooks whose body acquires the
-// shared test-infra DDL advisory lock (via setupIsolatedTestDb /
-// getIsolatedTestDb / ensureDatabaseExists / dropDatabaseIfExists /
-// applyAllMigrations) must pass an explicit numeric timeout as the second
-// argument. Vitest's per-describe `{ timeout }` covers TEST bodies only —
-// hooks resolve their own timeout from beforeAll(fn, timeout =
-// getDefaultHookTimeout()), i.e. the 10s global default. A queue wait + full
-// migration can exceed 10s, and a timed-out hook is NOT cancelled (its
-// orphaned promise keeps holding the lock — cascade). There is deliberately
-// NO package-wide hookTimeout raise (an unrelated broken hook must surface
-// at 10s, not be masked for 30s), so the budget belongs at each call site.
+// PR #242 rule (2026-08-26 audit): lifecycle hooks whose body enters the
+// shared test-infra DDL advisory lock queue must pass an explicit numeric
+// timeout as the second argument. Vitest's per-describe `{ timeout }` covers
+// TEST bodies only — hooks resolve their own timeout from beforeAll(fn,
+// timeout = getDefaultHookTimeout()), i.e. the 10s global default. A queue
+// wait + full migration can exceed 10s, and a timed-out hook is NOT cancelled
+// (its orphaned promise keeps holding the lock — cascade). There is
+// deliberately NO package-wide hookTimeout raise (an unrelated broken hook
+// must surface at 10s, not be masked for 30s), so the budget belongs at each
+// call site.
+//
+// "Queue participant" is a semantic class, not a syntax class. A hook
+// participates when ANY of these hold (bounded data-flow, no AST / call-graph
+// analysis):
+//   1. direct:   the hook body names a lock holder
+//                (setupIsolatedTestDb / getIsolatedTestDb / ensureDatabaseExists
+//                / dropDatabaseIfExists / applyAllMigrations / createTestSchema
+//                / dropTestSchema / withTestInfraLifecycleLock — current source
+//                reality, every one wraps withTestInfraLifecycleLock);
+//   2. cleanup:  the hook body calls `.cleanup()` on a binding assigned from
+//                setupIsolatedTestDb / getIsolatedTestDb in the same file
+//                (`iso.cleanup()`, `iso?.cleanup()`, `env.iso.cleanup()`);
+//   3. alias:    the hook body bare-calls a cleanup alias assigned from a
+//                setup binding's `.cleanup` (`cleanup = result.cleanup;`
+//                → `await cleanup();`), or an arrow closure whose body queues;
+//   4. helper:   the hook body calls a same-file `function` whose body queues
+//                by rules 1-3 (e.g. `teardown(env)` / `makeEnv(...)`).
+// A `.cleanup()` on a binding that is NOT from a setup call (e.g. an unrelated
+// `cache.cleanup()`) is deliberately NOT a participant — the receiver must be
+// one of the file's own setup bindings. Hooks that look like participants but
+// use a non-arrow shape the scanner cannot audit FAIL LOUD instead of silently
+// passing.
 {
   const LOCK_FNS = [
     "setupIsolatedTestDb",
@@ -135,21 +163,22 @@ for (const f of vitestConfigs) {
     "ensureDatabaseExists",
     "dropDatabaseIfExists",
     "applyAllMigrations",
+    "createTestSchema",
+    "dropTestSchema",
+    "withTestInfraLifecycleLock",
   ];
   const HOOK_RE = /\b(beforeAll|afterAll|beforeEach|afterEach)\s*\(/;
+  const SETUP_BINDING_RE =
+    /([A-Za-z_$][\w$]*)\s*=\s*await\s+(?:setupIsolatedTestDb|getIsolatedTestDb)\s*\(/g;
 
-  // Char-level, comment/string-aware scan of a hook call starting at `start`.
-  // Returns the call text (keyword through the matching close paren) or null
-  // when the line is not a plain `beforeAll(async () => { ... })` shape.
-  function scanHook(src, start) {
-    const m = HOOK_RE.exec(src.slice(start));
-    if (!m) return null;
-    const kwStart = start + m.index;
-    const open = kwStart + m[0].length - 1; // position of '('
-    const head = /\(\s*(?:async\s*)?\(\)\s*=>\s*\{/.exec(src.slice(open));
-    if (!head) return null;
+  // Char-level, comment/string/template-aware scan of a balanced region
+  // starting at `open` (index of the opening char). Tracks only the given
+  // `openCh`/`closeCh` pair (`(`→`)` for hook argument regions, `{`→`}` for
+  // function bodies). Returns the text through the matching close char, or
+  // null when unbalanced.
+  function scanRegion(src, open, openCh, closeCh) {
     let depth = 0;
-    let k = open + head[0].length - 1; // the callback's '{'
+    let k = open;
     while (k < src.length) {
       const c = src[k];
       if (c === "/" && src[k + 1] === "/") {
@@ -205,52 +234,165 @@ for (const f of vitestConfigs) {
         }
         continue;
       }
-      if (c === "{") depth++;
-      else if (c === "}") {
+      if (c === openCh) depth++;
+      else if (c === closeCh) {
         depth--;
-        if (depth === 0) {
-          let p = k + 1;
-          while (p < src.length && /\s/.test(src[p])) p++;
-          if (src[p] === ")") return src.slice(kwStart, p + 1);
-          return null;
-        }
+        if (depth === 0) return src.slice(open, k + 1);
       }
       k++;
     }
     return null;
   }
 
-  const dbDir = join(ROOT, "packages/db/src");
-  const files = [];
-  async function collect(dir) {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) await collect(full);
-      else if (/\.test\.ts$/.test(entry.name)) files.push(full);
-    }
+  // Last identifier before the end of `text` (handles `iso.cleanup()` and
+  // `iso?.cleanup()` — the optional `?` is the trailing char in both).
+  function lastIdBefore(text) {
+    const m = /([A-Za-z_$][\w$]*)\s*\??\s*$/.exec(text);
+    return m ? m[1] : null;
   }
-  await collect(dbDir);
+
+  // Does `text` tear down an isolated test schema — `.cleanup()` on one of the
+  // file's own setup bindings, or a bare call of a cleanup alias?
+  function tearsDownIsolatedSchema(text, setupBindings, aliases) {
+    for (const m of text.matchAll(/\.cleanup\s*\(/g)) {
+      const id = lastIdBefore(text.slice(0, m.index));
+      if (id && setupBindings.has(id)) return true;
+    }
+    for (const alias of aliases) {
+      if (new RegExp(`\\b${alias}\\s*\\??\\s*\\(`).test(text)) return true;
+    }
+    return false;
+  }
+
+  // Brace body of a top-level `function NAME(...) { ... }` starting at the
+  // parameter-list open paren. Skips a return-type annotation
+  // (`): Promise<Env> {`) — bounded: finds the next `{` after the params.
+  function functionBody(src, open) {
+    let depth = 0;
+    let k = open;
+    while (k < src.length) {
+      if (src[k] === "(") depth++;
+      else if (src[k] === ")") {
+        depth--;
+        if (depth === 0) {
+          k++;
+          break;
+        }
+      }
+      k++;
+    }
+    while (k < src.length && /\s/.test(src[k])) k++;
+    if (src[k] === ":") {
+      const brace = src.indexOf("{", k);
+      if (brace === -1) return null;
+      return scanRegion(src, brace, "{", "}");
+    }
+    if (src[k] !== "{") return null;
+    return scanRegion(src, k, "{", "}");
+  }
+
+  const testRoots = ["packages/db/src", "apps/api/src"];
+  const files = [];
+  async function collect(root) {
+    const dir = join(ROOT, root);
+    async function walk(d) {
+      for (const entry of await readdir(d, { withFileTypes: true })) {
+        const full = join(d, entry.name);
+        if (entry.isDirectory()) await walk(full);
+        else if (/\.test\.ts$/.test(entry.name)) files.push(full);
+      }
+    }
+    await walk(dir);
+  }
+  for (const root of testRoots) await collect(root);
 
   for (const path of files) {
     const src = await readFile(path, "utf8");
+
+    // Bindings assigned from the setup helpers (rule 2 receiver set).
+    const setupBindings = new Set();
+    for (const m of src.matchAll(SETUP_BINDING_RE)) setupBindings.add(m[1]);
+
+    // Cleanup aliases (rule 3): `NAME = <setupBinding>.cleanup`, plus arrow
+    // closures whose body queues (`cleanup = async () => { ... iso.cleanup() }`).
+    const aliases = new Set();
+    for (const m of src.matchAll(
+      /([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\.cleanup/g,
+    )) {
+      if (setupBindings.has(m[2])) aliases.add(m[1]);
+    }
+    for (const m of src.matchAll(
+      /([A-Za-z_$][\w$]*)\s*=\s*async\s*\([^)]*\)\s*=>\s*\{/g,
+    )) {
+      const body = scanRegion(src, m.index + m[0].length - 1, "{", "}");
+      if (
+        body &&
+        (LOCK_FNS.some((fn) => body.includes(fn)) ||
+          tearsDownIsolatedSchema(body, setupBindings, aliases))
+      ) {
+        aliases.add(m[1]);
+      }
+    }
+
+    // Same-file helpers that queue (rule 4).
+    const queueHelpers = new Set();
+    for (const m of src.matchAll(
+      /(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g,
+    )) {
+      const body = functionBody(src, m.index + m[0].length - 1);
+      if (
+        body &&
+        (LOCK_FNS.some((fn) => body.includes(fn)) ||
+          tearsDownIsolatedSchema(body, setupBindings, aliases))
+      ) {
+        queueHelpers.add(m[1]);
+      }
+    }
+
+    // Lifecycle hooks.
     let idx = 0;
     for (;;) {
-      const hook = scanHook(src, idx);
-      if (!hook) break;
-      const hookStart = src.indexOf(hook, idx);
-      idx = hookStart + hook.length;
-      if (!LOCK_FNS.some((fn) => hook.includes(fn))) continue;
+      const m = HOOK_RE.exec(src.slice(idx));
+      if (!m) break;
+      const kwStart = idx + m.index;
+      const open = kwStart + m[0].length - 1;
+      const region = scanRegion(src, open, "(", ")");
+      if (!region) {
+        idx = kwStart + m[0].length;
+        continue;
+      }
+      idx = kwStart + region.length;
+      const lineNo = src.slice(0, kwStart).split("\n").length;
+
+      const plain = /^\(\s*(?:async\s*)?\(\)\s*=>\s*\{/.test(region);
+      const direct = LOCK_FNS.some((fn) => region.includes(fn));
+      const teardown = tearsDownIsolatedSchema(region, setupBindings, aliases);
+      const helper = [...queueHelpers].some((hn) =>
+        new RegExp(`\\b${hn}\\s*\\(`).test(region),
+      );
+      if (!direct && !teardown && !helper) continue;
+
+      if (!plain) {
+        violations.push(
+          `${relative(ROOT, path)}:${lineNo} queue-participant lifecycle hook ` +
+            "uses a non-arrow shape that Guard 5 cannot audit (expected " +
+            "`beforeAll(async () => { ... })` / `afterAll(...)` with an arrow " +
+            "callback). Refactor to a plain arrow callback so the hook budget " +
+            "is checkable (PR #242 rule).",
+        );
+        continue;
+      }
       // Timed iff the close paren is directly preceded by a numeric arg
       // (`}, 30_000);` or the prettier `},\n 30_000,\n);` form).
-      const tail = hook.replace(/\s+/g, "").match(/\d[\d_]*\s*,?\s*\);?$/);
+      const tail = region.replace(/\s+/g, "").match(/\d[\d_]*\s*,?\s*\);?$/);
       if (tail) continue;
-      const lineNo = src.slice(0, hookStart).split("\n").length;
       violations.push(
         `${relative(ROOT, path)}:${lineNo} queue-participant lifecycle hook ` +
-          "(acquires the shared test-infra DDL advisory lock) must pass an " +
-          "explicit numeric hook timeout (e.g. `}, 30_000);` for repository " +
-          "bootstrap, `}, 120_000);` for full-migration beforeAll) — the 10s " +
-          "default silently pays the lock queue wait (PR #242 rule).",
+          "(enters the shared test-infra DDL advisory lock directly, or tears " +
+          "down an isolated test schema that holds it) must pass an explicit " +
+          "numeric hook timeout (e.g. `}, 30_000);` for bootstrap/teardown, " +
+          "`}, 120_000);` for full-migration setup) — the 10s default silently " +
+          "pays the lock queue wait (PR #242 rule).",
       );
     }
   }

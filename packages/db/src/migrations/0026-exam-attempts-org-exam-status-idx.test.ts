@@ -86,7 +86,7 @@ describe("0026 exam_attempts org+exam+status index (J5-I1B4 §6.5)", () => {
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   it("the (organization_id, exam_id, status) index exists", async () => {
     const rows = await sql.unsafe<{ indexname: string }[]>(`

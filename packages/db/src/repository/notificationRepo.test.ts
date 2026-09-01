@@ -113,7 +113,7 @@ describe("notificationRepo", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   describe("insert / dedupe", () => {
     it("creates a new notification and returns it with created=true", async () => {

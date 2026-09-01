@@ -29,7 +29,7 @@ describe("baseRepo count and listPaginated", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function seedOrg(name: string) {
     const orgRepo = createOrganizationRepo(db);

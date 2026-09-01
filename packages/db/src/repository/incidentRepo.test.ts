@@ -172,7 +172,7 @@ describe("incident persistence foundation", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("creates an incident with defaults and reads it back", async () => {
     const repo = createIncidentRepo(db);

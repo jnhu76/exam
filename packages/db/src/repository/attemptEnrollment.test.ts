@@ -199,7 +199,7 @@ describe("attemptRepo custom methods", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("findActiveByEnrollment returns in_progress attempt", async () => {
     await attemptRepo.create(ctx, {
@@ -715,7 +715,7 @@ describe("enrollmentRepo custom methods", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("findByExamAndCandidate returns enrollment", async () => {
     await enrollmentRepo.create(ctx, {

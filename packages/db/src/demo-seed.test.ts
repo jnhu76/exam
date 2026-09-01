@@ -32,7 +32,7 @@ describe("demo seed", { timeout: 30_000 }, () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("seeds and verifies without errors", async () => {
     const ids = await seedDemo(db, precomputedHash);

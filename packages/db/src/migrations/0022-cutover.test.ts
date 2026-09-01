@@ -215,7 +215,7 @@ describe("0022 cutover — Clean I1", () => {
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   it("installs the status/pointer CHECK constraint", async () => {
     const rows = await conn.sql.unsafe(`
@@ -352,7 +352,7 @@ describe("0022 cutover — Transitional I1", () => {
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   it("disrupted + null pointer gets parent + detected + pointer", async () => {
     const attempt = await conn.db
@@ -537,7 +537,7 @@ describe("0022 cutover — Corrupt states", () => {
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   async function expectMigrationThrows(
     setupSql: string,

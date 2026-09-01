@@ -35,7 +35,7 @@ describe(
 
     afterAll(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     it("creates default org and Phase 1 users with real argon2 hashes", async () => {
       const result = await seed(db, hashPassword);
@@ -170,7 +170,7 @@ describe(
 
     afterEach(async () => {
       await cleanup();
-    });
+    }, 30_000);
 
     function makeCtx(orgId: string) {
       return {

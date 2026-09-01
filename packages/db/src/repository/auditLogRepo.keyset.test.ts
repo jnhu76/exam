@@ -48,7 +48,7 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("walks (created_at DESC, id DESC) without overlap or skip", async () => {
     const repo = createAuditLogTestRepo(db);

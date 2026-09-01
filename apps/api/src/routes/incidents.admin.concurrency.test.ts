@@ -346,7 +346,7 @@ describe("incident version-race recovery (ADR-014 §9)", () => {
       sqlShared?.end() ?? Promise.resolve(),
     ]);
     await iso?.cleanup().catch(() => {});
-  });
+  }, 30_000);
 
   it("same operationId concurrent resolve → one applied + one idempotent_replayed", async () => {
     const ctx = makeCtx();

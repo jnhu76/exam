@@ -96,11 +96,11 @@ describe("EmailOutboxService.processDueEmails", () => {
     ctx = createContext(org.id);
     orgScope = { organizationId: org.id };
     repo = createEmailOutboxRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("pending -> sent on success (sentAt = now, providerMessageId from sender)", async () => {
     const now = new Date("2026-06-01T00:00:00Z");

@@ -143,7 +143,7 @@ describe("0037 grader-exam-assignment schema contract (#296)", () => {
   afterAll(async () => {
     await conn?.sql.end();
     await iso?.cleanup();
-  });
+  }, 30_000);
 
   async function constraintNames(table: string): Promise<string[]> {
     const rows = await sql.unsafe<{ conname: string }[]>(`

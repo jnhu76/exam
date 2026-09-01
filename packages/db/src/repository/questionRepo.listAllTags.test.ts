@@ -157,7 +157,7 @@ describe("questionRepo.listAllTags (vocabulary resilience)", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("survives legacy non-array tags values and excludes them from the vocabulary", async () => {
     const tags = await repo.listAllTags(ctxA);

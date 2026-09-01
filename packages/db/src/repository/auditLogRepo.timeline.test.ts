@@ -45,7 +45,7 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("returns only rows matching (targetType, targetId) for the org, oldest-first", async () => {
     const repo = createAuditLogTestRepo(db);

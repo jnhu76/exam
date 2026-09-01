@@ -134,7 +134,7 @@ describe("teacher course assignment persistence foundation", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   const now = () => new Date("2026-02-01T00:00:00.000Z");
 

@@ -151,7 +151,7 @@ describe("0021 interruption policy migration — real 0020 → 0021 upgrade", ()
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   /**
    * Insert historical fixture data into the pre-0021 schema via raw SQL.
@@ -612,7 +612,7 @@ describe("0021 — post-migration disrupted rows are a distinct population", () 
   afterAll(async () => {
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
-  });
+  }, 30_000);
 
   it("CHECK constraint rejects a disrupted attempt without interruption pointer", async () => {
     const attemptId = randomUUID();

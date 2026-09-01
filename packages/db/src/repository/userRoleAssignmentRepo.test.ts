@@ -57,7 +57,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
   }, 30_000);
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("assigns a role and lists it for the user", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "alice");

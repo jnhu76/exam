@@ -30,7 +30,7 @@ describe("clientEventRepo.createMany", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function seedOrg(name: string) {
     const orgRepo = createOrganizationRepo(db);
@@ -158,7 +158,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   async function seedOrg(name: string) {
     const orgRepo = createOrganizationRepo(db);

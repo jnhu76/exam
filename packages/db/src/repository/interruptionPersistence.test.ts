@@ -172,7 +172,7 @@ describe("interruption persistence foundation", () => {
 
   afterAll(async () => {
     await cleanup();
-  });
+  }, 30_000);
 
   it("applies strict defaults to Exam and Attempt snapshot columns", async () => {
     const exam = await db
