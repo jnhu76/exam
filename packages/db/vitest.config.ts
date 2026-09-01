@@ -57,9 +57,11 @@ export default defineConfig(({ mode }) => ({
     },
     // Deliberately NO package-wide hookTimeout raise. Vitest's per-describe
     // `{ timeout }` applies to TEST bodies only — hooks default to the 10s
-    // global hookTimeout. The few lifecycle hooks that queue on the shared
-    // test-infra DDL advisory lock declare their own explicit 30s timeout at
-    // the hook call site (PR #242 rule); an unrelated broken hook must still
-    // surface at the 10s default instead of being masked for 30s.
+    // global hookTimeout. Every lifecycle hook that queues on the shared
+    // test-infra DDL advisory lock declares its own explicit numeric timeout
+    // at the call site (PR #242 rule): 30_000 for repository bootstrap,
+    // 120_000 for full-migration beforeAll (enforced by scripts/check-db-config.mjs
+    // Guard 5); an unrelated broken hook must still surface at the 10s default
+    // instead of being masked by a raised budget.
   },
 }));
