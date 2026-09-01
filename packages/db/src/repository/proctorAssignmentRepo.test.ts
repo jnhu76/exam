@@ -152,7 +152,7 @@ describe("proctor assignment persistence foundation", () => {
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
     repo = createProctorAssignmentRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

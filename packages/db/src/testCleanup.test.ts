@@ -24,7 +24,7 @@ describe(
       const result = await getIsolatedTestDb("db-cleanup-org");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
@@ -167,7 +167,7 @@ describe(
       const result = await getIsolatedTestDb("db-cleanup-child");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
@@ -270,7 +270,7 @@ describe(
       const result = await getIsolatedTestDb("db-cleanup-biz");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();

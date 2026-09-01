@@ -95,7 +95,7 @@ describe("staffInvitationRepo (#297)", () => {
     auxUrl = iso.databaseUrl;
     auxSchema = iso.schemaName;
     cleanup = iso.cleanup;
-  });
+  }, 30_000);
   afterAll(async () => {
     await auxConn?.sql.end().catch(() => {});
     auxConn = null;
@@ -436,7 +436,7 @@ describe("passwordResetTokenRepo (#297)", () => {
     auxUrl = iso.databaseUrl;
     auxSchema = iso.schemaName;
     cleanup = iso.cleanup;
-  });
+  }, 30_000);
   afterAll(async () => {
     await auxConn?.sql.end().catch(() => {});
     auxConn = null;

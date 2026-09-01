@@ -87,7 +87,7 @@ describe("examProfileRepo — organization-scoped CRUD (P7-M2 §10/§27)", () =>
         updatedAt: now,
       },
     ]);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

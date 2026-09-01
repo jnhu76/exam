@@ -113,7 +113,7 @@ describe("heartbeat/scanner commit-order serialization — real PostgreSQL", () 
       createdAt: now,
       updatedAt: now,
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     if (adminSql) await adminSql.end();

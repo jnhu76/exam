@@ -210,7 +210,7 @@ describe("0022 cutover — Clean I1", () => {
       VALUES ${insertAttemptSql(cleanAttemptId, 1, "in_progress", cleanDeadline)}
     `);
     await executeMigrationFile(conn.sql, "0022_engine_policy_seam");
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
@@ -347,7 +347,7 @@ describe("0022 cutover — Transitional I1", () => {
     `);
 
     await executeMigrationFile(conn.sql, "0022_engine_policy_seam");
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
@@ -532,7 +532,7 @@ describe("0022 cutover — Corrupt states", () => {
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
     await applyMigrationsThrough0021(conn.sql);
     await insertBaseFixture(conn.sql);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();

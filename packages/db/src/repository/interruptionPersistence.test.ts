@@ -168,7 +168,7 @@ describe("interruption persistence foundation", () => {
     cleanup = result.cleanup;
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

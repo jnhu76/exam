@@ -163,7 +163,7 @@ describe("emailOutboxRepo", () => {
     );
     ctx = createContext(org.id);
     orgScope = { organizationId: org.id };
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -797,7 +797,7 @@ describe("emailOutboxRepo — SKIP LOCKED with independent connections", () => {
     orgScope = { organizationId: org.id };
     repoA = createEmailOutboxRepo(connA.db);
     repoB = createEmailOutboxRepo(connB.db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     try {

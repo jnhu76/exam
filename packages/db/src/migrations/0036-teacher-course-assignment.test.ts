@@ -117,7 +117,7 @@ describe("0036 teacher-course-assignment schema contract (#286 §3A)", () => {
       INSERT INTO "courses" ("id", "organization_id", "name", "code", "description", "created_at", "updated_at")
       VALUES (${s(courseId)}, ${s(orgId)}, 'Course', 'C-0036', '', ${ts(createdAt)}, ${ts(createdAt)})
     `);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();

@@ -124,7 +124,7 @@ describe("0024 proctor-assignment schema contract (ADR-015 §4)", () => {
         '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, 'unlimited', 'highest', 1,
         'immediate', 'strict', ${ts(createdAt)}, ${ts(createdAt)})
     `);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();

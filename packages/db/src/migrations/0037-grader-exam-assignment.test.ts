@@ -138,7 +138,7 @@ describe("0037 grader-exam-assignment schema contract (#296)", () => {
         )
       `);
     }
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();

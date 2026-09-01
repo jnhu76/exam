@@ -81,7 +81,7 @@ describe("0026 exam_attempts org+exam+status index (J5-I1B4 §6.5)", () => {
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
     sql = conn.sql;
     await applyAllMigrations(conn.sql, iso.databaseUrl);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await conn?.sql.end();

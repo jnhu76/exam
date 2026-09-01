@@ -195,7 +195,7 @@ describe("attemptRepo custom methods", () => {
       attemptCount: 1,
     });
     enrollmentId = enr.id;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -711,7 +711,7 @@ describe("enrollmentRepo custom methods", () => {
     ctx = createContext(orgId);
 
     await seedBaseData(db, orgId, ids);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

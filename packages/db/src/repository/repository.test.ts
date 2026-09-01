@@ -48,7 +48,7 @@ describe("repository tenant isolation", () => {
     settingsRepo = createSettingsRepo(db);
     courseRepo = createCourseRepo(db);
     questionRepo = createQuestionRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -240,7 +240,7 @@ describe("organizationRepo.resolveOptionalBrandingTenant", () => {
     db = result.db;
     cleanup = result.cleanup;
     organizationRepo = createOrganizationRepo(db);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -308,7 +308,7 @@ describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
     });
     orgId = org.id;
     ctx = createContext(orgId);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

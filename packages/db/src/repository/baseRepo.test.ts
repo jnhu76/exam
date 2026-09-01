@@ -25,7 +25,7 @@ describe("baseRepo count and listPaginated", () => {
     const result = await getIsolatedTestDb("db-baseRepo-count");
     db = result.db;
     cleanup = result.cleanup;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

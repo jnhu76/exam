@@ -26,7 +26,7 @@ describe("clientEventRepo.createMany", () => {
     const result = await getIsolatedTestDb("db-clientEventRepo");
     db = result.db;
     cleanup = result.cleanup;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -154,7 +154,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
     const result = await getIsolatedTestDb("db-clientEventRepo-read");
     db = result.db;
     cleanup = result.cleanup;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

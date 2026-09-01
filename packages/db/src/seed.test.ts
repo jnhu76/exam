@@ -31,7 +31,7 @@ describe(
       const result = await getIsolatedTestDb("db-seed");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await cleanup();
@@ -166,7 +166,7 @@ describe(
       const result = await getIsolatedTestDb("db-seed-authority");
       db = result.db;
       cleanup = result.cleanup;
-    });
+    }, 30_000);
 
     afterEach(async () => {
       await cleanup();

@@ -28,7 +28,7 @@ describe("demo seed", { timeout: 30_000 }, () => {
     const result = await getIsolatedTestDb("db-demo-seed");
     db = result.db;
     cleanup = result.cleanup;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

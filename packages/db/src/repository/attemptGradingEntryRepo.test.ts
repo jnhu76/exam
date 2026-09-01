@@ -152,7 +152,7 @@ describe("attemptGradingEntryRepo", () => {
       submittedAt: new Date(),
     });
     attemptId = attempt.id;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

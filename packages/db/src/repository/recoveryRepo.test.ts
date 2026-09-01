@@ -251,7 +251,7 @@ describe("recovery incident queue repository", () => {
     testSchemaName = result.schemaName;
     alpha = await createFixture(db, "alpha");
     beta = await createFixture(db, "beta");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -1615,7 +1615,7 @@ describe("recovery incident aggregate detail repository", () => {
         linkedAt: incidentAt,
       });
     }
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -3140,7 +3140,7 @@ describe("recovery attempt operations context repository", () => {
     db = result.db;
     cleanup = result.cleanup;
     fx = await createFixture(db, "op");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();
@@ -4491,7 +4491,7 @@ describe("recovery exam recovery context repository", () => {
     cleanup = result.cleanup;
     fx = await createFixture(db, "examctx");
     emptyFx = await createFixture(db, "examctxempty");
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

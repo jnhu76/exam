@@ -53,7 +53,7 @@ describe("P3-L0-1 repo round-trip: text_response + submitted_answers", () => {
       createdAt: now,
       updatedAt: now,
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

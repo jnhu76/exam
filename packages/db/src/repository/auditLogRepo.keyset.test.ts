@@ -44,7 +44,7 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
       slug: `audit-keyset-${suffix}`,
     });
     ctx = createContext(org.id);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

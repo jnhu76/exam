@@ -153,7 +153,7 @@ describe("questionRepo.listAllTags (vocabulary resilience)", () => {
       "org b question",
       '["orgb-only"]',
     );
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await cleanup();

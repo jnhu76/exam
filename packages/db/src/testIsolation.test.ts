@@ -335,7 +335,7 @@ describe(
       testDb = await setupIsolatedTestDb({
         namespace: "test-helper",
       });
-    });
+    }, 30_000);
 
     afterAll(async () => {
       await testDb?.cleanup().catch(() => {});

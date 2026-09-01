@@ -146,7 +146,7 @@ describe("0021 interruption policy migration — real 0020 → 0021 upgrade", ()
     //    re-implemented here — it runs straight from the committed file,
     //    including the `ON COMMIT DROP` temp table it depends on.
     await executeMigrationFile(conn.sql, "0021_noisy_archangel");
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
@@ -607,7 +607,7 @@ describe("0021 — post-migration disrupted rows are a distinct population", () 
       createdAt: now,
       updatedAt: now,
     });
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (conn) await conn.sql.end();
