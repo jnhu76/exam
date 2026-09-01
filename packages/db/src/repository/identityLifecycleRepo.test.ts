@@ -350,7 +350,7 @@ describe("staffInvitationRepo (#297)", () => {
     expect(fulfilled.map((r) => r.value.id)).toContain(open[0]!.id);
   });
 
-  it("schedule INV-A — both supersede UPDATEs pre-commit: the loser's INSERT blocks on the index and surfaces ConflictError", async () => {
+  it("schedule INV-A — the loser's snapshot predates the winner's row: supersede provably sees nothing, the loser's INSERT blocks on the index and surfaces ConflictError", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "inviter-8");
     const aux = await auxDb();
     const email = "dupe-race-serialized@example.com";
@@ -377,38 +377,45 @@ describe("staffInvitationRepo (#297)", () => {
     });
     await aInserted.promise;
 
-    // B: the supersede statement demonstrably runs BEFORE A commits
-    // (barrier), then the repo create path's INSERT must block on A's index
-    // entry. The manual UPDATE is the schedule control only — the same
-    // predicate as the repo's supersede statement, not a second authority.
-    const bSuperseded = deferred();
-    const txB = inTx(db, async (tx) => {
-      await tx
-        .update(schema.staffInvitations)
-        .set({ revokedAt: NOW, updatedAt: NOW })
-        .where(
-          and(
-            eq(schema.staffInvitations.organizationId, ctx.organizationId),
-            eq(schema.staffInvitations.email, email),
-            isNull(schema.staffInvitations.consumedAt),
-            isNull(schema.staffInvitations.revokedAt),
-          ),
-        );
-      bSuperseded.resolve();
-      return createStaffInvitationRepo(tx).createWithinTransaction(ctx, {
-        email,
-        role: "Grader",
-        tokenHash: hashToken("dupe-race-serialized-b"),
-        expiresAt: new Date(Date.now() + 3600 * 1000),
-        createdBy: userId,
-        now: NOW,
-      });
-    });
-    await bSuperseded.promise;
+    // B runs REPEATABLE READ and freezes its snapshot with its FIRST
+    // statement, while the main thread still holds A parked: row_a can
+    // never enter B's snapshot, so the supersede statement inside the repo
+    // path provably updates nothing no matter when A commits. The frozen
+    // snapshot — not statement scheduling — is the schedule pin: pinning
+    // via read-committed statement ordering instead would leave the
+    // in-path supersede racing A's COMMIT across two connections, and
+    // instrumentation-level timing shifts alone can flip that race into a
+    // legal two-fulfilled history that the rigid loser assertion rejects.
+    // With nothing superseded, the partial unique index is the only
+    // serialization point: B's INSERT must block on A's uncommitted entry
+    // and surface 23505 once A commits.
+    const bSnapshotFrozen = deferred();
+    const txB = executeInTransaction(
+      db,
+      async (tx) => {
+        await tx
+          .select()
+          .from(schema.staffInvitations)
+          .where(eq(schema.staffInvitations.email, email));
+        bSnapshotFrozen.resolve(); // snapshot frozen; row_a is invisible to B
+        return createStaffInvitationRepo(tx).createWithinTransaction(ctx, {
+          email,
+          role: "Grader",
+          tokenHash: hashToken("dupe-race-serialized-b"),
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          createdBy: userId,
+          now: NOW,
+        });
+      },
+      "repeatable read",
+    );
+    await bSnapshotFrozen.promise;
 
     releaseA.resolve();
     // Both promises settling IS the no-deadlock proof (a PostgreSQL deadlock
-    // would reject one tx with SQLSTATE 40P01).
+    // would reject one tx with SQLSTATE 40P01). B also cannot retry through
+    // this schedule: unique_violation (23505) is not a retryable error in
+    // executeInTransaction, and plain REPEATABLE READ raises no 40001.
     const results = await Promise.allSettled([txA, txB]);
     expect(results[0]!.status).toBe("fulfilled");
     expect(results[1]!.status).toBe("rejected");
@@ -436,7 +443,12 @@ describe("staffInvitationRepo (#297)", () => {
  * state. The default repeatable read + retry wrapper of executeInTransaction
  * would (a) hide an issuance-commit from a waiting deactivation's burn and
  * (b) retry through already-resolved test barriers, so it must not be used
- * for these deterministic schedules.
+ * for these deterministic schedules. The one deliberate exception is
+ * INV-A's loser transaction above: it passes "repeatable read" explicitly
+ * to freeze its snapshot before the winner's row can be visible — the
+ * schedule pin — and neither exception reason applies to it (nothing waits
+ * on a later commit through B's eyes, and its unique_violation failure is
+ * never retried).
  */
 function inTx<T>(dbArg: Database, fn: (tx: TransactionDatabase) => Promise<T>) {
   return executeInTransaction(dbArg, fn, "read committed");
