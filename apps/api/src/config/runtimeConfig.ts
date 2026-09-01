@@ -1,16 +1,33 @@
 /**
- * Centralized runtime configuration.
+ * Centralized runtime configuration — policy facade (#370).
  *
- * All cross-module infrastructure settings and runtime mode switches
- * are read from environment variables once at startup and frozen into
- * a typed object.  Routes, plugins, and the OpenAPI layer should read
- * from `getRuntimeConfig()` rather than accessing `process.env` directly.
+ * Primitive env parsing, defaults, and requiredness are owned by
+ * `./settings.ts` (the ONE application semantic settings model). This
+ * module layers the cross-field and runtime-mode POLICY on top of the
+ * resolved primitives and assembles the frozen {@link AppRuntimeConfig}:
+ *
+ *   process.env → resolveSettings() → primitive typed settings
+ *               → runtime policy (this file) → AppRuntimeConfig
+ *
+ * Policy that lives here (NOT in settings — it must stay primitive):
+ *   - API bind-port ownership switch (APP_PORT vs DEV_API_PORT by mode);
+ *   - CORS_ORIGIN / PUBLIC_WEB_ORIGIN dev defaults derived from VITE_PORT
+ *     (dependent defaults) and the CORS comma-list split;
+ *   - heartbeat divisibility + DEADLINE_SCAN_INTERVAL_MS ← scan interval;
+ *   - REDIS mode ⇄ URL relation;
+ *   - EMAIL_TRANSPORT=smtp ⇒ SMTP_HOST required, and the test-like hard
+ *     guard forcing smtp → fake;
+ *   - email worker lease-sanity inequality;
+ *   - DATABASE_URL / APP_MODE resolution — delegated to the @exam/db deep
+ *     module, never re-implemented here.
  *
  * Design rules (Phase 1.7 CONFIG-BASELINE):
  * - Only infrastructure + mode config lives here.
  * - Business rules, RBAC matrices, and per-route settings are NOT config.
  * - APP_MODE is the authoritative run-mode; NODE_ENV is a fallback/build signal.
- * - production must fail fast on missing JWT_SECRET / DATABASE_URL / CORS_ORIGIN.
+ * - production must fail fast on missing JWT_SECRET / DATABASE_URL / CORS_ORIGIN
+ *   (error precedence pinned by tests: DATABASE_URL before JWT_SECRET, which
+ *   is why the delegated DB resolution runs before resolveSettings).
  */
 
 import {
@@ -19,7 +36,7 @@ import {
   type AppMode as AppModeCore,
 } from "@exam/db";
 import { RuntimeConfigError } from "@exam/domain";
-import { z } from "zod";
+import { resolveSettings, type ResolvedSettings } from "./settings.js";
 
 // AppMode is sourced from the single-source resolver in @exam/db. Re-exported
 // here for backward compatibility with existing importers.
@@ -255,65 +272,10 @@ export interface AppRuntimeConfig {
   launchpad: LaunchpadConfig;
 }
 
-const DEFAULT_JWT_SECRET = "development-only-change-me";
-
 /**
- * Default runtime timezone (display/log/diagnostics only). ADR-006: this does
- * not change business-time comparison semantics. Asia/Shanghai is an explicit
- * IANA zone; ambiguous abbreviations such as CST are never recommended.
- */
-const DEFAULT_APP_TIMEZONE = "Asia/Shanghai";
-
-/**
- * Assert that `timeZone` is a valid IANA timezone by probing the runtime's
- * `Intl.DateTimeFormat`. Throws on invalid values so APP_TIMEZONE misconfig
- * fails fast at startup. (Node rejects unknown zone strings here.)
- */
-function assertValidIanaTimeZone(timeZone: string): void {
-  try {
-    // eslint-disable-next-line no-new
-    new Intl.DateTimeFormat("en-US", { timeZone });
-  } catch {
-    throw new RuntimeConfigError(
-      `Invalid APP_TIMEZONE: ${timeZone}. Must be a valid IANA timezone (e.g. Asia/Shanghai).`,
-    );
-  }
-}
-
-/**
- * Resolve the runtime timezone from `APP_TIMEZONE`, defaulting to
- * Asia/Shanghai. Invalid (non-IANA) values fail fast.
- *
- * @param env - Process environment to read from.
- * @returns The resolved IANA timezone string.
- */
-function resolveTimezone(env: NodeJS.ProcessEnv): string {
-  const raw = env.APP_TIMEZONE?.trim();
-  const timezone = raw && raw.length > 0 ? raw : DEFAULT_APP_TIMEZONE;
-  assertValidIanaTimeZone(timezone);
-  return timezone;
-}
-
-const positiveIntSchema = z
-  .union([z.string(), z.number()])
-  .transform((v) => Number(v))
-  .pipe(z.number().int().positive());
-
-const nonNegativeIntSchema = z
-  .union([z.string(), z.number()])
-  .transform((v) => Number(v))
-  .pipe(z.number().int().min(0));
-
-/**
- * Resolve the application runtime mode from `APP_MODE`, falling back to
- * `NODE_ENV` when `APP_MODE` is unset.
- *
- * Delegates the mode-selection logic to the single-source resolver in
- * `@exam/db` and wraps any error as a {@link RuntimeConfigError} so callers
- * that rely on this typed error are unaffected.
- *
- * @param env - Process environment to read from.
- * @returns The resolved {@link AppMode}.
+ * Resolve the application runtime mode from `APP_MODE`, delegating to the
+ * single-source resolver in `@exam/db` and wrapping any error as a
+ * {@link RuntimeConfigError}.
  */
 function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
   try {
@@ -324,103 +286,10 @@ function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
 }
 
 /**
- * Map a `NODE_ENV` string to the narrow {@link AppEnv} union. Unrecognised
- * values default to `"development"`.
- *
- * @param value - Raw `NODE_ENV` string (may be `undefined`).
- * @returns The resolved {@link AppEnv}.
- */
-function parseAppEnv(value: string | undefined): AppEnv {
-  if (value === "production") return "production";
-  if (value === "test") return "test";
-  return "development";
-}
-
-/**
- * Parse DEPLOYMENT_MODE.
- *
- * Phase 1 only supports singleTenant (the internal default organization
- * boundary). `multiTenant` is a Phase 4 platformization capability and is
- * rejected as a current runnable mode. Unknown values are also rejected.
- *
- * The raw input value is intentionally NOT echoed back in the error message to
- * avoid leaking sensitive configuration.
- */
-function parseDeploymentMode(value: string | undefined): DeploymentMode {
-  const trimmed = value?.trim();
-  if (trimmed === undefined || trimmed === "") return "singleTenant";
-  if (trimmed === "singleTenant") return "singleTenant";
-  if (trimmed === "multiTenant") {
-    throw new RuntimeConfigError(
-      "DEPLOYMENT_MODE=multiTenant is not supported in Phase 1. " +
-        "Phase 1 runtime is single-tenant only (singleTenant). " +
-        "Optional multiTenant is a Phase 4 platformization capability.",
-    );
-  }
-  throw new RuntimeConfigError(
-    "Invalid DEPLOYMENT_MODE. Phase 1 runtime supports singleTenant only.",
-  );
-}
-
-/**
- * Check whether a string environment variable represents a truthy value.
- *
- * Recognised truthy values: `"true"` and `"1"` (case-sensitive).
- *
- * @param value - Raw environment variable string (may be `undefined`).
- * @returns `true` when the value is truthy; `false` otherwise.
- */
-function isTruthy(value: string | undefined): boolean {
-  return value === "true" || value === "1";
-}
-
-/**
- * Parse a positive integer from a string environment variable, falling back
- * to a default when the value is missing, empty, non-numeric, or non-positive.
- *
- * @param value - Raw environment variable string (may be `undefined`).
- * @param fallback - Default value returned when parsing fails or the value is absent.
- * @returns A positive integer, either parsed or the fallback.
- */
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (value === undefined || value === "") return fallback;
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) return fallback;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return n;
-}
-
-/**
- * Resolve the JWT signing secret from `JWT_SECRET`. In production mode an
- * unset value causes a fast startup failure; in non-production modes a
- * development-only placeholder is used.
- *
- * @param env - Process environment to read from.
- * @param mode - Current {@link AppMode}.
- * @returns The resolved JWT secret string.
- */
-function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
-  const secret = env.JWT_SECRET;
-  if (secret) return secret;
-  if (mode === "production") {
-    throw new RuntimeConfigError("JWT_SECRET is required in production");
-  }
-  return DEFAULT_JWT_SECRET;
-}
-
-/**
- * Resolve the database connection URL.
- *
- * Delegates to the single-source resolver in `@exam/db` (which routes by
- * APP_MODE: test/ci/e2e → TEST_DATABASE_URL, else DATABASE_URL) and wraps any
- * error as a {@link RuntimeConfigError}. The `mode` argument is retained for
- * signature compatibility but the core resolver re-derives mode from env so
- * the two cannot diverge.
- *
- * @param env - Process environment to read from.
- * @param mode - Current {@link AppMode} (unused; kept for API compatibility).
- * @returns The resolved database connection URL.
+ * Resolve the database connection URL — delegated to the single-source
+ * resolver in `@exam/db` (mode routing, constructed local URLs, test
+ * name-safety). The `mode` argument is retained for signature clarity;
+ * the core resolver re-derives mode from env so the two cannot diverge.
  */
 function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
   try {
@@ -431,53 +300,12 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
 }
 
 /**
- * Resolve the CORS origin(s) from `CORS_ORIGIN`. In production, the value
- * is required and a missing value triggers a fast failure. In non-production
- * modes the default is `http://localhost:${VITE_PORT}` (default 5173) —
- * VITE_PORT owns the dev web port, so the API origin follows the port Vite
- * actually serves on. Comma-separated values are split into an array; a
- * single origin is returned as a plain string.
- *
- * @param env - Process environment to read from.
- * @param mode - Current {@link AppMode}.
- * @returns A single origin string, or an array when multiple origins are configured.
+ * Derive the default dev web origin from the resolved VITE_PORT (the single
+ * owner of the dev web port). Used only when CORS_ORIGIN / PUBLIC_WEB_ORIGIN
+ * are unset in non-production modes; explicit values always win.
  */
-function resolveCorsOrigin(
-  env: NodeJS.ProcessEnv,
-  mode: AppMode,
-): string | string[] {
-  let raw: string | undefined;
-  if (mode === "production") {
-    raw = env.CORS_ORIGIN;
-    if (!raw) {
-      throw new RuntimeConfigError("CORS_ORIGIN is required in production");
-    }
-  } else {
-    raw = env.CORS_ORIGIN || defaultDevWebOrigin(env);
-  }
-  if (raw.includes(",")) {
-    const parts = raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    if (parts.length === 1) return parts[0]!;
-    return parts;
-  }
-  return raw;
-}
-
-/** VITE_PORT fallback — the conventional Vite dev port (verified available on
- * WSL2 + Docker Desktop; see docs/development/ports.md). */
-const DEFAULT_VITE_PORT = "5173";
-
-/**
- * Derive the default dev web origin from VITE_PORT (the single owner of the
- * dev web port). Used only when CORS_ORIGIN / PUBLIC_WEB_ORIGIN are unset in
- * non-production modes; explicit values always win.
- */
-function defaultDevWebOrigin(env: NodeJS.ProcessEnv): string {
-  const port = env.VITE_PORT?.trim() || DEFAULT_VITE_PORT;
-  return `http://localhost:${port}`;
+function defaultDevWebOrigin(s: ResolvedSettings): string {
+  return `http://localhost:${s.app.VITE_PORT}`;
 }
 
 /**
@@ -487,171 +315,50 @@ function defaultDevWebOrigin(env: NodeJS.ProcessEnv): string {
  * must never hijack the local dev API, and a stale `DEV_API_PORT` must never
  * override the container identity in production. The owner is therefore
  * mode-aware:
- *   - development → DEV_API_PORT ?? 3000. APP_PORT is deliberately ignored —
- *     it is container-internal only (Compose sets it; a bare `pnpm dev` must
- *     bind DEV_API_PORT even when a leftover APP_PORT=3000 exists).
- *   - production  → APP_PORT ?? 3000. Container identity (every Compose file
- *     fixes it at 3000; host publishing is EXAM_PORT). DEV_API_PORT never
- *     reaches production.
- *   - test/e2e/ci → APP_PORT ?? DEV_API_PORT ?? 3000. The runner decides:
- *     Docker E2E (docker-compose.test.yml) sets APP_PORT (container-internal
- *     3000); WSL E2E (run-wsl.sh) sets DEV_API_PORT per shard. Container
- *     identity wins when both are set.
- *
- * @param env  - Process environment to read from.
- * @param mode - Current {@link AppMode}.
- * @returns The resolved bind port (positive integer).
+ *   - development → DEV_API_PORT. APP_PORT is deliberately ignored — it is
+ *     container-internal only (Compose sets it; a bare `pnpm dev` must bind
+ *     DEV_API_PORT even when a leftover APP_PORT=3000 exists).
+ *   - production  → APP_PORT. Container identity (every Compose file fixes
+ *     it at 3000; host publishing is EXAM_PORT).
+ *   - test/e2e/ci → APP_PORT ?? DEV_API_PORT. The runner decides: Docker E2E
+ *     sets APP_PORT; the WSL runner sets DEV_API_PORT per shard.
  */
-function resolveApiBindPort(env: NodeJS.ProcessEnv, mode: AppMode): number {
+function resolveApiBindPort(s: ResolvedSettings, mode: AppMode): number {
   if (mode === "production") {
-    return parsePositiveInt(env.APP_PORT, 3000);
+    return s.app.APP_PORT ?? 3000;
   }
   if (mode === "development") {
-    return parsePositiveInt(env.DEV_API_PORT, 3000);
+    return s.app.DEV_API_PORT ?? 3000;
   }
-  return parsePositiveInt(
-    env.APP_PORT,
-    parsePositiveInt(env.DEV_API_PORT, 3000),
-  );
+  return s.app.APP_PORT ?? s.app.DEV_API_PORT ?? 3000;
 }
 
 /**
- * Resolves and validates PUBLIC_WEB_ORIGIN (P5-N1 §12).
- *
- * The value is an absolute origin (scheme + host[+port], no path, no trailing
- * slash). Production requires the env var; non-production defaults to the Vite
- * dev origin derived from VITE_PORT so a bare `pnpm dev` works. The renderer
- * re-validates at combine time as defense in depth.
+ * Resolve the CORS origin(s): comma-list split/trim/filter over the raw
+ * value, defaulting (non-production only — the settings leaf fails fast in
+ * production) to the Vite dev origin derived from VITE_PORT.
  */
-function resolvePublicWebOrigin(env: NodeJS.ProcessEnv, mode: AppMode): string {
-  let raw: string | undefined;
-  if (mode === "production") {
-    raw = env.PUBLIC_WEB_ORIGIN;
-    if (!raw) {
-      throw new RuntimeConfigError(
-        "PUBLIC_WEB_ORIGIN is required in production (used to build Email links)",
-      );
-    }
-  } else {
-    raw = env.PUBLIC_WEB_ORIGIN || defaultDevWebOrigin(env);
+function resolveCorsOrigin(s: ResolvedSettings): string | string[] {
+  const raw = s.app.CORS_ORIGIN || defaultDevWebOrigin(s);
+  if (raw.includes(",")) {
+    const parts = raw
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0);
+    if (parts.length === 1) return parts[0]!;
+    return parts;
   }
-  const trimmed = raw.replace(/\/+$/, "");
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    throw new RuntimeConfigError(
-      `PUBLIC_WEB_ORIGIN must be an absolute origin (scheme + host[+port], no path, no trailing slash); got: ${raw}`,
-    );
-  }
-  if (
-    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
-    parsed.username ||
-    parsed.password ||
-    parsed.search ||
-    parsed.hash ||
-    (parsed.pathname !== "/" && parsed.pathname !== "")
-  ) {
-    throw new RuntimeConfigError(
-      `PUBLIC_WEB_ORIGIN must be an absolute origin (scheme + host[+port], no path, no trailing slash); got: ${raw}`,
-    );
-  }
-  return trimmed;
+  return raw;
 }
 
 /**
- * Public helper for callers (e.g. migration scripts) that only need the
- * database URL without forcing the full runtime config validation
- * (which requires JWT_SECRET / CORS_ORIGIN in production).
+ * Resolve the Redis runtime config from resolved settings (P7):
+ * `REDIS_MODE=optional|required` without `REDIS_URL` fails fast; an unset
+ * mode derives from URL presence (optional when a URL exists, else off).
  */
-export function resolveDatabaseUrlFromEnv(env: NodeJS.ProcessEnv): string {
-  try {
-    return resolveDatabaseUrlCore(env);
-  } catch (err) {
-    throw new RuntimeConfigError((err as Error).message);
-  }
-}
-
-/**
- * Resolve the Redis connection URL from `REDIS_URL`. Redis is optional:
- * when `REDIS_URL` is unset or empty, Redis is disabled and the URL is null.
- *
- * @param env - Process environment to read from.
- * @returns The resolved Redis URL or null when disabled.
- */
-function resolveRedisUrl(env: NodeJS.ProcessEnv): string | null {
-  const url = env.REDIS_URL;
-  if (!url) return null;
-  const trimmed = url.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
-/**
- * Resolve the Redis runtime mode from `REDIS_MODE`.
- *
- * - unset: `"optional"` when `REDIS_URL` is set (post-P7 default: use Redis
- *   when healthy, degrade safely when not), else `"off"`.
- * - explicit `"off"`: Redis is never created, even when a URL is set.
- * - explicit `"optional"` / `"required"`: must be accompanied by `REDIS_URL`
- *   (fail fast otherwise — an operator that explicitly asked for Redis but
- *   forgot the URL is a misconfiguration, not a silent off).
- *
- * @param env - Process environment to read from.
- * @returns The resolved {@link RedisMode}.
- */
-function resolveRedisMode(env: NodeJS.ProcessEnv): RedisMode {
-  const raw = (env.REDIS_MODE ?? "").trim();
-  if (raw === "") {
-    return resolveRedisUrl(env) !== null ? "optional" : "off";
-  }
-  if (raw === "off" || raw === "optional" || raw === "required") {
-    return raw;
-  }
-  throw new RuntimeConfigError(
-    `REDIS_MODE must be "off", "optional" or "required" (got: ${raw})`,
-  );
-}
-
-/**
- * Parse a positive integer timeout env value with fail-fast validation.
- * Empty/whitespace falls back to the default; non-numeric or non-positive
- * values throw a {@link RuntimeConfigError} so a misconfigured timeout is
- * never silently coerced.
- */
-function resolveTimeoutMs(
-  env: NodeJS.ProcessEnv,
-  key: string,
-  fallback: number,
-): number {
-  const raw = env[key]?.trim();
-  if (!raw) return fallback;
-  if (!/^\d+$/.test(raw)) {
-    throw new RuntimeConfigError(
-      `${key} must be a positive integer (got: ${raw})`,
-    );
-  }
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new RuntimeConfigError(
-      `${key} must be a positive integer (got: ${raw})`,
-    );
-  }
-  return n;
-}
-
-/**
- * Resolve and validate the full Redis runtime config (P7).
- *
- * Validation rules:
- * - `REDIS_MODE=optional|required` without `REDIS_URL` fails fast.
- * - Timeouts are positive integers with documented LAN-friendly defaults.
- *
- * @param env - Process environment to read from.
- * @returns The resolved {@link RedisConfig}.
- */
-function resolveRedisConfig(env: NodeJS.ProcessEnv): RedisConfig {
-  const mode = resolveRedisMode(env);
-  const url = resolveRedisUrl(env);
+function resolveRedisConfig(s: ResolvedSettings): RedisConfig {
+  const url = s.redis.REDIS_URL;
+  const mode = s.redis.REDIS_MODE ?? (url !== null ? "optional" : "off");
   if (mode !== "off" && url === null) {
     throw new RuntimeConfigError(
       `REDIS_MODE=${mode} requires REDIS_URL to be set`,
@@ -661,173 +368,86 @@ function resolveRedisConfig(env: NodeJS.ProcessEnv): RedisConfig {
     mode: mode === "off" || url === null ? "off" : mode,
     url,
     enabled: mode !== "off" && url !== null,
-    keyPrefix: env.REDIS_KEY_PREFIX ?? "",
-    connectTimeoutMs: resolveTimeoutMs(env, "REDIS_CONNECT_TIMEOUT_MS", 2000),
-    commandTimeoutMs: resolveTimeoutMs(env, "REDIS_COMMAND_TIMEOUT_MS", 1000),
-    startupTimeoutMs: resolveTimeoutMs(env, "REDIS_STARTUP_TIMEOUT_MS", 8000),
+    keyPrefix: s.redis.REDIS_KEY_PREFIX,
+    connectTimeoutMs: s.redis.REDIS_CONNECT_TIMEOUT_MS,
+    commandTimeoutMs: s.redis.REDIS_COMMAND_TIMEOUT_MS,
+    startupTimeoutMs: s.redis.REDIS_STARTUP_TIMEOUT_MS,
   };
 }
 
 /**
- * Parse a boolean env value strictly: only `"true"` and `"false"` (case-
- * sensitive) are accepted. Anything else throws, so a misconfigured boolean
- * fails fast rather than silently coercing.
- */
-function parseStrictBool(value: string | undefined, name: string): boolean {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  throw new RuntimeConfigError(
-    `${name} must be "true" or "false" (got: ${String(value)})`,
-  );
-}
-
-/**
- * Resolve the email runtime config from env (M3 — Email Outbox).
- *
- * Defaults are safe: disabled, fake transport, success fake mode, and (when
- * SMTP is configured) TLS-required + certificate-validation-on. Invalid
- * combinations fail fast: unsupported transport/fakeMode, non-numeric port,
- * non-boolean secure, smtp transport without SMTP_HOST, and out-of-range
- * maxAttempts / retryBaseSeconds.
- *
- * Note: `SMTP_TLS_REJECT_UNAUTHORIZED=false` in production is a security risk;
- * this resolver surfaces it but does NOT hard-fail (per job spec it may warn).
- * Hard enforcement is left to the SMTP sender / deployment policy.
- *
- * @param env - Process environment to read from.
- * @returns The resolved {@link EmailConfig}.
+ * Resolve the email runtime config (M3 — Email Outbox) from resolved
+ * settings. Cross-field policy: `EMAIL_TRANSPORT=smtp` requires SMTP_HOST;
+ * test-like modes force smtp → fake (see the guard below).
  */
 function resolveEmailConfig(
-  env: NodeJS.ProcessEnv,
-  opts: { isTestLike: boolean } = { isTestLike: false },
+  s: ResolvedSettings,
+  opts: { isTestLike: boolean },
 ): EmailConfig {
-  const enabled = isTruthy(env.EMAIL_ENABLED);
-  let transportRaw = (env.EMAIL_TRANSPORT ?? "fake").trim();
+  let transport = s.email.EMAIL_TRANSPORT;
 
   // Test-mode hard guard: NEVER honor smtp in test/e2e/ci, even if a stale
   // or misconfigured env says so. This prevents tests from accidentally
   // constructing a real nodemailer transport (and potentially sending real
   // mail via POST /api/email/test) when a dev .env with EMAIL_TRANSPORT=smtp
   // leaks into the test runtime. See docs/architecture/email-config.md §6.
-  if (opts.isTestLike && transportRaw === "smtp") {
+  if (opts.isTestLike && transport === "smtp") {
     // TODO: replace with the app logger once one is available at config-load
     // time. Using stderr directly keeps this side-effect free of fastify.
     process.stderr.write(
       "[runtimeConfig] EMAIL_TRANSPORT=smtp ignored in test/e2e/ci mode; forcing 'fake' to prevent real SMTP/network use in tests.\n",
     );
-    transportRaw = "fake";
+    transport = "fake";
   }
-
-  if (transportRaw !== "fake" && transportRaw !== "smtp") {
-    throw new RuntimeConfigError(
-      `EMAIL_TRANSPORT must be "fake" or "smtp" (got: ${transportRaw})`,
-    );
-  }
-  const fakeModeRaw = (env.EMAIL_FAKE_MODE ?? "success").trim();
-  if (fakeModeRaw !== "success" && fakeModeRaw !== "failure") {
-    throw new RuntimeConfigError(
-      `EMAIL_FAKE_MODE must be "success" or "failure" (got: ${fakeModeRaw})`,
-    );
-  }
-
-  const maxAttempts = positiveIntSchema.parse(env.EMAIL_MAX_ATTEMPTS ?? "3");
-  const retryBaseSeconds = positiveIntSchema.parse(
-    env.EMAIL_RETRY_BASE_SECONDS ?? "60",
-  );
-  const fakeDelayMs = nonNegativeIntSchema.parse(
-    env.EMAIL_FAKE_DELAY_MS ?? "0",
-  );
 
   let smtp: SmtpConfig | null = null;
-  if (transportRaw === "smtp") {
-    const host = (env.SMTP_HOST ?? "").trim();
+  if (transport === "smtp") {
+    const host = s.email.SMTP_HOST;
     if (host.length === 0) {
       throw new RuntimeConfigError(
         "EMAIL_TRANSPORT=smtp requires SMTP_HOST to be set",
       );
     }
-    const port = positiveIntSchema.parse(env.SMTP_PORT ?? "587");
-    const secure = parseStrictBool(env.SMTP_SECURE ?? "false", "SMTP_SECURE");
-    const requireTls = parseStrictBool(
-      env.SMTP_REQUIRE_TLS ?? "true",
-      "SMTP_REQUIRE_TLS",
-    );
-    const tlsRejectUnauthorized = parseStrictBool(
-      env.SMTP_TLS_REJECT_UNAUTHORIZED ?? "true",
-      "SMTP_TLS_REJECT_UNAUTHORIZED",
-    );
-    const servernameRaw = (env.SMTP_TLS_SERVERNAME ?? "").trim();
-    const connectionTimeoutMs = positiveIntSchema.parse(
-      env.SMTP_CONNECTION_TIMEOUT_MS ?? "10000",
-    );
-    const greetingTimeoutMs = positiveIntSchema.parse(
-      env.SMTP_GREETING_TIMEOUT_MS ?? "10000",
-    );
-    const socketTimeoutMs = positiveIntSchema.parse(
-      env.SMTP_SOCKET_TIMEOUT_MS ?? "10000",
-    );
     smtp = {
       host,
-      port,
-      secure,
-      user: env.SMTP_USER ?? "",
-      password: env.SMTP_PASSWORD ?? "",
-      requireTls,
-      tlsRejectUnauthorized,
-      tlsServername: servernameRaw.length > 0 ? servernameRaw : null,
-      connectionTimeoutMs,
-      greetingTimeoutMs,
-      socketTimeoutMs,
+      port: s.email.SMTP_PORT,
+      secure: s.email.SMTP_SECURE,
+      user: s.email.SMTP_USER,
+      password: s.email.SMTP_PASSWORD,
+      requireTls: s.email.SMTP_REQUIRE_TLS,
+      tlsRejectUnauthorized: s.email.SMTP_TLS_REJECT_UNAUTHORIZED,
+      tlsServername:
+        s.email.SMTP_TLS_SERVERNAME.length > 0
+          ? s.email.SMTP_TLS_SERVERNAME
+          : null,
+      connectionTimeoutMs: s.email.SMTP_CONNECTION_TIMEOUT_MS,
+      greetingTimeoutMs: s.email.SMTP_GREETING_TIMEOUT_MS,
+      socketTimeoutMs: s.email.SMTP_SOCKET_TIMEOUT_MS,
     };
   }
 
   return {
-    enabled,
-    transport: transportRaw,
-    from: (env.EMAIL_FROM ?? "no-reply@example.local").trim(),
-    fromName: (env.EMAIL_FROM_NAME ?? "Exam Platform").trim(),
-    fakeMode: fakeModeRaw,
-    fakeDelayMs,
-    maxAttempts,
-    retryBaseSeconds,
+    enabled: s.email.EMAIL_ENABLED,
+    transport,
+    from: s.email.EMAIL_FROM,
+    fromName: s.email.EMAIL_FROM_NAME,
+    fakeMode: s.email.EMAIL_FAKE_MODE,
+    fakeDelayMs: s.email.EMAIL_FAKE_DELAY_MS,
+    maxAttempts: s.email.EMAIL_MAX_ATTEMPTS,
+    retryBaseSeconds: s.email.EMAIL_RETRY_BASE_SECONDS,
     smtp,
   };
 }
 
 /**
- * Resolve the email delivery worker runtime configuration from env (P5-0).
- *
- * All parameters have safe defaults for local development. Production
- * deployments should tune these via environment variables.
+ * Resolve the email delivery worker configuration (P5-0) from resolved
+ * settings, enforcing the P7-S2-D lease sanity guard.
  */
 function resolveEmailWorkerConfig(
-  env: NodeJS.ProcessEnv,
-  email: ReturnType<typeof resolveEmailConfig>,
+  s: ResolvedSettings,
+  email: EmailConfig,
 ): EmailWorkerConfig {
-  const pollIntervalMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_POLL_INTERVAL_MS ?? "5000",
-  );
-  const batchSize = positiveIntSchema.parse(
-    env.EMAIL_WORKER_BATCH_SIZE ?? "20",
-  );
-  const lockTimeoutMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_LOCK_TIMEOUT_MS ?? "300000",
-  );
-  const heartbeatStaleThresholdMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_HEARTBEAT_STALE_MS ?? "60000",
-  );
-  // INVARIANT (#351 shutdown budget contract): this default is one term of
-  // the deployment budget hierarchy —
-  //   container stop grace (compose stop_grace_period, 45s)
-  //     > email loop drain (this, 8s) + audit drain (10s) + DB pool close (10s)
-  //     > each individual component budget.
-  // Do not raise it without raising stop_grace_period in docker-compose.yml.
-  const shutdownTimeoutMs = positiveIntSchema.parse(
-    env.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS ?? "8000",
-  );
-  // Concurrency is fixed at 1 for Phase 1 (single worker instance).
-  // The config field exists for forward compatibility.
-  const concurrency = 1;
+  const lockTimeoutMs = s.emailWorker.EMAIL_WORKER_LOCK_TIMEOUT_MS;
 
   // P7-S2-D lease sanity guard (fail-fast, SMTP transport only):
   //
@@ -839,9 +459,7 @@ function resolveEmailWorkerConfig(
   // smtp-connection implementation, `apps/api/node_modules/nodemailer`):
   //
   //   DNS resolution      dnsTimeout, default 30000ms — SERIAL, runs before
-  //                       any connection attempt (`connect()` → shared
-  //                       resolveHostname with `timeout: dnsTimeout`), NOT
-  //                       modeled by this check
+  //                       any connection attempt, NOT modeled by this check
   //   TCP/TLS connect     connectionTimeout — SERIAL, bounded
   //   SMTP greeting       greetingTimeout — SERIAL, bounded
   //   mail conversation   socketTimeout — INACTIVITY only; reset on traffic,
@@ -879,13 +497,34 @@ function resolveEmailWorkerConfig(
   }
 
   return {
-    pollIntervalMs,
-    batchSize,
+    pollIntervalMs: s.emailWorker.EMAIL_WORKER_POLL_INTERVAL_MS,
+    batchSize: s.emailWorker.EMAIL_WORKER_BATCH_SIZE,
     lockTimeoutMs,
-    heartbeatStaleThresholdMs,
-    shutdownTimeoutMs,
-    concurrency,
+    heartbeatStaleThresholdMs: s.emailWorker.EMAIL_WORKER_HEARTBEAT_STALE_MS,
+    // INVARIANT (#351 shutdown budget contract): this default is one term of
+    // the deployment budget hierarchy —
+    //   container stop grace (compose stop_grace_period, 45s)
+    //     > email loop drain (this, 8s) + audit drain (10s) + DB pool close (10s)
+    //     > each individual component budget.
+    // Do not raise it without raising stop_grace_period in docker-compose.yml.
+    shutdownTimeoutMs: s.emailWorker.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS,
+    // Concurrency is fixed at 1 for Phase 1 (single worker instance).
+    // The config field exists for forward compatibility.
+    concurrency: 1,
   };
+}
+
+/**
+ * Public helper for callers (e.g. migration scripts) that only need the
+ * database URL without forcing the full runtime config validation
+ * (which requires JWT_SECRET / CORS_ORIGIN in production).
+ */
+export function resolveDatabaseUrlFromEnv(env: NodeJS.ProcessEnv): string {
+  try {
+    return resolveDatabaseUrlCore(env);
+  } catch (err) {
+    throw new RuntimeConfigError((err as Error).message);
+  }
 }
 
 /**
@@ -898,20 +537,27 @@ export function loadRuntimeConfig(
   const mode = parseAppMode(env);
   const isProduction = mode === "production";
   const isTestLike = mode === "test" || mode === "e2e" || mode === "ci";
-  const envValue = parseAppEnv(env.NODE_ENV);
-  const deploymentMode = parseDeploymentMode(env.DEPLOYMENT_MODE);
 
-  const apiReferenceEnabled = isTruthy(env.API_DOCS_ENABLED) && !isProduction;
+  // Delegated DB resolution runs FIRST: a missing production DATABASE_URL is
+  // reported before any settings leaf (historic precedence, pinned by tests).
+  const databaseUrl = resolveDatabaseUrl(env, mode);
 
-  const scanIntervalMs = positiveIntSchema.parse(
-    env.HEARTBEAT_SCAN_INTERVAL_MS ?? "30000",
-  );
-  const deadlineScanIntervalMs = positiveIntSchema.parse(
-    env.DEADLINE_SCAN_INTERVAL_MS ?? scanIntervalMs.toString(),
-  );
-  const timeoutMs = positiveIntSchema.parse(
-    env.HEARTBEAT_TIMEOUT_MS ?? "60000",
-  );
+  let s: ResolvedSettings;
+  try {
+    s = resolveSettings(env, mode);
+  } catch (err) {
+    if (err instanceof Error && err.name === "SettingsError") {
+      throw new RuntimeConfigError(err.message);
+    }
+    throw err;
+  }
+
+  const apiReferenceEnabled = s.app.API_DOCS_ENABLED && !isProduction;
+
+  const scanIntervalMs = s.app.HEARTBEAT_SCAN_INTERVAL_MS;
+  const deadlineScanIntervalMs =
+    s.app.DEADLINE_SCAN_INTERVAL_MS ?? scanIntervalMs;
+  const timeoutMs = s.app.HEARTBEAT_TIMEOUT_MS;
   if (timeoutMs % 1000 !== 0) {
     throw new RuntimeConfigError(
       `HEARTBEAT_TIMEOUT_MS must be a multiple of 1000, got ${timeoutMs}`,
@@ -919,27 +565,25 @@ export function loadRuntimeConfig(
   }
   const heartbeatTimeoutSeconds = Math.floor(timeoutMs / 1000);
 
-  const redis = resolveRedisConfig(env);
-
-  const email = resolveEmailConfig(env, { isTestLike });
+  const email = resolveEmailConfig(s, { isTestLike });
 
   return {
     app: { mode, isProduction, isTestLike },
-    env: envValue,
-    mode: deploymentMode,
-    port: resolveApiBindPort(env, mode),
-    host: env.HOST || "0.0.0.0",
-    database: { url: resolveDatabaseUrl(env, mode) },
-    redis,
+    env: s.app.NODE_ENV,
+    mode: s.app.DEPLOYMENT_MODE,
+    port: resolveApiBindPort(s, mode),
+    host: s.app.HOST,
+    database: { url: databaseUrl },
+    redis: resolveRedisConfig(s),
     authSecret: {
-      jwtSecret: resolveJwtSecret(env, mode),
-      cookieSecure: isProduction || isTruthy(env.COOKIE_SECURE),
+      jwtSecret: s.auth.JWT_SECRET,
+      cookieSecure: isProduction || s.app.COOKIE_SECURE,
     },
-    cors: { origin: resolveCorsOrigin(env, mode) },
+    cors: { origin: resolveCorsOrigin(s) },
     features: {
-      restoreFrontend: isTruthy(env.FEATURE_RESTORE_FRONTEND),
-      manualExamOpenClose: isTruthy(env.FEATURE_MANUAL_EXAM_OPEN_CLOSE),
-      liveScoreList: isTruthy(env.FEATURE_LIVE_SCORE_LIST),
+      restoreFrontend: s.app.FEATURE_RESTORE_FRONTEND,
+      manualExamOpenClose: s.app.FEATURE_MANUAL_EXAM_OPEN_CLOSE,
+      liveScoreList: s.app.FEATURE_LIVE_SCORE_LIST,
     },
     heartbeat: {
       scanIntervalMs,
@@ -954,7 +598,7 @@ export function loadRuntimeConfig(
       staticCSP: true,
     },
     tenancy: {
-      mode: deploymentMode,
+      mode: s.app.DEPLOYMENT_MODE,
       defaultTenantSlug: "default",
       // Phase 1: internal default organization only.
       // Not a current multi-tenant runtime mode; always false in Phase 1.
@@ -967,23 +611,24 @@ export function loadRuntimeConfig(
       exposeSuperAdmin: false,
     },
     rateLimit: {
-      enabled: mode !== "e2e" && !isTruthy(env.RATE_LIMIT_DISABLED),
-      max: parsePositiveInt(env.RATE_LIMIT_MAX, 100),
-      timeWindow: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
+      enabled: mode !== "e2e" && !s.app.RATE_LIMIT_DISABLED,
+      max: s.app.RATE_LIMIT_MAX,
+      timeWindow: s.app.RATE_LIMIT_WINDOW_MS,
     },
     security: {
       cspEnabled: true,
     },
-    timezone: { timezone: resolveTimezone(env) },
+    timezone: { timezone: s.app.APP_TIMEZONE },
     email,
-    emailWorker: resolveEmailWorkerConfig(env, email),
-    publicWebOrigin: { origin: resolvePublicWebOrigin(env, mode) },
+    emailWorker: resolveEmailWorkerConfig(s, email),
+    publicWebOrigin: {
+      origin: s.app.PUBLIC_WEB_ORIGIN ?? defaultDevWebOrigin(s),
+    },
     launchpad: {
       // P7-C1: unset/empty LAUNCHPAD_SETUP_TOKEN disables launchpad (the
       // bootstrap endpoint refuses). NOT fail-fast — a bare `docker compose
-      // up` without launchpad configured must start normally. Trimmed to
-      // treat a whitespace-only value as unset.
-      setupToken: (env.LAUNCHPAD_SETUP_TOKEN ?? "").trim(),
+      // up` without launchpad configured must start normally.
+      setupToken: s.app.LAUNCHPAD_SETUP_TOKEN,
     },
   };
 }
