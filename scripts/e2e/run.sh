@@ -26,7 +26,10 @@
 #   COMPOSE_PROJECT_NAME 隔离多个并发运行，默认 exam-e2e
 #   KEEP_STACK=1         等价于 --keep
 #
-# 退出码：直接透传 e2e 容器（playwright）退出码。
+# 退出码：
+#   测试（playwright）或预检失败 → 退出码直传；清理失败仅作 stderr 诊断。
+#   测试通过但清理（compose down -v）失败 → sentinel 70（与 run-wsl 清理语义一致）。
+#   清理永不掩盖测试失败，也永不把失败的清理吞成 0。
 
 set -Eeuo pipefail
 
@@ -49,7 +52,7 @@ SPEC_KEYS=()
 EXTRA_PW_ARGS=()
 
 usage() {
-  sed -n '3,30p' "$0"
+  sed -n '3,33p' "$0"
 }
 
 # ----- 参数解析 -----
@@ -92,15 +95,40 @@ warn() { printf '\033[1;33m[e2e]\033[0m %s\n' "$*" >&2; }
 err()  { printf '\033[1;31m[e2e]\033[0m %s\n' "$*" >&2; }
 
 # ----- 清理 -----
+# Exit-code priority matrix — same contract as run-wsl-lib.sh
+# compute_final_exit (issue #375):
+#
+#   tests | cleanup | final
+#   ------+---------+------
+#   pass  | pass    | 0
+#   fail  | pass    | test/preflight exit code
+#   pass  | fail    | 70 (cleanup-failure sentinel)
+#   fail  | fail    | test/preflight exit code; cleanup error to stderr
+#
+# `exit` (not `return`) inside the handler is what publishes the final code —
+# a bare `return` would restore the pre-trap $? and drop the sentinel.
+# `trap - EXIT` prevents trap re-entry when `exit` fires inside the handler.
 cleanup() {
   local code=$?
+  trap - EXIT
   if [[ "$KEEP_STACK" == "1" ]]; then
     warn "KEEP_STACK=1，保留 stack。手动清理：docker compose -f $COMPOSE_FILE -p $PROJECT_NAME down -v"
-    return $code
+    exit "$code"
   fi
   log "清理 stack（含数据卷）..."
-  compose down -v --remove-orphans >/dev/null 2>&1 || true
-  return $code
+  local down_out
+  if down_out="$(compose down -v --remove-orphans 2>&1)"; then
+    exit "$code"
+  fi
+  err "compose down -v 失败 (project=$PROJECT_NAME)。docker compose 输出："
+  printf '%s\n' "$down_out" >&2
+  err "手动清理：docker compose -f $COMPOSE_FILE -p $PROJECT_NAME down -v"
+  if [[ "$code" -eq 0 ]]; then
+    err "测试通过但清理失败 → 以 sentinel 70 退出。"
+    exit 70
+  fi
+  warn "测试已失败 (exit=$code)，保留测试退出码；清理失败仅作诊断。"
+  exit "$code"
 }
 trap cleanup EXIT
 trap 'err "中断"; exit 130' INT TERM

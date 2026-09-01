@@ -71,7 +71,7 @@
     "formal:operator-grant": "pnpm formal:operator-grant:runner-test && node scripts/formal/run-operator-grant-tlc.mjs all",
     "test:operator-grant-race": "pnpm --filter @exam/api exec vitest run src/routes/attempts/admin-time-grants.concurrency.test.ts --reporter=verbose",
     "test:operator-grant-race:repeat": "node scripts/test/run-operator-grant-race-repeat.mjs",
-    "test:e2e-runner": "node --test scripts/e2e/run-wsl-lib.test.mjs",
+    "test:e2e-runner": "node --test scripts/e2e/run-wsl-lib.test.mjs scripts/e2e/run.test.mjs",
     "test:db-journal": "node --test scripts/db/check-postgres-migration-journal.test.mjs",
     "prepare": "husky",
     "test:stale-ui-docs": "node --test scripts/check-stale-ui-docs.test.mjs",
