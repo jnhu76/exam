@@ -1,8 +1,9 @@
 /**
  * Smoke contract for the manual frontend-primitives scanner: it must remain
- * executable (exit 0 = clean, 1 = findings — never a crash). The scanner
- * itself is intentionally manual (see its header); this test only proves the
- * manual declaration stays runnable.
+ * executable — exit 0 (clean) or 1 (findings) with the expected stdout banner
+ * and an empty stderr. INVARIANT: real findings and success print to stdout;
+ * stderr must stay empty because Node also exits 1 on uncaught import-time or
+ * top-level failures, which this test must not mistake for findings.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -18,6 +19,10 @@ test("check-frontend-primitives executes to a defined outcome", () => {
     res.status === 0 || res.status === 1,
     `scanner crashed (exit ${res.status}):\n${res.stderr}`,
   );
-  const out = `${res.stdout}${res.stderr}`;
-  assert.ok(out.trim().length > 0, "scanner produced no output");
+  assert.equal(
+    res.stderr.trim(),
+    "",
+    `scanner wrote to stderr (crash signature, not findings):\n${res.stderr}`,
+  );
+  assert.match(res.stdout, /^[✓✗]/, "scanner stdout missing the ✓/✗ banner");
 });
