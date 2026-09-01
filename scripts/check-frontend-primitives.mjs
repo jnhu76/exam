@@ -8,14 +8,16 @@
  * DatePicker / Calendar grids, Dialog/Modal, Select/Combobox, Popover,
  * DropdownMenu, Tooltip, Tabs, FocusTrap.
  *
- * NOT wired into CI by default. Run manually:
+ * NOT wired into CI by default — its co-occurrence heuristics still carry
+ * known findings (verified against the current tree); run manually:
  *   node scripts/check-frontend-primitives.mjs
+ * (scripts/check-frontend-primitives.test.mjs smoke-proves executability.)
  *
  * Design rules (per governance §10):
  * - Must not flag legitimate business components (row expanders, toggle
  *   states that drive a plain `aria-expanded` on a non-modal element).
- * - Targets apps/web/src/{pages,components/shared,components/exam,
- *   components/layout,components/app,lib,hooks} — never components/ui/.
+ * - Scan scope = shared business-UI authority (scripts/lib/ui-scan-roots.mjs)
+ *   plus an explicit lib/hooks delta — never components/ui/.
  * - Allow-list path fragments for known-safe business patterns.
  *
  * Exit codes: 0 = clean, 1 = findings.
@@ -23,23 +25,30 @@
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { BUSINESS_UI_ROOTS } from "./lib/ui-scan-roots.mjs";
 
 const ROOT = new URL("../apps/web/src", import.meta.url).pathname;
 const REPO = new URL("..", import.meta.url).pathname;
 
-// Directories to scan. components/ui is intentionally excluded — that is the
-// one place complex primitives are allowed to live.
-const SCAN_DIRS = [
-  "pages",
-  "components/shared",
-  "components/exam",
-  "components/layout",
-  "components/app",
-  "components/settings",
-  "components/question",
-  "lib",
-  "hooks",
-];
+// Base scope: the shared governed-business-UI authority, mapped to
+// apps/web/src-relative dirs. components/ui stays excluded — it is the one
+// place complex primitives are allowed to live.
+const WEB_SRC_PREFIX = "apps/web/src/";
+const businessUiDirs = BUSINESS_UI_ROOTS.map((root) => {
+  if (!root.startsWith(WEB_SRC_PREFIX)) {
+    throw new Error(
+      `check-frontend-primitives scans apps/web/src only; authority root ${root} is outside ${WEB_SRC_PREFIX}`,
+    );
+  }
+  return root.slice(WEB_SRC_PREFIX.length);
+});
+
+// Intentional narrow delta on top of the authority: hand-rolled interactive
+// primitives are a code-shape risk that can also hide in logic dirs, which
+// visual governance (colors/weights) does not treat as business UI.
+const EXTRA_SCAN_DIRS = ["lib", "hooks"];
+
+const SCAN_DIRS = [...businessUiDirs, ...EXTRA_SCAN_DIRS];
 
 // Path fragments that mark a file as known-safe (business component, not a
 // hand-rolled primitive). Add here only when a finding is reviewed and is a
@@ -163,12 +172,7 @@ async function main() {
 
   if (allFindings.length === 0) {
     console.log("✓ No handwritten UI primitives found outside components/ui/.");
-    console.log(
-      "  (Scanned: pages, components/shared, components/exam, components/layout,",
-    );
-    console.log(
-      "   components/app, components/settings, components/question, lib, hooks)",
-    );
+    console.log(`  (Scanned: ${SCAN_DIRS.join(", ")})`);
     process.exit(0);
   }
 
