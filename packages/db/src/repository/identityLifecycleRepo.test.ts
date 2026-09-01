@@ -15,7 +15,10 @@ import {
   type TransactionDatabase,
 } from "../types.js";
 import { schema } from "../schema/pg.js";
-import { createStaffInvitationRepo } from "./staffInvitationRepo.js";
+import {
+  createStaffInvitationRepo,
+  type StaffInvitationRow,
+} from "./staffInvitationRepo.js";
 import { createPasswordResetTokenRepo } from "./passwordResetTokenRepo.js";
 import { createUserRepo } from "./userRepo.js";
 import { hashToken, generateToken } from "@exam/auth/src/tokens.js";
@@ -286,13 +289,14 @@ describe("staffInvitationRepo (#297)", () => {
     expect(await repo.revokeById(ctx, invitation.id, NOW)).toBeNull();
   });
 
-  it("concurrent duplicate invite: exactly one success, the loser surfaces ConflictError (never a raw unique violation)", async () => {
+  it("concurrent duplicate invite: every interleaving leaves exactly ONE open invitation; any loser surfaces ConflictError (never a raw unique violation)", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "inviter-7");
     const aux = await auxDb();
+    const email = "dupe-race@example.com";
     const invite = (dbArg: Database, tag: string) =>
       inTx(dbArg, (tx) =>
         createStaffInvitationRepo(tx).createWithinTransaction(ctx, {
-          email: "dupe-race@example.com",
+          email,
           role: "Teacher",
           tokenHash: hashToken(`dupe-race-${tag}`),
           expiresAt: new Date(Date.now() + 3600 * 1000),
@@ -300,31 +304,135 @@ describe("staffInvitationRepo (#297)", () => {
           now: NOW,
         }),
       );
-    // Genuinely concurrent: separate connections, so the two INSERTs really
-    // contend on the partial unique index (not on a pool queue).
+    // Genuinely concurrent: separate connections. TWO interleavings are
+    // legal, and the assertions accept the full allowed outcome set instead
+    // of freezing one schedule:
+    //   a) both supersede UPDATEs run pre-commit — the loser's INSERT blocks
+    //      on the winner's uncommitted index entry and surfaces ConflictError
+    //      after the winner commits (deterministic in schedule INV-A below);
+    //   b) the second tx's supersede UPDATE runs after the winner committed —
+    //      it revokes that row and its own INSERT succeeds, which is exactly
+    //      the sequential supersede semantics. How many creates "won" is a
+    //      scheduling accident, not a contract; the ONE-OPEN-ROW storage
+    //      invariant is.
     const results = await Promise.allSettled([
       invite(db, "a"),
       invite(aux, "b"),
     ]);
-    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<StaffInvitationRow> =>
+        r.status === "fulfilled",
+    );
     const rejected = results.filter(
       (r): r is PromiseRejectedResult => r.status === "rejected",
     );
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect(rejected[0]!.reason).toBeInstanceOf(ConflictError);
-    // Exactly one OPEN invitation survives.
-    const open = await db
+    expect(fulfilled.length + rejected.length).toBe(2);
+    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
+    // A losing create, when this schedule produces one, surfaces the typed
+    // conflict — a raw SQLSTATE 23505 must never escape.
+    for (const r of rejected) {
+      expect(r.reason).toBeInstanceOf(ConflictError);
+    }
+    // Storage invariant under BOTH histories: exactly one OPEN invitation,
+    // owned by a successful create; the loser (index rejection or supersede)
+    // never leaves a second open row behind.
+    const rows = await db
       .select()
       .from(schema.staffInvitations)
-      .where(
-        and(
-          eq(schema.staffInvitations.email, "dupe-race@example.com"),
-          isNull(schema.staffInvitations.revokedAt),
-          isNull(schema.staffInvitations.consumedAt),
-        ),
-      );
+      .where(eq(schema.staffInvitations.email, email));
+    expect(rows).toHaveLength(fulfilled.length);
+    const open = rows.filter(
+      (r) => r.revokedAt === null && r.consumedAt === null,
+    );
+    const revoked = rows.filter((r) => r.revokedAt !== null);
     expect(open).toHaveLength(1);
+    expect(revoked).toHaveLength(rows.length - 1);
+    expect(fulfilled.map((r) => r.value.id)).toContain(open[0]!.id);
+  });
+
+  it("schedule INV-A — the loser's snapshot predates the winner's row: supersede provably sees nothing, the loser's INSERT blocks on the index and surfaces ConflictError", async () => {
+    const { userId, ctx } = await seedOrgAndUser(db, "inviter-8");
+    const aux = await auxDb();
+    const email = "dupe-race-serialized@example.com";
+    const aInserted = deferred();
+    const releaseA = deferred();
+
+    // A takes the full repo path and parks AFTER its INSERT: its (org, email)
+    // entry sits in the partial unique index, still uncommitted.
+    const txA = inTx(aux, async (tx) => {
+      const row = await createStaffInvitationRepo(tx).createWithinTransaction(
+        ctx,
+        {
+          email,
+          role: "Teacher",
+          tokenHash: hashToken("dupe-race-serialized-a"),
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          createdBy: userId,
+          now: NOW,
+        },
+      );
+      aInserted.resolve(); // A now HOLDS the open-invitation index entry
+      await releaseA.promise;
+      return row;
+    });
+    await aInserted.promise;
+
+    // B runs REPEATABLE READ and freezes its snapshot with its FIRST
+    // statement, while the main thread still holds A parked: row_a can
+    // never enter B's snapshot, so the supersede statement inside the repo
+    // path provably updates nothing no matter when A commits. The frozen
+    // snapshot — not statement scheduling — is the schedule pin: pinning
+    // via read-committed statement ordering instead would leave the
+    // in-path supersede racing A's COMMIT across two connections, and
+    // instrumentation-level timing shifts alone can flip that race into a
+    // legal two-fulfilled history that the rigid loser assertion rejects.
+    // With nothing superseded, the partial unique index is the only
+    // serialization point: B's INSERT must block on A's uncommitted entry
+    // and surface 23505 once A commits.
+    const bSnapshotFrozen = deferred();
+    const txB = executeInTransaction(
+      db,
+      async (tx) => {
+        await tx
+          .select()
+          .from(schema.staffInvitations)
+          .where(eq(schema.staffInvitations.email, email));
+        bSnapshotFrozen.resolve(); // snapshot frozen; row_a is invisible to B
+        return createStaffInvitationRepo(tx).createWithinTransaction(ctx, {
+          email,
+          role: "Grader",
+          tokenHash: hashToken("dupe-race-serialized-b"),
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          createdBy: userId,
+          now: NOW,
+        });
+      },
+      "repeatable read",
+    );
+    await bSnapshotFrozen.promise;
+
+    releaseA.resolve();
+    // Both promises settling IS the no-deadlock proof (a PostgreSQL deadlock
+    // would reject one tx with SQLSTATE 40P01). B also cannot retry through
+    // this schedule: unique_violation (23505) is not a retryable error in
+    // executeInTransaction, and plain REPEATABLE READ raises no 40001.
+    const results = await Promise.allSettled([txA, txB]);
+    expect(results[0]!.status).toBe("fulfilled");
+    expect(results[1]!.status).toBe("rejected");
+    expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
+      ConflictError,
+    );
+    // The winner's row survives OPEN; the loser's rolled-back tx left nothing.
+    const rows = await db
+      .select()
+      .from(schema.staffInvitations)
+      .where(eq(schema.staffInvitations.email, email));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(
+      (results[0] as PromiseFulfilledResult<StaffInvitationRow>).value.id,
+    );
+    expect(rows[0]!.revokedAt).toBeNull();
+    expect(rows[0]!.consumedAt).toBeNull();
   });
 });
 
@@ -335,7 +443,12 @@ describe("staffInvitationRepo (#297)", () => {
  * state. The default repeatable read + retry wrapper of executeInTransaction
  * would (a) hide an issuance-commit from a waiting deactivation's burn and
  * (b) retry through already-resolved test barriers, so it must not be used
- * for these deterministic schedules.
+ * for these deterministic schedules. The one deliberate exception is
+ * INV-A's loser transaction above: it passes "repeatable read" explicitly
+ * to freeze its snapshot before the winner's row can be visible — the
+ * schedule pin — and neither exception reason applies to it (nothing waits
+ * on a later commit through B's eyes, and its unique_violation failure is
+ * never retried).
  */
 function inTx<T>(dbArg: Database, fn: (tx: TransactionDatabase) => Promise<T>) {
   return executeInTransaction(dbArg, fn, "read committed");

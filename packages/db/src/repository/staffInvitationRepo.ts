@@ -56,12 +56,16 @@ export function createStaffInvitationRepo(db: Database) {
    * the same (organization, email) in the same transaction. Returns the
    * created row.
    *
-   * Concurrent duplicate invites for the same email serialize on the partial
-   * unique index: the loser's INSERT blocks until the winner commits and
-   * then fails with {@link ConflictError} (the supersede statement cannot
-   * see the winner's uncommitted row, so the index is the only
-   * serialization point). The violation is mapped HERE — a raw PostgreSQL
-   * unique error must never escape to the route layer as a 500.
+   * A concurrent duplicate invite whose supersede statement cannot see the
+   * winner's uncommitted row serializes on the partial unique index: the
+   * loser's INSERT blocks until the winner commits and then fails with
+   * {@link ConflictError} (the index is the only serialization point in
+   * that schedule). When the supersede statement DOES observe the winner's
+   * committed row, the second create legitimately supersedes it — two
+   * successes, the sequential supersede semantics; the index still leaves
+   * exactly ONE open invitation in both schedules. The violation is mapped
+   * HERE — a raw PostgreSQL unique error must never escape to the route
+   * layer as a 500.
    */
   async function createWithinTransaction(
     ctx: TenantContext | RequestContext,
