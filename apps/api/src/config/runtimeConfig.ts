@@ -119,9 +119,10 @@ export interface CorsConfig {
 
 /**
  * Public web origin used to build absolute URLs in server-generated content
- * (P5-N1 §12). Currently the only consumer is the grade_notification Email
- * renderer, which combines `PUBLIC_WEB_ORIGIN` with a validated site-relative
- * action path to produce an in-Email link back to the candidate result page.
+ * (P5-N1 §12): `PUBLIC_WEB_ORIGIN` combined with a validated site-relative
+ * path. Consumers include the identity one-time links (invitation
+ * acceptance, password reset) and the grade_notification Email renderer,
+ * which produces a link back to the candidate result page.
  *
  * Validated at boot to an absolute origin (scheme + host[+port], no path).
  * Defaults in non-production to `http://localhost:${VITE_PORT}` (VITE_PORT

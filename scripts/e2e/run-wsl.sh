@@ -15,6 +15,11 @@
 #   - HEARTBEAT_TIMEOUT_MS=15000    disconnect-restore spec 依赖 15s 超时
 #   - HEARTBEAT_SCAN_INTERVAL_MS=5000 / DEADLINE_SCAN_INTERVAL_MS=5000
 # 缺这些 env，disconnect/restore 类 spec 会因 scanner 时序不符而 timeout。
+#   - PUBLIC_WEB_ORIGIN           绑定 http://localhost:<本进程端口>。
+#     INVARIANT：身份一次性链接（邀请接受/密码重置）= PUBLIC_WEB_ORIGIN +
+#     固定站内路径，浏览器直接 goto 该绝对 URL；本拓扑中 SPA 由 API 进程
+#     自己服务，链接必须回到 Playwright 实际访问的同一 origin。绑定跟随
+#     各自进程端口，禁止全局固定端口（并行 shard 端口各不相同）。
 #
 # 用法：
 #   bash scripts/e2e/run-wsl.sh                       # 跑全部 spec
@@ -81,7 +86,7 @@ log()  { printf '\033[1;36m[e2e-wsl]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[e2e-wsl]\033[0m %s\n' "$*" >&2; }
 err()  { printf '\033[1;31m[e2e-wsl]\033[0m %s\n' "$*" >&2; }
 
-usage() { sed -n '3,40p' "$0"; }
+usage() { sed -n '3,45p' "$0"; }
 
 while (( "$#" )); do
   case "$1" in
@@ -176,7 +181,11 @@ launch_api() {
   else
     cmd=(pnpm --filter @exam/api dev)
   fi
+  # 身份一次性链接由本 API 进程按 PUBLIC_WEB_ORIGIN 生成绝对 URL，浏览器
+  # 随后直接 goto 该 URL；origin 必须是本进程端口（SPA 由 API 进程自己服务），
+  # 缺省时 runtime config 会回退到 Vite dev origin(:5173)，那里无进程监听。
   DEV_API_PORT="$port" TEST_DATABASE_URL="$db_url" \
+    PUBLIC_WEB_ORIGIN="http://localhost:${port}" \
     APP_MODE=e2e RATE_LIMIT_DISABLED=1 \
     HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
     setsid "${cmd[@]}" >"$logfile" 2>&1 &

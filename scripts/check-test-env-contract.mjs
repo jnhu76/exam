@@ -195,6 +195,95 @@ for (const testPath of testFiles) {
 
 console.log("   Production-guard test check complete.");
 
+// ── 5. Check E2E public web origin contract ────────────────────────────────
+console.log("5. Checking E2E public web origin contract...");
+
+// Identity one-time links (invitation acceptance, password reset) are
+// server-generated absolute URLs: PUBLIC_WEB_ORIGIN + a fixed site-relative
+// path. The browser later goes to that URL directly, so every E2E launch
+// path must bind PUBLIC_WEB_ORIGIN to the origin the browser actually uses
+// — otherwise the link points at a closed port (the API serves the SPA in
+// test topologies, and an unset var falls back to the dev Vite origin).
+
+const e2eBaseUrl = ciContent.match(/^\s+E2E_BASE_URL:\s*(.+?)\s*$/m);
+const ciOrigin = ciContent.match(/^\s+PUBLIC_WEB_ORIGIN:\s*(.+?)\s*$/m);
+if (!e2eBaseUrl) {
+  addViolation(".github/workflows/ci.yml", 0, "e2e job missing E2E_BASE_URL");
+} else if (!ciOrigin) {
+  addViolation(
+    ".github/workflows/ci.yml",
+    0,
+    "e2e job missing PUBLIC_WEB_ORIGIN — identity one-time links would fall back to the dev Vite origin",
+  );
+} else if (e2eBaseUrl[1] !== ciOrigin[1]) {
+  addViolation(
+    ".github/workflows/ci.yml",
+    0,
+    `e2e PUBLIC_WEB_ORIGIN (${ciOrigin[1]}) must equal E2E_BASE_URL (${e2eBaseUrl[1]}) — the API serves the SPA on one origin`,
+  );
+}
+
+const composeTestPath = join(ROOT, "docker-compose.test.yml");
+const composeTestContent = readFileSync(composeTestPath, "utf-8");
+if (
+  !composeTestContent.includes(
+    "PUBLIC_WEB_ORIGIN: http://localhost:${EXAM_PORT:-3000}",
+  )
+) {
+  addViolation(
+    "docker-compose.test.yml",
+    0,
+    "compose test env missing PUBLIC_WEB_ORIGIN derived from EXAM_PORT",
+  );
+}
+
+// WSL runner: PUBLIC_WEB_ORIGIN must be bound INSIDE launch_api, derived from
+// that process's port argument. A missing binding falls back to :5173; a
+// fixed origin (e.g. :3000) fixes serial mode while parallel shards keep
+// pointing at the wrong port. Bounded textual extraction of the function
+// body — not a shell parser.
+const runWslPath = join(ROOT, "scripts/e2e/run-wsl.sh");
+const runWslLines = readFileLines(runWslPath);
+const launchStart = runWslLines.findIndex((l) => /^launch_api\(\) \{/.test(l));
+if (launchStart === -1) {
+  addViolation(
+    "scripts/e2e/run-wsl.sh",
+    0,
+    "launch_api() not found — API launch seam changed; re-bind PUBLIC_WEB_ORIGIN to the per-process API port",
+  );
+} else {
+  let launchEnd = launchStart;
+  while (launchEnd < runWslLines.length && runWslLines[launchEnd] !== "}") {
+    launchEnd++;
+  }
+  const originBindings = [];
+  for (let i = launchStart; i <= launchEnd && i < runWslLines.length; i++) {
+    if (/PUBLIC_WEB_ORIGIN\s*=/.test(runWslLines[i])) {
+      originBindings.push({ n: i + 1, line: runWslLines[i] });
+    }
+  }
+  if (originBindings.length === 0) {
+    addViolation(
+      "scripts/e2e/run-wsl.sh",
+      launchStart + 1,
+      "launch_api does not bind PUBLIC_WEB_ORIGIN — identity one-time links fall back to the dev Vite origin (:5173), where no E2E process listens",
+    );
+  }
+  for (const b of originBindings) {
+    if (
+      !/PUBLIC_WEB_ORIGIN\s*=\s*"http:\/\/localhost:\$\{port\}"/.test(b.line)
+    ) {
+      addViolation(
+        "scripts/e2e/run-wsl.sh",
+        b.n,
+        'launch_api PUBLIC_WEB_ORIGIN must bind this API process port ("http://localhost:${port}") — a fixed origin leaves parallel shards pointing at the wrong port',
+      );
+    }
+  }
+}
+
+console.log("   E2E public web origin check complete.");
+
 // ── Report ─────────────────────────────────────────────────────────────────
 console.log("\n" + "=".repeat(60));
 
