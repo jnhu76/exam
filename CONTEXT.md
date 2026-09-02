@@ -69,7 +69,7 @@ archived   → []  (terminal)
 
 **Command functions**: All status changes go through centralized command functions (`packages/exam-engine/src/examCommands.ts`); mutating `status` directly in a route is forbidden.
 
-- `publishExam` — draft → published (builds QuestionSnapshot; guards: ≥1 question, valid schedule, timed_window, manual selection, valid retake policy, score totals)
+- `publishExam` — draft → published (builds QuestionSnapshot; guards: ≥1 question, valid schedule, authoring timing mode (`timed_window`/`deadline`/`untimed`; `timed_sync` rejected until Phase B activation), manual selection, valid retake policy, score totals)
 - `openExam` — published → open
 - `closeExam` — open → closed (idempotent: already-closed returns unchanged)
 - `cancelExam` — published|open → canceled (NOT idempotent; does not void/force-submit attempts — that guard is route-layer)

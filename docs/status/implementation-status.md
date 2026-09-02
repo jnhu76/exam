@@ -14,7 +14,7 @@ Single-tenant, Admin + Candidate reliable exam loop:
 - Admin bootstrap + local admin reset-password script.
 - CandidateField configuration, Candidate creation + CSV import.
 - Course creation, Question CSV import.
-- Exam creation (`timed_window` path), publish, Candidate enrollment/assignment.
+- Exam creation (`timed_window` / `deadline` / `untimed` paths), publish, Candidate enrollment/assignment.
 - Candidate login (no organization slug), start exam, Answer Save Protocol,
   Submit Attempt, Auto grading.
 - Result visible to Admin and Candidate; Result CSV export.
@@ -26,9 +26,11 @@ Single-tenant, Admin + Candidate reliable exam loop:
 
 ## Phase 2 — Exam Operation: ✅ GATE ITEMS IMPLEMENTED
 
-Core exam loop items are implemented and verified. The remaining items
-(`timed_sync` / `deadline` / `untimed` timing modes, queue admission) are not
-implemented — Issues #291/#292.
+Core exam loop items are implemented and verified. `deadline` / `untimed`
+timing modes are implemented (#291 Phase A, PR #388). The remaining items
+(the `timed_sync` timing mode and queue admission, tracked by Issues #291
+and #292) are not implemented; `timed_sync` semantics are frozen in
+`docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`.
 
 ### Implemented
 
@@ -89,8 +91,9 @@ implemented — Issues #291/#292.
 
 ### Deferred (Phase 2+ hardening)
 
-- `timed_sync` / `deadline` / `untimed` timing modes (only `timed_window`
-  implemented; `requireQueue` code exists but is not operationally wired).
+- `timed_sync` timing mode (semantics frozen, activation pending; `deadline`
+  and `untimed` are implemented; `requireQueue` code exists but is not
+  operationally wired).
 - Queue admission.
 
 ## Phase 3 — Collaboration, Permissions, Account Lifecycle: 🟡 PARTIALLY IMPLEMENTED

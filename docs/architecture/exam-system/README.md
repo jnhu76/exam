@@ -3,7 +3,7 @@
 > Normative architecture documentation for the exam platform's domain protocols, state machines, and data authority.
 
 ```text
-Last runtime verified against: bcf02847b0231e233dcb3ff98ec7ae681739b028
+Last runtime verified against: b994d109b7fcb34db8105cb85a2edf9420a9c613
 Recovery contract updated in: PR #218
 
 Verification scope:
@@ -103,7 +103,7 @@ For absent or proposed behavior, these explicit labels are used:
 
 ## Known Limitations
 
-- Phase 1 only implements `timed_window` timing mode; `timed_sync`, `deadline`, and `untimed` are **NOT IMPLEMENTED** as runtime modes (schema fields exist).
+- Timing modes `timed_window`, `deadline`, and `untimed` are **IMPLEMENTED** (#291 Phase A); `timed_sync` remains **NOT ACTIVATED** — its semantics are frozen in `docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`, with implementation planned in B1→B2 slices.
 - `not_started`, `queued`, `grading`, and `voided` attempt statuses have **no write path** in the current implementation — they exist as target design.
 - Candidate disrupted-recovery UI is **IMPLEMENTED** (REC-I3): the `useAttemptRestore()` hook drives restore from the `CandidateTakeSnapshot` `canResume` capability — an explicit restore command, a `restoring` state, a `failed`/retry surface with an auto-focused retry button, a generation token to prevent cross-attempt cross-writes, and an authoritative snapshot reload after the command acks. The recovery contract is implemented under ADR-012/ADR-013. See [candidate-recovery.md](./candidate-recovery.md) for sequence diagrams.
   - What remains open is the **operator/proctor** side, not the candidate surface: the operator time-grant route/permission is **IMPLEMENTED** (REC-I4-I3B2 CLOSED); the exam incident authority persistence and Admin API are **IMPLEMENTED** (J3 `REC-I6-I1` — CLOSED on master via PR #242; see [incident-authority.md](./incident-authority.md)); a dedicated operator/proctor recovery center is **NOT IMPLEMENTED** (REC-OPS J5/J6), Proctor incident permissions and Proctor-to-Exam scope are **NOT IMPLEMENTED** (J4/M11), and system-generated incidents are **NOT IMPLEMENTED**.

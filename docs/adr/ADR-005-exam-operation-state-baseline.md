@@ -330,6 +330,18 @@ follow-up** if it bloats the PR; **API must be complete**.
 
 ### 4.2 Validation rules (binding)
 
+> **Amendment (2026-09-03, #291 Phase A2 as-built):** this subsection was
+> written when `timed_window` was the only timing mode. Phase A2 made
+> `deadline` / `untimed` authorable, and both fields below are now accepted
+> for every authoring mode (plain nullable policy fields; per-mode legality
+> is owned by the canonical exam-policy validator, which does not constrain
+> them). The create/update rejection rules below are **not enforced in
+> current code**; the runtime semantics — §4.3 late-entry cutoff anchored at
+> `openAt`, and the candidate submit gate anchored at personal `startedAt`
+> (`attemptCommands.ts`) — remain as-built for every mode. Re-instating an
+> authoring-time window sanity check is a candidate follow-up, not current
+> behavior.
+
 - `latestStartAt = openAt + latestStartOffsetMinutes` **must be before
   `closeAt`** (when `latestStartOffsetMinutes != null`). Reject otherwise at
   create/update with a validation error.

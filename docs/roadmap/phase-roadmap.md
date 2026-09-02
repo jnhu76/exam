@@ -93,7 +93,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 ### Status
 
-**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The remaining timing modes (`timed_sync`, `deadline`, `untimed`) and queue admission are deferred to Issues (#291, #292).
+**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The `deadline` and `untimed` timing modes are implemented (#291 Phase A, PR #388). The remaining `timed_sync` mode (semantics frozen in `docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`) and queue admission are deferred to Issues (#291, #292).
 
 **i18n foundation complete (J1–J10).** All user-visible Chinese in production source goes through `t()` via `apps/web/src/i18n/locales/zh-CN.ts`. Full production source hardcoded copy gate enforced via `pnpm lint:copy`. See `docs/standards/i18n-copy-policy.md`.
 
@@ -121,7 +121,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 ### In scope — Deferred (Issue-tracked)
 
-- `timed_sync`, `deadline`, and `untimed` timing modes (only `timed_window` is implemented) — **Issue #291**.
+- `timed_sync` timing mode (`deadline` and `untimed` implemented in #291 Phase A; `timed_sync` semantics frozen, activation pending) — **Issue #291**.
 - Queue admission (`requireQueue` code exists but is not operationally wired) — **Issue #292**.
 
 ### Out of scope
@@ -141,7 +141,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 - ✅ Operational staff can recover disrupted attempts through a documented UI flow.
 - ✅ Force submit, extend time, and misconduct marking are audited.
-- ⏳ Non-`timed_window` timing modes have documented lifecycle behavior and executable profiles — **Issue #291**.
+- 🟡 Non-`timed_window` timing modes have documented lifecycle behavior and executable profiles (`deadline`/`untimed` done in Phase A; `timed_sync` frozen, activation pending) — **Issue #291**.
 - ⏳ Queue admission is observable, recoverable, and restart-safe — **Issue #292**.
 - ✅ Exam and attempt timelines support incident diagnosis.
 - ✅ Larger exports have job logs and failure evidence.
