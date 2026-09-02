@@ -188,10 +188,7 @@ export function isAttemptDeadlineExpired(
   now: Date,
 ): boolean {
   const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
-  return (
-    effectiveDeadline !== null &&
-    now.getTime() >= effectiveDeadline.getTime()
-  );
+  return effectiveDeadline !== null && now.getTime() >= effectiveDeadline.getTime();
 }
 
 /**
