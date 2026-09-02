@@ -14714,7 +14714,8 @@
                           "durationMinutes": {
                             "type": "integer",
                             "exclusiveMinimum": true,
-                            "minimum": 0
+                            "minimum": 0,
+                            "nullable": true
                           },
                           "openAt": {
                             "type": "string",
@@ -14722,7 +14723,8 @@
                           },
                           "closeAt": {
                             "type": "string",
-                            "format": "date-time"
+                            "format": "date-time",
+                            "nullable": true
                           },
                           "passingScore": {
                             "type": "number",
@@ -15024,12 +15026,18 @@
                   },
                   "timingMode": {
                     "type": "string",
-                    "enum": ["timed_window"]
+                    "enum": [
+                      "timed_sync",
+                      "timed_window",
+                      "deadline",
+                      "untimed"
+                    ]
                   },
                   "durationMinutes": {
                     "type": "integer",
                     "exclusiveMinimum": true,
-                    "minimum": 0
+                    "minimum": 0,
+                    "nullable": true
                   },
                   "openAt": {
                     "type": "string",
@@ -15037,7 +15045,8 @@
                   },
                   "closeAt": {
                     "type": "string",
-                    "format": "date-time"
+                    "format": "date-time",
+                    "nullable": true
                   },
                   "passingScore": {
                     "type": "number",
@@ -15116,7 +15125,6 @@
                   "title",
                   "courseId",
                   "openAt",
-                  "closeAt",
                   "passingScore",
                   "totalScore"
                 ],
@@ -15180,7 +15188,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -15188,7 +15197,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -15539,7 +15549,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -15547,7 +15558,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -15886,12 +15898,18 @@
                   },
                   "timingMode": {
                     "type": "string",
-                    "enum": ["timed_window"]
+                    "enum": [
+                      "timed_sync",
+                      "timed_window",
+                      "deadline",
+                      "untimed"
+                    ]
                   },
                   "durationMinutes": {
                     "type": "integer",
                     "exclusiveMinimum": true,
-                    "minimum": 0
+                    "minimum": 0,
+                    "nullable": true
                   },
                   "openAt": {
                     "type": "string",
@@ -15899,7 +15917,8 @@
                   },
                   "closeAt": {
                     "type": "string",
-                    "format": "date-time"
+                    "format": "date-time",
+                    "nullable": true
                   },
                   "passingScore": {
                     "type": "number",
@@ -16081,7 +16100,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -16089,7 +16109,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -16556,7 +16577,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -16564,7 +16586,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -16900,7 +16923,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -16908,7 +16932,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -17259,7 +17284,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -17267,7 +17293,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -17641,7 +17668,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -17649,7 +17677,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -18017,7 +18046,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -18025,7 +18055,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -18376,7 +18407,8 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "openAt": {
                       "type": "string",
@@ -18384,7 +18416,8 @@
                     },
                     "closeAt": {
                       "type": "string",
-                      "format": "date-time"
+                      "format": "date-time",
+                      "nullable": true
                     },
                     "passingScore": {
                       "type": "number",
@@ -19654,10 +19687,15 @@
                       "description": {
                         "type": "string"
                       },
+                      "timingMode": {
+                        "type": "string",
+                        "enum": ["timed_window", "deadline", "untimed"]
+                      },
                       "durationMinutes": {
                         "type": "integer",
                         "exclusiveMinimum": true,
-                        "minimum": 0
+                        "minimum": 0,
+                        "nullable": true
                       },
                       "latestStartOffsetMinutes": {
                         "type": "integer",
@@ -19717,6 +19755,7 @@
                       "organizationId",
                       "name",
                       "description",
+                      "timingMode",
                       "durationMinutes",
                       "latestStartOffsetMinutes",
                       "minSubmitAfterStartMinutes",
@@ -19808,10 +19847,16 @@
                     "maxLength": 500,
                     "default": ""
                   },
+                  "timingMode": {
+                    "type": "string",
+                    "enum": ["timed_window", "deadline", "untimed"],
+                    "default": "timed_window"
+                  },
                   "durationMinutes": {
                     "type": "integer",
                     "exclusiveMinimum": true,
-                    "minimum": 0
+                    "minimum": 0,
+                    "nullable": true
                   },
                   "latestStartOffsetMinutes": {
                     "type": "integer",
@@ -19900,10 +19945,15 @@
                     "description": {
                       "type": "string"
                     },
+                    "timingMode": {
+                      "type": "string",
+                      "enum": ["timed_window", "deadline", "untimed"]
+                    },
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "latestStartOffsetMinutes": {
                       "type": "integer",
@@ -19963,6 +20013,7 @@
                     "organizationId",
                     "name",
                     "description",
+                    "timingMode",
                     "durationMinutes",
                     "latestStartOffsetMinutes",
                     "minSubmitAfterStartMinutes",
@@ -20141,10 +20192,15 @@
                     "description": {
                       "type": "string"
                     },
+                    "timingMode": {
+                      "type": "string",
+                      "enum": ["timed_window", "deadline", "untimed"]
+                    },
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "latestStartOffsetMinutes": {
                       "type": "integer",
@@ -20204,6 +20260,7 @@
                     "organizationId",
                     "name",
                     "description",
+                    "timingMode",
                     "durationMinutes",
                     "latestStartOffsetMinutes",
                     "minSubmitAfterStartMinutes",
@@ -20325,10 +20382,15 @@
                     "type": "string",
                     "maxLength": 500
                   },
+                  "timingMode": {
+                    "type": "string",
+                    "enum": ["timed_window", "deadline", "untimed"]
+                  },
                   "durationMinutes": {
                     "type": "integer",
                     "exclusiveMinimum": true,
-                    "minimum": 0
+                    "minimum": 0,
+                    "nullable": true
                   },
                   "latestStartOffsetMinutes": {
                     "type": "integer",
@@ -20419,10 +20481,15 @@
                     "description": {
                       "type": "string"
                     },
+                    "timingMode": {
+                      "type": "string",
+                      "enum": ["timed_window", "deadline", "untimed"]
+                    },
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
                     },
                     "latestStartOffsetMinutes": {
                       "type": "integer",
@@ -20482,6 +20549,7 @@
                     "organizationId",
                     "name",
                     "description",
+                    "timingMode",
                     "durationMinutes",
                     "latestStartOffsetMinutes",
                     "minSubmitAfterStartMinutes",
@@ -20798,12 +20866,23 @@
                       },
                       "windowEndAt": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                       },
                       "durationMinutes": {
                         "type": "integer",
                         "exclusiveMinimum": true,
-                        "minimum": 0
+                        "minimum": 0,
+                        "nullable": true
+                      },
+                      "timingMode": {
+                        "type": "string",
+                        "enum": [
+                          "timed_sync",
+                          "timed_window",
+                          "deadline",
+                          "untimed"
+                        ]
                       },
                       "totalQuestions": {
                         "type": "integer",
@@ -20878,6 +20957,7 @@
                       "windowStartAt",
                       "windowEndAt",
                       "durationMinutes",
+                      "timingMode",
                       "totalQuestions",
                       "passingScore",
                       "totalScore",
@@ -25917,6 +25997,15 @@
                       "type": "string",
                       "enum": ["hidden", "visible"]
                     },
+                    "timingMode": {
+                      "type": "string",
+                      "enum": [
+                        "timed_sync",
+                        "timed_window",
+                        "deadline",
+                        "untimed"
+                      ]
+                    },
                     "submittedAt": {
                       "type": "string",
                       "format": "date-time",
@@ -27191,6 +27280,7 @@
                     "canSubmit",
                     "resultVisibility",
                     "answerVisibility",
+                    "timingMode",
                     "submittedAt",
                     "serverNow",
                     "effectiveDeadline",
@@ -39457,7 +39547,8 @@
                           },
                           "closeAt": {
                             "type": "string",
-                            "format": "date-time"
+                            "format": "date-time",
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -44797,7 +44888,8 @@
                           "type": "string"
                         },
                         "closeAt": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": ["id", "title", "status", "closeAt"],
@@ -45044,7 +45136,8 @@
                             ]
                           },
                           "effectiveDeadlineAt": {
-                            "type": "string"
+                            "type": "string",
+                            "nullable": true
                           },
                           "score": {
                             "type": "number",
@@ -45439,7 +45532,8 @@
                           "nullable": true
                         },
                         "effectiveDeadlineAt": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         },
                         "submittedAt": {
                           "type": "string",
@@ -45486,7 +45580,8 @@
                           "type": "string"
                         },
                         "closeAt": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": ["id", "title", "status", "closeAt"],
@@ -46004,7 +46099,8 @@
                           "type": "string"
                         },
                         "closeAt": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": [

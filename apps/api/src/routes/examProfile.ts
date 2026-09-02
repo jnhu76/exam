@@ -37,6 +37,7 @@ function toExamProfileResponse(profile: ExamProfile) {
     organizationId: profile.organizationId,
     name: profile.name,
     description: profile.description,
+    timingMode: profile.timingMode,
     durationMinutes: profile.durationMinutes,
     latestStartOffsetMinutes: profile.latestStartOffsetMinutes,
     minSubmitAfterStartMinutes: profile.minSubmitAfterStartMinutes,
@@ -176,7 +177,8 @@ const examProfileRoutes: FastifyPluginAsync = async (fastify) => {
         const profile = (await repo.create(ctx, {
           name: data.name,
           description: data.description,
-          durationMinutes: data.durationMinutes,
+          timingMode: data.timingMode,
+          durationMinutes: data.durationMinutes ?? null,
           latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
           minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
           retakePolicy: data.retakePolicy,

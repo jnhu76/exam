@@ -597,14 +597,15 @@ describe("attempt routes", () => {
     // calculateDeadlineAt; the operator time grant engine writes non-null; restoreAttempt
     // only preserves an existing value; scanner/submit never write deadlineAt.
     // A NULL active deadlineAt is therefore schema-admissible but
-    // protocol-unreachable — a legacy/corrupt/historical defensive-recovery
-    // state, NOT a Phase-1 timing mode (see docs/architecture/exam-runtime.md §5.1
-    // and computeEffectiveDeadline REACHABILITY BOUNDARY).
+    // protocol state for close-bound modes since Phase A (#291): a
+    // `deadline`-mode attempt carries deadlineAt = NULL and expires via the
+    // exam's closeAt (covered below). Only `untimed` (closeAt also NULL)
+    // sits outside the scanner's expiry domain — the under-lock canonical
+    // recheck always rejects it.
     //
-    // T1 (reachability invariant): production-started attempts always carry a
-    // non-null deadlineAt. This is the ACTIVE-DEADLINE-001 invariant, NOT
-    // evidence that NULL is a valid protocol state.
-    it("production start always establishes a non-null deadlineAt (ACTIVE-DEADLINE-001 reachability invariant)", async () => {
+    // T1 (reachability invariant, scoped): production-started attempts in
+    // timed_window always carry a non-null deadlineAt.
+    it("timed_window production start establishes a non-null deadlineAt (ACTIVE-DEADLINE-001, scoped)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -826,6 +827,141 @@ describe("attempt routes", () => {
           `cell ${c.name}: expectCandidate=${c.expectCandidate}`,
         ).toBe(c.expectCandidate);
       }
+    });
+    // ── Phase A2 (#291): scanner behavior per timing mode ──
+    //
+    // deadline mode: NULL deadlineAt is now a REACHABLE protocol state. The
+    // attempt expires via exam.closeAt and MUST be auto-submitted at equality.
+    // untimed mode: closeAt and deadlineAt are both NULL — the canonical
+    // effective deadline is null, expiry is always false, and the scanner must
+    // never submit the attempt however late it runs.
+    describe("attempt routes — Phase A timing modes (scanner)", () => {
+      it("deadline-mode attempt (null deadlineAt) is auto-submitted by the scanner at closeAt", async () => {
+        const t = await createIsolatedTestOrg();
+        const exam = await ctx.app.inject({
+          method: "POST",
+          url: "/api/exams",
+          payload: buildExamPayload({
+            title: "Phase A Deadline Scanner Exam",
+            courseId: t.courseId,
+            questionIds: [t.questionId],
+            timingMode: "deadline",
+            durationMinutes: null,
+          }),
+          cookies: { "auth-token": t.adminToken },
+        });
+        const examId = exam.json().id;
+        await ctx.app.inject({
+          method: "POST",
+          url: `/api/exams/${examId}/publish`,
+          cookies: { "auth-token": t.adminToken },
+        });
+        await ctx.app.inject({
+          method: "POST",
+          url: `/api/exams/${examId}/enrollments`,
+          payload: { candidateIds: [t.candidateProfileId] },
+          cookies: { "auth-token": t.adminToken },
+        });
+        const startRes = await ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${examId}/start`,
+          cookies: { "auth-token": t.candidateToken },
+        });
+        expect(startRes.statusCode).toBe(201);
+        const attemptId = startRes.json().id as string;
+
+        // The started attempt carries a NULL personal deadline (global cutoff
+        // only) — the defining deadline-mode invariant.
+        const started = await ctx.db
+          .select({ deadlineAt: schema.examAttempts.deadlineAt })
+          .from(schema.examAttempts)
+          .where(eq(schema.examAttempts.id, attemptId));
+        expect(started[0]!.deadlineAt).toBeNull();
+
+        // Push the exam window into the past; the scanner must reconcile.
+        await ctx.db
+          .update(schema.exams)
+          .set({ closeAt: new Date(Date.now() - 60_000) })
+          .where(eq(schema.exams.id, examId));
+
+        const result = await scanDatabaseForExpiredAttempts(
+          ctx.app,
+          new Date(),
+        );
+        expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          makeCandidateCtx(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("graded");
+        expect(after?.submissionReason).toBe("deadline");
+        // The scanner path stamps submittedAt at the wall-clock reconciliation
+        // instant (only the lazy on-read path backdates to the effective
+        // deadline), so it can only be AT OR AFTER the closeAt cutoff.
+        const closedAt = await ctx.db
+          .select({ closeAt: schema.exams.closeAt })
+          .from(schema.exams)
+          .where(eq(schema.exams.id, examId));
+        expect(after?.submittedAt?.getTime()).toBeGreaterThanOrEqual(
+          closedAt[0]!.closeAt!.getTime(),
+        );
+      });
+
+      it("untimed attempt is NEVER auto-submitted by the scanner, however late", async () => {
+        const t = await createIsolatedTestOrg();
+        const exam = await ctx.app.inject({
+          method: "POST",
+          url: "/api/exams",
+          payload: buildExamPayload({
+            title: "Phase A Untimed Scanner Exam",
+            courseId: t.courseId,
+            questionIds: [t.questionId],
+            timingMode: "untimed",
+            durationMinutes: null,
+          }),
+          cookies: { "auth-token": t.adminToken },
+        });
+        expect(exam.statusCode).toBe(201);
+        const examId = exam.json().id;
+        expect(exam.json().closeAt).toBeNull();
+        await ctx.app.inject({
+          method: "POST",
+          url: `/api/exams/${examId}/publish`,
+          cookies: { "auth-token": t.adminToken },
+        });
+        await ctx.app.inject({
+          method: "POST",
+          url: `/api/exams/${examId}/enrollments`,
+          payload: { candidateIds: [t.candidateProfileId] },
+          cookies: { "auth-token": t.adminToken },
+        });
+        const startRes = await ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${examId}/start`,
+          cookies: { "auth-token": t.candidateToken },
+        });
+        expect(startRes.statusCode).toBe(201);
+        const attemptId = startRes.json().id as string;
+        const started = await ctx.db
+          .select({ deadlineAt: schema.examAttempts.deadlineAt })
+          .from(schema.examAttempts)
+          .where(eq(schema.examAttempts.id, attemptId));
+        expect(started[0]!.deadlineAt).toBeNull();
+
+        // A full day "passes" (simulated wall-clock sample for the scan cycle).
+        await scanDatabaseForExpiredAttempts(
+          ctx.app,
+          new Date(Date.now() + 86_400_000),
+        );
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          makeCandidateCtx(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("in_progress");
+        expect(after?.submittedAt).toBeNull();
+      });
     });
   });
 });

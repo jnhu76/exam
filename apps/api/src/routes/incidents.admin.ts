@@ -1419,12 +1419,11 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       if (!aggregate) throw new NotFoundError("Incident not found");
 
       // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
-      // with null attempt deadlineAt → exam.closeAt. Computed here (not in
-      // the repo, which is forbidden from importing @exam/exam-engine) via the
-      // single canonical authority. The repo guarantees examSummary.closeAt is
-      // non-null (it fails closed with AUTHZ_UNAVAILABLE otherwise), so the
-      // minimal projections below are safe: computeEffectiveDeadline reads
-      // only `exam.closeAt` and `attempt.deadlineAt`.
+      // with null attempt deadlineAt → exam.closeAt, and untimed exams
+      // (closeAt null, #291 Phase A) → null for every attempt. Computed here
+      // (not in the repo, which is forbidden from importing @exam/exam-engine)
+      // via the single canonical authority, which reads only `exam.closeAt`
+      // and `attempt.deadlineAt`.
       const examForDeadline = {
         closeAt: aggregate.examSummary.closeAt,
       };
@@ -1445,7 +1444,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             id: aggregate.examSummary.id,
             title: aggregate.examSummary.title,
             status: aggregate.examSummary.status,
-            closeAt: aggregate.examSummary.closeAt.toISOString(),
+            closeAt: aggregate.examSummary.closeAt?.toISOString() ?? null,
           },
           events: aggregate.events.map((e) => ({
             ...e,
@@ -1472,9 +1471,10 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             id: a.id,
             candidateId: a.candidateId,
             status: a.status,
-            effectiveDeadlineAt: computeEffectiveDeadline(examForDeadline, {
-              deadlineAt: a.deadlineAt,
-            }).toISOString(),
+            effectiveDeadlineAt:
+              computeEffectiveDeadline(examForDeadline, {
+                deadlineAt: a.deadlineAt,
+              })?.toISOString() ?? null,
             score: a.score,
           })),
           timeAdjustmentSummaries: aggregate.timeAdjustmentSummaries.map(
@@ -1556,11 +1556,10 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       if (!context) throw new NotFoundError("Attempt not found");
 
       // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
-      // with null attempt deadlineAt → exam.closeAt. Computed here (not in
-      // the repo, which is forbidden from importing @exam/exam-engine) via the
-      // single canonical authority. The repo guarantees examSummary.closeAt is
-      // non-null (it fails closed with AUTHZ_UNAVAILABLE otherwise), so the
-      // effective deadline is always computable.
+      // with null attempt deadlineAt → exam.closeAt, and untimed exams
+      // (closeAt null, #291 Phase A) → null. Computed here (not in the repo,
+      // which is forbidden from importing @exam/exam-engine) via the single
+      // canonical authority.
       const effectiveDeadlineAt = computeEffectiveDeadline(
         { closeAt: context.examSummary.closeAt },
         { deadlineAt: context.attempt.deadlineAt },
@@ -1584,7 +1583,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             status: context.attempt.status,
             startedAt: context.attempt.startedAt?.toISOString() ?? null,
             deadlineAt: context.attempt.deadlineAt?.toISOString() ?? null,
-            effectiveDeadlineAt: effectiveDeadlineAt.toISOString(),
+            effectiveDeadlineAt: effectiveDeadlineAt?.toISOString() ?? null,
             submittedAt: context.attempt.submittedAt?.toISOString() ?? null,
             gradedAt: context.attempt.gradedAt?.toISOString() ?? null,
             lastActivityAt:
@@ -1595,7 +1594,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             id: context.examSummary.id,
             title: context.examSummary.title,
             status: context.examSummary.status,
-            closeAt: context.examSummary.closeAt.toISOString(),
+            closeAt: context.examSummary.closeAt?.toISOString() ?? null,
           },
           candidateSummary: context.candidateSummary,
           interruptionEpisodes: context.interruptionEpisodes.map((episode) => ({
@@ -1709,7 +1708,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             title: context.examSummary.title,
             status: context.examSummary.status,
             timingMode: context.examSummary.timingMode,
-            closeAt: context.examSummary.closeAt.toISOString(),
+            closeAt: context.examSummary.closeAt?.toISOString() ?? null,
           },
           incidentStats: context.incidentStats,
           recentIncidents: context.recentIncidents.map((r) => ({

@@ -534,7 +534,9 @@ describe("permission boundary", () => {
 
       const reRead = await examRepo.findById(adminCtx(), openExam.id);
       requireDefined(reRead, "extend: exam must still exist after denial");
-      expect(reRead.closeAt.getTime()).toBe(openExam.closeAt.getTime());
+      expect(reRead.closeAt).not.toBeNull();
+      expect(openExam.closeAt).not.toBeNull();
+      expect(reRead.closeAt!.getTime()).toBe(openExam.closeAt!.getTime());
       expect(reRead.updatedAt.getTime()).toBe(openExam.updatedAt.getTime());
     });
 

@@ -140,7 +140,7 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
   const examEnded =
     exam.status === "closed" ||
     exam.status === "archived" ||
-    now >= exam.closeAt;
+    (exam.closeAt !== null && now >= exam.closeAt);
 
   if (!examEnded) {
     return {
