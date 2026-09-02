@@ -9,12 +9,11 @@
  * docs/standards/ui-system.md.
  *
  * Scope rules:
- *   - exam-ui/* apply to business / feature source ONLY:
- *       src/pages/**, src/components/shared/**, src/components/exam/**,
- *       src/components/settings/**, src/components/question/**
- *   - components/ui (generated shadcn primitives) is NEVER linted by exam-ui.
+ *   - governed business / feature roots come from the repository-wide
+ *     BUSINESS_UI_ROOTS authority in scripts/lib/ui-scan-roots.mjs;
+ *   - components/ui (generated shadcn primitives) is NEVER linted by exam-ui;
  *   - components/layout (topbar/sidebar — owns intentional sticky elevation)
- *     is excluded from no-business-shadow but still covered by the other rules.
+ *     is excluded from no-business-shadow but still covered by the other rules;
  *   - test files (*.test.ts/tsx) and the lint rules themselves are excluded.
  *
  * No other ESLint rules are configured here — exam-ui is the sole purpose of
@@ -22,6 +21,7 @@
  * unchanged and authoritative for non-visual concerns.
  */
 import tseslintParser from "@typescript-eslint/parser";
+import { BUSINESS_UI_ROOTS } from "../../scripts/lib/ui-scan-roots.mjs";
 import examUiPlugin from "./src/lint/exam-ui/index";
 
 /**
@@ -45,18 +45,29 @@ const compatibilityPlugins = {
   "@typescript-eslint": { rules: { "no-explicit-any": noopRule } },
 };
 
-/** Business / feature source where visual-authority rules apply. */
-const businessGlobs = [
-  "src/pages/**/*.tsx",
-  "src/components/shared/**/*.tsx",
-  "src/components/exam/**/*.tsx",
-  "src/components/settings/**/*.tsx",
-  "src/components/question/**/*.tsx",
-];
+const WEB_ROOT_PREFIX = "apps/web/";
+const LAYOUT_ROOT = "apps/web/src/components/layout";
+
+/** Convert a canonical repository root into an ESLint glob relative to apps/web. */
+function toWebTsxGlob(root: string): string {
+  if (!root.startsWith(WEB_ROOT_PREFIX)) {
+    throw new Error(`UI scan root is outside apps/web: ${root}`);
+  }
+  return `${root.slice(WEB_ROOT_PREFIX.length)}/**/*.tsx`;
+}
+
+if (!BUSINESS_UI_ROOTS.includes(LAYOUT_ROOT)) {
+  throw new Error(`${LAYOUT_ROOT} must remain in BUSINESS_UI_ROOTS`);
+}
+
+/** Business / feature source where every visual-authority rule applies. */
+const businessGlobs = BUSINESS_UI_ROOTS.filter(
+  (root) => root !== LAYOUT_ROOT,
+).map(toWebTsxGlob);
 
 /** Layout source: topbar/sidebar owns intentional sticky elevation, so
  *  no-business-shadow does not apply here. Other exam-ui rules still do. */
-const layoutGlobs = ["src/components/layout/**/*.tsx"];
+const layoutGlobs = [toWebTsxGlob(LAYOUT_ROOT)];
 
 const ignores = [
   "dist/**",
