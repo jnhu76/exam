@@ -1890,6 +1890,8 @@ const zhCN = {
         status: "状态",
         duration: "考试时长",
         durationValue: "{{minutes}}分钟",
+        deadlineMode: "截止时间制",
+        noDuration: "不限时",
         passingScore: "及格分",
         questionCount: "题目数量",
         participantCount: "参与人数",
@@ -1899,9 +1901,6 @@ const zhCN = {
       config: {
         title: "考试配置",
         timingMode: "时间模式：",
-        timingModeValue: {
-          timed_window: "定时窗口",
-        },
         retakePolicy: "重考策略：",
         scoreStrategy: "分数策略：",
         maxAttempts: "最大尝试次数：",

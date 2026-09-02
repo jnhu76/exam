@@ -454,4 +454,66 @@ describe("ExamDetailPage", () => {
       expect(await screen.findByText("加载考试详情失败")).toBeInTheDocument();
     });
   });
+
+  // Phase A2 nullable timing (issue #389): deadline/untimed responses carry
+  // durationMinutes = null (and closeAt = null for untimed). Projections must
+  // key on the canonical timingMode and never render a fabricated duration or
+  // an epoch timestamp, matching the candidate-side narrowing in StartExamPage.
+  describe("nullable timing modes", () => {
+    it("renders the explicit duration for timed_window", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          timingMode: "timed_window",
+          durationMinutes: 45,
+        });
+      });
+      renderPage();
+      expect(await screen.findByText("45分钟")).toBeInTheDocument();
+      expect(screen.getByText("定时窗口")).toBeInTheDocument();
+    });
+
+    it("renders deadline mode without fabricating a duration", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          timingMode: "deadline",
+          durationMinutes: null,
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+        });
+      });
+      renderPage();
+      expect(await screen.findByText("截止时间制")).toBeInTheDocument();
+      // i18next collapses a null interpolation to a bare “分钟” unit — the
+      // fabricated-duration render this regression locks out.
+      expect(screen.queryByText("分钟")).not.toBeInTheDocument();
+      expect(screen.queryByText("0分钟")).not.toBeInTheDocument();
+      // The config row localizes the mode instead of leaking the raw enum.
+      expect(screen.getByText("截止时间")).toBeInTheDocument();
+      expect(screen.queryByText("deadline")).not.toBeInTheDocument();
+    });
+
+    it("renders untimed mode without fabricating duration or closeAt", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          timingMode: "untimed",
+          durationMinutes: null,
+          closeAt: null,
+        });
+      });
+      renderPage();
+      // Duration card AND the config timingMode row both render 不限时.
+      expect(
+        (await screen.findAllByText("不限时")).length,
+      ).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText("分钟")).not.toBeInTheDocument();
+      // formatDateTime(null) renders the 1970 epoch — never reachable.
+      expect(screen.queryByText(/1970/)).not.toBeInTheDocument();
+      expect(screen.queryByText("untimed")).not.toBeInTheDocument();
+    });
+  });
 });
