@@ -68,6 +68,7 @@ function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
     minSubmitAfterStartMinutes: null,
     resultPublicationMode: "immediate",
     resultsPublishedAt: null,
+    syncStartedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

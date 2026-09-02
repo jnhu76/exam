@@ -400,6 +400,10 @@ export interface CheckAndUpdateResult {
  * Lazily transitions published→open when now >= openAt, and open→closed when
  * now >= closeAt. Untimed exams (#291 Phase A) never auto-close — they are
  * open-ended until an admin lifecycle command closes/cancels them.
+ * timed_sync exams (#291 Phase B) never auto-open: their open transition is
+ * the operator's synchronized start command, so an un-triggered sitting stays
+ * published no matter how far past openAt the clock runs. closeAt auto-close
+ * still applies once the sitting is open.
  * Returns the exam (potentially updated) with transition info, or null if not found.
  */
 export async function checkAndUpdateExamStatus(
@@ -415,7 +419,11 @@ export async function checkAndUpdateExamStatus(
   const previousStatus = exam.status;
   let transition: "open" | "closed" | undefined;
 
-  if (exam.status === "published" && now >= exam.openAt) {
+  if (
+    exam.status === "published" &&
+    now >= exam.openAt &&
+    exam.timingMode !== "timed_sync"
+  ) {
     exam = await openExam(repo, examId);
     transition = "open";
   }

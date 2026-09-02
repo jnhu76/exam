@@ -146,6 +146,20 @@ describe("0021 interruption policy migration — real 0020 → 0021 upgrade", ()
     //    re-implemented here — it runs straight from the committed file,
     //    including the `ON COMMIT DROP` temp table it depends on.
     await executeMigrationFile(conn.sql, "0021_noisy_archangel");
+
+    //    5. Replay the REMAINING journal entries (idx > 21) so the physical
+    //    schema matches the current drizzle schema the assertions query
+    //    with. The upgrade under test (0020 -> 0021) already ran in full
+    //    isolation at its controlled point; later migrations only bring the
+    //    schema up to head, keeping `schema.exams` full-row selects valid
+    //    for every future migration that adds a column. Without this step
+    //    the test breaks on each new exam-table column (as-built drift).
+    const postUpgradeTags = journal.entries
+      .filter((e) => e.idx > 21)
+      .map((e) => e.tag);
+    for (const tag of postUpgradeTags) {
+      await executeMigrationFile(conn.sql, tag);
+    }
   }, 120_000);
 
   afterAll(async () => {

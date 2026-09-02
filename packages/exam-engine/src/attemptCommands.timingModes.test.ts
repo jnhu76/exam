@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Exam, ExamAttempt } from "@exam/domain";
+import { AttemptLateEntryClosedError } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
 import { startOrRestoreAttempt } from "./attemptCommands.js";
 import type { StartOrRestoreDependencies } from "./attemptCommands.js";
@@ -129,6 +130,82 @@ describe("startOrRestoreAttempt — Phase A timing modes", () => {
     const beforeOpen = new Date("2025-01-01T08:00:00Z");
     await expect(start(untimedExam(), beforeOpen)).rejects.toThrow(
       /outside exam open window/i,
+    );
+  });
+});
+
+// #291 Phase B1 — timed_sync start gating (Model A freeze). The sitting's
+// shared deadline comes from the durable T0 (exam.syncStartedAt), never from
+// the candidate's start instant; entry before the trigger or after the
+// global deadline is forbidden.
+describe("startOrRestoreAttempt — timed_sync (Phase B kernel)", () => {
+  const t0 = new Date("2025-01-01T10:00:00Z");
+
+  const syncExam = (overrides: Partial<Exam> = {}): Exam =>
+    makeExam({
+      timingMode: "timed_sync",
+      durationMinutes: 90,
+      syncStartedAt: t0,
+      ...overrides,
+    });
+
+  it("rejects start before the operator trigger even inside the open window", async () => {
+    const untriggered = syncExam({ syncStartedAt: null });
+    await expect(start(untriggered)).rejects.toThrow(
+      /synchronized exam has not been started/i,
+    );
+  });
+
+  it("mints the shared global deadline regardless of the start instant", async () => {
+    const at = (await start(syncExam(), new Date("2025-01-01T10:02:00Z")))
+      .result.attempt;
+    const late = (await start(syncExam(), new Date("2025-01-01T10:55:00Z")))
+      .result.attempt;
+    // T0 + 90min, identical for both candidates.
+    expect(at.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
+    expect(late.deadlineAt).toEqual(at.deadlineAt);
+  });
+
+  it("caps the shared deadline at closeAt when the cap binds earlier", async () => {
+    const capped = syncExam({ closeAt: new Date("2025-01-01T11:00:00Z") });
+    const { attempt } = (await start(capped, new Date("2025-01-01T10:30:00Z")))
+      .result;
+    expect(attempt.deadlineAt).toEqual(new Date("2025-01-01T11:00:00Z"));
+  });
+
+  it("rejects start at/after the global deadline even when closeAt is later", async () => {
+    const atDeadline = new Date("2025-01-01T11:30:00Z");
+    await expect(start(syncExam(), atDeadline)).rejects.toThrow(
+      /synchronized exam deadline has passed/i,
+    );
+  });
+
+  it("still rejects start at/after closeAt (window gate regression)", async () => {
+    const afterClose = new Date("2025-01-01T12:00:00Z");
+    await expect(start(syncExam(), afterClose)).rejects.toThrow(
+      /outside exam open window/i,
+    );
+  });
+
+  it("anchors the late-entry cutoff at T0, not openAt", async () => {
+    const offsetExam = syncExam({ latestStartOffsetMinutes: 20 });
+    // openAt 09:00 + 20min = 09:20 (long past); T0 10:00 + 20min = 10:20.
+    const withinBuffer = new Date("2025-01-01T10:15:00Z");
+    const afterBuffer = new Date("2025-01-01T10:25:00Z");
+    const { attempt } = (await start(offsetExam, withinBuffer)).result;
+    expect(attempt.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
+    await expect(start(offsetExam, afterBuffer)).rejects.toThrow(
+      AttemptLateEntryClosedError,
+    );
+  });
+
+  it("rejects an untriggered sync exam as not-started, not late-entry", async () => {
+    const untriggered = syncExam({
+      syncStartedAt: null,
+      latestStartOffsetMinutes: 20,
+    });
+    await expect(start(untriggered)).rejects.toThrow(
+      /synchronized exam has not been started/i,
     );
   });
 });

@@ -23,7 +23,7 @@ import {
 } from "@exam/domain";
 import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
 import { isCandidateRetakeDeferred } from "./candidateResultVisibility.js";
-import { calculateDeadlineAt } from "./timer.js";
+import { calculateDeadlineAt, computeSyncDeadline } from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
 import {
@@ -170,6 +170,21 @@ export async function startOrRestoreAttempt(
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
+  // #291 Phase B: timed_sync entry is owned by the operator-triggered sitting
+  // (Model A freeze). Before T0 there is no shared clock to join; after the
+  // global deadline a new attempt would be born expired. Both keep the
+  // EXAM_NOT_OPEN (409) contract — the distinction is message-level only.
+  let syncDeadline: Date | null = null;
+  if (exam.timingMode === "timed_sync") {
+    if (exam.syncStartedAt === null) {
+      throw new ExamNotOpenError("Synchronized exam has not been started");
+    }
+    syncDeadline = computeSyncDeadline(exam);
+    if (syncDeadline !== null && now.getTime() >= syncDeadline.getTime()) {
+      throw new ExamNotOpenError("Synchronized exam deadline has passed");
+    }
+  }
+
   // Use the canonical Enrollment→active-Attempt lock seam (R3).
   let lockResult: EnrollmentActiveAttemptLock;
   try {
@@ -250,25 +265,39 @@ export async function startOrRestoreAttempt(
   }
 
   // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only.
+  // #291 Phase B: for timed_sync the buffer is anchored at the operator-
+  // triggered sitting start (T0), not at openAt — the buffer is relative to
+  // when the sitting actually began. The null-anchor branch is unreachable
+  // (the pre-T0 guard above already threw) but keeps the type honest.
   if (exam.latestStartOffsetMinutes != null) {
-    const latestStartAt = new Date(
-      exam.openAt.getTime() + exam.latestStartOffsetMinutes * 60_000,
-    );
-    if (now.getTime() > latestStartAt.getTime()) {
-      throw new AttemptLateEntryClosedError({ latestStartAt, now });
+    const lateEntryAnchor =
+      exam.timingMode === "timed_sync" ? exam.syncStartedAt : exam.openAt;
+    if (lateEntryAnchor !== null) {
+      const latestStartAt = new Date(
+        lateEntryAnchor.getTime() + exam.latestStartOffsetMinutes * 60_000,
+      );
+      if (now.getTime() > latestStartAt.getTime()) {
+        throw new AttemptLateEntryClosedError({ latestStartAt, now });
+      }
     }
   }
 
   const attemptNo = enrollment.attemptCount + 1;
-  // #291 Phase A: a personal deadline exists ONLY in timed_window mode. The
-  // global closeAt of a deadline-mode exam must never be mis-modelled as the
-  // attempt's personal deadline (computeEffectiveDeadline derives it from the
-  // exam row). Canonical policy validation guarantees durationMinutes for
-  // reachable timed_window exams; the null guard keeps that type-honest.
+  // #291 deadline model per timing mode. timed_window carries a personal
+  // deadline (start instant + duration). timed_sync copies the sitting's
+  // SHARED global deadline (derived from the durable T0, never from this
+  // candidate's start instant — two starts at different instants resolve to
+  // the same value). The global closeAt of a deadline-mode exam must never
+  // be mis-modelled as a personal deadline (computeEffectiveDeadline derives
+  // it from the exam row). Canonical policy validation guarantees
+  // durationMinutes for reachable timed_window exams; the null guard keeps
+  // that type-honest.
   const deadlineAt =
     exam.timingMode === "timed_window" && exam.durationMinutes !== null
       ? calculateDeadlineAt(now, exam.durationMinutes)
-      : null;
+      : exam.timingMode === "timed_sync"
+        ? syncDeadline
+        : null;
 
   // Resolve the timing policy snapshot for the new attempt.
   const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);

@@ -286,6 +286,13 @@
       "when": 1788900000005,
       "tag": "0040_phase_a_timing_modes",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788900000006,
+      "tag": "0041_phase_b_sync_started_at",
+      "breakpoints": true
     }
   ]
 }

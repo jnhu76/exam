@@ -123,6 +123,7 @@ export function makeExam(overrides: Partial<Exam> = {}): Exam {
     minSubmitAfterStartMinutes: null,
     resultPublicationMode: "immediate",
     resultsPublishedAt: null,
+    syncStartedAt: null,
     createdAt: FIXED_STAMP,
     updatedAt: FIXED_STAMP,
     ...overrides,
