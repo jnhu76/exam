@@ -171,7 +171,7 @@ export function NotificationBell() {
           {hasUnread && (
             <Badge
               variant="destructive"
-              className="absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]"
+              className="absolute -right-1 -top-1 h-4 min-w-4 px-1"
               data-testid="notification-unread-badge"
             >
               {unreadCount > 99
@@ -242,7 +242,7 @@ export function NotificationBell() {
                     <span className="line-clamp-2 text-xs text-muted-foreground">
                       {n.body}
                     </span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="type-metadata">
                       {formatDateTime(n.createdAt)}
                     </span>
                   </button>

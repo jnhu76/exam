@@ -21,6 +21,7 @@ const GATES_IMPORTING_AUTHORITY = [
   "scripts/check-token-bypass.mjs",
   "scripts/check-high-font-weight.mjs",
   "scripts/check-frontend-primitives.mjs",
+  "apps/web/eslint.config.ts",
 ];
 
 test("authority roots exist, are unique, and live under apps/web/src", () => {
