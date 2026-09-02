@@ -100,8 +100,8 @@ export interface IncidentAggregateExamSummary {
   id: string;
   title: string;
   status: string;
-  /** Exam closeAt — the upper bound of every effective deadline. */
-  closeAt: Date;
+  /** Exam closeAt — null for untimed exams (#291 Phase A): no upper bound. */
+  closeAt: Date | null;
 }
 
 export interface IncidentQueueAttemptSummary {
@@ -308,8 +308,8 @@ export interface ExamRecoveryContext {
     title: string;
     status: string;
     timingMode: string;
-    /** Non-null — the repo fails closed (503) when the timed_window invariant is broken. */
-    closeAt: Date;
+    /** Null for untimed exams (#291 Phase A): open-ended, no closeAt. */
+    closeAt: Date | null;
   };
   incidentStats: {
     total: number;
@@ -664,14 +664,9 @@ export function createRecoveryRepo(db: Database) {
             `RECOVERY_AGG_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
           );
         }
-        if (examRow.closeAt == null) {
-          // timed_window invariant: every exam carries a non-null closeAt. A
-          // null here is tenant-data corruption the canonical deadline helper
-          // cannot reason about — fail closed rather than mis-project.
-          throw new AuthzUnavailableError(
-            `RECOVERY_AGG_EXAM_CLOSEAT_NULL: incident ${incident.id} exam ${incident.examId}`,
-          );
-        }
+        // #291 Phase A: closeAt is nullable (untimed exams are open-ended).
+        // Null is projected as-is; the route derives the effective deadline
+        // through the canonical seam, which maps closeAt=null → null.
 
         // ADR-014 §2: anchor and membership are MUTUALLY EXCLUSIVE — an
         // anchored Incident (attemptId set) rejects membership rows. A

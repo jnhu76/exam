@@ -16,8 +16,19 @@ export const ExamStatusEnum = z.enum([
   "archived",
 ]);
 export type ExamStatus = z.infer<typeof ExamStatusEnum>;
-const TimingModeEnum = z.enum([
+export const TimingModeEnum = z.enum([
   "timed_sync",
+  "timed_window",
+  "deadline",
+  "untimed",
+]);
+/**
+ * Timing modes authoring may select in Phase A (#291). `timed_sync` remains
+ * in the wire enum (the response contract already carries it) but is rejected
+ * by the canonical exam-policy validator until the admission/queue runtime
+ * exists — Zod stays shape-level; the matrix lives in the engine.
+ */
+export const PhaseATimingModeEnum = z.enum([
   "timed_window",
   "deadline",
   "untimed",
@@ -31,7 +42,6 @@ const RetakePolicyEnum = z.enum([
   "weekly_limit",
   "pass_then_stop",
 ]);
-const Phase1TimingModeEnum = z.literal("timed_window");
 const Phase1QuestionSelectionModeEnum = z.literal("manual");
 export const Phase1RetakePolicyEnum = z.enum([
   "unlimited",
@@ -72,9 +82,11 @@ export const ExamSchema = z.object({
   courseId: z.string().uuid(),
   status: ExamStatusEnum,
   timingMode: TimingModeEnum,
-  durationMinutes: z.number().int().positive(),
+  // #291 Phase A: null duration = no personal time limit (deadline/untimed);
+  // null closeAt = open-ended (untimed only).
+  durationMinutes: z.number().int().positive().nullable(),
   openAt: z.string().datetime(),
-  closeAt: z.string().datetime(),
+  closeAt: z.string().datetime().nullable(),
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
   questionSelectionMode: QuestionSelectionModeEnum,
@@ -140,10 +152,13 @@ export const CreateExamRequestBaseSchema = z.object({
   // behavior is unchanged.
   description: z.string().max(2000).optional(),
   courseId: z.string().uuid(),
-  timingMode: Phase1TimingModeEnum.optional(),
-  durationMinutes: z.number().int().positive().optional(),
+  // Full wire enum: `timed_sync` is accepted syntactically and rejected with a
+  // structured EXAM_TIMING_MODE_INVALID conflict by the canonical engine
+  // validator — the ONE matrix authority (no duplicated enum gate here).
+  timingMode: TimingModeEnum.optional(),
+  durationMinutes: z.number().int().positive().nullish(),
   openAt: z.string().datetime(),
-  closeAt: z.string().datetime(),
+  closeAt: z.string().datetime().nullish(),
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
   questionSelectionMode: Phase1QuestionSelectionModeEnum.optional(),
@@ -203,7 +218,7 @@ export const CreateExamRequestBaseSchema = z.object({
  */
 export const CreateExamRequestSchema = CreateExamRequestBaseSchema.extend({
   description: z.string().max(2000).default(""),
-  timingMode: Phase1TimingModeEnum.default("timed_window"),
+  timingMode: TimingModeEnum.default("timed_window"),
   questionSelectionMode: Phase1QuestionSelectionModeEnum.default("manual"),
   questionIds: z.array(z.string().uuid()).default([]),
   controlFlags: ControlFlagsSchema.default({}),
@@ -211,7 +226,16 @@ export const CreateExamRequestSchema = CreateExamRequestBaseSchema.extend({
   scoreStrategy: ScoreStrategyEnum.default("highest"),
   maxAttempts: z.number().int().min(1).default(1),
 }).superRefine((data, ctx) => {
-  if (data.profileId === undefined && data.durationMinutes === undefined) {
+  // Only `timed_window` requires a duration (personal time limit). A profile
+  // may supply it; without one the omission keeps the legacy Required error.
+  // deadline/untimed legitimately carry no duration — their mode invariants
+  // (duration null, closeAt presence, interruption strict) are owned by the
+  // canonical engine validator.
+  if (
+    data.timingMode === "timed_window" &&
+    data.profileId === undefined &&
+    data.durationMinutes === undefined
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.invalid_type,
       expected: "number",
@@ -232,10 +256,13 @@ export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
 export const UpdateExamRequestBaseSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
-  timingMode: Phase1TimingModeEnum.optional(),
-  durationMinutes: z.number().int().positive().optional(),
+  timingMode: TimingModeEnum.optional(),
+  durationMinutes: z.number().int().positive().nullish(),
   openAt: z.string().datetime().optional(),
-  closeAt: z.string().datetime().optional(),
+  // Explicit null clears closeAt (timed_window/deadline → untimed switch);
+  // the mode legality of the resulting combination is owned by the canonical
+  // engine validator on the merged draft policy.
+  closeAt: z.string().datetime().nullish(),
   passingScore: z.number().min(0).optional(),
   totalScore: z.number().positive().optional(),
   questionIds: z.array(z.string().uuid()).optional(),

@@ -4,6 +4,7 @@ import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 import { InterruptionTimePolicySchema } from "./interruption.js";
 import { AnswerModeEnum, ContentDocumentV1Schema } from "./contentDocument.js";
+import { TimingModeEnum } from "./exam.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
@@ -1103,6 +1104,10 @@ export const CandidateTakeSnapshotSchema = z.object({
   lockReason: LockReasonEnum.optional(),
   resultVisibility: VisibilityEnum,
   answerVisibility: VisibilityEnum,
+  // #291 Phase A: the canonical timing mode. The client renders the personal
+  // countdown ONLY for timed_window — it must not infer the mode from a null
+  // effectiveDeadline.
+  timingMode: TimingModeEnum,
   submittedAt: z.string().datetime().nullable(),
   serverNow: z.string().datetime(),
   effectiveDeadline: z.string().datetime().nullable(),

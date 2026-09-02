@@ -189,27 +189,28 @@ export const RecoveryAggregateCandidateSummarySchema = z.object({
  * Aggregate Attempt summary carries the EFFECTIVE deadline, not the raw
  * `examAttempts.deadlineAt`. Computed server-side via the canonical
  * `computeEffectiveDeadline` (contract §6.2/§6.3); the frontend MUST NOT
- * derive it. Non-nullable: the repo fails closed (503) when `exam.closeAt` is
- * null, so every successful response carries a computable effective deadline.
+ * derive it. Nullable since Phase A (#291): an untimed exam has no closeAt
+ * and therefore no effective deadline at all — null is a modeled state, not
+ * a failure.
  */
 export const RecoveryAggregateAttemptSummarySchema = z.object({
   id: z.string(),
   candidateId: z.string().nullable(),
   status: RecoveryAttemptStatusSchema,
-  effectiveDeadlineAt: z.string(),
+  effectiveDeadlineAt: z.string().nullable(),
   score: z.number().nullable(),
 });
 
 /**
  * Aggregate Exam summary carries `closeAt` so the route can compute the
- * effective deadline. Non-nullable (timed_window invariant; repo fails closed
- * otherwise).
+ * effective deadline. Nullable since Phase A (#291): untimed exams are
+ * open-ended (no closeAt).
  */
 export const RecoveryAggregateExamSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   status: z.string(),
-  closeAt: z.string(),
+  closeAt: z.string().nullable(),
 });
 
 export const RecoveryAggregateTimeAdjustmentSchema = z.object({
@@ -277,11 +278,10 @@ export const AttemptOperationsAttemptSchema = z.object({
   status: RecoveryAttemptStatusSchema,
   startedAt: z.string().nullable(),
   deadlineAt: z.string().nullable(),
-  // Non-nullable: the route computes it via the canonical
-  // `computeEffectiveDeadline` and the repo guarantees a non-null
-  // `examSummary.closeAt` (fails closed otherwise). Nullable wire would invite
-  // the frontend to re-derive it (contract §6.2 forbids that).
-  effectiveDeadlineAt: z.string(),
+  // Server-computed via the canonical `computeEffectiveDeadline`; the
+  // frontend MUST NOT re-derive it (contract §6.2). Nullable since Phase A
+  // (#291): untimed attempts have no effective deadline — null is modeled.
+  effectiveDeadlineAt: z.string().nullable(),
   submittedAt: z.string().nullable(),
   gradedAt: z.string().nullable(),
   lastActivityAt: z.string().nullable(),
@@ -293,7 +293,7 @@ export const AttemptOperationsExamSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   status: z.string(),
-  closeAt: z.string(),
+  closeAt: z.string().nullable(),
 });
 
 export const AttemptOperationsCandidateSummarySchema = z.object({
@@ -405,7 +405,7 @@ export const ExamRecoveryContextSchema = z.object({
     title: z.string(),
     status: z.string(),
     timingMode: z.string(),
-    closeAt: z.string(),
+    closeAt: z.string().nullable(),
   }),
   incidentStats: z.object({
     total: z.number().int().nonnegative(),

@@ -290,7 +290,7 @@ export async function verifyDemoSeed(
         `Open exam openAt should be <= now`,
       );
       assert(
-        openExam.closeAt.getTime() > now,
+        openExam.closeAt !== null && openExam.closeAt.getTime() > now,
         `Open exam closeAt should be > now`,
       );
     }
@@ -302,7 +302,7 @@ export async function verifyDemoSeed(
     const closedExam = closedExamRows[0];
     if (closedExam) {
       assert(
-        closedExam.closeAt.getTime() < now,
+        closedExam.closeAt !== null && closedExam.closeAt.getTime() < now,
         `Closed exam closeAt should be < now`,
       );
     }

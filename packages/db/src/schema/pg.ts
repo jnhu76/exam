@@ -29,6 +29,7 @@ import type {
   AttemptTimeAdjustment,
   InterruptionTimePolicy,
   ExamProfileRetakePolicy,
+  ExamProfileTimingMode,
   ScoreStrategy,
 } from "@exam/domain";
 import {
@@ -278,7 +279,10 @@ export const exams = pgTable(
       .references(() => courses.id),
     status: text("status").notNull(),
     timingMode: text("timing_mode").notNull(),
-    durationMinutes: integer("duration_minutes").notNull(),
+    // #291 Phase A: null duration = deadline/untimed (no personal limit);
+    // null closeAt = untimed (open-ended). Per-mode invariants are owned by
+    // the canonical exam-policy validator.
+    durationMinutes: integer("duration_minutes"),
     openAt: timestamp("open_at", {
       withTimezone: true,
       mode: "date",
@@ -286,7 +290,7 @@ export const exams = pgTable(
     closeAt: timestamp("close_at", {
       withTimezone: true,
       mode: "date",
-    }).notNull(),
+    }),
     passingScore: doublePrecision("passing_score").notNull(),
     totalScore: doublePrecision("total_score").notNull(),
     questionSelectionMode: text("question_selection_mode").notNull(),
@@ -393,7 +397,13 @@ export const examPolicyProfiles = pgTable(
     organizationId: organizationId().references(() => organizations.id),
     name: text("name").notNull(),
     description: text("description").notNull(),
-    durationMinutes: integer("duration_minutes").notNull(),
+    // #291 Phase A: profiles carry the timing mode they default to (never
+    // timed_sync); null duration for deadline/untimed profiles.
+    timingMode: text("timing_mode")
+      .$type<ExamProfileTimingMode>()
+      .notNull()
+      .default("timed_window"),
+    durationMinutes: integer("duration_minutes"),
     latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
     minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
     retakePolicy: text("retake_policy")

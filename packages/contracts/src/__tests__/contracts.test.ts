@@ -253,12 +253,85 @@ describe("exam contracts", () => {
     expect(result.questionSelectionMode).toBe("manual");
   });
 
-  it("CreateExamRequestSchema rejects invalid timingMode", () => {
+  it("CreateExamRequestSchema rejects values outside the timing-mode enum", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      timingMode: "hybrid",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // ── Phase A2 (#291): deadline / untimed join the authoring surface. ──
+  it("CreateExamRequestSchema accepts deadline mode with closeAt and no duration", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      timingMode: "deadline",
+      durationMinutes: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema accepts untimed mode without closeAt/duration", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
       timingMode: "untimed",
+      durationMinutes: null,
+      closeAt: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema accepts timed_sync at shape level (canonical validator rejects)", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      timingMode: "timed_sync",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("timed_window still requires duration without a profile", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      title: "T",
+      courseId: validExam.courseId,
+      openAt: validExam.openAt,
+      closeAt: validExam.closeAt,
+      timingMode: "timed_window",
+      // durationMinutes omitted, no profileId
     });
     expect(result.success).toBe(false);
+  });
+
+  it("ExamSchema exposes nullable durationMinutes/closeAt", () => {
+    const row = {
+      id: "00000000-0000-0000-0000-000000000001",
+      organizationId: "00000000-0000-0000-0000-000000000002",
+      title: "T",
+      description: "",
+      courseId: "00000000-0000-0000-0000-000000000003",
+      status: "open",
+      timingMode: "untimed",
+      durationMinutes: null,
+      openAt: new Date().toISOString(),
+      closeAt: null,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      controlFlags: {},
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      latestStartOffsetMinutes: null,
+      minSubmitAfterStartMinutes: null,
+      resultPublicationMode: "immediate",
+      resultsPublishedAt: null,
+      interruptionTimePolicy: "strict",
+      interruptionGracePerIncidentSeconds: null,
+      interruptionGracePerAttemptSeconds: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(ExamSchema.safeParse(row).success).toBe(true);
   });
 
   it("CreateExamRequestSchema rejects negative passingScore", () => {
