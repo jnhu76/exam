@@ -17,7 +17,10 @@ describe("nullable effective-deadline kernel", () => {
       ),
     ).toEqual(earlierAttemptDeadline);
     expect(
-      computeEffectiveDeadline({ closeAt }, { deadlineAt: laterAttemptDeadline }),
+      computeEffectiveDeadline(
+        { closeAt },
+        { deadlineAt: laterAttemptDeadline },
+      ),
     ).toEqual(closeAt);
   });
 
@@ -45,11 +48,7 @@ describe("nullable effective-deadline kernel", () => {
 
   it("keeps the equality boundary expired when a deadline exists", () => {
     expect(
-      isAttemptDeadlineExpired(
-        { closeAt },
-        { deadlineAt: null },
-        closeAt,
-      ),
+      isAttemptDeadlineExpired({ closeAt }, { deadlineAt: null }, closeAt),
     ).toBe(true);
   });
 
