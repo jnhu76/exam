@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import type { ExamDTO } from "@exam/contracts";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
@@ -52,27 +53,10 @@ import {
   canUpdateExam,
 } from "@/lib/capabilities";
 
-/** Full exam detail including stats and participant list. */
-/** Full exam detail including configuration, statistics, and participant summaries. */
-interface ExamDetail {
-  id: string;
-  title: string;
-  description: string;
-  courseId: string;
-  status: string;
-  timingMode: string;
-  durationMinutes: number;
-  openAt: string;
-  closeAt: string;
-  passingScore: number;
-  totalScore: number;
-  questionIds: string[];
-  controlFlags: Record<string, unknown>;
-  retakePolicy: string;
-  scoreStrategy: string;
-  maxAttempts: number;
-  resultPublicationMode: "immediate" | "after_grading" | "manual";
-  resultsPublishedAt: string | null;
+/** Full exam detail: the canonical exam entity plus aggregated stats and
+ * participant summaries. Extends the shared contract type so nullable timing
+ * fields (durationMinutes/closeAt for deadline/untimed) cannot drift. */
+interface ExamDetail extends ExamDTO {
   stats: {
     participantCount: number;
     completedCount: number;
@@ -124,7 +108,9 @@ export function ExamDetailPage() {
   const policyLabels = useMemo(
     () => ({
       timingMode: {
-        timed_window: t("admin.examDetail.config.timingModeValue.timed_window"),
+        timed_window: t("admin.forms.exam.timingModeValue.timed_window"),
+        deadline: t("admin.forms.exam.timingModeValue.deadline"),
+        untimed: t("admin.forms.exam.timingModeValue.untimed"),
       } as Record<string, string>,
       retakePolicy: {
         unlimited: t("admin.examProfilePages.enumLabels.retakePolicyUnlimited"),
@@ -606,10 +592,19 @@ export function ExamDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Projection keys on the canonical timingMode — null duration is
+             * real for deadline/untimed and must never render as a fabricated
+             * duration (same narrowing as StartExamPage). */}
             <p className="type-metric">
-              {t("admin.examDetail.stats.durationValue", {
-                minutes: exam.durationMinutes,
-              })}
+              {exam.timingMode === "untimed"
+                ? t("admin.examDetail.stats.noDuration")
+                : exam.timingMode === "deadline"
+                  ? t("admin.examDetail.stats.deadlineMode")
+                  : exam.durationMinutes !== null
+                    ? t("admin.examDetail.stats.durationValue", {
+                        minutes: exam.durationMinutes,
+                      })
+                    : t("admin.examDetail.stats.deadlineMode")}
             </p>
           </CardContent>
         </Card>
@@ -672,7 +667,12 @@ export function ExamDetailPage() {
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.endTime")}
             </span>
-            <span>{formatDateTime(exam.closeAt)}</span>
+            {/* closeAt is null for untimed exams; formatting null would render
+             * an epoch timestamp. "—" matches the RecoveryExamDetailPage
+             * missing-timestamp convention. */}
+            <span>
+              {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
+            </span>
           </div>
         </CardContent>
       </Card>
