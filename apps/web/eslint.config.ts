@@ -46,7 +46,7 @@ const compatibilityPlugins = {
 };
 
 const WEB_ROOT_PREFIX = "apps/web/";
-const LAYOUT_ROOT = "apps/web/src/components/layout";
+const LAYOUT_ROOT_SUFFIX = "/components/layout";
 
 /** Convert a canonical repository root into an ESLint glob relative to apps/web. */
 function toWebTsxGlob(root: string): string {
@@ -56,18 +56,23 @@ function toWebTsxGlob(root: string): string {
   return `${root.slice(WEB_ROOT_PREFIX.length)}/**/*.tsx`;
 }
 
-if (!BUSINESS_UI_ROOTS.includes(LAYOUT_ROOT)) {
-  throw new Error(`${LAYOUT_ROOT} must remain in BUSINESS_UI_ROOTS`);
+const layoutRoot = BUSINESS_UI_ROOTS.find((root) =>
+  root.endsWith(LAYOUT_ROOT_SUFFIX),
+);
+if (!layoutRoot) {
+  throw new Error(
+    `BUSINESS_UI_ROOTS must include a root ending in ${LAYOUT_ROOT_SUFFIX}`,
+  );
 }
 
 /** Business / feature source where every visual-authority rule applies. */
 const businessGlobs = BUSINESS_UI_ROOTS.filter(
-  (root) => root !== LAYOUT_ROOT,
+  (root) => root !== layoutRoot,
 ).map(toWebTsxGlob);
 
 /** Layout source: topbar/sidebar owns intentional sticky elevation, so
  *  no-business-shadow does not apply here. Other exam-ui rules still do. */
-const layoutGlobs = [toWebTsxGlob(LAYOUT_ROOT)];
+const layoutGlobs = [toWebTsxGlob(layoutRoot)];
 
 const ignores = [
   "dist/**",
