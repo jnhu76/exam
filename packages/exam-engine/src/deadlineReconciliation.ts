@@ -1,4 +1,4 @@
-import type { Exam, ExamAttempt } from "@exam/domain";
+import type { ExamAttempt } from "@exam/domain";
 import {
   GradingStatus,
   InvalidStateTransitionError,
@@ -293,9 +293,8 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Attempt not found after reconciliation");
   }
 
-  // Slice 4: finalizeGrading aggregates from the grading workset internally —
-  // no externally computed result. gradingWorksetRepo is the caller's
-  // tx-scoped repo (same one submitAttempt materialized into).
+  // Slice 4: finalizeGrading aggregates from the workset. gradingWorksetRepo
+  // is the caller's tx-scoped repo (same one submitAttempt materialized into).
   // P3-FORMAL-P0-D2: the caller-minted capability is threaded through to
   // finalizeGrading → finalizeTerminalGrading (affinity-proven).
   await finalizeGrading(
