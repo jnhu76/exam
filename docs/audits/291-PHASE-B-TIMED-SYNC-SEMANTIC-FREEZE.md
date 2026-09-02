@@ -95,6 +95,11 @@ effectiveDeadline  = min(closeAt, attempt.deadlineAt) = syncDeadline
 - `computeEffectiveDeadline` / `isAttemptDeadlineExpired` / the deadline
   scanner need NO timed_sync branches: the copied `deadlineAt` flows through
   the existing Phase A kernel unchanged.
+- Copy cost (amended 2026-09-03 after adversarial review): a **cap-bound**
+  sitting copies the old `closeAt` into `deadlineAt`, so a later
+  `extendExam` cannot reach in-flight attempts through the min() alone —
+  the B2 extend command must rewrite in-flight `deadlineAt` in that case
+  (see the extend row in §7). A **duration-bound** sitting needs no rewrite.
 - Two candidates starting at `T0+2min` and `T0+30min` resolve to the same
   `attempt.deadlineAt` — the deadline is derived from the durable T0, never
   from the candidate's start instant.
@@ -198,7 +203,7 @@ undefined. #292 owns the admission record shape.
 | interruption `strict` | ✔ | required at activation |
 | interruption `bounded_grace` | ✘ auto-compensation desynchronizes the shared end | rejected at activation validator |
 | interruption `operator_incident` | deferred | per-attempt grants exist (ADR-013, closeAt-bounded); whether timed_sync admits them is an explicit later product decision, not silently enabled |
-| extend exam | ✔ `extendExam` moves `closeAt`; the global deadline is `min(T0+duration, closeAt)` and follows the cap; no per-attempt rewrite needed (effective deadline already takes the min) | keep existing command |
+| extend exam | ✔ with one B2 rule: when the sitting is **cap-bound** (`T0 + duration >= closeAt` before the extension), extending `closeAt` must rewrite `deadlineAt` for in-flight attempts (`in_progress`/`disrupted`) to the new sync deadline inside the extend command's transaction (audit-covered) — the copied `deadlineAt` otherwise keeps the old cap and the extension would not reach candidates already in the sitting, diverging from deadline-mode precedent. A **duration-bound** sitting needs no rewrite (extension only postpones lazy close). All still-in-flight attempts move together, so the shared end is preserved | keep existing command + B2 sync branch |
 | extend one attempt | deferred with `operator_incident` | explicit later decision |
 | retake | one sitting = one attempt; `max_attempts > 1` rejected at activation; cross-sitting retakes out of scope | activation validator |
 | result publication | orthogonal (mode + `resultsPublishedAt`); no coupling | unchanged |
@@ -227,6 +232,7 @@ undefined. #292 owns the admission record shape.
   selection, `exam.sync_started` atomic audit, activation-time policy
   matrix (duration/closeAt required, strict-only, retake rule), authoring
   and publish activation, admin trigger surface, candidate waiting UX, E2E.
+  Also: the `extendExam` cap-bound rewrite of in-flight `deadlineAt` (§7).
 - **B3 — admission queue (#292)** per its own issue.
 - **B4 — composition**: `timed_sync + requireQueue`, proctor/operator
   console surfaces, final multimodal closeout.
