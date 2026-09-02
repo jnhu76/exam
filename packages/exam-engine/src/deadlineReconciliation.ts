@@ -125,73 +125,73 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
   ExamAttempt["status"]
 >(["in_progress", "disrupted"]);
 
+type DeadlineExam = { closeAt: Date | null | undefined };
+type DeadlineAttempt = { deadlineAt?: Date | null | undefined };
+
 /**
- * Computes the effective deadline for an attempt.
+ * Computes the canonical effective deadline for an attempt.
  *
- * `effectiveDeadline = min(exam.closeAt, attempt.deadlineAt)` — derived from
- * existing fields, no new deadline model (L0 §5.1). A null attempt deadline
- * falls back to the exam close.
+ * The deadline lattice is deliberately small:
+ *   - exam close + attempt deadline => min(closeAt, deadlineAt)
+ *   - exam close only               => closeAt
+ *   - neither                       => null (no deadline)
+ *   - attempt deadline only         => invalid hybrid; fail closed
  *
- * REACHABILITY BOUNDARY (P0-C1): the NULL `attempt.deadlineAt` branch is a
- * DEFENSIVE recovery over the schema-admissible NULL domain, NOT a normative
- * Phase-1 timing mode. The Phase-1 `timed_window` protocol invariant is:
- *
- *   ProtocolReachable(a) AND Active(a)  =>  a.deadlineAt != NULL
- *
- * because every ordinary production active-Attempt writer
- * (`startOrRestoreAttempt` via `calculateDeadlineAt`, and the operator time
- * grant engine `grantAttemptTime` added in REC-I4-I3B2) writes a non-null
- * `deadlineAt`, and no transition into `in_progress`/
- * `disrupted` introduces NULL (`restoreInterruptedAttempt` only preserves it). The
- * fallback therefore covers schema-admissible but protocol-unreachable
- * legacy / corrupt / historical NULL rows; it does not declare NULL a valid
- * protocol timing state. See `docs/architecture/exam-runtime.md` §5.1 for the
- * reachable-invariant / defensive-recovery split.
+ * Current production authoring still exposes only `timed_window`, whose
+ * reachable active attempts have BOTH bounds. The nullable result is the
+ * kernel seam required before `deadline` / `untimed` can be activated; A1 does
+ * not by itself make those modes reachable.
  *
  * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
- * "effective deadline" value. The scanner's DB candidate predicate is a
- * DERIVED discovery approximation that agrees with this seam over BOTH the
- * reachable domain (non-NULL `deadlineAt`) and the defensive NULL domain
- * (NULL => `exam.closeAt`); the authoritative expiry decision is
- * `isAttemptDeadlineExpired` below, which is the ONLY place "is this attempt
- * expired?" is answered for mutation purposes.
+ * effective deadline value. Discovery queries may over-approximate candidates,
+ * but the authoritative expiry decision is `isAttemptDeadlineExpired` below.
  */
 export function computeEffectiveDeadline(
-  exam: Pick<Exam, "closeAt">,
-  attempt: { deadlineAt?: Date | null | undefined },
-): Date {
-  const examClose = exam.closeAt;
-  if (examClose == null) {
-    throw new ValidationError(
-      "Exam closeAt is required for deadline computation (timed_window invariant)",
-    );
+  exam: { closeAt: Date },
+  attempt: DeadlineAttempt,
+): Date;
+export function computeEffectiveDeadline(
+  exam: DeadlineExam,
+  attempt: DeadlineAttempt,
+): Date | null;
+export function computeEffectiveDeadline(
+  exam: DeadlineExam,
+  attempt: DeadlineAttempt,
+): Date | null {
+  const examClose = exam.closeAt ?? null;
+  const attemptDeadline = attempt.deadlineAt ?? null;
+
+  if (examClose === null) {
+    if (attemptDeadline !== null) {
+      throw new ValidationError(
+        "Exam closeAt is required when an attempt deadline exists",
+      );
+    }
+    return null;
   }
-  // attempt.deadlineAt == null is a defensive recovery branch: reachable
-  // active attempts always carry a non-null deadlineAt (P0-C1 invariant
-  // ACTIVE-DEADLINE-001). Falling back to exam.closeAt here lets the scanner
-  // and inline reconciliation converge on legacy/schema-admissible NULL rows.
-  return attempt.deadlineAt && attempt.deadlineAt < examClose
-    ? attempt.deadlineAt
-    : examClose;
+
+  if (attemptDeadline === null) return examClose;
+  return attemptDeadline < examClose ? attemptDeadline : examClose;
 }
 
 /**
  * Canonical "is this attempt past its effective deadline?" decision.
  *
- * `now >= computeEffectiveDeadline(exam, attempt)`. This is the SOLE
- * authoritative expiry seam for any code path that mutates attempt state on
- * deadline (inline reconciliation AND the scanner under-lock recheck). Both
- * the candidate path and the scanner MUST call this — never re-derive
- * `deadlineAt <= now || closeAt <= now` inline.
- *
- * @throws {ValidationError} if `exam.closeAt` is null (timed_window invariant).
+ * A null effective deadline means there is no deadline and therefore this
+ * predicate is always false. Otherwise expiry is `now >= effectiveDeadline`.
+ * This is the SOLE authoritative expiry seam for deadline-triggered mutation;
+ * callers must not re-derive deadline comparisons inline.
  */
 export function isAttemptDeadlineExpired(
-  exam: Exam,
-  attempt: ExamAttempt,
+  exam: DeadlineExam,
+  attempt: DeadlineAttempt,
   now: Date,
 ): boolean {
-  return now.getTime() >= computeEffectiveDeadline(exam, attempt).getTime();
+  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
+  return (
+    effectiveDeadline !== null &&
+    now.getTime() >= effectiveDeadline.getTime()
+  );
 }
 
 /**
