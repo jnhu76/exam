@@ -21064,7 +21064,17 @@
                     "durationMinutes": {
                       "type": "integer",
                       "exclusiveMinimum": true,
-                      "minimum": 0
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "timingMode": {
+                      "type": "string",
+                      "enum": [
+                        "timed_sync",
+                        "timed_window",
+                        "deadline",
+                        "untimed"
+                      ]
                     },
                     "passingScore": {
                       "type": "number"
@@ -21183,6 +21193,7 @@
                     "id",
                     "title",
                     "durationMinutes",
+                    "timingMode",
                     "passingScore",
                     "totalScore",
                     "questionCount",

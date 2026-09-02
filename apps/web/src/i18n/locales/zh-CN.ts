@@ -2889,6 +2889,10 @@ const zhCN = {
       title: "考试信息",
       duration: "考试时长",
       durationValue: "{{minutes}}分钟",
+      // deadline/untimed carry null duration; copy keys on timingMode, never
+      // on durationMinutes (same rule as examList.meta).
+      deadlineMode: "截止时间制",
+      noDuration: "不限时",
       questionCount: "题目数量",
       questionCountValue: "{{count}}题",
       passingScore: "及格分数",

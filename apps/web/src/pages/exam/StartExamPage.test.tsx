@@ -552,3 +552,89 @@ describe("StartExamPage", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("StartExamPage timing modes (A2 corrective)", () => {
+  function makeDetail(overrides: {
+    title: string;
+    timingMode: "timed_window" | "deadline" | "untimed";
+    durationMinutes: number | null;
+  }) {
+    return {
+      id: "exam-1",
+      title: overrides.title,
+      durationMinutes: overrides.durationMinutes,
+      timingMode: overrides.timingMode,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+      availabilityStatus: "available" as const,
+      primaryAction: "start" as const,
+    };
+  }
+
+  it("timed_window shows the personal duration", async () => {
+    apiGet.mockResolvedValueOnce(
+      makeDetail({
+        title: "Timed Exam",
+        timingMode: "timed_window",
+        durationMinutes: 45,
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Timed Exam")).toBeInTheDocument();
+    expect(screen.getByText("45分钟")).toBeInTheDocument();
+  });
+
+  it("deadline shows deadline-mode info and never a fabricated duration", async () => {
+    apiGet.mockResolvedValueOnce(
+      makeDetail({
+        title: "Deadline Exam",
+        timingMode: "deadline",
+        durationMinutes: null,
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Deadline Exam")).toBeInTheDocument();
+    expect(screen.getByText("截止时间制")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/null分钟|0分钟|undefined/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("untimed shows 不限时 and never a fabricated duration", async () => {
+    apiGet.mockResolvedValueOnce(
+      makeDetail({
+        title: "Untimed Exam",
+        timingMode: "untimed",
+        durationMinutes: null,
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Untimed Exam")).toBeInTheDocument();
+    expect(screen.getByText("不限时")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/null分钟|0分钟|undefined/),
+    ).not.toBeInTheDocument();
+  });
+});

@@ -1035,6 +1035,7 @@ describe("attempt contracts", () => {
       id: "550e8400-e29b-41d4-a716-446655440000",
       title: "Exam",
       durationMinutes: 60,
+      timingMode: "timed_window",
       passingScore: 60,
       totalScore: 100,
       questionCount: 10,
@@ -1057,6 +1058,72 @@ describe("attempt contracts", () => {
       primaryAction: "start",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("CandidateExamDetailResponseSchema timing modes (A2 corrective)", () => {
+  const baseDetail = {
+    id: "550e8400-e29b-41d4-a716-446655440000",
+    title: "Exam",
+    passingScore: 60,
+    totalScore: 100,
+    questionCount: 10,
+    controlFlags: {
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      detectTabSwitch: false,
+      disableCopyPaste: false,
+      requireQueue: false,
+      batchSize: 10,
+      batchInterval: 3,
+      restrictIp: false,
+      requireLockdown: false,
+      showResultImmediately: true,
+    },
+    maxAttempts: 2,
+    currentAttempts: 0,
+    canStartNewAttempt: true,
+    availabilityStatus: "available" as const,
+    primaryAction: "start" as const,
+  };
+
+  it("parses timed_window with a positive duration and carries timingMode", () => {
+    const result = CandidateExamDetailResponseSchema.safeParse({
+      ...baseDetail,
+      durationMinutes: 60,
+      timingMode: "timed_window",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timingMode).toBe("timed_window");
+      expect(result.data.durationMinutes).toBe(60);
+    }
+  });
+
+  it("parses deadline with explicit null duration (no personal time limit)", () => {
+    const result = CandidateExamDetailResponseSchema.safeParse({
+      ...baseDetail,
+      durationMinutes: null,
+      timingMode: "deadline",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timingMode).toBe("deadline");
+      expect(result.data.durationMinutes).toBeNull();
+    }
+  });
+
+  it("parses untimed with explicit null duration (open-ended)", () => {
+    const result = CandidateExamDetailResponseSchema.safeParse({
+      ...baseDetail,
+      durationMinutes: null,
+      timingMode: "untimed",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timingMode).toBe("untimed");
+      expect(result.data.durationMinutes).toBeNull();
+    }
   });
 });
 

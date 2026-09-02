@@ -964,11 +964,20 @@ export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;
 /**
  * Detailed exam view for a candidate, including exam metadata, control flags, attempt history,
  * availability status, and the recommended primary action.
+ *
+ * #291 Phase A: `durationMinutes` is nullable exactly like `ExamSchema` — it is
+ * null for deadline and untimed modes (no personal time limit). The canonical
+ * `timingMode` (same authority as `CandidateExamSummarySchema`) is exposed so
+ * the client keys its "不限时"/countdown copy on the mode, never on a null
+ * duration.
  */
 export const CandidateExamDetailResponseSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
-  durationMinutes: z.number().int().positive(),
+  durationMinutes: z.number().int().positive().nullable(),
+  // Canonical timing mode — the client renders timing copy on this field,
+  // never on a null duration (mirrors CandidateExamSummarySchema.timingMode).
+  timingMode: TimingModeEnum,
   passingScore: z.number(),
   totalScore: z.number(),
   questionCount: z.number().int().min(0),

@@ -293,6 +293,9 @@ function buildCandidateExamDetail(
     id: exam.id,
     title: exam.title,
     durationMinutes: exam.durationMinutes,
+    // #291 Phase A: the exam's own timingMode is the canonical source — never
+    // infer the mode from the nullable duration/closeAt combination.
+    timingMode: exam.timingMode,
     passingScore: exam.passingScore,
     totalScore: exam.totalScore,
     questionCount: exam.questionSnapshot.length,
