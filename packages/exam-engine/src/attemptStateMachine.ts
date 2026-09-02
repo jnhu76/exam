@@ -30,7 +30,8 @@ export type TransitionResult = TransitionOk | TransitionFail;
 
 /** Optional guards evaluated before a transition is applied (e.g., deadline check). */
 export interface TransitionGuards {
-  deadlineAt?: Date;
+  // Null = no deadline (#291 untimed/deadline attempts) — guard is skipped.
+  deadlineAt?: Date | null;
   now?: Date;
 }
 

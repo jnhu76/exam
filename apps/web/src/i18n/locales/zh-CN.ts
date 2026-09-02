@@ -431,6 +431,9 @@ const zhCN = {
     /** Card metadata with interpolation. i18next interpolation: {{value}}. */
     meta: {
       duration: "{{minutes}}分钟",
+      noDuration: "不限时",
+      deadline: "截止时间制",
+      noEnd: "不限时",
       passingScore: "及格分: {{score}}/{{total}}",
       questionCount: "题目数: {{count}}",
       attempts: "已考: {{used}}/{{max}}次",
@@ -534,6 +537,8 @@ const zhCN = {
     },
     timer: {
       remaining: "剩余时间",
+      cutoff: "截止时间",
+      untimed: "不限时",
     },
     save: {
       idle: "等待保存",
@@ -1383,6 +1388,7 @@ const zhCN = {
       interruptionHint:
         "「有限补时」会在网络中断时给予有限的时间补偿；「不补时」严格按开考时间计算截止。",
       summaryDuration: "{{count}} 分钟",
+      summaryNoDuration: "无个人时长",
       summaryLatestStart: "最晚进入 {{count}} 分钟",
       summaryMinSubmit: "最短交卷 {{count}} 分钟",
       summaryMaxAttempts: "最多 {{count}} 次",
@@ -1520,6 +1526,7 @@ const zhCN = {
       },
       schedule: {
         startTime: "开始时间",
+        untimedHint: "该考试为不限时模式：随时作答，无需截止时间。",
         endTime: "结束时间",
         timeInvalid: "结束时间必须晚于开始时间",
       },
@@ -1679,8 +1686,17 @@ const zhCN = {
         latestStart: "最晚进入（开考后分钟）",
         minSubmit: "最短交卷（开考后分钟）",
         noLimit: "留空=不限",
-        timingMode:
-          "时间模式：限时窗口（当前版本仅支持此模式）。留空表示不限制。",
+        timingMode: "计时模式",
+        timingModeHint: {
+          timed_window: "考生在开放窗口内限时作答，超时自动交卷。",
+          deadline: "无个人倒计时，只需在截止时间前提交。",
+          untimed: "不限时：随时作答，无截止时间。",
+        },
+        timingModeValue: {
+          timed_window: "定时窗口",
+          deadline: "截止时间",
+          untimed: "不限时",
+        },
         sectionScore: "分数设置",
         totalScore: "总分",
         autoCalc: "自动计算",
@@ -2873,6 +2889,10 @@ const zhCN = {
       title: "考试信息",
       duration: "考试时长",
       durationValue: "{{minutes}}分钟",
+      // deadline/untimed carry null duration; copy keys on timingMode, never
+      // on durationMinutes (same rule as examList.meta).
+      deadlineMode: "截止时间制",
+      noDuration: "不限时",
       questionCount: "题目数量",
       questionCountValue: "{{count}}题",
       passingScore: "及格分数",

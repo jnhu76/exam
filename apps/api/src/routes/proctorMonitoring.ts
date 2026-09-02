@@ -84,7 +84,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
       const items = exams.map((exam) => ({
         ...exam,
         openAt: exam.openAt.toISOString(),
-        closeAt: exam.closeAt.toISOString(),
+        closeAt: exam.closeAt?.toISOString() ?? null,
       }));
       return { items, total: items.length };
     },

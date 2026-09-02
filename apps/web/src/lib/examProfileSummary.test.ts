@@ -30,6 +30,7 @@ const en: ProfileSummaryLabels = {
 };
 
 const baseStrict: ExamProfilePolicyDefaults = {
+  timingMode: "timed_window",
   durationMinutes: 60,
   latestStartOffsetMinutes: null,
   minSubmitAfterStartMinutes: null,
@@ -83,6 +84,7 @@ describe("summarizeProfile", () => {
     expect(
       summarizeProfile(
         {
+          timingMode: "timed_window",
           durationMinutes: 60,
           latestStartOffsetMinutes: 15,
           minSubmitAfterStartMinutes: 10,

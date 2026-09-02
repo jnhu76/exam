@@ -18,6 +18,7 @@ function buildSnapshot(
     attemptId: "00000000-0000-0000-0000-000000000001",
     examId: "00000000-0000-0000-0000-000000000002",
     attemptStatus: "in_progress",
+    timingMode: "timed_window",
     gradingStatus: "auto_graded",
     isEditable: true,
     canStart: false,

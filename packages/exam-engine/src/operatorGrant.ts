@@ -446,6 +446,14 @@ export async function grantAttemptTime(
     throw new ValidationError("Calculated deadline is invalid");
   }
 
+  // #291 Phase A: untimed exams have no closeAt to grant against (and can
+  // never carry the operator_incident snapshot policy — canonical matrix).
+  if (exam.closeAt === null) {
+    throw new ValidationError(
+      "Cannot grant operator time on an exam without closeAt",
+    );
+  }
+
   // 11. Reject (no silent clamp) if the new deadline would exceed exam.closeAt.
   if (afterDeadline.getTime() > exam.closeAt.getTime()) {
     throw new AttemptDeadlineExceedsExamCloseError({

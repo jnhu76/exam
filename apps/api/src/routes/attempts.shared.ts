@@ -32,14 +32,11 @@ function getInputMode(
   }
 }
 
-/**
- * Computes effectiveDeadline from exam and attempt fields.
- * Delegates to the canonical @exam/exam-engine seam (L0 §5.1). A null attempt
- * deadline falls back to the exam close. NOTE: the canonical helper throws if
- * `exam.closeAt` is null (timed_window invariant); the take path only reaches
- * here for `timed_window` exams where closeAt is always set.
- */
-// computeEffectiveDeadline is re-exported above from @exam/exam-engine.
+// computeEffectiveDeadline is re-exported above from @exam/exam-engine and is
+// the ONLY deadline seam used below (L0 §5.1). Since Phase A (#291) it is
+// null-safe: an untimed exam (closeAt null) projects an null effective
+// deadline; a deadline-mode attempt (deadlineAt null) falls back to the exam
+// close.
 
 /**
  * Computes answerVisibility — whether standardAnswer/rubric is shown.
@@ -144,13 +141,9 @@ export function buildCandidateTakeSnapshot(
 ) {
   const attemptStatus = attempt.status;
   const gradingStatus: GradingStatus = attempt.gradingStatus ?? "auto_graded";
-  // Canonical seam. On the candidate take path timingMode is always
-  // `timed_window` (Phase 1), so exam.closeAt is non-null and this never
-  // throws; the nullish guard preserves the legacy "open-ended" snapshot
-  // semantics if a non-timed exam ever reaches this projection.
-  const effectiveDeadline = exam.closeAt
-    ? computeEffectiveDeadline(exam, attempt)
-    : null;
+  // Canonical seam — single deadline authority for every timing mode. A null
+  // result means open-ended (untimed): never expired, no countdown.
+  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
   const effectiveDeadlineStr = effectiveDeadline?.toISOString() ?? null;
 
   // Derived capability: isEditable (CONTEXT.md:12, exam-protocol.md §6.1)
@@ -291,6 +284,9 @@ export function buildCandidateTakeSnapshot(
     lockReason,
     resultVisibility,
     answerVisibility,
+    // Canonical timing mode — the client must gate the personal countdown on
+    // this field, never on effectiveDeadline being null (#291 Phase A).
+    timingMode: exam.timingMode,
     submittedAt: attempt.submittedAt?.toISOString() ?? null,
     serverNow: now.toISOString(),
     effectiveDeadline: effectiveDeadlineStr,

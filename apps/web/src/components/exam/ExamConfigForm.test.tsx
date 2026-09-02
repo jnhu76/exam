@@ -7,6 +7,7 @@ const baseConfig: ExamConfigData = {
   title: "Test Exam",
   description: "",
   courseId: "course-1",
+  timingMode: "timed_window",
   durationMinutes: 60,
   openAt: "2026-06-01T09:00",
   closeAt: "2026-06-01T11:00",

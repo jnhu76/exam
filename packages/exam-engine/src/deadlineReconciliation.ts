@@ -68,8 +68,13 @@ export interface ReconciledAttemptMutationContext {
   readonly attemptId: string;
   /** Authoritative server-time snapshot captured at mint time. */
   readonly checkedAt: Date;
-  /** Canonical effective deadline = computeEffectiveDeadline(exam, attempt). */
-  readonly effectiveDeadline: Date;
+  /**
+   * Canonical effective deadline = computeEffectiveDeadline(exam, attempt).
+   * Nullable since Phase A (#291): untimed attempts have no deadline at all —
+   * null means "never expires", NOT "already expired" (the pure save decision
+   * treats a null deadline as no deadline guard).
+   */
+  readonly effectiveDeadline: Date | null;
   readonly [MUTATION_CONTEXT_BRAND]: true;
 
   /**
@@ -92,7 +97,7 @@ export interface ReconciledAttemptMutationContext {
 function mintReconciledAttemptMutationContext(
   attemptId: string,
   checkedAt: Date,
-  effectiveDeadline: Date,
+  effectiveDeadline: Date | null,
   attemptRepo: AttemptRepository,
 ): ReconciledAttemptMutationContext {
   return {
@@ -258,6 +263,12 @@ export async function ensureAttemptDeadlineReconciled(
     return attempt;
   }
   const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
+  // INVARIANT: expiry ⇒ a non-null effective deadline (null never expires).
+  // The guard keeps that fact type-honest and fails safe (no-op) instead of
+  // submitting an attempt that has no deadline.
+  if (effectiveDeadline === null) {
+    return attempt;
+  }
 
   // Lazy inline submit-and-grade using effectiveDeadline as the submit time,
   // so submittedAt = effectiveDeadline (the business deadline), not the

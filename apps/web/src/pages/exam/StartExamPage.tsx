@@ -177,9 +177,18 @@ export function StartExamPage() {
               <span>{t("startExam.info.duration")}</span>
             </div>
             <span className="text-foreground">
-              {t("startExam.info.durationValue", {
-                minutes: exam.durationMinutes,
-              })}
+              {/* Projection keys on the canonical timingMode — null duration is
+               * real for deadline/untimed and must never be rendered as a
+               * fabricated duration (same narrowing as ExamListPage). */}
+              {exam.timingMode === "untimed"
+                ? t("startExam.info.noDuration")
+                : exam.timingMode === "deadline"
+                  ? t("startExam.info.deadlineMode")
+                  : exam.durationMinutes !== null
+                    ? t("startExam.info.durationValue", {
+                        minutes: exam.durationMinutes,
+                      })
+                    : t("startExam.info.deadlineMode")}
             </span>
 
             <div className="flex items-center gap-2 text-muted-foreground">

@@ -5,6 +5,7 @@ import {
 } from "./interruption.js";
 import {
   Phase1RetakePolicyEnum,
+  PhaseATimingModeEnum,
   ScoreStrategyEnum,
   ResultPublicationModeEnum,
 } from "./exam.js";
@@ -30,7 +31,10 @@ export const ExamProfileSchema = z.object({
   organizationId: z.string().uuid(),
   name: z.string(),
   description: z.string(),
-  durationMinutes: z.number().int().positive(),
+  // #291 Phase A: profiles carry the timing mode they default to (never
+  // timed_sync); null duration for deadline/untimed profiles.
+  timingMode: PhaseATimingModeEnum,
+  durationMinutes: z.number().int().positive().nullable(),
   latestStartOffsetMinutes: z.number().int().min(0).nullable(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullable(),
   retakePolicy: Phase1RetakePolicyEnum,
@@ -68,7 +72,10 @@ export type ExamProfileDTO = z.infer<typeof ExamProfileSchema>;
 export const CreateExamProfileRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().max(500).default(""),
-  durationMinutes: z.number().int().positive(),
+  // Omission means the legacy default mode — a profile created before Phase A
+  // resolves to timed_window, matching the DB column default.
+  timingMode: PhaseATimingModeEnum.default("timed_window"),
+  durationMinutes: z.number().int().positive().nullable(),
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
   retakePolicy: Phase1RetakePolicyEnum,
@@ -104,7 +111,8 @@ export type CreateExamProfileRequest = z.infer<
 export const UpdateExamProfileRequestSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
-  durationMinutes: z.number().int().positive().optional(),
+  timingMode: PhaseATimingModeEnum.optional(),
+  durationMinutes: z.number().int().positive().nullish(),
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
   retakePolicy: Phase1RetakePolicyEnum.optional(),

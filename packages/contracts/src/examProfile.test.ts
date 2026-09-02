@@ -60,6 +60,7 @@ describe("CreateExamRequestSchema — P7-M2 profileId + durationMinutes (design 
 describe("CreateExamProfileRequestSchema (design §16)", () => {
   const valid = {
     name: "Standard",
+    timingMode: "timed_window",
     durationMinutes: 60,
     retakePolicy: "max_attempts",
     maxAttempts: 2,
@@ -174,6 +175,54 @@ describe("UpdateExamProfileRequestSchema (design §22 explicit null)", () => {
   });
 });
 
+describe("ExamProfileSchema Phase A mode shapes (#291)", () => {
+  const validCreate = {
+    name: "Standard",
+    timingMode: "timed_window",
+    durationMinutes: 60,
+    retakePolicy: "max_attempts",
+    maxAttempts: 2,
+    scoreStrategy: "highest",
+    resultPublicationMode: "after_grading",
+    interruptionTimePolicy: "strict",
+  };
+
+  it("accepts a deadline profile with null duration (#291 Phase A)", () => {
+    const result = CreateExamProfileRequestSchema.safeParse({
+      ...validCreate,
+      timingMode: "deadline",
+      durationMinutes: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an untimed profile with null duration (#291 Phase A)", () => {
+    const result = CreateExamProfileRequestSchema.safeParse({
+      ...validCreate,
+      timingMode: "untimed",
+      durationMinutes: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a profile carrying timed_sync (latent mode)", () => {
+    const result = CreateExamProfileRequestSchema.safeParse({
+      ...validCreate,
+      timingMode: "timed_sync",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("defaults an omitted timingMode to timed_window (legacy profiles)", () => {
+    const { timingMode: _omitted, ...withoutMode } = validCreate;
+    const result = CreateExamProfileRequestSchema.safeParse(withoutMode);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timingMode).toBe("timed_window");
+    }
+  });
+});
+
 describe("ExamProfileSchema response shape", () => {
   it("accepts the persisted profile response", () => {
     const result = ExamProfileSchema.safeParse({
@@ -181,6 +230,7 @@ describe("ExamProfileSchema response shape", () => {
       organizationId: "00000000-0000-0000-0000-000000000011",
       name: "Standard",
       description: "",
+      timingMode: "timed_window",
       durationMinutes: 60,
       latestStartOffsetMinutes: null,
       minSubmitAfterStartMinutes: null,

@@ -125,7 +125,9 @@ function useSummaryLabels(): ProfileSummaryLabels {
   return useMemo(
     () => ({
       durationMinutes: (m) =>
-        t("admin.examProfilePages.summaryDuration", { count: m }),
+        m === null
+          ? t("admin.examProfilePages.summaryNoDuration")
+          : t("admin.examProfilePages.summaryDuration", { count: m }),
       latestStart: (m) =>
         t("admin.examProfilePages.summaryLatestStart", { count: m }),
       minSubmit: (m) =>
@@ -251,6 +253,7 @@ export function ExamCreatePage() {
       id: p.id,
       name: p.name,
       defaults: {
+        timingMode: p.timingMode,
         durationMinutes: p.durationMinutes,
         latestStartOffsetMinutes: p.latestStartOffsetMinutes,
         minSubmitAfterStartMinutes: p.minSubmitAfterStartMinutes,
@@ -328,7 +331,11 @@ export function ExamCreatePage() {
     if (state.step === 2) {
       // User-supplied policy values must stay in their valid domain; the
       // profile/default fallback is already valid (validated on save).
-      if (preview.resolved.durationMinutes < 1) {
+      if (
+        preview.resolved.timingMode === "timed_window" &&
+        preview.resolved.durationMinutes !== null &&
+        preview.resolved.durationMinutes < 1
+      ) {
         errors.durationMinutes = t(
           "admin.examWizard.validation.durationRequired",
         );
@@ -347,7 +354,10 @@ export function ExamCreatePage() {
         errors.score = t("admin.examWizard.validation.scoreInvalid");
     }
     if (state.step === 4) {
-      if (!state.openAt || !state.closeAt)
+      if (
+        preview.resolved.timingMode !== "untimed" &&
+        (!state.openAt || !state.closeAt)
+      )
         errors.time = t("admin.examWizard.validation.timeRequired");
       else if (new Date(state.closeAt) <= new Date(state.openAt))
         errors.time = t("admin.examWizard.validation.timeInvalid");
@@ -378,7 +388,7 @@ export function ExamCreatePage() {
     setSaveError(null);
     setFieldErrors({});
     try {
-      const payload = buildCreateExamPayload(state);
+      const payload = buildCreateExamPayload(state, preview.resolved);
       const exam = await api.post<{ id: string }>("/api/exams", payload);
       toast.success(t("admin.examWizard.feedback.createSuccess"));
       void navigate(`/admin/exams/${exam.id}`);
@@ -763,19 +773,27 @@ export function ExamCreatePage() {
                 }
               />
             </Field>
-            <Field>
-              <Label htmlFor="wiz-closeAt">
-                {t("admin.examWizard.schedule.endTime")}
-              </Label>
-              <Input
-                id="wiz-closeAt"
-                type="datetime-local"
-                value={state.closeAt}
-                onChange={(e) =>
-                  setState((s) => ({ ...s, closeAt: e.target.value }))
-                }
-              />
-            </Field>
+            {/* Untimed (Phase A2 (Issue 291)) is open-ended — no close time to pick. */}
+            {preview.resolved.timingMode !== "untimed" && (
+              <Field>
+                <Label htmlFor="wiz-closeAt">
+                  {t("admin.examWizard.schedule.endTime")}
+                </Label>
+                <Input
+                  id="wiz-closeAt"
+                  type="datetime-local"
+                  value={state.closeAt}
+                  onChange={(e) =>
+                    setState((s) => ({ ...s, closeAt: e.target.value }))
+                  }
+                />
+              </Field>
+            )}
+            {preview.resolved.timingMode === "untimed" && (
+              <p className="text-sm text-muted-foreground">
+                {t("admin.examWizard.schedule.untimedHint")}
+              </p>
+            )}
           </FieldRow>
           {/* Local validation key + server-routed field names both render. */}
           <FieldError>{fieldErrors.time}</FieldError>

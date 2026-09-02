@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { passwordField } from "./passwordPolicy.js";
+import { TimingModeEnum } from "./exam.js";
 import { optionalEmailField } from "./emailField.js";
 
 // ── Candidate Exam Summary (Phase 1 derived contract) ─────────────
@@ -56,8 +57,13 @@ export const CandidateExamSummarySchema = z.object({
   examId: z.string().uuid(),
   title: z.string(),
   windowStartAt: z.string().datetime(),
-  windowEndAt: z.string().datetime(),
-  durationMinutes: z.number().int().positive(),
+  // #291 Phase A: untimed exams are open-ended — null window end and no
+  // personal duration.
+  windowEndAt: z.string().datetime().nullable(),
+  durationMinutes: z.number().int().positive().nullable(),
+  // Canonical timing mode — UI must gate "不限时"/countdown copy on this
+  // field, never on a null duration/windowEnd.
+  timingMode: TimingModeEnum,
   totalQuestions: z.number().int().min(0),
   passingScore: z.number(),
   totalScore: z.number(),

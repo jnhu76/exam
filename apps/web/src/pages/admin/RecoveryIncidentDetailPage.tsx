@@ -636,7 +636,9 @@ export function RecoveryIncidentDetailPage() {
                 {t("admin.recoveryIncident.examCloseAt")}
               </dt>
               <dd className="text-sm">
-                {formatTime(data.examSummary.closeAt)}
+                {data.examSummary.closeAt === null
+                  ? "—"
+                  : formatTime(data.examSummary.closeAt)}
               </dd>
             </div>
           </dl>
@@ -684,7 +686,9 @@ export function RecoveryIncidentDetailPage() {
                   <StatusBadge status={a.status} />
                   <span className="text-xs text-muted-foreground">
                     {t("admin.recoveryIncident.effectiveDeadline")}:{" "}
-                    {formatTime(a.effectiveDeadlineAt)}
+                    {a.effectiveDeadlineAt === null
+                      ? "—"
+                      : formatTime(a.effectiveDeadlineAt)}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {t("admin.recoveryIncident.score")}:{" "}

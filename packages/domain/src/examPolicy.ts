@@ -22,15 +22,17 @@ import type {
 import type { ControlFlags, InterruptionTimePolicy } from "./types.js";
 
 /**
- * Timing + schedule policy. `timed_window` is the only supported timing mode
- * in Phase 1; `untimed`/`timed_sync`/`deadline` are latent enum values blocked
- * at the contract layer, not modelled here as executable.
+ * Timing + schedule policy. Phase A supports `timed_window`, `deadline` and
+ * `untimed`; `timed_sync` stays a latent enum value rejected by the canonical
+ * validator until the admission/queue runtime exists. `durationMinutes` is
+ * null for modes without a personal duration (deadline/untimed); `closeAt`
+ * is null only for `untimed`.
  */
 export interface TimingPolicy {
   timingMode: TimingMode;
-  durationMinutes: number;
+  durationMinutes: number | null;
   openAt: Date;
-  closeAt: Date;
+  closeAt: Date | null;
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
 }
@@ -117,6 +119,7 @@ export interface ResolvedExamPolicy {
  */
 export const ExamPolicyConflictCode = {
   ExamWindowInvalid: "EXAM_WINDOW_INVALID",
+  ExamTimingModeInvalid: "EXAM_TIMING_MODE_INVALID",
   PassingScoreExceedsTotal: "PASSING_SCORE_EXCEEDS_TOTAL",
   RetakeMaxAttemptsInvalid: "RETAKE_MAX_ATTEMPTS_INVALID",
   InterruptionPolicyCapsInvalid: "INVALID_INTERRUPTION_POLICY",

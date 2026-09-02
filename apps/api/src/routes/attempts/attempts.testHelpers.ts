@@ -39,19 +39,36 @@ export function buildExamPayload(
     maxAttempts: number;
     passingScore: number;
     totalScore: number;
-    durationMinutes: number;
+    // #291 Phase A: deadline/untimed carry null duration; untimed also nulls
+    // closeAt (the payload builder below handles that from timingMode).
+    timingMode: "timed_window" | "deadline" | "untimed";
+    durationMinutes: number | null;
+    closeAt: string | null;
     minSubmitAfterStartMinutes: number | null;
     latestStartOffsetMinutes: number | null;
   }> = {},
 ) {
+  const untimed = overrides.timingMode === "untimed";
   return {
     title: overrides.title ?? "Test Exam",
     description: "",
     courseId: overrides.courseId ?? "",
-    timingMode: "timed_window" as const,
-    durationMinutes: overrides.durationMinutes ?? 60,
+    timingMode: overrides.timingMode ?? ("timed_window" as const),
+    // INVARIANT: explicit null is a real Phase A value (deadline/untimed) —
+    // merge on `undefined`, never `??`, or null collapses to the 60 default.
+    durationMinutes:
+      overrides.durationMinutes !== undefined
+        ? overrides.durationMinutes
+        : untimed
+          ? null
+          : 60,
     openAt: new Date(Date.now() - 3600000).toISOString(),
-    closeAt: new Date(Date.now() + 86400000).toISOString(),
+    closeAt:
+      overrides.closeAt === undefined
+        ? untimed
+          ? null
+          : new Date(Date.now() + 86400000).toISOString()
+        : overrides.closeAt,
     passingScore: overrides.passingScore ?? 60,
     totalScore: overrides.totalScore ?? 100,
     questionSelectionMode: "manual" as const,

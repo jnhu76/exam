@@ -135,8 +135,10 @@ export interface EvaluateInterruptionPolicyInput {
   decisionNow: Date;
   /** The attempt's locked current deadlineAt (before any adjustment). */
   beforeDeadline: Date | null;
-  /** The exam's locked closeAt — the hard upper bound for any grant. */
-  examCloseAt: Date;
+  /** The exam's locked closeAt — the hard upper bound for any grant. Null
+   *  for untimed exams (#291 Phase A), which can never carry a bounded_grace
+   *  snapshot, so a null here fails closed in the bounded branch. */
+  examCloseAt: Date | null;
   /** Sum of committed bounded_grace added_seconds for this attempt. */
   priorBoundedGraceAddedSeconds: number;
 }
@@ -216,6 +218,13 @@ export function evaluateInterruptionTimePolicy(
     // Active bounded attempt must carry a deadline; never invent one from now.
     throw new ValidationError(
       "bounded_grace restore requires a non-null attempt deadline",
+    );
+  }
+  if (examCloseAt == null) {
+    // Untimed exams have no close bound and cannot carry bounded_grace
+    // (canonical timing-mode matrix) — never compute an unbounded grant.
+    throw new ValidationError(
+      "bounded_grace restore requires a non-null exam closeAt",
     );
   }
 

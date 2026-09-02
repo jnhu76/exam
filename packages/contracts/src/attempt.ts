@@ -4,6 +4,7 @@ import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 import { InterruptionTimePolicySchema } from "./interruption.js";
 import { AnswerModeEnum, ContentDocumentV1Schema } from "./contentDocument.js";
+import { TimingModeEnum } from "./exam.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
@@ -963,11 +964,20 @@ export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;
 /**
  * Detailed exam view for a candidate, including exam metadata, control flags, attempt history,
  * availability status, and the recommended primary action.
+ *
+ * #291 Phase A: `durationMinutes` is nullable exactly like `ExamSchema` — it is
+ * null for deadline and untimed modes (no personal time limit). The canonical
+ * `timingMode` (same authority as `CandidateExamSummarySchema`) is exposed so
+ * the client keys its "不限时"/countdown copy on the mode, never on a null
+ * duration.
  */
 export const CandidateExamDetailResponseSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
-  durationMinutes: z.number().int().positive(),
+  durationMinutes: z.number().int().positive().nullable(),
+  // Canonical timing mode — the client renders timing copy on this field,
+  // never on a null duration (mirrors CandidateExamSummarySchema.timingMode).
+  timingMode: TimingModeEnum,
   passingScore: z.number(),
   totalScore: z.number(),
   questionCount: z.number().int().min(0),
@@ -1103,6 +1113,10 @@ export const CandidateTakeSnapshotSchema = z.object({
   lockReason: LockReasonEnum.optional(),
   resultVisibility: VisibilityEnum,
   answerVisibility: VisibilityEnum,
+  // #291 Phase A: the canonical timing mode. The client renders the personal
+  // countdown ONLY for timed_window — it must not infer the mode from a null
+  // effectiveDeadline.
+  timingMode: TimingModeEnum,
   submittedAt: z.string().datetime().nullable(),
   serverNow: z.string().datetime(),
   effectiveDeadline: z.string().datetime().nullable(),

@@ -188,6 +188,116 @@ describe("attempt routes", () => {
         blockingReason: "max_attempts_reached",
       });
     });
+
+    it("returns 200 for a deadline exam with nullable duration (A2 corrective)", async () => {
+      const examResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Deadline Detail Exam",
+          courseId,
+          questionIds: [questionId],
+          timingMode: "deadline",
+          durationMinutes: null,
+          // closeAt stays non-null: deadline mode has a hard end time.
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const deadlineExamId = examResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${deadlineExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, deadlineExamId);
+
+      const detailResponse = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/exams/${deadlineExamId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json()).toMatchObject({
+        id: deadlineExamId,
+        timingMode: "deadline",
+        durationMinutes: null,
+      });
+    });
+
+    it("returns 200 for an untimed exam with nullable duration (A2 corrective)", async () => {
+      const examResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Untimed Detail Exam",
+          courseId,
+          questionIds: [questionId],
+          timingMode: "untimed",
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const untimedExamId = examResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${untimedExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, untimedExamId);
+
+      const detailResponse = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/exams/${untimedExamId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json()).toMatchObject({
+        id: untimedExamId,
+        timingMode: "untimed",
+        durationMinutes: null,
+      });
+    });
+
+    it("keeps timed_window detail as a non-null duration control (A2 corrective)", async () => {
+      const examResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Timed Window Detail Exam",
+          courseId,
+          questionIds: [questionId],
+          timingMode: "timed_window",
+          durationMinutes: 45,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const timedExamId = examResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${timedExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, timedExamId);
+
+      const detailResponse = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/exams/${timedExamId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json()).toMatchObject({
+        id: timedExamId,
+        timingMode: "timed_window",
+      });
+      expect(
+        (detailResponse.json() as { durationMinutes: number }).durationMinutes,
+      ).toBeGreaterThan(0);
+    });
   });
 
   describe("GET /attempts/:id", () => {

@@ -293,6 +293,9 @@ function buildCandidateExamDetail(
     id: exam.id,
     title: exam.title,
     durationMinutes: exam.durationMinutes,
+    // #291 Phase A: the exam's own timingMode is the canonical source — never
+    // infer the mode from the nullable duration/closeAt combination.
+    timingMode: exam.timingMode,
     passingScore: exam.passingScore,
     totalScore: exam.totalScore,
     questionCount: exam.questionSnapshot.length,
@@ -423,8 +426,9 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             examId: exam.id,
             title: exam.title,
             windowStartAt: exam.openAt.toISOString(),
-            windowEndAt: exam.closeAt.toISOString(),
+            windowEndAt: exam.closeAt?.toISOString() ?? null,
             durationMinutes: exam.durationMinutes,
+            timingMode: exam.timingMode,
             // Snapshot authority boundary: a draft has no frozen snapshot yet,
             // so its authored question ids are the current authoring state; any
             // non-draft state must report the frozen snapshot length — even

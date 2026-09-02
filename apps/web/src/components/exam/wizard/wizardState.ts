@@ -14,6 +14,7 @@ import { buildExplicitOverridesPayload } from "@/lib/wizardPolicyPreview";
 
 /** Code defaults mirroring the contract's canonical CreateExamRequest defaults. */
 export const WIZARD_CODE_DEFAULTS: ExamProfilePolicyDefaults = {
+  timingMode: "timed_window",
   durationMinutes: 60,
   latestStartOffsetMinutes: null,
   minSubmitAfterStartMinutes: null,
@@ -172,8 +173,12 @@ export function goToStep(state: WizardState, step: number): WizardState {
  */
 export function buildCreateExamPayload(
   state: WizardState,
+  resolved: ExamProfilePolicyDefaults = WIZARD_CODE_DEFAULTS,
 ): Record<string, unknown> {
-  if (!state.openAt || !state.closeAt) {
+  // Resolved timing mode (override > profile > code default) decides which
+  // schedule/duration fields are legal on the wire (Phase A2 (Issue 291)).
+  const untimed = resolved.timingMode === "untimed";
+  if (!state.openAt || (!state.closeAt && !untimed)) {
     throw new Error(
       "Exam schedule (openAt/closeAt) is required before creating an exam",
     );
@@ -182,10 +187,12 @@ export function buildCreateExamPayload(
     title: state.title.trim(),
     description: state.description,
     courseId: state.courseId,
-    timingMode: "timed_window",
+    timingMode: resolved.timingMode,
     questionSelectionMode: "manual",
     openAt: new Date(state.openAt).toISOString(),
-    closeAt: new Date(state.closeAt).toISOString(),
+    // Untimed is open-ended: explicit semantic null, never a fabricated date.
+    closeAt:
+      untimed || !state.closeAt ? null : new Date(state.closeAt).toISOString(),
     passingScore: state.passingScore,
     totalScore: state.totalScore,
     questionIds: state.questionIds,
@@ -193,16 +200,30 @@ export function buildCreateExamPayload(
   if (state.profileId) {
     payload.profileId = state.profileId;
   }
-  const duration = resolveOverrideOrPlaceholder(state, "durationMinutes");
-  if (duration !== undefined) {
-    payload.durationMinutes = duration;
-  } else if (!state.profileId) {
-    payload.durationMinutes = WIZARD_CODE_DEFAULTS.durationMinutes;
+  if (resolved.timingMode === "timed_window") {
+    const duration = resolveOverrideOrPlaceholder(state, "durationMinutes");
+    if (duration !== undefined) {
+      payload.durationMinutes = duration;
+    } else if (!state.profileId) {
+      payload.durationMinutes = WIZARD_CODE_DEFAULTS.durationMinutes;
+    }
+  } else {
+    // deadline/untimed: explicit semantic null. Omitting would let a profile
+    // duration survive into an illegal combination (M2 wire rule §161).
+    payload.durationMinutes = null;
   }
   // Send ONLY the explicit overrides (own keys, preserving null) via the
   // shared wire-faithful helper. Absent keys are omitted so the backend
-  // applies the profile (or code default).
-  Object.assign(payload, buildExplicitOverridesPayload(state.overrides));
+  // applies the profile (or code default). timingMode/durationMinutes above
+  // are already resolved — drop override keys that would double-write them.
+  const {
+    timingMode: _timingMode,
+    durationMinutes: _duration,
+    ...restOverrides
+  } = state.overrides;
+  void _timingMode;
+  void _duration;
+  Object.assign(payload, buildExplicitOverridesPayload(restOverrides));
   return payload;
 }
 

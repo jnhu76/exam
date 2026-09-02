@@ -90,7 +90,7 @@ function toExamResponse(exam: Exam) {
     timingMode: exam.timingMode,
     durationMinutes: exam.durationMinutes,
     openAt: exam.openAt.toISOString(),
-    closeAt: exam.closeAt.toISOString(),
+    closeAt: exam.closeAt?.toISOString() ?? null,
     passingScore: exam.passingScore,
     totalScore: exam.totalScore,
     questionSelectionMode: exam.questionSelectionMode,
@@ -196,7 +196,7 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   const examEnded =
     exam.status === "closed" ||
     exam.status === "archived" ||
-    now >= exam.closeAt;
+    (exam.closeAt !== null && now >= exam.closeAt);
 
   if (!examEnded) {
     return {
@@ -267,6 +267,7 @@ function resolveResultPublicationMode(
  * (design §20 Option A).
  */
 const PROFILE_POLICY_FIELDS = [
+  "timingMode",
   "durationMinutes",
   "latestStartOffsetMinutes",
   "minSubmitAfterStartMinutes",
@@ -596,8 +597,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           );
         }
         const explicitOverrides: Partial<ExamProfilePolicyDefaults> = {};
+        if (rawBody.timingMode !== undefined) {
+          explicitOverrides.timingMode =
+            data.timingMode as ExamProfilePolicyDefaults["timingMode"];
+        }
         if (rawBody.durationMinutes !== undefined) {
-          explicitOverrides.durationMinutes = data.durationMinutes as number;
+          explicitOverrides.durationMinutes = data.durationMinutes as
+            | number
+            | null;
         }
         if (rawBody.latestStartOffsetMinutes !== undefined) {
           explicitOverrides.latestStartOffsetMinutes =
@@ -653,23 +660,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         data = reparsed.data;
       }
 
-      // P7-M2 canonical guard (design §20): after the canonical parse,
-      // `durationMinutes` is present iff a profile supplied it or the caller
-      // sent it (the schema refine rejects the no-profile omission). Fail
-      // closed rather than persisting undefined.
-      if (data.durationMinutes === undefined) {
-        return reply.code(400).send(
-          buildErrorResponse(request.id, "VALIDATION_ERROR", {
-            fields: [
-              {
-                field: "durationMinutes",
-                code: "INVALID_TYPE",
-                message: "Required",
-              },
-            ],
-          }),
-        );
-      }
+      // P7-M2 canonical guard (design §20), Phase A adjustment (#291):
+      // after the canonical parse a timed_window exam always carries
+      // `durationMinutes` (profile-supplied or caller-sent; the schema refine
+      // rejects the no-profile omission). deadline/untimed legitimately
+      // normalize the omission to the semantic null below.
 
       // ADR-013 §3: resolve the interruption policy from the (optional)
       // authoring input. `data` already carries the merged authoring values
@@ -739,9 +734,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       // validator (design §43).
       assertExamPolicyInputValid({
         timingMode: data.timingMode,
-        durationMinutes: data.durationMinutes,
+        durationMinutes: data.durationMinutes ?? null,
         openAt: new Date(data.openAt),
-        closeAt: new Date(data.closeAt),
+        closeAt:
+          data.closeAt !== undefined && data.closeAt !== null
+            ? new Date(data.closeAt)
+            : null,
         latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
         minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
         questionSelectionMode: data.questionSelectionMode,
@@ -766,9 +764,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         courseId: data.courseId,
         status: "draft",
         timingMode: data.timingMode,
-        durationMinutes: data.durationMinutes,
+        durationMinutes: data.durationMinutes ?? null,
         openAt: new Date(data.openAt),
-        closeAt: new Date(data.closeAt),
+        closeAt:
+          data.closeAt !== undefined && data.closeAt !== null
+            ? new Date(data.closeAt)
+            : null,
         passingScore: data.passingScore,
         totalScore: data.totalScore,
         questionSelectionMode: data.questionSelectionMode,
@@ -891,11 +892,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             if (forbidden.length > 0) {
               throw new ExamUpdateNotAllowedError();
             }
+            // #291 Phase A: clearing closeAt is legal only for untimed exams
+            // (published untimed already carry null). A close-bound published
+            // exam (timed_window/deadline) must never lose its cutoff — the
+            // draft-only canonical validation does not re-check here.
+            if (data.closeAt === null && existing.timingMode !== "untimed") {
+              throw new ValidationError("Only untimed exams may clear closeAt");
+            }
             // Same-value schedule: skip mutation and audit.
             const sameOpenAt =
               !data.openAt || data.openAt === existing.openAt.toISOString();
             const sameCloseAt =
-              !data.closeAt || data.closeAt === existing.closeAt.toISOString();
+              data.closeAt === undefined ||
+              data.closeAt ===
+                (existing.closeAt ? existing.closeAt.toISOString() : null);
             if (sameOpenAt && sameCloseAt) {
               return { exam: existing, draftObservation: false };
             }
@@ -1022,11 +1032,18 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               timingMode:
                 (updateData.timingMode as Exam["timingMode"] | undefined) ??
                 exam.timingMode,
+              // Nullable (#291 Phase A): `null` duration/closeAt is business
+              // semantics (deadline/untimed), merged with `!== undefined` —
+              // never `??`, which would resurrect the old value over null.
               durationMinutes:
-                (updateData.durationMinutes as number | undefined) ??
-                exam.durationMinutes,
+                updateData.durationMinutes !== undefined
+                  ? (updateData.durationMinutes as number | null)
+                  : exam.durationMinutes,
               openAt: (updateData.openAt as Date | undefined) ?? exam.openAt,
-              closeAt: (updateData.closeAt as Date | undefined) ?? exam.closeAt,
+              closeAt:
+                updateData.closeAt !== undefined
+                  ? (updateData.closeAt as Date | null)
+                  : exam.closeAt,
               // Nullable fields: `null` is business semantics (e.g. clearing
               // interruption caps when switching bounded_grace → strict), so
               // merge with `!== undefined` — never `??`, which would resurrect
@@ -1416,17 +1433,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         id,
         fastify.now(),
         async ({ repo, exam }) => {
-          const oldCloseAt = new Date(exam.closeAt);
           if (exam.status !== "open") {
             throw new ExamExtendNotAllowedError({
               reason: exam.status === "closed" ? "ALREADY_CLOSED" : "NOT_OPEN",
             });
           }
+          // extendExam fails closed on untimed exams (#291 Phase A): they
+          // have no closeAt to extend. The non-null assertion is proven by
+          // that guard — extendExam only returns on a successful extension.
+          const oldCloseAt = new Date(exam.closeAt!);
           const updated = await extendExam(repo, id, extendMinutes);
           return {
             exam: updated,
             oldCloseAt,
-            newCloseAt: new Date(updated.closeAt),
+            newCloseAt: new Date(updated.closeAt!),
           };
         },
         request,

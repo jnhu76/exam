@@ -21,14 +21,20 @@ interface QuestionScore {
   score: number;
 }
 
+/** Timing modes authoring may select (Phase A2 (Issue 291)) — never timed_sync. */
+export type AuthoringTimingMode = "timed_window" | "deadline" | "untimed";
+
 /** Complete exam configuration data used by the create/edit form. */
 export interface ExamConfigData {
   title: string;
   description: string;
   courseId: string;
-  durationMinutes: number;
+  timingMode: AuthoringTimingMode;
+  // Null = not applicable to the selected timing mode (deadline/untimed have
+  // no personal duration; untimed additionally has no closeAt).
+  durationMinutes: number | null;
   openAt: string;
-  closeAt: string;
+  closeAt: string | null;
   passingScore: number;
   totalScore: number;
   questionSelectionMode: "manual" | "random";
@@ -102,6 +108,18 @@ export function ExamConfigForm({
     onChange({ ...data, ...partial });
   }
 
+  function updateTimingMode(mode: AuthoringTimingMode) {
+    if (mode === data.timingMode) return;
+    onChange({
+      ...data,
+      timingMode: mode,
+      // Clearing is part of the mode switch, not the user's job: a stale
+      // duration/closeAt would otherwise survive into an illegal payload.
+      durationMinutes: mode === "timed_window" ? data.durationMinutes : null,
+      closeAt: mode === "untimed" ? null : data.closeAt,
+    });
+  }
+
   function updateFlags(partial: Partial<ExamConfigData["controlFlags"]>) {
     onChange({
       ...data,
@@ -167,6 +185,33 @@ export function ExamConfigForm({
         </CardHeader>
         <CardContent>
           <FieldGroup>
+            <Field>
+              <Label>{t("admin.forms.exam.timingMode")}</Label>
+              <Select
+                value={data.timingMode}
+                onValueChange={(v) =>
+                  updateTimingMode(v as AuthoringTimingMode)
+                }
+              >
+                <SelectTrigger data-testid="timing-mode-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="timed_window">
+                    {t("admin.forms.exam.timingModeValue.timed_window")}
+                  </SelectItem>
+                  <SelectItem value="deadline">
+                    {t("admin.forms.exam.timingModeValue.deadline")}
+                  </SelectItem>
+                  <SelectItem value="untimed">
+                    {t("admin.forms.exam.timingModeValue.untimed")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t(`admin.forms.exam.timingModeHint.${data.timingMode}`)}
+              </p>
+            </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field>
                 <Label>{t("admin.forms.exam.startTime")}</Label>
@@ -176,29 +221,33 @@ export function ExamConfigForm({
                   onChange={(e) => update({ openAt: e.target.value })}
                 />
               </Field>
-              <Field>
-                <Label>{t("admin.forms.exam.endTime")}</Label>
-                <Input
-                  type="datetime-local"
-                  value={data.closeAt}
-                  onChange={(e) => update({ closeAt: e.target.value })}
-                />
-              </Field>
+              {data.timingMode !== "untimed" && (
+                <Field>
+                  <Label>{t("admin.forms.exam.endTime")}</Label>
+                  <Input
+                    type="datetime-local"
+                    value={data.closeAt ?? ""}
+                    onChange={(e) => update({ closeAt: e.target.value })}
+                  />
+                </Field>
+              )}
             </div>
             {timeError && (
               <FieldError>{t("admin.forms.exam.timeInvalid")}</FieldError>
             )}
-            <Field>
-              <Label>{t("admin.forms.exam.duration")}</Label>
-              <Input
-                type="number"
-                value={data.durationMinutes}
-                onChange={(e) =>
-                  update({ durationMinutes: Number(e.target.value) })
-                }
-                min={1}
-              />
-            </Field>
+            {data.timingMode === "timed_window" && (
+              <Field>
+                <Label>{t("admin.forms.exam.duration")}</Label>
+                <Input
+                  type="number"
+                  value={data.durationMinutes ?? ""}
+                  onChange={(e) =>
+                    update({ durationMinutes: Number(e.target.value) })
+                  }
+                  min={1}
+                />
+              </Field>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <Field>
                 <Label>{t("admin.forms.exam.latestStart")}</Label>
@@ -239,9 +288,6 @@ export function ExamConfigForm({
                 />
               </Field>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t("admin.forms.exam.timingMode")}
-            </p>
           </FieldGroup>
         </CardContent>
       </Card>

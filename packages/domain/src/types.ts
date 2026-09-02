@@ -294,9 +294,12 @@ export interface Exam {
   courseId: string;
   status: ExamStatus;
   timingMode: TimingMode;
-  durationMinutes: number;
+  // Phase A (#291): null duration = no personal time limit (deadline/untimed);
+  // null closeAt = open-ended (untimed only). Non-null invariants per mode are
+  // owned by the canonical exam-policy validator, not by these columns.
+  durationMinutes: number | null;
   openAt: Date;
-  closeAt: Date;
+  closeAt: Date | null;
   passingScore: number;
   totalScore: number;
   questionSelectionMode: QuestionSelectionMode;
@@ -446,7 +449,9 @@ export interface ExamAttempt {
   startedAt?: Date;
   submittedAt?: Date;
   gradedAt?: Date;
-  deadlineAt?: Date;
+  // Null since Phase A (#291): deadline/untimed attempts have no personal
+  // deadline. Undefined = field not set (legacy rows); null = modeled "none".
+  deadlineAt?: Date | null;
   lastActivityAt?: Date;
   interruptionTimingPolicySnapshot?: AttemptTimingPolicySnapshot;
   currentInterruptionId?: string | null;

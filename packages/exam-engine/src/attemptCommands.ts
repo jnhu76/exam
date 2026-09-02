@@ -164,7 +164,9 @@ export async function startOrRestoreAttempt(
     throw new ExamNotOpenError("Exam is not open");
   }
 
-  if (now < exam.openAt || now >= exam.closeAt) {
+  // Phase A (#291) admission. openAt gates every mode; closeAt gates only the
+  // close-bound modes (timed_window/deadline) — untimed has no closeAt.
+  if (now < exam.openAt || (exam.closeAt !== null && now >= exam.closeAt)) {
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
@@ -258,7 +260,15 @@ export async function startOrRestoreAttempt(
   }
 
   const attemptNo = enrollment.attemptCount + 1;
-  const deadlineAt = calculateDeadlineAt(now, exam.durationMinutes);
+  // #291 Phase A: a personal deadline exists ONLY in timed_window mode. The
+  // global closeAt of a deadline-mode exam must never be mis-modelled as the
+  // attempt's personal deadline (computeEffectiveDeadline derives it from the
+  // exam row). Canonical policy validation guarantees durationMinutes for
+  // reachable timed_window exams; the null guard keeps that type-honest.
+  const deadlineAt =
+    exam.timingMode === "timed_window" && exam.durationMinutes !== null
+      ? calculateDeadlineAt(now, exam.durationMinutes)
+      : null;
 
   // Resolve the timing policy snapshot for the new attempt.
   const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);

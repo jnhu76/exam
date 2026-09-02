@@ -41,7 +41,9 @@ import {
 interface ProfileFormState {
   name: string;
   description: string;
-  durationMinutes: number;
+  timingMode: ExamProfilePolicyDefaults["timingMode"];
+  // Null for deadline/untimed profiles (no personal duration).
+  durationMinutes: number | null;
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
   retakePolicy: ExamProfilePolicyDefaults["retakePolicy"];
@@ -58,6 +60,7 @@ function emptyForm(): ProfileFormState {
   return {
     name: "",
     description: "",
+    timingMode: "timed_window",
     durationMinutes: 60,
     latestStartOffsetMinutes: null,
     minSubmitAfterStartMinutes: null,
@@ -83,6 +86,7 @@ function formFromProfile(p: ExamProfileDTO): ProfileFormState {
   return {
     name: p.name,
     description: p.description,
+    timingMode: p.timingMode,
     durationMinutes: p.durationMinutes,
     latestStartOffsetMinutes: p.latestStartOffsetMinutes,
     minSubmitAfterStartMinutes: p.minSubmitAfterStartMinutes,
@@ -105,6 +109,7 @@ function buildCreateBody(s: ProfileFormState) {
   return {
     name: s.name.trim(),
     description: s.description,
+    timingMode: s.timingMode,
     durationMinutes: s.durationMinutes,
     latestStartOffsetMinutes: s.latestStartOffsetMinutes,
     minSubmitAfterStartMinutes: s.minSubmitAfterStartMinutes,
@@ -216,7 +221,10 @@ export function ExamProfileEditPage() {
     if (!form.name.trim()) {
       errors.name = t("admin.examProfilePages.feedback.nameRequired");
     }
-    if (!form.durationMinutes || form.durationMinutes <= 0) {
+    if (
+      form.timingMode === "timed_window" &&
+      (!form.durationMinutes || form.durationMinutes <= 0)
+    ) {
       errors.durationMinutes = t(
         "admin.examProfilePages.feedback.durationRequired",
       );
@@ -311,20 +319,66 @@ export function ExamProfileEditPage() {
       <FormSection title={t("admin.examProfilePages.sections.duration")}>
         <FieldGroup>
           <Field>
-            <Label htmlFor="durationMinutes">
-              {t("admin.examProfilePages.fields.durationMinutes")}
+            <Label htmlFor="timingMode">
+              {t("admin.forms.exam.timingMode")}
             </Label>
-            <Input
-              id="durationMinutes"
-              type="number"
-              min={1}
-              value={form.durationMinutes}
-              onChange={(e) =>
-                update({ durationMinutes: Number(e.target.value) })
-              }
-            />
-            <FieldError>{fieldErrors.durationMinutes}</FieldError>
+            <Select
+              value={form.timingMode}
+              onValueChange={(v) => {
+                const mode = v as ProfileFormState["timingMode"];
+                update({
+                  timingMode: mode,
+                  // Mode switch clears non-applicable fields; deadline/
+                  // untimed also force strict (a compensation policy around
+                  // a personal deadline cannot apply to them).
+                  durationMinutes:
+                    mode === "timed_window" ? form.durationMinutes : null,
+                  ...(mode !== "timed_window"
+                    ? {
+                        interruptionTimePolicy: "strict" as const,
+                        interruptionGracePerIncidentSeconds: null,
+                        interruptionGracePerAttemptSeconds: null,
+                      }
+                    : {}),
+                });
+              }}
+            >
+              <SelectTrigger data-testid="profile-timing-mode-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="timed_window">
+                  {t("admin.forms.exam.timingModeValue.timed_window")}
+                </SelectItem>
+                <SelectItem value="deadline">
+                  {t("admin.forms.exam.timingModeValue.deadline")}
+                </SelectItem>
+                <SelectItem value="untimed">
+                  {t("admin.forms.exam.timingModeValue.untimed")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t(`admin.forms.exam.timingModeHint.${form.timingMode}`)}
+            </p>
           </Field>
+          {form.timingMode === "timed_window" && (
+            <Field>
+              <Label htmlFor="durationMinutes">
+                {t("admin.examProfilePages.fields.durationMinutes")}
+              </Label>
+              <Input
+                id="durationMinutes"
+                type="number"
+                min={1}
+                value={form.durationMinutes ?? ""}
+                onChange={(e) =>
+                  update({ durationMinutes: Number(e.target.value) })
+                }
+              />
+              <FieldError>{fieldErrors.durationMinutes}</FieldError>
+            </Field>
+          )}
         </FieldGroup>
       </FormSection>
 

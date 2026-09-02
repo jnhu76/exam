@@ -5,6 +5,7 @@ import {
 } from "./examProfile.js";
 
 const baseProfile: ExamProfilePolicyDefaults = {
+  timingMode: "timed_window",
   durationMinutes: 60,
   latestStartOffsetMinutes: 10,
   minSubmitAfterStartMinutes: 5,
@@ -82,5 +83,60 @@ describe("applyExamProfileDefaults — purity (P7-M2 §18)", () => {
     const a = applyExamProfileDefaults(baseProfile, { maxAttempts: 3 });
     const b = applyExamProfileDefaults(baseProfile, { maxAttempts: 3 });
     expect(a).toEqual(b);
+  });
+});
+
+// ── Phase A2 (#291): timing mode joins the copy-on-apply authority ──
+describe("applyExamProfileDefaults — Phase A timing modes (#291)", () => {
+  const timedProfile: ExamProfilePolicyDefaults = {
+    ...baseProfile,
+  };
+  const deadlineProfile: ExamProfilePolicyDefaults = {
+    ...baseProfile,
+    timingMode: "deadline",
+    durationMinutes: null,
+    interruptionTimePolicy: "strict",
+    interruptionGracePerIncidentSeconds: null,
+    interruptionGracePerAttemptSeconds: null,
+  };
+  const untimedProfile: ExamProfilePolicyDefaults = {
+    ...baseProfile,
+    timingMode: "untimed",
+    durationMinutes: null,
+  };
+
+  it("copies the profile timingMode when the request omits it", () => {
+    expect(applyExamProfileDefaults(deadlineProfile, {}).timingMode).toBe(
+      "deadline",
+    );
+    expect(applyExamProfileDefaults(untimedProfile, {}).timingMode).toBe(
+      "untimed",
+    );
+  });
+
+  it("copies the profile null durationMinutes over a stale target value", () => {
+    // The target exam's old duration (60) must NOT survive a deadline/untimed
+    // profile application: null is the profile's semantic value. With no
+    // duration override, the profile's null wins over the stale target.
+    const resolvedDeadline = applyExamProfileDefaults(deadlineProfile, {});
+    expect(resolvedDeadline.durationMinutes).toBeNull();
+    expect(
+      applyExamProfileDefaults(untimedProfile, {}).durationMinutes,
+    ).toBeNull();
+  });
+
+  it("an explicit request timingMode/duration still wins over the profile", () => {
+    const resolved = applyExamProfileDefaults(timedProfile, {
+      timingMode: "deadline",
+      durationMinutes: null,
+    });
+    expect(resolved.timingMode).toBe("deadline");
+    expect(resolved.durationMinutes).toBeNull();
+  });
+
+  it("resolves timingMode for every profile (no absent key)", () => {
+    expect(applyExamProfileDefaults(timedProfile, {}).timingMode).toBe(
+      "timed_window",
+    );
   });
 });

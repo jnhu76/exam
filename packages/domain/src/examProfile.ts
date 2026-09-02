@@ -16,7 +16,11 @@
 // `ExamProfilePolicyDefaults` is the smaller reusable subset a profile may
 // supply during authoring. The two concepts must not be collapsed.
 
-import type { ResultPublicationMode, ScoreStrategy } from "./enums.js";
+import type {
+  AuthoringTimingMode,
+  ResultPublicationMode,
+  ScoreStrategy,
+} from "./enums.js";
 import type { InterruptionTimePolicy } from "./types.js";
 
 /**
@@ -29,6 +33,9 @@ export type ExamProfileRetakePolicy =
   | "max_attempts"
   | "pass_then_stop";
 
+/** Alias for persistence layers: profiles carry only the authoring modes. */
+export type ExamProfileTimingMode = AuthoringTimingMode;
+
 /**
  * The reusable policy subset a profile may supply during authoring.
  *
@@ -37,7 +44,12 @@ export type ExamProfileRetakePolicy =
  * latent/unenforced dimensions (see the M2 design §5/§6).
  */
 export interface ExamProfilePolicyDefaults {
-  durationMinutes: number;
+  // Phase A (#291): the timing mode is a copied default. Profiles may carry
+  // only the authoring modes (never `timed_sync`); `durationMinutes` is null
+  // for deadline/untimed profiles and the copy-on-apply semantics below make
+  // that null overwrite a stale target value.
+  timingMode: AuthoringTimingMode;
+  durationMinutes: number | null;
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
   retakePolicy: ExamProfileRetakePolicy;
@@ -81,6 +93,10 @@ export function applyExamProfileDefaults(
   explicitOverrides: Partial<ExamProfilePolicyDefaults>,
 ): ExamProfilePolicyDefaults {
   return {
+    timingMode:
+      explicitOverrides.timingMode !== undefined
+        ? explicitOverrides.timingMode
+        : profileDefaults.timingMode,
     durationMinutes:
       explicitOverrides.durationMinutes !== undefined
         ? explicitOverrides.durationMinutes

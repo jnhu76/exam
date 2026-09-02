@@ -840,7 +840,9 @@ export function RecoveryAttemptDetailPage() {
                   {t("admin.recoveryAttempt.examCloseAt")}
                 </dt>
                 <dd className="text-sm">
-                  {formatTime(data.examSummary.closeAt)}
+                  {data.examSummary.closeAt === null
+                    ? "—"
+                    : formatTime(data.examSummary.closeAt)}
                 </dd>
               </div>
             </dl>

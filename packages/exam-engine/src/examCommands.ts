@@ -115,8 +115,10 @@ export async function publishExam(
   // narrowed by Zod literals at the contract boundary; these guards are the
   // engine-side re-check (publish is the freeze/acceptance gate) and also
   // defend against historically/stale data that predates a narrower contract.
-  if (exam.timingMode !== "timed_window") {
-    throw new ValidationError("Phase 1 only supports timed_window exams");
+  // Phase A2 (#291): timed_window/deadline/untimed are publishable; the
+  // canonical revalidation below is the authority that rejects timed_sync.
+  if (exam.timingMode === "timed_sync") {
+    throw new ValidationError("timed_sync exams are not supported");
   }
   if (exam.questionSelectionMode !== "manual") {
     throw new ValidationError(
@@ -131,8 +133,10 @@ export async function publishExam(
   // `duration_minutes` has no DB CHECK (> 0), so publish is the last line for
   // historical/stale rows that bypass the Zod `.positive()` shape boundary
   // (P7-M1 design §9: duration is "Zod + publish"). Shape invariant, not
-  // cross-field — stays here rather than in the canonical validator.
-  if (exam.durationMinutes <= 0) {
+  // cross-field — stays here rather than in the canonical validator. Null is
+  // legal since Phase A (#291): deadline/untimed exams carry no duration
+  // (their mode matrix lives in the canonical revalidation below).
+  if (exam.durationMinutes !== null && exam.durationMinutes <= 0) {
     throw new ValidationError("Duration must be positive");
   }
 
@@ -372,6 +376,11 @@ export async function extendExam(
     );
   }
 
+  // #291 Phase A: untimed exams have no closeAt to extend.
+  if (exam.closeAt === null) {
+    throw new ValidationError("Cannot extend an untimed exam (no closeAt)");
+  }
+
   const oldCloseAt = new Date(exam.closeAt);
   const newCloseAt = new Date(oldCloseAt.getTime() + extendMinutes * 60_000);
   const updated = await repo.update(examId, { closeAt: newCloseAt });
@@ -388,7 +397,9 @@ export interface CheckAndUpdateResult {
 
 /**
  * Check-on-access auto-transition for exam status.
- * Lazily transitions published→open when now >= openAt, and open→closed when now >= closeAt.
+ * Lazily transitions published→open when now >= openAt, and open→closed when
+ * now >= closeAt. Untimed exams (#291 Phase A) never auto-close — they are
+ * open-ended until an admin lifecycle command closes/cancels them.
  * Returns the exam (potentially updated) with transition info, or null if not found.
  */
 export async function checkAndUpdateExamStatus(
@@ -409,7 +420,7 @@ export async function checkAndUpdateExamStatus(
     transition = "open";
   }
 
-  if (exam.status === "open" && now >= exam.closeAt) {
+  if (exam.status === "open" && exam.closeAt !== null && now >= exam.closeAt) {
     exam = await closeExam(repo, examId);
     transition = "closed";
   }
