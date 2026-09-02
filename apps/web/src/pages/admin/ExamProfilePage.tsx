@@ -32,7 +32,9 @@ function useProfileSummaryLabels(): ProfileSummaryLabels {
   const { t } = useTranslation();
   return {
     durationMinutes: (m) =>
-      t("admin.examProfilePages.summaryDuration", { count: m }),
+      m === null
+        ? t("admin.examProfilePages.summaryNoDuration")
+        : t("admin.examProfilePages.summaryDuration", { count: m }),
     latestStart: (m) =>
       t("admin.examProfilePages.summaryLatestStart", { count: m }),
     minSubmit: (m) =>

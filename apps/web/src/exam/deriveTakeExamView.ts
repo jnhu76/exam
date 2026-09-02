@@ -39,6 +39,8 @@ export interface TakeExamView {
   showResult: boolean;
   showAnswers: boolean;
   serverNow: string;
+  /** Canonical timing mode — gates the personal countdown (Phase A2 (Issue 291)). */
+  timingMode: CandidateTakeSnapshot["timingMode"];
   effectiveDeadline: string | null;
   submittedAt: string | null;
   questions: DerivedQuestionView[];
@@ -70,6 +72,7 @@ export function deriveTakeExamView(
     showResult: snapshot.resultVisibility === "visible",
     showAnswers: snapshot.answerVisibility === "visible",
     serverNow: snapshot.serverNow,
+    timingMode: snapshot.timingMode,
     effectiveDeadline: snapshot.effectiveDeadline,
     submittedAt: snapshot.submittedAt,
     questions: snapshot.questions.map((q) => ({

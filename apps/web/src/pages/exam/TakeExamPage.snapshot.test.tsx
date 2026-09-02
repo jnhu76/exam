@@ -34,6 +34,7 @@ function buildSnapshot(
     attemptId: "att-1",
     examId: "exam-1",
     attemptStatus: "in_progress",
+    timingMode: "timed_window",
     gradingStatus: "auto_graded",
     isEditable: true,
     canStart: false,

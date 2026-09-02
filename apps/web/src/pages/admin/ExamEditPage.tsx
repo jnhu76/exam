@@ -63,9 +63,10 @@ interface ExamDetailResponse {
   description: string;
   courseId: string;
   status: string;
-  durationMinutes: number;
+  timingMode: "timed_window" | "deadline" | "untimed";
+  durationMinutes: number | null;
   openAt: string;
-  closeAt: string;
+  closeAt: string | null;
   passingScore: number;
   totalScore: number;
   questionSelectionMode: string;
@@ -95,9 +96,10 @@ function examToConfig(exam: ExamDetailResponse): ExamConfigData {
     title: exam.title ?? "",
     description: exam.description ?? "",
     courseId: exam.courseId ?? "",
-    durationMinutes: exam.durationMinutes ?? 60,
+    timingMode: exam.timingMode ?? "timed_window",
+    durationMinutes: exam.durationMinutes,
     openAt: isoToLocalInput(exam.openAt),
-    closeAt: isoToLocalInput(exam.closeAt),
+    closeAt: exam.closeAt ? isoToLocalInput(exam.closeAt) : null,
     passingScore: exam.passingScore ?? 60,
     totalScore: exam.totalScore ?? 100,
     questionSelectionMode:
@@ -207,23 +209,23 @@ export function ExamEditPage() {
       // For published exams the backend guard only allows schedule fields
       // (openAt/closeAt); strip everything else to avoid a 409 round-trip.
       const scheduleOnly = examStatus === "published";
+      const closeAtIso =
+        config.closeAt === null || config.closeAt === ""
+          ? null
+          : new Date(config.closeAt).toISOString();
       const payload = scheduleOnly
         ? {
             openAt: config.openAt
               ? new Date(config.openAt).toISOString()
               : undefined,
-            closeAt: config.closeAt
-              ? new Date(config.closeAt).toISOString()
-              : undefined,
+            closeAt: closeAtIso ?? undefined,
           }
         : {
             ...config,
             openAt: config.openAt
               ? new Date(config.openAt).toISOString()
               : undefined,
-            closeAt: config.closeAt
-              ? new Date(config.closeAt).toISOString()
-              : undefined,
+            closeAt: closeAtIso,
           };
       await api.patch(`/api/exams/${id}`, payload);
       toast.success(t("admin.examEdit.feedback.updateSuccess"));

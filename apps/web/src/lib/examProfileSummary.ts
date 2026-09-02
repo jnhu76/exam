@@ -18,7 +18,8 @@ import type { ExamProfilePolicyDefaults } from "@exam/domain";
  * passes them in, keeping this module pure and free of i18next coupling.
  */
 export interface ProfileSummaryLabels {
-  durationMinutes: (m: number) => string;
+  /** Accepts null (Issue 291): deadline/untimed profiles carry no duration. */
+  durationMinutes: (m: number | null) => string;
   latestStart: (m: number) => string;
   minSubmit: (m: number) => string;
   retake: {

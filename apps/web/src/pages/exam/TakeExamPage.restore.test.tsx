@@ -50,6 +50,7 @@ function buildSnapshot(
     examId: "exam-1",
     attemptStatus: "in_progress",
     gradingStatus: "auto_graded",
+    timingMode: "timed_window",
     isEditable: true,
     canStart: false,
     canResume: false,

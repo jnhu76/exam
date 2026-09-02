@@ -52,6 +52,7 @@ const existing: ExamProfileDTO = {
   organizationId: "00000000-0000-0000-0000-000000000001",
   name: "标准在线考试",
   description: "existing",
+  timingMode: "timed_window" as const,
   durationMinutes: 90,
   latestStartOffsetMinutes: 20,
   minSubmitAfterStartMinutes: 5,

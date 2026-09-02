@@ -18,6 +18,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { routes } from "@/lib/routes";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { Separator } from "@/components/ui/separator";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { QuestionNavigator } from "@/components/exam/QuestionNavigator";
@@ -155,6 +156,7 @@ export function TakeExamPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const [snapshot, setSnapshot] = useState<CandidateTakeSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1004,12 +1006,41 @@ export function TakeExamPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <SaveIndicator state={saveState} />
-            {!view.isLocked && (
+            {/* The personal countdown exists ONLY in timed_window mode
+                (Phase A2 (Issue 291)). deadline mode shows a static cutoff time; an
+                untimed exam shows the untimed badge. The snapshot's canonical
+                timingMode is the gate — never a null effectiveDeadline. */}
+            {!view.isLocked && view.timingMode === "timed_window" && (
               <ExamTimer
                 deadlineAt={view.effectiveDeadline!}
                 onTimeout={handleTimeout}
                 serverOffsetMs={serverOffsetRef.current}
               />
+            )}
+            {!view.isLocked && view.timingMode === "deadline" && (
+              <div
+                data-testid="deadline-static"
+                className="rounded-md border border-border bg-card px-3 py-1.5 text-right"
+              >
+                <div className="type-metadata">
+                  {t("candidateRuntime.timer.cutoff")}
+                </div>
+                <span className="type-numeric text-sm font-medium leading-tight">
+                  {view.effectiveDeadline
+                    ? formatDateTime(view.effectiveDeadline)
+                    : "—"}
+                </span>
+              </div>
+            )}
+            {!view.isLocked && view.timingMode === "untimed" && (
+              <div
+                data-testid="untimed-badge"
+                className="rounded-md border border-border bg-card px-3 py-1.5"
+              >
+                <span className="type-metadata">
+                  {t("candidateRuntime.timer.untimed")}
+                </span>
+              </div>
             )}
             {!view.isLocked && (
               <Button

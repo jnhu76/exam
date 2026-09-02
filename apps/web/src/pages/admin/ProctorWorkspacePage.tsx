@@ -171,7 +171,7 @@ export function ProctorWorkspacePage() {
                     {formatDateTime(exam.openAt)}
                   </DataTableCell>
                   <DataTableCell role="date">
-                    {formatDateTime(exam.closeAt)}
+                    {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
                   </DataTableCell>
                   <DataTableCell role="actions">
                     <RowActions>

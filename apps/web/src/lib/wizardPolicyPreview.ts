@@ -48,6 +48,7 @@ export interface WizardPolicyPreview {
 
 /** The set of profile-safe fields, for iteration. */
 export const PROFILE_POLICY_FIELDS = [
+  "timingMode",
   "durationMinutes",
   "latestStartOffsetMinutes",
   "minSubmitAfterStartMinutes",

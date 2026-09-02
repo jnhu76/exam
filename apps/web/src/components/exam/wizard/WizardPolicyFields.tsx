@@ -93,6 +93,7 @@ export function WizardPolicyFields({
 
   const retake = resolved("retakePolicy");
   const interruption = resolved("interruptionTimePolicy");
+  const timingMode = resolved("timingMode");
   const showMaxAttempts = retake === "max_attempts";
   const showGraceCaps = interruption === "bounded_grace";
 
@@ -102,29 +103,78 @@ export function WizardPolicyFields({
         <FieldRow>
           <Field>
             <div className="flex items-center justify-between">
-              <Label htmlFor="wiz-durationMinutes">
-                {t("admin.examWizard.fields.durationMinutes")}
+              <Label htmlFor="wiz-timingMode">
+                {t("admin.forms.exam.timingMode")}
               </Label>
-              {sourceBadge("durationMinutes")}
+              {sourceBadge("timingMode")}
             </div>
-            <Input
-              id="wiz-durationMinutes"
-              type="number"
-              min={1}
-              value={resolved("durationMinutes")}
-              onChange={(e) => {
-                // Empty input reverts to inheritance — never store 0.
-                if (e.target.value === "") {
+            <Select
+              value={timingMode}
+              onValueChange={(v) => {
+                if (v === "timed_window") {
+                  // timed_window needs a duration — drop any null override so
+                  // the profile/code default (or a fresh entry) applies.
                   clearOverride("durationMinutes");
                 } else {
-                  setOverride("durationMinutes", Number(e.target.value));
+                  // deadline/untimed carry NO personal duration; null is the
+                  // semantic value and overwrites any stale override.
+                  setOverride("durationMinutes", null);
                 }
+                setOverride(
+                  "timingMode",
+                  v as ExamProfilePolicyDefaults["timingMode"],
+                );
               }}
-            />
-            <FieldError>{fieldErrors.durationMinutes}</FieldError>
-            {resetBtn("durationMinutes")}
+            >
+              <SelectTrigger data-testid="wiz-timing-mode-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="timed_window">
+                  {t("admin.forms.exam.timingModeValue.timed_window")}
+                </SelectItem>
+                <SelectItem value="deadline">
+                  {t("admin.forms.exam.timingModeValue.deadline")}
+                </SelectItem>
+                <SelectItem value="untimed">
+                  {t("admin.forms.exam.timingModeValue.untimed")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t(`admin.forms.exam.timingModeHint.${timingMode}`)}
+            </p>
+            {resetBtn("timingMode")}
           </Field>
         </FieldRow>
+        {timingMode === "timed_window" && (
+          <FieldRow>
+            <Field>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="wiz-durationMinutes">
+                  {t("admin.examWizard.fields.durationMinutes")}
+                </Label>
+                {sourceBadge("durationMinutes")}
+              </div>
+              <Input
+                id="wiz-durationMinutes"
+                type="number"
+                min={1}
+                value={resolved("durationMinutes") ?? ""}
+                onChange={(e) => {
+                  // Empty input reverts to inheritance — never store 0.
+                  if (e.target.value === "") {
+                    clearOverride("durationMinutes");
+                  } else {
+                    setOverride("durationMinutes", Number(e.target.value));
+                  }
+                }}
+              />
+              <FieldError>{fieldErrors.durationMinutes}</FieldError>
+              {resetBtn("durationMinutes")}
+            </Field>
+          </FieldRow>
+        )}
       </FormSection>
 
       <FormSection title={t("admin.examWizard.sections.entrySubmit")}>

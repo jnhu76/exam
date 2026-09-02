@@ -8,6 +8,7 @@ import {
 import type { ExamProfilePolicyDefaults } from "@exam/domain";
 
 const codeDefaults: ExamProfilePolicyDefaults = {
+  timingMode: "timed_window",
   durationMinutes: 60,
   latestStartOffsetMinutes: null,
   minSubmitAfterStartMinutes: null,
@@ -24,6 +25,7 @@ const profile: WizardProfileLike = {
   id: "p1",
   name: "标准在线考试",
   defaults: {
+    timingMode: "timed_window",
     durationMinutes: 90,
     latestStartOffsetMinutes: 15,
     minSubmitAfterStartMinutes: 10,

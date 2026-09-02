@@ -129,7 +129,14 @@ function ExamCard({
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <AppIcon icon={Clock} size="badge" />
-            {t("examList.meta.duration", { minutes: exam.durationMinutes })}
+            {exam.timingMode === "untimed"
+              ? t("examList.meta.noDuration")
+              : exam.timingMode === "timed_window" &&
+                  exam.durationMinutes !== null
+                ? t("examList.meta.duration", {
+                    minutes: exam.durationMinutes,
+                  })
+                : t("examList.meta.deadline")}
           </span>
           <span>
             {t("examList.meta.passingScore", {
@@ -149,7 +156,9 @@ function ExamCard({
         </div>
         <div className="text-sm text-muted-foreground">
           {formatDateTime(exam.windowStartAt)} —{" "}
-          {formatDateTime(exam.windowEndAt)}
+          {exam.windowEndAt === null
+            ? t("examList.meta.noEnd")
+            : formatDateTime(exam.windowEndAt)}
         </div>
         <div className="flex justify-end">
           {actionLabel && (
