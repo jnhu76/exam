@@ -48,7 +48,7 @@ describe("nullable effective-deadline kernel", () => {
       isAttemptDeadlineExpired(
         { closeAt },
         { deadlineAt: null },
-        new Date(closeAt),
+        closeAt,
       ),
     ).toBe(true);
   });
