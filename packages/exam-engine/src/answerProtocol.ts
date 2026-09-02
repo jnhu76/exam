@@ -69,7 +69,9 @@ export interface AnswerState {
   attemptStatus: AttemptStatus;
   answers: AnswerRecord[];
   clientSeqMap: Map<string, AnswerRecord>;
-  deadlineAt?: Date;
+  // Nullable since Phase A (#291): an untimed attempt's canonical effective
+  // deadline is null — no deadline guard applies (null != expired).
+  deadlineAt?: Date | null;
   now?: Date;
 }
 

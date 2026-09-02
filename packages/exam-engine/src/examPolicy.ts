@@ -86,24 +86,39 @@ export function resolveExamPolicy(exam: Exam): ResolvedExamPolicy {
  * deterministic; does not throw on policy conflicts — callers decide whether
  * to throw `ValidationError` (authoring/publish) or treat as advisory.
  *
- * Scope: ONLY currently-supported combinations (design §9). No rules for
- * unimplemented P7-M2+ dimensions (device binding, admission queue, full
- * proctoring, untimed/deadline/timed_sync timing modes).
+ * Owns the Phase A timing-mode matrix (#291): which (timingMode,
+ * durationMinutes, closeAt, interruptionTimePolicy) combinations may be
+ * persisted/published. This is the FINAL acceptance authority — Zod may
+ * reject shapes early at the API boundary, but every create / draft-update /
+ * publish path funnels through here.
  */
 export function validateExamPolicy(
   policy: ResolvedExamPolicy,
 ): ExamPolicyConflict[] {
   const conflicts: ExamPolicyConflict[] = [];
 
-  // ── Timing window: openAt must strictly precede closeAt. ──
-  // Today this is enforced ONLY in publishExam (gap on create/update).
-  if (policy.timing.openAt >= policy.timing.closeAt) {
+  // ── Timing window: openAt must strictly precede closeAt (when present). ──
+  // Null closeAt (untimed) has no window to invert.
+  if (
+    policy.timing.closeAt !== null &&
+    policy.timing.openAt >= policy.timing.closeAt
+  ) {
     conflicts.push({
       code: ExamPolicyConflictCode.ExamWindowInvalid,
       fields: ["openAt", "closeAt"],
       message: "Exam openAt must be before closeAt",
     });
   }
+
+  // ── Phase A timing-mode matrix (#291). ──
+  // One authority for mode legality; runtime (start/save/scanner) may rely on
+  // these invariants for reachable published exams.
+  conflicts.push(
+    ...validateTimingModeMatrix(
+      policy.timing,
+      policy.interruption.interruptionTimePolicy,
+    ),
+  );
 
   // ── Passing score must not exceed total score. ──
   // Today this is checked in 4 drifting places; this is the canonical owner.
@@ -170,6 +185,96 @@ export function validateExamPolicyForExam(exam: Exam): ExamPolicyConflict[] {
 }
 
 /**
+ * Phase A timing-mode matrix (#291) — the ONE authority for which
+ * (timingMode, durationMinutes, closeAt, interruptionTimePolicy) combinations
+ * are legal. Pure; emits at most one `EXAM_TIMING_MODE_INVALID` conflict
+ * naming every implicated field.
+ *
+ *   timed_window  duration > 0, closeAt present; interruption policies
+ *                 unchanged (strict / bounded_grace / operator_incident)
+ *   deadline      duration null (global cutoff, no personal time), closeAt
+ *                 present, strict only — bounded_grace/operator_incident are
+ *                 modelled around a personal attempt deadline and could
+ *                 exceed the global closeAt
+ *   untimed       duration null, closeAt null (open-ended), strict only —
+ *                 there is no deadline to compensate
+ *   timed_sync    rejected in Phase A: no admission/queue runtime exists
+ */
+function validateTimingModeMatrix(
+  timing: ResolvedExamPolicy["timing"],
+  interruptionTimePolicy: InterruptionTimePolicy,
+): ExamPolicyConflict[] {
+  const mode = timing.timingMode;
+
+  const invalid = (fields: string[], message: string): ExamPolicyConflict[] => [
+    { code: ExamPolicyConflictCode.ExamTimingModeInvalid, fields, message },
+  ];
+
+  if (mode === "timed_window") {
+    if (timing.durationMinutes === null) {
+      return invalid(
+        ["timingMode", "durationMinutes"],
+        "timed_window exams require a positive durationMinutes",
+      );
+    }
+    if (timing.closeAt === null) {
+      return invalid(
+        ["timingMode", "closeAt"],
+        "timed_window exams require closeAt",
+      );
+    }
+    return [];
+  }
+
+  if (mode === "deadline") {
+    if (timing.durationMinutes !== null) {
+      return invalid(
+        ["timingMode", "durationMinutes"],
+        "deadline exams must not set durationMinutes",
+      );
+    }
+    if (timing.closeAt === null) {
+      return invalid(
+        ["timingMode", "closeAt"],
+        "deadline exams require closeAt",
+      );
+    }
+    if (interruptionTimePolicy !== "strict") {
+      return invalid(
+        ["timingMode", "interruptionTimePolicy"],
+        "deadline exams only support the strict interruption policy",
+      );
+    }
+    return [];
+  }
+
+  if (mode === "untimed") {
+    if (timing.durationMinutes !== null) {
+      return invalid(
+        ["timingMode", "durationMinutes"],
+        "untimed exams must not set durationMinutes",
+      );
+    }
+    if (timing.closeAt !== null) {
+      return invalid(
+        ["timingMode", "closeAt"],
+        "untimed exams must not set closeAt",
+      );
+    }
+    if (interruptionTimePolicy !== "strict") {
+      return invalid(
+        ["timingMode", "interruptionTimePolicy"],
+        "untimed exams only support the strict interruption policy",
+      );
+    }
+    return [];
+  }
+
+  // timed_sync — latent until the #292 admission/queue runtime exists.
+  return invalid(["timingMode"], "timed_sync is not supported yet");
+}
+
+/**
  * Throw a `ValidationError` carrying structured field details if the resolved
  * policy has any cross-field conflicts. Used by publish (the freeze/acceptance
  * gate) and may be used by authoring paths. No-op when the policy is valid.
@@ -201,9 +306,9 @@ export function assertExamPolicyValid(exam: Exam): void {
  */
 export interface ExamPolicyInput {
   timingMode: Exam["timingMode"];
-  durationMinutes: number;
+  durationMinutes: number | null;
   openAt: Date;
-  closeAt: Date;
+  closeAt: Date | null;
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
   questionSelectionMode: Exam["questionSelectionMode"];

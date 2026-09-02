@@ -78,13 +78,13 @@ describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0", () => {
 
     // Canonical effective deadline = min(10:00, 11:25) = 10:00 — the context
     // carries the canonical value, NOT attempt.deadlineAt (11:25).
-    expect(
-      computeEffectiveDeadline(
-        h.examRepo.findById("exam-1") as Exam,
-        h.attempt,
-      ).getTime(),
-    ).toBe(examCloseAt.getTime());
-    expect(h.mutationContext.effectiveDeadline.getTime()).toBe(
+    const effective = computeEffectiveDeadline(
+      h.examRepo.findById("exam-1") as Exam,
+      h.attempt,
+    );
+    expect(effective).not.toBeNull();
+    expect(effective!.getTime()).toBe(examCloseAt.getTime());
+    expect(h.mutationContext.effectiveDeadline!.getTime()).toBe(
       examCloseAt.getTime(),
     );
     // The preparation seam froze the attempt at the canonical effective deadline.
@@ -122,7 +122,7 @@ describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0", () => {
     });
     const h = await prepare(exam, attempt, makeEnrollment(), now);
 
-    expect(h.mutationContext.effectiveDeadline.getTime()).toBe(
+    expect(h.mutationContext.effectiveDeadline!.getTime()).toBe(
       examCloseAt.getTime(),
     );
     expect(h.mutationContext.checkedAt.getTime()).toBe(now.getTime());

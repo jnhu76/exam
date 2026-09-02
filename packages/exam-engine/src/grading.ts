@@ -76,7 +76,9 @@ export function shouldEnrollmentComplete(
   ) {
     return true;
   }
-  if (now >= exam.closeAt) {
+  // Untimed exams (#291 Phase A) have no close cutoff — only the retake
+  // rules above can complete the enrollment.
+  if (exam.closeAt !== null && now >= exam.closeAt) {
     return true;
   }
   return false;

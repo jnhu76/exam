@@ -756,9 +756,9 @@ describe("isAttemptDeadlineExpired (canonical expiry authority)", () => {
     const exam = makeExam({ closeAt: EXAM_CLOSE });
     const attempt = makeAttempt({ status: "in_progress" });
     delete (attempt as { deadlineAt?: Date }).deadlineAt;
-    expect(computeEffectiveDeadline(exam, attempt).getTime()).toBe(
-      EXAM_CLOSE.getTime(),
-    );
+    const effective = computeEffectiveDeadline(exam, attempt);
+    expect(effective).not.toBeNull();
+    expect(effective!.getTime()).toBe(EXAM_CLOSE.getTime());
   });
 
   // T4: non-NULL attempt.deadlineAt PAST exam.closeAt => expires at closeAt.

@@ -17,6 +17,7 @@ import type { ExamProfilePolicyDefaults } from "./examProfile.js";
  */
 
 const PROFILE_SAFE_FIELDS = new Set<keyof ExamProfilePolicyDefaults>([
+  "timingMode",
   "durationMinutes",
   "latestStartOffsetMinutes",
   "minSubmitAfterStartMinutes",
@@ -66,7 +67,7 @@ describe("STARTER_PROFILE_RECIPES — truthfulness guard", () => {
     }
   });
 
-  it("each recipe.defaults has exactly the 10 profile-safe fields, nothing more", () => {
+  it("each recipe.defaults has exactly the 11 profile-safe fields, nothing more", () => {
     for (const recipe of STARTER_PROFILE_RECIPES) {
       const keys = Object.keys(recipe.defaults);
       expect(new Set(keys)).toEqual(PROFILE_SAFE_FIELDS);

@@ -57,6 +57,7 @@ export const STARTER_PROFILE_RECIPES: readonly StarterProfileRecipe[] = [
   {
     key: "basic_quiz",
     defaults: {
+      timingMode: "timed_window",
       durationMinutes: 30,
       latestStartOffsetMinutes: null,
       minSubmitAfterStartMinutes: null,
@@ -74,6 +75,7 @@ export const STARTER_PROFILE_RECIPES: readonly StarterProfileRecipe[] = [
   {
     key: "standard_online",
     defaults: {
+      timingMode: "timed_window",
       durationMinutes: 60,
       latestStartOffsetMinutes: 15,
       minSubmitAfterStartMinutes: 10,

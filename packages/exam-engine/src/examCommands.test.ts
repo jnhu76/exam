@@ -264,6 +264,42 @@ describe("examCommands", () => {
       expect(result.status).toBe("published");
     });
 
+    // ── Phase A (#291): publish is the freeze gate for timing modes ──
+    it("publishes a deadline-mode draft (null duration, closeAt kept)", async () => {
+      const repo = makeRepo(
+        makeExam({ timingMode: "deadline", durationMinutes: null }),
+      );
+      const result = await publishExam(repo, "exam-1", testQuestions);
+      expect(result.status).toBe("published");
+      expect(result.timingMode).toBe("deadline");
+    });
+
+    it("publishes an untimed draft (null duration, null closeAt)", async () => {
+      const repo = makeRepo(
+        makeExam({
+          timingMode: "untimed",
+          durationMinutes: null,
+          closeAt: null,
+        }),
+      );
+      const result = await publishExam(repo, "exam-1", testQuestions);
+      expect(result.status).toBe("published");
+      expect(result.timingMode).toBe("untimed");
+    });
+
+    it("rejects publish of a timed_sync draft (latent mode)", async () => {
+      const repo = makeRepo(
+        makeExam({
+          timingMode: "timed_sync",
+          durationMinutes: null,
+          closeAt: null,
+        }),
+      );
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /timed_sync/,
+      );
+    });
+
     it("captures questionSnapshot with real data", async () => {
       const repo = makeRepo(makeExam());
       const result = await publishExam(repo, "exam-1", testQuestions);
@@ -698,7 +734,8 @@ describe("examCommands", () => {
       const repo = makeRepo(baseExam("open"));
       const result = await extendExam(repo, "exam-1", 15);
       expect(result.status).toBe("open");
-      expect(new Date(result.closeAt).getTime()).toBeGreaterThan(
+      expect(result.closeAt).not.toBeNull();
+      expect(new Date(result.closeAt!).getTime()).toBeGreaterThan(
         futureClose.getTime(),
       );
     });

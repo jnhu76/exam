@@ -191,6 +191,13 @@ export const TimingMode = {
 } as const;
 export type TimingMode = (typeof TimingMode)[keyof typeof TimingMode];
 
+/**
+ * Timing modes that authoring (exams and policy profiles) may select in
+ * Phase A (#291). `timed_sync` stays latent until the admission/queue
+ * runtime exists; the canonical exam-policy validator rejects it.
+ */
+export type AuthoringTimingMode = Exclude<TimingMode, "timed_sync">;
+
 /** How questions are selected for an exam paper: manually curated or randomly drawn. */
 export const QuestionSelectionMode = {
   Manual: "manual",
