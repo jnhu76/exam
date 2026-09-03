@@ -16,6 +16,8 @@ recovery, audit, and day-2 operations.
 
 [**Install**](INSTALL.md) · [**Documentation**](docs/README.md) · [**Roadmap**](docs/roadmap/current.md) · [**Contributing**](CONTRIBUTING.md)
 
+**English** · [简体中文](README.zh-CN.md)
+
 </div>
 
 ---
