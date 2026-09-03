@@ -3,6 +3,15 @@
 > The single canonical entry point for this repository's documentation.
 > Developers and AI agents: start here, not in `docs/archive/`.
 
+The root `README.md` is **descriptive and navigational** — it introduces
+the project and points to authoritative documents. It is not a runtime
+authority. If `README.md` conflicts with current production behavior,
+`README.md` is stale. Production code determines what the system
+actually does today; normative documents (SPEC, ADR, contracts) determine
+what it is required or intended to do within their declared authority.
+A mismatch is a defect or documentation drift and must be reconciled
+explicitly.
+
 ## Authority by fact type
 
 The repository does not use one global ranking for unlike facts. Each fact type
@@ -117,6 +126,32 @@ See also the root [`DESIGN.md`](../DESIGN.md) and
 | Path | Purpose |
 | --- | --- |
 | [`../formal/README.md`](../formal/README.md) | TLA+ executable specifications and model-checking inputs |
+
+### Deployment
+
+| Document | Purpose |
+| --- | --- |
+| [`deployment/README.md`](deployment/README.md) | Deployment landing page — topology, image acquisition, configuration |
+| [`deployment/mvp-deployment-runbook.md`](deployment/mvp-deployment-runbook.md) | Complete operator runbook |
+| [`deployment/backup-and-recovery.md`](deployment/backup-and-recovery.md) | Backup procedures and restore evidence |
+| [`deployment/upgrade-and-uninstall.md`](deployment/upgrade-and-uninstall.md) | Upgrade lifecycle and uninstall guide |
+| [`deployment/gates.md`](deployment/gates.md) | Deployment gate definitions |
+
+### Operations
+
+| Document | Purpose |
+| --- | --- |
+| [`operations/README.md`](operations/README.md) | Operations landing page — backup, upgrade, diagnostics, email |
+
+### Development
+
+| Document | Purpose |
+| --- | --- |
+| [`../INSTALL.md`](../INSTALL.md) | First installation — zero to running |
+| [`development/README.md`](development/README.md) | Development landing page — local setup, testing, E2E |
+| [`development/ports.md`](development/ports.md) | Port map and ownership rules |
+| [`standards/code-quality.md`](standards/code-quality.md) | Code quality rules, gates, AI coding rules |
+| [`standards/testing.md`](standards/testing.md) | Testing and CI contract |
 
 ### Historical material (not current guidance)
 
