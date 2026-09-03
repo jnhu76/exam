@@ -319,6 +319,13 @@ export interface Exam {
   // for a manual-mode exam. Null until the first publish-results call; once
   // set, it is never updated (idempotent re-publish is a no-op on this field).
   resultsPublishedAt: Date | null;
+  // #291 Phase B: durable synchronized-start authority (Model A freeze,
+  // docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md). Server instant
+  // written exactly once by the canonical sync-start command; null = the
+  // operator has not triggered the sitting (timed_sync start is forbidden).
+  // Non-timed_sync exams stay permanently null. Never reset (cancel/archive
+  // keep it as history).
+  syncStartedAt: Date | null;
   interruptionTimePolicy?: InterruptionTimePolicy;
   interruptionGracePerIncidentSeconds?: number | null;
   interruptionGracePerAttemptSeconds?: number | null;

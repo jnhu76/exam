@@ -133,6 +133,7 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
     minSubmitAfterStartMinutes: null,
     resultPublicationMode: "immediate",
     resultsPublishedAt: null,
+    syncStartedAt: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,

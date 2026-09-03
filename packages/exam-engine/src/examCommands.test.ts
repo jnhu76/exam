@@ -55,6 +55,7 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
     minSubmitAfterStartMinutes: null,
     resultPublicationMode: "immediate",
     resultsPublishedAt: null,
+    syncStartedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -795,6 +796,42 @@ describe("examCommands", () => {
       const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
       expect(result?.exam.status).toBe("published");
       expect(result?.transition).toBeUndefined();
+    });
+
+    it("does not auto-open a timed_sync exam at openAt (the operator start owns open)", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(
+        makeExam({
+          status: "published",
+          timingMode: "timed_sync",
+          syncStartedAt: null,
+          openAt,
+          closeAt,
+        }),
+      );
+      const now = new Date("2025-01-01T10:30:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("published");
+      expect(result?.transition).toBeUndefined();
+    });
+
+    it("still auto-closes an open timed_sync exam at closeAt", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(
+        makeExam({
+          status: "open",
+          timingMode: "timed_sync",
+          syncStartedAt: new Date("2025-01-01T10:05:00Z"),
+          openAt,
+          closeAt,
+        }),
+      );
+      const now = new Date("2025-01-01T12:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("closed");
+      expect(result?.transition).toBe("closed");
     });
 
     it("does not transition open when now < closeAt", async () => {

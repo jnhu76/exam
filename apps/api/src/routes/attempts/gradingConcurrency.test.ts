@@ -262,6 +262,7 @@ async function buildFixture(
     minSubmitAfterStartMinutes: null,
     resultPublicationMode: "immediate",
     resultsPublishedAt: null,
+    syncStartedAt: null,
     createdAt: now,
     updatedAt: now,
   };

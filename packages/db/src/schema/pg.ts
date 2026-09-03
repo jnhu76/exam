@@ -291,6 +291,15 @@ export const exams = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    // #291 Phase B: durable synchronized-start authority. Null = the operator
+    // has not triggered the sitting (timed_sync only; other modes stay null).
+    // Written exactly once by the canonical sync-start command; the column
+    // carries no CHECK — per-mode legality is owned by the canonical
+    // exam-policy validator.
+    syncStartedAt: timestamp("sync_started_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     passingScore: doublePrecision("passing_score").notNull(),
     totalScore: doublePrecision("total_score").notNull(),
     questionSelectionMode: text("question_selection_mode").notNull(),

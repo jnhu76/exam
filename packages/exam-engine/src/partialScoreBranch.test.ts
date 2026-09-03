@@ -129,6 +129,7 @@ function makeExam(): Exam {
     minSubmitAfterStartMinutes: null,
     resultPublicationMode: "immediate",
     resultsPublishedAt: null,
+    syncStartedAt: null,
     createdAt: NOW,
     updatedAt: NOW,
   };

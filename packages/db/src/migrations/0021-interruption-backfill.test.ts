@@ -146,6 +146,97 @@ describe("0021 interruption policy migration — real 0020 → 0021 upgrade", ()
     //    re-implemented here — it runs straight from the committed file,
     //    including the `ON COMMIT DROP` temp table it depends on.
     await executeMigrationFile(conn.sql, "0021_noisy_archangel");
+
+    //    4.5 Fail fast: prove 0021 ITSELF already performed the
+    //    disrupted-attempt data backfill, against the 0021-era physical
+    //    schema via raw SQL (later migrations are not replayed yet, so the
+    //    current full drizzle schema must NOT be queried here). 0022's P2
+    //    repairs exactly `status = 'disrupted' AND current_interruption_id
+    //    IS NULL` rows by re-creating parent + detected event + pointer, so
+    //    a disabled 0021 backfill would otherwise be silently masked by the
+    //    replay below and the post-replay assertions would stay green.
+    const preReplayBackfill = await conn.sql<
+      {
+        attempt_id: string;
+        current_interruption_id: string | null;
+        interrupted_at: Date | null;
+        parent_id: string | null;
+        parent_created_at: Date | null;
+        detected_occurred_at: Date | null;
+        detection_source: string | null;
+        reason_code: string | null;
+      }[]
+    >`
+      SELECT
+        a."id" AS attempt_id,
+        a."current_interruption_id",
+        a."interrupted_at",
+        p."id" AS parent_id,
+        p."created_at" AS parent_created_at,
+        e."occurred_at" AS detected_occurred_at,
+        e."detection_source",
+        e."reason_code"
+      FROM "exam_attempts" a
+      LEFT JOIN "attempt_interruptions" p
+        ON p."id" = a."current_interruption_id"
+       AND p."organization_id" = a."organization_id"
+       AND p."attempt_id" = a."id"
+      LEFT JOIN "attempt_interruption_events" e
+        ON e."interruption_id" = a."current_interruption_id"
+       AND e."attempt_id" = a."id"
+       AND e."event_type" = 'detected'
+      WHERE a."id" IN (${attemptIds.disruptedA}, ${attemptIds.disruptedB})
+    `;
+    expect(
+      preReplayBackfill,
+      "0021 backfill probe: both disrupted fixture attempts must be probed pre-replay",
+    ).toHaveLength(2);
+    for (const row of preReplayBackfill) {
+      // The pointer must already exist: 0022 P2 only repairs rows whose
+      // pointer is NULL, so a NULL here means 0021 skipped its backfill.
+      expect(
+        row.current_interruption_id,
+        `0021 backfill probe: attempt ${row.attempt_id} must already have current_interruption_id`,
+      ).not.toBeNull();
+      expect(
+        row.interrupted_at,
+        `0021 backfill probe: attempt ${row.attempt_id} must already have interrupted_at`,
+      ).not.toBeNull();
+      // The parent interruption must already exist and be this attempt's own
+      // (parent_id equals the pointer via the join; non-null because the
+      // pointer assertion above ran first).
+      expect(
+        row.parent_id,
+        `0021 backfill probe: attempt ${row.attempt_id} must already have an attempt_interruptions parent`,
+      ).toBe(row.current_interruption_id);
+      // The detected event must already exist with the 0021 backfill shape.
+      expect(
+        row.detection_source,
+        `0021 backfill probe: attempt ${row.attempt_id} detected event must come from 0021`,
+      ).toBe("migration_backfill");
+      expect(
+        row.reason_code,
+        `0021 backfill probe: attempt ${row.attempt_id} detected event must carry the 0021 reason code`,
+      ).toBe("migration_backfill_unknown_detected_at");
+      // Pointer/parent/event timestamps all stem from the single 0021
+      // mapping-table timestamp and must be identical pre-replay.
+      expect(row.parent_created_at).toEqual(row.interrupted_at);
+      expect(row.detected_occurred_at).toEqual(row.interrupted_at);
+    }
+
+    //    5. Replay the REMAINING journal entries (idx > 21) so the physical
+    //    schema matches the current drizzle schema the assertions query
+    //    with. The upgrade under test (0020 -> 0021) already ran in full
+    //    isolation at its controlled point; later migrations only bring the
+    //    schema up to head, keeping `schema.exams` full-row selects valid
+    //    for every future migration that adds a column. Without this step
+    //    the test breaks on each new exam-table column (as-built drift).
+    const postUpgradeTags = journal.entries
+      .filter((e) => e.idx > 21)
+      .map((e) => e.tag);
+    for (const tag of postUpgradeTags) {
+      await executeMigrationFile(conn.sql, tag);
+    }
   }, 120_000);
 
   afterAll(async () => {
