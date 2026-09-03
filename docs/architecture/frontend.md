@@ -2,8 +2,9 @@
 
 > Current as-built authority for the `apps/web` frontend. Describes what is
 > implemented today, not future work. For UI visual-system constraints, see
-> [`docs/standards/ui-system.md`](../standards/ui-system.md). For open UI
-> migration items, see [`archive/roadmap/ui-open-items.md`](../archive/roadmap/ui-open-items.md).
+> [`docs/standards/ui-system.md`](../standards/ui-system.md). Current UI product
+> work is Issue-tracked via [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md)
+> (notably #305–#308); the former `ui-open-items` file is historical evidence only.
 
 ## Tech stack (frozen)
 
