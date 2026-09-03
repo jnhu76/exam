@@ -61,13 +61,9 @@ describe("NotificationType / EmailType string independence", () => {
   // and must never assume `NotificationType === EmailType` by string equality.
   it("'result_published' is NOT equal to any EmailType string", () => {
     const emailTypes: EmailType[] = [
-      "registration_welcome",
       "password_reset",
-      "admin_created_user",
-      "exam_notification",
+      "staff_invitation",
       "grade_notification",
-      "system_alert",
-      "test_email",
     ];
     const nt: NotificationType = "result_published";
     for (const et of emailTypes) {

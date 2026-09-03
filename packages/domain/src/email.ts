@@ -6,9 +6,11 @@
  * delivery service). It lives in the leaf `@exam/domain` package so it
  * carries no Fastify / Drizzle / nodemailer dependency.
  *
- * Scope note: this Job builds reusable email infrastructure ONLY. There is no
- * registration, password-reset, or user-email integration here — those flows
- * do not exist in Phase 1 and the `users` table has no email column.
+ * Scope note: this module defines reusable email infrastructure ONLY. The
+ * identity flows that enqueue mail (staff invitation, password reset) and the
+ * operational notification flow (result_published) live in `@exam/api` and
+ * enqueue through the outbox — this module owns the shared row/message types,
+ * not the callers.
  */
 
 /**
@@ -37,17 +39,19 @@ export type EmailOutboxStatus =
 
 /**
  * Logical category of an outbox row. Used for filtering / observability only —
- * it does not affect send behavior. New categories may be added freely.
+ * it does not affect send behavior.
+ *
+ * A value is added exactly when a production writer starts emitting it and
+ * removed when no production writer remains (#300 audit): the `email_outbox`
+ * `type` column is plain text with no CHECK constraint, so the union only
+ * constrains NEW rows; historical rows keep their persisted value. Current
+ * writers: `grade_notification` (result_published), `staff_invitation`,
+ * `password_reset`.
  */
 export type EmailType =
-  | "registration_welcome"
   | "password_reset"
-  | "admin_created_user"
   | "staff_invitation"
-  | "exam_notification"
-  | "grade_notification"
-  | "system_alert"
-  | "test_email";
+  | "grade_notification";
 
 /**
  * A canonical email message handed to a sender. `html` is optional; `text` is

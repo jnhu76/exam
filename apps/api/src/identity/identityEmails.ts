@@ -7,6 +7,9 @@
 // in audit payloads or application logs. Template-engine/i18n architecture is
 // #300 and deliberately out of scope here.
 
+import type { RenderedEmailContent } from "../email/renderedEmail.js";
+import { escapeEmailHtml } from "../email/renderedEmail.js";
+
 /** Structured input to the staff-invitation renderer. */
 export interface StaffInvitationEmailPayload {
   /** Invited staff role (server-trusted, from the invitation row). */
@@ -25,13 +28,6 @@ export interface PasswordResetEmailPayload {
   expiresInMinutes: number;
 }
 
-/** Rendered Email content handed to the outbox. */
-export interface RenderedIdentityEmail {
-  subject: string;
-  bodyText: string;
-  bodyHtml: string;
-}
-
 /**
  * zh-CN display labels for invitable staff roles. Mirrors the web locale
  * labels (`admin.users.roleLabels`) so email copy and UI copy agree; kept
@@ -45,19 +41,10 @@ export const STAFF_ROLE_LABELS_ZH: Record<string, string> = {
   Maintainer: "系统运维",
 };
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** Renders the staff-invitation Email content. */
 export function renderStaffInvitationEmail(
   payload: StaffInvitationEmailPayload,
-): RenderedIdentityEmail {
+): RenderedEmailContent {
   const roleLabel = STAFF_ROLE_LABELS_ZH[payload.role] ?? payload.role;
   const link = payload.acceptUrl;
   const subject = "账号邀请";
@@ -67,8 +54,8 @@ export function renderStaffInvitationEmail(
     `${link}\n\n` +
     `若您未期待此邮件，请忽略本邮件。`;
   const bodyHtml =
-    `<p>您收到加入考试平台的邀请，角色：<strong>${escapeHtml(roleLabel)}</strong>。</p>` +
-    `<p><a href="${escapeHtml(link)}">点击激活账号</a>（${payload.expiresInDays} 天内有效，仅可使用一次）</p>` +
+    `<p>您收到加入考试平台的邀请，角色：<strong>${escapeEmailHtml(roleLabel)}</strong>。</p>` +
+    `<p><a href="${escapeEmailHtml(link)}">点击激活账号</a>（${payload.expiresInDays} 天内有效，仅可使用一次）</p>` +
     `<p style="color:#888;font-size:12px;">若您未期待此邮件，请忽略本邮件。</p>`;
   return { subject, bodyText, bodyHtml };
 }
@@ -76,7 +63,7 @@ export function renderStaffInvitationEmail(
 /** Renders the password-reset Email content. */
 export function renderPasswordResetEmail(
   payload: PasswordResetEmailPayload,
-): RenderedIdentityEmail {
+): RenderedEmailContent {
   const link = payload.resetUrl;
   const subject = "重置密码";
   const bodyText =
@@ -86,7 +73,7 @@ export function renderPasswordResetEmail(
     `若您没有申请重置密码，请忽略本邮件，您的账号不会受影响。`;
   const bodyHtml =
     `<p>您申请了重置登录密码。</p>` +
-    `<p><a href="${escapeHtml(link)}">点击设置新密码</a>（${payload.expiresInMinutes} 分钟内有效，仅可使用一次）</p>` +
+    `<p><a href="${escapeEmailHtml(link)}">点击设置新密码</a>（${payload.expiresInMinutes} 分钟内有效，仅可使用一次）</p>` +
     `<p style="color:#888;font-size:12px;">若您没有申请重置密码，请忽略本邮件，您的账号不会受影响。</p>`;
   return { subject, bodyText, bodyHtml };
 }

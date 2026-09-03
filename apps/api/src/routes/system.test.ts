@@ -364,7 +364,7 @@ describe("system routes", () => {
         {
           id: randomUUID(),
           organizationId: orgId,
-          type: "test_email",
+          type: "grade_notification",
           recipientEmail: "a@x.com",
           subject: "s",
           bodyText: "t",
@@ -376,7 +376,7 @@ describe("system routes", () => {
         {
           id: randomUUID(),
           organizationId: orgId,
-          type: "test_email",
+          type: "grade_notification",
           recipientEmail: "b@x.com",
           subject: "s",
           bodyText: "t",

@@ -48,10 +48,7 @@ import {
   PASSWORD_RESET_TTL_MS,
   PASSWORD_RESET_COOLDOWN_MS,
 } from "../identity/identityPolicy.js";
-import {
-  renderStaffInvitationEmail,
-  renderPasswordResetEmail,
-} from "../identity/identityEmails.js";
+import { renderPasswordResetEmail } from "../identity/identityEmails.js";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
