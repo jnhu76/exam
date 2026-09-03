@@ -872,8 +872,10 @@ and §24 (deferred capabilities). Highlights:
 - pass-to-proceed API / service tokens / API keys / webhooks NOT implemented (Phase 4).
 - Staff invitation / Email password reset / account lifecycle are implemented
   (#297); additional account-recovery surfaces are not.
-- Additional NotificationType values beyond result_published NOT implemented
-  (P5-N2 future).
+- NotificationType values: `result_published` and `exam_assigned` are
+  implemented; further operational events (schedule change, cancellation,
+  grading assignment, announcements) are NOT implemented and require separate
+  evidence (P5-N2 future).
 - Email bodies render through per-flow pure zh-CN renderer functions (#300);
   a generic template engine and multi-locale backend i18n are NOT implemented
   (by design — see ADR-011 §24).
