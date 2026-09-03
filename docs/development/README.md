@@ -1,5 +1,7 @@
 # Development Guide
 
+**English** · [简体中文](README.zh-CN.md)
+
 > Local development setup, testing, code quality, and architecture
 > references for Exam contributors.
 
