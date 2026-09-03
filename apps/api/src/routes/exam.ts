@@ -76,7 +76,10 @@ import {
 import { buildCandidateStatusItems } from "../lib/proctorService.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { resolveResultPublishedRecipients } from "../notifications/recipientResolver.js";
-import { dispatchResultPublishedFanOut } from "../notifications/notificationService.js";
+import {
+  dispatchResultPublishedFanOut,
+  dispatchExamAssigned,
+} from "../notifications/notificationService.js";
 
 /** Convert an Exam domain entity to the API response shape with ISO date strings. */
 function toExamResponse(exam: Exam) {
@@ -1909,7 +1912,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** Batch enroll candidates into an exam. Skips already-enrolled or non-existent candidates. Returns counts of added and skipped. */
+    /**
+     * Batch enroll candidates into an exam. Skips already-enrolled or
+     * non-existent candidates. Returns counts of added and skipped.
+     *
+     * Each effective (new) enrollment commits atomically with its audit row
+     * and its exam_assigned Inbox/Email notification (#299, ADR-011 §17);
+     * a duplicate or unknown candidate is skipped without notifying.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { examId } = request.params as { examId: string };
@@ -1931,9 +1941,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
-      const userRepo = createUserRepo(fastify.db);
       const existing = await enrollmentRepo.listByExam(ctx, examId);
       const existingIds = new Set(existing.map((e) => e.candidateId));
+      const config = getRuntimeConfig();
+      const operationNow = fastify.now();
 
       let added = 0;
       let skipped = 0;
@@ -1956,6 +1967,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           skippedCandidates.push({ candidateId, reason: "NOT_FOUND" });
           continue;
         }
+        let recipientUser:
+          | Awaited<ReturnType<ReturnType<typeof createUserRepo>["findById"]>>
+          | undefined;
         const enrollment = await executeInTransaction(
           fastify.db,
           async (tx) => {
@@ -1971,16 +1985,36 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               targetId: created.id,
               metadata: { examId, candidateId },
             });
+            // #299 — Inbox + optional Email ride the SAME transaction
+            // (ADR-011 §17): a failed required write rolls back the
+            // enrollment. The recipient identity/email resolve from the
+            // canonical candidateProfile → users row, never from request
+            // input. Duplicates never reach here (skipped above), so one
+            // effective assignment produces at most one notification.
+            recipientUser = await createUserRepo(tx).findById(
+              ctx,
+              candidate.userId,
+            );
+            await dispatchExamAssigned({
+              db: tx,
+              ctx,
+              examId,
+              examTitle: exam.title,
+              recipientUserId: candidate.userId,
+              recipientEmail: recipientUser?.email ?? null,
+              publicWebOrigin: config.publicWebOrigin.origin,
+              emailMaxAttempts: config.email.maxAttempts,
+              now: operationNow,
+            });
             return created;
           },
         );
         added++;
-        const user = await userRepo.findById(ctx, candidate.userId);
         enrollments.push({
           id: enrollment.id,
           examId: enrollment.examId,
           candidateId: enrollment.candidateId,
-          candidateDisplayName: user?.name ?? "-",
+          candidateDisplayName: recipientUser?.name ?? "-",
           status: enrollment.status,
           attemptCount: enrollment.attemptCount,
           finalScore: enrollment.finalScore ?? null,

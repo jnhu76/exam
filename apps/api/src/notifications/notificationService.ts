@@ -9,9 +9,11 @@ import {
 } from "./policy.js";
 import {
   buildResultPublishedActionPath,
-  buildAbsoluteResultLink,
+  buildExamAssignedActionPath,
+  buildAbsoluteNotificationLink,
 } from "./actionLink.js";
 import { renderGradeNotificationEmail } from "./gradeNotificationEmail.js";
+import { renderExamAssignedEmail } from "./examAssignedEmail.js";
 
 // P5-N1-I2 — channel-neutral NotificationService.
 //
@@ -127,7 +129,10 @@ export async function dispatchResultPublishedToRecipient(
         `dispatchResultPublishedToRecipient: policy enabled Email for ${type} but no EmailType mapping exists`,
       );
     }
-    const absoluteLink = buildAbsoluteResultLink(actionPath, publicWebOrigin);
+    const absoluteLink = buildAbsoluteNotificationLink(
+      actionPath,
+      publicWebOrigin,
+    );
     const rendered = renderGradeNotificationEmail({
       examTitle,
       actionPath: absoluteLink,
@@ -179,5 +184,119 @@ export async function dispatchResultPublishedFanOut(
     recipientsProcessed: opts.recipients.length,
     inboxRowsCreated,
     outboxRowsCreated,
+  };
+}
+
+/** Options for dispatching one exam_assigned notification. */
+export interface DispatchExamAssignedOptions {
+  /** Caller's transaction-scoped db handle (the enrollment transaction). */
+  db: Database;
+  /** Tenant context (organizationId derived from here). */
+  ctx: TenantContext;
+  /** Exam id (the stable assignment identity for dedupe keys). */
+  examId: string;
+  /** Exam title (server-trusted, escaped at Email render time). */
+  examTitle: string;
+  /** Authoritative recipient user id (candidate profile → users.id). */
+  recipientUserId: string;
+  /** Normalized recipient email from users.email, or null (Inbox-only). */
+  recipientEmail: string | null;
+  /** Public web origin for absolute Email links (from runtime config). */
+  publicWebOrigin: string;
+  /** Default maxAttempts for outbox rows (from email config). */
+  emailMaxAttempts: number;
+  /** Authoritative timestamp for this dispatch (from fastify.now()). */
+  now: Date;
+}
+
+/**
+ * Dispatches the exam_assigned notification for one newly enrolled
+ * candidate (#299, #402 G3).
+ *
+ * Same atomicity contract as result_published (ADR-011 §17): the REQUIRED
+ * Inbox row and the REQUIRED-when-email-exists outbox row are written inside
+ * the caller's enrollment transaction — a failed write rolls back the
+ * enrollment. SMTP is never called here; the worker drains the outbox.
+ *
+ * Idempotency rides on the enrollment mutation itself: a duplicate
+ * enrollment is skipped before dispatch (and the (org, recipient, dedupeKey)
+ * unique index is the DB-level backstop). The action path is the candidate
+ * exam list (`/exam/list`), the existing authorized surface — the
+ * notification does not expose examId on a new per-exam page.
+ */
+export async function dispatchExamAssigned(
+  opts: DispatchExamAssignedOptions,
+): Promise<RecipientDispatchResult> {
+  const { db, ctx, examId, examTitle, publicWebOrigin, emailMaxAttempts, now } =
+    opts;
+  const type = "exam_assigned";
+  const recipientUserId = opts.recipientUserId;
+  const recipientEmail = opts.recipientEmail;
+
+  if (!requiresInbox(type)) {
+    throw new Error(
+      `dispatchExamAssigned: type ${type} does not require Inbox — refusing to dispatch`,
+    );
+  }
+
+  const notificationRepo = createNotificationRepo(db);
+  const emailOutboxRepo = createEmailOutboxRepo(db);
+
+  // 1. REQUIRED Inbox row.
+  const actionPath = buildExamAssignedActionPath();
+  const inboxInsert = await notificationRepo.insert(
+    ctx,
+    {
+      recipientUserId,
+      type,
+      title: "考试已安排",
+      body: `您已被安排参加考试「${examTitle}」，请进入考试列表查看详情。`,
+      actionPath,
+      dedupeKey: `exam_assigned:${examId}`,
+    },
+    now,
+  );
+
+  // 2. REQUIRED Email outbox row when the candidate user has an email AND
+  //    the Inbox row was newly created (dedupe backstop for retries).
+  let outboxCreated = false;
+  if (
+    inboxInsert.created &&
+    recipientEmail != null &&
+    emailEnabledForRecipient(type, recipientEmail)
+  ) {
+    const emailType = resolveEmailTypeForNotification(type);
+    if (emailType == null) {
+      throw new Error(
+        `dispatchExamAssigned: policy enabled Email for ${type} but no EmailType mapping exists`,
+      );
+    }
+    const absoluteLink = buildAbsoluteNotificationLink(
+      actionPath,
+      publicWebOrigin,
+    );
+    const rendered = renderExamAssignedEmail({
+      examTitle,
+      listUrl: absoluteLink,
+    });
+    // REQUIRED insert (throws on failure → rolls back the enrollment tx).
+    await emailOutboxRepo.create(ctx, {
+      type: emailType,
+      recipientEmail,
+      subject: rendered.subject,
+      bodyText: rendered.bodyText,
+      bodyHtml: rendered.bodyHtml,
+      maxAttempts: emailMaxAttempts,
+      dedupeKey: `exam_assigned:${examId}:${recipientUserId}`,
+      notificationId: inboxInsert.row.id,
+      recipientUserId,
+    });
+    outboxCreated = true;
+  }
+
+  return {
+    notification: inboxInsert.row,
+    inboxCreated: inboxInsert.created,
+    outboxCreated,
   };
 }

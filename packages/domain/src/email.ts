@@ -45,12 +45,13 @@ export type EmailOutboxStatus =
  * removed when no production writer remains (#300 audit): the `email_outbox`
  * `type` column is plain text with no CHECK constraint, so the union only
  * constrains NEW rows; historical rows keep their persisted value. Current
- * writers: `grade_notification` (result_published), `staff_invitation`,
- * `password_reset`.
+ * writers: `grade_notification` (result_published), `exam_notification`
+ * (exam_assigned), `staff_invitation`, `password_reset`.
  */
 export type EmailType =
   | "password_reset"
   | "staff_invitation"
+  | "exam_notification"
   | "grade_notification";
 
 /**
