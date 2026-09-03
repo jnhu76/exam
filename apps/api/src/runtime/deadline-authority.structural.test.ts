@@ -17,6 +17,9 @@ import { fileURLToPath } from "node:url";
 // cannot silently regress:
 //
 //   computeEffectiveDeadline / isAttemptDeadlineExpired  (CANONICAL AUTHORITY)
+//        |  defined in packages/exam-engine/src/timer.ts (the timing leaf) and
+//        |  re-exported by deadlineReconciliation.ts for deep-import stability;
+//        |  the structural test below pins the SINGLE definition site.
 //        |
 //        +-- inline reconciliation (ensureAttemptDeadlineReconciled)
 //        |       AUTHORITATIVE
@@ -85,9 +88,11 @@ describe("effective-deadline authority structural guard", () => {
       ),
     );
     expect(defs).toHaveLength(1);
-    expect(defs[0]).toBe(
-      join(REPO_ROOT, "packages/exam-engine/src/deadlineReconciliation.ts"),
-    );
+    // The canonical kernel lives in the timing leaf (timer.ts) so every
+    // engine module — including attemptCommands, which must not import
+    // deadlineReconciliation (cycle) — consumes the SAME definition.
+    // deadlineReconciliation re-exports it; there is still one definition.
+    expect(defs[0]).toBe(join(REPO_ROOT, "packages/exam-engine/src/timer.ts"));
   });
 
   it("defines `isAttemptDeadlineExpired` (the canonical expiry seam)", () => {
@@ -97,9 +102,7 @@ describe("effective-deadline authority structural guard", () => {
       ),
     );
     expect(defs).toHaveLength(1);
-    expect(defs[0]).toBe(
-      join(REPO_ROOT, "packages/exam-engine/src/deadlineReconciliation.ts"),
-    );
+    expect(defs[0]).toBe(join(REPO_ROOT, "packages/exam-engine/src/timer.ts"));
   });
 
   it("does NOT reintroduce the removed in-memory `selectExpiredAttempts`", () => {
