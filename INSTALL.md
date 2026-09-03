@@ -1,5 +1,7 @@
 # Installation
 
+**English** · [简体中文](INSTALL.zh-CN.md)
+
 This guide takes you from zero to a running Exam deployment. For
 advanced configuration, upgrade procedures, and operations, see the
 [Deployment](docs/deployment/) and [Operations](docs/operations/)
