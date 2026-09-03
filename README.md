@@ -133,7 +133,4 @@ making any changes.
 ## License
 
 Licensed under the [GNU Affero General Public License v3.0](LICENSE)
-(AGPL-3.0). You may study, modify, and self-host this software. Network
-use of modified versions requires source disclosure per AGPL terms.
-Commercial licensing may be available separately — contact the project
-maintainer.
+(AGPL-3.0). See `LICENSE` for the authoritative terms.

@@ -111,10 +111,10 @@ and modification principles.
 Exam is licensed under the
 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
 
-By contributing, you agree that your contributions will be licensed
-under the same license. Commercial dual-licensing may be offered
-separately by the project maintainer in the future; contributing does
-not grant any additional commercial rights.
+Contributions are accepted under the project's applicable AGPL-3.0
+terms. Any future commercial licensing or contributor-rights model
+requires a separate, explicit governance and legal decision and is not
+established by this document.
 
 ## Questions?
 

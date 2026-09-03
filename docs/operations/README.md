@@ -41,7 +41,7 @@ backoff, and lock-timeout recovery.
 | Email disabled (default) | Outbox drains to `sent` without delivery — no action needed |
 | Enable SMTP | Set `EMAIL_ENABLED=true`, `EMAIL_TRANSPORT=smtp`, `SMTP_*` vars |
 | Stuck processing | Restart app — abandoned rows recovered after lock timeout |
-| Dead emails | Inspect via `psql`, replay by resetting status to `pending` |
+| Dead emails | Inspect `last_error` via `psql`; no supported automatic replay — see notes below |
 | Loop degraded | Check `GET /api/system/diagnostics` `emailStatus.worker` |
 
 See
@@ -49,6 +49,14 @@ See
 the full SMTP configuration reference and
 [`mvp-deployment-runbook.md`](../deployment/mvp-deployment-runbook.md)
 section 8 for the outbox loop internals.
+
+**Dead email guidance:** The `dead` status is terminal — the retry
+budget has been exhausted. There is no automated replay mechanism.
+Inspect `last_error` and the recipient/content via `psql` to determine
+the failure cause. The deployment runbook documents a manual operator
+override procedure; use it only after confirming the root cause.
+Do not mutate the outbox directly unless following that documented
+procedure.
 
 ## Health and Diagnostics
 
