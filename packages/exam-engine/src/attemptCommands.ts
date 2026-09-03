@@ -304,23 +304,14 @@ export async function startOrRestoreAttempt(
         ? syncDeadline
         : null;
 
-  // #395: manual-submit feasibility for a NEW attempt. A candidate manual
-  // submit is legal only in [earliestSubmitAt, effectiveDeadline) — the submit
-  // guard admits now >= earliestSubmitAt while the canonical deadline kernel
-  // expires (and freezes via reconciliation) at now >= effectiveDeadline. The
-  // window is therefore reachable iff earliestSubmitAt < effectiveDeadline
-  // STRICTLY: at equality the only guard-passing instant is already expired,
-  // leaving the attempt's normal candidate completion path unreachable (only
-  // the exempt deadline_scanner/proctor/system sources could submit it).
+  // A NEW attempt must retain a non-empty candidate manual-submit window:
+  // candidate submit is legal at/after earliestSubmitAt, while the effective
+  // deadline expires at equality, so feasibility requires strict `<`.
   //
-  // INVARIANT: feasibility is evaluated on the same would-be attempt shape the
-  // create below persists — the effective deadline flows through the canonical
-  // computeEffectiveDeadline kernel (min(closeAt, deadlineAt)), never per-mode
-  // arithmetic, so timed_window/deadline/timed_sync share one rule and B2
-  // timed_sync is protected without a mode-specific implementation. Null
-  // effective deadline (untimed) never rejects here. Resume/restore of
-  // existing attempts is never subject to this guard (new attempts only); a
-  // rejection precedes both the attempt create and the enrollment update.
+  // INVARIANT: new attempts only — resume/restore must never hit this check —
+  // and a rejection must precede both the attempt create and the enrollment
+  // update. The effective deadline flows through the canonical kernel so
+  // every timing mode shares one rule; a null deadline never rejects.
   if (exam.minSubmitAfterStartMinutes != null) {
     const effectiveDeadline = computeEffectiveDeadline(exam, { deadlineAt });
     if (effectiveDeadline !== null) {

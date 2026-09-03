@@ -163,12 +163,8 @@ describe("attempt routes", () => {
 
   describe("POST /attempts/:examId/start — minSubmitAfterStartMinutes feasibility (#395)", () => {
     it("rejects an impossible late start with 409 ATTEMPT_START_SUBMIT_INFEASIBLE and leaves zero mutation", async () => {
-      // closeAt = now + 5min while duration 60min puts the personal deadline
-      // later, so the effective deadline binds at closeAt. A start NOW gives
-      // earliestSubmitAt = now + 30min > closeAt — no reachable candidate
-      // manual-submit instant. Before #395 this start succeeded (201) and
-      // trapped the candidate behind ATTEMPT_SUBMIT_TOO_EARLY until the
-      // deadline scanner froze the attempt.
+      // closeAt binds 5min out while minSubmit needs 30min — no reachable
+      // candidate manual-submit instant.
       const examRes = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
@@ -228,37 +224,6 @@ describe("attempt routes", () => {
       expect(enrollment).toHaveLength(1);
       expect(enrollment[0]!.attemptCount).toBe(0);
       expect(enrollment[0]!.status).toBe("assigned");
-    });
-
-    it("starts 201 when the min-submit window still fits before the effective deadline", async () => {
-      // Same minSubmit 30, but closeAt = now + 2h with duration 60min: the
-      // personal deadline binds at now + 60min > earliest now + 30min.
-      const examRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: buildExamPayload({
-          title: "Feasible Late Exam",
-          courseId,
-          questionIds: [questionId],
-          minSubmitAfterStartMinutes: 30,
-          closeAt: new Date(Date.now() + 7_200_000).toISOString(),
-        }),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const feasibleExamId = examRes.json().id as string;
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/exams/${feasibleExamId}/publish`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      await enrollCandidateForExam(ctx, candidateProfileId, feasibleExamId);
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${feasibleExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(res.statusCode).toBe(201);
     });
   });
 

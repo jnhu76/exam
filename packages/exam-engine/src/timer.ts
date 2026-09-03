@@ -20,18 +20,11 @@ type DeadlineAttempt = { deadlineAt?: Date | null | undefined };
  *   - neither                       => null (no deadline)
  *   - attempt deadline only         => invalid hybrid; fail closed
  *
- * Current production authoring still exposes only `timed_window`, whose
- * reachable active attempts have BOTH bounds. The nullable result is the
- * kernel seam required before `deadline` / `untimed` can be activated; A1 does
- * not by itself make those modes reachable.
- *
  * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
  * effective deadline value. Discovery queries may over-approximate candidates,
  * but the authoritative expiry decision is `isAttemptDeadlineExpired` below.
- * Re-exported by `deadlineReconciliation.ts`; consumers import from either —
- * there is exactly one implementation (this module owns the timing leaf, so
- * every engine module — including `attemptCommands` — can depend on it without
- * cycles).
+ * Living in the timing leaf lets every engine module depend on it without
+ * cycles; `deadlineReconciliation.ts` re-exports it for deep-import stability.
  */
 export function computeEffectiveDeadline(
   exam: { closeAt: Date },

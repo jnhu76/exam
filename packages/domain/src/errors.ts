@@ -305,18 +305,9 @@ export class AttemptLateEntryClosedError extends AppError {
 }
 
 /**
- * A new attempt start is rejected because the candidate-manual-submit window
- * is unreachable (#395). The minimum manual-submit duration
- * (`minSubmitAfterStartMinutes`) leaves no legal candidate submit instant
- * before the canonical effective deadline: a candidate submit is legal only
- * in `[earliestSubmitAt, effectiveDeadline)` — the too-early guard allows
- * `now >= earliestSubmitAt` while deadline expiry freezes at
- * `now >= effectiveDeadline` — so the window is non-empty iff
- * `earliestSubmitAt < effectiveDeadline` (strict; at equality the single
- * guard-passing instant is already expired).
- *
- * Applies only to creating a NEW attempt; resume/restore of existing attempts
- * is never blocked. Null effective deadline (untimed) never rejects here.
+ * NEW attempt creation is rejected because the minimum manual-submit duration
+ * leaves no legal candidate submit instant before the effective deadline.
+ * Applies to new starts only; resume/restore is never blocked (HTTP 409).
  */
 export class AttemptStartSubmitInfeasibleError extends AppError {
   constructor(

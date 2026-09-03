@@ -398,24 +398,24 @@ details: { earliestSubmitAt, remainingSeconds }
 
 Must **not** block: `deadline_scanner`, `proctor`, `system` submit sources.
 
-> **Amendment (2026-09-03, #395 as-built):** the two policies above compose
-> into a new-attempt admission rule. A candidate manual submit is legal only
-> in `[earliestSubmitAt, effectiveDeadline)` — the guard above admits
-> `now >= earliestSubmitAt` while the canonical deadline kernel
-> (`computeEffectiveDeadline` = `min(closeAt, deadlineAt)`) expires and
-> freezes at `now >= effectiveDeadline`. `startOrRestoreAttempt` therefore
-> rejects a NEW attempt start when `earliestSubmitAt >= effectiveDeadline`
-> (strict inequality required: at equality the only guard-passing instant is
-> already expired) with `409 ATTEMPT_START_SUBMIT_INFEASIBLE`. The check is
-> expressed through the canonical effective-deadline kernel — never per-mode
-> arithmetic — so it covers `timed_window`, `deadline`, and latent
-> `timed_sync` uniformly, and never rejects when the effective deadline is
-> null (`untimed`). Resume/restore of existing attempts is not subject to it,
-> and a rejection precedes both the attempt create and the enrollment update
-> (zero mutation). Consequence: an exam authored with
-> `minSubmitAfterStartMinutes >= durationMinutes` (no authoring-time
-> rejection exists — see the §4.2 amendment) is unstartable at runtime for
-> want of any reachable manual-submit window.
+**New-attempt admission (`startOrRestoreAttempt`):** the two policies above
+compose — a candidate manual submit is legal only in
+`[earliestSubmitAt, effectiveDeadline)`, because the guard above admits
+`now >= earliestSubmitAt` while the canonical deadline kernel
+(`computeEffectiveDeadline` = `min(closeAt, deadlineAt)`) already expires at
+`now >= effectiveDeadline`. Creating a new attempt is therefore admitted only
+when `earliestSubmitAt < effectiveDeadline` (strict: at equality the only
+guard-passing instant is already expired); otherwise the start is rejected
+with `409 ATTEMPT_START_SUBMIT_INFEASIBLE` before the attempt create and the
+enrollment update (zero mutation).
+
+The check goes through the canonical effective-deadline kernel — never
+per-mode arithmetic — so it holds uniformly for `timed_window`, `deadline`,
+and `timed_sync`, and never rejects when the effective deadline is null
+(`untimed`). It governs only new-attempt creation; resume/restore of existing
+attempts is not subject to it. Because authoring does not reject
+`minSubmitAfterStartMinutes >= durationMinutes` (§4.2), such an exam is
+unstartable at runtime for want of any reachable manual-submit window.
 
 ### 4.5 Submit source discriminator (command layer only)
 

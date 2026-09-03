@@ -130,13 +130,9 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
   ExamAttempt["status"]
 >(["in_progress", "disrupted"]);
 
-// Canonical deadline kernel (computeEffectiveDeadline / isAttemptDeadlineExpired)
-// lives in `./timer.js` — the timing leaf this module depends on. Re-exported
-// here so existing deep imports keep resolving; there is exactly one
-// implementation. This module stays the canonical RECONCILIATION owner (the
-// freeze/grade mutation seam), while the pure value/expiry decisions are
-// shared with every engine start/save path that must not import this module
-// (cycle: attemptCommands ← deadlineReconciliation).
+// Pure deadline calculation lives in timer.ts so engine callers can share the
+// same kernel without depending on reconciliation orchestration; re-exported
+// here for deep-import stability.
 export { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
 
 /**

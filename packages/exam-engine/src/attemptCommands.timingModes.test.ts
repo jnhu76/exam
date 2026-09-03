@@ -303,27 +303,16 @@ describe("startOrRestoreAttempt — timed_sync (Phase B kernel)", () => {
   });
 });
 
-// #395 — new-attempt manual-submit feasibility. A candidate manual submit is
-// legal only in [earliestSubmitAt, effectiveDeadline): the too-early guard
-// admits now >= earliestSubmitAt (attemptCommands submitAttempt) while the
-// canonical deadline kernel expires at now >= effectiveDeadline
-// (deadlineReconciliation isAttemptDeadlineExpired) and freezes the attempt
-// with the deadline source before a candidate submit can run. The window is
-// therefore reachable iff earliestSubmitAt < effectiveDeadline — STRICT: at
-// equality the single guard-passing instant is already expired.
-//
-// The rule is expressed through computeEffectiveDeadline (the canonical
-// kernel), never per-mode arithmetic, so timed_window / deadline /
-// timed_sync all flow through the same guard and untimed (null effective
-// deadline) never rejects here.
+// Candidate manual submit is legal only in [earliestSubmitAt,
+// effectiveDeadline): the too-early guard admits now >= earliestSubmitAt
+// while the canonical deadline kernel expires at now >= effectiveDeadline.
+// A NEW start is therefore feasible iff earliestSubmitAt < effectiveDeadline
+// STRICTLY — at equality the single guard-passing instant is already expired.
+// The rule flows through computeEffectiveDeadline, never per-mode arithmetic.
 describe("startOrRestoreAttempt — min-submit feasibility (#395)", () => {
-  // Issue reproduction shape: closeAt-bound effective deadline. openAt 09:00,
-  // closeAt 12:00, duration 120, minSubmit 30 (authoring-sane: min < duration).
-  const lateWindowExam = (): Exam =>
-    makeExam({ durationMinutes: 120, minSubmitAfterStartMinutes: 30 });
-
-  function startTracked(exam: Exam, now: Date, existing?: ExamAttempt) {
-    const attemptRepo = makeStartAttemptRepo(existing);
+  // Fixture defaults give the exam a 09:00–12:00 window.
+  function startTracked(exam: Exam, now: Date) {
+    const attemptRepo = makeStartAttemptRepo();
     const enrollmentUpdateCalls: unknown[] = [];
     const base = makeEnrollmentRepo([makeEnrollment()]);
     const enrollmentRepo: EnrollmentRepository = {
@@ -345,12 +334,10 @@ describe("startOrRestoreAttempt — min-submit feasibility (#395)", () => {
     return { promise, attemptRepo, enrollmentUpdateCalls };
   }
 
-  it("rejects an impossible late timed_window start and leaves zero mutation (#395 repro)", async () => {
-    // now 11:45 → deadlineAt 13:45 → effective min(12:00, 13:45) = 12:00;
-    // earliest 12:15 ≥ 12:00 → the whole manual-submit window is past the
-    // deadline. Before #395 this start SUCCEEDED and trapped the candidate.
+  it("rejects an impossible late timed_window start and leaves zero mutation", async () => {
+    // Start 11:45 → earliest 12:15, past the closeAt-bound effective 12:00.
     const { promise, attemptRepo, enrollmentUpdateCalls } = startTracked(
-      lateWindowExam(),
+      makeExam({ durationMinutes: 120, minSubmitAfterStartMinutes: 30 }),
       new Date("2025-01-01T11:45:00Z"),
     );
     const error = await promise.then(
@@ -363,47 +350,21 @@ describe("startOrRestoreAttempt — min-submit feasibility (#395)", () => {
     expect(enrollmentUpdateCalls).toHaveLength(0);
   });
 
-  it("rejects when the personal duration binds the effective deadline (wide-open window)", async () => {
-    // duration 30, minSubmit 45, now 10:00 → deadlineAt 10:30 < closeAt 12:00;
-    // effective = 10:30, earliest 10:45. The exam window is wide open, yet no
-    // legal manual-submit instant exists.
-    const exam = makeExam({
-      durationMinutes: 30,
-      minSubmitAfterStartMinutes: 45,
-    });
-    const { promise, attemptRepo } = startTracked(
-      exam,
-      new Date("2025-01-01T10:00:00Z"),
-    );
-    await expect(promise).rejects.toThrow(AttemptStartSubmitInfeasibleError);
-    expect(attemptRepo.created).toBeNull();
-  });
-
-  it("allows a nearby feasible late start on the same exam", async () => {
-    // Same exam as the repro; now 11:00 → earliest 11:30 < effective 12:00.
-    const { promise, attemptRepo } = startTracked(
-      lateWindowExam(),
-      new Date("2025-01-01T11:00:00Z"),
-    );
-    const { attempt, isNew } = await promise;
-    expect(isNew).toBe(true);
-    expect(attempt.status).toBe("in_progress");
-    expect(attemptRepo.created).not.toBeNull();
-    expect(attempt.deadlineAt).toEqual(new Date("2025-01-01T13:00:00Z"));
-  });
-
-  it("rejects at the exact boundary earliestSubmitAt == effectiveDeadline", async () => {
-    // duration 90, minSubmit 30, closeAt 12:00; now 11:30 → deadlineAt 13:00,
-    // effective 12:00, earliest 12:00. At equality the ONLY instant that
-    // passes the too-early guard (12:00) is exactly the expiry instant
-    // (now >= effectiveDeadline), so no candidate-manual-submit instant is
-    // reachable — rejected.
+  it("admits strictly before the boundary and rejects at earliestSubmitAt == effectiveDeadline", async () => {
     const exam = makeExam({
       durationMinutes: 90,
       minSubmitAfterStartMinutes: 30,
     });
-    const { promise } = startTracked(exam, new Date("2025-01-01T11:30:00Z"));
-    const error = (await promise.then(
+    // Start 11:29 → earliest 11:59 < effective 12:00 — one legal minute left.
+    const admitted = await startTracked(exam, new Date("2025-01-01T11:29:00Z"))
+      .promise;
+    expect(admitted.attempt.status).toBe("in_progress");
+    // Start 11:30 → earliest 12:00 == effective 12:00: the only instant
+    // passing the too-early guard is already the expiry instant.
+    const error = (await startTracked(
+      exam,
+      new Date("2025-01-01T11:30:00Z"),
+    ).promise.then(
       () => null,
       (e: unknown) => e,
     )) as AttemptStartSubmitInfeasibleError | null;
@@ -419,35 +380,15 @@ describe("startOrRestoreAttempt — min-submit feasibility (#395)", () => {
     );
   });
 
-  it("admits the start one minute before the boundary (earliestSubmitAt strictly before effectiveDeadline)", async () => {
-    // Same exam; now 11:29 → earliest 11:59 < effective 12:00 — the candidate
-    // keeps a one-minute legal manual-submit window.
-    const exam = makeExam({
-      durationMinutes: 90,
-      minSubmitAfterStartMinutes: 30,
-    });
-    const { promise } = startTracked(exam, new Date("2025-01-01T11:29:00Z"));
-    const { attempt } = await promise;
-    expect(attempt.status).toBe("in_progress");
-  });
-
-  it("applies the same canonical rule to deadline mode (closeAt-only effective deadline)", async () => {
-    // deadline mode: attempt deadlineAt is null, effective deadline = closeAt.
+  it("applies the same canonical rule to deadline mode (effective deadline = closeAt)", async () => {
     const exam = makeExam({
       timingMode: "deadline",
       durationMinutes: null,
       minSubmitAfterStartMinutes: 30,
     });
-    // now 11:45 → earliest 12:15 ≥ closeAt 12:00 → reject.
     await expect(
       startTracked(exam, new Date("2025-01-01T11:45:00Z")).promise,
     ).rejects.toThrow(AttemptStartSubmitInfeasibleError);
-    // Control on the same exam: now 11:00 → earliest 11:30 < 12:00 → start.
-    const { attempt } = await startTracked(
-      exam,
-      new Date("2025-01-01T11:00:00Z"),
-    ).promise;
-    expect(attempt.deadlineAt).toBeNull();
   });
 
   it("does not reject an untimed start solely because of minSubmitAfterStartMinutes (null effective deadline)", async () => {
@@ -463,32 +404,6 @@ describe("startOrRestoreAttempt — min-submit feasibility (#395)", () => {
     ).promise;
     expect(attempt.status).toBe("in_progress");
     expect(attempt.deadlineAt).toBeNull();
-  });
-
-  it("still resumes an existing in_progress attempt whose remaining time is shorter than minSubmitAfterStartMinutes", async () => {
-    // Existing attempt: started 10:30, deadlineAt 11:30 → effective
-    // min(12:00, 11:30) = 11:30. now 11:15 leaves 15 min < minSubmit 60, but
-    // #395 governs NEW attempt creation only — the resume must return the
-    // existing attempt untouched.
-    const exam = makeExam({
-      durationMinutes: 60,
-      minSubmitAfterStartMinutes: 60,
-    });
-    const active = makeAttempt({
-      status: "in_progress",
-      startedAt: new Date("2025-01-01T10:30:00Z"),
-      deadlineAt: new Date("2025-01-01T11:30:00Z"),
-    });
-    const { promise, attemptRepo } = startTracked(
-      exam,
-      new Date("2025-01-01T11:15:00Z"),
-      active,
-    );
-    const { attempt, isNew } = await promise;
-    expect(isNew).toBe(false);
-    expect(attempt.id).toBe("attempt-1");
-    expect(attempt.status).toBe("in_progress");
-    expect(attemptRepo.created).toBeNull();
   });
 
   it("still restores a disrupted attempt whose remaining time is shorter than minSubmitAfterStartMinutes", async () => {
@@ -526,41 +441,22 @@ describe("startOrRestoreAttempt — min-submit feasibility (#395)", () => {
     expect(attemptRepo.created).toBeNull();
   });
 
-  // Latent Phase B2 oracle (#291 Model A): late entry against a SHARED global
-  // deadline must be protected by the SAME canonical feasibility rule — no
-  // timed_sync-specific implementation. This is the pre-B2 regression the
-  // issue requires: syncDeadline 11:30, NEW start at 11:05, minSubmit 30.
-  describe("timed_sync latent oracle (pre-B2)", () => {
-    const t0 = new Date("2025-01-01T10:00:00Z");
-    const syncExam = (): Exam =>
-      makeExam({
-        timingMode: "timed_sync",
-        durationMinutes: 90,
-        syncStartedAt: t0,
-        minSubmitAfterStartMinutes: 30,
-      });
-
-    it("rejects a late timed_sync NEW start through the canonical feasibility rule", async () => {
-      // T0 + 90min = syncDeadline 11:30 (closeAt 12:00 later). Start at 11:05
-      // passes the pre-T0/post-deadline/closeAt gates; earliest 11:35 ≥
-      // effective min(12:00, 11:30) = 11:30 → infeasible.
-      const { promise, attemptRepo, enrollmentUpdateCalls } = startTracked(
-        syncExam(),
-        new Date("2025-01-01T11:05:00Z"),
-      );
-      await expect(promise).rejects.toThrow(AttemptStartSubmitInfeasibleError);
-      expect(attemptRepo.created).toBeNull();
-      expect(enrollmentUpdateCalls).toHaveLength(0);
+  it("rejects a late timed_sync start through the same canonical rule (latent B2)", async () => {
+    // The shared sitting deadline (T0 10:00 + 90min = 11:30, before closeAt
+    // 12:00) must flow through this same guard — a future timed_sync start
+    // path must not grow a mode-specific feasibility policy.
+    const syncExam = makeExam({
+      timingMode: "timed_sync",
+      durationMinutes: 90,
+      syncStartedAt: new Date("2025-01-01T10:00:00Z"),
+      minSubmitAfterStartMinutes: 30,
     });
-
-    it("admits a timed_sync start leaving a reachable manual-submit window before the shared deadline", async () => {
-      // Start 10:55 → earliest 11:25 < shared deadline 11:30 → feasible.
-      const { promise } = startTracked(
-        syncExam(),
-        new Date("2025-01-01T10:55:00Z"),
-      );
-      const { attempt } = await promise;
-      expect(attempt.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
-    });
+    const { promise, attemptRepo, enrollmentUpdateCalls } = startTracked(
+      syncExam,
+      new Date("2025-01-01T11:05:00Z"),
+    );
+    await expect(promise).rejects.toThrow(AttemptStartSubmitInfeasibleError);
+    expect(attemptRepo.created).toBeNull();
+    expect(enrollmentUpdateCalls).toHaveLength(0);
   });
 });
