@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Exam, ExamAttempt } from "@exam/domain";
-import { AttemptLateEntryClosedError } from "@exam/domain";
+import { AttemptLateEntryClosedError, ExamNotOpenError } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
 import { startOrRestoreAttempt } from "./attemptCommands.js";
 import type { StartOrRestoreDependencies } from "./attemptCommands.js";
@@ -81,9 +81,12 @@ const deadlineExam = (): Exam =>
 const untimedExam = (): Exam =>
   makeExam({ timingMode: "untimed", durationMinutes: null, closeAt: null });
 
-async function start(exam: Exam, now: Date = fixedNow) {
+// Wires the same dependency stack as `start` but exposes the pending
+// promise, so rejection tests can still inspect the in-memory
+// AttemptRepository after the command has failed.
+function startWithRepo(exam: Exam, now: Date = fixedNow) {
   const attemptRepo = makeStartAttemptRepo();
-  const result = await startOrRestoreAttempt(
+  const promise = startOrRestoreAttempt(
     makeExamRepo([exam]),
     makeEnrollmentRepo([makeEnrollment()]),
     attemptRepo,
@@ -92,7 +95,12 @@ async function start(exam: Exam, now: Date = fixedNow) {
     now,
     makeStartDeps(),
   );
-  return { result, attemptRepo };
+  return { promise, attemptRepo };
+}
+
+async function start(exam: Exam, now: Date = fixedNow) {
+  const { promise, attemptRepo } = startWithRepo(exam, now);
+  return { result: await promise, attemptRepo };
 }
 
 describe("startOrRestoreAttempt — Phase A timing modes", () => {
@@ -151,9 +159,12 @@ describe("startOrRestoreAttempt — timed_sync (Phase B kernel)", () => {
 
   it("rejects start before the operator trigger even inside the open window", async () => {
     const untriggered = syncExam({ syncStartedAt: null });
-    await expect(start(untriggered)).rejects.toThrow(
+    const { promise, attemptRepo } = startWithRepo(untriggered);
+    await expect(promise).rejects.toThrow(
       /synchronized exam has not been started/i,
     );
+    // Pre-T0 rejection must not have created any attempt row.
+    expect(attemptRepo.created).toBeNull();
   });
 
   it("mints the shared global deadline regardless of the start instant", async () => {
@@ -175,9 +186,12 @@ describe("startOrRestoreAttempt — timed_sync (Phase B kernel)", () => {
 
   it("rejects start at/after the global deadline even when closeAt is later", async () => {
     const atDeadline = new Date("2025-01-01T11:30:00Z");
-    await expect(start(syncExam(), atDeadline)).rejects.toThrow(
+    const { promise, attemptRepo } = startWithRepo(syncExam(), atDeadline);
+    await expect(promise).rejects.toThrow(
       /synchronized exam deadline has passed/i,
     );
+    // Post-deadline rejection must never leave a born-expired attempt row.
+    expect(attemptRepo.created).toBeNull();
   });
 
   it("still rejects start at/after closeAt (window gate regression)", async () => {
@@ -185,6 +199,22 @@ describe("startOrRestoreAttempt — timed_sync (Phase B kernel)", () => {
     await expect(start(syncExam(), afterClose)).rejects.toThrow(
       /outside exam open window/i,
     );
+  });
+
+  it("never-triggered sitting past closeAt rejects as expired window, not as waiting", async () => {
+    // P2-A oracle: with syncStartedAt = null AND now >= closeAt, the closeAt
+    // window guard must dominate the T0-null guard — the candidate sees the
+    // canonical expired-window rejection, never the pre-T0 waiting text.
+    const untriggered = syncExam({ syncStartedAt: null });
+    const afterClose = new Date("2025-01-01T12:00:00Z");
+    const error = await startWithRepo(untriggered, afterClose).promise.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ExamNotOpenError);
+    const message = error instanceof Error ? error.message : String(error);
+    expect(message).toMatch(/outside exam open window/i);
+    expect(message).not.toMatch(/synchronized exam has not been started/i);
   });
 
   it("anchors the late-entry cutoff at T0, not openAt", async () => {
