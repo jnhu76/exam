@@ -93,7 +93,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 ### Status
 
-**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The `deadline` and `untimed` timing modes are implemented (#291 Phase A, PR #388). The remaining `timed_sync` mode (semantics frozen in `docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`) and queue admission are deferred to Issues (#291, #292).
+**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The `deadline` and `untimed` timing modes are implemented (#291 Phase A, PR #388). The remaining `timed_sync` mode (semantics frozen in `docs/contracts/timed-sync-semantics.md`) and queue admission are deferred to Issues (#291, #292).
 
 **i18n foundation complete (J1–J10).** All user-visible Chinese in production source goes through `t()` via `apps/web/src/i18n/locales/zh-CN.ts`. Full production source hardcoded copy gate enforced via `pnpm lint:copy`. See `docs/standards/i18n-copy-policy.md`.
 
@@ -248,7 +248,7 @@ Identity lifecycle remains separate future work.
 | P3 | P4 closed | ✅ CLOSED |
 | P5-N1 | P4 + P5-0 + P3 closed | ✅ CLOSED |
 | P6 | Preceding MVP blockers closed | ✅ CLOSED |
-| P7 | P6 closed; current-tree reality audit | ✅ **CLOSED (2026-08-14)** — all workstreams shipped (Redis shared rate limit PR #265, state/authority P7-S2 PR #269, portable backup/DR P7-C, operational control plane P7-E PR #282, configurable exam modes P7-M PRs #277/#279, RBAC remediation PR #284, RTO+retention P7-CLOSE PR #290); final program closeout: [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md). Deferred capabilities are Issue-tracked (index: [`post-mvp-issues.md`](post-mvp-issues.md)). |
+| P7 | P6 closed; current-tree reality audit | ✅ **CLOSED (2026-08-14)** — all workstreams shipped (Redis shared rate limit PR #265, state/authority P7-S2 PR #269, portable backup/DR P7-C, operational control plane P7-E PR #282, configurable exam modes P7-M PRs #277/#279, RBAC remediation PR #284, RTO+retention P7-CLOSE PR #290); final program closeout: [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md). Deferred capabilities are Issue-tracked (index: [`post-mvp-issues.md`](post-mvp-issues.md)). |
 
 ### Out of scope
 
@@ -293,9 +293,9 @@ operator-visible system that supports exam policies from minimal collection to
 strict/high-assurance operation.
 
 Detailed planning authority:
-[`docs/roadmap/P7-system-readiness-and-exam-modes.md`](P7-system-readiness-and-exam-modes.md).
+[`archive/roadmap/P7-system-readiness-and-exam-modes.md`](../archive/roadmap/P7-system-readiness-and-exam-modes.md).
 Redis capability study:
-[`docs/audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](../audits/P7-R0-REDIS-CAPABILITY-STUDY.md).
+[`docs/archive/audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](../archive/audits/P7-R0-REDIS-CAPABILITY-STUDY.md).
 
 ### Status
 
@@ -307,7 +307,7 @@ closeout (P7-S2, PR #269), portable backup/DR (P7-C), the operational control
 plane (P7-E0/E1/E2A-E3, PRs #276/#281/#282), configurable exam modes
 (P7-M1/M2/M, PRs #277/#279), the RBAC role-reality remediation (PR #284), and
 the RTO + retention mechanism (P7-CLOSE, PR #290). **The final program
-closeout** ([`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md))
+closeout** ([`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md))
 resolves all release gates (P7-0 … P7-6 PASS), accepts ADR-017 revision 4 and
 ADR-018, and migrates every deferred capability to GitHub Issues (index:
 [`post-mvp-issues.md`](post-mvp-issues.md)). Nothing in this section is an

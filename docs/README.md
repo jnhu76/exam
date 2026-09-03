@@ -51,10 +51,10 @@ guidance.
 | [`roadmap/current.md`](roadmap/current.md) | Phase-level status summary; intentionally does not duplicate the live Issue queue |
 | [`roadmap/post-mvp-issues.md`](roadmap/post-mvp-issues.md) | Coarse Issue index; live state and ordering remain on GitHub |
 | GitHub Issue [#333](https://github.com/jnhu76/exam/issues/333) | Current generic-completion → stabilization → High-Assurance / ToB sequencing authority |
-| [`roadmap/phase3-open-items.md`](roadmap/phase3-open-items.md) | Phase 3 inventory/reference; live Issue state wins when status changes |
-| [`roadmap/P7-system-readiness-and-exam-modes.md`](roadmap/P7-system-readiness-and-exam-modes.md) | P7 planning record — **STATUS: CLOSED** |
-| [`audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](audits/P7-FINAL-PROGRAM-CLOSEOUT.md) | P7 final program closeout evidence |
-| [`audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](audits/P7-R0-REDIS-CAPABILITY-STUDY.md) | Redis capability fact-base |
+| [`archive/roadmap/phase3-open-items.md`](archive/roadmap/phase3-open-items.md) | Phase 3 inventory/reference; live Issue state wins when status changes |
+| [`archive/roadmap/P7-system-readiness-and-exam-modes.md`](archive/roadmap/P7-system-readiness-and-exam-modes.md) | P7 planning record — **STATUS: CLOSED** |
+| [`archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md) | P7 final program closeout evidence |
+| [`archive/audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](archive/audits/P7-R0-REDIS-CAPABILITY-STUDY.md) | Redis capability fact-base |
 
 ### Architecture (current implemented design)
 
@@ -64,7 +64,7 @@ guidance.
 | [`architecture/exam-runtime.md`](architecture/exam-runtime.md) | Exam / Attempt / Answer / Submit / Grading / Result visibility protocol |
 | [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences and authority boundaries |
 | [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
-| [`architecture/email-config.md`](architecture/email-config.md) | Email outbox/SMTP operator reference |
+| [`operations/email-config.md`](operations/email-config.md) | Email outbox/SMTP operator reference |
 
 ### Contracts (behavior code must preserve)
 
@@ -76,6 +76,10 @@ guidance.
 | [`contracts/redis-baseline.md`](contracts/redis-baseline.md) | Redis optional-infrastructure baseline |
 | [`contracts/import-export-format.md`](contracts/import-export-format.md) | CSV import/export data formats |
 | [`contracts/mock-data.md`](contracts/mock-data.md) | Demo seed data contract |
+| [`contracts/admin-recovery-center.md`](contracts/admin-recovery-center.md) | Admin Recovery Center API/read-model authority (J5-R0) |
+| [`contracts/timed-sync-semantics.md`](contracts/timed-sync-semantics.md) | `timed_sync` frozen clock semantics (#291 Phase B, B0 authority) |
+| [`contracts/exam-policy-authority.md`](contracts/exam-policy-authority.md) | Exam policy schema + conflict validator design (P7-M1) |
+| [`contracts/exam-profile-templates.md`](contracts/exam-profile-templates.md) | Exam policy profile templates + authoring-time resolution (P7-M2) |
 
 ### ADRs (architectural decisions)
 
@@ -92,7 +96,7 @@ Recovery authority:
   freezes interruption evidence, compensation policy, and deadline ordering.
 - [`adr/ADR-014-exam-incident-authority.md`](adr/ADR-014-exam-incident-authority.md)
   freezes exam-incident identity, lifecycle, permissions, and action links.
-- [`audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md`](audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md)
+- [`archive/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md`](archive/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md)
   records source-proven runtime reality at its audit baseline.
 
 ### Standards (constraints on future work)
@@ -116,7 +120,7 @@ Recovery authority:
 | --- | --- |
 | [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture |
 | [`standards/ui-system.md`](standards/ui-system.md) | Design tokens, recipes, component authority, Tailwind boundary, accessibility, lint |
-| [`roadmap/ui-open-items.md`](roadmap/ui-open-items.md) | Unfinished visual-authority migration work |
+| [`archive/roadmap/ui-open-items.md`](archive/roadmap/ui-open-items.md) | Unfinished visual-authority migration work |
 
 See also the root [`DESIGN.md`](../DESIGN.md) and
 [`AGENTS.md`](../AGENTS.md) §“前端任务路由”.
@@ -142,6 +146,7 @@ See also the root [`DESIGN.md`](../DESIGN.md) and
 | Document | Purpose |
 | --- | --- |
 | [`operations/README.md`](operations/README.md) | Operations landing page — backup, upgrade, diagnostics, email |
+| [`operations/email-config.md`](operations/email-config.md) | Email outbox/SMTP operator reference |
 
 ### Development
 

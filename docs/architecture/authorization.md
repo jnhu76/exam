@@ -3,7 +3,7 @@
 > Current authority for the platform's capability-based authorization model.
 > This describes what is **implemented** today (Phase 2 + Phase 3 infrastructure),
 > not future scoped-role-bundle product work — see
-> [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md) for that.
+> [`archive/roadmap/phase3-open-items.md`](../archive/roadmap/phase3-open-items.md) for that.
 
 ## Authority
 
@@ -73,7 +73,7 @@ There are three role-bearing surfaces. Only the first is an authority:
 | JWT `role` claim | **Identity / display projection and drift telemetry only.** A mismatch between the JWT claim and the assignment-backed primary role is logged at debug level and explicitly must never widen access. | **No.** Telemetry only. |
 
 This policy was made explicit in P4-C1 (see
-[`docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`](../audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md)).
+[`docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`](../archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md)).
 The permanent whole-application regression lock
 (`routeRegistryConformanceWholeApp.test.ts`) guards against any future route
 re-introducing a role-based gate.
@@ -110,7 +110,7 @@ excluded from the primary application-route count.
 > reconciled the then-current tree to **91 primary routes (81 protected +
 > 10 non-gated)**, 81/81 registry ↔ runtime MATCH with zero drift, and a full
 > `pnpm verify` pass. Full evidence:
-> [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
+> [`docs/archive/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../archive/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
 > That inventory is a **historical record**; the conformance test above is the
 > current authority (the count has grown with each subsequent route addition —
 > see the test's comment chain).
@@ -119,7 +119,7 @@ excluded from the primary application-route count.
 
 The active MVP product-role model is **Admin / Teacher / Candidate**. This model
 is **CLOSED** (P4 — RBAC MVP role switch, 2026-07-24, tested commit `b4dc1d6`;
-see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md)).
+see [`docs/archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md)).
 
 - **Admin**: full system, user, configuration, examination, grading,
   proctoring, result-publication, export, audit, and diagnostics capabilities
@@ -160,14 +160,14 @@ resource gates remain the security authority.
 **Implemented** — scoped authority is live for all three staff roles:
 
 - **Proctor → Exam** per ADR-015 (Accepted 2026-08-02, PR #245; reality audit
-  [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)):
+  [`docs/archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)):
   `exam_proctor_assignments` + `exam_proctor_assignment_events` persistence,
   the `assignProctorToExam` / `revokeProctorFromExam` commands, the Admin
   assignment API, the Incident→Exam resolver, per-request Proctor-assignment
   enforcement (Admin short-circuit; missing assignment → 404), the
   `proctorAccess` route-registry policy, and the minimum Proctor incident
   activation (view/create/investigate — resolve stays Admin-only). Closeout:
-  [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+  [`docs/archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
 - **Teacher → Course** (#286, PR #347 — `teacher_course_assignments` carrier,
   `teacherAccess: "course_assignment_scoped"` gates, SQL-side LIST filtering
   before pagination/count across courses, questions, exams, candidates, and

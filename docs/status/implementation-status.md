@@ -30,7 +30,7 @@ Core exam loop items are implemented and verified. `deadline` / `untimed`
 timing modes are implemented (#291 Phase A, PR #388). The remaining items
 (the `timed_sync` timing mode and queue admission, tracked by Issues #291
 and #292) are not implemented; `timed_sync` semantics are frozen in
-`docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`.
+`docs/contracts/timed-sync-semantics.md`.
 
 ### Implemented
 
@@ -182,11 +182,11 @@ P4 (RBAC MVP role switch) ✅ CLOSED
 
 | Job  | True dependency                                | What it adds                                                                                      |
 | ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes. **CLOSED** (2026-07-24, tested commit `b4dc1d6`); see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md). |
+| P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes. **CLOSED** (2026-07-24, tested commit `b4dc1d6`); see [`docs/archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md). |
 | P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. **CLOSED** (2026-07-25, PR #210). |
-| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **CLOSED** (P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API, M9 Teacher all-view result, M12 Teacher browser E2E, M13 concurrent idempotency). See [`docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`docs/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md). |
-| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **CLOSED** (2026-07-25, PR #213 merged; final review corrective merged in the same PR). See [`docs/archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md`](../archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md) and [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md). |
-| P6   | Preceding MVP blockers closed                   | MVP ready closeout. **CLOSED — implemented MVP subset release-ready** (2026-07-26, PR #215 merged; independent closeout PASS). See [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md). |
+| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. **CLOSED** (P3-R0 audit + P3-R1 test-only closeout: M8 Teacher publish API, M9 Teacher all-view result, M12 Teacher browser E2E, M13 concurrent idempotency). See [`docs/archive/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`](../archive/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md), [`docs/archive/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md`](../archive/audits/P3-R1-FINAL-ROLE-RESULT-PUBLISHING-TEST-CLOSEOUT.md). |
+| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically. **CLOSED** (2026-07-25, PR #213 merged; final review corrective merged in the same PR). See [`docs/archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md`](../archive/roadmap/P5-N1-notification-inbox-result-published-job-v2.md) and [`docs/archive/audits/P5-N1-I3-CLOSEOUT.md`](../archive/audits/P5-N1-I3-CLOSEOUT.md). |
+| P6   | Preceding MVP blockers closed                   | MVP ready closeout. **CLOSED — implemented MVP subset release-ready** (2026-07-26, PR #215 merged; independent closeout PASS). See [`docs/archive/audits/P6-MVP-READY-REALITY-AUDIT.md`](../archive/audits/P6-MVP-READY-REALITY-AUDIT.md). |
 
 **P6 release readiness:** the supported LAN/on-premise, single-organization
 MVP deployment now has:
@@ -228,14 +228,14 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 
 - **Operational Control Plane (P7-E) is COMPLETE — on master** (merged via
   PR #282, 2026-08-12; E2A/E2B/E2C/E3 implemented; see
-  [`docs/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
+  [`docs/archive/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../archive/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
   The post-P7-E RBAC role-reality remediation (PR #284, 2026-08-13) further
   corrected the Admin authority + Maintainer observability boundary; ADR-017
   rev 4 + ADR-018 were accepted by the P7 final program closeout. See the
   **P7-F final readiness closeout**
-  ([`docs/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md))
+  ([`docs/archive/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`](../archive/audits/P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md))
   for the release-gate history and the **final program closeout**
-  ([`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md))
+  ([`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md))
   for the final gate matrix. **P7 is CLOSED (2026-08-14).** The RTO +
   retention mechanism (P7-CLOSE, PR #290: typed nullable RTO authority 30s..48h
   measured via automated restore-drill evidence, retention evidence ledger +
@@ -289,7 +289,7 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   - **Decision gates (E3)**: `backup.trigger`, `backup.schedule.manage`,
     `backup.retention.manage`, `service.restart` → **DEFERRED (NO-GO)** with
     explicit rationale (host cron/scripts remain execution authority; see
-    [`docs/audits/P7-E3-DECISION-GATES.md`](../audits/P7-E3-DECISION-GATES.md)).
+    [`docs/archive/audits/P7-E3-DECISION-GATES.md`](../archive/audits/P7-E3-DECISION-GATES.md)).
     Email worker/runtime settings stay env + restart-required (no confirmed
     online-edit requirement).
   - **E0 residue**: `DEADLINE_SCAN_INTERVAL_MS` canonical-loader bypass
@@ -320,7 +320,7 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   implemented for the Admin surface by J3
   (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) — **J3 is CLOSED on master**
   via PR #242 (merge commit `5b653c13`, 2026-08-01; see
-  [`docs/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md`](../audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md)).
+  [`docs/archive/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md`](../archive/audits/REC-I6-I1-INCIDENT-RUNTIME-CLOSEOUT.md)).
   The Admin Incident runtime is implemented: five additive tables
   (migration `0023`), domain types/errors, repositories, nine canonical
   write commands, Admin-only permissions, API routes, audit actions, and
@@ -338,17 +338,17 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   **Accepted** (2026-08-02, PR #245)
   ([`docs/adr/ADR-015-proctor-exam-scope-authority.md`](../adr/ADR-015-proctor-exam-scope-authority.md))
   with reality audit
-  ([`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
+  ([`docs/archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md));
   it is documentation-only. **J4-I1 (runtime) is CLOSED** (2026-08-02,
   PR #250, merge commit `62f84407`) — Proctor-to-Exam assignment
   persistence, commands, Admin assignment API, resolver enforcement, and
   the minimum Proctor incident activation are implemented per ADR-015 §23
   (A → B → C → D); closeout:
-  [`docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+  [`docs/archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
   The Proctor **product** Recovery Center UI (J6) is NOT IMPLEMENTED. The
   Admin Recovery Center UI (J5-I1B) is CLOSED: J5-R0 contract is ACCEPTED
   (see
-  [`docs/roadmap/j5-r0-admin-recovery-center-contract.md`](../roadmap/j5-r0-admin-recovery-center-contract.md)),
+  [`docs/contracts/admin-recovery-center.md`](../contracts/admin-recovery-center.md)),
   J5-I1A (read models) is CLOSED, and J5-I1B (admin recovery center UI)
   is CLOSED.
   System-generated incidents — not implemented (Issue #304).
@@ -373,11 +373,11 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   was executed in full during the P4-V0 re-issue and **passed (exit 0)**; the
   grouped suite file/test counts were corrected against real `vitest run` output.
   Full evidence:
-  [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
+  [`docs/archive/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../archive/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
   Gate 0.5 was re-verified during P4-R1 closeout on commit `b4dc1d6` (the
   conformance suite and the whole-application regression lock both pass); the
   baseline remains PASS. P4 is **CLOSED** — see
-  [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md).
+  [`docs/archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md).
 
 ## E2E status
 

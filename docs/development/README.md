@@ -165,7 +165,7 @@ E2E guide.
 | [`docs/SPEC.md`](../SPEC.md) | Product specification — invariants, domain model |
 | [`docs/architecture/authorization.md`](../architecture/authorization.md) | Capability-based authorization model |
 | [`docs/architecture/exam-runtime.md`](../architecture/exam-runtime.md) | Exam / Attempt / Answer / Submit protocol |
-| [`docs/architecture/email-config.md`](../architecture/email-config.md) | Email outbox / SMTP operator reference |
+| [`docs/operations/email-config.md`](../operations/email-config.md) | Email outbox / SMTP operator reference |
 | [`docs/architecture/frontend.md`](../architecture/frontend.md) | Frontend architecture (as-built) |
 | [`docs/standards/ui-system.md`](../standards/ui-system.md) | UI system constraints and visual authority |
 | [`docs/adr/README.md`](../adr/README.md) | Architecture Decision Records index |

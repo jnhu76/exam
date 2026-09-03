@@ -17,7 +17,7 @@
  * own orchestrator files; a future misconduct orchestrator must NOT depend on
  * a force-submit-named matcher.
  *
- * See docs/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§5.
+ * See docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§5.
  */
 
 import { AppError } from "@exam/domain";

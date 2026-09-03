@@ -472,7 +472,7 @@ export type MarkProctorIncidentResponse = z.infer<
 // `FlagMisconductRequestSchema` above remains for the not-yet-activated
 // misconduct route (Slice 3).
 //
-// See docs/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
+// See docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
 
 /**
  * The two dangerous Attempt commands sharing one receipt table.

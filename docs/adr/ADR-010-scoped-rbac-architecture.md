@@ -21,7 +21,7 @@ for the implemented model.
 > infrastructure: scoped Teacher/Proctor/Grader role bundles as product roles,
 > resource-relationship assignment (M11), staff invitation, SMTP password reset,
 > and account-lifecycle UI. Those are tracked in
-> [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md).
+> [`archive/roadmap/phase3-open-items.md`](../archive/roadmap/phase3-open-items.md).
 >
 > **Gate 0.5 caveat:** the post-PR-197 re-verification (M10-F rerun) is PENDING.
 > The infrastructure is live; the PASS closure verdict is not freshly
@@ -433,7 +433,7 @@ Audit Action (constant)
 | --- | --- | --- | :---: | --- | --- | :---: | --- |
 | `score.all.view` | score | all.view | yes | Admin, Teacher | exam/course | read-opt | |
 | `score.export` | score | export | yes | Admin | organization/exam | yes (`export_scores`) | |
-| ~~`result.publish`~~ | result | publish | — | — | — | — | **Removed in P4-C1.** Was a dead alias of `exam.result.publish` with zero route consumers and zero grants. The live result-publication capability is `exam.result.publish` (§4.4), granted to Admin+Teacher and consumed by `POST /exams/:id/publish-results`. See `docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`. |
+| ~~`result.publish`~~ | result | publish | — | — | — | — | **Removed in P4-C1.** Was a dead alias of `exam.result.publish` with zero route consumers and zero grants. The live result-publication capability is `exam.result.publish` (§4.4), granted to Admin+Teacher and consumed by `POST /exams/:id/publish-results`. See `docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`. |
 
 ### 4.9 System / Diagnostics
 

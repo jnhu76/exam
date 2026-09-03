@@ -84,7 +84,7 @@ gate wording — each is a recorded human decision.
 
 | Gate | Verdict | One-line reality |
 | --- | --- | --- |
-| P7-0 | **PASS** (after bounded doc reconciliation in this PR) | Doc drift repaired; current-state docs now tell one story — incl. a Current-status overlay + per-workstream status rows added to the canonical `P7-system-readiness-and-exam-modes.md`. |
+| P7-0 | **PASS** (after bounded doc reconciliation in this PR) | Doc drift repaired; current-state docs now tell one story — incl. a Current-status overlay + per-workstream status rows added to the canonical `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md`. |
 | P7-1 | **PASS** | P7-S2 guarantees intact on master; no new reachable partial state; no general reconciler needed (evidence-based). |
 | P7-2 | **PASS** | Redis = shared rate limit only (ADR-001 decision); lifecycle `off\|optional\|required`; no exam authority. |
 | P7-3 | **NOT PASS — HUMAN_DECISION_REQUIRED** (two bullets not met: **RTO** + **retention**; the rest — evidence ledger, verified drills, RPO intent — pass) | RTO: no declared supported value / no typed authority / no restore-within-RTO acceptance. Retention: host-owned/`NOT_ENFORCED`. Neither is faked. |
@@ -107,7 +107,7 @@ Reality found (drift, all repaired in this PR):
 - `docs/roadmap/phase-roadmap.md` P7 status row (line ~247) and Status block
   (lines ~296-306) were frozen at the 2026-08-08 state ("workstreams open"),
   ignoring P7-S2/#269, P7-C, P7-E, P7-M, #284.
-- `docs/roadmap/phase3-open-items.md` module-order + intro (lines ~24-38) had
+- `docs/archive/roadmap/phase3-open-items.md` module-order + intro (lines ~24-38) had
   the same stale P7 status; and its F-04/Teacher@Course section (lines ~86-102)
   framed #286 as a *pending durable tracker* — stale vs the 2026-08-13
   closure-without-implementation.
@@ -307,7 +307,7 @@ Reality (representative closeout, not "make every screen perfect"):
 - **Maintainer:** lands on `/admin/operations`; sees ONLY the Operations group (no 管理 business nav leakage — F-08 fixed); direct business routes 403; zero business actions; zero infrastructure execution (verified by `operationalBoundary.test.ts` + `adversarialAudit.test.ts` + E2E `operations.spec.ts`).
 - **Teacher/Proctor/Grader:** existing supported surfaces verified honestly; Teacher@Course isolation is **NOT** claimed (F-04, #286).
 - **Candidate:** supported exam flow intact (blocking E2E: candidate-happy-path, resume-attempt, submit-flush).
-- **Responsive/a11y:** measured no page-level mobile overflow (above); stepper is an accessible `<ol>` with `aria-current="step"`; labels paired with inputs; `FieldError` `role="alert"`; dialogs use Radix primitives; no color-only status. UI debt reduction (typography recipes, StatsCard/PageSection migration) remains ongoing per `ui-open-items.md` — explicitly NOT absorbed into P7-F.
+- **Responsive/a11y:** measured no page-level mobile overflow (above); stepper is an accessible `<ol>` with `aria-current="step"`; labels paired with inputs; `FieldError` `role="alert"`; dialogs use Radix primitives; no color-only status. UI debt reduction (typography recipes, StatsCard/PageSection migration) remains ongoing per `docs/archive/roadmap/ui-open-items.md` — explicitly NOT absorbed into P7-F.
 
 Verdict: **PASS** (representative closeout).
 
@@ -346,11 +346,11 @@ The runtime implements the ADR-017 **rev-4** read-only-observer model; the ADR
     Preferred resolution path: host-side automated retention (WAL-G/pgBackRest
     via cron/systemd), Exam observes evidence only.
 - **P3:**
-  - Doc drift (P7-0) — **FIXED** in this PR (current/phase-roadmap/phase3-open-items/implementation-status + canonical `P7-system-readiness-and-exam-modes.md` reconciled — the latter gained a Current-status overlay and per-workstream status rows).
+  - Doc drift (P7-0) — **FIXED** in this PR (current/phase-roadmap/phase3-open-items/implementation-status + canonical `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` reconciled — the latter gained a Current-status overlay and per-workstream status rows).
   - `#286` closed-without-implementation — **HUMAN_DECISION_REQUIRED** (clarify intent; P7-F did not reopen, did not claim isolation, did not redefine Teacher).
   - ADR-017 rev4 / ADR-018 PROPOSED — **HUMAN_DECISION_REQUIRED** (accept or revise).
   - Minor P7-M UI polish (low-contrast hints, small step counter, starter-button styling) — recorded, non-blocking; not absorbed into P7-F.
-  - `recovery-operations-jobs.md` startup-reconciler-is-J7 framing is stale vs the S2 negative conclusion — reconciled in this closeout, not by code.
+  - `docs/archive/roadmap/recovery-operations-jobs.md` startup-reconciler-is-J7 framing is stale vs the S2 negative conclusion — reconciled in this closeout, not by code.
 
 ## Visual review
 

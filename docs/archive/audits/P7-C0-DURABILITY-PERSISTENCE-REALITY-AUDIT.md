@@ -41,7 +41,7 @@ exam-redis-1  redis:7-alpine          Up 3 days (healthy)  0.0.0.0:6379->6379
 ```
 
 Repository guidance read before audit: `AGENTS.md`,
-`docs/roadmap/current.md`, `docs/roadmap/P7-system-readiness-and-exam-modes.md`,
+`docs/roadmap/current.md`, `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md`,
 `docs/architecture/exam-system/state-and-authority.md`,
 `docs/audits/P7-S2-RUNTIME-AUTHORITY-HARDENING-CLOSEOUT.md`,
 `docs/adr/README.md`, ADR-001, ADR-005, ADR-006, ADR-007, ADR-011, ADR-012,

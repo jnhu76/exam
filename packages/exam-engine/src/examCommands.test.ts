@@ -342,7 +342,7 @@ describe("examCommands", () => {
     // lower bound; it validates the cross-field relationship (passing <= total)
     // via the canonical validator. A negative passingScore that somehow reached
     // the engine would still satisfy passing<=total, so publish trusts the
-    // upstream shape boundary. See docs/audits/P7-M1-... §9/§10.
+    // upstream shape boundary. See docs/contracts/exam-policy-authority.md §9/§10.
 
     it("throws when passingScore exceeds effective question total", async () => {
       const repo = makeRepo(makeExam({ passingScore: 101, totalScore: 100 }));

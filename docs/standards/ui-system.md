@@ -3,7 +3,7 @@
 > Current as-built constraints on the `apps/web` visual system. These constrain
 > future development. For the frontend architecture, see
 > [`docs/architecture/frontend.md`](../architecture/frontend.md). For open UI
-> migration items, see [`docs/roadmap/ui-open-items.md`](../roadmap/ui-open-items.md).
+> migration items, see [`archive/roadmap/ui-open-items.md`](../archive/roadmap/ui-open-items.md).
 
 ## Four-layer authority model
 

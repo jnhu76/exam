@@ -70,7 +70,7 @@ branch was created from the verified HEAD.
 - `AGENTS.md` (product generalization, phase rules, tech stack, repository
   pattern, frontend visual authority, exam-specific gotchas).
 - `docs/roadmap/current.md`, `docs/roadmap/phase-roadmap.md`,
-  `docs/roadmap/phase3-open-items.md`.
+  `docs/archive/roadmap/phase3-open-items.md`.
 - `docs/status/implementation-status.md`.
 - `docs/roadmap/P5-N1-notification-inbox-result-published-job-v2.md` (the
   specification to reconcile).
@@ -143,7 +143,7 @@ synchronized:
 | Document | Change |
 | --- | --- |
 | `docs/roadmap/current.md` | P3 → ✅ CLOSED; P5-N1 → 🔄 REALITY AUDIT IN PROGRESS; P6 → ⏸ BLOCKED on P5-N1 |
-| `docs/roadmap/phase3-open-items.md` | P3 → CLOSED; P5-N1 → REALITY AUDIT IN PROGRESS; P5-N1 §"NOT AUTHORIZED" expanded with anti-overdesign items |
+| `docs/archive/roadmap/phase3-open-items.md` | P3 → CLOSED; P5-N1 → REALITY AUDIT IN PROGRESS; P5-N1 §"NOT AUTHORIZED" expanded with anti-overdesign items |
 | `docs/status/implementation-status.md` | P3 → ✅ CLOSED; P5-N1 → 🔄 REALITY AUDIT IN PROGRESS (P5-N1-R0) |
 
 Commit: `docs: advance phase 3 cursor to P5-N1`.
@@ -155,7 +155,7 @@ Commit: `docs: advance phase 3 cursor to P5-N1`.
 ADR-011 (`docs/adr/ADR-011-notification-and-email-delivery.md`) is the
 architecture authority. Its `Status:` header read `Proposed` at audit start.
 Multiple roadmap documents (`implementation-status.md:93`,
-`phase3-open-items.md:85,92`) already described it as accepted. The ADR's core
+`docs/archive/roadmap/phase3-open-items.md:85,92`) already described it as accepted. The ADR's core
 decisions (two-channel Inbox + async Email outbox, PostgreSQL-backed queue, no
 BullMQ/Kafka, atomic business transaction, validated `PUBLIC_WEB_ORIGIN` /
 `actionPath`, at-least-once delivery) are the basis on which P5-0 and P3 were

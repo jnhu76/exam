@@ -77,7 +77,7 @@ source → consumer → business effect**, and classified into exactly one prima
 class plus a mutation-lifecycle tag.
 
 **Authority documents read:** `AGENTS.md`, `docs/roadmap/current.md`,
-`docs/roadmap/P7-system-readiness-and-exam-modes.md` (Workstream E + Gate P7-4),
+`docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` (Workstream E + Gate P7-4),
 `docs/architecture/exam-system/state-and-authority.md`,
 `docs/deployment/mvp-deployment-runbook.md`, `docs/deployment/backup-and-recovery.md`
 (via the P7-C closeout), `docs/architecture/email-config.md`,

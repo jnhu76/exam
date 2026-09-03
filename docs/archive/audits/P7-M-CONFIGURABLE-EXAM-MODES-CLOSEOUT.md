@@ -205,7 +205,7 @@ subsystems that actually own them.
 ### Reconciliation of old planning statements (task §55)
 
 The historical P7 roadmap (`docs/roadmap/current.md` workstream 7 and
-`docs/roadmap/P7-system-readiness-and-exam-modes.md` §9/Gate P7-5) described
+`docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` §9/Gate P7-5) described
 configurable profiles spanning timing, admission, session/device, navigation,
 interruption, submission, randomization, result, monitoring, and audit, with
 "minimal, standard, controlled, and strict templates over one engine" and

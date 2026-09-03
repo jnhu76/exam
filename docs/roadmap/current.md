@@ -13,7 +13,7 @@
 | Phase 1 — Minimal Deliverable | ✅ CLOSED | Admin + Candidate reliable exam loop delivered. |
 | Phase 2 — Exam Operation | ✅ CLOSED for the supported MVP subset | Additional timing/admission/high-assurance capabilities remain scheduled separately. |
 | Phase 3 — Collaboration / Permissions | 🟨 GENERIC PRODUCT COMPLETION | Core authorization infrastructure and built-in scoped-role slices are implemented; remaining generic-product work is sequenced in #333. |
-| P7 — System Readiness and Exam Modes | ✅ CLOSED | Final evidence: [`../audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md). |
+| P7 — System Readiness and Exam Modes | ✅ CLOSED | Final evidence: [`../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md). |
 | Phase 4 — Platformization | ⬜ NOT STARTED | Begins only after the generic edition is completed and stabilized. |
 
 For implementation reality, use

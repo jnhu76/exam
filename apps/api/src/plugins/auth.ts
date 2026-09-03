@@ -242,7 +242,7 @@ export function buildAuthPlugin(
     // It had zero route consumers (verified: `rg fastify.requirePermission\(`)
     // and read only `ctx.permissions`, which is `[]` on every runtime context.
     // The authoritative capability gate is `requireCapability` below
-    // (`ctx.capabilities`). See docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
+    // (`ctx.capabilities`). See docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
     // The legacy `requireRole` decorator is retained solely as the test-fixture
     // seam for the whole-app zero-requireRole regression lock's negative
     // control (it lets the conformance test prove the classifier detects a

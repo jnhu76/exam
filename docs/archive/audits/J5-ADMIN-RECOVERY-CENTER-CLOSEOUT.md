@@ -207,5 +207,5 @@ API + web servers, real admin API assertions):
   server-computed `allowedActions`, retry-safe, reload-authoritative.
 - J5-I1D — CLOSED: E2E workflows A–F + failure paths (403/404/409/network-
   indeterminate) + a11y/responsive closeout, green via the WSL runner.
-- Roadmap docs (`docs/roadmap/current.md`, `docs/roadmap/recovery-operations-jobs.md`)
+- Roadmap docs (`docs/roadmap/current.md`, `docs/archive/roadmap/recovery-operations-jobs.md`)
   updated truthfully; this closeout is the single authoritative record.

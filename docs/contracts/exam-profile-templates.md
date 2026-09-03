@@ -55,7 +55,7 @@ default profile, 0 settings subsystem, 0 UI, 0 new permissions, 0 presets.
 - `73ad31cb` (origin/master, clean; PR #277 / P7-M1 merged).
 - Verified P7-M1 artifacts present: `packages/domain/src/examPolicy.ts`,
   `packages/exam-engine/src/examPolicy.ts`,
-  `docs/audits/P7-M1-EXAM-POLICY-AUTHORITY-AND-VALIDATION.md`;
+  `docs/contracts/exam-policy-authority.md`;
   `publishExam → assertExamPolicyValid`; nullable draft-policy merge preserves
   explicit null; `ResolvedExamPolicy` is a typed value, not persisted JSON;
   no profile/template persistence existed.

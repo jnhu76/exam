@@ -1,6 +1,6 @@
 // ── P7-M2: exam policy profile defaults (typed authoring template) ──
 //
-// Authority: P7-M2 design (`docs/audits/P7-M2-PROFILE-TEMPLATES-AND-RESOLUTION.md`).
+// Authority: P7-M2 design (`docs/contracts/exam-profile-templates.md`).
 //
 // An exam policy profile is an editable, organization-owned AUTHORING
 // convenience: a reusable subset of exam-policy defaults that may be applied

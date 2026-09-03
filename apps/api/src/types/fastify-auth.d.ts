@@ -103,7 +103,7 @@ declare module "fastify" {
     // P4-C1. It had zero route consumers and read only `ctx.permissions` (which
     // is `[]` on every runtime context). The authoritative capability gate is
     // `requireCapability` / `requireScopedCapability` / resource-aware gates.
-    // See docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
+    // See docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
     /** Phase 3 capability gate (RBAC runtime activation, PR #3). */
     requireCapability: (permission: PermissionKey) => AuthzPreHandler;
     /**

@@ -1,6 +1,6 @@
 // P7-M1 integration: canonical exam-policy validation is enforced across
 // create, draft-update, and publish (the freeze/acceptance gate).
-// Authority: docs/audits/P7-M1-EXAM-POLICY-AUTHORITY-AND-VALIDATION.md §11, §21.
+// Authority: docs/contracts/exam-policy-authority.md §11, §21.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import examRoutes from "./exam.js";

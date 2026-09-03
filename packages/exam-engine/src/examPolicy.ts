@@ -1,6 +1,6 @@
 // ── P7-M1: canonical exam policy resolver + conflict validator ─────
 //
-// Authority: P7-M1 design (`docs/audits/P7-M1-EXAM-POLICY-AUTHORITY-AND-VALIDATION.md`).
+// Authority: P7-M1 design (`docs/contracts/exam-policy-authority.md`).
 //
 // This module is the ONE canonical owner of cross-field exam-policy semantic
 // validation (design §9, §10). It is:

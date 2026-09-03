@@ -3,7 +3,7 @@
 ## Status
 
 * Status: **ACCEPTED** (2026-08-14 — P7 final program closeout,
-  [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
+  [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
   proposed 2026-08-13 with ADR-017 rev 4, accepted after the runtime boundary
   check in that closeout — the current `/system/*` surfaces already realize
   the window contract)

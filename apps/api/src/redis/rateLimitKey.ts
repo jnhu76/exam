@@ -5,7 +5,7 @@ import type { FastifyRequest } from "fastify";
  * Domain-separation context for the rate-limit IP digest (P7). The digest is
  * HMAC-SHA256 over `exam-ratelimit-ip-v1:<ip>` with the deployment JWT secret
  * as the key, so the same secret never signs rate-limit material with any
- * other domain. See docs/audits/P7-REDIS-SHARED-RATE-LIMIT-CLOSEOUT.md §key.
+ * other domain. See docs/archive/audits/P7-REDIS-SHARED-RATE-LIMIT-CLOSEOUT.md §key.
  */
 const RATE_LIMIT_DIGEST_CONTEXT = "exam-ratelimit-ip-v1";
 

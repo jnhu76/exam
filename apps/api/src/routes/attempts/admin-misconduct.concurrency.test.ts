@@ -38,7 +38,7 @@
  * observer hooks, and real pid/txid + SQLSTATE/constraint extracted from the
  * caught error — no randomized retry loops, no reimplemented transaction.
  *
- * @see docs/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §5.2/§7/§9.3
+ * @see docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §5.2/§7/§9.3
  */
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";

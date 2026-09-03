@@ -23,7 +23,7 @@
  * the existing `Promise.all` test in `admin-time-grants.test.ts`; this
  * deterministic test owns the DB/domain evidence.
  *
- * @see docs/audits/REC-I4-V1-OPERATOR-GRANT-POSTGRES-CONCURRENCY.md
+ * @see docs/archive/audits/REC-I4-V1-OPERATOR-GRANT-POSTGRES-CONCURRENCY.md
  */
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";

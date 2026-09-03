@@ -73,16 +73,16 @@ If the scan branch ever becomes unreachable again, the mutation tests fail
   implementation" removed; P7 workstream 1 marked closed.
 - `docs/roadmap/phase-roadmap.md` — P7 rows → PARTIALLY IMPLEMENTED with
   shipped-items note.
-- `docs/roadmap/P7-system-readiness-and-exam-modes.md` — status block
+- `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` — status block
   NOT STARTED → PARTIALLY IMPLEMENTED (P7-D1 accepted; P7-D2/D3 shipped);
   §1.1 Redis line; §2.2 pointer-ized to implementation-status /
   phase3-open-items / recovery-operations-jobs; Workstream B P7-D1 gate
   records the accepted decision + shipped adoption sequence items.
-- `docs/roadmap/phase3-open-items.md` — P7 PLANNING → IN PROGRESS; M11
+- `docs/archive/roadmap/phase3-open-items.md` — P7 PLANNING → IN PROGRESS; M11
   Proctor→Exam slice CONTRACT ACCEPTED + J4-I1 NEXT → **CLOSED** (runtime
   implemented, `exam_proctor_assignments` exists); Teacher/Grader slices
   remain deferred.
-- `docs/roadmap/recovery-operations-jobs.md` — J5 index row + §6 "J5 is
+- `docs/archive/roadmap/recovery-operations-jobs.md` — J5 index row + §6 "J5 is
   NEXT" → CLOSED (J6 next); Redis framing updated (P7-D1 accepted); J8
   section carries the decision record; dated snapshot clarified.
 - `docs/adr/README.md` — ADR-001 row (baseline + shared-rate-limiting

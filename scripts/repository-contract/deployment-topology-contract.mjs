@@ -5,7 +5,7 @@
  *
  * Authority: docs/adr/ADR-011-notification-and-email-delivery.md,
  * docs/adr/ADR-001-redis.md, and the P6 MVP boundary
- * (docs/audits/P6-MVP-READY-REALITY-AUDIT.md). The MVP cannot be
+ * (docs/archive/audits/P6-MVP-READY-REALITY-AUDIT.md). The MVP cannot be
  * release-ready if `docker compose up` starts the API and PostgreSQL but
  * nothing consumes the PostgreSQL `email_outbox` table that identity and
  * notification flows write into (ADR-011).

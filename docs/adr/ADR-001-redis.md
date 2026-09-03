@@ -189,7 +189,7 @@ REDIS_STARTUP_TIMEOUT_MS=8000        # P7: bounded startup window (ms)
 ### P7 — Shared rate limiting (adopted responsibility)
 
 See `docs/contracts/redis-baseline.md` (P7 sections) and
-`docs/audits/P7-REDIS-SHARED-RATE-LIMIT-CLOSEOUT.md` for the full closeout.
+`docs/archive/audits/P7-REDIS-SHARED-RATE-LIMIT-CLOSEOUT.md` for the full closeout.
 In short:
 
 - The rate limiter uses an atomic Lua fixed-window counter in Redis while the

@@ -18,7 +18,7 @@
 > Review-cycle disclosure: ADR-016 was authored before/during the P7-C0 audit
 > branch (`fix/p7-c0-durability-persistence-reality-audit`) but was **not** part
 > of `origin/master` at the audit baseline. ADR-016 and the P7-C0 audit
-> (`docs/audits/P7-C0-DURABILITY-PERSISTENCE-REALITY-AUDIT.md`) are reviewed in
+> (`docs/archive/audits/P7-C0-DURABILITY-PERSISTENCE-REALITY-AUDIT.md`) are reviewed in
 > the **same PR/review cycle** and MUST NOT be treated as independent baseline
 > evidence for one another.
 
@@ -28,7 +28,7 @@ storage technology, a synchronization framework, a wire protocol, a Desktop
 runtime, or a fully-offline examination mode, and it does **not** freeze a
 concrete representation of a recovery/history-generation mechanism. All such
 detail lives in the non-binding companion note
-[`docs/architecture/future-offline-resilient-client.md`](../architecture/future-offline-resilient-client.md).
+[`docs/archive/future-offline-resilient-client.md`](../archive/future-offline-resilient-client.md).
 
 It does **not** authorize implementation of a Desktop client, local SQLite
 database, synchronization framework, Tauri/Electron migration, CRDT layer, or
@@ -59,7 +59,7 @@ reconciliation after the authoritative server itself has been restored from an
 older backup or PITR point.
 
 The P7-C0 audit
-([§18](../audits/P7-C0-DURABILITY-PERSISTENCE-REALITY-AUDIT.md)) found that
+([§18](../archive/audits/P7-C0-DURABILITY-PERSISTENCE-REALITY-AUDIT.md)) found that
 **no stable server-history generation / incarnation identifier exists today**
 that a future client could use to distinguish ordinary server restart/history
 continuation from authoritative history replacement (historical restore or

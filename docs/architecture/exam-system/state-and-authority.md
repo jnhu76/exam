@@ -8,7 +8,7 @@ Last runtime verified against: 1d3a0bd8 + P7-S2 branch (fix/p7-s2-runtime-author
 Recovery contract authority: PR #218 / ADR-012 (amended by P7-S2-B)
 Interruption-policy freeze: ADR-013 / REC-I4-R0
 
-Verification scope (P7-S2 closeout, see docs/audits/P7-S2-RUNTIME-AUTHORITY-HARDENING-CLOSEOUT.md):
+Verification scope (P7-S2 closeout, see docs/archive/audits/P7-S2-RUNTIME-AUTHORITY-HARDENING-CLOSEOUT.md):
 - Result publication is SINGLE-WINNER (P7-S2-A): `publishResults()` locks the
   exam row (FOR UPDATE) and re-reads `resultsPublishedAt` under the lock;
   concurrent publishers cannot both observe NULL. Deterministic two-connection
@@ -334,7 +334,7 @@ Additional operational notification types remain P5-N2+ scope.
 > freezes through **two** mechanisms — true snapshots (question /
 > interruption / deadline / submitted answers) and published-row immutability
 > (result mode / retake / score strategy / passing score / control flags).
-> See `docs/audits/P7-M1-EXAM-POLICY-AUTHORITY-AND-VALIDATION.md`.
+> See `docs/contracts/exam-policy-authority.md`.
 
 ### 6.1 Result Publication Policy
 

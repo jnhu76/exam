@@ -108,7 +108,7 @@ export const Permission = {
   // P4-C1. The live result-publication capability is `ExamResultPublish`
   // (exam.result.publish), granted to Admin+Teacher and consumed by
   // POST /exams/:id/publish-results. `result.publish` had zero route consumers
-  // and zero grants — see docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
+  // and zero grants — see docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
   ScoreAllView: "score.all.view",
   ScoreExport: "score.export",
 

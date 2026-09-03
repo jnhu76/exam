@@ -44,12 +44,12 @@
 > any Incident, Attempt, assignment, or interruption state machine. Where it
 > appears to differ from those ADRs, the ADRs win.
 >
-> Related: [`recovery-operations-jobs.md`](recovery-operations-jobs.md) §7 (J5
+> Related: [`recovery-operations-jobs.md`](../archive/roadmap/recovery-operations-jobs.md) §7 (J5
 > planning sketch — superseded by this contract where they differ),
 > [`ADR-014`](../adr/ADR-014-exam-incident-authority.md),
 > [`ADR-015`](../adr/ADR-015-proctor-exam-scope-authority.md),
 > [`../architecture/exam-system/incident-authority.md`](../architecture/exam-system/incident-authority.md),
-> [`../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+> [`../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
 
 ---
 
@@ -93,7 +93,7 @@ The Recovery Center is a read + operate surface over:
 This section records the verified current capability on `master` after the
 J4-I1 merge (PR #250, merge commit `62f84407`, 2026-08-02). Every later section
 is constrained by what is actually implemented here, not by what the planning
-sketch in `recovery-operations-jobs.md` §7 wished for.
+sketch in `docs/archive/roadmap/recovery-operations-jobs.md` §7 wished for.
 
 ### 2.1 Reality table
 
@@ -1032,7 +1032,7 @@ J6 planning sketch cannot drift apart:
 The earlier J6 planning sketch's rows that read "Grant time: Policy-dependent",
 "Force submit: Policy-dependent", "Resolve/dismiss: Policy-dependent" are
 **stale relative to ADR-015 §13 as implemented** and are corrected in
-`recovery-operations-jobs.md` §8 by this same job.
+`docs/archive/roadmap/recovery-operations-jobs.md` §8 by this same job.
 
 Critical distinction J6 (and any UI sharing J5 components) must preserve:
 
@@ -1056,7 +1056,7 @@ J5-R0 acceptance is "the contract is complete and reality-consistent", NOT
 ```text
 [ ] master reality audit completed                     (§2)
 [ ] J4 status reconciled across docs                   (separate doc fixes)
-[ ] J5 dependencies corrected (J1 + J3 + J4-I1)        (recovery-operations-jobs.md)
+[ ] J5 dependencies corrected (J1 + J3 + J4-I1)        (docs/archive/roadmap/recovery-operations-jobs.md)
 [ ] J5 MVP boundaries frozen                           (§3, §4)
 [ ] existing / reusable / missing API matrix completed (§2.1, §5.3)
 [ ] queue read model frozen                            (§5)

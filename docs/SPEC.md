@@ -36,7 +36,7 @@ Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是
 > 上述原则是系统**长期不变契约**。但需要明确当前接线深度：
 >
 > - "答卷可恢复"已**产品化**：答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由、以及候考人端**自助恢复入口**（`TakeExamPage` REC-I3 restore 流程，ADR-012）均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
-> - Admin 侧恢复工作台（J5 Recovery Center：事件队列、事件详情、attempt/exam 恢复上下文与操作面板）已交付（2026-08-08，见 `docs/roadmap/recovery-operations-jobs.md`）。**尚未产品化**的是 Proctor 恢复工作台（J6）、系统级 incident 的自动生成、以及心跳调参与超时阈值的生产评估。
+> - Admin 侧恢复工作台（J5 Recovery Center：事件队列、事件详情、attempt/exam 恢复上下文与操作面板）已交付（2026-08-08，见 `docs/archive/roadmap/recovery-operations-jobs.md`）。**尚未产品化**的是 Proctor 恢复工作台（J6）、系统级 incident 的自动生成、以及心跳调参与超时阈值的生产评估。
 
 ---
 
@@ -277,7 +277,7 @@ Phase 3 才引入基于 permission + scope 的协作角色：
 
 | 模式 | 时间规则 | 典型场景 | 当前接线 |
 |------|----------|----------|------|
-| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **设计已冻结（Phase B / planned）**：语义见 `docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`，实现按 B1→B2 分片推进 |
+| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **设计已冻结（Phase B / planned）**：语义见 `docs/contracts/timed-sync-semantics.md`，实现按 B1→B2 分片推进 |
 | **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 | **已接线** |
 | **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 | **已接线**（#291 Phase A2） |
 | **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 | **已接线**（#291 Phase A2） |
@@ -285,7 +285,7 @@ Phase 3 才引入基于 permission + scope 的协作角色：
 > `timed_window`、`deadline`、`untimed` 已在当前代码中接线（#291 Phase A）。`timed_sync` 仍是目标设计：其计时语义已冻结（操作员触发的全局时钟 + 共享截止时间），但 authoring/publish/考生路径尚未激活——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要按冻结文档的 B1→B2 分片显式推进。队列入场（`requireQueue`）独立归属 #292。
 
 ```
-timed_sync 示例（冻结语义，见 291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md）：
+timed_sync 示例（冻结语义，见 docs/contracts/timed-sync-semantics.md）：
   窗口：周一 9:00-11:00；运营人员在窗口内点击"开考"（T0）
   全局截止 = min(T0 + 90 分钟, closeAt)；T0 后进入的考生共享同一截止时间（剩余更少）
   到全局截止强制交卷；队列入场（requireQueue）只管准入，不改变共享截止时间

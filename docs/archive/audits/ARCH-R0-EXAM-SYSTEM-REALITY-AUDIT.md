@@ -23,7 +23,7 @@ The following authority sources were read before auditing:
 - `AGENTS.md`, `CONTEXT.md`, `SPEC.md`
 - `docs/architecture/exam-runtime.md`, `authorization.md`
 - `docs/adr/` (ADR-005 through ADR-011)
-- `docs/roadmap/phase-roadmap.md`, `phase3-open-items.md`
+- `docs/roadmap/phase-roadmap.md`, `docs/archive/roadmap/phase3-open-items.md`
 - `docs/status/implementation-status.md`
 - All `packages/domain/src/`, `packages/exam-engine/src/`, `packages/db/src/`, `packages/authz/src/`
 - All `apps/api/src/routes/`, `apps/api/src/orchestrators/`, `apps/api/src/authz/`, `apps/api/src/adapters/`, `apps/api/src/audit/`

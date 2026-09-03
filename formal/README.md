@@ -61,7 +61,7 @@ The model is an abstract protocol specification checked with TLC over a
 small finite domain. It does not mechanically verify the React/Fastify/
 PostgreSQL implementation. The gap between model and implementation is
 documented per-model (see `tla/recovery/README.md` §"Known runtime/model
-mismatches") and in the closeout audit (`docs/audits/REC-F1-*.md`).
+mismatches") and in the closeout audit (`docs/archive/audits/REC-F1-*.md`).
 
 ## How formal models are reviewed
 

@@ -23,7 +23,7 @@ changes no code; it records reality.
 This audit concerns only the **Proctor → assigned Exam** relationship and
 the resource-scope enforcement it requires. It does not audit
 Teacher→Course, Teacher→Exam, or Grader→Work — those are separate M11
-slices explicitly out of scope for J4 (`docs/roadmap/recovery-operations-jobs.md`
+slices explicitly out of scope for J4 (`docs/archive/roadmap/recovery-operations-jobs.md`
 §6 "deliberately small slice of M11").
 
 ---

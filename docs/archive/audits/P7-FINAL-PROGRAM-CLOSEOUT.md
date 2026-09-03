@@ -347,7 +347,7 @@ superseded by this document:
 - `P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md` / `P7-RBAC-ROLE-REMEDIATION.md`
   / `P7-C-PORTABLE-BACKUP-RECOVERY-CLOSEOUT.md` — "READY FOR HUMAN REVIEW"
   verdicts were superseded by P7-F (2026-08-13) and finally by this document.
-- `docs/roadmap/P7-system-readiness-and-exam-modes.md` — the "Current status"
+- `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` — the "Current status"
   overlay is replaced by the STATUS: CLOSED header + this document.
 
 ## Verification
@@ -384,11 +384,11 @@ executable product-side proof.
   `P7-CLOSE-RTO-RETENTION-CLOSEOUT.md`, `P7-E-OPERATIONAL-CONTROL-PLANE-
   CLOSEOUT.md`, `P7-F-FINAL-SYSTEM-READINESS-CLOSEOUT.md`,
   `P7-RBAC-ROLE-REMEDIATION.md`.
-- Roadmaps: `docs/roadmap/P7-system-readiness-and-exam-modes.md`,
-  `current.md`, `phase-roadmap.md`, `phase3-open-items.md`,
-  `post-mvp-issues.md` (new — Issues index), `recovery-operations-jobs.md`
+- Roadmaps: `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md`,
+  `current.md`, `phase-roadmap.md`, `docs/archive/roadmap/phase3-open-items.md`,
+  `post-mvp-issues.md` (new — Issues index), `docs/archive/roadmap/recovery-operations-jobs.md`
   (HISTORICAL header; J7 per-acceptance disposition matrix),
-  `ui-open-items.md`.
+  `docs/archive/roadmap/ui-open-items.md`.
 - `docs/status/implementation-status.md`, `docs/deployment/backup-and-
   recovery.md` (§12 deployment-site obligations).
 - `tests/deployment/logical-backup-restore.sh` — the one code change.

@@ -26,7 +26,7 @@ the PR C branch and was closed once its rebased replacement (250, base
 ## 2. Base and final SHAs
 
 - Accepted base SHA: `836023c7f9b32bc2cacc8745d1257363fc0222bd` (master, PR #245 M11-R0)
-- ADR-015 acceptance date: 2026-08-02; acceptance evidence: ADR-015 §Status + §26 checklist (all closed) present on the base commit; J4-R0 CLOSED and J4-I1 NEXT per `docs/roadmap/recovery-operations-jobs.md` §6.
+- ADR-015 acceptance date: 2026-08-02; acceptance evidence: ADR-015 §Status + §26 checklist (all closed) present on the base commit; J4-R0 CLOSED and J4-I1 NEXT per `docs/archive/roadmap/recovery-operations-jobs.md` §6.
 - Final head (J4-I1D closing PR #250): `bd985eee47182c9e255a9f1a03c1b3b092710078`
   (verified via `gh pr view 250`).
 - Merge commit (J4-I1D closing PR #250): `62f844079da61ce16ea27c3f8db9fd2ab944812f`,

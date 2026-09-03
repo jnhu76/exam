@@ -184,15 +184,15 @@ or repointed.
 
 - `docs/roadmap/current.md`
 - `docs/status/implementation-status.md`
-- `docs/roadmap/P7-system-readiness-and-exam-modes.md`
+- `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md`
 - `docs/architecture/exam-system/state-and-authority.md`
 - `docs/architecture/exam-system/candidate-recovery.md`
 - `docs/architecture/exam-system/protocol-catalog.md`
 - `docs/contracts/api-reference.md`
 - `docs/deployment/mvp-deployment-runbook.md`
-- `docs/roadmap/recovery-operations-jobs.md` (J1 marked CLOSED)
+- `docs/archive/roadmap/recovery-operations-jobs.md` (J1 marked CLOSED)
 
-`docs/roadmap/phase-roadmap.md` and `docs/roadmap/phase3-open-items.md` were
+`docs/roadmap/phase-roadmap.md` and `docs/archive/roadmap/phase3-open-items.md` were
 reviewed; neither made the superseded I3B2 route/permission deferral claim.
 
 ## Remaining non-goals

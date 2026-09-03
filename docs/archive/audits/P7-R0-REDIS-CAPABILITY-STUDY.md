@@ -4,7 +4,7 @@
 > hygiene):** the P7-D1 decision is **accepted** (2026-08-08) — Redis is
 > adopted for ONE bounded responsibility, the **shared/global rate limiter**
 > (ADR-001 "Post-MVP Decision (P7)"; PR #265 shipped P7-D2/D3; decision
-> record: `docs/roadmap/P7-system-readiness-and-exam-modes.md` Workstream B).
+> record: `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` Workstream B).
 > The study below is retained as historical evidence — read it as the
 > fact-base that informed the decision, not as current product truth.
 
@@ -12,7 +12,7 @@
 > Date: 2026-07-31
 > Scope: LAN/on-premise, single-organization Exam deployment; future
 > multi-instance readiness
-> Planning authority: [`docs/roadmap/P7-system-readiness-and-exam-modes.md`](../roadmap/P7-system-readiness-and-exam-modes.md)
+> Planning authority: [`docs/archive/roadmap/P7-system-readiness-and-exam-modes.md`](../roadmap/P7-system-readiness-and-exam-modes.md)
 > (Workstream B / P7-D1 decision gate). This document is the capability
 > evidence base for the P7-D1 decision — adopt or decline. It does not by
 > itself change any authority and does not presuppose adoption.
@@ -343,7 +343,7 @@ P7-R0  Current-state and authority audit (this document)
 The tentative order under the "adopt" branch is rate-limit-first (naturally
 ephemeral, low coupling to exam state), but **only approved responsibilities are
 scheduled**. Decline is an equally valid P7-D1 outcome — see
-`docs/roadmap/P7-system-readiness-and-exam-modes.md` §P7-D1 for the canonical
+`docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` §P7-D1 for the canonical
 gate definition.
 
 ### P7-D1 acceptance

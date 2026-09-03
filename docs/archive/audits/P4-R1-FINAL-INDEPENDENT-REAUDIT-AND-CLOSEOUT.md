@@ -10,7 +10,7 @@
 > **Tested commit (HEAD):** `b4dc1d6` (`test(e2e): complete teacher browser product path`)
 > **Re-audit date:** 2026-07-24
 > **Naming note.** This "P4" is the **Phase-3 module Job id**
-> (`P4 — RBAC MVP role switch`) from `docs/roadmap/phase3-open-items.md`, **not**
+> (`P4 — RBAC MVP role switch`) from `docs/archive/roadmap/phase3-open-items.md`, **not**
 > the roadmap's Phase 4 ("Platformization and Integration"). Throughout this
 > report "P4" = the Admin/Teacher/Candidate MVP role-switch Job; "Phase 4" =
 > platformization. They are unrelated.
@@ -34,7 +34,7 @@ no scope leak is present; and `pnpm verify` plus the full six-spec E2E set pass
 with zero skips.
 
 **Next authorized Job:** `P5-0 — Email delivery runtime hardening` (the exact
-next title and order from `docs/roadmap/phase3-open-items.md` "Module execution
+next title and order from `docs/archive/roadmap/phase3-open-items.md` "Module execution
 order").
 
 This Job does **not** begin P5-0 and does **not** claim P3, P5-0, P5-N1, or P6
@@ -94,7 +94,7 @@ Read in the order specified by task §2:
 ```text
 AGENTS.md
 docs/roadmap/phase-roadmap.md
-docs/roadmap/phase3-open-items.md
+docs/archive/roadmap/phase3-open-items.md
 docs/status/implementation-status.md
 docs/architecture/authorization.md
 docs/adr/ADR-010-scoped-rbac-architecture.md
@@ -840,7 +840,7 @@ notifications
 
 The closure report explicitly hands these seams and owners to P3 without
 re-deciding them. P3 result-publishing closeout
-(`docs/roadmap/phase3-open-items.md` §P3) will verify result-visibility modes,
+(`docs/archive/roadmap/phase3-open-items.md` §P3) will verify result-visibility modes,
 leak tests, and the Admin/Teacher/Candidate result-view matrix under the final
 role model — using the frozen capability ownership recorded here.
 
@@ -1070,7 +1070,7 @@ P5-N1, or P6 closed, and do **not** rewrite unrelated roadmap history.
 - `docs/status/implementation-status.md` — Phase 3 module table: P4 row marked
   CLOSED with tested commit `b4dc1d6`, closure date 2026-07-24, link to this
   report; next-authorized-Job pointer updated to P5-0.
-- `docs/roadmap/phase3-open-items.md` — P4 entry marked CLOSED with tested
+- `docs/archive/roadmap/phase3-open-items.md` — P4 entry marked CLOSED with tested
   commit and link to this report.
 - `docs/architecture/authorization.md` — MVP product-role boundary section
   records P4 CLOSED with tested commit and link to this report.
@@ -1094,7 +1094,7 @@ docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md  (this report)
 docs/audits/P4-C3-INDEPENDENT-REVIEW.md                      (prior untracked review, FAIL)
 docs/audits/P4-C3-CORR1-INDEPENDENT-REVIEW.md                (prior untracked review, PASS)
 docs/status/implementation-status.md                         (minimal P4 CLOSED update)
-docs/roadmap/phase3-open-items.md                            (minimal P4 CLOSED update)
+docs/archive/roadmap/phase3-open-items.md                            (minimal P4 CLOSED update)
 docs/architecture/authorization.md                           (minimal P4 CLOSED update)
 ```
 
@@ -1110,7 +1110,7 @@ PASS — P4 CLOSED:
     P5-0 — Email delivery runtime hardening
 ```
 
-Per `docs/roadmap/phase3-open-items.md` "Module execution order":
+Per `docs/archive/roadmap/phase3-open-items.md` "Module execution order":
 
 ```text
 P4 (RBAC MVP role switch)            ← CLOSED by this audit
