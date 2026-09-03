@@ -22,9 +22,9 @@ non-blocking, "POST is not page authority", "restore does not directly
 grant time"). It is **not** a proof that the TypeScript implementation is
 a refinement. Safety is exhaustively model-checked; liveness is currently
 PARTIAL. REC-I4 runtime mismatches are documented in the
-[REC-I4-R0 audit](../../audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md);
+[REC-I4-R0 audit](../../archive/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md);
 formal-model mismatches are documented in the
-[REC-F1 audit](../../audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md).
+[REC-F1 audit](../../archive/audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md).
 
 ---
 

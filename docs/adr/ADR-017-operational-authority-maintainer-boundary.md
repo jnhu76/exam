@@ -3,7 +3,7 @@
 ## Status
 
 * Status: **ACCEPTED through revision 4** (2026-08-14 — P7 final program
-  closeout, [`docs/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
+  closeout, [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
   the runtime already implements the rev-4 model — verified in that closeout).
   Revision 4 was proposed 2026-08-13 (P7-RBAC-ROLE-REALITY-AUDIT remediation)
   and accepted by the P7 final program closeout after the code/runtime
@@ -44,7 +44,7 @@
   * P7-E0 Configuration Reality Audit (verdict: no generic settings subsystem)
 
 > Review-cycle disclosure: ADR-017 is authored in the same cycle as the
-> P7-E1 audit (`docs/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`).
+> P7-E1 audit (`docs/archive/audits/P7-E1-OPERATIONAL-AUTHORITY-AND-MAINTAINER-BOUNDARY.md`).
 > The audit is the evidence base for this ADR; the ADR is the binding
 > boundary contract. They MUST be reviewed together and MUST NOT be treated
 > as independent baseline evidence for one another.

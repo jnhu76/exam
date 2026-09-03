@@ -8,11 +8,11 @@
 >
 > **Companion documents:**
 >
-> - [`docs/audits/P6-MVP-READY-REALITY-AUDIT.md`](../audits/P6-MVP-READY-REALITY-AUDIT.md)
+> - [`docs/archive/audits/P6-MVP-READY-REALITY-AUDIT.md`](../archive/audits/P6-MVP-READY-REALITY-AUDIT.md)
 >   — release-readiness audit (acceptance matrix, finding register, evidence).
 > - [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md)
 >   — Notification and Email architecture authority.
-> - [`docs/architecture/email-config.md`](../architecture/email-config.md)
+> - [`docs/operations/email-config.md`](../operations/email-config.md)
 >   — Email configuration operational guide.
 > - [`docs/adr/ADR-001-redis.md`](../adr/ADR-001-redis.md) — Redis decision
 >   (optional in the implemented MVP).
@@ -126,7 +126,7 @@ below are the ones whose behavior an operator actually needs to reason about:
 | `SMTP_USER` / `SMTP_PASSWORD` | auth block omitted if both empty; password is scrubbed from logs/errors |
 
 For the full annotated leaf list (port/TLS guidance per provider), see
-`docs/architecture/email-config.md`; for the authoritative defaults, the
+`docs/operations/email-config.md`; for the authoritative defaults, the
 settings model is the single source.
 
 > **dotenv gotcha:** dotenv does NOT overwrite inherited `process.env`. Stale
@@ -851,7 +851,7 @@ down migrations. Rollback is via DB restore from backup.
 
 ## 16. Known limitations
 
-See `docs/audits/P6-MVP-READY-REALITY-AUDIT.md` §23 (accepted limitations)
+See `docs/archive/audits/P6-MVP-READY-REALITY-AUDIT.md` §23 (accepted limitations)
 and §24 (deferred capabilities). Highlights:
 
 ```text

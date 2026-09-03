@@ -45,7 +45,7 @@ backoff, and lock-timeout recovery.
 | Loop degraded | Check `GET /api/system/diagnostics` `emailStatus.worker` |
 
 See
-[`architecture/email-config.md`](../architecture/email-config.md) for
+[`email-config.md`](email-config.md) for
 the full SMTP configuration reference and
 [`mvp-deployment-runbook.md`](../deployment/mvp-deployment-runbook.md)
 section 8 for the outbox loop internals.

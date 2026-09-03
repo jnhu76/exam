@@ -136,7 +136,7 @@ clean working tree, 2026-08-12).
 
 **Authority documents read:** `docs/SPEC.md` (§2.4, §3, §6), `AGENTS.md`,
 `docs/roadmap/phase-roadmap.md`, `docs/roadmap/current.md`,
-`docs/roadmap/P7-system-readiness-and-exam-modes.md`,
+`docs/archive/roadmap/P7-system-readiness-and-exam-modes.md`,
 `docs/status/implementation-status.md`, ADR-001/006/010/011/013/014/015/016,
 P7-C closeout, P7-E0 audit, `docs/architecture/authorization.md`.
 

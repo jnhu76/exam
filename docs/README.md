@@ -3,14 +3,13 @@
 > The single canonical entry point for this repository's documentation.
 > Developers and AI agents: start here, not in `docs/archive/`.
 
-The root `README.md` is **descriptive and navigational** — it introduces
-the project and points to authoritative documents. It is not a runtime
-authority. If `README.md` conflicts with current production behavior,
-`README.md` is stale. Production code determines what the system
-actually does today; normative documents (SPEC, ADR, contracts) determine
-what it is required or intended to do within their declared authority.
-A mismatch is a defect or documentation drift and must be reconciled
-explicitly.
+The root `README.md` is **descriptive and navigational** — it introduces the
+project and points to authoritative documents. It is not a runtime authority.
+If `README.md` conflicts with current production behavior, `README.md` is stale.
+Production code determines what the system actually does today; normative
+documents (SPEC, ADRs, contracts) determine what it is required or intended to
+do within their declared authority. A mismatch is a defect or documentation
+drift and must be reconciled explicitly.
 
 ## Authority by fact type
 
@@ -20,7 +19,7 @@ has one authority:
 | Fact type | Authority |
 | --- | --- |
 | A specific architectural decision | Accepted ADRs under [`docs/adr/`](adr/) |
-| External behavior and data format | [`docs/contracts/`](contracts/), generated OpenAPI, and contract tests |
+| External behavior, data format, and frozen semantics | [`docs/contracts/`](contracts/), generated OpenAPI, and contract tests |
 | Product invariants and domain model | [`docs/SPEC.md`](SPEC.md) |
 | Current implemented architecture | [`docs/architecture/`](architecture/) and production code |
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
@@ -32,7 +31,7 @@ has one authority:
 
 An OPEN Issue is an execution contract, not a substitute for runtime or product
 truth. Before implementation, reconcile it with current master. Closed Issues,
-merged PRs, audits, and archived plans are historical evidence only.
+merged PRs, archived audits, and archived plans are historical evidence only.
 
 When two sources describe the same fact differently, treat the disagreement as
 a defect. Characterize the as-built behavior, identify the stale or violated
@@ -40,7 +39,7 @@ authority, and reconcile the affected sources together. Do not silently choose
 the easiest source. Archived material is evidence only and never current
 guidance.
 
-## Where things live
+## Current documentation
 
 ### Specification & phase scope
 
@@ -51,10 +50,6 @@ guidance.
 | [`roadmap/current.md`](roadmap/current.md) | Phase-level status summary; intentionally does not duplicate the live Issue queue |
 | [`roadmap/post-mvp-issues.md`](roadmap/post-mvp-issues.md) | Coarse Issue index; live state and ordering remain on GitHub |
 | GitHub Issue [#333](https://github.com/jnhu76/exam/issues/333) | Current generic-completion → stabilization → High-Assurance / ToB sequencing authority |
-| [`roadmap/phase3-open-items.md`](roadmap/phase3-open-items.md) | Phase 3 inventory/reference; live Issue state wins when status changes |
-| [`roadmap/P7-system-readiness-and-exam-modes.md`](roadmap/P7-system-readiness-and-exam-modes.md) | P7 planning record — **STATUS: CLOSED** |
-| [`audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](audits/P7-FINAL-PROGRAM-CLOSEOUT.md) | P7 final program closeout evidence |
-| [`audits/P7-R0-REDIS-CAPABILITY-STUDY.md`](audits/P7-R0-REDIS-CAPABILITY-STUDY.md) | Redis capability fact-base |
 
 ### Architecture (current implemented design)
 
@@ -62,9 +57,10 @@ guidance.
 | --- | --- |
 | [`architecture/authorization.md`](architecture/authorization.md) | Capability-based authorization model |
 | [`architecture/exam-runtime.md`](architecture/exam-runtime.md) | Exam / Attempt / Answer / Submit / Grading / Result visibility protocol |
+| [`architecture/exam-system/README.md`](architecture/exam-system/README.md) | Exam-system architecture map and known limitations |
 | [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences and authority boundaries |
 | [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
-| [`architecture/email-config.md`](architecture/email-config.md) | Email outbox/SMTP operator reference |
+| [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture |
 
 ### Contracts (behavior code must preserve)
 
@@ -76,6 +72,10 @@ guidance.
 | [`contracts/redis-baseline.md`](contracts/redis-baseline.md) | Redis optional-infrastructure baseline |
 | [`contracts/import-export-format.md`](contracts/import-export-format.md) | CSV import/export data formats |
 | [`contracts/mock-data.md`](contracts/mock-data.md) | Demo seed data contract |
+| [`contracts/admin-recovery-center.md`](contracts/admin-recovery-center.md) | Admin Recovery Center API/read-model authority (J5-R0) |
+| [`contracts/timed-sync-semantics.md`](contracts/timed-sync-semantics.md) | `timed_sync` frozen clock semantics (#291 Phase B, B0 authority) |
+| [`contracts/exam-policy-authority.md`](contracts/exam-policy-authority.md) | Exam policy schema + conflict-validator authority (P7-M1) |
+| [`contracts/exam-profile-templates.md`](contracts/exam-profile-templates.md) | Exam policy profile templates + authoring-time resolution authority (P7-M2) |
 
 ### ADRs (architectural decisions)
 
@@ -84,7 +84,7 @@ guidance.
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
 | [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-018-operational-observability-window.md`](adr/ADR-018-operational-observability-window.md) | Formal architecture decisions |
 
-Recovery authority:
+Key recovery authority:
 
 - [`adr/ADR-012-candidate-recovery-contract.md`](adr/ADR-012-candidate-recovery-contract.md)
   freezes candidate recovery and answer authority.
@@ -92,8 +92,6 @@ Recovery authority:
   freezes interruption evidence, compensation policy, and deadline ordering.
 - [`adr/ADR-014-exam-incident-authority.md`](adr/ADR-014-exam-incident-authority.md)
   freezes exam-incident identity, lifecycle, permissions, and action links.
-- [`audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md`](audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md)
-  records source-proven runtime reality at its audit baseline.
 
 ### Standards (constraints on future work)
 
@@ -103,23 +101,13 @@ Recovery authority:
 | [`standards/testing.md`](standards/testing.md) | Testing & CI contract, environment variables, DB lifecycle |
 | [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n hardcoded-copy gate |
 | [`standards/test-flakes.md`](standards/test-flakes.md) | Test flake registry |
+| [`standards/ui-system.md`](standards/ui-system.md) | Design tokens, recipes, component authority, accessibility, visual lint |
 
 ### Status (what is implemented now)
 
 | Document | Purpose |
 | --- | --- |
-| [`status/implementation-status.md`](status/implementation-status.md) | Implemented / partial / limited summary; reconcile with current master before relying on a changing detail |
-
-### Frontend visual authority
-
-| Document | Purpose |
-| --- | --- |
-| [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture |
-| [`standards/ui-system.md`](standards/ui-system.md) | Design tokens, recipes, component authority, Tailwind boundary, accessibility, lint |
-| [`roadmap/ui-open-items.md`](roadmap/ui-open-items.md) | Unfinished visual-authority migration work |
-
-See also the root [`DESIGN.md`](../DESIGN.md) and
-[`AGENTS.md`](../AGENTS.md) §“前端任务路由”.
+| [`status/implementation-status.md`](status/implementation-status.md) | Implemented / partial / limited summary; reconcile changing details with current master |
 
 ### Formal executable models
 
@@ -142,6 +130,7 @@ See also the root [`DESIGN.md`](../DESIGN.md) and
 | Document | Purpose |
 | --- | --- |
 | [`operations/README.md`](operations/README.md) | Operations landing page — backup, upgrade, diagnostics, email |
+| [`operations/email-config.md`](operations/email-config.md) | Email outbox/SMTP operator reference |
 
 ### Development
 
@@ -153,11 +142,27 @@ See also the root [`DESIGN.md`](../DESIGN.md) and
 | [`standards/code-quality.md`](standards/code-quality.md) | Code quality rules, gates, AI coding rules |
 | [`standards/testing.md`](standards/testing.md) | Testing and CI contract |
 
-### Historical material (not current guidance)
+See also the root [`DESIGN.md`](../DESIGN.md) and [`AGENTS.md`](../AGENTS.md).
 
-[`docs/archive/`](archive/) holds plans, audits, reviews, implementation reports,
-and phase-history material. It is reference-only. Git history, closed Issues,
-and merged PRs serve the same historical-evidence role.
+## Historical evidence (not current guidance)
+
+[`docs/archive/`](archive/) contains historical plans, audits, reviews,
+implementation reports, closeouts, and superseded backlogs. Current documents
+may cite archived files as evidence, but archived material is never the current
+authority for implementation.
+
+Representative records:
+
+| Document | Historical role |
+| --- | --- |
+| [`archive/roadmap/phase3-open-items.md`](archive/roadmap/phase3-open-items.md) | Superseded Phase 3 execution inventory |
+| [`archive/roadmap/P7-system-readiness-and-exam-modes.md`](archive/roadmap/P7-system-readiness-and-exam-modes.md) | Closed P7 planning record |
+| [`archive/roadmap/ui-open-items.md`](archive/roadmap/ui-open-items.md) | Superseded UI migration inventory |
+| [`archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md) | P7 final closeout evidence |
+| [`archive/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md`](archive/audits/REC-I4-R0-INTERRUPTION-TIME-POLICY.md) | Recovery runtime reality evidence at its audit baseline |
+
+For archive semantics and directory taxonomy, see
+[`archive/README.md`](archive/README.md).
 
 ## Quick reference
 

@@ -259,7 +259,7 @@ Checkpoint 3 can keep them consistent:
 
 | Document | Reference | Disposition |
 | --- | --- | --- |
-| `docs/roadmap/recovery-operations-jobs.md` | J2/J3 specs; 110 incident mentions | primary update target |
+| `docs/archive/roadmap/recovery-operations-jobs.md` | J2/J3 specs; 110 incident mentions | primary update target |
 | `docs/adr/ADR-013-…` | :374, :502, :644 reservation statements | ACCEPTED — statements remain true; no semantic edit |
 | `docs/adr/ADR-012-…` | :618, :892 "REC-I6 operator incident timeline" | ACCEPTED — no semantic edit |
 | `docs/contracts/api-reference.md` | :1063 "REC-I6 系统事件模型仍是延期项" | remains true (implementation deferred); no new route to document |
@@ -269,7 +269,7 @@ Checkpoint 3 can keep them consistent:
 | `docs/architecture/exam-system/domain-model.md` | :470 REC-I6 note; §14 absent aggregates | add Incident row to §14 |
 | `docs/architecture/exam-system/README.md` | :108 known limitation; doc map :74-76 | add incident-authority.md to map; refresh limitation wording |
 | `docs/roadmap/current.md` | :45, :161 | refresh to "designed, pending acceptance" |
-| `docs/roadmap/P7-system-readiness-and-exam-modes.md` | :643 relationship table | refresh row without changing P7 scope |
+| `docs/archive/roadmap/P7-system-readiness-and-exam-modes.md` | :643 relationship table | refresh row without changing P7 scope |
 | `docs/status/implementation-status.md` | :219 known limitation | note ADR-014 PROPOSED, implementation deferred |
 | `docs/deployment/mvp-deployment-runbook.md` | :733 deferred list | remains true; no change required |
 | `docs/roadmap/phase-roadmap.md` | :146 timeline acceptance signal | remains true; no change required |

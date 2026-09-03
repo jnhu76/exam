@@ -15,7 +15,7 @@
 > `docs/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`.
 > **J5-R0 CLOSED / ACCEPTED** — `REC-OPS-ADMIN-RECOVERY-CENTER` reality audit +
 > product/API/read-model contract
-> (`j5-r0-admin-recovery-center-contract.md`, PR #251 merged 2026-08-02,
+> (`../../contracts/admin-recovery-center.md`, PR #251 merged 2026-08-02,
 > merge commit `b2545e6e`; amended 2026-08-04 by J5-I1A2 / PR #253).
 > J5-I1A1 (Recovery Incident Queue, `GET /admin/recovery/incidents`) is
 > **CLOSED** (PR #252 merged). J5-I1A2 (Recovery Incident Aggregate Detail,
@@ -686,7 +686,7 @@ investigate an incident.
 ## 7. J5 — REC-OPS Admin Recovery Center
 
 > **The authoritative J5 contract is
-> [`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md)
+> [`admin-recovery-center.md`](../../contracts/admin-recovery-center.md)
 > (Status: CLOSED / ACCEPTED).** The contract was built from a master reality audit
 > (post-J4-I1 merge) and supersedes the planning sketch below where they
 > differ. In particular the contract: corrects J5's dependencies to
@@ -1249,7 +1249,7 @@ PR-4  J4-R0 — M11-PROCTOR-EXAM-SCOPE-CONTRACT — CLOSED (design contract;
          PR #250, merge commit 62f84407); sliced A→B→C→D per ADR-015 §23.
 PR-5  REC-OPS-ADMIN-RECOVERY-CENTER — R0 contract CLOSED/ACCEPTED (PR #251,
        amended by PR #253); authoritative contract:
-       j5-r0-admin-recovery-center-contract.md
+       docs/contracts/admin-recovery-center.md
        implementation slices: J5-R0 → J5-I1A → J5-I1B → J5-I1C0 → J5-I1C1 → J5-I1D
          (J5-I1A1 CLOSED, PR #252; J5-I1A2 CLOSED, PR #253;
           J5-I1A3 CLOSED, PR #254; J5-I1A CLOSED;
@@ -1276,7 +1276,7 @@ CLOSED (2026-08-02, PR #250).
 
 J5-R0 (`REC-OPS-ADMIN-RECOVERY-CENTER` reality audit + product/API/read-model
 contract) is **CLOSED / ACCEPTED** — see
-[`j5-r0-admin-recovery-center-contract.md`](j5-r0-admin-recovery-center-contract.md).
+[`admin-recovery-center.md`](../../contracts/admin-recovery-center.md).
 J5-I1A1 (Queue), J5-I1A2 (Incident Aggregate Detail), and J5-I1A3 (Attempt
 Operations Context) are **CLOSED** (PR #252, PR #253, PR #254) — **J5-I1A is
 CLOSED**. **J5-I1B (Recovery Center UI) is CLOSED** (queue, incident detail,

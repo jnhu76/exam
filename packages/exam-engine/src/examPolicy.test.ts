@@ -1,7 +1,7 @@
 // P7-M1 canonical exam-policy validator — focused unit tests.
 // Covers: valid baselines, each supported cross-field conflict, boundary
 // values, determinism, non-mutation of input, and the assertExamPolicyValid
-// throw contract. Authority: docs/audits/P7-M1-EXAM-POLICY-AUTHORITY-AND-VALIDATION.md §9.
+// throw contract. Authority: docs/contracts/exam-policy-authority.md §9.
 
 import { describe, expect, it } from "vitest";
 import type { Exam } from "@exam/domain";

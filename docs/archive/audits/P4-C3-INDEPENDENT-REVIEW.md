@@ -9,7 +9,7 @@
 > **Authority read first:** `AGENTS.md`, `docs/audits/P4-R0-MVP-ROLE-SWITCH-REALITY-AUDIT.md`,
 > `docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`, `docs/audits/P4-C2-FRONTEND-CAPABILITY-GATING.md`,
 > `docs/audits/P4-C3-THREE-ROLE-E2E-EVIDENCE.md`, `docs/architecture/authorization.md`,
-> `docs/status/implementation-status.md`, `docs/roadmap/phase3-open-items.md`.
+> `docs/status/implementation-status.md`, `docs/archive/roadmap/phase3-open-items.md`.
 > **Frozen role boundary:** `docs/audits/P4-R0-MVP-ROLE-SWITCH-REALITY-AUDIT.md` §12.
 
 ---

@@ -22,7 +22,7 @@
  * runtime context; zero production authorization decisions read it. The dead
  * legacy `requirePermission` decorator that read it was removed in P4-C1
  * (zero route consumers, read only the always-empty `ctx.permissions`); see
- * docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md. The field itself is
+ * docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md. The field itself is
  * retained as a compatibility surface because it is part of the base
  * `RequestContext` in the `@exam/domain` leaf package, and every resolver /
  * system-actor / auth context still initializes it to `[]`.

@@ -1,80 +1,70 @@
 # 文档归档
 
-本目录包含已归档的 Phase 1.0–1.7 及 UI 设计文档。
+> `docs/archive/` 只保存历史证据，不是当前实施入口，也不是规范性 authority。
+> 当前开发请从 [`docs/README.md`](../README.md) 开始。
 
-## 归档原因
+## 归档原则
 
-这些文档已完成实施、验收、阶段性关闭，或已被当前 Phase Roadmap 取代。保留用于历史参考，不再作为活跃开发文档。
+这里保存已经完成、被取代或仅用于追溯的材料，例如：
 
-当前阶段边界以以下文档为准：
+- reality audit / preflight / independent review；
+- implementation / corrective / closeout evidence；
+- 已关闭或被 GitHub Issues 取代的 roadmap / backlog；
+- 旧阶段实施记录、UI 迁移记录和历史设计探索。
 
-- `docs/SPEC.md` — 产品规范（权威）
-- `docs/phase-roadmap.md` — Phase 1/2/3/4 路线权威
-- `docs/code-quality.md` — 代码质量指南
+归档并不等于删除。当前 ADR、contract、status 或代码仍然可以引用这些文件作为历史证据，但归档内容不能覆盖当前 production code、SPEC、Accepted ADR、current contracts、standards、status 或 roadmap。
+
+## 当前 authority 去哪里找
+
+| Fact type | Current authority |
+| --- | --- |
+| 文档总入口 | [`docs/README.md`](../README.md) |
+| 产品/领域不变量 | [`docs/SPEC.md`](../SPEC.md) |
+| 架构决策 | [`docs/adr/`](../adr/) |
+| 行为/API/语义契约 | [`docs/contracts/`](../contracts/) |
+| 当前实现架构 | [`docs/architecture/`](../architecture/) + production code |
+| 工程规范 | [`docs/standards/`](../standards/) |
+| 当前实现状态 | [`docs/status/`](../status/) |
+| 阶段边界与当前路线 | [`docs/roadmap/`](../roadmap/) |
+| 当前执行顺序 | GitHub active roadmap Issue（当前由 `docs/README.md` 指向） |
 
 ## 目录结构
 
-```txt
+高信号归档目录：
+
+```text
 archive/
-├── dev/                          # 开发文档归档（测试基线、配置、种子数据等）
-├── phase1-archive/               # Phase 1.0–1.8 实施文档
-│   ├── phase-1.0/
-│   ├── phase-1.1/
-│   ├── phase-1.2/
-│   ├── phase-1.3/
-│   ├── phase-1.4/
-│   ├── phase-1.5/
-│   ├── phase-1.6/
-│   ├── phase-1.7/
-│   ├── phase1.8/
-│   └── ui-20260610/
-├── phase2-archive/               # Phase 2 实施文档
-│   └── phase2/
-├── frontend/                     # UI 交互规范
-└── known-test-isolation-issues.md
+├── audits/                  # reality audits, reviews, closeouts, formal evidence
+├── roadmap/                 # superseded/closed roadmap and backlog records
+├── implementation-reports/ # historical implementation reports
+├── reviews/                 # historical reviews
+├── dev/                     # historical development/test records
+├── frontend/                # historical frontend/UI material
+├── followups/               # historical follow-up records
+├── phase1-archive/          # Phase 1 history
+├── phase2-archive/          # Phase 2 history
+├── phase3-archive/          # Phase 3 history
+├── phase3/                  # older Phase 3 evidence retained in-place
+└── ...                      # other legacy archive buckets retained to preserve history
 ```
 
-## 参考指南
+本次整理刻意没有为了目录美观重排所有旧 archive 子树。新归档优先使用 `audits/` 和 `roadmap/` 等高信号目录；旧目录保持原位以减少无意义 churn。
 
-- **Phase 1.0**: 核心功能实现（考试流程、基础管理、安全约束）
-- **Phase 1.1**: 功能补全（API 错误处理、发布刷新、考生考试列表、密码设置、烟雾测试）
-- **Phase 1.2**: 体验增强（考试配置联动、分页、搜索、状态反馈、UI/UX 优化、烟雾测试）
-- **Phase 1.3**: 安全加固（身份认证、权限边界、数据隔离、审计日志）
-- **Phase 1.4**: 架构、安全、UI foundation reset 与阶段性收口文档
-- **Phase 1.5**: PostgreSQL-only database convergence 文档
-- **Phase 1.6**: PostgreSQL correctness hardening 与考试协议事务硬化文档
-- **Phase 1.7**: Security baseline、API contract、exam lifecycle non-E2E closeout 文档
-- **UI 20260610**: UI 审计与重构（设计原则、组件清单、页面迁移计划）
+## 如何使用归档
 
-## 活跃文档
+- 查“现在应该怎么做” → 不要从这里开始，回到 [`docs/README.md`](../README.md)。
+- 查“当时为什么这么设计/怎么验收” → 可以引用这里的 audit、closeout、review。
+- current document 可以链接 archive 作为 evidence，但应明确它是历史证据。
+- 如果 archive 与 current authority 冲突，以 current authority 与 as-built code 为准；冲突本身应作为 drift/defect 处理。
 
-当前活跃文档位于 `docs/` 根目录或对应活跃子目录：
+## 重要说明
 
-- `docs/CURRENT.md` — 当前活跃文档索引
-- `docs/SPEC.md` — 产品规范（权威）
-- `docs/phase-roadmap.md` — Phase 1/2/3/4 路线权威
-- `docs/code-quality.md` — 代码质量指南
-- `docs/api/reference.md` — API 参考
-- `docs/api/contract.md` — API 契约
-- `docs/import-export-format.md` — CSV 导入导出格式
-- `docs/mock-data.md` — Mock 数据
-- `docs/dev/i18n-copy-policy.md` — i18n 文案策略
+`docs/archive/audits/` 不是旧的 `docs/audits/` authority namespace 的简单改名。
+仍然生效的语义/行为 authority 已被重新归位到 active namespace，例如：
 
-## 归档时间
+- [`docs/contracts/timed-sync-semantics.md`](../contracts/timed-sync-semantics.md)
+- [`docs/contracts/exam-policy-authority.md`](../contracts/exam-policy-authority.md)
+- [`docs/contracts/exam-profile-templates.md`](../contracts/exam-profile-templates.md)
+- [`docs/contracts/admin-recovery-center.md`](../contracts/admin-recovery-center.md)
 
-- Phase 1.0: 2026-06-01
-- Phase 1.1: 2026-06-01
-- Phase 1.2: 2026-06-02
-- Phase 1.3: 2026-06-03
-- UI 20260610: 2026-06-10
-- Phase 1.4: 2026-06-14
-- Phase 1.5: 2026-06-14
-- Phase 1.6: 2026-06-14
-- Phase 1.7: 2026-06-14
-
-## 注意事项
-
-1. 归档文档仅供参考，不应作为当前实施计划。
-2. 如需查看历史实施细节或设计决策，请查阅归档文档。
-3. 当前开发以 `docs/SPEC.md`、`docs/phase-roadmap.md` 和 `docs/code-quality.md` 为准。
-4. 如归档文档与当前权威文档冲突，以当前权威文档为准。
+因此：**archive = evidence；contracts/ADR/SPEC/code = current authority by fact type。**

@@ -1,6 +1,6 @@
 // ── P7-M: starter exam profile recipes (truthful authoring defaults) ──
 //
-// Authority: P7-M closeout (`docs/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md`).
+// Historical closeout evidence: P7-M closeout (`docs/archive/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md`).
 //
 // A starter recipe is a RECOMMENDED AUTHORING DEFAULT only. It is NOT runtime
 // authority, NOT a second profile kind, and NOT a special id. The UI offers

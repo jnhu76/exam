@@ -1,5 +1,5 @@
 // #291 Phase B1 — the synchronized-deadline equation (Model A freeze,
-// docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md).
+// docs/contracts/timed-sync-semantics.md).
 //
 // syncDeadline = null when the operator has not triggered the sitting;
 // otherwise min(T0 + durationMinutes, closeAt). The equation is a pure

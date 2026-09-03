@@ -16,7 +16,7 @@ Authority precedence:
 3. Current code reality (this document's primary evidence)
 4. Current product behavior (test evidence)
 5. Current tests (all four suites green at audit SHA)
-6. Roadmap/status docs (docs/roadmap/P7-system-readiness-and-exam-modes.md, docs/roadmap/current.md)
+6. Roadmap/status docs (docs/archive/roadmap/P7-system-readiness-and-exam-modes.md, docs/roadmap/current.md)
 7. Historical/archive prose (incl. "Phase 1 only Admin/Candidate" statements superseded by ADR-017 D2)
 ```
 

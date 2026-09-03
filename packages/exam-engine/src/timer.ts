@@ -75,7 +75,7 @@ export function isAttemptDeadlineExpired(
 
 /**
  * The synchronized-deadline equation for `timed_sync` exams (#291 Phase B,
- * Model A freeze in docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md):
+ * Model A freeze in docs/contracts/timed-sync-semantics.md):
  *
  *   syncDeadline = null when the operator has not triggered the sitting;
  *   otherwise min(syncStartedAt + durationMinutes, closeAt).

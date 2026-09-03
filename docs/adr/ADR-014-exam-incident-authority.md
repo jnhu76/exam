@@ -26,8 +26,8 @@ The following boundaries remain unchanged by this acceptance:
 > master** (PR #242, merge commit `5b653c13`, 2026-08-01): the Admin incident
 > persistence, commands, API, audit, and optional time-grant linkage are
 > implemented; the Admin Recovery Center (J5) is **CLOSED** (2026-08-08) —
-> see `docs/roadmap/recovery-operations-jobs.md` and
-> `docs/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`. The statements above
+> see `docs/archive/roadmap/recovery-operations-jobs.md` and
+> `docs/archive/audits/J5-ADMIN-RECOVERY-CENTER-CLOSEOUT.md`. The statements above
 > describe the state at acceptance time (2026-08-01) and are retained as
 > history.
 
@@ -41,7 +41,7 @@ The following boundaries remain unchanged by this acceptance:
 | Supersedes | none |
 | Superseded by | — |
 | Related decisions | ADR-005, ADR-006, ADR-008, ADR-010, ADR-012, ADR-013 |
-| Reality audit | [`docs/audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) |
+| Reality audit | [`docs/archive/audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md`](../archive/audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md) |
 | Architecture doc | [`docs/architecture/exam-system/incident-authority.md`](../architecture/exam-system/incident-authority.md) (TARGET) |
 
 ### Revision notes
@@ -136,7 +136,7 @@ incident authority" (ADR-013 §5, §8, §10). ADR-013 also froze that an
 `interruptionId` (one attempt) and a future `incidentId` (possibly many
 attempts) are never interchangeable.
 
-The recovery workstream (`docs/roadmap/recovery-operations-jobs.md`, J2)
+The recovery workstream (`docs/archive/roadmap/recovery-operations-jobs.md`, J2)
 requires that the incident concept be frozen — identity, lifecycle,
 authority, relationships, concurrency, audit — before any persistence or API
 work begins, so that J3 implements frozen semantics instead of inventing

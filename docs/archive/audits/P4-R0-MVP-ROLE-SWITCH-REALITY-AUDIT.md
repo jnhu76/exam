@@ -12,13 +12,13 @@
 > `P4 → P5-0 → P3 → P5-N1 → P6`, the P4 dependency row, the Gate 0.5 PENDING
 > note, and the 91/81/10 inventory this audit cites are all unchanged.)
 > **Authority chain read first:** `AGENTS.md`, `docs/roadmap/phase-roadmap.md`,
-> `docs/roadmap/phase3-open-items.md`, `docs/architecture/authorization.md`,
+> `docs/archive/roadmap/phase3-open-items.md`, `docs/architecture/authorization.md`,
 > `docs/status/implementation-status.md`,
 > `docs/archive/phase3/p4-mvp-rbac-route-matrix.md` (historical; explicitly
 > superseded by the current code — see §1.2).
 >
 > **Naming note.** This document's "P4" is the **Phase-3 module Job id**
-> (`P4 — RBAC MVP role switch`) from `docs/roadmap/phase3-open-items.md`, **not**
+> (`P4 — RBAC MVP role switch`) from `docs/archive/roadmap/phase3-open-items.md`, **not**
 > the roadmap's Phase 4 ("Platformization and Integration"). Throughout this
 > report "P4" = the Admin/Teacher/Candidate MVP role-switch Job; "Phase 4" =
 > platformization. They are unrelated.
@@ -133,7 +133,7 @@ a gate migration.
 
 ### 2.2 In scope (P4 product — what the role-switch Job must deliver)
 
-Per `docs/roadmap/phase3-open-items.md` §P4, P4 activates the **final MVP
+Per `docs/archive/roadmap/phase3-open-items.md` §P4, P4 activates the **final MVP
 product-role model** (Admin / Teacher / Candidate) on MVP routes:
 
 - Who may call each MVP API.
@@ -178,7 +178,7 @@ implement M11. "Do not audit-and-fix."
 - `AGENTS.md` (workspace instructions).
 - `docs/roadmap/phase-roadmap.md` (phase-scope authority; the **real** Phase 4
   is platformization — do not confuse with the P4 Job id).
-- `docs/roadmap/phase3-open-items.md` (§P4 = this Job; module execution order
+- `docs/archive/roadmap/phase3-open-items.md` (§P4 = this Job; module execution order
   P4 → P5-0 → P3 → P5-N1 → P6).
 - `docs/architecture/authorization.md` (as-built authz model; asserts
   91/81/10 — verified by this audit).
@@ -345,7 +345,7 @@ separate `status`/`disabled` column. Behavior:
 
 > **Lifecycle note.** Full account activation/deactivation UI, SMTP password
 > reset, and invitation are Phase 3 *future work*
-> (`docs/roadmap/phase3-open-items.md` "Staff invitation + SMTP password reset
+> (`docs/archive/roadmap/phase3-open-items.md` "Staff invitation + SMTP password reset
 > + account lifecycle — NOT STARTED"). P4 must not implement lifecycle; it
 > only records the current disable-path reality.
 

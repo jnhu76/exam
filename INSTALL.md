@@ -150,7 +150,7 @@ SMTP_USER=<username>
 SMTP_PASSWORD=<password>
 ```
 
-See [`docs/architecture/email-config.md`](docs/architecture/email-config.md)
+See [`docs/operations/email-config.md`](docs/operations/email-config.md)
 for the full SMTP configuration reference.
 
 ## Troubleshooting

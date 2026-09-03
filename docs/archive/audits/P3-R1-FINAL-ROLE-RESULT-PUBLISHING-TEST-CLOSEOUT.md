@@ -10,7 +10,7 @@
 > **Closeout date:** 2026-07-25
 > **Governing audit:** `docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`
 > **Predecessors (read first):** `AGENTS.md`,
-> `docs/roadmap/phase3-open-items.md`, `docs/status/implementation-status.md`,
+> `docs/archive/roadmap/phase3-open-items.md`, `docs/status/implementation-status.md`,
 > `docs/audits/P3-R0-FINAL-ROLE-RESULT-PUBLISHING-REALITY-AUDIT.md`.
 
 This Job accepts the P3-R0 audit with one documentation correction (§4). It

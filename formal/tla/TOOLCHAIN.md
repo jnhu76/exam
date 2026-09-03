@@ -1,7 +1,7 @@
 # TLA+ Toolchain Pin
 
 This document records the exact TLA+ toolchain used to produce the
-model-checking evidence in `docs/audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md`.
+model-checking evidence in `docs/archive/audits/REC-F1-RECOVERY-PROTOCOL-FORMAL-MODEL.md`.
 It is reproducibility evidence, not installation prose.
 
 ## Pinned version

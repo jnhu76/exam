@@ -10,7 +10,7 @@
 > **Branch:** `feat/p3-result-publishing-closeout`
 > **Starting master commit:** `cac6b85` (`P5-0: Email Delivery Runtime …` — PR #210)
 > **Audit date:** 2026-07-25
-> **Predecessors (read first):** `AGENTS.md`, `docs/roadmap/phase3-open-items.md`,
+> **Predecessors (read first):** `AGENTS.md`, `docs/archive/roadmap/phase3-open-items.md`,
 > `docs/status/implementation-status.md`, `docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`,
 > `docs/audits/P4-C3-THREE-ROLE-E2E-EVIDENCE.md`,
 > `docs/archive/phase3/p3-candidate-result-answer-visibility-proof.md`,
@@ -42,7 +42,7 @@ for the cache reality and the forced re-run evidence).
 
 ## 2. Authority read
 
-Read in full (not summarized): `AGENTS.md`; `docs/roadmap/phase3-open-items.md`
+Read in full (not summarized): `AGENTS.md`; `docs/archive/roadmap/phase3-open-items.md`
 (P3/P4/P5-0/P5-N1 sections); `docs/status/implementation-status.md`;
 `docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`;
 `docs/audits/P4-C3-THREE-ROLE-E2E-EVIDENCE.md`; the two archived P3 proofs

@@ -18,7 +18,7 @@
 > Proctor and remains Admin-only. The Admin **and** Proctor Recovery Center
 > product UIs (J5 / J6) and system-generated incidents remain NOT
 > IMPLEMENTED; the J5-R0 Admin Recovery Center contract is IN REVIEW (see
-> [`../../roadmap/j5-r0-admin-recovery-center-contract.md`](../../roadmap/j5-r0-admin-recovery-center-contract.md)).
+> [`../../contracts/admin-recovery-center.md`](../../contracts/admin-recovery-center.md)).
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
 > (Accepted). This document is the accepted target contract for J3. It provides
@@ -27,7 +27,7 @@
 > and Admin routes below are implemented per this contract; sections that
 > remain proposals are marked explicitly.
 
-Reality baseline: [`REC-I6-R0 reality audit`](../../audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md).
+Reality baseline: [`REC-I6-R0 reality audit`](../../archive/audits/REC-I6-R0-INCIDENT-AUTHORITY-REALITY-AUDIT.md).
 The pre-J3 live incident surface was the audit-event-only
 `proctor.incident_marked` marker; `attempt_time_adjustments.incident_id` is
 the only `incident_id` column. J3 adds the incident tables and the Admin
@@ -295,5 +295,5 @@ mapping guidance lives in ADR-014 §15.
 - [`candidate-recovery.md`](candidate-recovery.md) — ADR-012/ADR-013 recovery sequences.
 - [`protocol-catalog.md`](protocol-catalog.md) — Incident protocols (Admin runtime implemented in J3; the assigned-Proctor view/create/investigate backend authority is implemented in J4-I1; the Proctor **product** UI is J6, not started).
 - [`domain-model.md`](domain-model.md) — explicitly absent / designed aggregates.
-- [`../../roadmap/recovery-operations-jobs.md`](../../roadmap/recovery-operations-jobs.md) — J2/J3/J4 workstream; the J5 Admin Recovery Center contract is
-  [`../../roadmap/j5-r0-admin-recovery-center-contract.md`](../../roadmap/j5-r0-admin-recovery-center-contract.md).
+- [`../../archive/roadmap/recovery-operations-jobs.md`](../../archive/roadmap/recovery-operations-jobs.md) — J2/J3/J4 workstream; the J5 Admin Recovery Center contract is
+  [`../../contracts/admin-recovery-center.md`](../../contracts/admin-recovery-center.md).

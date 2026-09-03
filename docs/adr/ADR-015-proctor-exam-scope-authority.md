@@ -24,7 +24,7 @@ multiTenant, or SuperAdmin.
 | Accepted | 2026-08-02 |
 | Decision owner | jnhu76 |
 | Review evidence | PR #245 final independent review (head `58777282`, 6 commits) — four review rounds; three-document adversarial consistency audit (10 criteria, all PASS) |
-| Reality audit | [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md) |
+| Reality audit | [`docs/archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md) |
 | Acceptance checklist | §26 (all items closed) |
 
 ## Metadata
@@ -37,8 +37,8 @@ multiTenant, or SuperAdmin.
 | Supersedes | none |
 | Superseded by | — |
 | Related decisions | ADR-010 (Scoped RBAC), ADR-013 (interruption/time policy), ADR-014 (incident authority) |
-| Reality audit | [`docs/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md) |
-| Roadmap job | [`docs/roadmap/recovery-operations-jobs.md`](../roadmap/recovery-operations-jobs.md) §6 (J4) |
+| Reality audit | [`docs/archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md) |
+| Roadmap job | [`docs/archive/roadmap/recovery-operations-jobs.md`](../archive/roadmap/recovery-operations-jobs.md) §6 (J4) |
 | Phase | Phase 3 product work (M11 resource-relationship authorization) |
 
 ## Terminology
@@ -61,12 +61,12 @@ resource-relationship authorization (M11). The Proctor role preset exists
 and carries org-wide capabilities, but there is no Proctor→Exam assignment
 and no resolver that narrows Proctor authority to assigned exams.
 
-The recovery workstream (`docs/roadmap/recovery-operations-jobs.md`) requires
+The recovery workstream (`docs/archive/roadmap/recovery-operations-jobs.md`) requires
 that the **minimum** resource-relationship slice — Proctor → assigned Exam —
 be frozen before any runtime work begins, so that J4-I1 implements frozen
 semantics instead of inventing them. This ADR is that freeze. It is built
 directly on the reality audit
-([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)),
+([`M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md`](../archive/audits/M11-R0-PROCTOR-EXAM-SCOPE-REALITY-AUDIT.md)),
 which records the verified master state at `e9fa1969`.
 
 J3 (REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS) is CLOSED on master (PR #242).
@@ -193,7 +193,7 @@ Admin does not require fake exam assignment rows.
 ```
 
 Admin bypass is an explicit product policy (ADR-010 compatibility superset;
-recovery-operations-jobs.md §13 "Admin authority is not implemented by fake
+docs/archive/roadmap/recovery-operations-jobs.md §13 "Admin authority is not implemented by fake
 Proctor assignments"). The resolver MUST short-circuit Admin before the
 assignment check (§5). No code path may synthesize an
 `exam_proctor_assignments` row for an Admin, and no test fixture may rely on
