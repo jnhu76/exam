@@ -9,6 +9,7 @@ import type {
 } from "@exam/domain";
 import {
   AttemptLateEntryClosedError,
+  AttemptStartSubmitInfeasibleError,
   AttemptSubmitTooEarlyError,
   AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
@@ -23,7 +24,11 @@ import {
 } from "@exam/domain";
 import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
 import { isCandidateRetakeDeferred } from "./candidateResultVisibility.js";
-import { calculateDeadlineAt, computeSyncDeadline } from "./timer.js";
+import {
+  calculateDeadlineAt,
+  computeEffectiveDeadline,
+  computeSyncDeadline,
+} from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
 import {
@@ -298,6 +303,39 @@ export async function startOrRestoreAttempt(
       : exam.timingMode === "timed_sync"
         ? syncDeadline
         : null;
+
+  // #395: manual-submit feasibility for a NEW attempt. A candidate manual
+  // submit is legal only in [earliestSubmitAt, effectiveDeadline) — the submit
+  // guard admits now >= earliestSubmitAt while the canonical deadline kernel
+  // expires (and freezes via reconciliation) at now >= effectiveDeadline. The
+  // window is therefore reachable iff earliestSubmitAt < effectiveDeadline
+  // STRICTLY: at equality the only guard-passing instant is already expired,
+  // leaving the attempt's normal candidate completion path unreachable (only
+  // the exempt deadline_scanner/proctor/system sources could submit it).
+  //
+  // INVARIANT: feasibility is evaluated on the same would-be attempt shape the
+  // create below persists — the effective deadline flows through the canonical
+  // computeEffectiveDeadline kernel (min(closeAt, deadlineAt)), never per-mode
+  // arithmetic, so timed_window/deadline/timed_sync share one rule and B2
+  // timed_sync is protected without a mode-specific implementation. Null
+  // effective deadline (untimed) never rejects here. Resume/restore of
+  // existing attempts is never subject to this guard (new attempts only); a
+  // rejection precedes both the attempt create and the enrollment update.
+  if (exam.minSubmitAfterStartMinutes != null) {
+    const effectiveDeadline = computeEffectiveDeadline(exam, { deadlineAt });
+    if (effectiveDeadline !== null) {
+      const earliestSubmitAt = calculateDeadlineAt(
+        now,
+        exam.minSubmitAfterStartMinutes,
+      );
+      if (earliestSubmitAt.getTime() >= effectiveDeadline.getTime()) {
+        throw new AttemptStartSubmitInfeasibleError({
+          earliestSubmitAt,
+          effectiveDeadline,
+        });
+      }
+    }
+  }
 
   // Resolve the timing policy snapshot for the new attempt.
   const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);

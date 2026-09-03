@@ -768,6 +768,11 @@ describe("attempt routes", () => {
 
   describe("POST /attempts/:attemptId/submit — minSubmitAfterStartMinutes guard (ADR-005 Slice 3)", () => {
     it("rejects candidate submit too early with 409 ATTEMPT_SUBMIT_TOO_EARLY", async () => {
+      // minSubmit 30 < duration 60 keeps the start feasible (#395: the start
+      // needs earliestSubmitAt = start+30 strictly before the effective
+      // deadline start+60; min == duration is the equality boundary and is
+      // correctly unstartable now). An immediate submit is still ~30min too
+      // early — the submit-guard semantics under test.
       const examRes = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
@@ -775,7 +780,7 @@ describe("attempt routes", () => {
           title: "MinSubmit Exam",
           courseId,
           questionIds: [questionId],
-          minSubmitAfterStartMinutes: 60,
+          minSubmitAfterStartMinutes: 30,
         }),
         cookies: { "auth-token": ctx.adminToken },
       });
