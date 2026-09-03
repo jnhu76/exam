@@ -775,7 +775,7 @@ describe("attempt routes", () => {
           title: "MinSubmit Exam",
           courseId,
           questionIds: [questionId],
-          minSubmitAfterStartMinutes: 60,
+          minSubmitAfterStartMinutes: 30,
         }),
         cookies: { "auth-token": ctx.adminToken },
       });
@@ -793,7 +793,7 @@ describe("attempt routes", () => {
       });
       const attemptId = startRes.json().id;
 
-      // Submit immediately (well under 60 min) -> 409.
+      // Submit immediately (well under 30 min) -> 409.
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/submit`,

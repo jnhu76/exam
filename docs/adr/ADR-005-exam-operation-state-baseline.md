@@ -398,6 +398,25 @@ details: { earliestSubmitAt, remainingSeconds }
 
 Must **not** block: `deadline_scanner`, `proctor`, `system` submit sources.
 
+**New-attempt admission (`startOrRestoreAttempt`):** the two policies above
+compose — a candidate manual submit is legal only in
+`[earliestSubmitAt, effectiveDeadline)`, because the guard above admits
+`now >= earliestSubmitAt` while the canonical deadline kernel
+(`computeEffectiveDeadline` = `min(closeAt, deadlineAt)`) already expires at
+`now >= effectiveDeadline`. Creating a new attempt is therefore admitted only
+when `earliestSubmitAt < effectiveDeadline` (strict: at equality the only
+guard-passing instant is already expired); otherwise the start is rejected
+with `409 ATTEMPT_START_SUBMIT_INFEASIBLE` before the attempt create and the
+enrollment update (zero mutation).
+
+The check goes through the canonical effective-deadline kernel — never
+per-mode arithmetic — so it holds uniformly for `timed_window`, `deadline`,
+and `timed_sync`, and never rejects when the effective deadline is null
+(`untimed`). It governs only new-attempt creation; resume/restore of existing
+attempts is not subject to it. Because authoring does not reject
+`minSubmitAfterStartMinutes >= durationMinutes` (§4.2), such an exam is
+unstartable at runtime for want of any reachable manual-submit window.
+
 ### 4.5 Submit source discriminator (command layer only)
 
 ```ts

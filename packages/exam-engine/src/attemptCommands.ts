@@ -9,6 +9,7 @@ import type {
 } from "@exam/domain";
 import {
   AttemptLateEntryClosedError,
+  AttemptStartSubmitInfeasibleError,
   AttemptSubmitTooEarlyError,
   AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
@@ -23,7 +24,11 @@ import {
 } from "@exam/domain";
 import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
 import { isCandidateRetakeDeferred } from "./candidateResultVisibility.js";
-import { calculateDeadlineAt, computeSyncDeadline } from "./timer.js";
+import {
+  calculateDeadlineAt,
+  computeEffectiveDeadline,
+  computeSyncDeadline,
+} from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
 import {
@@ -298,6 +303,30 @@ export async function startOrRestoreAttempt(
       : exam.timingMode === "timed_sync"
         ? syncDeadline
         : null;
+
+  // A NEW attempt must retain a non-empty candidate manual-submit window:
+  // candidate submit is legal at/after earliestSubmitAt, while the effective
+  // deadline expires at equality, so feasibility requires strict `<`.
+  //
+  // INVARIANT: new attempts only — resume/restore must never hit this check —
+  // and a rejection must precede both the attempt create and the enrollment
+  // update. The effective deadline flows through the canonical kernel so
+  // every timing mode shares one rule; a null deadline never rejects.
+  if (exam.minSubmitAfterStartMinutes != null) {
+    const effectiveDeadline = computeEffectiveDeadline(exam, { deadlineAt });
+    if (effectiveDeadline !== null) {
+      const earliestSubmitAt = calculateDeadlineAt(
+        now,
+        exam.minSubmitAfterStartMinutes,
+      );
+      if (earliestSubmitAt.getTime() >= effectiveDeadline.getTime()) {
+        throw new AttemptStartSubmitInfeasibleError({
+          earliestSubmitAt,
+          effectiveDeadline,
+        });
+      }
+    }
+  }
 
   // Resolve the timing policy snapshot for the new attempt.
   const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);

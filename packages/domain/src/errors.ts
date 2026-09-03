@@ -304,6 +304,20 @@ export class AttemptLateEntryClosedError extends AppError {
   }
 }
 
+/**
+ * NEW attempt creation is rejected because the minimum manual-submit duration
+ * leaves no legal candidate submit instant before the effective deadline.
+ * Applies to new starts only; resume/restore is never blocked (HTTP 409).
+ */
+export class AttemptStartSubmitInfeasibleError extends AppError {
+  constructor(
+    details: { earliestSubmitAt: Date; effectiveDeadline: Date },
+    message = "Remaining time before the deadline cannot satisfy the minimum manual-submit duration",
+  ) {
+    super(message, "ATTEMPT_START_SUBMIT_INFEASIBLE", 409, details);
+  }
+}
+
 /** Candidate has reached the maximum number of allowed attempts (HTTP 409). */
 export class MaxAttemptsReachedError extends AppError {
   constructor(message = "Maximum attempt count reached") {

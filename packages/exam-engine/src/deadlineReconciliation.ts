@@ -3,7 +3,6 @@ import {
   GradingStatus,
   InvalidStateTransitionError,
   NotFoundError,
-  ValidationError,
 } from "@exam/domain";
 import type {
   AttemptRepository,
@@ -18,6 +17,7 @@ import {
   type LockedEnrollmentAttemptIdentity,
 } from "./lockSeam.js";
 import type { SubmitInterruptionResolution } from "./restoreInterruption.js";
+import { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
 
 // ── Mutation context authority (EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0) ──
 //
@@ -130,73 +130,10 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
   ExamAttempt["status"]
 >(["in_progress", "disrupted"]);
 
-type DeadlineExam = { closeAt: Date | null | undefined };
-type DeadlineAttempt = { deadlineAt?: Date | null | undefined };
-
-/**
- * Computes the canonical effective deadline for an attempt.
- *
- * The deadline lattice is deliberately small:
- *   - exam close + attempt deadline => min(closeAt, deadlineAt)
- *   - exam close only               => closeAt
- *   - neither                       => null (no deadline)
- *   - attempt deadline only         => invalid hybrid; fail closed
- *
- * Current production authoring still exposes only `timed_window`, whose
- * reachable active attempts have BOTH bounds. The nullable result is the
- * kernel seam required before `deadline` / `untimed` can be activated; A1 does
- * not by itself make those modes reachable.
- *
- * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
- * effective deadline value. Discovery queries may over-approximate candidates,
- * but the authoritative expiry decision is `isAttemptDeadlineExpired` below.
- */
-export function computeEffectiveDeadline(
-  exam: { closeAt: Date },
-  attempt: DeadlineAttempt,
-): Date;
-export function computeEffectiveDeadline(
-  exam: DeadlineExam,
-  attempt: DeadlineAttempt,
-): Date | null;
-export function computeEffectiveDeadline(
-  exam: DeadlineExam,
-  attempt: DeadlineAttempt,
-): Date | null {
-  const examClose = exam.closeAt ?? null;
-  const attemptDeadline = attempt.deadlineAt ?? null;
-
-  if (examClose === null) {
-    if (attemptDeadline !== null) {
-      throw new ValidationError(
-        "Exam closeAt is required when an attempt deadline exists",
-      );
-    }
-    return null;
-  }
-
-  if (attemptDeadline === null) return examClose;
-  return attemptDeadline < examClose ? attemptDeadline : examClose;
-}
-
-/**
- * Canonical "is this attempt past its effective deadline?" decision.
- *
- * A null effective deadline means there is no deadline and therefore this
- * predicate is always false. Otherwise expiry is `now >= effectiveDeadline`.
- * This is the SOLE authoritative expiry seam for deadline-triggered mutation;
- * callers must not re-derive deadline comparisons inline.
- */
-export function isAttemptDeadlineExpired(
-  exam: DeadlineExam,
-  attempt: DeadlineAttempt,
-  now: Date,
-): boolean {
-  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
-  return (
-    effectiveDeadline !== null && now.getTime() >= effectiveDeadline.getTime()
-  );
-}
+// Pure deadline calculation lives in timer.ts so engine callers can share the
+// same kernel without depending on reconciliation orchestration; re-exported
+// here for deep-import stability.
+export { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
 
 /**
  * Lazy-triggered deadline reconciliation (P3-L0-3 / ADR-008 §5.3).

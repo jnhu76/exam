@@ -8,6 +8,71 @@ export function calculateDeadlineAt(
   return new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
 }
 
+type DeadlineExam = { closeAt: Date | null | undefined };
+type DeadlineAttempt = { deadlineAt?: Date | null | undefined };
+
+/**
+ * Computes the canonical effective deadline for an attempt.
+ *
+ * The deadline lattice is deliberately small:
+ *   - exam close + attempt deadline => min(closeAt, deadlineAt)
+ *   - exam close only               => closeAt
+ *   - neither                       => null (no deadline)
+ *   - attempt deadline only         => invalid hybrid; fail closed
+ *
+ * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
+ * effective deadline value. Discovery queries may over-approximate candidates,
+ * but the authoritative expiry decision is `isAttemptDeadlineExpired` below.
+ * Living in the timing leaf lets every engine module depend on it without
+ * cycles; `deadlineReconciliation.ts` re-exports it for deep-import stability.
+ */
+export function computeEffectiveDeadline(
+  exam: { closeAt: Date },
+  attempt: DeadlineAttempt,
+): Date;
+export function computeEffectiveDeadline(
+  exam: DeadlineExam,
+  attempt: DeadlineAttempt,
+): Date | null;
+export function computeEffectiveDeadline(
+  exam: DeadlineExam,
+  attempt: DeadlineAttempt,
+): Date | null {
+  const examClose = exam.closeAt ?? null;
+  const attemptDeadline = attempt.deadlineAt ?? null;
+
+  if (examClose === null) {
+    if (attemptDeadline !== null) {
+      throw new ValidationError(
+        "Exam closeAt is required when an attempt deadline exists",
+      );
+    }
+    return null;
+  }
+
+  if (attemptDeadline === null) return examClose;
+  return attemptDeadline < examClose ? attemptDeadline : examClose;
+}
+
+/**
+ * Canonical "is this attempt past its effective deadline?" decision.
+ *
+ * A null effective deadline means there is no deadline and therefore this
+ * predicate is always false. Otherwise expiry is `now >= effectiveDeadline`.
+ * This is the SOLE authoritative expiry seam for deadline-triggered mutation;
+ * callers must not re-derive deadline comparisons inline.
+ */
+export function isAttemptDeadlineExpired(
+  exam: DeadlineExam,
+  attempt: DeadlineAttempt,
+  now: Date,
+): boolean {
+  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
+  return (
+    effectiveDeadline !== null && now.getTime() >= effectiveDeadline.getTime()
+  );
+}
+
 /**
  * The synchronized-deadline equation for `timed_sync` exams (#291 Phase B,
  * Model A freeze in docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md):
