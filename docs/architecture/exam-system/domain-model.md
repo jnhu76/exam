@@ -4,7 +4,7 @@
 
 ```text
 Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+b994d109b7fcb34db8105cb85a2edf9420a9c613
 
 Verification scope:
 Current master implementation after merged P5-0 / PR #210.
@@ -171,8 +171,8 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 | `questionIds` | Yes | Validated against snapshot |
 | `totalScore` | Yes | Must equal sum of question scores |
 | `passingScore` | Yes | Must be ≤ totalScore |
-| `durationMinutes` | Yes | Must be positive |
-| `timingMode` | Yes | Phase 1: `timed_window` only |
+| `durationMinutes` | Yes | Positive for timed_window; semantic null for deadline/untimed (#291 Phase A) |
+| `timingMode` | Yes | Authoring modes: `timed_window`, `deadline`, `untimed` (#291 Phase A); `timed_sync` rejected until Phase B activation |
 | `questionSelectionMode` | Yes | Phase 1: `manual` only |
 | `controlFlags` | Yes | All flags |
 | `retakePolicy` | Yes | Phase 1: `unlimited`, `max_attempts`, `pass_then_stop` |

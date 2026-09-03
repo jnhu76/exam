@@ -134,7 +134,7 @@ not_started → queued → in_progress → submitted → grading → graded
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
 | `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
-| `queued` | 排队中（requireQueue 时） | **Phase 2 / planned**：`requireQueue` 入口属于 timed_sync 计时模式（§2.5），仅在内存路径上短暂出现，不持久化 |
+| `queued` | 排队中（requireQueue 时） | **目标设计（#292）**：准入是与计时模式正交的独立维度，由 #292 的准入记录承载，不建模为 attempt 状态；现行代码仅有一个进程内的过渡性准入 gate（非持久，由 #292 替换，见 #394） |
 | `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
 | `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Proctor 恢复工作台（J6）未实现 |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
@@ -277,17 +277,18 @@ Phase 3 才引入基于 permission + scope 的协作角色：
 
 | 模式 | 时间规则 | 典型场景 | 当前接线 |
 |------|----------|----------|------|
-| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **Phase 2 / planned**（依赖监考面板） |
+| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **设计已冻结（Phase B / planned）**：语义见 `docs/audits/291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md`，实现按 B1→B2 分片推进 |
 | **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 | **已接线** |
-| **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 | **Phase 2 / planned** |
-| **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 | **Phase 2 / planned** |
+| **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 | **已接线**（#291 Phase A2） |
+| **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 | **已接线**（#291 Phase A2） |
 
-> Phase 1 仅实现 `timed_window`。其它三种模式作为目标设计保留，**未在当前代码中接线**——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要等待 Phase 2+ 硬化阶段显式启动（详见 §七 Phase 2 列表）。
+> `timed_window`、`deadline`、`untimed` 已在当前代码中接线（#291 Phase A）。`timed_sync` 仍是目标设计：其计时语义已冻结（操作员触发的全局时钟 + 共享截止时间），但 authoring/publish/考生路径尚未激活——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要按冻结文档的 B1→B2 分片显式推进。队列入场（`requireQueue`）独立归属 #292。
 
 ```
-timed_sync 示例：
-  Phase 2 运营人员点击"开考" → 考生排队分批进入 → 开始 90 分钟倒计时
-  窗口：周一 9:00-11:00，最迟 10:30 可开始（预留 buffer）
+timed_sync 示例（冻结语义，见 291-PHASE-B-TIMED-SYNC-SEMANTIC-FREEZE.md）：
+  窗口：周一 9:00-11:00；运营人员在窗口内点击"开考"（T0）
+  全局截止 = min(T0 + 90 分钟, closeAt)；T0 后进入的考生共享同一截止时间（剩余更少）
+  到全局截止强制交卷；队列入场（requireQueue）只管准入，不改变共享截止时间
 
 timed_window 示例：
   开放窗口：周一到周五
@@ -313,7 +314,7 @@ untimed 示例：
 | `shuffleOptions` | 关 | 开 | 选项乱序 |
 | `detectTabSwitch` | 关 | 开 | Phase 1 minimal behavior；完整审计与处置进入 Phase 2 |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
-| `requireQueue` | 关 | 开 | 队列入场（依赖 `timed_sync`，**Phase 2 / planned**） |
+| `requireQueue` | 关 | 开 | 队列入场：与计时模式**正交**的准入维度，独立归属 **#292**；对应能力交付前，运行支持矩阵可临时拒绝部分组合（如 `timed_sync + requireQueue=true`，见 Phase B 冻结文档） |
 | `batchSize` | - | 10 | 每批放行人数（同上） |
 | `batchInterval` | - | 3 | 批次间隔秒数（同上） |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
