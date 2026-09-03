@@ -30,8 +30,15 @@
   `closeAt`. `extendExam` moves `closeAt` only.
 - `not_started` / `queued` attempt statuses have no production write path.
 - `requireQueue` / `batchSize` / `batchInterval` are authorable policy
-  fields with no runtime behavior (#292). Redis is adopted for shared rate
-  limiting only (ADR-001); queue Redis adoption remains decision-gated.
+  fields, and `requireQueue=true` is NOT inert as-built: a legacy Phase 2
+  in-memory admission gate (process-local module Map, queue-status route,
+  and candidate-start gating in `apps/api/src/routes/attempts.candidate.ts`)
+  is product-reachable for a published `timed_window` exam today —
+  non-durable (queue membership and batch timing reset on restart),
+  single-instance, unaudited. It is not an admission runtime; #292's durable
+  admission design replaces it (premise drift tracked in #394). Redis is
+  adopted for shared rate limiting only (ADR-001); queue Redis adoption
+  remains decision-gated.
 
 ## 2. Candidate models considered
 
@@ -114,7 +121,7 @@ effectiveDeadline  = min(closeAt, attempt.deadlineAt) = syncDeadline
 | `openAt` | earliest operator-trigger instant; also gates candidate visibility of the pre-start exam; start command must reject `now < openAt` | announced window start |
 | `closeAt` | required; absolute hard cap bounding the global deadline; `openAt < closeAt` (existing window check); lazy `open → closed` at `closeAt` retained | bounded sitting; guards against a late operator trigger stretching the sitting |
 | `syncStartedAt` | new nullable column; null = sitting not triggered; written exactly once; never reset (cancel/archive keep it as history) | durable T0 authority |
-| `requireQueue` | may be `false` (self-entry after T0) or `true` (#292 composition); no forbidden combination | orthogonal authorities |
+| `requireQueue` | `false` = self-entry after T0 (the Phase B core). `true` = #292 composition — **rejected at authoring/publish activation until #292 ships durable admission** (§4/§7); timed_sync must never fall back to the legacy in-memory gate (§1). End-state matrix has no forbidden combination; only the runtime support matrix temporarily rejects it | timing and admission are orthogonal dimensions |
 | `batchSize` / `batchInterval` | meaningful only with `requireQueue=true`; owned by #292 | admission policy |
 | `interruptionTimePolicy` | **strict only** at activation | same rationale as deadline mode: bounded_grace auto-compensation is modelled around a personal deadline and would silently desynchronize the shared end |
 | `maxAttempts` / retake | one synchronized sitting ≈ one attempt per enrollment; activation validator rejects `max_attempts > 1`; `unlimited` / `pass_then_stop` retakes re-enter the same shared global deadline (remaining time only). Multi-sitting retakes are out of scope | no repo authority for per-retake sittings; never silently allow an incoherent second full-duration sitting |
@@ -124,9 +131,19 @@ effectiveDeadline  = min(closeAt, attempt.deadlineAt) = syncDeadline
 
 ### Candidate-visible semantics (frozen for later slices)
 
-- Before T0: no attempt may start; candidate sees “等待开考” (waiting), not
-  “window closed”. No attempt rows exist pre-T0 (waiting-room is enrollment
-  visibility, not a durable attempt state).
+- Before T0, while the sitting window is live (`now < closeAt`): no attempt
+  may start; candidate sees “等待开考” (waiting), not “window closed”. No
+  attempt rows exist pre-T0 (waiting-room is enrollment visibility, not a
+  durable attempt state).
+- Never-started sitting expiry: if the exam reaches `closeAt` before T0 is
+  established, synchronized start becomes permanently unavailable. Frozen
+  effects: candidate start returns the canonical expired-window result (the
+  existing open-window gate precedes any “waiting” branch), never “waiting
+  for synchronized start”; no T0 may be minted afterwards; the exam must
+  converge to a lifecycle state representing an expired, non-startable exam.
+  The concrete lifecycle transition (e.g. lazy `published → closed`, if the
+  state-machine authority is extended accordingly) is a B2 implementation
+  decision; B1 must not invent a product transition.
 - After T0, before the global deadline: start succeeds;
   `attempt.deadlineAt = syncDeadline` (shared remaining time).
 - After the global deadline: start is rejected; in-flight attempts are
@@ -155,8 +172,12 @@ effectiveDeadline  = min(closeAt, attempt.deadlineAt) = syncDeadline
 - `timed_sync + requireQueue=false` is the Phase B product core: an
   operator-triggered sitting where enrolled candidates self-enter after T0.
 - `timed_sync + requireQueue=true` stays unreachable until #292 ships its
-  admission runtime; the current `timed_sync` authoring/publish rejections
-  cover this — no extra guard needed before then.
+  admission runtime. The blanket `timed_sync` authoring/publish rejections
+  cover this only while they exist; from B2 activation until #292 lands, the
+  activation validator itself must reject the combination (§7) and the
+  timed_sync start path must never consult the legacy in-memory admission
+  gate (§1) — that gate is #292's to retire or replace (#394), not a
+  transitional timed_sync queue.
 - Admission semantics under timed_sync (contract #292 must implement):
   admission is an entry gate only — it never changes the global deadline.
   Candidates admitted after T0 receive less remaining time; queue delay is
@@ -204,6 +225,7 @@ undefined. #292 owns the admission record shape.
 | interruption `bounded_grace` | ✘ auto-compensation desynchronizes the shared end | rejected at activation validator |
 | interruption `operator_incident` | deferred | per-attempt grants exist (ADR-013, closeAt-bounded); whether timed_sync admits them is an explicit later product decision, not silently enabled |
 | extend exam | ✔ with one B2 rule: when the sitting is **cap-bound** (`T0 + duration >= closeAt` before the extension), extending `closeAt` must rewrite `deadlineAt` for in-flight attempts (`in_progress`/`disrupted`) to the new sync deadline inside the extend command's transaction (audit-covered) — the copied `deadlineAt` otherwise keeps the old cap and the extension would not reach candidates already in the sitting, diverging from deadline-mode precedent. A **duration-bound** sitting needs no rewrite (extension only postpones lazy close). All still-in-flight attempts move together, so the shared end is preserved | keep existing command + B2 sync branch |
+| `requireQueue=true` before #292 | ✘ no durable admission runtime exists (the legacy in-memory gate is not one) | rejected at authoring/publish activation (B2) until #292; timed_sync start path never consults the in-memory gate |
 | extend one attempt | deferred with `operator_incident` | explicit later decision |
 | retake | one sitting = one attempt; `max_attempts > 1` rejected at activation; cross-sitting retakes out of scope | activation validator |
 | result publication | orthogonal (mode + `resultsPublishedAt`); no coupling | unchanged |
@@ -230,9 +252,11 @@ undefined. #292 owns the admission record shape.
 - **B2 — synchronized lifecycle activation**: canonical operator start
   command (published→open + T0, conditional-write idempotency), capability
   selection, `exam.sync_started` atomic audit, activation-time policy
-  matrix (duration/closeAt required, strict-only, retake rule), authoring
+  matrix (duration/closeAt required, strict-only, retake rule,
+  `timed_sync + requireQueue=true` rejection until #292 — §4/§7), authoring
   and publish activation, admin trigger surface, candidate waiting UX, E2E.
-  Also: the `extendExam` cap-bound rewrite of in-flight `deadlineAt` (§7).
+  Also: the `extendExam` cap-bound rewrite of in-flight `deadlineAt` (§7);
+  the never-started sitting's lifecycle convergence at `closeAt` (§3).
 - **B3 — admission queue (#292)** per its own issue.
 - **B4 — composition**: `timed_sync + requireQueue`, proctor/operator
   console surfaces, final multimodal closeout.
@@ -246,7 +270,10 @@ undefined. #292 owns the admission record shape.
 - Shared deadline: two starts at different instants produce identical
   `attempt.deadlineAt`.
 - Pre-T0 start rejected; post-deadline start rejected; post-`closeAt` start
-  rejected (existing window gate regression).
+  rejected (existing window gate regression). The pre-T0 “waiting” result is
+  window-bounded: with T0 null at/after `closeAt`, candidate start gets the
+  canonical expired-window rejection, never “waiting for synchronized
+  start” (published + T0=null + `now >= closeAt`).
 - Late-entry cutoff anchored at T0.
 - `checkAndUpdateExamStatus`: `timed_sync` stays `published` past `openAt`
   (no auto-open); `timed_window` auto-open regression; lazy close at
@@ -269,5 +296,8 @@ undefined. #292 owns the admission record shape.
 - If the per-attempt operator grant for `timed_sync` is requested, it is a
   new product decision requiring its own record (it changes the shared-end
   fairness model).
+- If B2 is asked to keep `timed_sync + requireQueue=true` publishable before
+  #292's durable admission ships, stop: that combination is frozen out
+  until #292 (§4/§7).
 - Any divergence between this freeze and as-built code is a defect: reconcile
   both directions per AGENTS.md §4 before continuing.

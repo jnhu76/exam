@@ -134,7 +134,7 @@ not_started → queued → in_progress → submitted → grading → graded
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
 | `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
-| `queued` | 排队中（requireQueue 时） | **Phase 2 / planned**：`requireQueue` 入口属于 timed_sync 计时模式（§2.5），仅在内存路径上短暂出现，不持久化 |
+| `queued` | 排队中（requireQueue 时） | **目标设计（#292）**：准入是与计时模式正交的独立维度，由 #292 的准入记录承载，不建模为 attempt 状态；现行代码仅有一个进程内的过渡性准入 gate（非持久，由 #292 替换，见 #394） |
 | `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
 | `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Proctor 恢复工作台（J6）未实现 |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
@@ -314,7 +314,7 @@ untimed 示例：
 | `shuffleOptions` | 关 | 开 | 选项乱序 |
 | `detectTabSwitch` | 关 | 开 | Phase 1 minimal behavior；完整审计与处置进入 Phase 2 |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
-| `requireQueue` | 关 | 开 | 队列入场（依赖 `timed_sync`，**Phase 2 / planned**） |
+| `requireQueue` | 关 | 开 | 队列入场：与计时模式**正交**的准入维度，独立归属 **#292**；对应能力交付前，运行支持矩阵可临时拒绝部分组合（如 `timed_sync + requireQueue=true`，见 Phase B 冻结文档） |
 | `batchSize` | - | 10 | 每批放行人数（同上） |
 | `batchInterval` | - | 3 | 批次间隔秒数（同上） |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
