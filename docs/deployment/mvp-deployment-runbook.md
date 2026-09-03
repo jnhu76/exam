@@ -870,11 +870,13 @@ and §24 (deferred capabilities). Highlights:
 - IP/CIDR exam restrictions, device binding, single-session enforcement NOT implemented.
 - multiTenant / SuperAdmin / organizationSlug login NOT implemented (Phase 4).
 - pass-to-proceed API / service tokens / API keys / webhooks NOT implemented (Phase 4).
-- Staff invitation / SMTP password reset / account recovery UI NOT implemented
-  (Phase 3 product work).
+- Staff invitation / Email password reset / account lifecycle are implemented
+  (#297); additional account-recovery surfaces are not.
 - Additional NotificationType values beyond result_published NOT implemented
   (P5-N2 future).
-- Email template engine + backend i18n NOT started.
+- Email bodies render through per-flow pure zh-CN renderer functions (#300);
+  a generic template engine and multi-locale backend i18n are NOT implemented
+  (by design — see ADR-011 §24).
 - Generic final-answer submit barrier — ADR-008 Option D (answer-type-independent) NOT implemented.
 - Live backup validation (pg_dump/restore) was not executed in the P6 audit;
   this runbook documents the supported procedure. Validate on first

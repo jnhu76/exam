@@ -1,6 +1,6 @@
 # ADR-011: Notification Inbox and Email Delivery Architecture
 
-- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**
+- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**; **Amended 2026-09-03 (#402/#300 — EmailDeliveryService retired, renderer convergence; see §24)**
 - **Date:** 2026-07-23
 - **Owners:** EXAM maintainers
 - **Related:** ADR-003 Job Queue, ADR-001 Redis, P5-0 Email Delivery Runtime, P3 Result Publishing Closeout, P5-N1 Notification Inbox
@@ -57,7 +57,7 @@ The repository already contains:
 
 The design should extend these boundaries instead of introducing an unrelated utility layer or premature infrastructure.
 
-### 2.1 Current implementation facts (verified from code, 2026-07-25 post-P5-0)
+### 2.1 Implementation facts (verified from code, 2026-07-25 post-P5-0; historical snapshot — see §24 for the 2026-09-03 EmailDeliveryService retirement)
 
 | Aspect | Current state | Evidence |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ The design should extend these boundaries instead of introducing an unrelated ut
 | Frontend routes | `/admin/*`, `/exam/*`, `/login` only; candidate result route is `/exam/:attemptId/result` | `apps/web/src/lib/routes.ts:33-39` |
 | `users` table email column | Does not exist (P5-N1 adds optional `users.email`) | `packages/db/src/schema/pg.ts:106-114`; migrations 0001-0018 |
 | Diagnostics | `buildEmailStatus` exposes `outbox.{pending,processing,retryWait,sent,dead}`, `worker.{status,lastPollAt,...}`, `oldestPendingAge`, `lastSuccessfulDeliveryAt` | `apps/api/src/routes/system.ts:46-166` |
-| Email service name | `EmailDeliveryService` (renamed from `EmailNotificationService` by P5-0) | `apps/api/src/email/emailDeliveryService.ts:29`; zero business callers (verified) |
+| Email service name | `EmailDeliveryService` (renamed from `EmailNotificationService` by P5-0) — RETIRED 2026-09-03 (§24): zero business callers re-verified, deleted | `apps/api/src/email/emailDeliveryService.ts:29`; zero business callers (verified) |
 | `grade_notification` EmailType | Defined in domain (`email.ts:47`) but NOT yet rendered/enqueued by any caller | `packages/domain/src/email.ts:47` (verified unused by grep) |
 
 ## 3. Architecture
@@ -1295,3 +1295,39 @@ query cost at 10k backlog: 11.9 ms per 100-row claim (EXPLAIN ANALYZE).
   an unconditional `process.exit()` in `server.ts` had been masking); the
   default shutdown budget dropped 30s → 8s and the app container declares
   `stop_grace_period: 45s` per the shutdown budget contract in §8.6.
+
+## 24. Amendment 2026-09-03 — #402/#300 EmailDeliveryService retirement + renderer convergence
+
+**Decision**: The `EmailDeliveryService` enqueue abstraction
+(`apps/api/src/email/emailDeliveryService.ts`) is deleted. It never had a
+production caller (verified at P5-0 and again at retirement); every live
+Email-producing flow (staff invitation, password reset, result publication)
+already creates its outbox row directly via `emailOutboxRepo.create` inside
+its own transaction, which is the pattern this ADR prescribes (§3, §5.1,
+§17). Its `enqueueBestEffort` surface (swallow outbox-write failures)
+contradicted the required-side-effect atomicity rule and is not retained in
+any form. The `EmailOutboxService` drain service, the senders, the retry
+policy, the sanitizer, and the worker/loop semantics are unchanged.
+
+Production Email content converges on one shared contract:
+`apps/api/src/email/renderedEmail.ts` exports `RenderedEmailContent`
+(`{subject, bodyText, bodyHtml}`) and `escapeEmailHtml`. The three
+production renderers (`renderGradeNotificationEmail`,
+`renderStaffInvitationEmail`, `renderPasswordResetEmail`) stay separate pure
+functions over structured payloads and share only that contract. No template
+engine, no template registry, and no backend i18n runtime exists by design —
+server Email copy is zh-CN only (Issue #300 closes as a convergence, not a
+framework build).
+
+`EmailType` domain values without any production writer
+(`registration_welcome`, `admin_created_user`, `system_alert`, `test_email`,
+`exam_notification`) are removed from the union. The `email_outbox.type`
+column is plain text with no CHECK constraint, so historical rows are
+unaffected and no migration is required. A value is added exactly when a
+production writer starts emitting it.
+
+**Evidence**: production caller map re-enumerated from current master at
+retirement (enqueue seams = invitation.ts, auth.ts password-reset,
+notificationService.ts; the `/api/email/test` diagnostic route sends
+synchronously via `fastify.emailSender` and never touches the outbox);
+typecheck + focused email/notification/identity/repo test suites green.

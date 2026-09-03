@@ -1146,9 +1146,10 @@ export const emailOutbox = pgTable(
     }),
     /**
      * Optional link to the Inbox notification that triggered this Email
-     * (P5-N1-I2). Identity-flow Emails (registration_welcome etc.) keep this
-     * null; operational Emails (result_published -> grade_notification) set
-     * it so an Email can be traced back to its Inbox row.
+     * (P5-N1-I2). Identity-flow Emails (staff invitation, password reset)
+     * keep this null; operational Emails (result_published ->
+     * grade_notification) set it so an Email can be traced back to its
+     * Inbox row.
      */
     notificationId: text("notification_id").references(() => notifications.id),
     /**
