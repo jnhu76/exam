@@ -8,57 +8,108 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-09-03
+
 ### Added
 
-- Added the Teacher-to-Course scoped authority model (#286): a persisted
-  `teacher_course_assignments` carrier (migration 0036, episode semantics
-  with a partial-unique one-active constraint and composite course FK),
-  an Admin assignment API
-  (`GET/POST /admin/users/:userId/course-assignments`, revoke subpath),
-  course/question scope resolvers plus a
-  `teacherAccess: "course_assignment_scoped"` enforcement stage on the
-  scoped-capability gate, and SQL-side LIST scope filtering for courses,
-  questions (and the tag vocabulary), exams, candidates, and score lists —
-  every filter applied before pagination/count and re-resolved from the DB
-  per request, so assignment revocation is effective on the next request.
-  Authority remains `capability × assignment`: the scope row alone grants
-  zero capabilities, Admin keeps its org-wide short-circuit, and
-  out-of-scope direct-ID probes fold into the canonical 404
-  (anti-enumeration). Non-Admin creators self-assign their new course in
-  the same transaction with an atomic `course.teacher_assigned` audit;
-  assignment/revoke write atomic `course.teacher_assigned` /
-  `course.teacher_revoked` audit facts. Admin UI: a per-Teacher
-  course-assignment dialog in UsersPage (assign, list, revoke).
-- Added the Grader-to-Exam scoped authority model (#296): a persisted
-  `grader_exam_assignments` carrier (migration 0037, the same episode
-  semantics as the Teacher carrier), an Admin assignment API
-  (`GET/POST /admin/users/:userId/exam-assignments`, revoke subpath),
-  a `graderAccess: "exam_assignment_scoped"` enforcement stage on the
-  scoped-capability gate (grading detail/write resolve the attempt→exam
-  chain per request), and grading-queue LIST scope filtering applied in
-  SQL before pagination AND before the total count (list and count
-  always agree). Authority remains `capability × assignment`: a bare
-  Grader role without assignments sees an empty queue and 404s on
-  out-of-scope probes (anti-enumeration), Admin keeps its org-wide
-  short-circuit, Teacher course assignments grant no grading scope and
-  Grader exam assignments grant no course authority, and revocation is
-  effective on the next request. Assignment/revoke write atomic
-  `exam.grader_assigned` / `exam.grader_revoked` audit facts. Admin UI:
-  a per-Grader exam-assignment dialog in UsersPage (assign, list,
-  revoke).
+- Scoped Teacher@Course authority (#286): a persisted
+  `teacher_course_assignments` carrier (migration 0036), an Admin
+  assignment API (`GET/POST /admin/users/:userId/course-assignments`,
+  revoke subpath), course/question scope resolvers with a
+  `teacherAccess: "course_assignment_scoped"` enforcement stage, and
+  SQL-side LIST scope filtering for courses, questions (and the tag
+  vocabulary), exams, candidates, and score lists. Authority is
+  `capability × assignment`: the scope row alone grants no capability,
+  Admin keeps its org-wide short-circuit, out-of-scope probes fold into
+  the canonical 404 (anti-enumeration), and revocation takes effect on
+  the next request. Admin UI: per-Teacher course-assignment dialog in
+  UsersPage (assign, list, revoke).
+- Scoped Grader@Exam authority (#296): the same episode-semantics carrier
+  model (`grader_exam_assignments`, migration 0037), an Admin assignment
+  API (`GET/POST /admin/users/:userId/exam-assignments`, revoke subpath),
+  a `graderAccess: "exam_assignment_scoped"` enforcement stage on grading
+  detail/write, and grading-queue LIST scope filtering applied in SQL
+  before pagination AND before the total count (list and count always
+  agree). Teacher course assignments grant no grading scope and Grader
+  exam assignments grant no course authority. Admin UI: per-Grader
+  exam-assignment dialog in UsersPage.
+- Staff invitation, email password reset, and account lifecycle (#297):
+  invitation with role choice, a public forgot-password flow that sends
+  an email reset link, and canonical credential lock ordering with
+  audited actors.
+- Permission registry and permission audit (#298): permission display
+  metadata and audit action vocabulary, keyset audit search/export
+  (actor/target filters), effective-authority projection, and an audit
+  search/export UI.
+- Plain/Rich content model and WYSIWYG authoring V1 (#301): a
+  `ContentDocumentV1` kernel with limits/normalize/projection, rich
+  question/option/answer slots with answer-shape validation, lazy
+  Tiptap rich editor with a canonical Plain/Rich adapter, a static
+  content renderer with a lazy KaTeX math seam, rich rendering in
+  grading/result/attempt views, and rich content frozen into exam
+  snapshots (migration 0039).
+- `deadline` and `untimed` exam timing modes (#291 Phase A): nullable
+  `duration_minutes`/`close_at` on exams and policy profiles, a per-profile
+  `timing_mode` (migration 0040), author-and-take support in the web UI,
+  and null-safe deadline authority in the engine (#387, #388, #390).
+- Synchronized-timing kernel preparation (#291 Phase B1, #392):
+  `exams.sync_started_at` persistence and an engine timer kernel
+  (migration 0041). This is latent kernel work — the `timed_sync` product
+  mode is not authorable or takable in this release.
+- Public repository entry points: a code-first README, focused installation,
+  deployment, operations, and development guides, a standard AGPL-3.0
+  license and contribution guide, plus Simplified Chinese README,
+  installation, and development entry guides (#398, #400).
 
 ### Changed
 
-- Course/question/exam authoring routes and exam enrollment management now
-  require, for non-Admin actors, an active Teacher-to-Course assignment to
-  the target course (create-style routes source the parent course from the
-  request body); a question move additionally requires an assignment to the
-  destination course. Missing parent courses on create now answer the
-  canonical 404 instead of the legacy 400 (ADR §3.9 anti-enumeration).
+- Email delivery now runs in-process inside the API; the dedicated
+  email-worker service is removed from the deployment topology (#320).
+  The delivery loop has an explicit shutdown budget, timer ownership, and
+  fail-closed backup evidence (#351).
+- Email runtime/Compose env parity: the seven SMTP/TLS/timeout
+  configuration variables now actually reach the app container, with
+  fallback defaults equal to the runtime defaults (#368).
+- Application settings unified behind a semantic settings model; profile
+  env contracts replaced by a settings-driven gate (#372).
+- Documentation authority and history are physically separated: current
+  contracts/architecture/roadmap remain active, while superseded plans,
+  audits, and closeouts live under `docs/archive/` without competing with
+  current guidance (#399).
+- E2E: `run-wsl` binds `PUBLIC_WEB_ORIGIN` per API shard so web-origin
+  dependent flows work in WSL E2E runs (#364, #365).
+- Governed business-UI scan roots centralized into a single authority
+  (notifications/features no longer unscanned), and every verifier script
+  is now gate-wired or explicitly declared manual (#379, #380, #383,
+  #384, #385, #386).
+- Docker E2E runner (`run.sh`) cleanup failures now fail loud instead of
+  being swallowed (#375, #376).
 
 ### Fixed
 
+- Attempt starts that cannot satisfy the minimum manual-submit duration
+  are now rejected up front, instead of starting an attempt that can
+  never reach a valid manual submit (#395).
+- Admin exam detail page now fully supports nullable timing modes
+  (bare unit rendering, no epoch close-at leak, mode-keyed projections)
+  (#389, #390).
+- Deadline authority is null-safe for no-deadline exams (#387).
+- Concurrent duplicate staff invitations now accept both legal
+  interleavings deterministically (one wins, the other fails cleanly)
+  (#374, #381).
+- Queue-participant DB test lifecycle hook budgets completed, closing
+  indirect cleanup gaps (Guard 5) (#373).
+
 ### Removed
+
+- Dedicated email-worker service (delivery is in-process) (#320).
+- `rebuild-all.sh`, whose hand-mirrored build order duplicated the
+  workspace topology authority (#378, #382).
+- Unused attempt time-extend permission (#363) and the obsolete shadow
+  permission mode (#366).
+- Roughly 1,900 lines of duplicated, visual-only, or over-minimized
+  recovery/incident and rich-content test evidence (anti-decay campaign,
+  #357/#359/#361/#362).
 
 ## [0.0.2] - 2026-08-28
 
@@ -174,6 +225,7 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/jnhu76/exam/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/jnhu76/exam/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/jnhu76/exam/releases/tag/v0.0.1
