@@ -73,7 +73,7 @@ async function seedRow(
     .values({
       id: randomUUID(),
       organizationId: orgId,
-      type: "test_email",
+      type: "grade_notification",
       recipientEmail: "to@example.com",
       subject: "s",
       bodyText: "t",
@@ -171,7 +171,7 @@ describe("emailOutboxRepo", () => {
 
   it("create inserts a pending row with attemptCount=0 and no retry/sent stamps", async () => {
     const row = await emailRepo.create(ctx, {
-      type: "test_email",
+      type: "grade_notification",
       recipientEmail: "to@example.com",
       subject: "Hello",
       bodyText: "Body",
@@ -364,7 +364,7 @@ describe("emailOutboxRepo", () => {
 
   it("findById is scoped to the tenant organization", async () => {
     const row = await emailRepo.create(ctx, {
-      type: "test_email",
+      type: "grade_notification",
       recipientEmail: "x@example.com",
       subject: "s",
       bodyText: "t",
@@ -603,7 +603,7 @@ describe("emailOutboxRepo", () => {
 
   it("accepts OrganizationScope context (not just RequestContext)", async () => {
     const row = await emailRepo.create(orgScope, {
-      type: "test_email",
+      type: "grade_notification",
       recipientEmail: "org-scope@example.com",
       subject: "Org scope test",
       bodyText: "test",

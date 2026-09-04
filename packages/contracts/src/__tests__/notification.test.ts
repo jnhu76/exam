@@ -5,7 +5,7 @@ import {
   UnreadCountResponseSchema,
   NotificationListResponseSchema,
   NOTIFICATION_ACTION_PATH_PATTERN,
-  isResultPublishedActionPath,
+  isNotificationActionPath,
 } from "../notification.js";
 
 // Slice 3 — notification contracts (P5-N1 Inbox API request/response shapes).
@@ -63,9 +63,11 @@ describe("NotificationSchema (read DTO)", () => {
   });
 
   it("rejects an unknown notification type", () => {
+    // "exam_cancelled" is still deferred — adding it to the union requires
+    // its own operational wiring (#402 brake).
     const result = NotificationSchema.safeParse({
       ...base,
-      type: "exam_assigned",
+      type: "exam_cancelled",
     });
     expect(result.success).toBe(false);
   });
@@ -183,10 +185,11 @@ describe("NotificationListResponseSchema (paginated)", () => {
   });
 });
 
-describe("NOTIFICATION_ACTION_PATH_PATTERN / isResultPublishedActionPath", () => {
-  // P5-N1-R0 §16 — frozen: the V1 builder returns /exam/:attemptId/result.
-  // The pattern is the single source of truth shared by the trusted builder,
-  // the write-time validator, and the render-time revalidator.
+describe("NOTIFICATION_ACTION_PATH_PATTERN / isNotificationActionPath", () => {
+  // P5-N1-R0 §16 (result path), extended additively for exam_assigned
+  // (#402/#299): /exam/list. The pattern is the single source of truth shared
+  // by the trusted builders, the write-time validator, and the render-time
+  // revalidator. Every accepted shape maps to an authorized candidate route.
 
   it("pattern matches the canonical result route", () => {
     expect(
@@ -196,47 +199,68 @@ describe("NOTIFICATION_ACTION_PATH_PATTERN / isResultPublishedActionPath", () =>
     ).toBe(true);
   });
 
-  it("isResultPublishedActionPath accepts a canonical result path", () => {
+  it("isNotificationActionPath accepts a canonical result path", () => {
     expect(
-      isResultPublishedActionPath(
+      isNotificationActionPath(
         "/exam/00000000-0000-4000-8000-00000000000a/result",
       ),
     ).toBe(true);
   });
 
+  it("accepts the canonical exam_assigned list path", () => {
+    expect(isNotificationActionPath("/exam/list")).toBe(true);
+    expect(NOTIFICATION_ACTION_PATH_PATTERN.test("/exam/list")).toBe(true);
+  });
+
+  it("rejects /exam/list with a trailing segment (no open prefix)", () => {
+    expect(isNotificationActionPath("/exam/list/extra")).toBe(false);
+  });
+
+  it("rejects /exam/list with a trailing slash", () => {
+    expect(isNotificationActionPath("/exam/list/")).toBe(false);
+  });
+
+  it("rejects arbitrary same-prefix shapes", () => {
+    expect(isNotificationActionPath("/exam/anything")).toBe(false);
+    expect(isNotificationActionPath("/exam/listx")).toBe(false);
+  });
+
   it("rejects an external URL", () => {
-    expect(
-      isResultPublishedActionPath("https://evil.example/exam/x/result"),
-    ).toBe(false);
+    expect(isNotificationActionPath("https://evil.example/exam/x/result")).toBe(
+      false,
+    );
+    expect(isNotificationActionPath("https://evil.example/exam/list")).toBe(
+      false,
+    );
   });
 
   it("rejects a protocol-relative URL", () => {
-    expect(isResultPublishedActionPath("//evil.example/exam/x/result")).toBe(
+    expect(isNotificationActionPath("//evil.example/exam/x/result")).toBe(
       false,
     );
+    expect(isNotificationActionPath("//evil.example/exam/list")).toBe(false);
   });
 
   it("rejects dot-dot traversal", () => {
-    expect(isResultPublishedActionPath("/exam/../admin/users/result")).toBe(
-      false,
-    );
+    expect(isNotificationActionPath("/exam/../admin/users/result")).toBe(false);
+    expect(isNotificationActionPath("/exam/../admin")).toBe(false);
   });
 
   it("rejects a backslash", () => {
-    expect(isResultPublishedActionPath("/exam/x\\result")).toBe(false);
+    expect(isNotificationActionPath("/exam/x\\result")).toBe(false);
   });
 
   it("rejects percent-encoded traversal", () => {
-    expect(isResultPublishedActionPath("/exam/%2e%2e/admin/result")).toBe(
-      false,
-    );
+    expect(isNotificationActionPath("/exam/%2e%2e/admin/result")).toBe(false);
   });
 
   it("rejects a control character", () => {
-    expect(isResultPublishedActionPath("/exam/x/result\n")).toBe(false);
+    expect(isNotificationActionPath("/exam/x/result\n")).toBe(false);
+    expect(isNotificationActionPath("/exam/list\r")).toBe(false);
   });
 
   it("rejects an unknown route prefix", () => {
-    expect(isResultPublishedActionPath("/admin/exams/123")).toBe(false);
+    expect(isNotificationActionPath("/admin/exams/123")).toBe(false);
+    expect(isNotificationActionPath("/admin")).toBe(false);
   });
 });

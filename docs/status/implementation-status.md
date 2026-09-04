@@ -209,13 +209,22 @@ notification onto the now-stable result-publication transaction (P5-N1).
 - P2-1 Exam Authoring UI Flow has been removed from the active Phase 3 plan by
   scope decision.
 - Staff invitation, Email password reset, and account lifecycle are
-  implemented (#297 — see *Identity lifecycle* below); the Email template
-  engine + backend i18n stay separate (#300).
+  implemented (#297 — see *Identity lifecycle* below). Production Email
+  bodies render through pure zh-CN renderer functions sharing one content
+  contract; the dead `EmailDeliveryService` enqueue abstraction and the
+  placeholder `EmailType` values are deleted (#300 — closed as a convergence;
+  no template engine / no backend i18n runtime by design, see ADR-011 §24).
+- Second operational notification `exam_assigned` is live (#299 first slice
+  under #402, ADR-011 §25): each new candidate enrollment commits atomically
+  with its Inbox row and — when the candidate user has an email — one
+  `exam_notification` outbox row; the action path is the authorized candidate
+  exam list (`/exam/list`). Further events (schedule change, cancellation,
+  grading assignment, announcements) remain deferred pending separate
+  evidence.
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
   (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
   rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit
   barrier (Option D follow-up; answer-type-independent).
-- Email template engine + backend i18n — not implemented (Issue #300).
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
 
