@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { buildSharedAttemptFixture } from "../routes/attempts/attempts.testHelpers.js";
+import { buildSharedAttemptFixture } from "../routes/attempts/__tests__/attempts.testHelpers.js";
 
 /**
  * Regression: deadline reconciliation must not cause a second

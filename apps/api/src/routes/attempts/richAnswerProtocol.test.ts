@@ -9,7 +9,7 @@ import {
   buildExamPayload,
   enrollCandidateForExam,
   ensureCandidateProfile,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 /**
  * The answer save protocol with rich content: INVALID_ANSWER rejection,

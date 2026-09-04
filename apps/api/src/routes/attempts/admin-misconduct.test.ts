@@ -11,11 +11,11 @@ import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
-import { buildExamPayload } from "./attempts.testHelpers.js";
+import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
 import {
   countMisconductAudits as countMisconductAuditsFor,
   listReceipts as listReceiptsFor,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 const MISCONDUCT_TEST_PREFIX = "misconduct-op-test-";
 

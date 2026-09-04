@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { buildSharedAttemptFixture } from "../routes/attempts/attempts.testHelpers.js";
+import { buildSharedAttemptFixture } from "../routes/attempts/__tests__/attempts.testHelpers.js";
 import { randomUUID } from "node:crypto";
 
 describe("submitAndGradeAttempt (via route)", () => {

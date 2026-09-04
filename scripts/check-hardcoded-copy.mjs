@@ -1,24 +1,40 @@
 #!/usr/bin/env node
 
 /**
- * Hardcoded copy guard — two-tier check:
+ * Hardcoded copy guard — two tiers.
  *
- * 1. Deployment-specific terms (校内/校园/大学/etc.) — forbidden everywhere
- *    except docs, tests, stories, demo seed.
+ * Copy zones and their authorities are defined in
+ * docs/standards/i18n-copy-policy.md; message semantics live in
+ * docs/contracts/api-contract.md. This script only enforces placement.
  *
- * 2. Production source CJK detection — user-visible Chinese in production
- *    source must go through i18n. Allowed exceptions:
- *    - zh-CN locale catalog
- *    - test files / fixtures
- *    - comments
- *    - documented CSV/template allowlist
- *    - PlaceholderPage (temporary)
+ * Tier 1 — deployment-specific terms (校内/校园/大学/…): forbidden
+ * everywhere except docs, tests, stories, demo seed. Scans all text files
+ * under apps/ and packages/.
+ *
+ * Tier 2 — production-source CJK gate. Every CJK string literal, template
+ * literal, or JSX text in production source must either live in an explicit
+ * catalog authority or carry a narrow suppression directive:
+ *
+ *     // i18n-copy-allow: <category> — <reason>
+ *
+ * with category one of wire-compat | server-rendered | developer-diagnostic
+ * | data-format | temporary. The directive covers the literal on its own
+ * line (trailing) or on the immediately following line (a block of
+ * consecutive directive comments is allowed for multi-line reasons).
+ * INVARIANT: a directive must not degrade into file-level immunity — any
+ * other CJK literal in the same file still fails, and an unknown category,
+ * missing reason, malformed directive, or stale directive fails.
+ *
+ * Comments (including Chinese comments) are not user-facing copy and are
+ * never flagged; literal extraction is AST-based, so `//` inside a string
+ * cannot disguise copy as a comment.
  *
  * Exit code 1 if violations found.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, extname } from "node:path";
+import ts from "typescript";
 
 // ─── Tier 1: Deployment-specific terms ──────────────────────────────
 
@@ -38,188 +54,7 @@ const FORBIDDEN_TERMS = [
   "student",
 ];
 
-// ─── Tier 2: Production source CJK gate ─────────────────────────────
-
-const CJK_REGEX = /[\u4e00-\u9fff]/;
-
-/**
- * Files exempted from CJK detection. Each entry documents WHY the
- * Chinese is acceptable and when the exemption should be removed.
- *
- * Web entries: UI copy that lives here for CSV/template compatibility or is a
- * temporary placeholder.
- *
- * Backend entries (apps/api/src): the API contract is code-driven — the error
- * handler (plugins/errors.ts) serializes an error CODE, never the thrown
- * message, so Chinese strings in thrown `ValidationError`/`NotFoundError` calls
- * are server-side log/debug copy that never reaches the client. The remaining
- * categories are API-provided data strings:
- *  - CSV/export column headers + row values (a data-format contract, not UI
- *    copy — the same as the web CSV import allowlist).
- *  - status-reason strings (`scoreViewDisabledReason`/`deleteDisabledReason`)
- *    returned in the response body and rendered verbatim by the web client
- *    today. Migrating these to machine-readable codes + web i18n mapping is a
- *    tracked follow-up (see docs/standards/i18n-copy-policy.md); until then they are
- *    allowlisted as an explicit documented exception.
- */
-const CJK_ALLOWLIST = [
-  // ── Web ──────────────────────────────────────────────────────────────
-  {
-    path: "apps/web/src/lib/candidateImport.ts",
-    reason:
-      "CSV header aliases (用户名/密码/姓名) for import compatibility, not UI copy.",
-    removal: "Never — CSV format is a data contract, not user-facing copy.",
-  },
-  {
-    path: "apps/web/src/pages/admin/QuestionImportPage.tsx",
-    reason:
-      "CSV template headers, parser tokens (是→true), and example row content. Data format, not UI.",
-    removal: "Never — template format is a data contract.",
-  },
-  {
-    path: "apps/web/src/pages/PlaceholderPage.tsx",
-    reason: "Temporary placeholder page awaiting implementation.",
-    removal: "When the page is implemented or removed.",
-  },
-  // ── Backend: CSV/export data-format contract ─────────────────────────
-  {
-    path: "apps/api/src/routes/export.ts",
-    reason:
-      "Scores CSV column headers + row values (考生姓名/成绩/及格状态/...). Data-format contract, not UI copy.",
-    removal: "Never — CSV export header/row format is a data contract.",
-  },
-  {
-    path: "apps/api/src/routes/attempts.admin.ts",
-    reason:
-      "Attempt-detail CSV column headers + row values (题号/题型/题目内容/...). Data-format contract, not UI copy.",
-    removal: "Never — CSV export header/row format is a data contract.",
-  },
-  {
-    path: "apps/api/src/routes/audit.ts",
-    reason:
-      "Audit-log export CSV column headers + row values (时间/操作/操作者/操作者ID/对象类型/对象ID/IP地址/请求ID). Data-format contract, not UI copy. Mirrors the export.ts allowlist entry.",
-    removal: "Never — CSV export header/row format is a data contract.",
-  },
-  // ── Backend: API-provided status-reason strings (rendered verbatim by
-  //    the web client today; code+web-i18n mapping is a tracked follow-up). ──
-  {
-    path: "apps/api/src/routes/exam.ts",
-    reason:
-      "scoreViewDisabledReason / deleteDisabledReason status-reason strings returned in the response body and rendered verbatim by the web client.",
-    removal:
-      "When migrated to machine-readable reason codes with a web i18n mapping (follow-up).",
-  },
-  // ── Backend: validation/error messages. The error handler serializes a
-  //    code (never the thrown message), so these are server-side log/debug
-  //    copy that never reaches the client. English would be cleaner but
-  //    changing them is non-blocking and out of closeout scope. ──
-  {
-    path: "apps/api/src/routes/course.ts",
-    reason:
-      "Thrown/inline validation messages (课程代码已存在/课程下仍有题目...). Server-side only — the error handler returns an error code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/routes/user.ts",
-    reason:
-      "Thrown validation messages (不能停用...). Server-side only — error handler returns a code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/authz/adminInvariant.ts",
-    reason:
-      "Thrown validation message for LAST_ACTIVE_ADMIN invariant. Server-side only — error handler returns a code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/authz/adminMaintainerExclusion.ts",
-    reason:
-      "Thrown validation message for ADMIN_MAINTAINER_EXCLUSION invariant (P7-E2A, ADR-017 D14). Server-side only — error handler returns a code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/routes/teacherAssignments.admin.ts",
-    reason:
-      "Thrown validation messages for teacher-assignment target qualification (issue #286: TARGET_USER_INACTIVE / TARGET_NOT_TEACHER). Server-side only — error handler returns a code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/routes/graderAssignments.admin.ts",
-    reason:
-      "Thrown validation messages for grader-assignment target qualification (issue #296: TARGET_USER_INACTIVE / TARGET_NOT_GRADER). Server-side only — error handler returns a code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/routes/question.ts",
-    reason:
-      "Thrown validation messages (课程不存在). Server-side only — error handler returns a code, not this message.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  // ── Backend: server-generated Email + Inbox copy (P5-N1). Per ADR-011 +
-  //    P5-N1-R0 §23, route-local inline zh-CN strings remain until a backend
-  //    Email template engine + i18n is introduced (deferred). The Email body
-  //    is rendered server-side and never passes through the web i18n catalog. ──
-  {
-    path: "apps/api/src/notifications/gradeNotificationEmail.ts",
-    reason:
-      "Server-generated grade_notification Email subject/bodyText/bodyHtml (考试结果已发布). Email is rendered server-side and never routed through the web i18n catalog.",
-    removal:
-      "When a backend Email template engine + i18n is introduced (P5-N1-R0 §23 deferred capability).",
-  },
-  // #297 identity lifecycle: staff-invitation + password-reset Email copy is
-  // rendered server-side (same boundary as gradeNotificationEmail) and never
-  // passes through the web i18n catalog. Template engine + backend i18n
-  // remains deferred (#300).
-  {
-    path: "apps/api/src/identity/identityEmails.ts",
-    reason:
-      "Server-generated identity Email subject/bodyText/bodyHtml (账号邀请 / 重置密码). Email is rendered server-side and never routed through the web i18n catalog.",
-    removal:
-      "When a backend Email template engine + i18n is introduced (#300).",
-  },
-  // #299 exam_assigned: renderer + Inbox copy share the same server-side
-  // Email/notification boundary as gradeNotificationEmail (#300 closed as a
-  // convergence — no template engine by design, ADR-011 §24/§25).
-  {
-    path: "apps/api/src/notifications/examAssignedEmail.ts",
-    reason:
-      "Server-generated exam_assigned Email subject/bodyText/bodyHtml (考试已安排). Email is rendered server-side and never routed through the web i18n catalog.",
-    removal:
-      "If notification copy is ever templated + i18n-resolved server-side (ADR-011 §25).",
-  },
-  {
-    path: "apps/api/src/notifications/notificationService.ts",
-    reason:
-      "Server-generated Inbox title/body for result_published and exam_assigned (考试结果已发布 / 考试已安排 …). The Inbox row is persisted server-side; its copy does not flow through the web i18n catalog at write time.",
-    removal:
-      "When notification copy is templated + i18n-resolved at read time (P5-N1-R0 §23 deferred capability).",
-  },
-  {
-    path: "apps/api/src/routes/candidate.ts",
-    reason:
-      "Inline field validation messages (缺少用户名或姓名/新增考生需要初始密码). Server-side only.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-  {
-    path: "apps/api/src/routes/attempts.candidate.ts",
-    reason:
-      "Thrown NotFound/ValidationError messages (候选人资料不存在/尝试不存在/问题不在此尝试中). Server-side only — error handler returns a code.",
-    removal:
-      "When server-side messages are standardized to English (follow-up); not user-facing.",
-  },
-];
-
-const ALLOWED_PATH_SET = new Set(CJK_ALLOWLIST.map((e) => e.path));
-
-// ─── Shared helpers ─────────────────────────────────────────────────
+// ─── Shared walk/exclusion helpers ──────────────────────────────────
 
 const EXCLUDE_PATTERNS = [
   /\.test\./,
@@ -231,38 +66,35 @@ const EXCLUDE_PATTERNS = [
   /node_modules\//,
   /dist\//,
   /\.git\//,
-  // Dev-only comparison labs under apps/web/src/dev/ are tree-shaken out of
-  // production builds (gated behind import.meta.env.DEV). Their specimen
-  // copy is dev tooling, not product UI, and must not pollute the
-  // production i18n catalog. Treated like test/fixture files.
-  /apps\/web\/src\/dev\//,
 ];
 
-const SCAN_DIRS = ["apps", "packages"];
-
 function walkDir(dir, callback) {
+  let entries;
   try {
-    const entries = readdirSync(dir);
-    for (const entry of entries) {
-      const fullPath = join(dir, entry);
-      try {
-        const stat = statSync(fullPath);
-        if (stat.isDirectory()) {
-          walkDir(fullPath, callback);
-        } else if (stat.isFile()) {
-          callback(fullPath);
-        }
-      } catch {
-        // skip inaccessible files
-      }
-    }
+    entries = readdirSync(dir);
   } catch {
-    // skip inaccessible directories
+    return; // skip inaccessible directories
+  }
+  for (const entry of entries) {
+    const fullPath = join(dir, entry);
+    let stat;
+    try {
+      stat = statSync(fullPath);
+    } catch {
+      continue; // skip inaccessible entries
+    }
+    if (stat.isDirectory()) {
+      walkDir(fullPath, callback);
+    } else if (stat.isFile()) {
+      // INVARIANT: callback errors must surface — a scan crash must never
+      // masquerade as a clean pass for that file.
+      callback(fullPath);
+    }
   }
 }
 
-function isExcluded(filePath) {
-  return EXCLUDE_PATTERNS.some((pattern) => pattern.test(filePath));
+function isExcluded(filePath, patterns) {
+  return patterns.some((pattern) => pattern.test(filePath));
 }
 
 function isTextFile(filePath) {
@@ -283,37 +115,257 @@ function isTextFile(filePath) {
   return textExtensions.includes(extname(filePath));
 }
 
-function isCommentLine(line) {
-  const trimmed = line.trim();
-  return (
-    trimmed.startsWith("//") ||
-    trimmed.startsWith("/*") ||
-    trimmed.startsWith("*")
-  );
+function toRelPath(filePath) {
+  return relative(process.cwd(), filePath).replace(/\\/g, "/");
+}
+
+// ─── Tier 2: Production source CJK gate ─────────────────────────────
+
+const CJK_REGEX = /[\u4e00-\u9fff]/;
+
+// Production-source roots for Tier2: browser, server, and every workspace
+// package's src/ tree. A package added under packages/* is scanned
+// automatically — no per-package registration.
+const TIER2_WEB_API_ROOTS = ["apps/web/src", "apps/api/src"];
+const TIER2_PACKAGE_SRC = /^packages\/[^/]+\/src\//;
+
+const JS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+
+// Structural test-only / non-product exclusions. Directory- and
+// extension-shaped only: a production file must not evade the gate through
+// its name (a file called foo.testHelpers.ts is still scanned).
+const TIER2_EXCLUDE_PATTERNS = [
+  ...EXCLUDE_PATTERNS,
+  /(^|\/)__tests__\//,
+  // testHelpers DIRECTORIES are test-only trees; requiring the trailing
+  // slash keeps plain files named testHelpers.ts inside the gate.
+  /(^|\/)testHelpers\//,
+  /(^|\/)fixtures\//,
+  /(^|\/)(e2e-seed|demo-seed)/,
+  // Dev-only comparison labs under apps/web/src/dev/ are tree-shaken out of
+  // production builds (gated behind import.meta.env.DEV); treated like
+  // test/fixture files.
+  /^apps\/web\/src\/dev\//,
+];
+
+// Files whose declared architectural responsibility is copy storage.
+// CATALOG authority is exact-path on purpose: the whole file may contain
+// copy because storing copy is the file's job. This must never widen to a
+// package or directory, so mixed production files cannot inherit it.
+const CATALOG_AUTHORITIES = [
+  /^apps\/web\/src\/i18n\/locales\//,
+  /^packages\/contracts\/src\/messageRegistry\.ts$/,
+];
+
+const SUPPRESSION_CATEGORIES = new Set([
+  "wire-compat",
+  "server-rendered",
+  "developer-diagnostic",
+  "data-format",
+  "temporary",
+]);
+
+const DIRECTIVE_PREFIX = "i18n-copy-allow:";
+const DIRECTIVE_RE = /^i18n-copy-allow:\s*([a-z-]+)(?:\s+(.*))?$/;
+
+const SUPPRESSION_USAGE =
+  "Directive syntax: // i18n-copy-allow: <category> — <reason>\n" +
+  "  Categories: wire-compat | server-rendered | developer-diagnostic | data-format | temporary\n" +
+  "  The directive must sit on the literal's own line or the line immediately above it.\n" +
+  "  Policy: docs/standards/i18n-copy-policy.md";
+
+function scriptKindFor(filePath) {
+  switch (extname(filePath)) {
+    case ".tsx":
+      return ts.ScriptKind.TSX;
+    case ".jsx":
+      return ts.ScriptKind.JSX;
+    case ".js":
+    case ".mjs":
+    case ".cjs":
+      return ts.ScriptKind.JS;
+    default:
+      return ts.ScriptKind.TS;
+  }
 }
 
 /**
- * Strips line comments (// ...) from a line, preserving URLs (https://).
- * Returns the code portion only, so CJK in comments is not flagged.
+ * Collects CJK-bearing copy nodes: string literals, template literals
+ * (reported once per literal, in any part), and JSX text. Property-key
+ * identifiers are code, not copy, and are not collected.
  */
-function stripComments(line) {
-  // Match // not preceded by : (preserves https://, http://, ftp://)
-  const match = line.match(/(?<!:)\/\//);
-  if (match && match.index !== undefined) {
-    return line.slice(0, match.index);
+function collectCjkNodes(sourceFile) {
+  const hits = [];
+  function visit(node) {
+    if (ts.isStringLiteral(node) && CJK_REGEX.test(node.text)) {
+      hits.push(node);
+    } else if (
+      ts.isNoSubstitutionTemplateLiteral(node) &&
+      CJK_REGEX.test(node.text)
+    ) {
+      hits.push(node);
+    } else if (ts.isTemplateExpression(node)) {
+      const joined =
+        node.head.text +
+        node.templateSpans.map((span) => span.literal.text).join("");
+      if (CJK_REGEX.test(joined)) hits.push(node);
+    } else if (ts.isJsxText(node) && CJK_REGEX.test(node.text)) {
+      hits.push(node);
+    }
+    ts.forEachChild(node, visit);
   }
-  return line;
+  visit(sourceFile);
+  return hits;
 }
 
-// ─── Tier 1: Deployment-specific violations ─────────────────────────
+function parseDirectives(sourceFile, text) {
+  const directives = [];
+  const seen = new Set();
+  function addRanges(ranges) {
+    for (const range of ranges ?? []) {
+      const key = `${range.pos}:${range.end}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const raw = text.slice(range.pos, range.end);
+      let body = raw;
+      if (body.startsWith("//")) {
+        body = body.slice(2);
+      } else if (body.startsWith("/*")) {
+        body = body.slice(2, body.endsWith("*/") ? -2 : undefined);
+      }
+      body = body.trim();
+      // Any comment opening with the reserved "i18n-copy-allow" token is a
+      // directive attempt; a typo (missing colon, bad category) must be
+      // reported, never silently treated as an ordinary comment.
+      if (!body.startsWith("i18n-copy-allow")) continue;
+      const line = text.slice(0, range.pos).split("\n").length;
+      const match = body.match(DIRECTIVE_RE);
+      if (!match) {
+        directives.push({ line, valid: false, problem: "malformed directive" });
+        continue;
+      }
+      const [, category, reason] = match;
+      if (!SUPPRESSION_CATEGORIES.has(category)) {
+        directives.push({
+          line,
+          valid: false,
+          problem: `unknown category "${category}"`,
+        });
+        continue;
+      }
+      if (!reason || !reason.trim()) {
+        directives.push({
+          line,
+          valid: false,
+          problem: `category "${category}" has no reason`,
+        });
+        continue;
+      }
+      directives.push({
+        line,
+        valid: true,
+        category,
+        reason: reason.trim(),
+        consumed: false,
+      });
+    }
+  }
+  function visit(node) {
+    addRanges(ts.getLeadingCommentRanges(text, node.getFullStart()));
+    addRanges(ts.getTrailingCommentRanges(text, node.getEnd()));
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  directives.sort((a, b) => a.line - b.line);
+  return directives;
+}
+
+/**
+ * Groups consecutive directive lines into blocks so a multi-line reason
+ * reads naturally; the block's effective position is its LAST line.
+ */
+function groupDirectiveBlocks(directives) {
+  const blocks = [];
+  for (const directive of directives) {
+    const last = blocks[blocks.length - 1];
+    if (last && directive.line === last.endLine + 1) {
+      last.items.push(directive);
+      last.endLine = directive.line;
+    } else {
+      blocks.push({ items: [directive], endLine: directive.line });
+    }
+  }
+  return blocks;
+}
+
+function scanTier2File(filePath, relPath) {
+  const content = readFileSync(filePath, "utf-8");
+  const lineTexts = content.split("\n");
+
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    content,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    scriptKindFor(filePath),
+  );
+
+  const directives = parseDirectives(sourceFile, content);
+  // INVARIANT: only fully valid blocks suppress. An invalid directive must
+  // never silence the adjacent literal — both the directive problem and the
+  // violation are reported.
+  const validBlocks = groupDirectiveBlocks(directives).filter((block) =>
+    block.items.every((item) => item.valid),
+  );
+
+  const violations = [];
+  for (const node of collectCjkNodes(sourceFile)) {
+    const line =
+      sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
+      1;
+    const suppressedBy = validBlocks.find(
+      (block) => block.endLine === line || block.endLine === line - 1,
+    );
+    if (suppressedBy) {
+      for (const item of suppressedBy.items) item.consumed = true;
+      continue;
+    }
+    violations.push({
+      relPath,
+      line,
+      excerpt: (lineTexts[line - 1] ?? "").trim(),
+    });
+  }
+
+  const problems = [];
+  for (const directive of directives) {
+    if (!directive.valid) {
+      problems.push({
+        relPath,
+        line: directive.line,
+        kind: "invalid-suppression",
+        detail: directive.problem,
+      });
+    } else if (!directive.consumed) {
+      problems.push({
+        relPath,
+        line: directive.line,
+        kind: "stale-suppression",
+        detail: "no CJK literal on this line or the line immediately below",
+      });
+    }
+  }
+
+  return { violations, problems };
+}
+
+// ─── Run ────────────────────────────────────────────────────────────
 
 const tier1Violations = [];
-
-// ─── Tier 2: CJK violations ────────────────────────────────────────
-
 const tier2Violations = [];
+const suppressionProblems = [];
 
-for (const dir of SCAN_DIRS) {
+for (const dir of ["apps", "packages"]) {
   const fullPath = join(process.cwd(), dir);
   try {
     statSync(fullPath);
@@ -323,9 +375,9 @@ for (const dir of SCAN_DIRS) {
 
   walkDir(fullPath, (filePath) => {
     if (!isTextFile(filePath)) return;
-    if (isExcluded(filePath)) return;
+    if (isExcluded(filePath, EXCLUDE_PATTERNS)) return;
 
-    const relPath = relative(process.cwd(), filePath).replace(/\\/g, "/");
+    const relPath = toRelPath(filePath);
 
     let content;
     try {
@@ -334,11 +386,8 @@ for (const dir of SCAN_DIRS) {
       return;
     }
 
-    const lines = content.split("\n");
-
-    // ── Tier 1 check ──
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    // ── Tier 1: forbidden deployment-specific terms, all text files ──
+    for (const [i, line] of content.split("\n").entries()) {
       for (const term of FORBIDDEN_TERMS) {
         if (line.includes(term)) {
           tier1Violations.push({
@@ -351,43 +400,19 @@ for (const dir of SCAN_DIRS) {
       }
     }
 
-    // ── Tier 2 check: CJK in production source ──
-    // Scan apps/web/src AND apps/api/src for the CJK gate.
-    if (
-      !relPath.startsWith("apps/web/src/") &&
-      !relPath.startsWith("apps/api/src/")
-    )
-      return;
+    // ── Tier 2: production source CJK gate ──
+    if (!JS_EXTENSIONS.has(extname(filePath))) return;
+    const inProductionRoot =
+      TIER2_WEB_API_ROOTS.some(
+        (root) => relPath === root || relPath.startsWith(root + "/"),
+      ) || TIER2_PACKAGE_SRC.test(relPath);
+    if (!inProductionRoot) return;
+    if (isExcluded(filePath, TIER2_EXCLUDE_PATTERNS)) return;
+    if (CATALOG_AUTHORITIES.some((pattern) => pattern.test(relPath))) return;
 
-    // Skip locale catalog
-    if (relPath.includes("i18n/locales/")) return;
-
-    // Skip test files (caught by EXCLUDE_PATTERNS, but double-check)
-    if (
-      relPath.includes(".test.") ||
-      relPath.includes("__tests__/") ||
-      relPath.includes("testHelpers") ||
-      relPath.includes("e2e-seed") ||
-      relPath.includes("demo-seed")
-    )
-      return;
-
-    // Allowlisted files: skip entirely (CSV/template/status-reason/log copy)
-    if (ALLOWED_PATH_SET.has(relPath)) return;
-
-    for (let i = 0; i < lines.length; i++) {
-      const code = stripComments(lines[i]);
-      if (!CJK_REGEX.test(code)) continue;
-
-      // Skip full-line comments
-      if (isCommentLine(lines[i])) continue;
-
-      tier2Violations.push({
-        file: relPath,
-        line: i + 1,
-        content: lines[i].trim(),
-      });
-    }
+    const { violations, problems } = scanTier2File(filePath, relPath);
+    tier2Violations.push(...violations);
+    suppressionProblems.push(...problems);
   });
 }
 
@@ -412,19 +437,27 @@ if (tier1Violations.length > 0) {
 if (tier2Violations.length > 0) {
   hasErrors = true;
   console.error(
-    "\n❌ Hardcoded Chinese found in production source (not in i18n catalog):\n",
+    "\n❌ Unauthorized production CJK literal (no catalog authority, no suppression):\n",
   );
   for (const v of tier2Violations) {
-    console.error(`  ${v.file}:${v.line}`);
-    console.error(`    ${v.content}\n`);
+    console.error(`  [CJK] ${v.relPath}:${v.line}`);
+    console.error(`    ${v.excerpt}\n`);
   }
   console.error(
-    "Move user-visible copy to apps/web/src/i18n/locales/zh-CN.ts\n" +
-      "and render it through t(...).\n" +
-      "If this is CSV/template compatibility or fixture data,\n" +
-      "add a documented allowlist entry in scripts/check-hardcoded-copy.mjs\n" +
-      "with justification.\n",
+    "Browser-interactive copy → apps/web/src/i18n/locales/zh-CN.ts via t(...).\n" +
+      "Copy in another legitimate zone stays in place with a narrow directive:\n" +
+      SUPPRESSION_USAGE +
+      "\n",
   );
+}
+
+if (suppressionProblems.length > 0) {
+  hasErrors = true;
+  console.error("\n❌ Invalid or stale i18n-copy-allow suppression:\n");
+  for (const p of suppressionProblems) {
+    console.error(`  [SUPPRESSION] ${p.relPath}:${p.line} — ${p.detail}`);
+  }
+  console.error(`\n${SUPPRESSION_USAGE}\n`);
 }
 
 if (hasErrors) {

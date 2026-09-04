@@ -294,6 +294,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "courseId",
                 code: "RESOURCE_NOT_FOUND",
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "课程不存在",
               },
             ],
@@ -408,6 +409,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "courseId",
                 code: "RESOURCE_NOT_FOUND",
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "课程不存在",
               },
             ],
@@ -428,6 +430,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
                 {
                   field: "courseId",
                   code: "RESOURCE_NOT_FOUND",
+                  // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                   message: "课程不存在",
                 },
               ],
@@ -591,6 +594,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "courseId",
                 code: "RESOURCE_NOT_FOUND",
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "课程不存在",
               },
             ],

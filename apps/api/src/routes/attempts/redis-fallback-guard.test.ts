@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildSharedAttemptFixture,
   type SharedAttemptFixture,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 
 /**

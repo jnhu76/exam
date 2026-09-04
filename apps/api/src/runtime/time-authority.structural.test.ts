@@ -122,7 +122,7 @@ const ALLOWLIST: { path: string; reason: string }[] = [
       "Test/factory helpers (fixture generation: openAt/closeAt/clientSavedAt, unique-id suffix); never asserts business-time authority of the server.",
   },
   {
-    path: "apps/api/src/routes/attempts/attempts.testHelpers.ts",
+    path: "apps/api/src/routes/attempts/__tests__/attempts.testHelpers.ts",
     reason:
       "Test/factory helpers extracted from attempts.test.ts during the attempts test split (shared exam/attempt fixture generation: openAt/closeAt, createdAt/updatedAt stamps); never asserts business-time authority of the server.",
   },

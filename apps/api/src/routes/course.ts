@@ -214,6 +214,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "code",
                 code: "RESOURCE_CONFLICT",
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "课程代码已存在",
               },
             ],
@@ -290,6 +291,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
                 {
                   field: "code",
                   code: "RESOURCE_CONFLICT",
+                  // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                   message: "课程代码已存在",
                 },
               ],
@@ -372,6 +374,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
                 {
                   field: "code",
                   code: "RESOURCE_CONFLICT",
+                  // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                   message: "课程代码已存在",
                 },
               ],
@@ -420,6 +423,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "courseId",
                 code: "RESOURCE_CONFLICT",
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "课程下仍有题目，无法删除",
               },
             ],

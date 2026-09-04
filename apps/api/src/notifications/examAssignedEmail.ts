@@ -34,14 +34,21 @@ export function renderExamAssignedEmail(
 ): RenderedEmailContent {
   const examTitle = payload.examTitle;
   const link = payload.listUrl;
+  // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
   const subject = "考试已安排";
   const bodyText =
+    // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
     `您已被安排参加考试「${examTitle}」，请进入考试列表查看详情。\n` +
+    // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
     `请登录考试平台查看：${link}\n\n` +
+    // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
     `（本邮件由系统自动发送，请勿直接回复。）`;
   const bodyHtml =
+    // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
     `<p>您已被安排参加考试「${escapeEmailHtml(examTitle)}」，请进入考试列表查看详情。</p>` +
+    // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
     `<p><a href="${escapeEmailHtml(link)}">查看考试列表</a></p>` +
+    // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
     `<p style="color:#888;font-size:12px;">本邮件由系统自动发送，请勿直接回复。</p>`;
   return { subject, bodyText, bodyHtml };
 }

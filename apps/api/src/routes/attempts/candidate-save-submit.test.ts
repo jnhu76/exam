@@ -16,7 +16,7 @@ import {
   enrollCandidateForExam,
   buildSharedAttemptFixture,
   disruptAttempt,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 async function installSubmitAuditFailure(
   db: Awaited<ReturnType<typeof buildTestApp>>["db"],

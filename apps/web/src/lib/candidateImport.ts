@@ -31,8 +31,11 @@ export interface ExistingCandidate {
  * Excluded from the hardcoded-copy lint via the CSV-compatibility allowlist.
  */
 export const CSV_HEADER_ALIASES = {
+  // i18n-copy-allow: data-format — CSV header alias data contract
   username: ["username", "用户名"],
+  // i18n-copy-allow: data-format — CSV header alias data contract
   password: ["password", "密码"],
+  // i18n-copy-allow: data-format — CSV header alias data contract
   name: ["name", "姓名"],
 } as const;
 

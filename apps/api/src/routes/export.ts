@@ -100,11 +100,16 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       }));
 
       const headers = [
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "考生姓名",
         ...fieldPairs.map((fp) => fp.label),
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "成绩",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "及格状态",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "尝试次数",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "提交时间",
       ];
 
@@ -118,6 +123,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
           {} as Record<string, unknown>,
         ),
         成绩: r.attempt.score,
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         及格状态: r.attempt.passed ? "及格" : "不及格",
         尝试次数: r.attempt.attemptNo,
         提交时间: r.attempt.submittedAt?.toISOString() ?? "",

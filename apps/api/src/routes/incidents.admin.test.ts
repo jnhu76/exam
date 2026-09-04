@@ -9,7 +9,7 @@ import {
 import candidateRoutes from "./candidate.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
-import { disruptAttempt } from "./attempts/attempts.testHelpers.js";
+import { disruptAttempt } from "./attempts/__tests__/attempts.testHelpers.js";
 import { registerAdminIncidentRoutes } from "./incidents.admin.js";
 import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";

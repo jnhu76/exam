@@ -70,7 +70,7 @@ import { ATTEMPT_COMMAND_RECEIPT_OPERATION_UNIQUE_CONSTRAINT } from "../../orche
 import {
   countMisconductAudits as countMisconductAuditsFor,
   listReceipts as listReceiptsFor,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 const TEST_PREFIX = "j5-i1c-mm-";
 
