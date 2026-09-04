@@ -238,6 +238,25 @@ use `surface-subtle`; body rows use `surface`. Related: `DataTablePagination`,
 - **Testing:** page tests query by role/label/placeholder/visible text/`data-testid`
   — never by `className` or Radix portal internals; every `userEvent` call is awaited.
 
+### Accessibility baseline checklist
+
+Product baseline, not WCAG certification. Automated gate:
+`apps/e2e/e2e/a11y-baseline.spec.ts` (axe, zero critical/serious on
+representative surfaces: login, candidate exam list, take-exam runtime +
+submit dialog, one admin form, one admin table). Manual checks for changes
+touching the surfaces below:
+
+| Area | Check |
+| --- | --- |
+| Keyboard | primary actions reachable by Tab; no keyboard-only dead end; logical tab order |
+| Dialogs | Radix owns trap/Escape/restore (controlled `open`/`onOpenChange`); confirm buttons carry the operation name; closing restores focus to the trigger |
+| Forms | `Label` associated (`htmlFor`); errors via `FieldError` (`role="alert"`); required/disabled semantics from the field contract |
+| Icon-only buttons | `aria-label` required (tooltip alone is not a name); `AppIcon` stays decorative unless it carries the label |
+| Status | domain status flows through `StatusBadge`/`statusMeta` (text + tone); color never the sole carrier; live regions only for save/error/save-state changes |
+| Timer | exam countdown keeps `role="timer"` + accessible name; per-second ticks are not announced |
+| Contrast | tokens already meet ≥4.5:1 for text roles; never fix contrast with page-local colors — fix the token/recipe owner |
+| Candidate runtime at 390px | timer/save/submit visible; answer input usable; navigator and footer actions reachable; no document-level horizontal overflow (`candidate-responsive.spec.ts`) |
+
 ## Forbidden dependencies
 
 Ant Design, MUI, Chakra, Headless UI (and any other component framework) are

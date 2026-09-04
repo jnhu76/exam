@@ -123,7 +123,11 @@
   --surface-selected: #eff6ff;
   --text: rgba(0, 0, 0, 0.88);
   --text-secondary: rgba(0, 0, 0, 0.65);
-  --text-muted: rgba(0, 0, 0, 0.45);
+  /* WCAG body-text floor: the alpha-ink value (0.45 black ≈ 3.4:1) failed the
+   * documented ≥4.5:1 contract (DESIGN.md token table); #627287 restores it
+   * (~4.9:1 on surface, cool-neutral slate). INVARIANT: --text-muted must
+   * stay ≥4.5:1 on --surface / --bg — axe color-contrast gates it. */
+  --text-muted: #627287;
   --text-subtle: rgba(0, 0, 0, 0.25);
   /* Structural borders — NEUTRAL grey ladder (no blue cast). Visual strength
    * ordering (strongest → weakest): control > shell ≈ header > row ≈ divider
@@ -179,28 +183,37 @@
   --sidebar-border: var(--border-shell);
   /* Semantic colors — perceptually uniform, mid-high lightness (L≈52-60%)
    * so they read bright and modern, not muddy. soft tints use one formula
-   * (main hue @ ~92% L bg / main text). Koi-UI-informed lightness strategy. */
-  --danger: #dc2f45;
+   * (main hue @ ~92% L bg / main text). Koi-UI-informed lightness strategy.
+   * --danger doubles as TEXT (form errors, dialog warnings) on --bg / soft
+   * surfaces, so it must hold ≥4.5:1 on canvas (#f5f7fa) — the brighter
+   * #dc2f45 measured 4.31; #c8263c restores the floor. */
+  --danger: #c8263c;
   --danger-hover: #c41e33;
   --danger-soft: #fdecef;
   --danger-border: #f4c8cf;
-  --success: #12936a;
+  /* Same text-role floor as --danger: success/warning appear as text on soft
+   * tints (SaveIndicator, warning notes) — values converge with their status
+   * triple text tokens (#0e7a56 / #8f560a) to hold ≥4.5:1. */
+  --success: #0e7a56;
   --success-soft: #e9f8f1;
-  --warning: #c4770a;
+  --warning: #8f560a;
   --warning-soft: #fdf3e3;
   --info: #0e6dd9;
   --info-soft: #e8f1fd;
   --status-neutral-bg: #f4f6fa;
   --status-neutral-text: #475467;
   --status-neutral-border: #e4e8ee;
+  /* Status TEXT tokens sit on their soft bg at 12px — each must stay ≥4.5:1
+   * against its -bg (axe color-contrast gates StatusBadge). Darkened from the
+   * first lightness pass (info 4.39 / positive 3.52 / caution 3.19). */
   --status-info-bg: #e8f1fd;
-  --status-info-text: #0e6dd9;
+  --status-info-text: #0d64c4;
   --status-info-border: #cfe0fa;
   --status-positive-bg: #e9f8f1;
-  --status-positive-text: #12936a;
+  --status-positive-text: #0e7a56;
   --status-positive-border: #bbe9d6;
   --status-caution-bg: #fdf3e3;
-  --status-caution-text: #c4770a;
+  --status-caution-text: #8f560a;
   --status-caution-border: #f0dab2;
   --status-destructive-bg: #fdecef;
   --status-destructive-text: #c41e33;

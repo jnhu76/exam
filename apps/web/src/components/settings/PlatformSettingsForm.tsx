@@ -103,12 +103,19 @@ export function PlatformSettingsForm({
           />
         </Field>
         <Field>
-          <Label>{t("admin.platformSettings.defaultTimezone")}</Label>
+          {/* Explicit label association: the Radix placeholder span is
+           * aria-hidden, so a placeholder-only combobox otherwise has no
+           * accessible name (axe button-name critical). */}
+          <Label htmlFor="platform-timezone">
+            {t("admin.platformSettings.defaultTimezone")}
+          </Label>
           <Select
-            value={timezoneValue ?? ""}
+            /* undefined (not "") when unset — an empty-string value suppresses
+             * the Radix placeholder, rendering an unnamed combobox. */
+            value={timezoneValue ?? undefined}
             onValueChange={(val) => setValue("timezone", val)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="platform-timezone" className="w-full">
               <SelectValue
                 placeholder={t("admin.platformSettings.timezonePlaceholder")}
               />

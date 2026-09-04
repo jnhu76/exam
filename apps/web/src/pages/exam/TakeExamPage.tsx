@@ -183,6 +183,7 @@ export function TakeExamPage() {
   const submittingRef = useRef(false);
   const deadlineHandledRef = useRef(false);
   const serverOffsetRef = useRef(0);
+  const submitOpenerRef = useRef<HTMLElement | null>(null);
   // Latest view, kept in a ref so async save callbacks can read the current
   // authority (canSave) at execution time without stale-closure races.
   const viewRef = useRef<ReturnType<typeof deriveTakeExamView> | null>(null);
@@ -696,6 +697,14 @@ export function TakeExamPage() {
   /** Opens the submit confirmation dialog and triggers a pending-save flush. */
   const openSubmitDialog = useCallback(async () => {
     if (!attemptId) return;
+    // The submit dialog is opened programmatically (its buttons live outside
+    // the <Dialog> subtree, so Radix has no trigger to restore focus from).
+    // Remember the opener; onCloseAutoFocus returns focus to it (APG dialog
+    // pattern).
+    submitOpenerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     trackExamEvent("submit_clicked", {}, { attemptId });
     setShowSubmitDialog(true);
     trackExamEvent("submit_confirm_opened", {}, { attemptId });
@@ -1083,7 +1092,8 @@ export function TakeExamPage() {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        {/* A div, not <main>: ExamLayout already owns the page's main landmark. */}
+        <div className="min-w-0 flex-1">
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
             {saveRejection &&
               !isDisconnected &&
@@ -1208,7 +1218,7 @@ export function TakeExamPage() {
               />
             </section>
           </div>
-        </main>
+        </div>
       </div>
 
       <Separator />
@@ -1274,7 +1284,16 @@ export function TakeExamPage() {
         open={showSubmitDialog}
         onOpenChange={handleSubmitDialogOpenChange}
       >
-        <DialogContent showCloseButton={!isFlushing}>
+        <DialogContent
+          showCloseButton={!isFlushing}
+          onCloseAutoFocus={(event) => {
+            const opener = submitOpenerRef.current;
+            if (opener) {
+              event.preventDefault();
+              opener.focus();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {t("candidateRuntime.submitDialog.title")}

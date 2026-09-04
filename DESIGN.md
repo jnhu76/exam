@@ -29,36 +29,38 @@ recompose an appearance role already owned by a recipe or component.
 ## Token authority
 
 All tokens live in `apps/web/src/index.css` `:root`. This table is the
-document-of-record and MUST stay in sync with that file. Canvas and surfaces
-follow the Radix UI slate scale (cool-neutral, perceptually uniform); semantic
-colors are perceptually uniform at mid-high lightness (L≈52-60%).
+document-of-record and MUST stay in sync with that file. Canvas is a very
+light neutral grey so white content surfaces read as a distinct raised layer;
+text roles use alpha-ink values over the surface; `text-muted` is the WCAG
+body-text floor (≥4.5:1 on surface/canvas — gated by the axe
+color-contrast baseline).
 
 | Role | Value | Use |
 | --- | --- | --- |
-| canvas | `#fcfcfd` | application page behind business content |
+| canvas | `#f5f7fa` | application page behind business content |
 | surface | `#ffffff` | cards, table shells, forms, toolbars |
-| surface-subtle | `#f9f9fb` | table headers, metadata strips |
-| surface-hover | `#f0f0f3` | neutral hover state |
-| surface-selected | `#eaf2fd` | selected/info anchor |
-| text | `#111827` | primary text |
-| text-secondary | `#374151` | emphasized secondary text |
-| text-muted | `#627287` | descriptions and metadata; ≥4.5:1 on canvas |
-| text-subtle | `#94a3b8` | non-essential decoration only |
-| border | `#dde2e8` | ordinary content boundary |
-| border-strong | `#cdd6e2` | interactive boundary |
+| surface-subtle | `#f8fafc` | table headers, metadata strips, hover wells |
+| surface-hover | `#f8fafc` | neutral hover state |
+| surface-selected | `#eff6ff` | selected/info anchor |
+| text | `rgba(0,0,0,0.88)` | primary text |
+| text-secondary | `rgba(0,0,0,0.65)` | emphasized secondary text |
+| text-muted | `#627287` | descriptions and metadata; ≥4.5:1 on surface/canvas |
+| text-subtle | `rgba(0,0,0,0.25)` | non-essential decoration only |
+| border (shell) | `#dfe3e8` | ordinary content boundary |
+| border-strong (control) | `#d1d5db` | interactive boundary |
 | primary | `#2563eb` | primary action and focus |
 | primary-hover | `#1d4ed8` | primary hover |
 | primary-active | `#1e40af` | primary pressed |
-| primary-soft | `#eaf1ff` | selected/info anchor |
+| primary-soft | `#eff6ff` | selected/info anchor |
 | danger | `#dc2f45` | error feedback, destructive action |
 | success | `#12936a` | correct/positive |
 | warning | `#c4770a` | caution |
 | info | `#0e6dd9` | distinct from primary blue |
-| sidebar | `#181b21` | persistent navigation |
-| sidebar-hover | `#20242b` | navigation hover |
-| sidebar-active | `#262a32` | navigation active (lighter than hover) |
-| sidebar-text | `#f5f7fa` | active navigation text |
-| sidebar-muted | `#aeb6c2` | inactive navigation text |
+| sidebar | `#fbfbfc` | light navigation chrome (`#181b21`-era dark rail is retired) |
+| sidebar-hover | `#f4f5f7` | navigation hover |
+| sidebar-active | `primary-soft` (`#eff6ff`) | navigation active (soft fill + primary accent) |
+| sidebar-text | `text` | navigation text |
+| sidebar-muted | `text-secondary` | inactive navigation text |
 
 The canvas must be visibly distinct from business surfaces. Ordinary business
 surfaces are white. A card must never look dirtier than the page behind it.
