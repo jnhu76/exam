@@ -16,7 +16,8 @@ categories with different authorities:
 | Category | Authority | Examples |
 | --- | --- | --- |
 | Browser localized copy | `apps/web` i18n catalog (`zh-CN.ts`) rendered via `t()` | All interactive UI labels and messages |
-| Wire compatibility copy | Server default compatibility catalog (`packages/contracts/src/messageRegistry.ts`); non-authoritative | `error.message` and field `message` for unknown-code fallback / non-Web consumers |
+| Wire compatibility copy — top-level `error.message` | Server default compatibility catalog (`packages/contracts/src/messageRegistry.ts`); non-authoritative | `error.message` for unknown-code fallback / non-Web consumers |
+| Wire compatibility copy — field/import `message` | Producer-local compatibility text (Zod issue messages, route/helper strings); non-authoritative; the registry does not own it (message contract D0.5) | `details.fields[].message`, bulk-import `errors[].message`, `SaveAnswerRejected.message` |
 | Server-rendered localized copy | Server renderer (Email, Inbox notifications) — legitimate independent boundary (ADR-011 §24) | Email subject/body, Inbox title/body |
 | Developer diagnostics | Logs and thrown messages that the error handler discards (never reach the client) | `throw new ValidationError("...")` copy |
 | Data-format literals | The data format itself | CSV headers/values, import template rows, parser tokens |
@@ -29,7 +30,7 @@ and the client.
 
 ## Rule 1: No hardcoded user-visible Chinese in production source
 
-Production source files (`apps/web/src/**` and `apps/api/src/**`, excluding tests, fixtures, seed, and locale catalog) must not contain user-visible Chinese strings. All user-facing copy must be:
+Production source files (`apps/web/src/**` and `apps/api/src/**`, excluding tests, fixtures, seed, and locale catalog) must not contain user-visible Chinese strings. **Authoritative browser-interactive presentation copy** must be:
 
 1. Defined in `apps/web/src/i18n/locales/zh-CN.ts`
 2. Rendered via `t("key")` or `useTranslation()` in components
@@ -61,13 +62,16 @@ All browser-interactive Chinese UI text lives in
 ```
 
 The zh-CN catalog is **not** the authority for every human-readable string
-in the system. In particular, the server's wire compatibility messages
-(`error.message`, field `message`) are produced by
-`packages/contracts/src/messageRegistry.ts` and are **non-authoritative
-compatibility text** (see the message contract): the web client re-resolves
+in the system. In particular, the server's wire compatibility messages are
+**non-authoritative compatibility text** (see the message contract):
+top-level `error.message` is produced by
+`packages/contracts/src/messageRegistry.ts`, while field-level / import
+`message` values are producer-local compatibility text (Zod issue
+messages, route/helper strings) — the registry does not own them
+(message contract D0.5). The web client re-resolves
 known codes against its own catalog and uses server messages only as an
 unknown-code fallback. Duplicate or near-duplicate wording between the web
-catalog and the compatibility catalog is therefore **intentional layering,
+catalog and the compatibility sources is therefore **intentional layering,
 not a defect**, as long as the semantic authority is unambiguous — machine
 semantics (`code` / `reason` / `params`) are the contract; wording is not.
 

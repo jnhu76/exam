@@ -15,7 +15,7 @@ const importErrorDetailSchema = z.object({
   message: z
     .string()
     .describe(
-      "Compatibility human text, non-authoritative. Clients MUST NOT parse or branch on this value; use code/params for machine handling.",
+      "Compatibility human text, non-authoritative. Do not parse it for machine semantics; use code where available. Structured params are a future additive protocol extension.",
     ),
 });
 

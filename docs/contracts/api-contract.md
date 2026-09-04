@@ -122,8 +122,12 @@ Rules:
 - When specialization is needed, the `(code, reason)` pair identifies the
   specific semantic (see D0.3).
 - The invariant: a code must never be re-pointed at a different coarse
-  category, a reason must never be redefined within its code's space, and
-  the same failure must always emit the same `(code, reason)` pair.
+  category, and a reason must never be redefined within its code's space.
+- Reason specialization is additive: introducing a reason for a failure
+  that previously emitted none (`(code, absent)` → `(code, REASON)`) is
+  an allowed additive specialization. Once a reason value is published
+  for a specific failure, that failure MUST keep emitting that reason
+  (no `REASON_A → REASON_B` reassignment, no silent drop back to absent).
 
 Explicitly rejected:
 
@@ -154,7 +158,10 @@ Rules:
 - `UPPER_SNAKE_CASE`.
 - Optional — introduced only when finer machine semantics are useful.
 - New values MAY be added; already published values MUST NOT be redefined.
-- The same specific failure should retain the same `(code, reason)` pair.
+- Once a specific failure emits a reason, it MUST keep emitting that same
+  reason. Introducing a reason where none was previously emitted is an
+  allowed additive specialization (see D0.2) — it does not violate
+  stability.
 - Clients MAY branch on reasons they understand and MUST tolerate unknown
   reasons (falling back to `ErrorCode`-level semantics).
 
@@ -217,16 +224,27 @@ compatibility field with no planned removal in this remediation program**;
 a future deprecation, if ever desired, requires a separate compatibility
 decision.
 
-**CURRENT:** server fills `message` from the contracts registry
-(`getErrorMessage` / `getMessageForLocale` in `messageRegistry.ts`),
-always in zh-CN; two ad-hoc English override channels
-(`helpers.formatZodError`, `scores.ts`) still exist (F-9, remediated by
-C1). The first-party web client re-resolves known codes against the
-registry and ignores the server `message`; it uses the server `message`
-only for unknown codes.
-**TARGET:** `message` is always registry zh-CN compatibility text; the
-English override channels are removed (C1); the web never treats
-`message` as authoritative copy (C3).
+**CURRENT:** the server fills top-level `error.message` from the
+contracts registry (`getErrorMessage` / `getMessageForLocale` in
+`messageRegistry.ts`), always in zh-CN; two ad-hoc English override
+channels (`helpers.formatZodError`, `scores.ts`) still exist (F-9,
+remediated by C1). Field-level and import `message` values are
+**producer-local compatibility text** (Zod issue messages and
+route/helper strings), not registry output. The first-party web client
+re-resolves known codes against the registry and ignores the server
+`message`; it uses the server `message` only for unknown codes.
+
+**TARGET (top-level `error.message`):** always registry zh-CN
+compatibility text; the English override channels are removed (C1).
+
+**TARGET (field-level / import `message`):** non-authoritative
+compatibility text whose language and producer are not machine
+contract; C0 does **not** require registry ownership of it. C2 removes
+first-party semantic dependence on it by adding `code + params`
+(D0.7) — it does not re-home field copy into the registry.
+
+In both zones the web never treats `message` as authoritative copy
+(C3).
 **MIGRATION RULE:** wording changes are never breaking once documented;
 tests pin machine semantics, not message text (D0.11).
 
@@ -269,15 +287,22 @@ remediated by C1 (structured pg code / typed error class).
 
 ```ts
 {
-  field: string;   // dot path; array indexes use `questions[0].options[1]`
+  field: string;   // bracket path; array indexes use `questions[0].options[1]`
   code: string;    // machine semantic: Zod issue code or domain reason code
   params?: Record<string, string | number>; // structured dynamic values
-  message?: string; // compatibility human text, non-authoritative
+  message: string; // compatibility human text, non-authoritative —
+                   // indefinitely retained; demotion to optional or
+                   // removal requires a separate compatibility decision
 }
 ```
 
 Path convention is the bracket form `questions[0].options[1]` rather than
 the ambiguous `questions.0.options.1`.
+
+`message` remains a **required** wire field in the TARGET: it stays
+non-authoritative compatibility text, but C0/C2 do not demote it to
+optional — a future `required → optional` demotion would be a separate
+compatibility decision, consistent with D0.5's indefinite-retention rule.
 
 Semantic ownership:
 
@@ -291,8 +316,9 @@ message = compatibility human text, non-authoritative
 **MIGRATION RULE (additive, no breaking removal in C0/C2):** existing
 `field.message` remains during migration; new machine fields are
 additive; the web moves to `code + params`; `message` becomes
-fallback-only. Future removal/deprecation, if ever desired, requires a
-separate compatibility decision.
+fallback-only in consumption while remaining a required wire field.
+Future required→optional demotion or removal, if ever desired, requires
+a separate compatibility decision.
 
 ### D0.8 — Disabled / blocking reason
 
@@ -385,8 +411,11 @@ machine semantics flow `ErrorCode / reason / field code + params` → Web
 mapping → `t()` → user. The Web is the eventual owner of browser-visible
 interactive copy (TARGET, implemented by C3).
 
-**Zone B — Wire Compatibility.** Authority: server default compatibility
-catalog (`packages/contracts/src/messageRegistry.ts`). Purpose: unknown-
+**Zone B — Wire Compatibility.** Authority for top-level `error.message`:
+the server default compatibility catalog
+(`packages/contracts/src/messageRegistry.ts`). Field-level and import
+compatibility messages are producer-local non-authoritative text — C0
+does not re-home them into the registry (see D0.5). Purpose: unknown-
 code fallback, basic non-Web consumer usability, support/debug context.
 It is **not** the interactive Web localization authority.
 

@@ -482,7 +482,7 @@ export const QuestionImportResultSchema = z.object({
         .string()
         .optional()
         .describe(
-          "Compatibility human text, non-authoritative. Clients MUST NOT parse or branch on this value; use code/params for machine handling.",
+          "Compatibility human text, non-authoritative. The current row-result shape does not yet expose a specific machine error code; machine-semantic enrichment is tracked by C2 (message contract D0.7).",
         ),
     }),
   ),

@@ -72,13 +72,13 @@ export const ErrorResponseSchema = z.object({
     message: z
       .string()
       .describe(
-        "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code/reason/params for programmatic handling.",
+        "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling.",
       ),
     details: z
       .unknown()
       .optional()
       .describe(
-        "Structured context, shape varies by code: reason (open-vocabulary machine contract), params (structured dynamic values), fields[] (field violations). Extensibility is inventory-gated; unknown shapes must be tolerated.",
+        "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic values — additive TARGET, not yet emitted). Extensibility is inventory-gated; unknown shapes must be tolerated.",
       ),
     requestId: z.string().min(1).describe("Request id for support correlation"),
   }),
@@ -99,7 +99,7 @@ export const ValidationErrorDetailSchema = z.object({
   field: z
     .string()
     .describe(
-      "Machine-addressable field/path (dot path; array indexes use [n]).",
+      "Machine-addressable field/path. Current array indexes are encoded as dot-separated numeric segments (for example items.0.name). See the Message & Error Contract (docs/contracts/api-contract.md D0.7) for the target path convention.",
     ),
   message: z
     .string()
