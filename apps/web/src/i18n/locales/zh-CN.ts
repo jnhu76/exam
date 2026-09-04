@@ -272,8 +272,12 @@ const zhCN = {
       fallback: "该字段填写有误，请检查后重试",
       REQUIRED: "{{label}}为必填项",
       INVALID_TYPE: "该字段类型不正确",
-      TOO_SMALL: "该字段不能小于 {{minimum}}",
-      TOO_BIG: "该字段不能大于 {{maximum}}",
+      // WHY: the wire params carry only minimum/maximum — the Zod constraint
+      // dimensions (type/inclusive/exact) never cross the wire — so numeric
+      // inequality wording would fabricate a constraint (e.g. positive()
+      // emits minimum 0 with an exclusive bound). Copy stays generic-safe.
+      TOO_SMALL: "该字段未满足最小限制",
+      TOO_BIG: "该字段未满足最大限制",
       INVALID_STRING: "该字段格式不正确",
       INVALID_ENUM_VALUE: "该字段取值不在允许范围内",
       UNRECOGNIZED_KEYS: "包含不支持的字段",

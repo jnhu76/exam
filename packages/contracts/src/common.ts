@@ -78,7 +78,7 @@ export const ErrorResponseSchema = z.object({
       .unknown()
       .optional()
       .describe(
-        "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic values — additive TARGET, not yet emitted). Extensibility is inventory-gated; unknown shapes must be tolerated.",
+        "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated.",
       ),
     requestId: z.string().min(1).describe("Request id for support correlation"),
   }),

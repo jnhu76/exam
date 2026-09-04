@@ -55,15 +55,39 @@ describe("resolveFieldError — C2 field violation protocol", () => {
     ).toBe("身份编号为必填项");
   });
 
-  it("interpolates structured numeric params into the localized copy (T4)", () => {
+  // T-R1/T-R2: TOO_SMALL/TOO_BIG copy must stay semantically safe. The wire
+  // params carry only `minimum`/`maximum` — the Zod constraint dimensions
+  // (type / inclusive / exact) never cross the wire — so any numeric
+  // inequality wording would fabricate a constraint the resolver inputs do
+  // not determine (e.g. positive() emits minimum 0 with inclusive=false).
+  it("renders an exclusive lower bound (positive()) without claiming >= minimum semantics (T-R1)", () => {
     expect(
       resolveFieldError({
-        field: "score",
+        field: "totalScore",
         code: "TOO_SMALL",
-        params: { minimum: 3 },
+        params: { minimum: 0 },
         message: "SERVER WORDING",
       }),
-    ).toBe("该字段不能小于 3");
+    ).toBe("该字段未满足最小限制");
+    expect(
+      resolveFieldError({
+        field: "durationMinutes",
+        code: "TOO_BIG",
+        params: { maximum: 1440 },
+        message: "SERVER WORDING",
+      }),
+    ).toBe("该字段未满足最大限制");
+  });
+
+  it("renders a non-numeric TOO_SMALL (string min) without numeric inequality wording (T-R2)", () => {
+    expect(
+      resolveFieldError({
+        field: "name",
+        code: "TOO_SMALL",
+        params: { minimum: 1 },
+        message: "SERVER WORDING",
+      }),
+    ).toBe("该字段未满足最小限制");
   });
 
   it("localizes the referenced resource from the resource param (T8)", () => {

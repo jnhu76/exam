@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZodError, type ZodIssue } from "zod";
+import { z, ZodError, type ZodIssue } from "zod";
 import {
   getValidationErrorDetails,
   normalizeErrorCode,
@@ -38,6 +38,24 @@ describe("getValidationErrorDetails — Zod machine semantics (C2)", () => {
     expect(field.params).toEqual({ minimum: 1 });
     // T6: the compatibility message stays present and non-empty.
     expect(field.message.length).toBeGreaterThan(0);
+  });
+
+  // T-R1/T-R2 anchors: the real Zod issue shapes behind the Web TOO_SMALL /
+  // TOO_BIG regressions. The wire intentionally keeps only `minimum`/`maximum`
+  // — `type`/`inclusive`/`exact` never cross the wire, so Web copy must not
+  // state a numeric inequality these inputs do not determine.
+  it("anchors the exclusive-bound wire fact: positive() → TOO_SMALL + {minimum: 0} (T-R1)", () => {
+    const parse = z.number().positive().safeParse(0);
+    const field = detailsFor(parse.error!.issues[0]!);
+    expect(field.code).toBe("TOO_SMALL");
+    expect(field.params).toEqual({ minimum: 0 });
+  });
+
+  it("anchors the non-numeric wire fact: string.min(1) → TOO_SMALL + {minimum: 1} (T-R2)", () => {
+    const parse = z.string().min(1).safeParse("");
+    const field = detailsFor(parse.error!.issues[0]!);
+    expect(field.code).toBe("TOO_SMALL");
+    expect(field.params).toEqual({ minimum: 1 });
   });
 
   it("derives invalid_type params from the structured expected/received", () => {
