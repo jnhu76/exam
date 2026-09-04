@@ -1,6 +1,6 @@
 # ADR-011: Notification Inbox and Email Delivery Architecture
 
-- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**; **Amended 2026-09-03 (#402/#300 — EmailDeliveryService retired, renderer convergence; see §24)**
+- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**; **Amended 2026-09-03 (#402/#300 — EmailDeliveryService retired, renderer convergence, see §24; #299 — second operational event `exam_assigned`, see §25)**
 - **Date:** 2026-07-23
 - **Owners:** EXAM maintainers
 - **Related:** ADR-003 Job Queue, ADR-001 Redis, P5-0 Email Delivery Runtime, P3 Result Publishing Closeout, P5-N1 Notification Inbox
@@ -1331,3 +1331,41 @@ retirement (enqueue seams = invitation.ts, auth.ts password-reset,
 notificationService.ts; the `/api/email/test` diagnostic route sends
 synchronously via `fastify.emailSender` and never touches the outbox);
 typecheck + focused email/notification/identity/repo test suites green.
+
+## 25. Amendment 2026-09-03 — #402/#299 second operational event: `exam_assigned`
+
+**Decision**: `exam_assigned` joins `result_published` as the second
+operational notification event. The trigger is a NEW effective enrollment
+row (`POST /exams/:examId/enrollments` creating an enrollment); duplicates
+and unknown candidates never notify — first-assignment idempotency is owned
+by the enrollment mutation's existing `DUPLICATE` skip plus the
+`exam_enrollments (organization_id, exam_id, candidate_id)` unique index.
+The dedupe identity of one assignment episode is the ENROLLMENT ROW
+(`exam_assigned:<enrollmentId>` for both the Inbox and the outbox row,
+backed by the recipient-scoped unique indexes): re-enrolling a candidate
+after their enrollment was removed is a new episode and notifies again,
+while a double dispatch of the same enrollment row is a no-op.
+
+Semantics are identical to result_published (§17): the Inbox row is REQUIRED
+and the outbox row is REQUIRED when the candidate user has an email, both
+written inside the per-candidate enrollment transaction — a failed write
+rolls back the enrollment. Bulk enrollment keeps its existing per-candidate
+transaction design; each effective enrollment notifies only its own
+candidate. The recipient resolves from the canonical candidateProfile →
+users row (never request input); a candidate without email receives the
+Inbox row only. The Email reuses the `exam_notification` EmailType; the
+action path is the trusted constant `/exam/list` — the authorized candidate
+exam list — so the notification exposes no examId on any new per-exam
+surface. No new table, worker, dependency, or dispatch framework: the
+policy mapping gains one explicit entry (`exam_assigned ->
+exam_notification`) and the service gains one command-specific dispatch
+function.
+
+Further operational events (schedule change, cancellation, grading
+assignment, announcements) remain deferred pending separate product
+evidence (#402 brake).
+
+**Evidence**: service-level transaction tests (atomic create, Inbox-only,
+duplicate no-op, required-write rollback) and route-level tests (Inbox +
+outbox wiring, no-email, duplicate skip, cross-org leakage fail-closed);
+`pnpm verify` green.

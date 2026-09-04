@@ -224,9 +224,10 @@ curl -s -b /tmp/admin-cookies.txt \
 
 > **Note:** `POST /api/email/test` sends **synchronously** via
 > `fastify.emailSender.send()` and bypasses the outbox — this is intentional
-> (it's a connectivity probe). Real business emails must go through
-> `EmailNotificationService` → `email_outbox` → worker (not yet wired; see
-> not yet wired; see P5-0 scope.
+> (it's a connectivity probe). Real business emails (staff invitation,
+> password reset, operational notifications) are written to `email_outbox`
+> inside their owning business transaction and drained by the in-process
+> outbox loop (ADR-011 §3/§23/§24).
 
 ---
 

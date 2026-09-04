@@ -214,6 +214,13 @@ notification onto the now-stable result-publication transaction (P5-N1).
   contract; the dead `EmailDeliveryService` enqueue abstraction and the
   placeholder `EmailType` values are deleted (#300 — closed as a convergence;
   no template engine / no backend i18n runtime by design, see ADR-011 §24).
+- Second operational notification `exam_assigned` is live (#299 first slice
+  under #402, ADR-011 §25): each new candidate enrollment commits atomically
+  with its Inbox row and — when the candidate user has an email — one
+  `exam_notification` outbox row; the action path is the authorized candidate
+  exam list (`/exam/list`). Further events (schedule change, cancellation,
+  grading assignment, announcements) remain deferred pending separate
+  evidence.
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
   (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
   rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit
