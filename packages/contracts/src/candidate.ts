@@ -231,7 +231,11 @@ export const CandidateImportResultSchema = z.object({
     z.object({
       row: z.number().int(),
       code: z.string(),
-      message: z.string(),
+      message: z
+        .string()
+        .describe(
+          "Compatibility human text, non-authoritative. Do not parse it for machine semantics; use code where available. Structured params are a future additive protocol extension.",
+        ),
     }),
   ),
   logId: z.string().uuid().optional(),

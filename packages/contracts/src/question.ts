@@ -478,7 +478,12 @@ export const QuestionImportResultSchema = z.object({
     z.object({
       row: z.number().int(),
       status: z.enum(["valid", "warning", "error"]),
-      message: z.string().optional(),
+      message: z
+        .string()
+        .optional()
+        .describe(
+          "Compatibility human text, non-authoritative. The current row-result shape does not yet expose a specific machine error code; machine-semantic enrichment is tracked by C2 (message contract D0.7).",
+        ),
     }),
   ),
   logId: z.string().uuid().optional(),

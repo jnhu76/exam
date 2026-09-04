@@ -66,7 +66,7 @@ guidance.
 
 | Document | Purpose |
 | --- | --- |
-| [`contracts/api-contract.md`](contracts/api-contract.md) | Runtime-first API contract policy |
+| [`contracts/api-contract.md`](contracts/api-contract.md) | Runtime-first API contract policy + canonical **Message & Error Contract** (ErrorCode / reason / params / message / field violations / localization zones; frozen by #413 C0) |
 | [`contracts/api-reference.md`](contracts/api-reference.md) | Human-readable API guide |
 | [`contracts/observability.md`](contracts/observability.md) | Logging, audit, trace conventions |
 | [`contracts/redis-baseline.md`](contracts/redis-baseline.md) | Redis optional-infrastructure baseline |
@@ -99,7 +99,7 @@ Key recovery authority:
 | --- | --- |
 | [`standards/code-quality.md`](standards/code-quality.md) | Quality rules, gates, dependency graph, AI coding rules |
 | [`standards/testing.md`](standards/testing.md) | Testing & CI contract, environment variables, DB lifecycle |
-| [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n hardcoded-copy gate |
+| [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n hardcoded-copy gate + copy taxonomy (browser / wire compat / server-rendered / diagnostics / data-format); semantics live in `contracts/api-contract.md` |
 | [`standards/test-flakes.md`](standards/test-flakes.md) | Test flake registry |
 | [`standards/ui-system.md`](standards/ui-system.md) | Design tokens, recipes, component authority, accessibility, visual lint |
 

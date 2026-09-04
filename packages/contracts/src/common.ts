@@ -53,13 +53,34 @@ export type SortParams = z.infer<typeof SortParamsSchema>;
 /**
  * Standard error response schema returned by API endpoints on failure.
  * Includes a machine-readable code, human message, optional details, and request ID.
+ *
+ * Semantics are frozen by the Message & Error Contract
+ * (docs/contracts/api-contract.md, #413 C0):
+ * - `code` is a stable coarse product-level machine contract.
+ * - `message` is non-authoritative compatibility text; clients MUST NOT
+ *   parse or branch on it. Wording/fallback language is not machine semantics.
+ * - `details` may carry `reason` (open-vocabulary stable machine contract),
+ *   `params` (structured dynamic context), and `fields[]` (field violations).
  */
 export const ErrorResponseSchema = z.object({
   error: z.object({
-    code: z.string(),
-    message: z.string(),
-    details: z.unknown().optional(),
-    requestId: z.string().min(1),
+    code: z
+      .string()
+      .describe(
+        "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message.",
+      ),
+    message: z
+      .string()
+      .describe(
+        "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling.",
+      ),
+    details: z
+      .unknown()
+      .optional()
+      .describe(
+        "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic values — additive TARGET, not yet emitted). Extensibility is inventory-gated; unknown shapes must be tolerated.",
+      ),
+    requestId: z.string().min(1).describe("Request id for support correlation"),
   }),
 });
 
@@ -68,11 +89,26 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 /**
  * Schema for a single field-level validation error detail.
+ *
+ * Semantics frozen by the Message & Error Contract (#413 C0): `field` is
+ * the machine-addressable path, `code` is the machine semantic, `message`
+ * is compatibility human text (non-authoritative). Target (additive, C2)
+ * adds `params` for structured dynamic values.
  */
 export const ValidationErrorDetailSchema = z.object({
-  field: z.string(),
-  message: z.string(),
-  code: z.string(),
+  field: z
+    .string()
+    .describe(
+      "Machine-addressable field/path. Current array indexes are encoded as dot-separated numeric segments (for example items.0.name). See the Message & Error Contract (docs/contracts/api-contract.md D0.7) for the target path convention.",
+    ),
+  message: z
+    .string()
+    .describe(
+      "Compatibility human text, non-authoritative. Clients MUST NOT parse or branch on this value.",
+    ),
+  code: z
+    .string()
+    .describe("Machine-readable validation or domain reason code."),
 });
 
 /** Type for a single field-level validation error. */

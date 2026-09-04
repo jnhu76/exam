@@ -300,9 +300,19 @@ const examListItemSchema = ExamSchema.extend({
   participantCount: z.number().int().nonnegative(),
   gradedAttemptCount: z.number().int().nonnegative(),
   canViewScores: z.boolean(),
-  scoreViewDisabledReason: z.string().nullable(),
+  scoreViewDisabledReason: z
+    .string()
+    .nullable()
+    .describe(
+      "Legacy natural-language compatibility text explaining why scores are unavailable. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8).",
+    ),
   canDelete: z.boolean(),
-  deleteDisabledReason: z.string().nullable(),
+  deleteDisabledReason: z
+    .string()
+    .nullable()
+    .describe(
+      "Legacy natural-language compatibility text explaining why the exam cannot be deleted. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8).",
+    ),
 });
 
 /** Zod schema for the paginated exam list response. */
