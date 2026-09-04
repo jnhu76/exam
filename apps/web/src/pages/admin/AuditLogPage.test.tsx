@@ -149,6 +149,21 @@ const auditItems = [
     userAgent: "Mozilla/5.0",
     createdAt: "2025-01-15T10:05:00Z",
   },
+  {
+    // A row written by a FUTURE action that the i18n catalog does not know:
+    // the table must fall back to the raw machine key without crashing
+    // (C6 F-14 forward compatibility).
+    id: "log-3",
+    organizationId: "org-1",
+    actorId: "admin-1",
+    action: "future.unknown_action",
+    targetType: "attempt",
+    targetId: "att-2",
+    metadata: {},
+    ipAddress: null,
+    userAgent: null,
+    createdAt: "2025-01-15T10:06:00Z",
+  },
 ];
 
 const mockAuditData = {
@@ -197,15 +212,18 @@ describe("AuditLogPage", () => {
 
   it("renders audit log table with entries", async () => {
     renderPage();
-    expect(
-      await screen.findByText("grading.score_entered"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("exam.publish_results")).toBeInTheDocument();
+    // Known actions render the localized label (same filterActions authority
+    // as the dropdown), not the raw machine key (C6 F-14).
+    expect(await screen.findByText("评分录入")).toBeInTheDocument();
+    expect(screen.getByText("公布成绩")).toBeInTheDocument();
+    // A future unknown action falls back to the raw machine key instead of
+    // going blank (forward compatibility).
+    expect(screen.getByText("future.unknown_action")).toBeInTheDocument();
   });
 
   it("renders target type and target id", async () => {
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
     expect(screen.getAllByText("attempt").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("exam").length).toBeGreaterThanOrEqual(1);
   });
@@ -224,9 +242,7 @@ describe("AuditLogPage", () => {
   it("shows loading state then data", async () => {
     renderPage();
     expect(screen.getByText("加载中...")).toBeInTheDocument();
-    expect(
-      await screen.findByText("grading.score_entered"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("评分录入")).toBeInTheDocument();
   });
 
   it("shows error state on fetch failure", async () => {
@@ -243,7 +259,7 @@ describe("AuditLogPage", () => {
   it("navigates pages with keyset next/prev", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
 
     // A non-null nextCursor enables the next button.
     const nextButton = screen.getByRole("button", { name: /下一页/ });
@@ -263,7 +279,7 @@ describe("AuditLogPage", () => {
 
   it("disables the prev button on the first page", async () => {
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
     expect(screen.getByRole("button", { name: /上一页/ })).toBeDisabled();
   });
 
@@ -279,17 +295,15 @@ describe("AuditLogPage", () => {
 
     mockApi();
     await userEvent.setup().click(screen.getByText("重试"));
-    expect(
-      await screen.findByText("grading.score_entered"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("评分录入")).toBeInTheDocument();
   });
 
   it("expands metadata on row click", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
 
-    const row = screen.getByText("grading.score_entered").closest("tr");
+    const row = screen.getByText("评分录入").closest("tr");
     expect(row).toBeTruthy();
     await user.click(row!);
 
@@ -299,7 +313,7 @@ describe("AuditLogPage", () => {
   it("sends targetType query param when target filter is set", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
 
     const targetTrigger = screen.getByRole("combobox", {
       name: /全部目标/,
@@ -313,14 +327,14 @@ describe("AuditLogPage", () => {
 
   it("renders 开始日期 / 结束日期 date-range pickers", async () => {
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
     expect(screen.getByLabelText("开始日期")).toBeInTheDocument();
     expect(screen.getByLabelText("结束日期")).toBeInTheDocument();
   });
 
   it("sends from / to query params when a date range is selected", async () => {
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
 
     fireEvent.click(screen.getByLabelText("开始日期"));
     await waitFor(() => {
@@ -339,11 +353,11 @@ describe("AuditLogPage", () => {
 
   it("has a clear-filters control that resets all filters", async () => {
     renderPage();
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
 
     fireEvent.click(screen.getByRole("combobox", { name: /全部操作/ }));
     fireEvent.click(await screen.findByRole("option", { name: "公布成绩" }));
-    await screen.findByText("grading.score_entered");
+    await screen.findByText("评分录入");
 
     fireEvent.click(screen.getByText("清空筛选"));
 

@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { validateTenantAccess } from "@exam/auth/src/tenantGuard.js";
+import {
+  buildErrorResponse,
+  normalizeErrorCode,
+} from "../lib/errorResponse.js";
 
 /**
  * Pre-handler hook that validates the authenticated actor's tenant access
@@ -16,17 +20,20 @@ const tenantGuardHook = async (
     validateTenantAccess(request.ctx, request.method, request.url);
   } catch (err) {
     if (err && typeof err === "object" && "statusCode" in err) {
-      const e = err as {
-        statusCode: number;
-        message: string;
-        code?: string;
-      };
-      return reply.code(e.statusCode).send({
-        error: {
-          code: e.code ?? "TENANT_ACCESS_DENIED",
-          message: e.message,
-        },
-      });
+      const e = err as { statusCode: number; code?: string };
+      // Canonical envelope only (C6 F-11): the legacy TENANT_ACCESS_DENIED
+      // code maps through normalizeErrorCode, the message comes from the
+      // registry, and the requestId is carried. The guard is dormant in
+      // single-tenant Phase 1 — this branch must never carry raw guard
+      // prose or tenant semantics of its own.
+      return reply
+        .code(e.statusCode)
+        .send(
+          buildErrorResponse(
+            request.id,
+            normalizeErrorCode(e.code, e.statusCode),
+          ),
+        );
     }
     throw err;
   }

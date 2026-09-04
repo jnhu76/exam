@@ -174,6 +174,43 @@ describe("RedisRuntime lifecycle (P7)", () => {
     await runtime.close();
   });
 
+  // C6 R10-T2: an ordinary connect failure (not the bounded-startup timer)
+  // must classify as connection_lost in both modes — timeout vs failure is
+  // identity-based, never message-based (C6 F-10b).
+  it("optional: connect rejection degrades (connection_lost) without throwing", async () => {
+    const client = new FakeClient();
+    client.connectImpl = () =>
+      Promise.reject(new Error("ECONNREFUSED 127.0.0.1:6379"));
+    const logger = makeLogger();
+    const runtime = new RedisRuntime({
+      config: config({ startupTimeoutMs: 5000 }),
+      logger,
+      clientFactory: () => client,
+    });
+    await expect(runtime.start()).resolves.toBeUndefined();
+    expect(runtime.state).toBe("degraded");
+    expect(runtime.degradedReason).toBe("connection_lost");
+    expect(runtime.shouldUseRedis()).toBe(false);
+    // optional keeps the client for background retry/recovery.
+    expect(client.disconnectCalls).toBe(0);
+  });
+
+  it("required: connect rejection degrades (connection_lost) and throws RuntimeConfigError", async () => {
+    const client = new FakeClient();
+    client.connectImpl = () =>
+      Promise.reject(new Error("ECONNREFUSED 127.0.0.1:6379"));
+    const runtime = new RedisRuntime({
+      config: config({ mode: "required", startupTimeoutMs: 5000 }),
+      logger: makeLogger(),
+      clientFactory: () => client,
+    });
+    await expect(runtime.start()).rejects.toBeInstanceOf(RuntimeConfigError);
+    expect(runtime.state).toBe("degraded");
+    expect(runtime.degradedReason).toBe("connection_lost");
+    expect(client.disconnectCalls).toBe(1);
+    await runtime.close();
+  });
+
   it("required startup error never leaks the Redis URL or its credentials (P7 review P1-2)", async () => {
     const client = new FakeClient();
     client.connectImpl = () => new Promise<never>(() => {});

@@ -61,10 +61,13 @@ test.describe("audit log viewer (P2E-J1)", () => {
     await page.getByRole("combobox", { name: "全部操作" }).click();
     await page.getByRole("option", { name: "登录成功" }).click();
 
-    // Every visible data row's 操作 cell should be login.success.
+    // Every visible data row's 操作 cell should render the localized
+    // filterActions label for login.success (C6 F-14: the table uses the
+    // same presentation authority as the filter; the raw machine key is only
+    // the fallback for unknown future actions).
     const actionCells = page
       .getByRole("row")
-      .locator("span", { hasText: /login\.success/ });
+      .locator("span", { hasText: /登录成功/ });
     await expect(actionCells.first()).toBeVisible({ timeout: 15_000 });
     const count = await actionCells.count();
     expect(count).toBeGreaterThan(0);
@@ -120,11 +123,13 @@ test.describe("audit log viewer (P2E-J1)", () => {
     await page.getByRole("button", { name: "开始日期" }).click();
     await page.getByRole("gridcell", { name: /1日/ }).first().click();
 
-    // The table should still have rows after applying from=day-1.
+    // The table should still have rows after applying from=day-1. Rows are
+    // anchored on the localized action labels (C6 F-14 presentation
+    // authority); login.success is always present after loginAsAdmin.
     await expect(
       page
         .getByRole("row")
-        .filter({ hasText: /exam\.|login\.|user\./ })
+        .filter({ hasText: /登录成功|创建考试|创建用户/ })
         .first(),
     ).toBeVisible({ timeout: 15_000 });
 
@@ -133,7 +138,7 @@ test.describe("audit log viewer (P2E-J1)", () => {
     await expect(
       page
         .getByRole("row")
-        .filter({ hasText: /exam\.|login\.|user\./ })
+        .filter({ hasText: /登录成功|创建考试|创建用户/ })
         .first(),
     ).toBeVisible({ timeout: 15_000 });
   });

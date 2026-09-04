@@ -7,6 +7,7 @@ import {
   UpdateCandidateRequestSchema,
   candidateFieldValidationMessages,
   ErrorResponseSchema,
+  getErrorMessage,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -634,13 +635,22 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           allCandidates.push(candidate);
           created++;
         } catch (err) {
+          // INVARIANT (message contract D0.5, C6 F-12): only the explicitly
+          // classified ValidationError may carry its prose into the row
+          // error. Any unexpected internal exception (SQL, driver, trigger,
+          // filesystem) is reduced to the canonical INTERNAL_ERROR
+          // compatibility message — raw err.message must never reach
+          // errors[], the response, or the persisted import log.
           errors.push({
             row: i + 1,
             code:
               err instanceof ValidationError
                 ? "VALIDATION_ERROR"
                 : "INTERNAL_ERROR",
-            message: err instanceof Error ? err.message : "Unknown error",
+            message:
+              err instanceof ValidationError
+                ? err.message
+                : getErrorMessage("INTERNAL_ERROR"),
           });
         }
       }

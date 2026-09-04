@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
+import { getErrorMessage } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -503,5 +505,120 @@ describe("candidate routes", () => {
         requestId: expect.any(String),
       },
     });
+  });
+
+  // C6 F-12: the import catch-all must reduce an unexpected internal
+  // exception to the canonical INTERNAL_ERROR compatibility message — raw
+  // exception prose (SQL, driver, trigger text) must never reach the
+  // response errors[] or the persisted import log.
+  it("import catch-all never persists raw internal exception text (C6 F-12)", async () => {
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const functionName = `fail_import_leak_${suffix}`;
+    const triggerName = `fail_import_leak_trigger_${suffix}`;
+    await ctx.db.execute(
+      sql.raw(`
+        CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+        BEGIN
+          RAISE EXCEPTION 'INTERNAL_SENTINEL_DO_NOT_LEAK password=super-secret relation organizations does not exist';
+        END;
+        $$ LANGUAGE plpgsql
+      `),
+    );
+    await ctx.db.execute(
+      sql.raw(`
+        CREATE TRIGGER ${triggerName}
+        BEFORE INSERT ON audit_logs
+        FOR EACH ROW
+        WHEN (NEW.action = 'candidate.create')
+        EXECUTE FUNCTION ${functionName}()
+      `),
+    );
+    try {
+      const username = `leak-probe-${Date.now()}`;
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/candidates/import",
+        payload: {
+          rows: [
+            {
+              username,
+              password: "password123",
+              name: "Leak Probe",
+              fields: { [identityFieldName]: `L-${Date.now()}` },
+            },
+          ],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.errors).toHaveLength(1);
+      expect(body.errors[0].code).toBe("INTERNAL_ERROR");
+      // Unknown/internal errors carry the canonical registry message, never
+      // the raw exception prose.
+      expect(body.errors[0].message).toBe(getErrorMessage("INTERNAL_ERROR"));
+      const responseText = JSON.stringify(body);
+      expect(responseText).not.toContain("INTERNAL_SENTINEL_DO_NOT_LEAK");
+      expect(responseText).not.toContain("super-secret");
+      expect(responseText).not.toContain("does not exist");
+
+      // The persisted import log must be equally clean.
+      expect(body.logId).toEqual(expect.any(String));
+      const repoCtx = {
+        actorId: crypto.randomUUID(),
+        organizationId,
+        targetOrganizationId: organizationId,
+        role: "Admin" as const,
+        permissions: [],
+        sessionId: "test",
+      };
+      const { items } = await createImportJobLogRepo(ctx.db).list(
+        repoCtx,
+        1,
+        10,
+        "candidate",
+      );
+      const persisted = items.find((l) => l.id === body.logId);
+      expect(persisted).toBeTruthy();
+      const persistedText = JSON.stringify(persisted);
+      expect(persistedText).not.toContain("INTERNAL_SENTINEL_DO_NOT_LEAK");
+      expect(persistedText).not.toContain("super-secret");
+      expect(persisted?.errorsDetail?.[0]?.message).toBe(
+        getErrorMessage("INTERNAL_ERROR"),
+      );
+    } finally {
+      await ctx.db.execute(
+        sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+      );
+      await ctx.db.execute(
+        sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`),
+      );
+    }
+  });
+
+  // Known-safe class: a ValidationError row keeps its approved compatibility
+  // prose (the C6 F-12 allowlist), unlike unknown internal errors.
+  it("known ValidationError rows keep their compatibility message (C6 F-12)", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates/import",
+      payload: {
+        rows: [
+          {
+            username: `missing-field-${Date.now()}`,
+            password: "password123",
+            name: "Missing Field",
+            fields: {},
+          },
+        ],
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].code).toBe("VALIDATION_ERROR");
+    expect(body.errors[0].message).toContain("身份编号");
   });
 });

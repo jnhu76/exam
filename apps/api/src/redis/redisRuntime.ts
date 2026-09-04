@@ -49,6 +49,18 @@ export type RedisDegradedReason =
   | "retry_exhausted"
   | null;
 
+/**
+ * Local identity sentinel for the bounded-startup timeout. Classification
+ * must branch on this type (instanceof), never on message text: the wording
+ * is diagnostic only and carries no external contract (C6 F-10b).
+ */
+export class RedisStartupTimeoutError extends Error {
+  constructor() {
+    super("redis startup timeout");
+    this.name = "RedisStartupTimeoutError";
+  }
+}
+
 export interface RedisRuntimeSnapshot {
   mode: RedisMode;
   state: RedisLifecycleState;
@@ -205,7 +217,7 @@ export class RedisRuntime {
     let timer: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(
-        () => reject(new Error("redis startup timeout")),
+        () => reject(new RedisStartupTimeoutError()),
         this.config.startupTimeoutMs,
       );
     });
@@ -215,8 +227,7 @@ export class RedisRuntime {
       // The 'ready' event (or its absence during the ready-check) settles the
       // state; connect() resolving merely means the socket is up.
     } catch (err) {
-      const isStartupTimeout =
-        (err as Error).message === "redis startup timeout";
+      const isStartupTimeout = err instanceof RedisStartupTimeoutError;
       if (this.mode === "required") {
         client.disconnect();
         this.setState(

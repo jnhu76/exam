@@ -9,11 +9,16 @@
 
 import type { RenderedEmailContent } from "../email/renderedEmail.js";
 import { escapeEmailHtml } from "../email/renderedEmail.js";
+import type { StaffInvitationRole } from "@exam/contracts";
 
 /** Structured input to the staff-invitation renderer. */
 export interface StaffInvitationEmailPayload {
-  /** Invited staff role (server-trusted, from the invitation row). */
-  role: string;
+  /**
+   * Invited staff role. INVARIANT: this is the closed `StaffInvitationRole`
+   * contract enforced by `CreateStaffInvitationRequestSchema` at the wire
+   * boundary — the renderer has no raw-string fallback path (C6 F-14).
+   */
+  role: StaffInvitationRole;
   /** Absolute acceptance URL from `buildInviteAcceptLink`. */
   acceptUrl: string;
   /** Invitation validity in whole days (display only). */
@@ -32,8 +37,10 @@ export interface PasswordResetEmailPayload {
  * zh-CN display labels for invitable staff roles. Mirrors the web locale
  * labels (`admin.users.roleLabels`) so email copy and UI copy agree; kept
  * local because server Email copy cannot import the web app's i18n.
+ * Typed as the closed role contract so a missing label is a compile error
+ * and the raw role key can never reach the rendered Email (C6 F-14).
  */
-export const STAFF_ROLE_LABELS_ZH: Record<string, string> = {
+export const STAFF_ROLE_LABELS_ZH: Record<StaffInvitationRole, string> = {
   // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
   Admin: "考试管理员",
   // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
@@ -50,7 +57,7 @@ export const STAFF_ROLE_LABELS_ZH: Record<string, string> = {
 export function renderStaffInvitationEmail(
   payload: StaffInvitationEmailPayload,
 ): RenderedEmailContent {
-  const roleLabel = STAFF_ROLE_LABELS_ZH[payload.role] ?? payload.role;
+  const roleLabel = STAFF_ROLE_LABELS_ZH[payload.role];
   const link = payload.acceptUrl;
   // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n
   const subject = "账号邀请";
