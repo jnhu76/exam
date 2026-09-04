@@ -18,16 +18,23 @@
  *     // i18n-copy-allow: <category> — <reason>
  *
  * with category one of wire-compat | server-rendered | developer-diagnostic
- * | data-format | temporary. The directive covers the literal on its own
+ * | data-format | temporary. The directive must sit on the literal's own
  * line (trailing) or on the immediately following line (a block of
- * consecutive directive comments is allowed for multi-line reasons).
+ * consecutive directive comments is allowed for multi-line reasons), and
+ * the category and reason must be separated by an em dash (—).
  * INVARIANT: a directive must not degrade into file-level immunity — any
- * other CJK literal in the same file still fails, and an unknown category,
- * missing reason, malformed directive, or stale directive fails.
+ * other CJK literal in the same file still fails, an unknown category,
+ * missing reason, malformed directive, or stale directive fails, and one
+ * directive block suppresses at most ONE CJK semantic unit (two literals
+ * beside the same directive fail).
  *
  * Comments (including Chinese comments) are not user-facing copy and are
  * never flagged; literal extraction is AST-based, so `//` inside a string
  * cannot disguise copy as a comment.
+ *
+ * Non-JS production text formats (CSS/JSON/HTML/MD/YAML) stay under this
+ * gate via a raw CJK line scan: none has a legitimate CJK zone today, so
+ * every CJK line fails and no suppression directives exist for them.
  *
  * Exit code 1 if violations found.
  */
@@ -131,6 +138,18 @@ const TIER2_PACKAGE_SRC = /^packages\/[^/]+\/src\//;
 
 const JS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
+// Non-JS production text formats the Tier2 gate must keep covering (the
+// pre-AST guard scanned these too). They go through the raw line scanner,
+// not the AST scanner.
+const TIER2_TEXT_EXTENSIONS = new Set([
+  ".css",
+  ".json",
+  ".html",
+  ".md",
+  ".yaml",
+  ".yml",
+]);
+
 // Structural test-only / non-product exclusions. Directory- and
 // extension-shaped only: a production file must not evade the gate through
 // its name (a file called foo.testHelpers.ts is still scanned).
@@ -165,8 +184,10 @@ const SUPPRESSION_CATEGORIES = new Set([
   "temporary",
 ]);
 
-const DIRECTIVE_PREFIX = "i18n-copy-allow:";
 const DIRECTIVE_RE = /^i18n-copy-allow:\s*([a-z-]+)(?:\s+(.*))?$/;
+// The documented syntax separates category and reason with an em dash; a
+// bare word after the category is a typo, not a reason.
+const DIRECTIVE_REASON_RE = /^—\s+(.+)$/;
 
 const SUPPRESSION_USAGE =
   "Directive syntax: // i18n-copy-allow: <category> — <reason>\n" +
@@ -261,12 +282,20 @@ function parseDirectives(sourceFile, text) {
         });
         continue;
       }
+      const reasonMatch = reason.trim().match(DIRECTIVE_REASON_RE);
+      if (!reasonMatch) {
+        directives.push({
+          line,
+          valid: false,
+          problem: `category "${category}" reason must follow " — " (em dash)`,
+        });
+        continue;
+      }
       directives.push({
         line,
         valid: true,
         category,
-        reason: reason.trim(),
-        consumed: false,
+        reason: reasonMatch[1].trim(),
       });
     }
   }
@@ -283,17 +312,24 @@ function parseDirectives(sourceFile, text) {
 /**
  * Groups consecutive directive lines into blocks so a multi-line reason
  * reads naturally; the block's effective position is its LAST line.
+ * INVARIANT: a block is consumed at most once — one directive block
+ * suppresses exactly one CJK semantic unit, so a second literal beside the
+ * same directive fails.
  */
 function groupDirectiveBlocks(directives) {
   const blocks = [];
   for (const directive of directives) {
     const last = blocks[blocks.length - 1];
+    let block;
     if (last && directive.line === last.endLine + 1) {
-      last.items.push(directive);
-      last.endLine = directive.line;
+      block = last;
+      block.items.push(directive);
+      block.endLine = directive.line;
     } else {
-      blocks.push({ items: [directive], endLine: directive.line });
+      block = { items: [directive], endLine: directive.line, consumed: false };
+      blocks.push(block);
     }
+    directive.block = block;
   }
   return blocks;
 }
@@ -323,11 +359,15 @@ function scanTier2File(filePath, relPath) {
     const line =
       sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
       1;
+    // Only an unconsumed block suppresses: consumption is one-to-one, so a
+    // directive can never be reused for a second literal on its line.
     const suppressedBy = validBlocks.find(
-      (block) => block.endLine === line || block.endLine === line - 1,
+      (block) =>
+        !block.consumed &&
+        (block.endLine === line || block.endLine === line - 1),
     );
     if (suppressedBy) {
-      for (const item of suppressedBy.items) item.consumed = true;
+      suppressedBy.consumed = true;
       continue;
     }
     violations.push({
@@ -346,7 +386,7 @@ function scanTier2File(filePath, relPath) {
         kind: "invalid-suppression",
         detail: directive.problem,
       });
-    } else if (!directive.consumed) {
+    } else if (!directive.block.consumed) {
       problems.push({
         relPath,
         line: directive.line,
@@ -357,6 +397,24 @@ function scanTier2File(filePath, relPath) {
   }
 
   return { violations, problems };
+}
+
+/**
+ * Raw CJK line scan for non-JS production text formats (CSS/JSON/HTML/MD/
+ * YAML). No suppression directives exist for these formats: none has a
+ * legitimate CJK zone today, so every CJK line fails. If one ever does,
+ * first establish the category in the copy policy, then add the narrowest
+ * format-appropriate exemption — do not grow a directive engine here.
+ */
+function scanTier2TextFile(filePath, relPath) {
+  const content = readFileSync(filePath, "utf-8");
+  const violations = [];
+  for (const [i, line] of content.split("\n").entries()) {
+    if (CJK_REGEX.test(line)) {
+      violations.push({ relPath, line: i + 1, excerpt: line.trim() });
+    }
+  }
+  return { violations, problems: [] };
 }
 
 // ─── Run ────────────────────────────────────────────────────────────
@@ -401,7 +459,9 @@ for (const dir of ["apps", "packages"]) {
     }
 
     // ── Tier 2: production source CJK gate ──
-    if (!JS_EXTENSIONS.has(extname(filePath))) return;
+    const ext = extname(filePath);
+    const isJs = JS_EXTENSIONS.has(ext);
+    if (!isJs && !TIER2_TEXT_EXTENSIONS.has(ext)) return;
     const inProductionRoot =
       TIER2_WEB_API_ROOTS.some(
         (root) => relPath === root || relPath.startsWith(root + "/"),
@@ -410,7 +470,9 @@ for (const dir of ["apps", "packages"]) {
     if (isExcluded(filePath, TIER2_EXCLUDE_PATTERNS)) return;
     if (CATALOG_AUTHORITIES.some((pattern) => pattern.test(relPath))) return;
 
-    const { violations, problems } = scanTier2File(filePath, relPath);
+    const { violations, problems } = isJs
+      ? scanTier2File(filePath, relPath)
+      : scanTier2TextFile(filePath, relPath);
     tier2Violations.push(...violations);
     suppressionProblems.push(...problems);
   });

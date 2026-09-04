@@ -302,3 +302,51 @@ test("T24: multiline template literal is one semantic unit", () => {
   });
   assert.equal(ok.code, 0);
 });
+
+test("T25: one directive suppresses at most ONE literal — two on the same line fail", () => {
+  const r = runGuard({
+    "apps/api/src/routes/foo.ts":
+      `// i18n-copy-allow: wire-compat — legacy field message; code+params are the contract\n` +
+      `export const pair = ["已声明的兼容文案", "未声明的新增文案"];\n`,
+  });
+  assert.equal(r.code, 1);
+  const cjkHits = r.output.match(/\[CJK\]/g) ?? [];
+  assert.equal(
+    cjkHits.length,
+    1,
+    `expected exactly one reported literal, got:\n${r.output}`,
+  );
+  assert.match(r.output, /foo\.ts:2/);
+});
+
+test("T26: CJK in a non-JS production text format fails (Tier2 coverage restored)", () => {
+  const formats = [
+    [".css", '.probe::after {\n  content: "违规中文";\n}\n'],
+    [".json", '{\n  "label": "违规中文"\n}\n'],
+    [".html", "<p>违规中文</p>\n"],
+    [".md", "# 违规中文\n"],
+    [".yaml", "label: 违规中文\n"],
+    [".yml", "label: 违规中文\n"],
+  ];
+  for (const [ext, content] of formats) {
+    const r = runGuard({ [`apps/web/src/probe${ext}`]: content });
+    assert.equal(r.code, 1, `expected ${ext} CJK to fail:\n${r.output}`);
+    assert.match(r.output, new RegExp(`probe\\${ext}:\\d`));
+  }
+});
+
+test("T26b: ASCII-only non-JS production text passes", () => {
+  const r = runGuard({
+    "apps/web/src/probe.css": '.probe::after {\n  content: "ok";\n}\n',
+  });
+  assert.equal(r.code, 0);
+});
+
+test("T27: directive without the em-dash separator is malformed and suppresses nothing", () => {
+  const r = runGuard({
+    "apps/api/src/routes/foo.ts": `// i18n-copy-allow: wire-compat legacy field message\nexport const x = "违规中文";\n`,
+  });
+  assert.equal(r.code, 1);
+  assert.match(r.output, /em dash/);
+  assert.match(r.output, /违规中文|foo\.ts:2/);
+});
