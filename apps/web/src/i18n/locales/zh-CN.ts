@@ -1753,6 +1753,7 @@ const zhCN = {
         contentFillBlankPlaceholder: "输入题目内容，用 ____ 标记空格位置",
         options: "选项",
         addOption: "添加选项",
+        removeOption: "删除选项 {{id}}",
         optionPlaceholder: "选项 {{id}}",
         optionContent: "选项 {{id}} 内容",
         answerMode: "作答模式",

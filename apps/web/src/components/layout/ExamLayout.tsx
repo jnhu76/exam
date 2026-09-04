@@ -62,9 +62,9 @@ export function ExamLayout() {
   const initials = user.name.slice(0, 2);
   return (
     <div data-testid="exam-layout" className="min-h-screen bg-background">
-      <header className="flex h-14 items-center justify-between border-b bg-card px-6">
+      <header className="flex h-14 items-center justify-between border-b bg-card px-4 sm:px-6">
         <BrandHeader />
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
             <NavLink
               to={routes.exam.list}
@@ -76,7 +76,9 @@ export function ExamLayout() {
             </NavLink>
           </Button>
           <NotificationBell />
-          <span className="mx-2 h-4 w-px bg-border" />
+          {/* The display name is the only unbounded-width header item; below
+              sm it collapses into the avatar (trigger keeps its aria-label). */}
+          <span className="mx-2 hidden h-4 w-px bg-border sm:block" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -89,7 +91,7 @@ export function ExamLayout() {
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm">{user.name}</span>
+                <span className="hidden text-sm sm:inline">{user.name}</span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

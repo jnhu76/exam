@@ -197,7 +197,7 @@ export function ExamConfigForm({
               {t(`admin.forms.exam.timingModeHint.${data.timingMode}`)}
             </p>
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <Label>{t("admin.forms.exam.startTime")}</Label>
               <Input
@@ -233,7 +233,7 @@ export function ExamConfigForm({
               />
             </Field>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <Label>{t("admin.forms.exam.latestStart")}</Label>
               <Input
@@ -278,7 +278,7 @@ export function ExamConfigForm({
 
       <FormSection title={t("admin.forms.exam.sectionScore")}>
         <FieldGroup>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <div className="flex items-center justify-between">
                 <Label htmlFor="totalScore">
@@ -357,7 +357,7 @@ export function ExamConfigForm({
 
       <FormSection title={t("admin.forms.exam.sectionRetake")}>
         <FieldGroup>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <Label>{t("admin.forms.exam.retakePolicy")}</Label>
               <Select

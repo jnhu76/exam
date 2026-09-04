@@ -31,6 +31,9 @@
 # 环境变量：
 #   DEV_API_PORT        api/dev server 端口，默认 3000
 #   DB_HOST_PORT        dev compose PostgreSQL 宿主端口，默认 5432
+#   REDIS_HOST_PORT     dev compose Redis 宿主端口，默认 6379；与 DB_HOST_PORT
+#                       配合 REDIS_URL=redis://localhost:<port> 可在其它 worktree
+#                       的 dev 栈占用默认端口时并行运行本脚本
 #   KEEP_SERVER=1     等价于 --keep-server
 #   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
 #
