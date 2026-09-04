@@ -82,9 +82,14 @@ message: "课程代码已存在",
 - The directive applies to the CJK literal on its own line (trailing) or
   on the immediately following line; a block of consecutive directive
   comments is allowed for a multi-line reason. A blank line between the
-  directive and the literal breaks the link.
+  directive and the literal breaks the link. The category and the reason
+  must be separated by an em dash (`—`), matching the documented syntax.
 - A multiline template literal (e.g. one Email body) is **one** semantic
   unit — one directive covers it, not the whole file.
+- **Consumption is one-to-one:** a directive block suppresses at most one
+  CJK semantic unit. A second literal on the directive's line (two
+  ternary branches, two array elements) is reported — each literal needs
+  its own directive.
 - Suppression categories (frozen set):
 
 | Category | Legitimate dataflow |
@@ -96,11 +101,19 @@ message: "课程代码已存在",
 | `temporary` | Placeholder copy awaiting implementation; the reason must state the removal condition |
 
 - **Fail conditions:** an unknown category, a missing reason, a malformed
-  directive, or a stale directive (no CJK literal on its own/next line)
-  each fail the gate. An invalid directive never silently suppresses the
-  literal next to it.
+  directive (including a missing `—` separator), or a stale directive (no
+  CJK literal on its own/next line) each fail the gate. An invalid
+  directive never silently suppresses the literal next to it.
 - **No file-level bypass exists.** A directive covers its literal, never
   the file; an unrelated new literal in the same file still fails.
+
+**Non-JS production text.** The gate is not limited to JS/TS: production
+`.css`, `.json`, `.html`, `.md`, `.yaml`, and `.yml` files under the same
+roots are scanned with a raw CJK line check. None of these formats has a
+legitimate CJK zone today, so **every CJK line fails** and no suppression
+directives exist for them; a legitimate need must first be established in
+this policy, then implemented as the narrowest format-appropriate
+exemption — not by growing a directive engine into these formats.
 
 **Test-only classification.** The gate excludes genuine test-only content
 by *structure*, not by filename: `*.test.*` / `*.spec.*` / `*.stories.*`
