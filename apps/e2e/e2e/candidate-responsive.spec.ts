@@ -111,19 +111,33 @@ test.describe("candidate responsive baseline 390x844", () => {
     page,
     request,
   }) => {
-    // `unique` feeds the exam title (E2E-<unique>-<timestamp>) and the seeded
-    // username, so it stays moderate; the title still exercises a long
-    // single-line mixed CJK/Latin heading at 390px.
+    // `unique` also feeds the seeded username, so the mixed-script stress
+    // title goes through titleOverride instead: CJK (wraps per-glyph) plus a
+    // single ~80-char unbroken Latin token (the case that requires
+    // break-words, not just normal wrapping).
+    const longTitle = [
+      "E2E-responsive-long-title",
+      "这是一个非常长的中文考试标题用于验证窄视口下卡片标题的换行行为",
+      "PneumonoultramicroscopicsilicovolcanoconiosisSupercalifragilisticexpialidocious",
+      Date.now(),
+    ].join("-");
     const seeded = await seedExam(request, "responsive-long-title", {
       questionAnswer: true,
       questionScore: 100,
+      titleOverride: longTitle,
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await candidateLogin(page, seeded.candidate);
     await page.waitForURL(/\/exam\/list/);
 
     await assertNoHorizontalOverflow(page);
-    await expect(page.getByTestId(`exam-card-${seeded.examId}`)).toBeVisible();
+    const titleCard = page.getByTestId(`exam-card-${seeded.examId}`);
+    await expect(titleCard).toBeVisible();
+    // The stress title really rendered — a silently dropped title would make
+    // the overflow assertions vacuous.
+    await expect(
+      titleCard.getByText("Pneumonoultramicroscopicsilicovolcanoconiosis"),
+    ).toBeVisible();
     await assertReachable(
       page,
       page

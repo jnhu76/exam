@@ -208,12 +208,18 @@ export async function seedExam(
      * encoding.
      */
     textResponseQuestions?: TextResponseQuestionSeed[];
+    /**
+     * Replaces the default `E2E-<unique>-<timestamp>` exam title. `unique`
+     * also feeds the seeded username, so titles needing scripts or lengths
+     * that username rules forbid go through here instead.
+     */
+    titleOverride?: string;
   } = {},
 ): Promise<SeededExam> {
   const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
   const token = await adminLogin(request, baseURL);
 
-  const examTitle = `E2E-${unique}-${Date.now()}`;
+  const examTitle = opts.titleOverride ?? `E2E-${unique}-${Date.now()}`;
 
   const course = await adminPost(request, baseURL, token, "/api/courses", {
     name: `Course-${unique}`,
