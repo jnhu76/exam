@@ -54,7 +54,7 @@ export function FillBlankInput({
     <div className="flex flex-col gap-4">
       {normalizedBlanks.map((blank, i) => (
         <div key={blank.id} className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
+          <span className="type-secondary">
             {t("candidateRuntime.answer.fillBlank.blankLabel", {
               number: i + 1,
             })}

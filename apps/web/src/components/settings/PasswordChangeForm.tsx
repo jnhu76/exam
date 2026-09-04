@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -10,19 +9,16 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 /**
- * Password change form with current/new/confirm fields and minimum-length
- * validation. Optionally wraps in a Card or renders as a bare <form>.
+ * Bare password change form with current/new/confirm fields and
+ * minimum-length validation. The hosting page owns the section frame
+ * (FormSection); this component owns only the form.
  *
  * Changing the password revokes every issued token for the account (durable
  * per-user credential epoch), so a successful change signs the user out:
  * the form performs an explicit logout + redirect to /login instead of
  * leaving the UI on a page whose next request would 401.
  */
-export function PasswordChangeForm({
-  cardWrapper = true,
-}: {
-  cardWrapper?: boolean;
-}) {
+export function PasswordChangeForm() {
   const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -64,7 +60,7 @@ export function PasswordChangeForm({
     }
   }
 
-  const form = (
+  return (
     <form className="max-w-sm" onSubmit={handleSubmit}>
       <FieldGroup>
         <Field>
@@ -89,7 +85,7 @@ export function PasswordChangeForm({
             required
             minLength={DEFAULT_PASSWORD_POLICY.minLength}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="type-metadata">
             {t("validation.passwordMinChars", {
               min: DEFAULT_PASSWORD_POLICY.minLength,
             })}
@@ -113,16 +109,5 @@ export function PasswordChangeForm({
         </Button>
       </FieldGroup>
     </form>
-  );
-
-  if (!cardWrapper) return form;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("passwordChange.title")}</CardTitle>
-      </CardHeader>
-      <CardContent>{form}</CardContent>
-    </Card>
   );
 }

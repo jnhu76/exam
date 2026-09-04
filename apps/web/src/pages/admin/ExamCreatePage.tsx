@@ -557,7 +557,7 @@ export function ExamCreatePage() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="type-metadata">
                 {state.profileId
                   ? t("admin.examWizard.copyOnApplyHint")
                   : t("admin.examWizard.noProfileHint")}
@@ -711,7 +711,7 @@ export function ExamCreatePage() {
                   }}
                 />
                 {hasQuestions && !manualTotalScore && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="type-metadata">
                     {t("admin.examWizard.questions.autoCalcLabel", {
                       score: computedTotal,
                     })}
@@ -790,7 +790,7 @@ export function ExamCreatePage() {
               </Field>
             )}
             {preview.resolved.timingMode === "untimed" && (
-              <p className="text-sm text-muted-foreground">
+              <p className="type-secondary">
                 {t("admin.examWizard.schedule.untimedHint")}
               </p>
             )}
@@ -810,7 +810,7 @@ export function ExamCreatePage() {
               <h3 className="type-section-title">
                 {t("admin.examWizard.review.summaryHeading")}
               </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 type-secondary">
                 {summarizeProfile(preview.resolved, summaryLabels)}
               </p>
             </div>

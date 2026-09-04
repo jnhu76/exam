@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /**
  * Vertical list of mobile record cards. Renders only at the small breakpoint;
- * the desktop DataTable is hidden there (see DataView). This is the mobile
+ * the desktop DataTable is hidden there. This is the mobile
  * analogue of the table body — empty/loading/error states are handled here too.
  */
 export function MobileRecordList({

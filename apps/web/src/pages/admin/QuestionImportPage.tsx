@@ -314,7 +314,7 @@ export function QuestionImportPage() {
             </Table>
           </DataTableShell>
           {parsedRows.length > 20 && (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.questionImport.moreRows", {
                 count: parsedRows.length - 20,
               })}
@@ -409,10 +409,7 @@ export function QuestionImportPage() {
                         />
                       )}
                     </DataTableCell>
-                    <DataTableCell
-                      role="long-text"
-                      className="text-sm text-muted-foreground"
-                    >
+                    <DataTableCell role="long-text" className="type-secondary">
                       {d.message ?? "-"}
                     </DataTableCell>
                   </TableRow>

@@ -30,7 +30,7 @@ export function ErrorState({
       )}
     >
       <AppIcon icon={CircleAlert} size="state" className="text-destructive" />
-      <p className="text-sm text-muted-foreground">{message}</p>
+      <p className="type-secondary">{message}</p>
       <div className="flex gap-2">
         {onRetry && (
           <Button type="button" variant="outline" size="sm" onClick={onRetry}>

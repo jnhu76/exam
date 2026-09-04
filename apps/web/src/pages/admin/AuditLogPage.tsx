@@ -408,10 +408,7 @@ export function AuditLogPage() {
                       setExpandedId(expandedId === item.id ? null : item.id)
                     }
                   >
-                    <DataTableCell
-                      role="date"
-                      className="text-sm text-muted-foreground"
-                    >
+                    <DataTableCell role="date" className="type-secondary">
                       {formatDateTime(item.createdAt)}
                     </DataTableCell>
                     <DataTableCell
@@ -428,7 +425,7 @@ export function AuditLogPage() {
                     <DataTableCell role="type">{item.targetType}</DataTableCell>
                     <DataTableCell
                       role="short-id"
-                      className="truncate text-sm text-muted-foreground"
+                      className="truncate type-secondary"
                     >
                       {item.targetId}
                     </DataTableCell>
@@ -446,18 +443,18 @@ export function AuditLogPage() {
                   <h3 className="mb-2 text-sm font-medium">
                     {t("admin.audit.columns.detail")}
                   </h3>
-                  <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                  <pre className="type-code rounded bg-muted p-3">
                     {JSON.stringify(item.metadata, null, 2)}
                   </pre>
                   {item.ipAddress && (
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="mt-2 type-metadata">
                       {t("admin.audit.ipAddress", { address: item.ipAddress })}
                     </p>
                   )}
                 </div>
               );
             })()}
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <div className="flex items-center justify-between type-secondary">
             <span>{t("admin.audit.pageInfo", { count: items.length })}</span>
             <div className="flex gap-2">
               <Button

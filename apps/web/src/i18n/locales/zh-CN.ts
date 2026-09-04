@@ -209,10 +209,9 @@ const zhCN = {
       placeholder: "搜索",
       clearLabel: "清除搜索",
     },
-    /** DataToolbar / ListToolbar default aria-labels. */
+    /** DataToolbar default aria-label. */
     toolbar: {
       dataLabel: "数据工具栏",
-      listLabel: "列表工具栏",
     },
     /** DataTablePagination copy with interpolation. */
     table: {

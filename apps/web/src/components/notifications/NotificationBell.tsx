@@ -215,7 +215,7 @@ export function NotificationBell() {
             </div>
           ) : list.length === 0 ? (
             <div
-              className="p-6 text-center text-sm text-muted-foreground"
+              className="p-6 text-center type-secondary"
               data-testid="notification-empty"
             >
               {t("notifications.empty")}
@@ -239,9 +239,7 @@ export function NotificationBell() {
                     >
                       {n.title}
                     </span>
-                    <span className="line-clamp-2 text-xs text-muted-foreground">
-                      {n.body}
-                    </span>
+                    <span className="line-clamp-2 type-metadata">{n.body}</span>
                     <span className="type-metadata">
                       {formatDateTime(n.createdAt)}
                     </span>
@@ -249,7 +247,7 @@ export function NotificationBell() {
                 </li>
               ))}
               {listTotal > list.length && (
-                <li className="px-3 py-2 text-center text-xs text-muted-foreground">
+                <li className="px-3 py-2 text-center type-metadata">
                   {t("notifications.more", { count: listTotal - list.length })}
                 </li>
               )}

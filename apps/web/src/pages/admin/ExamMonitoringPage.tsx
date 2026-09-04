@@ -187,7 +187,7 @@ export function ExamMonitoringPage() {
         <PageHeader title={t("admin.examMonitoring.pageTitle")} />
         <div className="flex items-center gap-3">
           {lastRefreshedAt !== null && (
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="type-numeric text-xs text-muted-foreground">
               {t("admin.examMonitoring.lastRefreshed", {
                 time: formatTime(lastRefreshedAt),
               })}
@@ -262,22 +262,22 @@ export function ExamMonitoringPage() {
                       )}
                     </Badge>
                   </Td>
-                  <Td className="tabular-nums">
+                  <Td className="type-numeric">
                     {a.lastHeartbeatAt ? formatTimeAgo(a.lastHeartbeatAt) : "—"}
                   </Td>
-                  <Td className="tabular-nums">
+                  <Td className="type-numeric">
                     {a.lastSaveAt ? formatTimeAgo(a.lastSaveAt) : "—"}
                   </Td>
-                  <Td className="tabular-nums text-center">
+                  <Td className="type-numeric text-center">
                     {a.visibilityLostCount}
                   </Td>
-                  <Td className="tabular-nums text-center">
+                  <Td className="type-numeric text-center">
                     {a.browserOfflineCount}
                   </Td>
-                  <Td className="tabular-nums text-center">
+                  <Td className="type-numeric text-center">
                     {a.saveFailedCount}
                   </Td>
-                  <Td className="tabular-nums text-center">
+                  <Td className="type-numeric text-center">
                     {a.submitFailedCount}
                   </Td>
                   <Td>
@@ -348,7 +348,7 @@ export function ExamMonitoringPage() {
                   key={ev.id}
                   className="flex items-start gap-3 rounded-md border p-2 text-xs"
                 >
-                  <span className="text-muted-foreground shrink-0 w-16 tabular-nums">
+                  <span className="text-muted-foreground shrink-0 w-16 type-numeric">
                     {formatTime(ev.occurredAt)}
                   </span>
                   <EventBadge level={ev.level} kind={ev.kind} />
@@ -367,7 +367,7 @@ export function ExamMonitoringPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.examMonitoring.timeline.noEvents")}
             </p>
           )}

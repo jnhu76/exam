@@ -60,8 +60,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       data-slot="diagnostic-data-row"
       className="flex items-baseline justify-between gap-2 py-1.5"
     >
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm tabular-nums text-foreground">{value}</span>
+      <span className="type-secondary">{label}</span>
+      <span className="type-numeric text-sm text-foreground">{value}</span>
     </div>
   );
 }
@@ -219,7 +219,7 @@ export function SystemDiagnosticsPage() {
         <PageHeader title={t("diagnostics.title")} />
         <div className="flex items-center gap-3">
           {lastRefreshedAt !== null && (
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="type-numeric text-xs text-muted-foreground">
               {t("diagnostics.header.lastRefreshed", {
                 time: formatTime(lastRefreshedAt),
               })}
@@ -302,7 +302,7 @@ export function SystemDiagnosticsPage() {
                 value={`${diag.dbLatency}ms`}
               />
               <div className="flex items-center justify-between gap-2 py-1.5">
-                <span className="text-sm text-muted-foreground">
+                <span className="type-secondary">
                   {t("diagnostics.labels.redis")}
                 </span>
                 {diag.redisStatus.mode === "off" ? (
@@ -394,13 +394,13 @@ export function SystemDiagnosticsPage() {
               title={t("diagnostics.cards.emailInfrastructure")}
             >
               <div className="flex items-center justify-between gap-2 py-1.5">
-                <span className="text-sm text-muted-foreground">
+                <span className="type-secondary">
                   {t("diagnostics.labels.emailStatus")}
                 </span>
                 <StatusBadge status={infraStatusKey(diag.emailStatus.status)} />
               </div>
               <div className="flex items-center justify-between gap-2 py-1.5">
-                <span className="text-sm text-muted-foreground">
+                <span className="type-secondary">
                   {t("diagnostics.labels.emailEnabled")}
                 </span>
                 <StatusBadge
@@ -412,7 +412,7 @@ export function SystemDiagnosticsPage() {
                 />
               </div>
               <div className="flex items-center justify-between gap-2 py-1.5">
-                <span className="text-sm text-muted-foreground">
+                <span className="type-secondary">
                   {t("diagnostics.labels.emailWorker")}
                 </span>
                 <StatusBadge
@@ -443,12 +443,12 @@ export function SystemDiagnosticsPage() {
                 value={`${diag.emailStatus.outbox.sent}`}
               />
               <div className="flex items-baseline justify-between gap-2 py-1.5">
-                <span className="text-sm text-muted-foreground">
+                <span className="type-secondary">
                   {t("diagnostics.labels.outboxDead")}
                 </span>
                 <span
                   className={cn(
-                    "text-sm tabular-nums text-foreground",
+                    "type-numeric text-sm text-foreground",
                     diag.emailStatus.outbox.dead > 0 &&
                       getToneTextColor("warning"),
                   )}
@@ -527,7 +527,7 @@ function DiagCard({
           role === "disabled" && "text-text-muted",
         )}
       >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 type-secondary">
           {icon}
           {title}
         </div>

@@ -68,12 +68,12 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2">
-                <p className="text-sm text-muted-foreground">
+                <p className="type-secondary">
                   {this.state.error?.message ||
                     i18n.t("common.errorBoundary.unknown")}
                 </p>
                 {import.meta.env.DEV && this.state.errorInfo && (
-                  <details className="text-xs text-muted-foreground">
+                  <details className="type-metadata">
                     <summary className="cursor-pointer">
                       {i18n.t("common.errorBoundary.details")}
                     </summary>

@@ -11,6 +11,10 @@
  *   - exam-ui/no-arbitrary-inline-typography (RECON-1 §15; exported, wired in C6)
  *   - exam-ui/no-heavy-font-weight (UI-PRODUCT-FINISH-CLOSURE-1; forbids
  *     font-semibold always and font-bold outside large metrics)
+ *   - exam-ui/no-recipe-recomposition (UI-STABILIZATION-GOAL-1 #305; forbids
+ *     the byte-exact raw stacks text-sm+text-muted-foreground, text-xs+
+ *     text-muted-foreground, and bare tabular-nums that replicate
+ *     type-secondary / type-metadata / type-numeric)
  *
  * Retired (UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, §8): `exam-ui/prefer-field-error`
  * is no longer wired. Its structural recipe (`<p> + text-destructive + text-size`)
@@ -57,6 +61,7 @@ import noArbitraryTypography from "./rules/no-arbitrary-typography";
 import noTypographyAuthorityConflict from "./rules/no-typography-authority-conflict";
 import noArbitraryInlineTypography from "./rules/no-arbitrary-inline-typography";
 import noHeavyFontWeight from "./rules/no-heavy-font-weight";
+import noRecipeRecomposition from "./rules/no-recipe-recomposition";
 
 /**
  * The rules are typed as typescript-eslint v8 `RuleModule`s, but ESLint v10's
@@ -72,6 +77,7 @@ const rules = {
   "no-typography-authority-conflict": noTypographyAuthorityConflict,
   "no-arbitrary-inline-typography": noArbitraryInlineTypography,
   "no-heavy-font-weight": noHeavyFontWeight,
+  "no-recipe-recomposition": noRecipeRecomposition,
 } as unknown as ESLint.Plugin["rules"];
 
 const plugin: ESLint.Plugin = {
@@ -87,4 +93,5 @@ export {
   noTypographyAuthorityConflict,
   noArbitraryInlineTypography,
   noHeavyFontWeight,
+  noRecipeRecomposition,
 };

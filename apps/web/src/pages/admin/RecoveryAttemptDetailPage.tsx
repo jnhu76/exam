@@ -618,7 +618,7 @@ export function RecoveryAttemptDetailPage() {
       )}
 
       {/* Snapshot indicator — server RR snapshot time + staleness flag. */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 type-metadata">
         {isStale && (
           <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
         )}
@@ -750,7 +750,7 @@ export function RecoveryAttemptDetailPage() {
         <PageSection title={t("admin.recoveryAttempt.sections.overview")}>
           <dl className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryAttempt.statusLabel")}
               </dt>
               <dd>
@@ -758,7 +758,7 @@ export function RecoveryAttemptDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryAttempt.startedAt")}
               </dt>
               <dd className="text-sm">
@@ -766,7 +766,7 @@ export function RecoveryAttemptDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryAttempt.submittedAt")}
               </dt>
               <dd className="text-sm">
@@ -774,7 +774,7 @@ export function RecoveryAttemptDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryAttempt.gradedAt")}
               </dt>
               <dd className="text-sm">
@@ -782,7 +782,7 @@ export function RecoveryAttemptDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryAttempt.lastActivityAt")}
               </dt>
               <dd className="text-sm">
@@ -792,7 +792,7 @@ export function RecoveryAttemptDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryAttempt.effectiveDeadline")}
               </dt>
               <dd className="text-sm">
@@ -815,7 +815,7 @@ export function RecoveryAttemptDetailPage() {
           <PageSection title={t("admin.recoveryAttempt.sections.exam")}>
             <dl className="flex flex-col gap-2">
               <div>
-                <dt className="text-xs text-muted-foreground">
+                <dt className="type-metadata">
                   {t("admin.recoveryAttempt.sections.exam")}
                 </dt>
                 <dd className="text-sm font-medium">
@@ -828,7 +828,7 @@ export function RecoveryAttemptDetailPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">
+                <dt className="type-metadata">
                   {t("admin.recoveryQueue.columns.severity")}
                 </dt>
                 <dd>
@@ -836,7 +836,7 @@ export function RecoveryAttemptDetailPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">
+                <dt className="type-metadata">
                   {t("admin.recoveryAttempt.examCloseAt")}
                 </dt>
                 <dd className="text-sm">
@@ -858,7 +858,7 @@ export function RecoveryAttemptDetailPage() {
           className="lg:col-span-2"
         >
           {data.interruptionEpisodes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryAttempt.noEpisodes")}
             </p>
           ) : (
@@ -872,7 +872,7 @@ export function RecoveryAttemptDetailPage() {
                     {t("admin.recoveryAttempt.episodeCount", {
                       count: index + 1,
                     })}
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    <span className="ml-2 type-metadata">
                       {episode.interruption.id} ·{" "}
                       {formatTime(episode.interruption.createdAt)}
                     </span>
@@ -886,16 +886,14 @@ export function RecoveryAttemptDetailPage() {
                               `admin.recoveryAttempt.eventType.${e.eventType}` as never,
                             )}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="type-metadata">
                             {formatTime(e.occurredAt)}
                           </span>
                           {e.actorId && (
-                            <span className="text-xs text-muted-foreground">
-                              {e.actorId}
-                            </span>
+                            <span className="type-metadata">{e.actorId}</span>
                           )}
                         </span>
-                        <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                        <span className="flex flex-wrap gap-x-3 type-metadata">
                           {e.detectionSource && (
                             <span>
                               {t("admin.recoveryAttempt.detectionSource")}:{" "}
@@ -938,7 +936,7 @@ export function RecoveryAttemptDetailPage() {
           className="lg:col-span-2"
         >
           {data.timeAdjustments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryAttempt.noAdjustments")}
             </p>
           ) : (
@@ -949,25 +947,25 @@ export function RecoveryAttemptDetailPage() {
                     <span className="font-medium">
                       {t(`admin.recoveryAttempt.policy.${adj.policy}` as never)}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="type-metadata">
                       {t(`admin.recoveryAttempt.source.${adj.source}` as never)}
                     </span>
                     <span className="text-xs">+{adj.addedSeconds}s</span>
                     {adj.eligibleSeconds != null && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="type-metadata">
                         {t("admin.recoveryAttempt.eligibleSeconds")}:{" "}
                         {adj.eligibleSeconds}s
                       </span>
                     )}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryAttempt.beforeDeadline")}:{" "}
                     {formatTime(adj.beforeDeadline)}
                     {" · "}
                     {t("admin.recoveryAttempt.afterDeadline")}:{" "}
                     {formatTime(adj.afterDeadline)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryAttempt.reason")}:{" "}
                     {adj.reasonText ?? adj.reasonCode}
                     {" · "}
@@ -999,7 +997,7 @@ export function RecoveryAttemptDetailPage() {
           className="lg:col-span-2"
         >
           {data.timeline.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryAttempt.noTimeline")}
             </p>
           ) : (
@@ -1010,10 +1008,10 @@ export function RecoveryAttemptDetailPage() {
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
                 >
                   <span className="text-sm font-medium">{entry.action}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {entry.actorName ?? entry.actorId}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {formatTime(entry.createdAt)}
                   </span>
                 </li>
@@ -1028,7 +1026,7 @@ export function RecoveryAttemptDetailPage() {
           className="lg:col-span-2"
         >
           {data.relatedIncidents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryAttempt.noRelatedIncidents")}
             </p>
           ) : (
@@ -1045,7 +1043,7 @@ export function RecoveryAttemptDetailPage() {
                     {r.title}
                   </Link>
                   <StatusBadge status={incidentStatusKey(r.status)} />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t(`admin.recoveryQueue.severity.${r.severity}` as never)}
                   </span>
                 </li>

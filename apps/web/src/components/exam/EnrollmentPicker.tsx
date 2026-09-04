@@ -107,7 +107,7 @@ export function EnrollmentPicker({
 
       <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
+          <p className="type-secondary py-4 text-center">
             {t("admin.enrollmentPicker.empty")}
           </p>
         ) : (
@@ -127,12 +127,10 @@ export function EnrollmentPicker({
                   <p className="text-sm font-medium truncate">
                     {candidate.name}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {candidate.username}
-                  </p>
+                  <p className="type-metadata truncate">{candidate.username}</p>
                 </div>
                 {enrolled && (
-                  <span className="text-xs text-muted-foreground shrink-0">
+                  <span className="type-metadata shrink-0">
                     {t("admin.enrollmentPicker.added")}
                   </span>
                 )}

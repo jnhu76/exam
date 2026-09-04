@@ -126,7 +126,7 @@ function ExamCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 type-secondary">
           <span className="flex items-center gap-1">
             <AppIcon icon={Clock} size="badge" />
             {exam.timingMode === "untimed"
@@ -154,7 +154,7 @@ function ExamCard({
             })}
           </span>
         </div>
-        <div className="text-sm text-muted-foreground">
+        <div className="type-secondary">
           {formatDateTime(exam.windowStartAt)} —{" "}
           {exam.windowEndAt === null
             ? t("examList.meta.noEnd")

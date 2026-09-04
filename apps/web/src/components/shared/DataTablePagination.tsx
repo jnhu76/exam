@@ -53,7 +53,7 @@ export function DataTablePagination({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-3 type-secondary sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >

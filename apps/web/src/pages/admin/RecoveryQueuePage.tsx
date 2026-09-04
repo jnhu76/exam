@@ -388,7 +388,7 @@ export function RecoveryQueuePage() {
       </DataToolbar>
 
       {snapshotAt && (
-        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-3 type-metadata">
           <span className={isStale ? "text-warning" : undefined}>
             {isStale && <AppIcon icon={CircleAlert} size="inline" />}
             {t("admin.recoveryQueue.snapshotAt", {
@@ -520,14 +520,14 @@ export function RecoveryQueuePage() {
                     <StatusBadge
                       status={incidentStatusKey(item.incident.status)}
                     />
-                    <span className="text-xs text-muted-foreground">
+                    <span className="type-metadata">
                       {formatTime(item.incident.createdAt)}
                     </span>
                   </span>
                   <span className="block truncate text-sm font-medium">
                     {item.examSummary.title}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t(
                       ("admin.recoveryQueue.severity." +
                         item.incident.severity) as never,

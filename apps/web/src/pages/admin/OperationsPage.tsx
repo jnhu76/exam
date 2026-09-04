@@ -17,15 +17,15 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatsCard } from "@/components/shared/StatsCard";
+import { PageSection } from "@/components/shared/PageSection";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Database, HeartPulse, MemoryStick, ShieldCheck } from "lucide-react";
+import { Database, HeartPulse, MemoryStick } from "lucide-react";
 
 const HEALTH_REFRESH_MS = 15_000;
 
@@ -262,483 +262,443 @@ export function OperationsPage() {
       </section>
 
       {/* ── Backup posture ── */}
-      <section aria-label={t("ops.backup.section")}>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">{t("ops.backup.title")}</CardTitle>
-            {backup ? (
-              <Badge
-                variant={
-                  backupTone === "healthy"
-                    ? "default"
-                    : backupTone === "warning"
-                      ? "secondary"
-                      : "outline"
-                }
-                data-testid="backup-status-badge"
-              >
-                {latestVerified === null && hasAnyRun
-                  ? t("ops.backup.notVerified")
-                  : !hasAnyRun
-                    ? t("ops.backup.noEvidence")
-                    : failureAfterVerified
-                      ? t("ops.backup.warning")
-                      : t("ops.backup.healthy")}
-              </Badge>
-            ) : (
-              <Skeleton className="h-6 w-24" />
-            )}
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {backup === null ? (
-              <Skeleton className="h-20 w-full" />
-            ) : (
-              <>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.backup.lastVerified")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {latestVerified?.verifiedAt
-                      ? `${latestVerified.artifactLabel} · ${formatDateTime(
-                          new Date(latestVerified.verifiedAt),
-                        )}`
-                      : t("ops.backup.noVerifiedArtifact")}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.backup.age")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {backupAgeMs !== null ? formatDuration(backupAgeMs) : "—"}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.backup.lastFailure")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {lastFailure
-                      ? `${lastFailure.failureReason ?? lastFailure.status} · ${formatDateTime(
-                          new Date(
-                            lastFailure.completedAt ?? lastFailure.startedAt,
-                          ),
-                        )}`
-                      : t("ops.backup.noFailure")}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.backup.counts")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {t("ops.backup.succeeded")}: {backup.counts.succeeded} ·{" "}
-                    {t("ops.backup.failed")}: {backup.counts.failed} ·{" "}
-                    {t("ops.backup.abandoned")}: {backup.counts.abandoned} ·{" "}
-                    {t("ops.backup.running")}: {backup.counts.running}
-                  </span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+      <PageSection
+        title={t("ops.backup.title")}
+        actions={
+          backup ? (
+            <Badge
+              variant={
+                backupTone === "healthy"
+                  ? "default"
+                  : backupTone === "warning"
+                    ? "secondary"
+                    : "outline"
+              }
+              data-testid="backup-status-badge"
+            >
+              {latestVerified === null && hasAnyRun
+                ? t("ops.backup.notVerified")
+                : !hasAnyRun
+                  ? t("ops.backup.noEvidence")
+                  : failureAfterVerified
+                    ? t("ops.backup.warning")
+                    : t("ops.backup.healthy")}
+            </Badge>
+          ) : (
+            <Skeleton className="h-6 w-24" />
+          )
+        }
+        contentClassName="space-y-3"
+      >
+        {backup === null ? (
+          <Skeleton className="h-20 w-full" />
+        ) : (
+          <>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.backup.lastVerified")}
+              </span>
+              <span className="type-numeric text-sm">
+                {latestVerified?.verifiedAt
+                  ? `${latestVerified.artifactLabel} · ${formatDateTime(
+                      new Date(latestVerified.verifiedAt),
+                    )}`
+                  : t("ops.backup.noVerifiedArtifact")}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">{t("ops.backup.age")}</span>
+              <span className="type-numeric text-sm">
+                {backupAgeMs !== null ? formatDuration(backupAgeMs) : "—"}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.backup.lastFailure")}
+              </span>
+              <span className="type-numeric text-sm">
+                {lastFailure
+                  ? `${lastFailure.failureReason ?? lastFailure.status} · ${formatDateTime(
+                      new Date(
+                        lastFailure.completedAt ?? lastFailure.startedAt,
+                      ),
+                    )}`
+                  : t("ops.backup.noFailure")}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">{t("ops.backup.counts")}</span>
+              <span className="type-numeric text-sm">
+                {t("ops.backup.succeeded")}: {backup.counts.succeeded} ·{" "}
+                {t("ops.backup.failed")}: {backup.counts.failed} ·{" "}
+                {t("ops.backup.abandoned")}: {backup.counts.abandoned} ·{" "}
+                {t("ops.backup.running")}: {backup.counts.running}
+              </span>
+            </div>
+          </>
+        )}
+      </PageSection>
 
       {/* ── Operational policy intent (P7-E3, ADR-017 D9) ── */}
-      <section aria-label={t("ops.policy.section")}>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AppIcon icon={ShieldCheck} size="nav" />
-              {t("ops.policy.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {t("ops.policy.intentNote")}
-            </p>
-            {policy === null ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (
-              <>
-                <div className="space-y-1">
-                  {(
-                    [
-                      ["rpo", policy.compliance.rpo],
-                      ["rto", policy.compliance.rto],
-                      ["retention", policy.compliance.retention],
-                      ["drill", policy.compliance.drill],
-                    ] as const
-                  ).map(([key, item]) => (
-                    <div
-                      key={key}
-                      data-slot="diagnostic-data-row"
-                      className="flex flex-wrap items-baseline justify-between gap-2 py-1"
-                    >
-                      <span className="text-sm text-muted-foreground">
-                        {t(`ops.policy.fields.${key}`)}
-                      </span>
-                      <span className="text-sm tabular-nums">
-                        {t("ops.policy.desired")}: {item.desired ?? "—"} ·{" "}
-                        {t("ops.policy.observed")}: {item.observed ?? "—"}
-                        <StatusBadge
-                          status={complianceBadgeKey(item.status)}
-                          className="ml-2"
-                        />
-                      </span>
-                    </div>
-                  ))}
-                  {policy.policy && (
-                    <div
-                      data-slot="diagnostic-data-row"
-                      className="flex flex-wrap items-baseline justify-between gap-2 py-1"
-                    >
-                      <span className="text-sm text-muted-foreground">
-                        {t("ops.policy.lastChange")}
-                      </span>
-                      <span className="text-sm tabular-nums">
-                        {policy.policy.reason} · {policy.policy.updatedBy} ·{" "}
-                        {formatDateTime(new Date(policy.policy.updatedAt))}
-                      </span>
-                    </div>
-                  )}
+      <PageSection title={t("ops.policy.title")} contentClassName="space-y-3">
+        <p className="type-secondary">{t("ops.policy.intentNote")}</p>
+        {policy === null ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <>
+            <div className="space-y-1">
+              {(
+                [
+                  ["rpo", policy.compliance.rpo],
+                  ["rto", policy.compliance.rto],
+                  ["retention", policy.compliance.retention],
+                  ["drill", policy.compliance.drill],
+                ] as const
+              ).map(([key, item]) => (
+                <div
+                  key={key}
+                  data-slot="diagnostic-data-row"
+                  className="flex flex-wrap items-baseline justify-between gap-2 py-1"
+                >
+                  <span className="type-secondary">
+                    {t(`ops.policy.fields.${key}`)}
+                  </span>
+                  <span className="type-numeric text-sm">
+                    {t("ops.policy.desired")}: {item.desired ?? "—"} ·{" "}
+                    {t("ops.policy.observed")}: {item.observed ?? "—"}
+                    <StatusBadge
+                      status={complianceBadgeKey(item.status)}
+                      className="ml-2"
+                    />
+                  </span>
                 </div>
+              ))}
+              {policy.policy && (
+                <div
+                  data-slot="diagnostic-data-row"
+                  className="flex flex-wrap items-baseline justify-between gap-2 py-1"
+                >
+                  <span className="type-secondary">
+                    {t("ops.policy.lastChange")}
+                  </span>
+                  <span className="type-numeric text-sm">
+                    {policy.policy.reason} · {policy.policy.updatedBy} ·{" "}
+                    {formatDateTime(new Date(policy.policy.updatedAt))}
+                  </span>
+                </div>
+              )}
+            </div>
 
-                {policyDraft !== null ? (
-                  <div className="mt-3 space-y-3 border-t pt-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="policy-rpo">
-                          {t("ops.policy.fields.rpo")} (s)
-                        </Label>
-                        <Input
-                          id="policy-rpo"
-                          type="number"
-                          min={300}
-                          max={604800}
-                          value={policyDraft.desiredRpoSeconds}
-                          onChange={(e) =>
-                            setPolicyDraft({
-                              ...policyDraft,
-                              desiredRpoSeconds: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="policy-rto">
-                          {t("ops.policy.fields.rto")} (s)
-                        </Label>
-                        <Input
-                          id="policy-rto"
-                          type="number"
-                          min={30}
-                          max={172800}
-                          placeholder={t("ops.policy.rtoPlaceholder")}
-                          value={policyDraft.desiredRtoSeconds ?? ""}
-                          onChange={(e) =>
-                            setPolicyDraft({
-                              ...policyDraft,
-                              desiredRtoSeconds: e.target.value || null,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="policy-retention">
-                          {t("ops.policy.fields.retention")} (d)
-                        </Label>
-                        <Input
-                          id="policy-retention"
-                          type="number"
-                          min={1}
-                          max={3650}
-                          value={policyDraft.desiredRetentionDays}
-                          onChange={(e) =>
-                            setPolicyDraft({
-                              ...policyDraft,
-                              desiredRetentionDays: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="policy-drill">
-                          {t("ops.policy.fields.drill")} (d)
-                        </Label>
-                        <Input
-                          id="policy-drill"
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={policyDraft.desiredDrillCadenceDays}
-                          onChange={(e) =>
-                            setPolicyDraft({
-                              ...policyDraft,
-                              desiredDrillCadenceDays: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="policy-reason">
-                        {t("ops.policy.reason")}
-                      </Label>
-                      <Input
-                        id="policy-reason"
-                        value={policyDraft.reason}
-                        onChange={(e) =>
-                          setPolicyDraft({
-                            ...policyDraft,
-                            reason: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        onClick={() => void savePolicy()}
-                        disabled={policySaving}
-                      >
-                        {policySaving
-                          ? t("ops.policy.saving")
-                          : t("ops.policy.save")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setPolicyDraft(null)}
-                      >
-                        {t("ops.policy.cancel")}
-                      </Button>
-                    </div>
+            {policyDraft !== null ? (
+              <div className="mt-3 space-y-3 border-t pt-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="policy-rpo">
+                      {t("ops.policy.fields.rpo")} (s)
+                    </Label>
+                    <Input
+                      id="policy-rpo"
+                      type="number"
+                      min={300}
+                      max={604800}
+                      value={policyDraft.desiredRpoSeconds}
+                      onChange={(e) =>
+                        setPolicyDraft({
+                          ...policyDraft,
+                          desiredRpoSeconds: e.target.value,
+                        })
+                      }
+                    />
                   </div>
-                ) : canManagePolicy ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    data-testid="policy-edit-button"
-                    onClick={() =>
+                  <div className="space-y-1">
+                    <Label htmlFor="policy-rto">
+                      {t("ops.policy.fields.rto")} (s)
+                    </Label>
+                    <Input
+                      id="policy-rto"
+                      type="number"
+                      min={30}
+                      max={172800}
+                      placeholder={t("ops.policy.rtoPlaceholder")}
+                      value={policyDraft.desiredRtoSeconds ?? ""}
+                      onChange={(e) =>
+                        setPolicyDraft({
+                          ...policyDraft,
+                          desiredRtoSeconds: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="policy-retention">
+                      {t("ops.policy.fields.retention")} (d)
+                    </Label>
+                    <Input
+                      id="policy-retention"
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={policyDraft.desiredRetentionDays}
+                      onChange={(e) =>
+                        setPolicyDraft({
+                          ...policyDraft,
+                          desiredRetentionDays: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="policy-drill">
+                      {t("ops.policy.fields.drill")} (d)
+                    </Label>
+                    <Input
+                      id="policy-drill"
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={policyDraft.desiredDrillCadenceDays}
+                      onChange={(e) =>
+                        setPolicyDraft({
+                          ...policyDraft,
+                          desiredDrillCadenceDays: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="policy-reason">
+                    {t("ops.policy.reason")}
+                  </Label>
+                  <Input
+                    id="policy-reason"
+                    value={policyDraft.reason}
+                    onChange={(e) =>
                       setPolicyDraft({
-                        desiredRpoSeconds: String(
-                          policy.policy?.desiredRpoSeconds ?? 3600,
-                        ),
-                        desiredRtoSeconds:
-                          policy.policy?.desiredRtoSeconds != null
-                            ? String(policy.policy.desiredRtoSeconds)
-                            : null,
-                        desiredRetentionDays: String(
-                          policy.policy?.desiredRetentionDays ?? 30,
-                        ),
-                        desiredDrillCadenceDays: String(
-                          policy.policy?.desiredDrillCadenceDays ?? 7,
-                        ),
-                        reason: "",
+                        ...policyDraft,
+                        reason: e.target.value,
                       })
                     }
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void savePolicy()}
+                    disabled={policySaving}
                   >
-                    {t("ops.policy.edit")}
+                    {policySaving
+                      ? t("ops.policy.saving")
+                      : t("ops.policy.save")}
                   </Button>
-                ) : null}
-                {policyError && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {policyError}
-                  </p>
-                )}
-                {policySaved && (
-                  <p className="text-sm text-foreground">
-                    {t("ops.policy.saved")}
-                  </p>
-                )}
-              </>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setPolicyDraft(null)}
+                  >
+                    {t("ops.policy.cancel")}
+                  </Button>
+                </div>
+              </div>
+            ) : canManagePolicy ? (
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="policy-edit-button"
+                onClick={() =>
+                  setPolicyDraft({
+                    desiredRpoSeconds: String(
+                      policy.policy?.desiredRpoSeconds ?? 3600,
+                    ),
+                    desiredRtoSeconds:
+                      policy.policy?.desiredRtoSeconds != null
+                        ? String(policy.policy.desiredRtoSeconds)
+                        : null,
+                    desiredRetentionDays: String(
+                      policy.policy?.desiredRetentionDays ?? 30,
+                    ),
+                    desiredDrillCadenceDays: String(
+                      policy.policy?.desiredDrillCadenceDays ?? 7,
+                    ),
+                    reason: "",
+                  })
+                }
+              >
+                {t("ops.policy.edit")}
+              </Button>
+            ) : null}
+            {policyError && (
+              <p role="alert" className="text-sm text-destructive">
+                {policyError}
+              </p>
             )}
-          </CardContent>
-        </Card>
-      </section>
+            {policySaved && (
+              <p className="type-body">{t("ops.policy.saved")}</p>
+            )}
+          </>
+        )}
+      </PageSection>
 
       {/* ── Restore readiness ── */}
-      <section aria-label={t("ops.restore.section")}>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">
-              {t("ops.restore.title")}
-            </CardTitle>
-            {restore ? (
-              <Badge
-                variant={
-                  drillTone === "healthy"
-                    ? "default"
-                    : drillTone === "warning"
-                      ? "secondary"
-                      : "outline"
-                }
-                data-testid="restore-status-badge"
-              >
-                {drill === null
-                  ? t("ops.restore.noEvidence")
-                  : drill.result === "succeeded"
-                    ? t("ops.restore.proven")
-                    : t("ops.restore.declared")}
-              </Badge>
-            ) : (
-              <Skeleton className="h-6 w-24" />
-            )}
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {restore === null ? (
-              <Skeleton className="h-16 w-full" />
-            ) : drill === null ? (
-              <p className="text-sm text-muted-foreground">
-                {t("ops.restore.noDrill")}
-              </p>
-            ) : (
-              <>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.restore.lastDrill")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {drill.operationId} ·{" "}
-                    {formatDateTime(
-                      new Date(drill.completedAt ?? drill.startedAt),
-                    )}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.restore.result")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {drill.result === "succeeded"
-                      ? t("ops.restore.resultSucceeded")
-                      : drill.result === "failed"
-                        ? t("ops.restore.resultFailed")
-                        : t("ops.restore.resultDeclared")}
-                    {drill.source === "automated"
-                      ? ` · ${t("ops.restore.sourceAutomated")}`
-                      : ` · ${t("ops.restore.sourceDeclared")}`}
-                    {drill.durationMs !== null &&
-                      ` · ${formatDuration(drill.durationMs)}`}
-                  </span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+      <PageSection
+        title={t("ops.restore.title")}
+        actions={
+          restore ? (
+            <Badge
+              variant={
+                drillTone === "healthy"
+                  ? "default"
+                  : drillTone === "warning"
+                    ? "secondary"
+                    : "outline"
+              }
+              data-testid="restore-status-badge"
+            >
+              {drill === null
+                ? t("ops.restore.noEvidence")
+                : drill.result === "succeeded"
+                  ? t("ops.restore.proven")
+                  : t("ops.restore.declared")}
+            </Badge>
+          ) : (
+            <Skeleton className="h-6 w-24" />
+          )
+        }
+        contentClassName="space-y-3"
+      >
+        {restore === null ? (
+          <Skeleton className="h-16 w-full" />
+        ) : drill === null ? (
+          <p className="type-secondary">{t("ops.restore.noDrill")}</p>
+        ) : (
+          <>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.restore.lastDrill")}
+              </span>
+              <span className="type-numeric text-sm">
+                {drill.operationId} ·{" "}
+                {formatDateTime(new Date(drill.completedAt ?? drill.startedAt))}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">{t("ops.restore.result")}</span>
+              <span className="type-numeric text-sm">
+                {drill.result === "succeeded"
+                  ? t("ops.restore.resultSucceeded")
+                  : drill.result === "failed"
+                    ? t("ops.restore.resultFailed")
+                    : t("ops.restore.resultDeclared")}
+                {drill.source === "automated"
+                  ? ` · ${t("ops.restore.sourceAutomated")}`
+                  : ` · ${t("ops.restore.sourceDeclared")}`}
+                {drill.durationMs !== null &&
+                  ` · ${formatDuration(drill.durationMs)}`}
+              </span>
+            </div>
+          </>
+        )}
+      </PageSection>
 
       {/* ── Runtime diagnostics (operational projection) ── */}
-      <section aria-label={t("ops.diagnostics.section")}>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("ops.diagnostics.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {diag === null ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (
-              <>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.diagnostics.dbLatency")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {diag.dbLatency} ms
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.diagnostics.redis")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {diag.redisStatus.state}
-                    {diag.redisStatus.latencyMs !== null &&
-                      ` · ${diag.redisStatus.latencyMs} ms`}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.diagnostics.heartbeatScanner")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {diag.heartbeatStatus.lastScanAt
-                      ? formatDateTime(
-                          new Date(diag.heartbeatStatus.lastScanAt),
-                        )
-                      : "—"}
-                    {" · "}
-                    {diag.heartbeatStatus.disruptedCount}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.diagnostics.deadlineScanner")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {diag.deadlineScannerStatus.lastScanAt
-                      ? formatDateTime(
-                          new Date(diag.deadlineScannerStatus.lastScanAt),
-                        )
-                      : "—"}
-                    {" · "}
-                    {diag.deadlineScannerStatus.autoSubmitCount}
-                  </span>
-                </div>
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {t("ops.diagnostics.emailWorker")}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {diag.emailStatus.status}
-                    {diag.emailStatus.worker.lastPollAt &&
-                      ` · ${formatDateTime(
-                        new Date(diag.emailStatus.worker.lastPollAt),
-                      )}`}
-                  </span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+      <PageSection
+        title={t("ops.diagnostics.title")}
+        contentClassName="space-y-1"
+      >
+        {diag === null ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.diagnostics.dbLatency")}
+              </span>
+              <span className="type-numeric text-sm">{diag.dbLatency} ms</span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.diagnostics.redis")}
+              </span>
+              <span className="type-numeric text-sm">
+                {diag.redisStatus.state}
+                {diag.redisStatus.latencyMs !== null &&
+                  ` · ${diag.redisStatus.latencyMs} ms`}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.diagnostics.heartbeatScanner")}
+              </span>
+              <span className="type-numeric text-sm">
+                {diag.heartbeatStatus.lastScanAt
+                  ? formatDateTime(new Date(diag.heartbeatStatus.lastScanAt))
+                  : "—"}
+                {" · "}
+                {diag.heartbeatStatus.disruptedCount}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.diagnostics.deadlineScanner")}
+              </span>
+              <span className="type-numeric text-sm">
+                {diag.deadlineScannerStatus.lastScanAt
+                  ? formatDateTime(
+                      new Date(diag.deadlineScannerStatus.lastScanAt),
+                    )
+                  : "—"}
+                {" · "}
+                {diag.deadlineScannerStatus.autoSubmitCount}
+              </span>
+            </div>
+            <div
+              data-slot="diagnostic-data-row"
+              className="flex items-baseline justify-between gap-2 py-1"
+            >
+              <span className="type-secondary">
+                {t("ops.diagnostics.emailWorker")}
+              </span>
+              <span className="type-numeric text-sm">
+                {diag.emailStatus.status}
+                {diag.emailStatus.worker.lastPollAt &&
+                  ` · ${formatDateTime(
+                    new Date(diag.emailStatus.worker.lastPollAt),
+                  )}`}
+              </span>
+            </div>
+          </>
+        )}
+      </PageSection>
     </div>
   );
 }

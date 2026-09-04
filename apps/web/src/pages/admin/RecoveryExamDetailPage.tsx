@@ -199,7 +199,7 @@ function RevokeProctorCommand({
         indeterminate={command.phase === "indeterminate"}
         onConfirm={() => void command.run()}
       >
-        <p className="text-sm text-muted-foreground">{displayName}</p>
+        <p className="type-secondary">{displayName}</p>
       </RecoveryCommandDialog>
     </>
   );
@@ -298,7 +298,7 @@ export function RecoveryExamDetailPage() {
       )}
 
       {/* Snapshot indicator — server RR snapshot time + staleness flag. */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 type-metadata">
         {isStale && (
           <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
         )}
@@ -317,13 +317,13 @@ export function RecoveryExamDetailPage() {
         <PageSection title={t("admin.recoveryExam.sections.exam")}>
           <dl className="flex flex-col gap-2">
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryExam.sections.exam")}
               </dt>
               <dd className="text-sm font-medium">{data.examSummary.title}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryQueue.columns.severity")}
               </dt>
               <dd>
@@ -331,7 +331,7 @@ export function RecoveryExamDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryExam.timingMode")}
               </dt>
               <dd className="text-sm">
@@ -341,7 +341,7 @@ export function RecoveryExamDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryExam.examCloseAt")}
               </dt>
               <dd className="text-sm">
@@ -380,7 +380,7 @@ export function RecoveryExamDetailPage() {
                   key={severity}
                   className="flex items-center gap-2 text-sm"
                 >
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t(`admin.recoveryQueue.severity.${severity}` as never)}
                   </span>
                   <span className="font-medium">
@@ -399,7 +399,7 @@ export function RecoveryExamDetailPage() {
         {/* Recent incidents — navigation stubs to the incident detail page */}
         <PageSection title={t("admin.recoveryExam.sections.recentIncidents")}>
           {data.recentIncidents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryExam.noRecentIncidents")}
             </p>
           ) : (
@@ -416,12 +416,12 @@ export function RecoveryExamDetailPage() {
                     {t(`admin.recoveryIncident.type.${incident.type}` as never)}
                   </Link>
                   <StatusBadge status={incidentStatusKey(incident.status)} />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t(
                       `admin.recoveryQueue.severity.${incident.severity}` as never,
                     )}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {formatTime(incident.createdAt)}
                   </span>
                 </li>
@@ -435,7 +435,7 @@ export function RecoveryExamDetailPage() {
             capability gating (ExamProctorAssignmentManage) is the authority. */}
         <PageSection title={t("admin.recoveryExam.sections.proctors")}>
           {data.activeProctors.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryExam.noProctors")}
             </p>
           ) : (
@@ -472,7 +472,7 @@ export function RecoveryExamDetailPage() {
           className="lg:col-span-2"
         >
           {attemptStatusEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryExam.noAttempts")}
             </p>
           ) : (

@@ -581,10 +581,7 @@ export function UsersPage() {
             <Field>
               <Label>{t("admin.users.dialog.role")}</Label>
               {roleLocked && editing ? (
-                <p
-                  className="py-2 text-sm text-muted-foreground"
-                  data-testid="locked-role"
-                >
+                <p className="py-2 type-secondary" data-testid="locked-role">
                   {t("admin.users.dialog.roleLockedHint", {
                     role: roleLabel(editing.role),
                   })}
@@ -637,9 +634,7 @@ export function UsersPage() {
             </DialogTitle>
           </DialogHeader>
           {assignmentsLoading ? (
-            <p className="py-4 text-sm text-muted-foreground">
-              {t("admin.common.loading")}
-            </p>
+            <p className="py-4 type-secondary">{t("admin.common.loading")}</p>
           ) : (
             <FieldGroup className="py-4">
               <Field>
@@ -676,7 +671,7 @@ export function UsersPage() {
                 <Label>{t("admin.users.teacherCourses.currentLabel")}</Label>
                 {assignments.filter((a) => a.status === "active").length ===
                 0 ? (
-                  <p className="py-2 text-sm text-muted-foreground">
+                  <p className="py-2 type-secondary">
                     {t("admin.users.teacherCourses.empty")}
                   </p>
                 ) : (
@@ -739,9 +734,7 @@ export function UsersPage() {
             </DialogTitle>
           </DialogHeader>
           {examAssignmentsLoading ? (
-            <p className="py-4 text-sm text-muted-foreground">
-              {t("admin.common.loading")}
-            </p>
+            <p className="py-4 type-secondary">{t("admin.common.loading")}</p>
           ) : (
             <FieldGroup className="py-4">
               <Field>
@@ -778,7 +771,7 @@ export function UsersPage() {
                 <Label>{t("admin.users.graderExams.currentLabel")}</Label>
                 {examAssignments.filter((a) => a.status === "active").length ===
                 0 ? (
-                  <p className="py-2 text-sm text-muted-foreground">
+                  <p className="py-2 type-secondary">
                     {t("admin.users.graderExams.empty")}
                   </p>
                 ) : (

@@ -119,6 +119,7 @@ const eslintConfig = [
       "exam-ui/no-arbitrary-inline-typography": "error",
       "exam-ui/no-typography-authority-conflict": "error",
       "exam-ui/no-heavy-font-weight": "error",
+      "exam-ui/no-recipe-recomposition": "error",
     },
   },
   {
@@ -143,6 +144,7 @@ const eslintConfig = [
       "exam-ui/no-arbitrary-inline-typography": "error",
       "exam-ui/no-typography-authority-conflict": "error",
       "exam-ui/no-heavy-font-weight": "error",
+      "exam-ui/no-recipe-recomposition": "error",
     },
   },
 ];

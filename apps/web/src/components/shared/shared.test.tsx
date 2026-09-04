@@ -1,10 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ConnectionIndicator } from "./ConnectionIndicator";
-import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { ContentCard } from "./ContentCard";
 import { DataTablePagination } from "./DataTablePagination";
 import { DataTableShell } from "./DataTableShell";
 import { DataToolbar } from "./DataToolbar";
@@ -12,7 +9,6 @@ import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
 import { FormSection } from "./FormSection";
 import { FieldStack, FormStack } from "./FormStack";
-import { ListToolbar } from "./ListToolbar";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
 import { PageSection } from "./PageSection";
@@ -220,13 +216,6 @@ describe("ConfirmDialog", () => {
   });
 });
 
-describe("ContentCard", () => {
-  it("renders children in a content container", () => {
-    render(<ContentCard>内容</ContentCard>);
-    expect(screen.getByText("内容")).toBeInTheDocument();
-  });
-});
-
 describe("SearchInput", () => {
   it("calls onChange when typing", async () => {
     const user = userEvent.setup();
@@ -266,54 +255,6 @@ describe("SearchInput", () => {
     expect(
       screen.queryByRole("button", { name: "清除搜索" }),
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("ListToolbar", () => {
-  it("renders search, filters, actions, and summary slots", () => {
-    render(
-      <ListToolbar
-        search={<input aria-label="关键词" />}
-        filters={<button type="button">筛选</button>}
-        actions={<button type="button">新建</button>}
-        summary="共 2 条"
-      />,
-    );
-
-    expect(
-      screen.getByRole("toolbar", { name: "列表工具栏" }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("关键词")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
-    expect(screen.getByText("共 2 条")).toBeInTheDocument();
-    expect(screen.getByRole("toolbar")).toHaveAttribute(
-      "data-toolbar-appearance",
-      "quiet",
-    );
-    expect(screen.getByLabelText("关键词").parentElement).toHaveAttribute(
-      "data-slot",
-      "toolbar-search",
-    );
-    expect(
-      screen.getByRole("button", { name: "筛选" }).parentElement,
-    ).toHaveAttribute("data-slot", "toolbar-filters");
-    expect(screen.getByRole("toolbar")).not.toHaveClass("surface-content");
-  });
-
-  it("renders legitimate falsy ReactNode slots", () => {
-    render(<ListToolbar search={0} filters={0} actions={0} summary={0} />);
-
-    expect(screen.getAllByText("0")).toHaveLength(4);
-  });
-
-  it("exposes the quiet appearance role for filter-heavy pages", () => {
-    render(<ListToolbar appearance="quiet" search="搜索" />);
-
-    expect(screen.getByRole("toolbar")).toHaveAttribute(
-      "data-toolbar-appearance",
-      "quiet",
-    );
   });
 });
 
@@ -428,61 +369,6 @@ describe("FormStack", () => {
   });
 });
 
-describe("ConfirmActionDialog", () => {
-  it("shows title and description and handles confirm and cancel", async () => {
-    const user = userEvent.setup();
-    const onConfirm = vi.fn();
-    const onCancel = vi.fn();
-
-    render(
-      <ConfirmActionDialog
-        trigger={<button type="button">删除</button>}
-        title="确认删除"
-        description="删除后无法恢复"
-        confirmLabel="删除"
-        destructive
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "删除" }));
-
-    expect(screen.getByText("确认删除")).toBeInTheDocument();
-    expect(screen.getByText("删除后无法恢复")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(onCancel).toHaveBeenCalledOnce();
-
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    expect(onConfirm).toHaveBeenCalledOnce();
-  });
-
-  it("does not confirm when confirm action is disabled", async () => {
-    const user = userEvent.setup();
-    const onConfirm = vi.fn();
-
-    render(
-      <ConfirmActionDialog
-        trigger={<button type="button">打开</button>}
-        title="确认删除"
-        description="删除后无法恢复"
-        confirmLabel="删除"
-        confirmDisabled
-        onConfirm={onConfirm}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "打开" }));
-    const confirmButton = screen.getByRole("button", { name: "删除" });
-
-    expect(confirmButton).toBeDisabled();
-    await user.click(confirmButton);
-    expect(onConfirm).not.toHaveBeenCalled();
-  });
-});
-
 describe("StatsCard", () => {
   it("renders label and value", () => {
     render(<StatsCard label="总考试数" value={42} />);
@@ -532,23 +418,6 @@ describe("StatsCard", () => {
     expect(
       screen.getByText("12").closest('[data-slot="stats-card-content"]'),
     ).toHaveAttribute("data-slot", "stats-card-content");
-  });
-});
-
-describe("ConnectionIndicator", () => {
-  it("renders connected status", () => {
-    render(<ConnectionIndicator status="connected" />);
-    expect(screen.getByText("连接正常")).toBeInTheDocument();
-  });
-
-  it("renders degraded status", () => {
-    render(<ConnectionIndicator status="degraded" />);
-    expect(screen.getByText("连接不稳定")).toBeInTheDocument();
-  });
-
-  it("renders offline status", () => {
-    render(<ConnectionIndicator status="offline" />);
-    expect(screen.getByText("连接已断开")).toBeInTheDocument();
   });
 });
 
@@ -716,6 +585,15 @@ describe("DataToolbar", () => {
     expect(
       screen.getByRole("toolbar", { name: "考试筛选" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the search slot as a governed region", () => {
+    render(<DataToolbar search={<input aria-label="关键词" />} />);
+
+    expect(screen.getByLabelText("关键词").parentElement).toHaveAttribute(
+      "data-slot",
+      "toolbar-search",
+    );
   });
 });
 

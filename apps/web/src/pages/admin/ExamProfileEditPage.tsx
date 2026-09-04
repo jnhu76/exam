@@ -358,7 +358,7 @@ export function ExamProfileEditPage() {
                 </SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
+            <p className="type-metadata">
               {t(`admin.forms.exam.timingModeHint.${form.timingMode}`)}
             </p>
           </Field>
