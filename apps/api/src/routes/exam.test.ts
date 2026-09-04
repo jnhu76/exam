@@ -337,6 +337,91 @@ describe("exam routes", () => {
     expect(body.error.requestId).toBeDefined();
   });
 
+  it("POST /api/exams emits machine field semantics for a cross-course question (C2 T8)", async () => {
+    const otherCourseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Other Course",
+        code: `EC-OTHER-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const otherCourseId = otherCourseRes.json().id;
+    const foreignRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId: otherCourseId,
+        type: "true_false",
+        content: "Foreign question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const foreignQuestionId = foreignRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Mismatched Question Exam",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [foreignQuestionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.details.fields).toEqual([
+      expect.objectContaining({
+        field: "questionIds",
+        code: "QUESTION_COURSE_MISMATCH",
+      }),
+    ]);
+    // T6: the compatibility message remains required on the wire.
+    expect(body.error.details.fields[0].message.length).toBeGreaterThan(0);
+  });
+
+  it("POST /api/exams emits machine field semantics for an unknown profile (C2 T8)", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Unknown Profile Exam",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [],
+        profileId: "00000000-0000-0000-0000-0000000000aa",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.details.fields).toEqual([
+      expect.objectContaining({
+        field: "profileId",
+        code: "RESOURCE_NOT_FOUND",
+        // Machine params per message contract D0.4/D0.7: which referenced
+        // entity is missing is structural, not compatibility prose.
+        params: { resource: "examProfile" },
+      }),
+    ]);
+    expect(body.error.details.fields[0].message.length).toBeGreaterThan(0);
+  });
+
   it("PATCH /api/exams/:id returns 409 EXAM_UPDATE_NOT_ALLOWED for published exam non-schedule field", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",

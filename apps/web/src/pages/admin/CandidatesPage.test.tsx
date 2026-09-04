@@ -418,6 +418,40 @@ describe("CandidatesPage", () => {
     expect(await screen.findByText("姓名不能为空")).toBeInTheDocument();
   });
 
+  it("renders a server identity-field error from machine code/params under the dynamic field (C2 T7)", async () => {
+    // The server paths the error as `fields.employeeId` with a machine code;
+    // the compatibility message wording is deliberately alien to prove the
+    // localized meaning comes from code + params via the Web catalog.
+    apiPost.mockRejectedValue(
+      new ApiError(400, "字段校验失败", "VALIDATION_ERROR", {
+        fields: [
+          {
+            field: "fields.employeeId",
+            code: "REQUIRED",
+            params: { label: "编号" },
+            message: "COMPLETELY DIFFERENT SERVER WORDING",
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "新增考生" }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "Name");
+    // Satisfy the CLIENT-side gate so the POST is reached; the server then
+    // rejects with the machine-coded identity-field error.
+    await user.type(inputs[3]!, "123");
+    await user.click(dialogSaveBtn(dialog));
+    expect(await screen.findByText("编号为必填项")).toBeInTheDocument();
+    expect(
+      screen.queryByText("COMPLETELY DIFFERENT SERVER WORDING"),
+    ).not.toBeInTheDocument();
+  });
+
   it("disables save button while saving to prevent duplicate submit", async () => {
     let resolveSave: (value: unknown) => void;
     apiPost.mockReturnValue(

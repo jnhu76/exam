@@ -519,6 +519,51 @@ describe("ExamCreatePage wizard — validation routing", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("routes a machine-coded server field error through the Web catalog, not server wording (C2 T2/T8)", async () => {
+    const user = userEvent.setup();
+    // Wire reality: top-level error.message is the registry compat text;
+    // fields[].message is producer-local compat. Both differ from the
+    // Web-catalog semantic the field renders.
+    apiPost.mockRejectedValueOnce(
+      Object.assign(new Error("输入内容有误，请检查后重试"), {
+        code: "VALIDATION_ERROR",
+        details: {
+          fields: [
+            {
+              field: "courseId",
+              code: "RESOURCE_NOT_FOUND",
+              params: { resource: "course" },
+              message: "SERVER COMPAT WORDING",
+            },
+          ],
+        },
+      }),
+    );
+    renderPage();
+    await screen.findByText("创建考试");
+    fillTitle("Machine Course Error");
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByRole("button", { name: /下一步/ }));
+    }
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-09-01T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-09-01T11:00" },
+    });
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    await screen.findByText("创建前检查");
+    await user.click(screen.getByRole("button", { name: "创建草稿" }));
+    // The meaning comes from code+params via the Web catalog ("课程不存在");
+    // the mutated server wording must never surface.
+    expect(
+      await screen.findByText("课程不存在", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("SERVER COMPAT WORDING")).not.toBeInTheDocument();
+    // stepForField routes courseId back to step 1.
+    expect(await screen.findByLabelText("考试名称")).toBeInTheDocument();
+  });
+
   it("stepper future steps are disabled — forward validation cannot be bypassed", async () => {
     renderPage();
     await screen.findByText("创建考试");

@@ -244,7 +244,8 @@ describe("candidate routes", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toMatchObject({
+    const body = res.json();
+    expect(body).toMatchObject({
       error: {
         code: "VALIDATION_ERROR",
         details: {
@@ -252,12 +253,21 @@ describe("candidate routes", () => {
             expect.objectContaining({
               field: `fields.${identityFieldName}`,
               code: "REQUIRED",
+              // Machine params per message contract D0.4/D0.7 (C2): the
+              // failing configured field's label is structural.
+              params: { label: "身份编号" },
             }),
           ]),
         },
         requestId: expect.any(String),
       },
     });
+    // T6: the compatibility message remains present and non-empty —
+    // dual-emitted alongside the machine code, never removed.
+    const requiredField = body.error.details.fields.find(
+      (f: { code: string }) => f.code === "REQUIRED",
+    );
+    expect(requiredField.message.length).toBeGreaterThan(0);
   });
 
   it("POST /api/candidates returns a stable identity conflict", async () => {

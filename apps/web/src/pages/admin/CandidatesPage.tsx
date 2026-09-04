@@ -210,7 +210,16 @@ export function CandidatesPage() {
       setDialogOpen(false);
       await load();
     } catch (err) {
-      const serverFieldErrors = getApiFieldErrors(err);
+      // Server identity-field errors carry path `fields.<name>`; the dialog
+      // renders them under the client validation key `field:<name>`.
+      const serverFieldErrors = Object.fromEntries(
+        Object.entries(getApiFieldErrors(err)).map(([key, value]) => [
+          key.startsWith("fields.")
+            ? `field:${key.slice("fields.".length)}`
+            : key,
+          value,
+        ]),
+      );
       setFieldErrors((current) => ({ ...current, ...serverFieldErrors }));
       setSaveError(getApiErrorMessage(err, t("admin.common.saveFailed")));
     } finally {

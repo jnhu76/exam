@@ -207,8 +207,14 @@ redefined or removed.
 **CURRENT:** since C1, top-level `details.params` are emitted where a
 machine-relevant dynamic fact exists: `courseCode` (duplicate course code),
 `questionCount` (non-empty course deletion), `name` (duplicate exam profile
-name). Field-level `details.fields[].params` are still not emitted — that is
-C2 scope.
+name). Since C2, field-level `details.fields[].params` are emitted where a
+structured fact exists: Zod issue metadata (`minimum` / `maximum` /
+`expected` / `received` / `validation`, derived only from structured issue
+properties — never from `issue.message`), the failing candidate identity
+field's `label`, and the missing referenced entity's `resource`
+(`course` / `examProfile`) on exam route-local field errors. Facts outside
+the frozen `string | number` domain (e.g. Zod `options` arrays) are
+omitted, never widened.
 **TARGET:** as above.
 **MIGRATION RULE:** additive. If repository reality ever proves that
 boolean/null/etc. values are genuinely required, report the divergence
@@ -253,9 +259,10 @@ compatibility text. — implemented by C1.
 
 **TARGET (field-level / import `message`):** non-authoritative
 compatibility text whose language and producer are not machine
-contract; C0 does **not** require registry ownership of it. C2 removes
-first-party semantic dependence on it by adding `code + params`
-(D0.7) — it does not re-home field copy into the registry.
+contract; C0 does **not** require registry ownership of it. Since C2,
+first-party field consumers resolve known field codes from
+`code + params` (D0.7) and no longer depend on this text — field copy
+is not re-homed into the registry.
 
 In both zones the web never treats `message` as authoritative copy
 (C3).
@@ -286,21 +293,41 @@ The local Redis sentinel (F-10b, hygiene only) remains and is C6 scope.
 
 `details.fields[]` is the field-level error channel.
 
-**CURRENT shape (wire):**
+**CURRENT shape (wire, since C2):**
 
 ```ts
 {
-  field: string;   // dot path; array indexes today use `items.0.name`
-  code: string;    // coarse ErrorCode or Zod issue code today
-  message: string; // human text — may be Chinese (routes) or English (Zod defaults)
+  field: string;   // dot path; array indexes use `items.0.name` (see path note)
+  code: string;    // machine semantic: Zod issue code or domain reason code
+  params?: Record<string, string | number>; // structured dynamic values (D0.4)
+  message: string; // compatibility human text, non-authoritative —
+                   // may be Chinese (routes) or English (Zod defaults)
 }
 ```
 
-**TARGET shape (frozen, additive; implemented by C2):**
+`params` is emitted only where a structured fact exists: Zod issue
+metadata, the failing candidate identity field's `label`, and the
+missing referenced entity's `resource` on exam route-local field errors.
+Existing field `code` values are kept stable (published field codes are
+not re-pointed); new codes may be added additively.
+
+**Path convention — TARGET DEFERRED (C2 verdict):** the C0 TARGET prefers
+bracket indexes (`questions[0].options[1]`), but C2 keeps the current
+dot-index encoding. Evidence: first-party consumers key field errors by
+the exact path string (e.g. the candidate dialog maps server
+`fields.<name>` paths onto its form keys), so a bracket migration must
+rewrite every producer and consumer in one slice — a breaking change to
+public paths with no demonstrated external demand. The C2 success
+criterion (wording independence) is fully achievable on dot paths; any
+future bracket migration is a separate compatibility decision and must
+follow the D0.9-style inventory gate.
+
+**TARGET shape (frozen; `params` + machine-code consumption implemented
+by C2):**
 
 ```ts
 {
-  field: string;   // bracket path; array indexes use `questions[0].options[1]`
+  field: string;
   code: string;    // machine semantic: Zod issue code or domain reason code
   params?: Record<string, string | number>; // structured dynamic values
   message: string; // compatibility human text, non-authoritative —
@@ -308,9 +335,6 @@ The local Redis sentinel (F-10b, hygiene only) remains and is C6 scope.
                    // removal requires a separate compatibility decision
 }
 ```
-
-Path convention is the bracket form `questions[0].options[1]` rather than
-the ambiguous `questions.0.options.1`.
 
 `message` remains a **required** wire field in the TARGET: it stays
 non-authoritative compatibility text, but C0/C2 do not demote it to
@@ -327,11 +351,19 @@ message = compatibility human text, non-authoritative
 ```
 
 **MIGRATION RULE (additive, no breaking removal in C0/C2):** existing
-`field.message` remains during migration; new machine fields are
-additive; the web moves to `code + params`; `message` becomes
-fallback-only in consumption while remaining a required wire field.
+`field.message` remains; new machine fields are additive; since C2 the
+first-party web resolves `code + params` and uses `message` only as the
+unknown-code fallback (D0.10) while it stays a required wire field.
 Future required→optional demotion or removal, if ever desired, requires
 a separate compatibility decision.
+
+**First-party consumption (CURRENT, since C2):** the Web field-error
+resolver (`apps/web/src/lib/apiErrors.ts`) maps known field codes to
+localized copy in the `validation.field.*` catalog namespace, interpolating
+`params` (with `resource` resolved through `validation.field.resources.*`);
+unknown codes fall back to the compatibility `message`, then to a generic
+localized field error. Known codes never consult `message`, so backend/Zod
+wording changes cannot alter first-party field semantics.
 
 ### D0.8 — Disabled / blocking reason
 

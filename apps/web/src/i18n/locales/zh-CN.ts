@@ -265,6 +265,30 @@ const zhCN = {
     passwordChangeSuccess: "密码修改成功",
     passwordChangeFailed: "密码修改失败",
     passwordMinChars: "至少 {{min}} 位",
+    /** C2 field-violation codes (message contract D0.7). Keyed by the wire
+     * machine code; codes without an entry fall back to the server
+     * compatibility message, so server wording is never authoritative. */
+    field: {
+      fallback: "该字段填写有误，请检查后重试",
+      REQUIRED: "{{label}}为必填项",
+      INVALID_TYPE: "该字段类型不正确",
+      // WHY: the wire params carry only minimum/maximum — the Zod constraint
+      // dimensions (type/inclusive/exact) never cross the wire — so numeric
+      // inequality wording would fabricate a constraint (e.g. positive()
+      // emits minimum 0 with an exclusive bound). Copy stays generic-safe.
+      TOO_SMALL: "该字段未满足最小限制",
+      TOO_BIG: "该字段未满足最大限制",
+      INVALID_STRING: "该字段格式不正确",
+      INVALID_ENUM_VALUE: "该字段取值不在允许范围内",
+      UNRECOGNIZED_KEYS: "包含不支持的字段",
+      IDENTITY_FIELD_CONFIGURATION: "考生身份字段配置无效",
+      RESOURCE_NOT_FOUND: "{{resource}}不存在",
+      QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
+      resources: {
+        course: "课程",
+        examProfile: "考试策略模板",
+      },
+    },
   },
 
   passwordChange: {

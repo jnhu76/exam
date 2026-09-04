@@ -7,22 +7,30 @@ import i18n from "@/i18n";
  */
 export const API_ERROR_FALLBACK_KEY = "errors.unknown";
 
-/** Shape of a single field-level validation error detail from the API. */
-interface ValidationFieldDetail {
+/** Shape of a single field-level validation error detail from the API (message contract D0.7). */
+export interface ApiFieldErrorDetail {
   field: string;
-  message: string;
   code?: string;
+  params?: Record<string, string | number>;
+  message: string;
 }
+
+/**
+ * i18n namespace for wire field-violation codes (message contract D0.7,
+ * C2 slice). Keyed by the machine field `code`, so first-party field
+ * semantics never depend on server compatibility wording. The vocabulary
+ * is open: codes without a catalog entry take the fallback chain in
+ * {@link resolveFieldError}.
+ */
+const FIELD_ERROR_KEY_PREFIX = "validation.field.";
 
 /** Returns true if value is a plain object (Record). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-/** Returns true if value matches the ValidationFieldDetail shape. */
-function isValidationFieldDetail(
-  value: unknown,
-): value is ValidationFieldDetail {
+/** Returns true if value matches the ApiFieldErrorDetail shape. */
+function isValidationFieldDetail(value: unknown): value is ApiFieldErrorDetail {
   if (!isRecord(value)) return false;
   return typeof value.field === "string" && typeof value.message === "string";
 }
@@ -45,7 +53,33 @@ export function getApiErrorMessage(error: unknown, fallback?: string): string {
   return fallback ?? resolveFallback();
 }
 
-/** Extracts per-field validation errors from an API error's details object. */
+/**
+ * Resolves one field violation to display text (message contract D0.7/D0.10):
+ * known field code → localized semantic from `code + params`; unknown code →
+ * the required server compatibility `message` (non-authoritative display
+ * fallback); generic localized fallback when neither is usable. Known codes
+ * never consult the compatibility message, so server wording changes cannot
+ * alter first-party field semantics.
+ */
+export function resolveFieldError(detail: ApiFieldErrorDetail): string {
+  if (detail.code && i18n.exists(`${FIELD_ERROR_KEY_PREFIX}${detail.code}`)) {
+    const params: Record<string, string | number> = { ...detail.params };
+    const resource = params.resource;
+    if (
+      typeof resource === "string" &&
+      i18n.exists(`${FIELD_ERROR_KEY_PREFIX}resources.${resource}`)
+    ) {
+      params.resource = i18n.t(
+        `${FIELD_ERROR_KEY_PREFIX}resources.${resource}` as never,
+      );
+    }
+    return i18n.t(`${FIELD_ERROR_KEY_PREFIX}${detail.code}` as never, params);
+  }
+  return detail.message || i18n.t(`${FIELD_ERROR_KEY_PREFIX}fallback` as never);
+}
+
+/** Extracts per-field validation errors from an API error's details object,
+ * resolving each to localized display text via its machine code/params. */
 export function getApiFieldErrors(error: unknown): Record<string, string> {
   if (!isRecord(error) || !isRecord(error.details)) return {};
   const fields = error.details.fields;
@@ -53,6 +87,6 @@ export function getApiFieldErrors(error: unknown): Record<string, string> {
   return Object.fromEntries(
     fields
       .filter(isValidationFieldDetail)
-      .map((detail) => [detail.field, detail.message]),
+      .map((detail) => [detail.field, resolveFieldError(detail)]),
   );
 }

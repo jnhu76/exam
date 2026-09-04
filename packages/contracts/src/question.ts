@@ -482,7 +482,7 @@ export const QuestionImportResultSchema = z.object({
         .string()
         .optional()
         .describe(
-          "Compatibility human text, non-authoritative. The current row-result shape does not yet expose a specific machine error code; machine-semantic enrichment is tracked by C2 (message contract D0.7).",
+          "Compatibility human text, non-authoritative. A failing row joins multiple Zod issue messages, so no single stable machine code exists per row; per-row code enrichment was evaluated and deferred by the message-remediation program (#417, C2 verdict).",
         ),
     }),
   ),

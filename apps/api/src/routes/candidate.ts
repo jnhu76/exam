@@ -78,6 +78,10 @@ function validateCandidateFields(
           {
             field: `fields.${field.name}`,
             code: "REQUIRED",
+            // Machine params per message contract D0.4/D0.7: the dynamic
+            // fact (which configured field failed) is structural, the prose
+            // in message is non-authoritative compatibility text.
+            params: { label: field.label },
             message: candidateFieldValidationMessages.required(field.label),
           },
         ],
@@ -94,6 +98,7 @@ function validateCandidateFields(
           {
             field: `fields.${field.name}`,
             code: "INVALID_TYPE",
+            params: { label: field.label },
             message: candidateFieldValidationMessages.numberRequired(
               field.label,
             ),
@@ -112,6 +117,7 @@ function validateCandidateFields(
           {
             field: `fields.${field.name}`,
             code: "INVALID_TYPE",
+            params: { label: field.label },
             message: candidateFieldValidationMessages.textRequired(field.label),
           },
         ],
