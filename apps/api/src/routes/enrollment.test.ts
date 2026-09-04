@@ -248,6 +248,53 @@ describe("exam enrollment routes", () => {
       },
     ]);
   });
+
+  it("POST /api/exams/:examId/enrollments keeps pre-request duplicate semantics alongside a valid tail (#408)", async () => {
+    // Fresh A and B, order-independent of earlier tests in this file.
+    const mkCandidate = async (tag: string) => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/candidates",
+        payload: {
+          username: `enroll-${tag}-${uniquePrefix()}`,
+          password: "password123",
+          name: `Candidate ${tag}`,
+          fields: {},
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      return res.json().id as string;
+    };
+    const aId = await mkCandidate("pre-a");
+    const bId = await mkCandidate("pre-b");
+
+    // A is enrolled BEFORE the request under test.
+    const seed = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [aId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(seed.statusCode).toBe(200);
+    expect(seed.json().added).toBe(1);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [aId, bId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Existing public response semantics: A → DUPLICATE skip, B → added.
+    expect(body.added).toBe(1);
+    expect(body.skipped).toBe(1);
+    expect(body.enrollments).toHaveLength(1);
+    expect(body.enrollments[0].candidateId).toBe(bId);
+    expect(body.skippedCandidates).toEqual([
+      { candidateId: aId, reason: "DUPLICATE" },
+    ]);
+  });
 });
 
 describe("exam_assigned notifications on enrollment (#299)", () => {
@@ -528,5 +575,81 @@ describe("exam_assigned notifications on enrollment (#299)", () => {
     const outbox = await outboxRowsFor(candidateUserId);
     expect(outbox).toHaveLength(2);
     expect(new Set(outbox.map((o) => o.dedupeKey)).size).toBe(2);
+  });
+
+  // #408 — a candidateId repeated within ONE payload must reuse the
+  // endpoint's DUPLICATE skip semantics, not reach the INSERT and hit the
+  // DB unique constraint (409) after the first copy already committed.
+  it("duplicate candidateIds within one payload skip as DUPLICATE (#408)", async () => {
+    const profileId = await createCandidateViaApi("dupin", "dupin@example.com");
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId, profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.added).toBe(1);
+    expect(body.skipped).toBe(1);
+    expect(body.skippedCandidates).toEqual([
+      { candidateId: profileId, reason: "DUPLICATE" },
+    ]);
+
+    // Durable truth: exactly one enrollment row for A.
+    const rows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, profileId));
+    expect(rows).toHaveLength(1);
+
+    // The repeated item must not produce a second business effect:
+    // one effective assignment → exactly one Inbox + one Email row.
+    expect(await inboxRowsFor(candidateUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(candidateUserId)).toHaveLength(1);
+  });
+
+  it("duplicate payload item does not abort the valid tail (#408)", async () => {
+    const aId = await createCandidateViaApi("taila", "taila@example.com");
+    const bId = await createCandidateViaApi("tailb", "tailb@example.com");
+    const aUserId = await resolveCandidateUserId(aId);
+    const bUserId = await resolveCandidateUserId(bId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [aId, aId, bId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.added).toBe(2);
+    expect(body.skipped).toBe(1);
+    expect(body.skippedCandidates).toEqual([
+      { candidateId: aId, reason: "DUPLICATE" },
+    ]);
+    expect(
+      body.enrollments.map((e: { candidateId: string }) => e.candidateId),
+    ).toEqual([aId, bId]);
+
+    // Both candidates enrolled exactly once.
+    const aRows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, aId));
+    expect(aRows).toHaveLength(1);
+    const bRows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, bId));
+    expect(bRows).toHaveLength(1);
+
+    // Each effective assignment notified exactly once.
+    expect(await inboxRowsFor(aUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(aUserId)).toHaveLength(1);
+    expect(await inboxRowsFor(bUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(bUserId)).toHaveLength(1);
   });
 });

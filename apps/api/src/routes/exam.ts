@@ -2008,6 +2008,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             return { enrollment: created, recipientUser: user };
           },
         );
+        // INVARIANT: sync after commit — a rolled-back enrollment must not
+        // be treated as already-enrolled by later payload items.
+        existingIds.add(candidateId);
         added++;
         enrollments.push({
           id: enrollment.id,
