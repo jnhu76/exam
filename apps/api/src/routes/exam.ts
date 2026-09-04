@@ -564,6 +564,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "courseId",
                 code: "RESOURCE_NOT_FOUND",
+                // Machine params per message contract D0.4/D0.7: which
+                // referenced entity is missing is structural, so the Web
+                // can localize without reading compatibility prose.
+                params: { resource: "course" },
                 message: "课程不存在",
               },
             ],
@@ -617,6 +621,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                 {
                   field: "profileId",
                   code: "RESOURCE_NOT_FOUND",
+                  params: { resource: "examProfile" },
                   message: "考试策略模板不存在",
                 },
               ],

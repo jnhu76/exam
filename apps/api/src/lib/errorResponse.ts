@@ -5,7 +5,7 @@ import {
   type ErrorResponse,
   type ValidationErrorDetails,
 } from "@exam/contracts";
-import type { ZodError } from "zod";
+import type { ZodError, ZodIssue } from "zod";
 
 /** Legacy string error codes mapped to the current {@link ErrorCode} domain values. */
 const legacyCodeMap: Readonly<Record<string, ErrorCode>> = {
@@ -87,7 +87,46 @@ export function buildErrorResponse(
 }
 
 /**
+ * Derive the machine `params` for a Zod issue from its structured
+ * properties only (message contract D0.4/D0.7) — never from
+ * `issue.message`. Values outside the frozen `string | number` domain
+ * (e.g. the string[] `options` of `invalid_enum_value`) are omitted;
+ * `code` still carries the semantic and `message` stays the compatibility
+ * text.
+ */
+function structuredIssueParams(
+  issue: ZodIssue,
+): Record<string, string | number> | undefined {
+  switch (issue.code) {
+    case "invalid_type":
+      return { expected: issue.expected, received: issue.received };
+    case "too_small":
+      return typeof issue.minimum === "number"
+        ? { minimum: issue.minimum }
+        : undefined;
+    case "too_big":
+      return typeof issue.maximum === "number"
+        ? { maximum: issue.maximum }
+        : undefined;
+    case "invalid_string":
+      // Regex-based string checks type `validation` as RegExp — outside the
+      // frozen param domain, so only the named string checks carry it.
+      return typeof issue.validation === "string"
+        ? { validation: issue.validation }
+        : undefined;
+    case "invalid_enum_value":
+      return { received: issue.received };
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Extract field-level validation details from a Zod error.
+ *
+ * Each entry carries the machine contract (`field` path, `code`, `params`
+ * where structured issue metadata exists) plus the required
+ * non-authoritative compatibility `message` (message contract D0.7).
  *
  * @param error - The thrown `ZodError`.
  * @returns A {@link ValidationErrorDetails} object listing each failing field.
@@ -96,11 +135,15 @@ export function getValidationErrorDetails(
   error: ZodError,
 ): ValidationErrorDetails {
   return {
-    fields: error.issues.map((issue) => ({
-      field: issue.path.map(String).join(".") || "_root",
-      code: issue.code.toUpperCase(),
-      message: issue.message,
-    })),
+    fields: error.issues.map((issue) => {
+      const params = structuredIssueParams(issue);
+      return {
+        field: issue.path.map(String).join(".") || "_root",
+        code: issue.code.toUpperCase(),
+        ...(params ? { params } : {}),
+        message: issue.message,
+      };
+    }),
   };
 }
 

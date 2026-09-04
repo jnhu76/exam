@@ -92,8 +92,9 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
  *
  * Semantics frozen by the Message & Error Contract (#413 C0): `field` is
  * the machine-addressable path, `code` is the machine semantic, `message`
- * is compatibility human text (non-authoritative). Target (additive, C2)
- * adds `params` for structured dynamic values.
+ * is compatibility human text (non-authoritative). C2 adds `params` for
+ * structured dynamic values (additive; value domain frozen to
+ * `string | number`).
  */
 export const ValidationErrorDetailSchema = z.object({
   field: z
@@ -109,6 +110,12 @@ export const ValidationErrorDetailSchema = z.object({
   code: z
     .string()
     .describe("Machine-readable validation or domain reason code."),
+  params: z
+    .record(z.union([z.string(), z.number()]))
+    .optional()
+    .describe(
+      "Structured dynamic values for this field error (machine contract, message contract D0.4/D0.7). Value domain is frozen to string | number; keys are additive and never redefined once published.",
+    ),
 });
 
 /** Type for a single field-level validation error. */
