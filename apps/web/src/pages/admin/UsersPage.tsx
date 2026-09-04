@@ -247,7 +247,7 @@ export function UsersPage() {
       setDialogOpen(false);
       await loadUsers();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, t("admin.common.saveFailed")));
+      toast.error(getApiErrorMessage(err, t, t("admin.common.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -261,7 +261,9 @@ export function UsersPage() {
       await api.patch(`/api/users/${user.id}`, { isActive: !user.isActive });
       await loadUsers();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, t("admin.common.operationFailed")));
+      toast.error(
+        getApiErrorMessage(err, t, t("admin.common.operationFailed")),
+      );
     } finally {
       setTogglingId(null);
     }
@@ -284,7 +286,7 @@ export function UsersPage() {
       setCourseOptions(courseRes.items);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.teacherCourses.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.teacherCourses.loadFailed")),
       );
       setAssignmentsUser(null);
     } finally {
@@ -308,7 +310,7 @@ export function UsersPage() {
       await openAssignments(assignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.teacherCourses.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.teacherCourses.loadFailed")),
       );
     } finally {
       setAssignmentsBusy(false);
@@ -326,7 +328,7 @@ export function UsersPage() {
       await openAssignments(assignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.teacherCourses.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.teacherCourses.loadFailed")),
       );
     } finally {
       setAssignmentsBusy(false);
@@ -350,7 +352,7 @@ export function UsersPage() {
       setExamOptions(examRes.items);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.graderExams.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.graderExams.loadFailed")),
       );
       setExamAssignmentsUser(null);
     } finally {
@@ -374,7 +376,7 @@ export function UsersPage() {
       await openExamAssignments(examAssignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.graderExams.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.graderExams.loadFailed")),
       );
     } finally {
       setExamAssignmentsBusy(false);
@@ -392,7 +394,7 @@ export function UsersPage() {
       await openExamAssignments(examAssignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.graderExams.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.graderExams.loadFailed")),
       );
     } finally {
       setExamAssignmentsBusy(false);

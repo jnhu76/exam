@@ -233,6 +233,7 @@ export function ExamEditPage() {
     } catch (err) {
       const message = getApiErrorMessage(
         err,
+        t,
         t("admin.examEdit.feedback.saveFailed"),
       );
       setSaveError(message);

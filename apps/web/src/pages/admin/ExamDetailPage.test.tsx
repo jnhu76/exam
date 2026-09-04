@@ -2,13 +2,38 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamDetailPage } from "./ExamDetailPage";
 import { permissionsForRole } from "@exam/authz";
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     get: vi.fn(),
     post: vi.fn(),
@@ -235,11 +260,15 @@ describe("ExamDetailPage", () => {
     });
 
     it("shows publish error message on failure", async () => {
-      postMock.mockRejectedValue(new Error("发布失败"));
+      postMock.mockRejectedValue(
+        new ApiError(409, "考试已发布，不能重复发布", "EXAM_ALREADY_PUBLISHED"),
+      );
       const user = userEvent.setup();
       renderPage();
       await user.click(await screen.findByText("发布考试"));
-      expect(await screen.findByText("发布失败")).toBeInTheDocument();
+      expect(
+        await screen.findByText("考试已发布，不能重复发布"),
+      ).toBeInTheDocument();
     });
 
     it("opens confirmation before archiving a published exam", async () => {

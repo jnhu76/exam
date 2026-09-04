@@ -144,7 +144,7 @@ export function CandidateFieldsPage() {
       await load();
     } catch (err) {
       setMutationError(
-        getApiErrorMessage(err, t("admin.candidateFields.toast.saveFailed")),
+        getApiErrorMessage(err, t, t("admin.candidateFields.toast.saveFailed")),
       );
     } finally {
       setSaving(false);
@@ -158,7 +158,11 @@ export function CandidateFieldsPage() {
       await load();
     } catch (err) {
       setMutationError(
-        getApiErrorMessage(err, t("admin.candidateFields.toast.deleteFailed")),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.candidateFields.toast.deleteFailed"),
+        ),
       );
     }
   }
@@ -180,7 +184,7 @@ export function CandidateFieldsPage() {
       await load();
     } catch (err) {
       setMutationError(
-        getApiErrorMessage(err, t("admin.candidateFields.toast.sortFailed")),
+        getApiErrorMessage(err, t, t("admin.candidateFields.toast.sortFailed")),
       );
     }
   }
@@ -202,7 +206,7 @@ export function CandidateFieldsPage() {
       await load();
     } catch (err) {
       setMutationError(
-        getApiErrorMessage(err, t("admin.candidateFields.toast.sortFailed")),
+        getApiErrorMessage(err, t, t("admin.candidateFields.toast.sortFailed")),
       );
     }
   }

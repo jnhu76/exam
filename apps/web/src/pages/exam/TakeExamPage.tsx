@@ -62,7 +62,14 @@ type SaveRejectionDisplay = {
   descriptionKey: string;
 };
 
-/** Maps a save-rejection reason to its display icon and i18n keys. */
+/** Maps a save-rejection reason to its display icon and i18n keys.
+ *
+ * INVARIANT: every SaveAnswerRejectReason value has an explicit case here —
+ * pinning the closed reason vocabulary so a reason can never silently fall
+ * into the generic default (message contract D0.13 web-unit assertion).
+ * STALE_VERSION reaches the surface only when serverAnswer reconciliation is
+ * unavailable; the reconciled path returns earlier without a rejection UI.
+ */
 function getSaveRejectionDisplay(
   rejection: SaveRejection,
 ): SaveRejectionDisplay {
@@ -84,6 +91,30 @@ function getSaveRejectionDisplay(
         Icon: Lock,
         titleKey: "candidateRuntime.status.ended",
         descriptionKey: "candidateRuntime.deadline.closed",
+      };
+    case "STALE_VERSION":
+      return {
+        Icon: Lock,
+        titleKey: "candidateRuntime.saveRejection.title",
+        descriptionKey: "candidateRuntime.saveRejection.staleVersion",
+      };
+    case "FUTURE_VERSION":
+      return {
+        Icon: Lock,
+        titleKey: "candidateRuntime.saveRejection.title",
+        descriptionKey: "candidateRuntime.saveRejection.futureVersion",
+      };
+    case "CONFLICTING_PAYLOAD":
+      return {
+        Icon: Lock,
+        titleKey: "candidateRuntime.saveRejection.title",
+        descriptionKey: "candidateRuntime.saveRejection.conflictingPayload",
+      };
+    case "INVALID_ANSWER":
+      return {
+        Icon: Lock,
+        titleKey: "candidateRuntime.saveRejection.title",
+        descriptionKey: "candidateRuntime.saveRejection.invalidAnswer",
       };
     default:
       return {

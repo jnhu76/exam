@@ -283,36 +283,11 @@ describe("api client", () => {
     });
   });
 
-  describe("A07 i18n integration", () => {
-    it("falls back to registry zh-CN message when server omits message but provides known code", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              error: {
-                code: "AUTH_REQUIRED",
-                requestId: "req-i18n-1",
-              },
-            }),
-            {
-              status: 401,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-        ),
-      );
-
-      await expect(api.get("/api/protected")).rejects.toMatchObject({
-        name: "ApiError",
-        status: 401,
-        code: "AUTH_REQUIRED",
-        message: "请先登录",
-        requestId: "req-i18n-1",
-      });
-    });
-
-    it("uses registry zh-CN message when code is known, even if server also provides message", async () => {
+  describe("C3 browser message authority (wire layer)", () => {
+    it("T1: keeps the server compat message verbatim for a known code — never contracts registry text", async () => {
+      // If the client re-resolves known codes through contracts
+      // getMessageForLocale (registry-first), .message would become 请先登录
+      // and this test fails (mutation M5).
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -321,7 +296,7 @@ describe("api client", () => {
               error: {
                 code: "AUTH_REQUIRED",
                 message: "服务端自定义文案",
-                requestId: "req-i18n-2",
+                requestId: "req-c3-1",
               },
             }),
             {
@@ -336,11 +311,13 @@ describe("api client", () => {
         name: "ApiError",
         status: 401,
         code: "AUTH_REQUIRED",
-        message: "请先登录",
+        message: "服务端自定义文案",
+        serverMessage: "服务端自定义文案",
+        requestId: "req-c3-1",
       });
     });
 
-    it("uses registry zh-CN message when code is known and server message is empty string", async () => {
+    it("synthesizes the status string when a known code carries no wire message", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -348,8 +325,7 @@ describe("api client", () => {
             JSON.stringify({
               error: {
                 code: "AUTH_REQUIRED",
-                message: "",
-                requestId: "req-i18n-empty-known",
+                requestId: "req-c3-2",
               },
             }),
             {
@@ -364,11 +340,37 @@ describe("api client", () => {
         name: "ApiError",
         status: 401,
         code: "AUTH_REQUIRED",
-        message: "请先登录",
+        message: "401 Request failed",
+        serverMessage: undefined,
       });
     });
 
-    it("falls back to server-provided message when code is unknown and message is non-empty", async () => {
+    it("treats an empty wire message as not usable", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: { code: "AUTH_REQUIRED", message: "" },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/protected")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 401,
+        code: "AUTH_REQUIRED",
+        message: "401 Request failed",
+        serverMessage: "",
+      });
+    });
+
+    it("T4: unknown code keeps the server compatibility message", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -377,7 +379,7 @@ describe("api client", () => {
               error: {
                 code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
                 message: "上游服务返回的特殊文案",
-                requestId: "req-i18n-unknown-with-msg",
+                requestId: "req-c3-4",
               },
             }),
             {
@@ -393,10 +395,11 @@ describe("api client", () => {
         status: 418,
         code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
         message: "上游服务返回的特殊文案",
+        serverMessage: "上游服务返回的特殊文案",
       });
     });
 
-    it("falls back to status string when code is unknown and message is empty string", async () => {
+    it("T5: unknown code with an empty wire message degrades to the status string", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -463,6 +466,42 @@ describe("api client", () => {
         name: "ApiError",
         status: 502,
         message: "502 Request failed",
+      });
+    });
+
+    it("preserves error details machine payload alongside the compat message", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "RESOURCE_CONFLICT",
+                message: "资源状态冲突",
+                details: {
+                  reason: "COURSE_CODE_EXISTS",
+                  params: { courseCode: "CS101" },
+                },
+                requestId: "req-c3-5",
+              },
+            }),
+            {
+              status: 409,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.post("/api/courses", {})).rejects.toMatchObject({
+        name: "ApiError",
+        status: 409,
+        code: "RESOURCE_CONFLICT",
+        details: {
+          reason: "COURSE_CODE_EXISTS",
+          params: { courseCode: "CS101" },
+        },
+        requestId: "req-c3-5",
       });
     });
   });

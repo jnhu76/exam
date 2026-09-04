@@ -72,7 +72,7 @@ export function SettingsPage() {
       window.dispatchEvent(new Event("branding:refresh"));
     } catch (err) {
       setSaveError(
-        getApiErrorMessage(err, t("admin.settings.brandSection.saveFailed")),
+        getApiErrorMessage(err, t, t("admin.settings.brandSection.saveFailed")),
       );
     } finally {
       setIsSaving(false);
@@ -98,6 +98,7 @@ export function SettingsPage() {
       setProfileError(
         getApiErrorMessage(
           err,
+          t,
           t("admin.settings.profileSection.feedback.saveFailed"),
         ),
       );

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { routes } from "@/lib/routes";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -86,7 +87,7 @@ export function StartExamPage() {
             message = t("startExam.errors.notOpen");
             break;
           default:
-            if (err.message) message = err.message;
+            message = getApiErrorMessage(err, t, message);
             break;
         }
       }

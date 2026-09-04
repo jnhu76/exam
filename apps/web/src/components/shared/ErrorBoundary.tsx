@@ -26,9 +26,13 @@ interface State {
 
 /**
  * React error boundary that catches rendering errors and displays a
- * user-friendly error card with a reload button. Shows component stack
- * in development mode. All copy is resolved from `common.errorBoundary.*`
- * via the default i18n instance (class component, no hooks).
+ * localized generic error card with a reload button.
+ *
+ * INVARIANT (message contract D0.11 Zone A / F-17): the raw runtime
+ * `error.message` is never part of the normal user-facing card — it is a
+ * developer diagnostic exposed only inside the development-only details
+ * surface. All user copy resolves via the Web i18n `common.errorBoundary.*`
+ * keys (class component, no hooks).
  */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -69,19 +73,26 @@ export class ErrorBoundary extends Component<Props, State> {
             <CardContent>
               <div className="flex flex-col gap-2">
                 <p className="type-secondary">
-                  {this.state.error?.message ||
-                    i18n.t("common.errorBoundary.unknown")}
+                  {i18n.t("common.errorBoundary.retryHint")}
                 </p>
-                {import.meta.env.DEV && this.state.errorInfo && (
-                  <details className="type-metadata">
-                    <summary className="cursor-pointer">
-                      {i18n.t("common.errorBoundary.details")}
-                    </summary>
-                    <pre className="mt-2 overflow-auto rounded bg-muted p-2">
-                      {this.state.errorInfo.componentStack}
-                    </pre>
-                  </details>
-                )}
+                {import.meta.env.DEV &&
+                  (this.state.error || this.state.errorInfo) && (
+                    <details className="type-metadata">
+                      <summary className="cursor-pointer">
+                        {i18n.t("common.errorBoundary.details")}
+                      </summary>
+                      {this.state.error?.message && (
+                        <pre className="mt-2 overflow-auto rounded bg-muted p-2">
+                          {this.state.error.message}
+                        </pre>
+                      )}
+                      {this.state.errorInfo?.componentStack && (
+                        <pre className="mt-2 overflow-auto rounded bg-muted p-2">
+                          {this.state.errorInfo.componentStack}
+                        </pre>
+                      )}
+                    </details>
+                  )}
               </div>
             </CardContent>
             <CardFooter>

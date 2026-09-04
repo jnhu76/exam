@@ -220,7 +220,9 @@ export function QuestionEditPage() {
       }
       void navigate("/admin/questions");
     } catch (err) {
-      setSaveError(getApiErrorMessage(err, t("admin.questionEdit.saveFailed")));
+      setSaveError(
+        getApiErrorMessage(err, t, t("admin.questionEdit.saveFailed")),
+      );
     } finally {
       setSaving(false);
     }

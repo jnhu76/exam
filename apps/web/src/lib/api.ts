@@ -1,11 +1,7 @@
 import { toast } from "sonner";
 import i18n from "@/i18n";
 import { routes } from "@/lib/routes";
-import {
-  getMessageForLocale,
-  isErrorCode,
-  type ErrorResponse,
-} from "@exam/contracts";
+import type { ErrorResponse } from "@exam/contracts";
 
 /** Base URL for API requests, derived from the VITE_API_BASE_URL env var. */
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -35,7 +31,15 @@ export function setNavigate(fn: (path: string) => void) {
   navigateFn = fn;
 }
 
-/** Typed error thrown by the API client on non-2xx responses or network failure. */
+/**
+ * Typed error thrown by the API client on non-2xx responses or network failure.
+ *
+ * INVARIANT (message contract D0.5/D0.11 Zone A): this class carries machine
+ * facts only. `serverMessage` is the raw wire compatibility text and is the
+ * UNKNOWN-semantics fallback; it is never the presentation authority for
+ * known codes — user-facing copy resolves through {@link getApiErrorMessage}
+ * (Web i18n), never through `.message`.
+ */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -43,6 +47,7 @@ export class ApiError extends Error {
     readonly code?: string,
     readonly details?: unknown,
     readonly requestId?: string,
+    readonly serverMessage?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -53,6 +58,42 @@ export class ApiError extends Error {
 type ErrorBody = Partial<ErrorResponse> & {
   message?: string;
 };
+
+/**
+ * Parses a non-2xx response into an {@link ApiError}, preserving the machine
+ * facts (status / code / details / requestId) and the raw server
+ * compatibility message. Shared by the JSON client and the blob download
+ * helper so both surfaces obey the same fallback contract.
+ *
+ * `.message` keeps the best-effort diagnostic text (wire compat message when
+ * present, otherwise a status string) for logs and developer tooling only.
+ */
+export async function responseToApiError(
+  response: Response,
+): Promise<ApiError> {
+  let serverMessage: string | undefined;
+  let code: string | undefined;
+  let details: unknown;
+  let requestId: string | undefined;
+  try {
+    const body = (await response.json()) as ErrorBody;
+    serverMessage = body.error?.message ?? body.message;
+    code = body.error?.code;
+    details = body.error?.details;
+    requestId = body.error?.requestId;
+  } catch {
+    // body parse failed; fall through to status-string message
+  }
+  const message = serverMessage || `${response.status} Request failed`;
+  return new ApiError(
+    response.status,
+    message,
+    code,
+    details,
+    requestId,
+    serverMessage,
+  );
+}
 
 /** Executes an HTTP request, handles error parsing, and throws ApiError. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -68,35 +109,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
 
     if (!response.ok) {
-      let message: string | undefined;
-      let serverMessage: string | undefined;
-      let code: string | undefined;
-      let details: unknown;
-      let requestId: string | undefined;
-      try {
-        const body = (await response.json()) as ErrorBody;
-        serverMessage = body.error?.message ?? body.message;
-        code = body.error?.code;
-        details = body.error?.details;
-        requestId = body.error?.requestId;
-      } catch {
-        // body parse failed; fall through to code/status fallback
-      }
-      if (code && isErrorCode(code)) {
-        message = getMessageForLocale(code);
-      } else if (serverMessage) {
-        message = serverMessage;
-      }
-      if (!message) {
-        message = `${response.status} Request failed`;
-      }
       if (
         response.status === 401 &&
         !ANONYMOUS_LEGAL_PATHS.has(window.location.pathname)
       ) {
         navigateFn?.("/login");
       }
-      throw new ApiError(response.status, message, code, details, requestId);
+      throw await responseToApiError(response);
     }
 
     if (response.status === 204) {

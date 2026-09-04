@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { QuestionEditPage } from "./QuestionEditPage";
 import { permissionsForRole } from "@exam/authz";
+import { ApiError } from "@/lib/api";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -14,6 +15,31 @@ const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
@@ -183,7 +209,9 @@ describe("QuestionEditPage", () => {
   });
 
   it("shows specific save error when API rejects", async () => {
-    apiPost.mockRejectedValue(new Error("题目不属于所选课程"));
+    apiPost.mockRejectedValue(
+      new ApiError(400, "题目不属于所选课程", "QUESTION_COURSE_MISMATCH"),
+    );
     const user = userEvent.setup();
     renderNew();
     await screen.findByText("新增题目");

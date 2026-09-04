@@ -2,9 +2,34 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PasswordChangeForm } from "./PasswordChangeForm";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     patch: vi.fn(),
     post: vi.fn(),
@@ -65,13 +90,15 @@ describe("PasswordChangeForm", () => {
   });
 
   it("shows error toast on API failure", async () => {
-    vi.mocked(api.patch).mockRejectedValueOnce(new Error("密码错误"));
+    vi.mocked(api.patch).mockRejectedValueOnce(
+      new ApiError(400, "当前密码不正确", "CURRENT_PASSWORD_INVALID"),
+    );
     render(<PasswordChangeForm />);
     const { toast } = await import("sonner");
     await userEvent.type(screen.getByLabelText("当前密码"), "old12345");
     await userEvent.type(screen.getByLabelText("新密码"), "newpass123");
     await userEvent.type(screen.getByLabelText("确认新密码"), "newpass123");
     await userEvent.click(screen.getByRole("button", { name: "修改密码" }));
-    expect(toast.error).toHaveBeenCalledWith("密码错误");
+    expect(toast.error).toHaveBeenCalledWith("当前密码不正确");
   });
 });

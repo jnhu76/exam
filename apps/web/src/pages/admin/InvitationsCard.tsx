@@ -104,7 +104,7 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
       setInvitations(res.items);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.invitations.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.invitations.loadFailed")),
       );
     } finally {
       setIsLoading(false);
@@ -142,7 +142,7 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
       await loadInvitations();
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.invitations.inviteFailed")),
+        getApiErrorMessage(err, t, t("admin.users.invitations.inviteFailed")),
       );
     } finally {
       setSubmitting(false);
@@ -155,7 +155,7 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
       await loadInvitations();
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.users.invitations.revokeFailed")),
+        getApiErrorMessage(err, t, t("admin.users.invitations.revokeFailed")),
       );
     }
   }

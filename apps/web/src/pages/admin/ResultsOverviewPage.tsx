@@ -26,6 +26,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
+import type { ScoreViewDisabledReasonCode } from "@exam/contracts";
+import { scoreViewDisabledReasonKey } from "@/lib/examDisabledReasons";
 
 /** Exam row shape as returned by the exams list API, including score-view permissions. */
 interface ExamRow {
@@ -38,6 +40,8 @@ interface ExamRow {
   totalScore: number;
   gradedAttemptCount: number;
   canViewScores: boolean;
+  scoreViewDisabledReasonCode: ScoreViewDisabledReasonCode | null;
+  /** Legacy natural-language sibling — compatibility fallback only (D0.8). */
   scoreViewDisabledReason: string | null;
 }
 
@@ -83,8 +87,17 @@ export function ResultsOverviewPage() {
     return exam.canViewScores;
   }
 
-  /** Returns the reason why scores cannot be viewed, or empty string if allowed. */
-  function gradableReason(exam: ExamRow) {
+  /**
+   * Returns the tooltip explanation why scores cannot be viewed. The machine
+   * DisabledReasonCode is authoritative (D0.8); the legacy natural-language
+   * wire field only covers unknown future codes.
+   */
+  function gradableReason(exam: ExamRow): string {
+    const code = exam.scoreViewDisabledReasonCode;
+    if (code) {
+      const key = scoreViewDisabledReasonKey(code);
+      if (key) return t(key);
+    }
     return exam.scoreViewDisabledReason ?? "";
   }
 

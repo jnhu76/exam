@@ -6,6 +6,7 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { can } from "@/lib/capabilities";
 import { Permission } from "@exam/authz";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -582,9 +583,11 @@ export function ProctorDashboardPage() {
         setForceSubmitState({ phase: "idle" });
       }
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.proctorDashboard.errors.forceSubmitFailed"),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.proctorDashboard.errors.forceSubmitFailed"),
+        ),
       );
     } finally {
       setForceSubmitting(false);
@@ -869,9 +872,11 @@ export function ProctorDashboardPage() {
           await clearAuthority();
           resetGrantDialog();
           toast.error(
-            err instanceof Error
-              ? err.message
-              : t("admin.proctorDashboard.errors.extendFailed"),
+            getApiErrorMessage(
+              err,
+              t,
+              t("admin.proctorDashboard.errors.extendFailed"),
+            ),
           );
           break;
         }
@@ -1206,9 +1211,11 @@ export function ProctorDashboardPage() {
       }
       resetMisconductDialog();
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.proctorDashboard.errors.flagFailed"),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.proctorDashboard.errors.flagFailed"),
+        ),
       );
     } finally {
       setFlagging(false);

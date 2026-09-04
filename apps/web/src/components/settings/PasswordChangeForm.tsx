@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,9 +52,7 @@ export function PasswordChangeForm() {
       window.location.assign("/login");
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("validation.passwordChangeFailed"),
+        getApiErrorMessage(err, t, t("validation.passwordChangeFailed")),
       );
     } finally {
       setChanging(false);

@@ -30,9 +30,11 @@ vi.mock("@/lib/api", () => ({
       readonly code?: string,
       readonly details?: unknown,
       readonly requestId?: string,
+      readonly serverMessage?: string,
     ) {
       super(message);
       this.name = "ApiError";
+      this.serverMessage = serverMessage ?? message;
     }
   },
   api: {
@@ -368,7 +370,9 @@ describe("CandidatesPage", () => {
   });
 
   it("preserves USER_ALREADY_EXISTS save error", async () => {
-    apiPost.mockRejectedValue(new Error("用户名已存在"));
+    apiPost.mockRejectedValue(
+      new ApiError(409, "用户名已存在", "USER_ALREADY_EXISTS"),
+    );
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "新增考生" }));
@@ -383,7 +387,13 @@ describe("CandidatesPage", () => {
   });
 
   it("preserves CANDIDATE_IDENTITY_CONFLICT save error", async () => {
-    apiPost.mockRejectedValue(new Error("身份信息已存在，请检查证件号"));
+    apiPost.mockRejectedValue(
+      new ApiError(
+        409,
+        "身份信息已存在，请检查证件号",
+        "CANDIDATE_IDENTITY_CONFLICT",
+      ),
+    );
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "新增考生" }));
@@ -394,9 +404,7 @@ describe("CandidatesPage", () => {
     await user.type(inputs[2]!, "Name");
     await user.type(inputs[3]!, "123");
     await user.click(dialogSaveBtn(dialog));
-    expect(
-      await screen.findByText("身份信息已存在，请检查证件号"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("身份信息已存在")).toBeInTheDocument();
   });
 
   it("renders API field errors from ApiError details", async () => {
@@ -556,7 +564,9 @@ describe("CandidatesPage", () => {
     });
 
     it("shows error toast when reset fails", async () => {
-      apiPost.mockRejectedValue(new Error("重置密码失败"));
+      apiPost.mockRejectedValue(
+        new ApiError(500, "重置密码失败", "INTERNAL_ERROR"),
+      );
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Candidate One");
@@ -569,7 +579,7 @@ describe("CandidatesPage", () => {
         within(dialog).getByRole("button", { name: "确认重置" }),
       );
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith("重置密码失败");
+        expect(toast.error).toHaveBeenCalledWith("服务器内部错误，请稍后重试");
       });
     });
   });
