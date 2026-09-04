@@ -2,6 +2,8 @@
 
 本文件规定整个仓库内编码代理必须遵守的工作方式、项目边界和文档路由。它不是第二份产品规格、架构文档、测试手册或阶段状态表。更具体的目录级 `AGENTS.md` 可以增加局部约束，但不得静默削弱本文件、Accepted ADR、产品契约或安全边界。
 
+本仓库只维护一份 agent instruction 的语义权威：本文件。支持 `AGENTS.md` 的 harness 直接加载；需要专用入口文件的工具只能通过薄适配引用本文件，禁止复制正文形成第二套规则。若工具不会自动读取 `AGENTS.md`，调用者必须显式注入或桥接本文件后再施工。
+
 规范词“必须”“禁止”“应当”“可以”具有约束含义。
 
 ## 1. 项目定位
@@ -63,7 +65,7 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 | 产品不变量与领域模型 | `docs/SPEC.md` |
 | 当前实现架构 | `docs/architecture/` 与生产代码 |
 | 阶段边界 | `docs/roadmap/phase-roadmap.md` |
-| 当前施工顺序与 disposition | 当前 roadmap tracker；现阶段为 GitHub Issue #333 |
+| 当前施工顺序与 disposition | `docs/README.md` 中的 active roadmap tracker 指针 |
 | 当前任务的 scope / acceptance / non-goals | 被当前 roadmap 指定的 OPEN Issue |
 | 当前实现状态 | `docs/status/implementation-status.md` 与 as-built evidence |
 | 测试、环境变量和数据库生命周期 | `docs/standards/testing.md` |
@@ -86,7 +88,7 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 4. PR ready 前确认代码、测试、长期文档、Issue 和 PR 描述表达同一个系统现实。
 5. merge 后写 closeout；只有 acceptance criteria 完整满足才关闭 Issue。若存在当前 roadmap tracker，再写一次 campaign checkpoint，不逐 commit spam。
 
-按任务只加载相关文档，不需要遍历全部 `docs/`：
+按任务只加载相关文档，不需要遍历全部 `docs/`；表中列出的文档也只读取解决当前问题所需的章节，不默认全文预加载：
 
 | 任务类型 | 施工前必须阅读 |
 | --- | --- |
@@ -198,13 +200,14 @@ pnpm e2e:docker
 
 ## 10. 依赖与外部研究
 
-先检查本仓库的实际版本、配置、锁文件、生成产物和错误输出。以下情况应查询对应版本的官方文档，而不是凭记忆猜测：
+外部研究遵循**最小充分证据**原则，按成本从低到高升级：
 
-- Docker/Compose、pnpm workspace/deploy、Node ESM/CJS、TypeScript 输出；
-- Vite、React、Tailwind、Fastify、Drizzle、Zod、PostgreSQL 的版本特定行为；
-- CI、包管理器、依赖升级或无法由仓库证据完整解释的错误。
+1. 先检查当前代码、相关测试、配置、锁文件、生成产物和错误输出；
+2. 本仓库已有权威文档或契约能够回答时，读取与当前问题直接相关的章节；
+3. 只有存在明确且尚未解决的版本特定行为、外部标准或第三方语义缺口时，才查询对应版本的精确官方资料；
+4. 只有任务本身需要 prior art / current external evidence，或精确官方资料仍不足时，才扩大为更广泛的外部研究。
 
-外部示例只是参考，不能高于仓库契约；禁止盲目复制。若无法访问官方资料，明确说明只使用了本地证据。
+当前决策已经有充分证据时必须停止升级；不得为了“可能有帮助”继续扩大上下文、搜索范围或工具调用。外部示例只是参考，不能高于仓库契约；禁止盲目复制。若无法访问所需官方资料，明确说明只使用了本地证据。
 
 密钥、令牌和生产凭证不得进入版本控制，即使仓库是私有的；使用环境变量、密钥管理或被忽略的本地配置。
 
@@ -219,4 +222,4 @@ pnpm e2e:docker
 - 最终 diff 是否只包含授权范围内的修改；
 - 工作树中的既有文件是否完整保留。
 
-非平凡任务的完成报告应简洁列出：范围、根因/设计、修改文件、实际执行的命令与结果、跳过项和剩余风险。不得用“应该通过”“看起来正确”或“CI 会检查”代替证据。
+非平凡任务的完成报告必须基于实际证据；具体字段以 [`docs/standards/code-quality.md` §17](docs/standards/code-quality.md#17-ai-coding-rules) 的“每个 Job 完成后必须输出”为唯一清单。不得用“应该通过”“看起来正确”或“CI 会检查”代替证据。
