@@ -3,7 +3,7 @@ import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { ZodError } from "zod";
 import { ImportJobLogStatusEnum } from "@exam/contracts";
-import { buildErrorResponse } from "../lib/errorResponse.js";
+import { buildValidationErrorResponse } from "../lib/errorResponse.js";
 import type { RuntimeRequestContext } from "../types/requestContext.js";
 
 /**
@@ -76,26 +76,17 @@ export function ensureTargetOrg<T extends RequestContext>(
 }
 
 /**
- * Converts a Zod validation error into a structured error response
- * conforming to the `ErrorResponseSchema` (code/message/details/requestId).
- * Used by handler-level validation fallbacks; the shared Fastify error
- * handler produces the same envelope for route-schema validation failures.
+ * Converts a Zod validation error into the canonical VALIDATION_ERROR
+ * response. Handler-level validation fallback sharing the same builder as
+ * the global error handler, so both paths emit one identical envelope:
+ * registry compatibility top-level message (D0.5 — no per-route override)
+ * plus field-level details (field messages remain producer-local Zod text
+ * until C2).
  *
  * @param requestId - The unique request identifier to include in the response.
  * @param error - The Zod validation error to convert.
  * @returns A structured error response object with field-level detail.
  */
 export function formatZodError(requestId: string, error: ZodError) {
-  return buildErrorResponse(
-    requestId,
-    "VALIDATION_ERROR",
-    {
-      fields: error.issues.map((i) => ({
-        field: i.path.map(String).join(".") || "_root",
-        code: i.code.toUpperCase(),
-        message: i.message,
-      })),
-    },
-    error.issues.map((i) => i.message).join("; "),
-  );
+  return buildValidationErrorResponse(requestId, error);
 }

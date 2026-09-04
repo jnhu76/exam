@@ -691,7 +691,10 @@ describe("J8: score list routes", () => {
 
     expect(response.statusCode).toBe(409);
     const body = response.json();
-    expect(body.error.message).toMatch(/not finished yet/i);
+    // C1-E: top-level message is the canonical registry compat text; the
+    // condition itself is asserted via the machine reason (D0.13).
+    expect(body.error.message).toBe("资源状态冲突");
+    expect(body.error.details?.reason).toBe("EXAM_NOT_FINISHED");
     expect(body.error.requestId).toEqual(expect.any(String));
     expect(body.error.code).toBe("RESOURCE_CONFLICT");
   });
@@ -851,6 +854,58 @@ describe("J8: score list routes", () => {
     expect(body.error.code).toBe("RESOURCE_CONFLICT");
     expect(body.error.details?.reason).toBe("UNRESOLVED_ATTEMPTS_EXIST");
     expect(body.error.details?.activeAttemptCount).toBeGreaterThanOrEqual(1);
+  });
+
+  // C1-E/T7: the not-finished conflict keeps its published machine reason
+  // (T4: pre-C1 vocabulary unchanged) and the top-level message is the
+  // canonical registry compat text — the English override channel is gone.
+  it("rejects scores for a not-yet-ended exam (EXAM_NOT_FINISHED, canonical compat message)", async () => {
+    const createResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Not Finished Score Guard",
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600000).toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 6,
+        totalScore: 10,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const examId = createResponse.json().id as string;
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?page=1&passFilter=all`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(response.statusCode).toBe(409);
+    const body = response.json();
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    expect(body.error.details?.reason).toBe("EXAM_NOT_FINISHED");
+    expect(body.error.message).toBe("资源状态冲突");
   });
 });
 

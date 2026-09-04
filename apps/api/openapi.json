@@ -6253,6 +6253,43 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic values — additive TARGET, not yet emitted). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       },
@@ -15254,6 +15291,16 @@
                             "nullable": true,
                             "description": "Legacy natural-language compatibility text explaining why scores are unavailable. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8)."
                           },
+                          "scoreViewDisabledReasonCode": {
+                            "type": "string",
+                            "enum": [
+                              "EXAM_CANCELED",
+                              "EXAM_NOT_FINISHED",
+                              "NO_GRADED_ATTEMPTS"
+                            ],
+                            "nullable": true,
+                            "description": "Machine code identifying why scores are unavailable (message contract D0.8); null when viewable. Additive sibling of the legacy text field."
+                          },
                           "canDelete": {
                             "type": "boolean"
                           },
@@ -15261,6 +15308,12 @@
                             "type": "string",
                             "nullable": true,
                             "description": "Legacy natural-language compatibility text explaining why the exam cannot be deleted. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8)."
+                          },
+                          "deleteDisabledReasonCode": {
+                            "type": "string",
+                            "enum": ["EXAM_NOT_DRAFT"],
+                            "nullable": true,
+                            "description": "Machine code identifying why deletion is blocked (message contract D0.8); null when deletable. Additive sibling of the legacy text field."
                           }
                         },
                         "required": [
@@ -15295,8 +15348,10 @@
                           "gradedAttemptCount",
                           "canViewScores",
                           "scoreViewDisabledReason",
+                          "scoreViewDisabledReasonCode",
                           "canDelete",
-                          "deleteDisabledReason"
+                          "deleteDisabledReason",
+                          "deleteDisabledReasonCode"
                         ],
                         "additionalProperties": false
                       }
