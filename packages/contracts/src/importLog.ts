@@ -12,7 +12,11 @@ export const ImportJobLogStatusEnum = z.enum([
 const importErrorDetailSchema = z.object({
   row: z.number().int(),
   code: z.string(),
-  message: z.string(),
+  message: z
+    .string()
+    .describe(
+      "Compatibility human text, non-authoritative. Clients MUST NOT parse or branch on this value; use code/params for machine handling.",
+    ),
 });
 
 export const ImportJobLogSchema = z.object({

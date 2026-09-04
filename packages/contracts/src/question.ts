@@ -478,7 +478,12 @@ export const QuestionImportResultSchema = z.object({
     z.object({
       row: z.number().int(),
       status: z.enum(["valid", "warning", "error"]),
-      message: z.string().optional(),
+      message: z
+        .string()
+        .optional()
+        .describe(
+          "Compatibility human text, non-authoritative. Clients MUST NOT parse or branch on this value; use code/params for machine handling.",
+        ),
     }),
   ),
   logId: z.string().uuid().optional(),

@@ -236,8 +236,16 @@ function injectMissingErrorResponses(spec: OpenAPISpecDocument): void {
             error: {
               type: "object",
               properties: {
-                code: { type: "string" },
-                message: { type: "string" },
+                code: {
+                  type: "string",
+                  description:
+                    "Stable coarse product-level machine contract (ErrorCode).",
+                },
+                message: {
+                  type: "string",
+                  description:
+                    "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value.",
+                },
               },
             },
           },
@@ -257,8 +265,16 @@ function injectMissingErrorResponses(spec: OpenAPISpecDocument): void {
             error: {
               type: "object",
               properties: {
-                code: { type: "string" },
-                message: { type: "string" },
+                code: {
+                  type: "string",
+                  description:
+                    "Stable coarse product-level machine contract (ErrorCode).",
+                },
+                message: {
+                  type: "string",
+                  description:
+                    "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value.",
+                },
               },
             },
           },

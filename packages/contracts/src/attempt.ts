@@ -204,7 +204,11 @@ export const SaveAnswerRejectedSchema = z
   .object({
     accepted: z.literal(false),
     reason: SaveAnswerRejectReasonEnum,
-    message: z.string(),
+    message: z
+      .string()
+      .describe(
+        "Compatibility human text, non-authoritative. Clients MUST NOT parse or branch on this value; branch on reason.",
+      ),
     serverVersion: z.number().int(),
     savedAt: z.string().datetime(),
     details: z
