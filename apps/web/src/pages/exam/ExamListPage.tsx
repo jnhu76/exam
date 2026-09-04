@@ -107,7 +107,9 @@ function ExamCard({
     <Card data-testid={`exam-card-${exam.examId}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-lg">{exam.title}</CardTitle>
+          <CardTitle className="min-w-0 break-words text-lg">
+            {exam.title}
+          </CardTitle>
           <div className="flex items-center gap-2 shrink-0">
             {exam.bestScore != null && (
               <Badge variant="default" data-testid="exam-best-score">

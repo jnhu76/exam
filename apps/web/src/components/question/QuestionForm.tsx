@@ -267,7 +267,7 @@ export function QuestionForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field>
           <Label>{t("admin.forms.question.course")}</Label>
           <CourseSearchSelect
@@ -517,6 +517,9 @@ export function QuestionForm({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label={t("admin.forms.question.removeOption", {
+                      id: opt.id,
+                    })}
                     onClick={() => removeOption(i)}
                   >
                     <AppIcon icon={Trash2} size="inline" />
