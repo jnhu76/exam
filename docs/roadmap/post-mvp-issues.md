@@ -15,7 +15,6 @@
 - #297 Staff invitation + Email password reset + account lifecycle.
 - #298 Permission registry + permission audit + audit-log search/export UI.
 - #299 Additional operational notifications.
-- #300 Email template engine + backend i18n.
 - #301 Rich-text / WYSIWYG V1.
 - #291 Additional exam timing modes — generic Phase A plus later high-assurance portion.
 - #294 Question / option randomization.

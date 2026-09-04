@@ -16,6 +16,9 @@
 //   MUST NOT include: score, pass/fail, standard answers, rubric, grader
 //   identity. Those live inside EXAM (Inbox + result page), never the Email.
 
+import type { RenderedEmailContent } from "../email/renderedEmail.js";
+import { escapeEmailHtml } from "../email/renderedEmail.js";
+
 /** Structured input to the grade_notification renderer. */
 export interface GradeNotificationPayload {
   /** Server-trusted exam title (HTML-escaped at render time). */
@@ -26,27 +29,6 @@ export interface GradeNotificationPayload {
    * renderer never sees a site-relative path or an unvalidated origin.
    */
   actionPath: string;
-}
-
-/** Rendered Email content handed to the outbox. */
-export interface RenderedEmailContent {
-  subject: string;
-  bodyText: string;
-  bodyHtml: string;
-}
-
-/**
- * HTML-escapes a string for safe interpolation into bodyHtml. Escapes the
- * five XML/HTML-significant characters. Does NOT attempt to sanitize full
- * HTML documents (the body is a fixed template with one interpolated title).
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 /**
@@ -67,8 +49,8 @@ export function renderGradeNotificationEmail(
     `请登录考试平台查看：${link}\n\n` +
     `（本邮件由系统自动发送，请勿直接回复。）`;
   const bodyHtml =
-    `<p>您参加的考试「${escapeHtml(examTitle)}」的结果已发布。</p>` +
-    `<p><a href="${escapeHtml(link)}">点击查看考试结果</a></p>` +
+    `<p>您参加的考试「${escapeEmailHtml(examTitle)}」的结果已发布。</p>` +
+    `<p><a href="${escapeEmailHtml(link)}">点击查看考试结果</a></p>` +
     `<p style="color:#888;font-size:12px;">本邮件由系统自动发送，请勿直接回复。</p>`;
   return { subject, bodyText, bodyHtml };
 }

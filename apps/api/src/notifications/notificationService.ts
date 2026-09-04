@@ -21,9 +21,8 @@ import { renderGradeNotificationEmail } from "./gradeNotificationEmail.js";
 //   - Inbox row is REQUIRED (failure rolls back the publication transaction)
 //   - Email outbox row is REQUIRED when a normalized recipient email exists
 //     (failure rolls back the publication transaction)
-//   - The outbox row is inserted via emailOutboxRepo.create (THROWS on failure)
-//     — NOT EmailDeliveryService.enqueueBestEffort (which swallows errors and
-//     would break atomicity, §17.3).
+//   - The outbox row insert therefore THROWS on failure; a best-effort
+//     (swallow-and-continue) insert would silently break that atomicity.
 
 /** Dedupe key for the Inbox row (recipient-scoped). P5-N1-R0 §11.2. */
 function inboxDedupeKey(examId: string): string {

@@ -1104,10 +1104,13 @@ export const clientEvents = pgTable(
 /**
  * Email outbox — a durable PostgreSQL-backed queue for email delivery (P5-0).
  *
- * The outbox pattern: business transactions only INSERT rows here; a separate
- * worker (`EmailDeliveryWorker`) claims due rows and sends them via an
- * `EmailSender`. Email failure is therefore asynchronous to the business
- * transaction and can never roll it back.
+ * The outbox pattern: business transactions only INSERT rows here; the
+ * in-process loop plugin (`emailOutboxLoop`) claims due rows and sends
+ * them via an `EmailSender`. SMTP delivery happens asynchronously after
+ * commit, so delivery failure can never roll back a committed business
+ * fact. The required outbox INSERT itself is part of the owning business
+ * transaction, and its failure rolls the business fact back with it
+ * (ADR-011 §17).
  *
  * Status lifecycle:
  *   pending -> processing -> sent (terminal)
@@ -1146,9 +1149,10 @@ export const emailOutbox = pgTable(
     }),
     /**
      * Optional link to the Inbox notification that triggered this Email
-     * (P5-N1-I2). Identity-flow Emails (registration_welcome etc.) keep this
-     * null; operational Emails (result_published -> grade_notification) set
-     * it so an Email can be traced back to its Inbox row.
+     * (P5-N1-I2). Identity-flow Emails (staff invitation, password reset)
+     * keep this null; operational Emails (result_published ->
+     * grade_notification) set it so an Email can be traced back to its
+     * Inbox row.
      */
     notificationId: text("notification_id").references(() => notifications.id),
     /**
