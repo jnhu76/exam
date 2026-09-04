@@ -177,6 +177,45 @@ test.describe("a11y keyboard / focus evidence", () => {
     });
     expect(insideDialog).toBe(true);
 
+    // Trap wrap evidence: walking Tab must cycle through the dialog's
+    // focusables and return to the start without ever leaving the dialog,
+    // and Shift+Tab from the cycle entry must wrap backward into the dialog.
+    // The autofocus target may be the content wrapper (tabindex=-1, not in
+    // the tab order), so step once to stand on a real cycle member first.
+    const describeFocus = () =>
+      page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el) return "(none)";
+        const id = el.dataset.testid ? `#${el.dataset.testid}` : "";
+        return `${el.tagName}${id}:${(el.textContent ?? "").trim().slice(0, 40)}`;
+      });
+    const focusStillInsideDialog = () =>
+      page.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        return dialog?.contains(document.activeElement) ?? false;
+      });
+    await page.keyboard.press("Tab");
+    const entry = await describeFocus();
+    const cycle: string[] = [entry];
+    let wrappedBackToEntry = false;
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press("Tab");
+      const current = await describeFocus();
+      expect(
+        await focusStillInsideDialog(),
+        `Tab #${i + 1} escaped the dialog (landed on ${current})`,
+      ).toBe(true);
+      if (current === entry) {
+        wrappedBackToEntry = true;
+        break;
+      }
+      cycle.push(current);
+    }
+    expect(wrappedBackToEntry, `focus cycle: ${cycle.join(" -> ")}`).toBe(true);
+    await page.keyboard.press("Shift+Tab");
+    expect(await focusStillInsideDialog()).toBe(true);
+    expect(await describeFocus()).not.toBe(entry);
+
     // Escape closes and Radix restores focus to the trigger.
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
