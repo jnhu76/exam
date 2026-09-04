@@ -4,8 +4,8 @@
 // `renderGradeNotificationEmail` content boundary (P5-N1-I2): server-generated
 // zh-CN copy, a single trusted absolute link, and NO secret other than the
 // token link itself — the raw token exists only in the delivered body, never
-// in audit payloads or application logs. Template-engine/i18n architecture is
-// #300 and deliberately out of scope here.
+// in audit payloads or application logs. There is deliberately NO template
+// engine / backend i18n runtime (ADR-011 §24).
 
 import type { RenderedEmailContent } from "../email/renderedEmail.js";
 import { escapeEmailHtml } from "../email/renderedEmail.js";
