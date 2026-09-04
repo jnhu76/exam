@@ -1336,12 +1336,15 @@ typecheck + focused email/notification/identity/repo test suites green.
 
 **Decision**: `exam_assigned` joins `result_published` as the second
 operational notification event. The trigger is a NEW effective enrollment
-row (`POST /exams/:examId/enrollments` creating an enrollment); duplicates,
-unknown candidates, and re-triggers never notify — idempotency rides on the
-enrollment mutation's existing `DUPLICATE` skip plus the
-`(organization, recipient, dedupe_key)` unique indexes as the DB-level
-backstop (`exam_assigned:<examId>` for the Inbox row,
-`exam_assigned:<examId>:<recipientUserId>` for the outbox row).
+row (`POST /exams/:examId/enrollments` creating an enrollment); duplicates
+and unknown candidates never notify — first-assignment idempotency is owned
+by the enrollment mutation's existing `DUPLICATE` skip plus the
+`exam_enrollments (organization_id, exam_id, candidate_id)` unique index.
+The dedupe identity of one assignment episode is the ENROLLMENT ROW
+(`exam_assigned:<enrollmentId>` for both the Inbox and the outbox row,
+backed by the recipient-scoped unique indexes): re-enrolling a candidate
+after their enrollment was removed is a new episode and notifies again,
+while a double dispatch of the same enrollment row is a no-op.
 
 Semantics are identical to result_published (§17): the Inbox row is REQUIRED
 and the outbox row is REQUIRED when the candidate user has an email, both

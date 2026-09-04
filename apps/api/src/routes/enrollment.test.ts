@@ -484,4 +484,49 @@ describe("exam_assigned notifications on enrollment (#299)", () => {
     expect(await inboxRowsFor(foreignUser.id)).toHaveLength(0);
     expect(await outboxRowsFor(foreignUser.id)).toHaveLength(0);
   });
+
+  it("re-enrollment after removal notifies again (new assignment episode)", async () => {
+    const profileId = await createCandidateViaApi("readd", "readd@example.com");
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    // First assignment: one Inbox + one outbox row.
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().added).toBe(1);
+    const enrollmentId = first.json().enrollments[0].id;
+    expect(await inboxRowsFor(candidateUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(candidateUserId)).toHaveLength(1);
+
+    // Remove the enrollment (only "assigned" enrollments are removable).
+    const del = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/exams/${examId}/enrollments/${enrollmentId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(del.statusCode).toBe(204);
+
+    // Re-assignment is a NEW enrollment row (new assignment episode): the
+    // candidate must get a SECOND notification + Email, not a dedupe no-op.
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().added).toBe(1);
+
+    const inbox = await inboxRowsFor(candidateUserId);
+    expect(inbox).toHaveLength(2);
+    expect(inbox.every((n) => n.type === "exam_assigned")).toBe(true);
+    expect(new Set(inbox.map((n) => n.id)).size).toBe(2);
+    const outbox = await outboxRowsFor(candidateUserId);
+    expect(outbox).toHaveLength(2);
+    expect(new Set(outbox.map((o) => o.dedupeKey)).size).toBe(2);
+  });
 });

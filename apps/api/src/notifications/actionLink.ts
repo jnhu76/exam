@@ -1,7 +1,4 @@
-import {
-  isNotificationActionPath,
-  type NotificationDTO,
-} from "@exam/contracts";
+import { isNotificationActionPath } from "@exam/contracts";
 
 // Notification action-link builders + render-time combiner.
 //
@@ -102,14 +99,4 @@ export function buildAbsoluteNotificationLink(
     );
   }
   return `${origin}${actionPath}`;
-}
-
-/**
- * Convenience: extracts the action path from a notification DTO.
- * Notifications are always actionable (action_path NOT NULL).
- */
-export function actionPathOf(
-  notification: Pick<NotificationDTO, "actionPath">,
-): string {
-  return notification.actionPath;
 }

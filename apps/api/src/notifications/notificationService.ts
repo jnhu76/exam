@@ -193,8 +193,11 @@ export interface DispatchExamAssignedOptions {
   db: Database;
   /** Tenant context (organizationId derived from here). */
   ctx: TenantContext;
-  /** Exam id (the stable assignment identity for dedupe keys). */
-  examId: string;
+  /**
+   * The enrollment row id created by this assignment (the assignment
+   * identity for dedupe keys — see {@link assignmentDedupeKey}).
+   */
+  enrollmentId: string;
   /** Exam title (server-trusted, escaped at Email render time). */
   examTitle: string;
   /** Authoritative recipient user id (candidate profile → users.id). */
@@ -210,6 +213,21 @@ export interface DispatchExamAssignedOptions {
 }
 
 /**
+ * Dedupe key for one assignment episode: the enrollment row id.
+ *
+ * INVARIANT: re-enrolling a candidate after their enrollment was removed is a
+ * NEW assignment episode (a new enrollment row) and MUST notify again, so the
+ * key cannot be scoped to (exam, recipient). First-assignment idempotency is
+ * owned by the enrollment mutation itself — the route's DUPLICATE skip plus
+ * the `exam_enrollments (organization_id, exam_id, candidate_id)` unique
+ * index; this key is only the DB-level backstop against dispatching the SAME
+ * enrollment row twice.
+ */
+function assignmentDedupeKey(enrollmentId: string): string {
+  return `exam_assigned:${enrollmentId}`;
+}
+
+/**
  * Dispatches the exam_assigned notification for one newly enrolled
  * candidate (#299, #402 G3).
  *
@@ -218,17 +236,22 @@ export interface DispatchExamAssignedOptions {
  * the caller's enrollment transaction — a failed write rolls back the
  * enrollment. SMTP is never called here; the worker drains the outbox.
  *
- * Idempotency rides on the enrollment mutation itself: a duplicate
- * enrollment is skipped before dispatch (and the (org, recipient, dedupeKey)
- * unique index is the DB-level backstop). The action path is the candidate
- * exam list (`/exam/list`), the existing authorized surface — the
- * notification does not expose examId on a new per-exam page.
+ * The action path is the candidate exam list (`/exam/list`), the existing
+ * authorized surface — the notification does not expose examId on a new
+ * per-exam page.
  */
 export async function dispatchExamAssigned(
   opts: DispatchExamAssignedOptions,
 ): Promise<RecipientDispatchResult> {
-  const { db, ctx, examId, examTitle, publicWebOrigin, emailMaxAttempts, now } =
-    opts;
+  const {
+    db,
+    ctx,
+    enrollmentId,
+    examTitle,
+    publicWebOrigin,
+    emailMaxAttempts,
+    now,
+  } = opts;
   const type = "exam_assigned";
   const recipientUserId = opts.recipientUserId;
   const recipientEmail = opts.recipientEmail;
@@ -252,7 +275,7 @@ export async function dispatchExamAssigned(
       title: "考试已安排",
       body: `您已被安排参加考试「${examTitle}」，请进入考试列表查看详情。`,
       actionPath,
-      dedupeKey: `exam_assigned:${examId}`,
+      dedupeKey: assignmentDedupeKey(enrollmentId),
     },
     now,
   );
@@ -287,7 +310,7 @@ export async function dispatchExamAssigned(
       bodyText: rendered.bodyText,
       bodyHtml: rendered.bodyHtml,
       maxAttempts: emailMaxAttempts,
-      dedupeKey: `exam_assigned:${examId}:${recipientUserId}`,
+      dedupeKey: assignmentDedupeKey(enrollmentId),
       notificationId: inboxInsert.row.id,
       recipientUserId,
     });

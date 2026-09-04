@@ -1967,10 +1967,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           skippedCandidates.push({ candidateId, reason: "NOT_FOUND" });
           continue;
         }
-        let recipientUser:
-          | Awaited<ReturnType<ReturnType<typeof createUserRepo>["findById"]>>
-          | undefined;
-        const enrollment = await executeInTransaction(
+        const { enrollment, recipientUser } = await executeInTransaction(
           fastify.db,
           async (tx) => {
             const created = await createEnrollmentRepo(tx).create(ctx, {
@@ -1990,23 +1987,25 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             // enrollment. The recipient identity/email resolve from the
             // canonical candidateProfile → users row, never from request
             // input. Duplicates never reach here (skipped above), so one
-            // effective assignment produces at most one notification.
-            recipientUser = await createUserRepo(tx).findById(
+            // effective assignment produces exactly one notification;
+            // re-enrollment after removal is a new assignment and notifies
+            // again (dedupe identity = the enrollment row).
+            const user = await createUserRepo(tx).findById(
               ctx,
               candidate.userId,
             );
             await dispatchExamAssigned({
               db: tx,
               ctx,
-              examId,
+              enrollmentId: created.id,
               examTitle: exam.title,
               recipientUserId: candidate.userId,
-              recipientEmail: recipientUser?.email ?? null,
+              recipientEmail: user?.email ?? null,
               publicWebOrigin: config.publicWebOrigin.origin,
               emailMaxAttempts: config.email.maxAttempts,
               now: operationNow,
             });
-            return created;
+            return { enrollment: created, recipientUser: user };
           },
         );
         added++;
