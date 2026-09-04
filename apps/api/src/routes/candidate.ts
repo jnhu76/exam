@@ -553,6 +553,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             errors.push({
               row: i + 1,
               code: "MISSING_REQUIRED_FIELD",
+              // i18n-copy-allow: wire-compat — non-authoritative import-row compatibility message persisted for logs; row code is the contract
               message: "缺少用户名或姓名",
             });
             continue;
@@ -583,6 +584,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             errors.push({
               row: i + 1,
               code: "MISSING_PASSWORD",
+              // i18n-copy-allow: wire-compat — non-authoritative import-row compatibility message persisted for logs; row code is the contract
               message: "新增考生需要初始密码",
             });
             continue;

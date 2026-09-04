@@ -61,6 +61,7 @@ export async function mutateWithAuthorityInvariants<T>(
         ).findAdminMaintainerExclusionViolations(ctx);
       if (violations.length > 0) {
         const v = violations[0]!;
+        // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
         throw new ValidationError("同一账号不能同时拥有管理员与维护者身份", {
           reason: "ADMIN_MAINTAINER_EXCLUSION",
           userId: v.userId,

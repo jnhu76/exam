@@ -964,6 +964,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           ctx.actorId,
         );
         if (!candidateProfile) {
+          // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
           throw new NotFoundError("候选人资料不存在");
         }
 
@@ -1036,6 +1037,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             saveResolution,
           );
         if (currentAttempt.candidateId !== candidateProfile.id) {
+          // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
           throw new NotFoundError("尝试不存在");
         }
 

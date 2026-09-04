@@ -9,7 +9,7 @@ import {
   buildExamPayload,
   enrollCandidateForExam,
   ensureCandidateProfile,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 /**
  * P2 authoring closeout — candidate information isolation for text_response.

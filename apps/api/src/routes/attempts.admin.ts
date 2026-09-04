@@ -469,14 +469,26 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
 
       await recordExportAudit(fastify, ctx, request, attemptId, "csv");
 
+      // i18n-copy-allow: data-format — CSV export header/value data contract
+      const correctLabel = "是";
+      // i18n-copy-allow: data-format — CSV export header/value data contract
+      const incorrectLabel = "否";
       const csvHeaders = [
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "题号",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "题型",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "题目内容",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "考生答案",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "标准答案",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "得分",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "满分",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
         "是否正确",
       ];
       const csvRows = exportData.questionResults.map((q) => ({
@@ -487,7 +499,8 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         标准答案: formatAnswerValue(q.standardAnswer),
         得分: q.score ?? "—",
         满分: q.maxScore,
-        是否正确: q.correct == null ? "—" : q.correct ? "是" : "否",
+        是否正确:
+          q.correct == null ? "—" : q.correct ? correctLabel : incorrectLabel,
       }));
       const csv = "\uFEFF" + generateCSV(csvHeaders, csvRows);
       reply.header(

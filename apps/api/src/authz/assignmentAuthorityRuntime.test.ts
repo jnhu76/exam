@@ -42,7 +42,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
-import { buildExamPayload } from "../routes/attempts/attempts.testHelpers.js";
+import { buildExamPayload } from "../routes/attempts/__tests__/attempts.testHelpers.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(courseRoutes);

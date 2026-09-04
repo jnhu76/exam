@@ -10,7 +10,7 @@ import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { RequestContext, Role } from "@exam/domain";
-import { buildExamPayload } from "./attempts.testHelpers.js";
+import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
 
 const TIMELINE_TEST_PREFIX = "timeline-test-";
 

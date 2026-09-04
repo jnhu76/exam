@@ -474,6 +474,7 @@ export async function saveAnswer(
     (q) => q.originalQuestionId === request.questionId,
   );
   if (!snapshotQuestion) {
+    // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
     throw new ValidationError("问题不在此尝试中");
   }
 

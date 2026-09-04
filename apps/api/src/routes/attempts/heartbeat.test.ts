@@ -16,7 +16,7 @@ import {
   enrollCandidateForExam,
   buildSharedAttemptFixture,
   disruptAttempt,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 const HEARTBEAT_SCANNER_TEST_PREFIX = "heartbeat-scanner-test-";
 

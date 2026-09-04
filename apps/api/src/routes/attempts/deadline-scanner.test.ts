@@ -12,7 +12,10 @@ import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
-import { buildExamPayload, disruptAttempt } from "./attempts.testHelpers.js";
+import {
+  buildExamPayload,
+  disruptAttempt,
+} from "./__tests__/attempts.testHelpers.js";
 
 const DEADLINE_SCANNER_TEST_PREFIX = "deadline-scanner-test-";
 

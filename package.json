@@ -55,7 +55,7 @@
     "coverage:db": "pnpm --filter @exam/db coverage",
     "coverage:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
     "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
-    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:db-journal && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check && pnpm test:e2e-runner && pnpm test:db-journal && pnpm test:stale-ui-docs && pnpm test:ui-scan-roots && pnpm test:frontend-primitives-smoke && pnpm test:generate-env",
+    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm test:copy-guard && pnpm lint:arch && pnpm lint:db-config && pnpm lint:db-journal && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check && pnpm test:e2e-runner && pnpm test:db-journal && pnpm test:stale-ui-docs && pnpm test:ui-scan-roots && pnpm test:frontend-primitives-smoke && pnpm test:generate-env",
     "formal:recovery:safety": "node scripts/formal/run-recovery-tlc.mjs safety",
     "formal:recovery:safety:route": "node scripts/formal/run-recovery-tlc.mjs safety:route",
     "formal:recovery:safety:submission": "node scripts/formal/run-recovery-tlc.mjs safety:submission",
@@ -77,7 +77,8 @@
     "test:stale-ui-docs": "node --test scripts/check-stale-ui-docs.test.mjs",
     "test:ui-scan-roots": "node --test scripts/lib/ui-scan-roots.test.mjs",
     "test:frontend-primitives-smoke": "node --test scripts/check-frontend-primitives.test.mjs",
-    "test:generate-env": "node --test scripts/generate-env.test.mjs"
+    "test:generate-env": "node --test scripts/generate-env.test.mjs",
+    "test:copy-guard": "node --test scripts/check-hardcoded-copy.test.mjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

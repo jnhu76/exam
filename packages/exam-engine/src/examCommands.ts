@@ -12,7 +12,9 @@ export { assertTransition as assertExamTransition } from "./examStateMachine.js"
  * Trimmed + lowercased before comparison so "  N/A  " matches.
  */
 const PLACEHOLDER_VALUES: ReadonlySet<string> = new Set([
+  // i18n-copy-allow: data-format — candidate answer placeholder tokens; data values, not copy
   "暂无",
+  // i18n-copy-allow: data-format — candidate answer placeholder tokens; data values, not copy
   "无",
   "n/a",
   "na",

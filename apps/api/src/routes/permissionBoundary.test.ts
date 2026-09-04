@@ -25,7 +25,7 @@ import {
 } from "@exam/db/src/repository/auditLogRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
-import { DEFAULT_CONTROL_FLAGS } from "./attempts/attempts.testHelpers.js";
+import { DEFAULT_CONTROL_FLAGS } from "./attempts/__tests__/attempts.testHelpers.js";
 import type { Exam } from "@exam/domain";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { eq } from "drizzle-orm";

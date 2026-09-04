@@ -6,7 +6,7 @@ import {
   buildExamPayload,
   enrollCandidateForExam,
   buildSharedAttemptFixture,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 /**
  * P3-PROTO-2 — CandidateTakeSnapshot endpoint tests.

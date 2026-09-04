@@ -9,7 +9,7 @@ import {
   buildExamPayload,
   enrollCandidateForExam,
   buildSharedAttemptFixture,
-} from "./attempts.testHelpers.js";
+} from "./__tests__/attempts.testHelpers.js";
 
 /**
  * P3-PROTO-1 — Backend State Consistency Tests (L0)

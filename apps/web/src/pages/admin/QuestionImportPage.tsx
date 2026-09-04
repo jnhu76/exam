@@ -171,6 +171,7 @@ export function QuestionImportPage() {
    */
   function parseStandardAnswer(answer: string, type: string): unknown {
     if (type === "true_false") {
+      // i18n-copy-allow: data-format — CSV template headers, parser tokens, example rows
       return answer.toLowerCase() === "true" || answer === "是";
     }
     if (type === "multiple_choice") {
@@ -211,10 +212,14 @@ export function QuestionImportPage() {
   function downloadTemplate() {
     // CSV template header — import column contract (not UI copy).
     const header =
+      // i18n-copy-allow: data-format — CSV template headers, parser tokens, example rows
       "题型,题目内容,选项A,选项B,选项C,选项D,标准答案,分值,难度,标签";
     // CSV template example rows (fixture content, not UI copy).
+    // i18n-copy-allow: data-format — CSV template headers, parser tokens, example rows
     const example1 = "single_choice,1+1=?,1,2,3,4,B,10,1,基础";
+    // i18n-copy-allow: data-format — CSV template headers, parser tokens, example rows
     const example2 = "true_false,地球是圆的,,,,,true,5,1,常识";
+    // i18n-copy-allow: data-format — CSV template headers, parser tokens, example rows
     const example3 = "fill_blank,法国首都____,,,,,巴黎,10,2,地理";
     const csv = [header, example1, example2, example3].join("\n");
     const blob = new Blob(["\uFEFF" + csv], {

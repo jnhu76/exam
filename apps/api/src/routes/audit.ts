@@ -84,13 +84,21 @@ function toAuditLogResponse(row: AuditLogRowWithActor) {
  * credentials, no raw personal payloads).
  */
 const EXPORT_HEADERS = [
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "时间",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "操作",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "操作者",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "操作者ID",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "对象类型",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "对象ID",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "IP地址",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
   "请求ID",
 ] as const;
 

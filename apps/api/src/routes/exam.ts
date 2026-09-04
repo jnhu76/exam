@@ -193,6 +193,7 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
       canViewScores: false,
       // D0.8 additive bridge: the legacy text is non-authoritative
       // compatibility copy; the machine condition lives in the *Code field.
+      // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
       scoreViewDisabledReason: "已取消的考试不提供成绩",
       scoreViewDisabledReasonCode: "EXAM_CANCELED",
     } as const;
@@ -206,6 +207,7 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   if (!examEnded) {
     return {
       canViewScores: false,
+      // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
       scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
       scoreViewDisabledReasonCode: "EXAM_NOT_FINISHED",
     } as const;
@@ -214,6 +216,7 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   if (gradedAttemptCount === 0) {
     return {
       canViewScores: false,
+      // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
       scoreViewDisabledReason: "暂无成绩数据",
       scoreViewDisabledReasonCode: "NO_GRADED_ATTEMPTS",
     } as const;
@@ -238,6 +241,7 @@ function getDeleteMeta(exam: Exam) {
 
   return {
     canDelete: false,
+    // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
     deleteDisabledReason: "仅草稿状态的考试允许删除",
     deleteDisabledReasonCode: "EXAM_NOT_DRAFT",
   } as const;
@@ -568,6 +572,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                 // referenced entity is missing is structural, so the Web
                 // can localize without reading compatibility prose.
                 params: { resource: "course" },
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "课程不存在",
               },
             ],
@@ -584,6 +589,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               {
                 field: "questionIds",
                 code: "QUESTION_COURSE_MISMATCH",
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                 message: "题目不属于所选课程",
               },
             ],
@@ -622,6 +628,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                   field: "profileId",
                   code: "RESOURCE_NOT_FOUND",
                   params: { resource: "examProfile" },
+                  // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
                   message: "考试策略模板不存在",
                 },
               ],
@@ -957,6 +964,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               ),
             );
             if (questionChecks.some((q) => q?.courseId !== exam.courseId)) {
+              // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
               throw new ValidationError("题目不属于所选课程");
             }
           }

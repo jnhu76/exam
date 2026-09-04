@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { TestContext } from "../testHelpers.js";
-import { buildTestApp, uniquePrefix } from "../testHelpers.js";
-import examRoutes from "../exam.js";
-import attemptRoutes from "../attempts.js";
+import type { TestContext } from "../../testHelpers.js";
+import { buildTestApp, uniquePrefix } from "../../testHelpers.js";
+import examRoutes from "../../exam.js";
+import attemptRoutes from "../../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 
 /**
