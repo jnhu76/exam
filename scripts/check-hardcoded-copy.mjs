@@ -184,10 +184,20 @@ const CJK_ALLOWLIST = [
     removal:
       "When a backend Email template engine + i18n is introduced (#300).",
   },
+  // #299 exam_assigned: renderer + Inbox copy share the same server-side
+  // Email/notification boundary as gradeNotificationEmail (#300 closed as a
+  // convergence — no template engine by design, ADR-011 §24/§25).
+  {
+    path: "apps/api/src/notifications/examAssignedEmail.ts",
+    reason:
+      "Server-generated exam_assigned Email subject/bodyText/bodyHtml (考试已安排). Email is rendered server-side and never routed through the web i18n catalog.",
+    removal:
+      "If notification copy is ever templated + i18n-resolved server-side (ADR-011 §25).",
+  },
   {
     path: "apps/api/src/notifications/notificationService.ts",
     reason:
-      "Server-generated result_published Inbox title/body (考试结果已发布 / 您参加的考试「...」的结果已发布). The Inbox row is persisted server-side; its copy does not flow through the web i18n catalog at write time.",
+      "Server-generated Inbox title/body for result_published and exam_assigned (考试结果已发布 / 考试已安排 …). The Inbox row is persisted server-side; its copy does not flow through the web i18n catalog at write time.",
     removal:
       "When notification copy is templated + i18n-resolved at read time (P5-N1-R0 §23 deferred capability).",
   },

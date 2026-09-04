@@ -48,7 +48,7 @@ async function seedRow(
     .values({
       id: randomUUID(),
       organizationId: orgId,
-      type: "test_email",
+      type: "grade_notification",
       recipientEmail: overrides.recipientEmail ?? "to@example.com",
       subject: "s",
       bodyText: "t",

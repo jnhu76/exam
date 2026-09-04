@@ -124,6 +124,17 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.courses)
     .where(eq(schema.courses.organizationId, organizationId));
+  // Inbox notifications + Email outbox rows (P5-N1 / #299): notifications
+  // reference users (recipient_user_id FK, no CASCADE) and email_outbox
+  // references notifications (notification_id FK) — both must go before the
+  // users delete in deleteOrganizationTreeOnce. Any mutation that creates a
+  // notification (enrollment, result publication) leaves rows behind here.
+  await tx
+    .delete(schema.emailOutbox)
+    .where(eq(schema.emailOutbox.organizationId, organizationId));
+  await tx
+    .delete(schema.notifications)
+    .where(eq(schema.notifications.organizationId, organizationId));
 }
 
 /**
