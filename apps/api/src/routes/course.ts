@@ -56,6 +56,29 @@ const CourseListQuerySchema = PaginationParamsSchema.extend({
 /** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
+/**
+ * INVARIANT (message contract D0.3/D0.6): COURSE_CODE_EXISTS is published
+ * only for the DB-authoritative unique failure on (organization_id, code),
+ * matched by structured SQLSTATE + exact constraint name through the cause
+ * chain — never by error message text. The create pre-check, the create
+ * race path, and the rename path must all resolve to this same predicate so
+ * one domain failure always carries the same reason on the wire.
+ */
+export function isCourseCodeConflict(err: unknown): boolean {
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    const e = current as Record<string, unknown>;
+    const constraint = e.constraint ?? e.constraint_name;
+    if (e.code === "23505" && constraint === "courses_org_code_unique") {
+      return true;
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
 /** Fastify plugin that registers all course CRUD routes. */
 const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -204,54 +227,77 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       // transaction with an atomic audit fact; Admin stays org-wide and
       // never receives episode rows.
       const isSelfAssigning = !isOrgWideAdmin(ctx);
-      const course = await executeInTransaction(fastify.db, async (tx) => {
-        const created = await createCourseRepo(tx).create(ctx, {
-          name: data.name,
-          code: data.code,
-          description: data.description,
-        });
-        if (isSelfAssigning) {
-          const now = fastify.now();
-          const assignment = await createTeacherCourseAssignmentRepo(
-            tx,
-          ).insertAssignment(ctx, {
-            teacherUserId: ctx.actorId,
-            courseId: created.id,
-            assignedBy: ctx.actorId,
-            assignedAt: now,
-            createdAt: now,
-            updatedAt: now,
+      try {
+        const course = await executeInTransaction(fastify.db, async (tx) => {
+          const created = await createCourseRepo(tx).create(ctx, {
+            name: data.name,
+            code: data.code,
+            description: data.description,
           });
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: AuditAction.CourseTeacherAssigned,
-            targetType: "course",
-            targetId: created.id,
-            metadata: {
-              organizationId: ctx.organizationId,
-              courseId: created.id,
+          if (isSelfAssigning) {
+            const now = fastify.now();
+            const assignment = await createTeacherCourseAssignmentRepo(
+              tx,
+            ).insertAssignment(ctx, {
               teacherUserId: ctx.actorId,
-              assignmentId: assignment.id,
-              actorId: ctx.actorId,
-              assignedAt: now.toISOString(),
-            },
-          });
+              courseId: created.id,
+              assignedBy: ctx.actorId,
+              assignedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            });
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: AuditAction.CourseTeacherAssigned,
+              targetType: "course",
+              targetId: created.id,
+              metadata: {
+                organizationId: ctx.organizationId,
+                courseId: created.id,
+                teacherUserId: ctx.actorId,
+                assignmentId: assignment.id,
+                actorId: ctx.actorId,
+                assignedAt: now.toISOString(),
+              },
+            });
+          }
+          return created;
+        });
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "course.create",
+          targetType: "course",
+          targetId: course.id,
+        });
+        return reply.code(201).send({
+          id: course.id,
+          organizationId: course.organizationId,
+          name: course.name,
+          code: course.code,
+          description: course.description,
+          createdAt: course.createdAt.toISOString(),
+          updatedAt: course.updatedAt.toISOString(),
+        });
+      } catch (err) {
+        // C1-R1: the pre-check above is an optimization, not the authority —
+        // the courses_org_code_unique index decides. A create that loses the
+        // concurrent-insert race must carry the same reason as the pre-check
+        // path (message contract D0.3 stability invariant).
+        if (isCourseCodeConflict(err)) {
+          return reply.code(409).send(
+            buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+              reason: "COURSE_CODE_EXISTS",
+              params: { courseCode: data.code },
+              fields: [
+                {
+                  field: "code",
+                  code: "RESOURCE_CONFLICT",
+                  message: "课程代码已存在",
+                },
+              ],
+            }),
+          );
         }
-        return created;
-      });
-      recordBestEffortAudit(fastify, request, ctx, {
-        action: "course.create",
-        targetType: "course",
-        targetId: course.id,
-      });
-      return reply.code(201).send({
-        id: course.id,
-        organizationId: course.organizationId,
-        name: course.name,
-        code: course.code,
-        description: course.description,
-        createdAt: course.createdAt.toISOString(),
-        updatedAt: course.updatedAt.toISOString(),
-      });
+        throw err;
+      }
     },
   );
 
@@ -272,41 +318,68 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         body: UpdateCourseRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin", "Teacher"],
-        response: { 200: courseItemSchema, 404: ErrorResponseSchema },
+        response: {
+          200: courseItemSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
       },
     },
-    /** Update an existing course by ID. Returns 404 if not found OR out of the caller's Teacher course scope. */
+    /** Update an existing course by ID. Returns 404 if not found OR out of the caller's Teacher course scope, 409 if the new code collides with an existing course (courses_org_code_unique). */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateCourseRequestSchema.parse(request.body);
-      const updated = await createCourseRepo(fastify.db).update(
-        ctx,
-        id,
-        data as Record<string, unknown>,
-      );
-      if (updated) {
+      try {
+        const updated = await createCourseRepo(fastify.db).update(
+          ctx,
+          id,
+          data as Record<string, unknown>,
+        );
+        if (!updated) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
         recordBestEffortAudit(fastify, request, ctx, {
           action: "course.update",
           targetType: "course",
           targetId: id,
           metadata: { changedFields: Object.keys(data) },
         });
+        return {
+          id: updated.id,
+          organizationId: updated.organizationId,
+          name: updated.name,
+          code: updated.code,
+          description: updated.description,
+          createdAt: updated.createdAt.toISOString(),
+          updatedAt: updated.updatedAt.toISOString(),
+        };
+      } catch (err) {
+        // C1-R1: PATCH has no create-style pre-check — renaming onto an
+        // existing code is rejected by the courses_org_code_unique index and
+        // must carry the same reason as create (message contract D0.3
+        // stability invariant). The UPDATE only writes `code` when
+        // data.code is provided, so the (organization_id, code) violation
+        // implies data.code is the colliding value.
+        if (isCourseCodeConflict(err) && data.code !== undefined) {
+          return reply.code(409).send(
+            buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+              reason: "COURSE_CODE_EXISTS",
+              params: { courseCode: data.code },
+              fields: [
+                {
+                  field: "code",
+                  code: "RESOURCE_CONFLICT",
+                  message: "课程代码已存在",
+                },
+              ],
+            }),
+          );
+        }
+        throw err;
       }
-      if (!updated) {
-        return reply
-          .code(404)
-          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-      }
-      return {
-        id: updated.id,
-        organizationId: updated.organizationId,
-        name: updated.name,
-        code: updated.code,
-        description: updated.description,
-        createdAt: updated.createdAt.toISOString(),
-        updatedAt: updated.updatedAt.toISOString(),
-      };
     },
   );
 

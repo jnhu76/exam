@@ -173,9 +173,13 @@ with no canonical description until this document. Since C1, the formerly
 prose-only conflicts also carry reasons: `RESOURCE_CONFLICT +
 COURSE_CODE_EXISTS` / `COURSE_HAS_QUESTIONS` (course routes, with
 `details.params`) and `RESOURCE_CONFLICT + EXAM_PROFILE_NAME_EXISTS` (exam
-profile routes, with `details.params`). The generic PG-conflict fallback and
-the candidate-create 23505 fallback stay reason-less by design (heterogeneous
-constraint set).
+profile routes, with `details.params`). `COURSE_CODE_EXISTS` is
+path-independent: it is emitted for the same `(organization_id, code)`
+unique failure on the create pre-check, the create DB race path, and the
+rename path (PATCH), classified by the structured `courses_org_code_unique`
+constraint match — never by error message text. The generic PG-conflict
+fallback and the candidate-create 23505 fallback stay reason-less by design
+(heterogeneous constraint set).
 **TARGET:** frozen as above; no new codes for domain specializations.
 **MIGRATION RULE:** additive only — new reasons never change the meaning
 of existing codes or reasons.
