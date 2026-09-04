@@ -1,7 +1,7 @@
 # DESIGN.md — EXAM Admin Clarity System
 
 > Project-owned visual authority for the EXAM frontend.
-> Status: active authority for `UI-SYSTEM-ROOT-CORRECTIVE-1`.
+> Status: active.
 > Dark mode is out of scope. Tailwind is the implementation substrate; semantic
 > recipes and authoritative components are the product-facing visual language.
 
