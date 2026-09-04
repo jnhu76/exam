@@ -88,12 +88,14 @@ task-focused.
   with get/post/patch/delete helpers). Supporting modules: `apiErrors.ts`, telemetry
   (`clientEvents.ts` / `clientEventBuffer.ts` / `clientSessionId.ts` /
   `sanitizeClientEvent.ts`), `download.ts`, `examTelemetry.ts`, `dateTime.ts`,
-  `pageMeta.ts`, `routes.ts`, `i18n.ts`, `logger.ts`.
+  `pageMeta.ts`, `routes.ts`, `logger.ts`.
 - **Cookie-based auth.** Every request sets `credentials: "include"`. No
   `Authorization: Bearer` header, no client-side token storage.
 - **401 handling.** On HTTP 401 the client calls a registered
-  `navigateFn?.("/login")`. Error codes/messages come from `@exam/contracts`
-  (`getMessageForLocale`, `isErrorCode`, `ErrorResponse`).
+  `navigateFn?.("/login")`. Error codes come from `@exam/contracts`
+  (`isErrorCode`, `ErrorResponse`); known-code presentation resolves through
+  Web i18n (C3 browser message authority) and the server compatibility
+  message is only the unknown-code fallback.
 - **Base URL** from `import.meta.env.VITE_API_BASE_URL`.
 
 ## Authentication and authorization projection

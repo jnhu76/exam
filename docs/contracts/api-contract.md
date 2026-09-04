@@ -243,8 +243,8 @@ a future deprecation, if ever desired, requires a separate compatibility
 decision.
 
 **CURRENT:** the server fills top-level `error.message` from the
-contracts registry (`getErrorMessage` / `getMessageForLocale` in
-`messageRegistry.ts`), always in zh-CN. Since C1, both former ad-hoc
+contracts registry (`getErrorMessage` in `messageRegistry.ts`), always
+in zh-CN. Since C1, both former ad-hoc
 English override channels (`helpers.formatZodError`, `scores.ts`) are
 removed and `buildErrorResponse` no longer accepts a message override;
 the top-level message is always the registry text for the code.
@@ -255,7 +255,11 @@ web client no longer re-resolves known codes against the registry: the
 browser presentation for known machine semantics is owned by Web i18n
 (Zone A), the server `message` is preserved as raw compatibility text on
 `ApiError` and is used only for unknown / not-yet-mapped codes and as a
-degrade-safe fallback.
+degrade-safe fallback. Since C4, the registry is a single-locale catalog:
+the former locale-parameterized lookup machinery
+(`getMessageForLocale` / `SUPPORTED_LOCALES` / `SupportedLocale` /
+`isSupportedLocale` / `fallbackMessages`) is removed as dead authority
+after the C3 consumer migration.
 
 **TARGET (top-level `error.message`):** always registry zh-CN
 compatibility text. — implemented by C1.
@@ -503,8 +507,10 @@ server default compatibility-message catalog
 ```
 
 It is **not** the final browser localization catalog — interactive Web
-copy belongs in the Web. C4 may later simplify dead locale machinery;
-C0 does not delete or refactor it.
+copy belongs in the Web. Since C4, the registry is a single-locale
+(zh-CN) compatibility catalog: locale-parameterized lookup machinery has
+no legitimate consumer and is removed; introducing a multi-locale wire
+catalog later would be a new compatibility decision, not a restoration.
 
 ### D0.13 — Test contract
 
