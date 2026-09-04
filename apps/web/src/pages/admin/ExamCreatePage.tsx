@@ -922,10 +922,14 @@ export function ExamCreatePage() {
         </div>
       </div>
 
-      {/* Question picker dialog (unchanged contract, wizard-local) */}
+      {/* Question picker dialog (unchanged contract, wizard-local). The
+          footer close button is this dialog's single close control, so the
+          built-in corner X is suppressed to avoid a duplicated accessible
+          name. */}
       <Dialog open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
         <DialogContent
           aria-describedby={undefined}
+          showCloseButton={false}
           className="max-w-2xl max-h-[80vh] overflow-y-auto"
         >
           <DialogHeader>

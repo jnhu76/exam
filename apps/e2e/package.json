@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@exam/contracts": "workspace:*",
     "@exam/domain": "workspace:*",
     "@playwright/test": "1.61.0",

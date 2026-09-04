@@ -34,6 +34,8 @@ export function ExamTimer({
 
   return (
     <div
+      role="timer"
+      aria-label={t("candidateRuntime.timer.remaining")}
       className={`rounded-md border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
     >
       <div className="type-metadata">
