@@ -167,6 +167,11 @@ const zhCN = {
    * Global error / toast / notify messages. API error *codes* stay machine
    * semantic (contracts/messageRegistry); these are the generic UI-facing
    * fallbacks and common mutation success/failure toasts.
+   *
+   * `codes` / `reasons` are the Web-owned presentation catalog for known
+   * machine semantics (message contract D0.11 Zone A, C3): the active Web
+   * i18n instance renders known ErrorCode / details.reason values, and the
+   * server compatibility message is only the unknown-semantics fallback.
    */
   errors: {
     network: "网络连接失败，请稍后重试",
@@ -176,6 +181,79 @@ const zhCN = {
     validation: "输入内容有误，请检查后重试",
     unknown: "操作失败，请稍后重试",
     operationFailed: "操作失败，请重试",
+    codes: {
+      authRequired: "请先登录",
+      authInvalidCredentials: "用户名或密码错误",
+      permissionDenied: "无权执行此操作",
+      validationError: "输入内容有误，请检查后重试",
+      resourceNotFound: "资源不存在或已被删除",
+      resourceConflict: "资源状态已变化，请刷新后重试",
+      invalidCursor: "无效的分页游标",
+      exportExceedsLimit: "匹配记录超过单次导出上限，请缩小查询范围",
+      rateLimited: "请求过于频繁，请稍后重试",
+      internalError: "服务器内部错误，请稍后重试",
+      currentPasswordInvalid: "当前密码不正确",
+      userAlreadyExists: "用户名已存在",
+      adminAlreadyExists: "已存在启用的管理员",
+      candidateIdentityConflict: "身份信息已存在",
+      candidateFieldInUse: "该身份字段正在使用，无法删除",
+      candidateIdentityFieldConflict: "只能设置一个唯一身份字段",
+      invalidStateTransition: "当前状态不允许执行此操作",
+      attemptAlreadyStarted: "考试尝试已开始",
+      attemptClosed: "考试已结束",
+      answerVersionConflict: "答案版本冲突，请刷新后重试",
+      opsPolicyVersionConflict: "策略意图已被其他操作修改，请刷新后重试",
+      examNotOpen: "考试当前不在开放时间内",
+      attemptDeadlineExceeded: "考试时间已到",
+      deadlineExceedsExamClose: "延长后的截止时间不能超过考试结束时间",
+      examAlreadyPublished: "考试已发布，不能重复发布",
+      examNotDraft: "仅草稿状态的考试允许此操作",
+      examCloseNotAllowed: "考试当前状态不允许关闭",
+      examArchiveNotAllowed: "考试当前状态不允许归档",
+      examUnpublishNotAllowed: "已开放的考试不能撤回发布",
+      examExtendNotAllowed: "考试当前状态不能延长",
+      examUpdateNotAllowed: "考试当前状态不允许修改",
+      examCancelNotAllowed: "考试当前状态不能取消",
+      examPublishResultsNotAllowed: "考试当前状态不能公布成绩",
+      examCanceledResultsUnavailable: "已取消的考试不提供成绩",
+      attemptSubmitTooEarly: "考试开始时间过短，暂时无法交卷",
+      attemptLateEntryClosed: "已超过最晚进入考试时间",
+      attemptStartSubmitInfeasible:
+        "剩余考试时间不足最短作答时长，无法开始新的考试尝试",
+      enrollmentNotRemovable: "已开始的报名不能移除",
+      questionCourseMismatch: "题目不属于所选课程",
+      maxAttemptsReached: "已达到最大考试次数",
+      examAlreadyPassed: "本场考试已通过",
+      idempotencyConflict: "操作标识符与已有请求冲突",
+      incidentVersionConflict: "事件版本冲突，请刷新后重试",
+      incidentActionAlreadyLinked: "该操作已关联到其他事件",
+      csrfOriginRejected: "请求来源不被允许",
+      authRegisterDisabled: "当前部署未开放注册",
+      launchpadAlreadyInitialized: "系统已完成初始化，请直接登录",
+      launchpadInvalidSetupToken: "初始化令牌无效或未配置",
+      passwordResetTargetRoleNotAllowed: "不能重置该角色用户的密码",
+      invitationInvalid: "邀请链接无效或已过期",
+      passwordResetInvalid: "重置链接无效或已过期",
+      authzUnavailable: "授权服务暂不可用，请稍后重试",
+      rateLimitUnavailable: "限流服务暂不可用，请稍后重试",
+    },
+    /**
+     * (ErrorCode, details.reason) specific copy. Context-neutral by design:
+     * one reason may surface on several pages (e.g. UNRESOLVED_ATTEMPTS_EXIST
+     * blocks score view, export, and exam cancel alike).
+     */
+    reasons: {
+      courseCodeExists: "课程代码已存在",
+      courseHasQuestions: "该课程下仍有 {{questionCount}} 道题目，无法删除",
+      examProfileNameExists: "该名称已被使用",
+      examNotFinished: "考试尚未结束",
+      unresolvedAttemptsExist: "考试仍有 {{activeAttemptCount}} 场未结束的作答",
+      cannotDisableSelf: "不能停用自己的账号",
+      targetUserInactive: "目标用户已被停用",
+      targetNotTeacher: "目标用户不具有教师角色",
+      targetNotGrader: "目标用户不具有阅卷员角色",
+      adminMaintainerExclusion: "同一账号不能同时拥有管理员与运维身份",
+    },
   },
 
   toast: {
@@ -247,7 +325,7 @@ const zhCN = {
     errorBoundary: {
       title: "系统错误",
       description: "应用程序遇到了一个意外错误",
-      unknown: "未知错误",
+      retryHint: "请重新加载页面；如果问题持续存在，请联系管理员",
       details: "查看详细信息",
       reload: "重新加载",
     },
@@ -607,6 +685,10 @@ const zhCN = {
     saveRejection: {
       title: "答案保存被拒",
       defaultDescription: "服务器拒绝了本次保存",
+      staleVersion: "服务器上存在更新的答案版本",
+      futureVersion: "答案版本超前，请刷新页面后重试",
+      conflictingPayload: "答案数据冲突，请刷新页面后重试",
+      invalidAnswer: "答案格式不符合此题要求，请检查作答内容",
     },
     answer: {
       panelTitle: "作答区",
@@ -980,6 +1062,15 @@ const zhCN = {
       confirmDelete: "确认删除",
       confirmDeleteDescription: "确定要删除考试「{{title}}」吗？",
       deleteDisabled: "当前不可删除",
+      /** Machine DisabledReasonCode presentation (D0.8, C3). The legacy
+       * natural-language wire fields stay compatibility-only fallbacks for
+       * unknown future codes. */
+      disabledReasons: {
+        canceled: "考试已取消",
+        notFinished: "考试尚未结束",
+        noGradedAttempts: "暂无已阅卷的作答",
+        notDraft: "仅草稿状态的考试可删除",
+      },
       duration: "{{min}}分钟",
       toast: {
         deleted: "考试已删除",
@@ -2266,7 +2357,6 @@ const zhCN = {
         loadFailed: "加载成绩列表失败",
         dataLoadFailed: "成绩数据加载异常，请重试",
         exportFailed: "导出失败，请稍后重试",
-        exportFailedWithMsg: "导出失败：{{message}}",
       },
       backToResults: "返回成绩查询",
       actions: {

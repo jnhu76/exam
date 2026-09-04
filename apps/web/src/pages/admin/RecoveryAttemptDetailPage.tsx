@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { createContextSafeUuid } from "@/lib/uuid";
 import type { AttemptOperationsContext as RecoveryAttemptOperationsResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
@@ -483,9 +484,11 @@ export function RecoveryAttemptDetailPage() {
       grantClaimRef.current = null;
       setGrantDialogOpen(false);
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.recoveryOps.actions.timeGrantFailed"),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.recoveryOps.actions.timeGrantFailed"),
+        ),
       );
     }
   }, [

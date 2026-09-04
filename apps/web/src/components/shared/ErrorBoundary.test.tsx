@@ -19,7 +19,7 @@ describe("ErrorBoundary", () => {
     expect(screen.getByText("Child content")).toBeInTheDocument();
   });
 
-  it("renders error UI when child throws", () => {
+  it("renders the localized generic card when a child throws (T10)", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     render(
       <ErrorBoundary>
@@ -27,12 +27,42 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
     expect(screen.getByText("系统错误")).toBeInTheDocument();
-    expect(screen.getByText("Test error message")).toBeInTheDocument();
-    expect(screen.queryByText("Child content")).not.toBeInTheDocument();
+    expect(screen.getByText("应用程序遇到了一个意外错误")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /重新加载/ }),
+    ).toBeInTheDocument();
     vi.restoreAllMocks();
   });
 
-  it("renders unknown error fallback when error has no message", () => {
+  it("T10: raw diagnostic message never renders in the production surface", async () => {
+    vi.stubEnv("DEV", false);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ErrorBoundary>
+        <ThrowingComponent shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText("系统错误")).toBeInTheDocument();
+    expect(screen.queryByText("Test error message")).not.toBeInTheDocument();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps raw runtime message inside the development-only details surface", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ErrorBoundary>
+        <ThrowingComponent shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+    // vitest runs with import.meta.env.DEV === true, so the dev details
+    // surface renders; the raw message must live only inside it.
+    const raw = screen.getByText("Test error message");
+    expect(raw.closest("details")).not.toBeNull();
+    vi.restoreAllMocks();
+  });
+
+  it("renders the localized card even when the error has no message", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const BadComponent = (): never => {
       throw new Error();
@@ -42,20 +72,7 @@ describe("ErrorBoundary", () => {
         <BadComponent />
       </ErrorBoundary>,
     );
-    expect(screen.getByText("未知错误")).toBeInTheDocument();
-    vi.restoreAllMocks();
-  });
-
-  it("renders reload button", () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    render(
-      <ErrorBoundary>
-        <ThrowingComponent shouldThrow={true} />
-      </ErrorBoundary>,
-    );
-    expect(
-      screen.getByRole("button", { name: /重新加载/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("系统错误")).toBeInTheDocument();
     vi.restoreAllMocks();
   });
 

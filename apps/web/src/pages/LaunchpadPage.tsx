@@ -107,7 +107,7 @@ export function LaunchpadPage() {
       setDone(true);
     } catch (err) {
       setSubmitError(
-        getApiErrorMessage(err, t("launchpad.errors.bootstrapFailed")),
+        getApiErrorMessage(err, t, t("launchpad.errors.bootstrapFailed")),
       );
     } finally {
       setSubmitting(false);

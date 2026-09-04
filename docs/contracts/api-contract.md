@@ -250,9 +250,12 @@ removed and `buildErrorResponse` no longer accepts a message override;
 the top-level message is always the registry text for the code.
 Field-level and import `message` values are
 **producer-local compatibility text** (Zod issue messages and
-route/helper strings), not registry output. The first-party web client
-re-resolves known codes against the registry and ignores the server
-`message`; it uses the server `message` only for unknown codes.
+route/helper strings), not registry output. Since C3, the first-party
+web client no longer re-resolves known codes against the registry: the
+browser presentation for known machine semantics is owned by Web i18n
+(Zone A), the server `message` is preserved as raw compatibility text on
+`ApiError` and is used only for unknown / not-yet-mapped codes and as a
+degrade-safe fallback.
 
 **TARGET (top-level `error.message`):** always registry zh-CN
 compatibility text. — implemented by C1.
@@ -397,10 +400,13 @@ repository conventions, but the additive invariant is mandatory.
 NO_GRADED_ATTEMPTS`, nullable) beside `scoreViewDisabledReason`, and
 `deleteDisabledReasonCode` (`EXAM_NOT_DRAFT`, nullable) beside
 `deleteDisabledReason`, on the exam list item. The legacy natural-language
-fields are unchanged. Browser consumption of the codes is C3 scope.
+fields are unchanged. Since C3 the first-party web renders these machine
+codes through Web i18n (`admin.exams.disabledReasons.*`); the legacy
+natural-language sibling is consumed only as the fallback for unknown
+future codes.
 
 **MIGRATION RULE:** server dual-emits (C1, done) → web adopts the machine
-code (C3) → the legacy human field becomes compatibility-only →
+code (C3, done) → the legacy human field becomes compatibility-only →
 deletion/deprecation is a separate future decision.
 
 ### D0.9 — `details` extensibility
@@ -469,8 +475,10 @@ Copy ownership is split into three zones.
 
 **Zone A — Interactive Web.** Authority: `apps/web` i18n catalog. Known
 machine semantics flow `ErrorCode / reason / field code + params` → Web
-mapping → `t()` → user. The Web is the eventual owner of browser-visible
-interactive copy (TARGET, implemented by C3).
+mapping → `t()` → user. The Web is the owner of browser-visible
+interactive copy (CURRENT, implemented by C3 for general `ErrorCode` /
+`details.reason` / DisabledReasonCode presentation; field-code copy is
+C2 scope).
 
 **Zone B — Wire Compatibility.** Authority for top-level `error.message`:
 the server default compatibility catalog

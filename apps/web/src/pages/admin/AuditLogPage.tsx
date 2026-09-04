@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { downloadFile } from "@/lib/download";
 import type { AuditActionMetadataEntry } from "@exam/contracts";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -272,9 +273,7 @@ export function AuditLogPage() {
         `audit-logs-${Date.now()}.csv`,
       );
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : t("admin.audit.exportFailed");
-      toast.error(message);
+      toast.error(getApiErrorMessage(err, t, t("admin.audit.exportFailed")));
     } finally {
       setExporting(false);
     }

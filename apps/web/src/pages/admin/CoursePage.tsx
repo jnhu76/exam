@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -154,8 +155,8 @@ export function CoursePage() {
           : t("admin.courses.toast.created"),
       );
       await loadCourses({ showLoading: false });
-    } catch {
-      toast.error(t("admin.common.saveFailed"));
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t, t("admin.common.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -168,9 +169,7 @@ export function CoursePage() {
       toast.success(t("admin.courses.toast.deleted"));
       await loadCourses({ showLoading: false });
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : t("admin.common.deleteFailed"),
-      );
+      toast.error(getApiErrorMessage(err, t, t("admin.common.deleteFailed")));
     }
   }
 

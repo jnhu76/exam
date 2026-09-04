@@ -402,6 +402,7 @@ export function ExamCreatePage() {
       }
       const message = getApiErrorMessage(
         err,
+        t,
         t("admin.examWizard.feedback.createFailed"),
       );
       setSaveError(message);

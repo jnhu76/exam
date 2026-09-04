@@ -10,6 +10,7 @@ import { FieldError } from "@/components/shared/FieldError";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 
@@ -62,11 +63,7 @@ export function InviteAcceptPage() {
       });
       setDone(true);
     } catch (err) {
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : t("auth.invite.failed"),
-      );
+      setError(getApiErrorMessage(err, t, t("auth.invite.failed")));
     } finally {
       setSubmitting(false);
     }

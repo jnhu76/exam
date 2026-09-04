@@ -23,18 +23,21 @@ vi.mock("@/lib/api", () => ({
     readonly code?: string;
     readonly details?: unknown;
     readonly requestId?: string;
+    readonly serverMessage?: string;
     constructor(
       status: number,
       message: string,
       code?: string,
       details?: unknown,
       requestId?: string,
+      serverMessage?: string,
     ) {
       super(message);
       this.status = status;
       this.code = code;
       this.details = details;
       this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
       this.name = "ApiError";
     }
   },

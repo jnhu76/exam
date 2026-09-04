@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { downloadFile } from "@/lib/download";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -97,11 +98,9 @@ export function ScoreListPage() {
       );
       setScores(data);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : t("admin.scoreList.errors.loadFailed");
-      setError(message);
+      setError(
+        getApiErrorMessage(err, t, t("admin.scoreList.errors.loadFailed")),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -118,11 +117,7 @@ export function ScoreListPage() {
       );
     } catch (err) {
       toast.error(
-        err instanceof Error && err.message
-          ? t("admin.scoreList.errors.exportFailedWithMsg", {
-              message: err.message,
-            })
-          : t("admin.scoreList.errors.exportFailed"),
+        getApiErrorMessage(err, t, t("admin.scoreList.errors.exportFailed")),
       );
     } finally {
       setExporting(false);

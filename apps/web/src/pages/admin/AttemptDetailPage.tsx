@@ -5,7 +5,9 @@ import { plainTextProjection } from "@exam/domain";
 import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { toast } from "sonner";
-import { api, ApiError } from "@/lib/api";
+import i18n from "@/i18n";
+import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { downloadFile } from "@/lib/download";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -262,8 +264,7 @@ async function exportAttempt(
       );
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : exportFailedMsg;
-    toast.error(message);
+    toast.error(getApiErrorMessage(err, i18n.t, exportFailedMsg));
   }
 }
 

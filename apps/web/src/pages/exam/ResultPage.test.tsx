@@ -6,6 +6,31 @@ import { api } from "@/lib/api";
 import { ResultPage } from "./ResultPage";
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     get: vi.fn(),
   },

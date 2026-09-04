@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { ExamDTO } from "@exam/contracts";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -254,9 +255,7 @@ export function ExamDetailPage() {
       await loadExam();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.examDetail.errors.addFailed"),
+        getApiErrorMessage(err, t, t("admin.examDetail.errors.addFailed")),
       );
     } finally {
       setAddingEnrollment(false);
@@ -273,9 +272,7 @@ export function ExamDetailPage() {
       await loadExam();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.examDetail.errors.removeFailed"),
+        getApiErrorMessage(err, t, t("admin.examDetail.errors.removeFailed")),
       );
     }
   }
@@ -290,10 +287,11 @@ export function ExamDetailPage() {
       toast.success(t("admin.examDetail.toast.published"));
       await loadExam();
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : t("admin.examDetail.errors.publishFailed");
+      const msg = getApiErrorMessage(
+        err,
+        t,
+        t("admin.examDetail.errors.publishFailed"),
+      );
       setPublishError(msg);
       toast.error(msg);
     } finally {
@@ -341,9 +339,11 @@ export function ExamDetailPage() {
       await loadExam();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.examDetail.errors.publishResultsFailed"),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.examDetail.errors.publishResultsFailed"),
+        ),
       );
     } finally {
       setReleasing(false);
@@ -378,9 +378,7 @@ export function ExamDetailPage() {
       await loadExam();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.examDetail.errors.archiveFailed"),
+        getApiErrorMessage(err, t, t("admin.examDetail.errors.archiveFailed")),
       );
     } finally {
       setArchiving(false);
@@ -397,9 +395,7 @@ export function ExamDetailPage() {
       await loadExam();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.examDetail.errors.cancelFailed"),
+        getApiErrorMessage(err, t, t("admin.examDetail.errors.cancelFailed")),
       );
     } finally {
       setCanceling(false);

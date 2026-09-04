@@ -7,7 +7,8 @@ import type {
   PaginatedResponse,
   UnreadCountResponse,
 } from "@exam/contracts";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -85,11 +86,9 @@ export function NotificationBell() {
       setList(result.items);
       setListTotal(result.total);
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : t("notifications.errors.loadFailed");
-      setListError(message);
+      setListError(
+        getApiErrorMessage(err, t, t("notifications.errors.loadFailed")),
+      );
     } finally {
       setIsLoadingList(false);
     }
@@ -147,11 +146,9 @@ export function NotificationBell() {
       );
       setUnreadCount(0);
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : t("notifications.errors.markAllFailed");
-      setListError(message);
+      setListError(
+        getApiErrorMessage(err, t, t("notifications.errors.markAllFailed")),
+      );
     }
   }, [t]);
 

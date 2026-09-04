@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { CandidateFieldsPage } from "./CandidateFieldsPage";
 import { permissionsForRole } from "@exam/authz";
+import { ApiError } from "@/lib/api";
 
 const { apiGet, apiPost, apiDelete, apiPatch } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -15,6 +16,31 @@ const { apiGet, apiPost, apiDelete, apiPatch } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
@@ -150,7 +176,9 @@ describe("CandidateFieldsPage", () => {
   });
 
   it("shows API error without unhandled rejection", async () => {
-    apiPost.mockRejectedValue(new Error("字段名已存在"));
+    apiPost.mockRejectedValue(
+      new ApiError(409, "字段名已存在", "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
+    );
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /添加字段/ }));
@@ -162,11 +190,15 @@ describe("CandidateFieldsPage", () => {
       .getAllByRole("button")
       .find((b) => b.textContent === "保存")!;
     await user.click(saveBtn);
-    expect(await within(dialog).findByText("字段名已存在")).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText("只能设置一个唯一身份字段"),
+    ).toBeInTheDocument();
   });
 
   it("clears dialog mutation error when closing", async () => {
-    apiPost.mockRejectedValue({ message: "字段名已存在" });
+    apiPost.mockRejectedValue(
+      new ApiError(409, "字段名已存在", "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
+    );
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /添加字段/ }));
@@ -178,7 +210,9 @@ describe("CandidateFieldsPage", () => {
       .getAllByRole("button")
       .find((b) => b.textContent === "保存")!;
     await user.click(saveBtn);
-    expect(await within(dialog).findByText("字段名已存在")).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText("只能设置一个唯一身份字段"),
+    ).toBeInTheDocument();
     const cancelBtn = within(dialog)
       .getAllByRole("button")
       .find((b) => b.textContent === "取消")!;
@@ -186,7 +220,9 @@ describe("CandidateFieldsPage", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    expect(screen.queryByText("字段名已存在")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("只能设置一个唯一身份字段"),
+    ).not.toBeInTheDocument();
   });
 
   it("disables save while field mutation is running", async () => {

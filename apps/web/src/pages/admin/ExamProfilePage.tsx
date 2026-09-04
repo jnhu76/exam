@@ -100,6 +100,7 @@ export function ExamProfilePage() {
       setError(
         getApiErrorMessage(
           err,
+          t,
           t("admin.examProfilePages.feedback.loadFailed"),
         ),
       );
@@ -118,7 +119,7 @@ export function ExamProfilePage() {
       toast.success(t("admin.examProfilePages.feedback.deleteSuccess"));
       await loadProfiles();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, t("admin.common.deleteFailed")));
+      toast.error(getApiErrorMessage(err, t, t("admin.common.deleteFailed")));
     }
   }
 

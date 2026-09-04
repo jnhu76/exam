@@ -221,7 +221,7 @@ export function CandidatesPage() {
         ]),
       );
       setFieldErrors((current) => ({ ...current, ...serverFieldErrors }));
-      setSaveError(getApiErrorMessage(err, t("admin.common.saveFailed")));
+      setSaveError(getApiErrorMessage(err, t, t("admin.common.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -236,7 +236,9 @@ export function CandidatesPage() {
       });
       await load();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, t("admin.common.operationFailed")));
+      toast.error(
+        getApiErrorMessage(err, t, t("admin.common.operationFailed")),
+      );
     } finally {
       setTogglingId(null);
     }
@@ -282,7 +284,7 @@ export function CandidatesPage() {
       setResetFieldError("");
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t("admin.candidates.toast.resetFailed")),
+        getApiErrorMessage(err, t, t("admin.candidates.toast.resetFailed")),
       );
     } finally {
       setResetting(false);

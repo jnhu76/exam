@@ -29,6 +29,9 @@ import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { canCreateExam, canDeleteExam } from "@/lib/capabilities";
+import { getApiErrorMessage } from "@/lib/apiErrors";
+import { deleteDisabledReasonKey } from "@/lib/examDisabledReasons";
+import type { DeleteDisabledReasonCode } from "@exam/contracts";
 
 /** Row shape returned by the exams list API. */
 interface ExamRow {
@@ -43,6 +46,8 @@ interface ExamRow {
   questionIds: string[];
   participantCount: number;
   canDelete: boolean;
+  deleteDisabledReasonCode: DeleteDisabledReasonCode | null;
+  /** Legacy natural-language sibling — compatibility fallback only (D0.8). */
   deleteDisabledReason: string | null;
 }
 
@@ -71,6 +76,20 @@ export function ExamPage() {
   const mayCreateExam = user ? canCreateExam(user) : false;
   const mayDeleteExam = user ? canDeleteExam(user) : false;
 
+  /**
+   * Tooltip explanation why deletion is blocked. The machine
+   * DisabledReasonCode is authoritative (D0.8); the legacy natural-language
+   * wire field only covers unknown future codes.
+   */
+  function deleteDisabledReasonPresentation(exam: ExamRow): string {
+    const code = exam.deleteDisabledReasonCode;
+    if (code) {
+      const key = deleteDisabledReasonKey(code);
+      if (key) return t(key);
+    }
+    return exam.deleteDisabledReason ?? t("admin.exams.deleteDisabled");
+  }
+
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -95,9 +114,7 @@ export function ExamPage() {
       await loadExams();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : t("admin.exams.toast.deleteFailed"),
+        getApiErrorMessage(err, t, t("admin.exams.toast.deleteFailed")),
       );
     }
   }
@@ -255,8 +272,7 @@ export function ExamPage() {
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    {exam.deleteDisabledReason ??
-                                      t("admin.exams.deleteDisabled")}
+                                    {deleteDisabledReasonPresentation(exam)}
                                   </TooltipContent>
                                 </Tooltip>
                               ))}

@@ -156,6 +156,7 @@ export function ExamProfileEditPage() {
       setError(
         getApiErrorMessage(
           err,
+          t,
           t("admin.examProfilePages.feedback.loadOneFailed"),
         ),
       );
@@ -281,6 +282,7 @@ export function ExamProfileEditPage() {
         ? t("admin.examProfilePages.feedback.duplicateName")
         : getApiErrorMessage(
             err,
+            t,
             t("admin.examProfilePages.feedback.saveFailed"),
           );
       setSaveError(message);

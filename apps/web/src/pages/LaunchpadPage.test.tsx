@@ -4,12 +4,39 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LaunchpadPage } from "./LaunchpadPage";
 
+import { ApiError } from "@/lib/api";
+
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
@@ -129,7 +156,13 @@ describe("LaunchpadPage", () => {
 
   it("shows an error banner and stays on /launchpad when bootstrap fails", async () => {
     apiGet.mockResolvedValueOnce({ initialized: false });
-    apiPost.mockRejectedValueOnce(new Error("初始化令牌无效或未配置"));
+    apiPost.mockRejectedValueOnce(
+      new ApiError(
+        400,
+        "初始化令牌无效或未配置",
+        "LAUNCHPAD_INVALID_SETUP_TOKEN",
+      ),
+    );
     const user = userEvent.setup();
 
     renderLaunchpad();
