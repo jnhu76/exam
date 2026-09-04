@@ -133,30 +133,9 @@ _Avoid_: final answers, locked answers, grading answers
 **submit freeze barrier**: The single-transaction operation that reads `answers`, normalizes them to `SubmittedAnswersSnapshot`, writes to `submitted_answers`, transitions attempt to `submitted`, and rejects any concurrent saveAnswer. Defined in ADR-008.
 _Avoid_: submit lock, answer lock
 
-**Deadline reconciliation**: Lazy-triggered at candidate attempt entry points (`/take`, save, submit, resume) via shared `ensureAttemptDeadlineReconciled(attemptId, serverNow)`. No后台 worker, no定时扫描, no Redis.
+**Deadline reconciliation**: The server-side semantic that reconciles an active attempt once `serverNow >= effectiveDeadline` before candidate take/save/submit/resume semantics proceed. After reconciliation, the expired attempt cannot accept new answer mutations. The transaction, locking, grading, audit, and idempotency protocol is owned by `docs/architecture/exam-runtime.md` and the relevant Accepted ADR, not by this glossary.
 
-**GET 写副作用警告**: `GET /candidate/attempts/:attemptId/take` may trigger deadline reconciliation (transactional write). This is a command-style GET with side effects. Response must include `Cache-Control: no-store`. Documentation must acknowledge this: SWR, prefetch, CDN, and HTTP cache layers must not cache this endpoint.
-
-Trigger: `attemptStatus in ('in_progress', 'disrupted') && serverNow >= effectiveDeadline`.
-
-`effectiveDeadline` = min(exam deadline, attempt deadline, extension-adjusted deadline) — derived from existing fields, no new deadline model.
-
-Behavior in transaction:
-1. Lock attempt row (`FOR UPDATE`)
-2. If not expired → return attempt unchanged
-3. If `submitted/grading/graded` → return existing (already frozen)
-4. If `voided/not_started/queued` → return unchanged
-5. Load question snapshot, build `SubmittedAnswersSnapshot` from draft `answers`
-6. Derive grading plan from snapshot (fully auto-gradable → `graded` + `fully_graded`; has manual → `submitted` + `pending_manual`)
-7. Set `attemptStatus`, `submittedAt = effectiveDeadline`, `submissionReason = 'deadline'`
-8. Audit `action = 'attempt.deadline_reconciled'`, `effectiveAt = effectiveDeadline`, `occurredAt = serverNow`
-9. Idempotent: repeated calls do not overwrite existing `submitted_answers` or `submittedAt`
-
-Save after deadline: reconcile first (L0-3 freezes the attempt inside the save entry transaction), then return `ATTEMPT_ALREADY_SUBMITTED` (the attempt is now deadline-submitted, so the save is rejected as already-submitted). The legacy `DEADLINE_EXCEEDED` reason is superseded: both communicate the same invariant — no save accepted past the deadline. Optionally附带最新 CandidateTakeSnapshot.
-
-Submit after deadline: reconcile first, return existing deadline-submitted snapshot; do not accept new answer payload.
-
-**Backfill strategy**: `submitted_answers` is populated by a separate TypeScript backfill script (not Drizzle migration). Covers all attempts with submit semantics: `submitted`, `grading`, `graded`, and `voided` with non-null `submittedAt`. Abnormal data fails fast by default; `--allow-quarantine` routes quarantined attempts to a report.
+**effectiveDeadline**: `min(exam deadline, attempt deadline, extension-adjusted deadline)` — the authoritative deadline derived from existing timing fields; it is not a separate deadline model.
 
 ## Result Visibility
 
