@@ -174,7 +174,7 @@ describe("exam policy profile routes (P7-M2 CRUD)", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("duplicate (org, name) → stable 409 RESOURCE_CONFLICT", async () => {
+  it("duplicate (org, name) → stable 409 RESOURCE_CONFLICT with machine reason (C1-B)", async () => {
     const name = `Dup-${uniquePrefix()}`;
     const first = await ctx.app.inject({
       method: "POST",
@@ -191,10 +191,13 @@ describe("exam policy profile routes (P7-M2 CRUD)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(second.statusCode).toBe(409);
-    expect(second.json().error.code).toBe("RESOURCE_CONFLICT");
+    const conflictBody = second.json();
+    expect(conflictBody.error.code).toBe("RESOURCE_CONFLICT");
+    expect(conflictBody.error.details?.reason).toBe("EXAM_PROFILE_NAME_EXISTS");
+    expect(conflictBody.error.details?.params).toEqual({ name });
 
     // Renaming an existing profile to a name another profile already owns is
-    // also rejected (unique (org, name) on update).
+    // also rejected (unique (org, name) on update), same machine reason.
     const other = await ctx.app.inject({
       method: "POST",
       url: "/api/exam-profiles",
@@ -209,6 +212,11 @@ describe("exam policy profile routes (P7-M2 CRUD)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(rename.statusCode).toBe(409);
+    const renameBody = rename.json();
+    expect(renameBody.error.details?.reason).toBe("EXAM_PROFILE_NAME_EXISTS");
+    expect(renameBody.error.details?.params).toEqual({
+      name: other.json().name,
+    });
   });
 
   it("invalid interruption defaults rejected (bounded_grace without caps → 400)", async () => {

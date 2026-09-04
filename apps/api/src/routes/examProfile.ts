@@ -28,6 +28,33 @@ const cookieAuth = [{ cookieAuth: [] }] as const;
 const examProfileListResponseSchema = z.array(ExamProfileSchema);
 
 /**
+ * Identifies a duplicate (org, name) violation from structured SQLSTATE code
+ * + constraint name only — never message text (message contract D0.6). The
+ * profile write paths have exactly one product-meaningful unique index, so
+ * this is the only 23505 subclass that earns a specific machine reason.
+ * Walks the cause chain (the driver wraps the underlying pg error) and
+ * accepts both driver spellings of the structured constraint field
+ * (`constraint` on node-postgres, `constraint_name` on postgres.js).
+ */
+function isProfileNameConflict(err: unknown): boolean {
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    const e = current as Record<string, unknown>;
+    const constraint = e.constraint ?? e.constraint_name;
+    if (
+      e.code === "23505" &&
+      constraint === "exam_policy_profiles_org_name_unique"
+    ) {
+      return true;
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
+/**
  * Convert an ExamProfile domain entity to the API response shape with ISO
  * date strings (mirrors the exam route's `toExamResponse`).
  */
@@ -200,6 +227,14 @@ const examProfileRoutes: FastifyPluginAsync = async (fastify) => {
 
         return reply.code(201).send(toExamProfileResponse(profile));
       } catch (err) {
+        if (isProfileNameConflict(err)) {
+          return reply.code(409).send(
+            buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+              reason: "EXAM_PROFILE_NAME_EXISTS",
+              params: { name: data.name },
+            }),
+          );
+        }
         if (
           err &&
           typeof err === "object" &&
@@ -345,6 +380,14 @@ const examProfileRoutes: FastifyPluginAsync = async (fastify) => {
         });
         return toExamProfileResponse(updated);
       } catch (err) {
+        if (isProfileNameConflict(err)) {
+          return reply.code(409).send(
+            buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+              reason: "EXAM_PROFILE_NAME_EXISTS",
+              params: { name: data.name ?? existing.name },
+            }),
+          );
+        }
         if (
           err &&
           typeof err === "object" &&

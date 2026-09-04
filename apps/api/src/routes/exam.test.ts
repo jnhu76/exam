@@ -481,12 +481,106 @@ describe("exam close (ADR-005 Slice 1)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(listRes.statusCode).toBe(200);
+    // C1-D: the blocked reason is dual-emitted — legacy compatibility text
+    // plus the machine code (message contract D0.8).
     expect(listRes.json().items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: examId,
           canViewScores: false,
           scoreViewDisabledReason: "暂无成绩数据",
+          scoreViewDisabledReasonCode: "NO_GRADED_ATTEMPTS",
+          canDelete: false,
+          deleteDisabledReason: "仅草稿状态的考试允许删除",
+          deleteDisabledReasonCode: "EXAM_NOT_DRAFT",
+        }),
+      ]),
+    );
+  });
+
+  it("dual-emits null disabled reason codes for a deletable draft (C1-D)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Draft Codes Null",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 60_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/exams",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    // A draft exam is not ended yet -> the not-finished scoreView branch.
+    expect(listRes.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: examId,
+          canViewScores: false,
+          scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
+          scoreViewDisabledReasonCode: "EXAM_NOT_FINISHED",
+          canDelete: true,
+          deleteDisabledReason: null,
+          deleteDisabledReasonCode: null,
+        }),
+      ]),
+    );
+  });
+
+  it("dual-emits EXAM_CANCELED after canceling an exam (C1-D)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Cancel Codes",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 60_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const cancelRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(cancelRes.statusCode).toBe(200);
+
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/exams",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: examId,
+          canViewScores: false,
+          scoreViewDisabledReason: "已取消的考试不提供成绩",
+          scoreViewDisabledReasonCode: "EXAM_CANCELED",
         }),
       ]),
     );

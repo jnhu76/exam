@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { schema } from "@exam/db/src/schema/pg.js";
 import courseRoutes from "./course.js";
 import {
   buildTestApp,
@@ -204,7 +205,7 @@ describe("course routes", () => {
     expect(deleteRes.statusCode).toBe(403);
   });
 
-  it("POST /api/courses rejects duplicate code within org", async () => {
+  it("POST /api/courses rejects duplicate code within org with a machine reason (C1-B)", async () => {
     const dupCode = `DUP-${uniquePrefix()}`;
     await ctx.app.inject({
       method: "POST",
@@ -220,5 +221,54 @@ describe("course routes", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    expect(body.error.details?.reason).toBe("COURSE_CODE_EXISTS");
+    expect(body.error.details?.params).toEqual({ courseCode: dupCode });
+  });
+
+  it("DELETE /api/courses/:id rejects a course that still has questions with a machine reason (C1-B)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Course With Questions",
+        code: `Q-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const courseId = createRes.json().id as string;
+
+    await ctx.db.insert(schema.questions).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      courseId,
+      type: "single_choice",
+      content: "Choose A",
+      options: [{ id: "a", content: "A" }],
+      standardAnswer: "a",
+      attachments: [],
+      score: 10,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/courses/${courseId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    expect(body.error.details?.reason).toBe("COURSE_HAS_QUESTIONS");
+    expect(body.error.details?.params?.questionCount).toBe(1);
   });
 });

@@ -135,6 +135,9 @@ function buildQuestionResults(
  * Determines whether the score list for an exam can be opened.
  * The exam must be finished (closed/archived or past closeAt) and have
  * at least one graded attempt.
+ *
+ * INVARIANT (message contract D0.6): the blocking condition is signaled to
+ * the client via `details.reason` (EXAM_NOT_FINISHED), never via prose.
  */
 function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
   const examEnded =
@@ -143,20 +146,14 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
     (exam.closeAt !== null && now >= exam.closeAt);
 
   if (!examEnded) {
-    return {
-      allowed: false,
-      message: "Exam is not finished yet",
-    };
+    return { allowed: false };
   }
 
   if (gradedCount === 0) {
-    return {
-      allowed: false,
-      message: "No graded attempts available yet",
-    };
+    return { allowed: false };
   }
 
-  return { allowed: true, message: null };
+  return { allowed: true };
 }
 
 /**
@@ -276,16 +273,11 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       });
       const access = canOpenScoreList(exam, gradedCount, now);
       if (!access.allowed) {
-        return reply
-          .code(409)
-          .send(
-            buildErrorResponse(
-              request.id,
-              "RESOURCE_CONFLICT",
-              { reason: "EXAM_NOT_FINISHED" },
-              access.message ?? undefined,
-            ),
-          );
+        return reply.code(409).send(
+          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            reason: "EXAM_NOT_FINISHED",
+          }),
+        );
       }
       const offset = (page - 1) * pageSize;
       const statsResult = await attemptRepo.getGradedStats(ctx, examId);

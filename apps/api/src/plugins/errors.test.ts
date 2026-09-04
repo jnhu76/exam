@@ -25,6 +25,31 @@ describe("error handler", () => {
     app.get("/test-not-found", async () => {
       throw new NotFoundError("Internal lookup context");
     });
+    // C1-A regression routes: structured PG classification vs text-only
+    // imitations. The structured routes use arbitrary/non-English/empty
+    // message text on purpose — classification must not care.
+    app.get("/test-pg-unique-violation", async () => {
+      throw Object.assign(new Error("任意非英文数据库错误文本"), {
+        code: "23505",
+      });
+    });
+    app.get("/test-pg-unique-empty-message", async () => {
+      throw Object.assign(new Error(""), { code: "23505" });
+    });
+    app.get("/test-pg-serialization-wrapped", async () => {
+      throw new Error("drizzle wrapper", {
+        cause: Object.assign(new Error("任意内层文本"), { code: "40001" }),
+      });
+    });
+    app.get("/test-text-duplicate-key", async () => {
+      throw new Error("duplicate key value violates unique constraint");
+    });
+    app.get("/test-text-unique-constraint", async () => {
+      throw new Error("unique constraint violated on some relation");
+    });
+    app.get("/test-text-serialize", async () => {
+      throw new Error("please serialize this payload");
+    });
     await app.ready();
     return app;
   }
@@ -102,6 +127,50 @@ describe("error handler", () => {
         requestId: expect.any(String),
       },
     });
+    await app.close();
+  });
+
+  // ── C1-A: PG classification is text-independent (message contract D0.6) ──
+
+  it("classifies structured 23505 as 409 regardless of message text (T1)", async () => {
+    const app = await buildApp();
+    for (const url of [
+      "/test-pg-unique-violation",
+      "/test-pg-unique-empty-message",
+    ]) {
+      const res = await app.inject({ method: "GET", url });
+      expect(res.statusCode, url).toBe(409);
+      expect(res.json().error.code, url).toBe("RESOURCE_CONFLICT");
+    }
+    await app.close();
+  });
+
+  it("classifies wrapped structured 40001 via the cause chain (T1)", async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/test-pg-serialization-wrapped",
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("RESOURCE_CONFLICT");
+    await app.close();
+  });
+
+  it("does NOT classify text-only errors as PG conflicts (T2 negative control)", async () => {
+    const app = await buildApp();
+    for (const url of [
+      "/test-text-duplicate-key",
+      "/test-text-unique-constraint",
+      "/test-text-serialize",
+    ]) {
+      const res = await app.inject({ method: "GET", url });
+      expect(res.statusCode, url).toBe(500);
+      const body = res.json();
+      expect(body.error.code, url).toBe("INTERNAL_ERROR");
+      expect(JSON.stringify(body), url).not.toContain("duplicate key");
+      expect(JSON.stringify(body), url).not.toContain("unique constraint");
+      expect(JSON.stringify(body), url).not.toContain("serialize");
+    }
     await app.close();
   });
 });

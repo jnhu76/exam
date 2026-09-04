@@ -15,6 +15,8 @@ import {
   CandidateStatusResponseSchema,
   ErrorResponseSchema,
   normalizeInterruptionPolicyConfiguration,
+  DeleteDisabledReasonCodeEnum,
+  ScoreViewDisabledReasonCodeEnum,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createGraderExamAssignmentRepo } from "@exam/db/src/repository/graderExamAssignmentRepo.js";
@@ -189,11 +191,11 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   if (exam.status === "canceled") {
     return {
       canViewScores: false,
-      // API-provided status-reason string rendered verbatim by the web client.
-      // Allowlisted in the backend copy guard (see i18n-copy-policy.md); a
-      // code-based enum + web i18n mapping is a tracked follow-up.
+      // D0.8 additive bridge: the legacy text is non-authoritative
+      // compatibility copy; the machine condition lives in the *Code field.
       scoreViewDisabledReason: "已取消的考试不提供成绩",
-    };
+      scoreViewDisabledReasonCode: "EXAM_CANCELED",
+    } as const;
   }
 
   const examEnded =
@@ -205,20 +207,23 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
     return {
       canViewScores: false,
       scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
-    };
+      scoreViewDisabledReasonCode: "EXAM_NOT_FINISHED",
+    } as const;
   }
 
   if (gradedAttemptCount === 0) {
     return {
       canViewScores: false,
       scoreViewDisabledReason: "暂无成绩数据",
-    };
+      scoreViewDisabledReasonCode: "NO_GRADED_ATTEMPTS",
+    } as const;
   }
 
   return {
     canViewScores: true,
     scoreViewDisabledReason: null,
-  };
+    scoreViewDisabledReasonCode: null,
+  } as const;
 }
 
 /** Determine whether an exam can be deleted. Only draft exams are deletable. */
@@ -227,13 +232,15 @@ function getDeleteMeta(exam: Exam) {
     return {
       canDelete: true,
       deleteDisabledReason: null,
-    };
+      deleteDisabledReasonCode: null,
+    } as const;
   }
 
   return {
     canDelete: false,
     deleteDisabledReason: "仅草稿状态的考试允许删除",
-  };
+    deleteDisabledReasonCode: "EXAM_NOT_DRAFT",
+  } as const;
 }
 
 /** Zod schema for route params containing a UUID `id`. */
@@ -306,6 +313,10 @@ const examListItemSchema = ExamSchema.extend({
     .describe(
       "Legacy natural-language compatibility text explaining why scores are unavailable. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8).",
     ),
+  scoreViewDisabledReasonCode:
+    ScoreViewDisabledReasonCodeEnum.nullable().describe(
+      "Machine code identifying why scores are unavailable (message contract D0.8); null when viewable. Additive sibling of the legacy text field.",
+    ),
   canDelete: z.boolean(),
   deleteDisabledReason: z
     .string()
@@ -313,6 +324,9 @@ const examListItemSchema = ExamSchema.extend({
     .describe(
       "Legacy natural-language compatibility text explaining why the exam cannot be deleted. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8).",
     ),
+  deleteDisabledReasonCode: DeleteDisabledReasonCodeEnum.nullable().describe(
+    "Machine code identifying why deletion is blocked (message contract D0.8); null when deletable. Additive sibling of the legacy text field.",
+  ),
 });
 
 /** Zod schema for the paginated exam list response. */

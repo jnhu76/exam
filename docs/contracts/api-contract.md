@@ -136,9 +136,11 @@ one ErrorCode = one unique logical failure
 ```
 
 **CURRENT:** the registry holds ~60 codes; some codes carry multiple
-specific failures without a machine reason (the distinguishing semantics
-currently live in the human message — a known debt, F-2/F-5, remediated by
-C1).
+specific failures. Since C1, the overloaded `RESOURCE_CONFLICT` business
+failures identified by #413 (course-code conflict, course-has-questions,
+exam-profile name conflict) emit `details.reason` (plus `details.params`
+where a dynamic fact exists); the generic PG-conflict and candidate-create
+23505 fallbacks stay reason-less by design (heterogeneous constraint set).
 **TARGET:** frozen as above; no new codes for domain specializations.
 **MIGRATION RULE:** none required — documentation-only (C0).
 
@@ -165,12 +167,16 @@ Rules:
 - Clients MAY branch on reasons they understand and MUST tolerate unknown
   reasons (falling back to `ErrorCode`-level semantics).
 
-**CURRENT:** eleven ad-hoc `details.reason` values are already emitted
+**CURRENT:** twelve ad-hoc `details.reason` values are already emitted
 (e.g. `EXAM_NOT_FINISHED`, `CANNOT_DISABLE_SELF`, `TARGET_USER_INACTIVE`),
-with no canonical description until this document. Some conflicts carry
-no reason at all.
-**TARGET:** frozen as above; C1 standardizes existing values and adds the
-missing reasons for overloaded codes (e.g. course conflicts).
+with no canonical description until this document. Since C1, the formerly
+prose-only conflicts also carry reasons: `RESOURCE_CONFLICT +
+COURSE_CODE_EXISTS` / `COURSE_HAS_QUESTIONS` (course routes, with
+`details.params`) and `RESOURCE_CONFLICT + EXAM_PROFILE_NAME_EXISTS` (exam
+profile routes, with `details.params`). The generic PG-conflict fallback and
+the candidate-create 23505 fallback stay reason-less by design (heterogeneous
+constraint set).
+**TARGET:** frozen as above; no new codes for domain specializations.
 **MIGRATION RULE:** additive only — new reasons never change the meaning
 of existing codes or reasons.
 
@@ -194,9 +200,11 @@ Record<string, string | number>
 Params are additive-only: new keys may be added, existing keys are not
 redefined or removed.
 
-**CURRENT:** no structured `params` are emitted; dynamic facts (e.g. the
-duplicate course code, a limit value) are embedded in prose copy only — a
-known debt (F-5) remediated by C1.
+**CURRENT:** since C1, top-level `details.params` are emitted where a
+machine-relevant dynamic fact exists: `courseCode` (duplicate course code),
+`questionCount` (non-empty course deletion), `name` (duplicate exam profile
+name). Field-level `details.fields[].params` are still not emitted — that is
+C2 scope.
 **TARGET:** as above.
 **MIGRATION RULE:** additive. If repository reality ever proves that
 boolean/null/etc. values are genuinely required, report the divergence
@@ -226,16 +234,18 @@ decision.
 
 **CURRENT:** the server fills top-level `error.message` from the
 contracts registry (`getErrorMessage` / `getMessageForLocale` in
-`messageRegistry.ts`), always in zh-CN; two ad-hoc English override
-channels (`helpers.formatZodError`, `scores.ts`) still exist (F-9,
-remediated by C1). Field-level and import `message` values are
+`messageRegistry.ts`), always in zh-CN. Since C1, both former ad-hoc
+English override channels (`helpers.formatZodError`, `scores.ts`) are
+removed and `buildErrorResponse` no longer accepts a message override;
+the top-level message is always the registry text for the code.
+Field-level and import `message` values are
 **producer-local compatibility text** (Zod issue messages and
 route/helper strings), not registry output. The first-party web client
 re-resolves known codes against the registry and ignores the server
 `message`; it uses the server `message` only for unknown codes.
 
 **TARGET (top-level `error.message`):** always registry zh-CN
-compatibility text; the English override channels are removed (C1).
+compatibility text. — implemented by C1.
 
 **TARGET (field-level / import `message`):** non-authoritative
 compatibility text whose language and producer are not machine
@@ -261,13 +271,12 @@ if (error.message.includes("duplicate key")) { /* ... */ }
 Allowed uses of message text: developer logging, diagnostic formatting,
 compatibility display fallback.
 
-**CURRENT:** the only production branching on message text is the PG
-constraint-text fallback in `apps/api/src/plugins/errors.ts` (F-10a) and a
-local Redis sentinel (F-10b, hygiene only). F-10a is a P2 — driver/pg
-wording participates in the external 409/500 classification — and is
-remediated by C1 (structured pg code / typed error class).
+**CURRENT:** since C1, the PG constraint-text fallback in
+`apps/api/src/plugins/errors.ts` (F-10a) is removed — external 409/500
+classification uses only structured SQLSTATE codes (`23505`, `40001`).
+The local Redis sentinel (F-10b, hygiene only) remains and is C6 scope.
 **TARGET:** zero production control-flow dependencies on message text.
-**MIGRATION RULE:** C1.
+**MIGRATION RULE:** F-10a closed by C1; the remaining F-10b item is hygiene.
 
 ### D0.7 — Field violations
 
@@ -347,6 +356,17 @@ unknown/fallback semantics if the current domain state space supports it
 (C1 inventories the exact values). Exact field naming may be adjusted to
 repository conventions, but the additive invariant is mandatory.
 
+**CURRENT:** since C1 the server dual-emits:
+`scoreViewDisabledReasonCode` (`EXAM_CANCELED | EXAM_NOT_FINISHED |
+NO_GRADED_ATTEMPTS`, nullable) beside `scoreViewDisabledReason`, and
+`deleteDisabledReasonCode` (`EXAM_NOT_DRAFT`, nullable) beside
+`deleteDisabledReason`, on the exam list item. The legacy natural-language
+fields are unchanged. Browser consumption of the codes is C3 scope.
+
+**MIGRATION RULE:** server dual-emits (C1, done) → web adopts the machine
+code (C3) → the legacy human field becomes compatibility-only →
+deletion/deprecation is a separate future decision.
+
 ### D0.9 — `details` extensibility
 
 `error.details` is currently `z.unknown()` — intentionally permissive
@@ -362,10 +382,15 @@ or an extensible/passthrough object preserving existing shapes.
 
 > No destructive narrowing without proof.
 
-**CURRENT:** `z.unknown()`.
+**CURRENT:** `z.unknown()`. The C1 inventory covered every production
+producer (validation `fields[]`, `reason`/`reason+activeAttemptCount`,
+`targetRole`, typed domain-error tuples with dates/numbers/strings, and the
+SaveAnswerRejected `serverAnswer` object). Narrowing to a structured schema
+is not proven covered by these shapes, so C1 keeps `z.unknown()`;
+**VERDICT: KEEP_UNKNOWN** — any future narrowing stays inventory-gated.
 **TARGET:** a compatible union or passthrough object — decided and
-implemented by C1 after the inventory.
-**MIGRATION RULE:** C1; C0 does not narrow anything.
+implemented by C1 after the inventory. C1's decision: keep permissive.
+**MIGRATION RULE:** any future narrowing requires a fresh inventory.
 
 ### D0.10 — Unknown / forward-compatibility contract
 

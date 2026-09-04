@@ -34,6 +34,10 @@ function extractValidationIssues(error: unknown): ZodIssue[] {
  * Checks whether an error represents a database unique-constraint violation
  * or serialization failure. These are mapped to 409 Conflict responses.
  *
+ * INVARIANT (message contract D0.6 / C1-A): classification uses ONLY
+ * structured SQLSTATE codes — never message text. Driver/PG wording may
+ * change arbitrarily without affecting external error semantics.
+ *
  * 23505 = unique_violation — duplicate key value violation (permanent conflict)
  * 40001 = serialization_failure — "could not serialize access due to
  *         concurrent update" — occurs in REPEATABLE READ isolation when
@@ -52,14 +56,6 @@ function isConstraintError(err: unknown): boolean {
     if (typeof current !== "object" || current === null) break;
     const e = current as Record<string, unknown>;
     if (e.code === "23505" || e.code === "40001") return true;
-    if (
-      typeof e.message === "string" &&
-      (e.message.includes("duplicate key") ||
-        e.message.includes("unique constraint") ||
-        e.message.includes("serialize"))
-    ) {
-      return true;
-    }
     current = e.cause;
   }
   return false;

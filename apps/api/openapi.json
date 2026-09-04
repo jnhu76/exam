@@ -15254,6 +15254,16 @@
                             "nullable": true,
                             "description": "Legacy natural-language compatibility text explaining why scores are unavailable. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8)."
                           },
+                          "scoreViewDisabledReasonCode": {
+                            "type": "string",
+                            "enum": [
+                              "EXAM_CANCELED",
+                              "EXAM_NOT_FINISHED",
+                              "NO_GRADED_ATTEMPTS"
+                            ],
+                            "nullable": true,
+                            "description": "Machine code identifying why scores are unavailable (message contract D0.8); null when viewable. Additive sibling of the legacy text field."
+                          },
                           "canDelete": {
                             "type": "boolean"
                           },
@@ -15261,6 +15271,12 @@
                             "type": "string",
                             "nullable": true,
                             "description": "Legacy natural-language compatibility text explaining why the exam cannot be deleted. Non-authoritative; machine semantics migrate additively to a machine code field (message contract D0.8)."
+                          },
+                          "deleteDisabledReasonCode": {
+                            "type": "string",
+                            "enum": ["EXAM_NOT_DRAFT"],
+                            "nullable": true,
+                            "description": "Machine code identifying why deletion is blocked (message contract D0.8); null when deletable. Additive sibling of the legacy text field."
                           }
                         },
                         "required": [
@@ -15295,8 +15311,10 @@
                           "gradedAttemptCount",
                           "canViewScores",
                           "scoreViewDisabledReason",
+                          "scoreViewDisabledReasonCode",
                           "canDelete",
-                          "deleteDisabledReason"
+                          "deleteDisabledReason",
+                          "deleteDisabledReasonCode"
                         ],
                         "additionalProperties": false
                       }

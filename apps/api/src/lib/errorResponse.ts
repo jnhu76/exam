@@ -62,23 +62,24 @@ export function normalizeErrorCode(
 /**
  * Build a standardised {@link ErrorResponse} payload.
  *
+ * INVARIANT (message contract D0.5): the top-level message is always the
+ * canonical registry compatibility text for `code` — callers cannot
+ * override it, so machine wording channels cannot reappear ad hoc.
+ *
  * @param requestId - Correlation ID for the current request.
  * @param code - Canonical error code.
  * @param details - Optional structured details (e.g. validation fields).
- * @param messageOverride - Optional human-readable message; when omitted the
- *   default message for `code` is used.
  * @returns A fully-formed `ErrorResponse` object.
  */
 export function buildErrorResponse(
   requestId: string,
   code: ErrorCode,
   details?: unknown,
-  messageOverride?: string,
 ): ErrorResponse {
   return {
     error: {
       code,
-      message: messageOverride ?? getErrorMessage(code),
+      message: getErrorMessage(code),
       ...(details === undefined ? {} : { details }),
       requestId,
     },

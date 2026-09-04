@@ -116,6 +116,41 @@ export const ExamSchema = z.object({
 export type ExamDTO = z.infer<typeof ExamSchema>;
 
 /**
+ * Machine code identifying why score viewing is unavailable for an exam list
+ * item (message contract D0.8 additive bridge). Closed enum: the state space
+ * is exactly the blocked conditions of the exam-list projection; `null`
+ * means scores are viewable. Emitted beside the legacy natural-language
+ * `scoreViewDisabledReason` field, which is retained unchanged as
+ * compatibility text.
+ */
+export const ScoreViewDisabledReasonCodeEnum = z.enum([
+  "EXAM_CANCELED",
+  // Same underlying condition (exam not ended) as the published
+  // RESOURCE_CONFLICT + EXAM_NOT_FINISHED details.reason — one condition,
+  // one name across the reason vocabulary.
+  "EXAM_NOT_FINISHED",
+  "NO_GRADED_ATTEMPTS",
+]);
+
+/** Machine code for why a score list is unavailable; null when viewable. */
+export type ScoreViewDisabledReasonCode = z.infer<
+  typeof ScoreViewDisabledReasonCodeEnum
+>;
+
+/**
+ * Machine code identifying why an exam cannot be deleted (message contract
+ * D0.8 additive bridge). Only draft exams are deletable, so the state space
+ * has a single blocked member; `null` means deletable. Emitted beside the
+ * legacy natural-language `deleteDisabledReason` field.
+ */
+export const DeleteDisabledReasonCodeEnum = z.enum(["EXAM_NOT_DRAFT"]);
+
+/** Machine code for why deletion is blocked; null when deletable. */
+export type DeleteDisabledReasonCode = z.infer<
+  typeof DeleteDisabledReasonCodeEnum
+>;
+
+/**
  * Request schema for enrolling candidates into an exam.
  */
 export const EnrollCandidatesRequestSchema = z.object({

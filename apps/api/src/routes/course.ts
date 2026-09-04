@@ -182,6 +182,11 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       if (existing.some((c) => c.code === data.code)) {
         return reply.code(409).send(
           buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            // Machine semantics per message contract D0.3/D0.4: the specific
+            // condition and the dynamic fact are structured, the prose in
+            // fields[] is non-authoritative compatibility text only.
+            reason: "COURSE_CODE_EXISTS",
+            params: { courseCode: data.code },
             fields: [
               {
                 field: "code",
@@ -333,6 +338,11 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       if (questionCount > 0) {
         return reply.code(409).send(
           buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            // Machine semantics per message contract D0.3/D0.4: the specific
+            // condition and the dynamic fact are structured, the prose in
+            // fields[] is non-authoritative compatibility text only.
+            reason: "COURSE_HAS_QUESTIONS",
+            params: { questionCount },
             fields: [
               {
                 field: "courseId",
