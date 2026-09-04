@@ -135,6 +135,31 @@ function readParams(
 }
 
 /**
+ * INVARIANT: interpolation params come from known projections only —
+ * heterogeneous wire details is never wholesale reinterpreted as params.
+ *
+ * Brownfield published reasons carry their dynamic fact flat on details
+ * instead of inside `details.params`. Current producers of
+ * UNRESOLVED_ATTEMPTS_EXIST all emit `{ reason, activeAttemptCount }`:
+ * scores/export routes (RESOURCE_CONFLICT) and the close/cancel routes
+ * (EXAM_CLOSE_NOT_ALLOWED / EXAM_CANCEL_NOT_ALLOWED). A new producer of this
+ * reason must keep that shape or extend this projection.
+ */
+function readReasonPresentationParams(
+  reason: string,
+  details: unknown,
+): Record<string, string | number> | undefined {
+  const params = readParams(details);
+  if (reason === "UNRESOLVED_ATTEMPTS_EXIST" && isRecord(details)) {
+    const activeAttemptCount = details.activeAttemptCount;
+    if (typeof activeAttemptCount === "number") {
+      return { ...params, activeAttemptCount };
+    }
+  }
+  return params;
+}
+
+/**
  * Resolves the user-facing presentation for an error thrown by the API layer
  * (message contract D0.10/D0.11 Zone A). Resolution priority:
  *
@@ -156,16 +181,17 @@ export function getApiErrorMessage(
     return fallback ?? t(API_ERROR_FALLBACK_KEY);
   }
   if (error.code && isErrorCode(error.code)) {
-    const reasonKey =
-      ERROR_REASON_KEYS[error.code]?.[readReason(error.details) ?? ""];
+    const reason = readReason(error.details);
+    const reasonKey = ERROR_REASON_KEYS[error.code]?.[reason ?? ""];
     if (reasonKey) {
       // i18next's resource-typed t() demands the exact interpolation params
       // of the concrete key; the resolver resolves (key, params) at runtime
-      // from the wire shape (D0.4), which readParams validates — the same
-      // dynamic-key escape the recovery pages use for t(dynamicKey).
+      // from the wire shape (D0.4), which the known-projection reader
+      // validates — the same dynamic-key escape the recovery pages use for
+      // t(dynamicKey).
       return t(
         `errors.reasons.${reasonKey}`,
-        readParams(error.details) as never,
+        readReasonPresentationParams(reason ?? "", error.details) as never,
       ) as unknown as string;
     }
     const codeKey = ERROR_CODE_KEYS[error.code];

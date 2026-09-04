@@ -97,11 +97,13 @@ describe("getApiErrorMessage (Web i18n authority)", () => {
         t,
       ),
     ).toBe("考试尚未结束");
+    // Real brownfield wire shape (scores/export routes): the dynamic fact is
+    // flat on details, NOT inside details.params.
     expect(
       getApiErrorMessage(
         new ApiError(409, "资源状态冲突", "RESOURCE_CONFLICT", {
           reason: "UNRESOLVED_ATTEMPTS_EXIST",
-          params: { activeAttemptCount: 2 },
+          activeAttemptCount: 2,
         }),
         t,
       ),
@@ -152,9 +154,12 @@ describe("getApiErrorMessage (Web i18n authority)", () => {
 
   it("every mapped reason emits its errors.reasons.* key with wire params", () => {
     const { t: recordingT, calls } = makeRecordingT();
+    // Real brownfield wire shape: flat activeAttemptCount. The exact-options
+    // assertion also proves the resolver never wholesale-spreads heterogeneous
+    // details (a spread would leak `reason` into the params).
     const error = new ApiError(409, "x", "RESOURCE_CONFLICT", {
       reason: "UNRESOLVED_ATTEMPTS_EXIST",
-      params: { activeAttemptCount: 2 },
+      activeAttemptCount: 2,
     });
     getApiErrorMessage(error, recordingT);
     expect(calls).toEqual([
@@ -163,6 +168,30 @@ describe("getApiErrorMessage (Web i18n authority)", () => {
         options: { activeAttemptCount: 2 },
       },
     ]);
+  });
+
+  it("close/cancel producers of UNRESOLVED_ATTEMPTS_EXIST stay at code-level copy (deliberate unmapped disposition)", () => {
+    // The same flat brownfield shape is emitted by the close/cancel routes
+    // under their own codes, but those (code, reason) pairs are deliberately
+    // unmapped: the code-level copy is the sufficient presentation there.
+    expect(
+      getApiErrorMessage(
+        new ApiError(409, "x", "EXAM_CLOSE_NOT_ALLOWED", {
+          reason: "UNRESOLVED_ATTEMPTS_EXIST",
+          activeAttemptCount: 5,
+        }),
+        t,
+      ),
+    ).toBe("考试当前状态不允许关闭");
+    expect(
+      getApiErrorMessage(
+        new ApiError(409, "x", "EXAM_CANCEL_NOT_ALLOWED", {
+          reason: "UNRESOLVED_ATTEMPTS_EXIST",
+          activeAttemptCount: 5,
+        }),
+        t,
+      ),
+    ).toBe("考试当前状态不能取消");
   });
 
   it("T11/M5 guard: known semantics flow through the injected translator, never contracts copy", () => {
