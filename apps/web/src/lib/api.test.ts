@@ -285,8 +285,8 @@ describe("api client", () => {
 
   describe("C3 browser message authority (wire layer)", () => {
     it("T1: keeps the server compat message verbatim for a known code — never contracts registry text", async () => {
-      // If the client re-resolves known codes through contracts
-      // getMessageForLocale (registry-first), .message would become 请先登录
+      // If the client re-resolves known codes through the server
+      // compatibility catalog (registry-first), .message would become 请先登录
       // and this test fails (mutation M5).
       vi.stubGlobal(
         "fetch",

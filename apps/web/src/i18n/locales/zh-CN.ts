@@ -175,12 +175,7 @@ const zhCN = {
    */
   errors: {
     network: "网络连接失败，请稍后重试",
-    unauthorized: "登录已过期，请重新登录",
-    forbidden: "没有权限执行此操作",
-    notFound: "资源不存在或已被删除",
-    validation: "输入内容有误，请检查后重试",
     unknown: "操作失败，请稍后重试",
-    operationFailed: "操作失败，请重试",
     codes: {
       authRequired: "请先登录",
       authInvalidCredentials: "用户名或密码错误",

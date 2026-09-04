@@ -196,7 +196,7 @@ describe("getApiErrorMessage (Web i18n authority)", () => {
 
   it("T11/M5 guard: known semantics flow through the injected translator, never contracts copy", () => {
     // If the implementation ever reverts to registry-first resolution
-    // (contracts getMessageForLocale / DEFAULT_LOCALE), no Web key would be
+    // (server compatibility catalog text), no Web key would be
     // recorded and this assertion fails (mutation M5).
     const { t: recordingT, calls } = makeRecordingT();
     const error = new ApiError(401, "请先登录", "AUTH_REQUIRED");

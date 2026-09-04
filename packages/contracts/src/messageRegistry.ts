@@ -1,26 +1,11 @@
 import type { SaveAnswerRejectReason } from "./attempt.js";
 
-/** Default locale used for error and status messages. */
-export const DEFAULT_LOCALE = "zh-CN" as const;
-
-/** List of locales supported by the message registry. Currently only zh-CN. */
-export const SUPPORTED_LOCALES = ["zh-CN"] as const;
-
-/** Union type of all supported locale identifiers. */
-export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
-
 /**
- * Type guard that checks whether a given string is a supported locale.
- * @param locale - The locale string to check.
- * @returns `true` if the locale is in the supported locales list.
- */
-export function isSupportedLocale(locale: string): locale is SupportedLocale {
-  return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
-}
-
-/**
- * Registry of all application error messages keyed by error code.
- * Each value is the user-facing Chinese (zh-CN) message for that error code.
+ * INVARIANT: this registry is the single-locale (zh-CN) server default
+ * compatibility catalog for top-level `error.message` (message contract
+ * D0.5/D0.11 Zone B). It is not a localization framework: browser-visible
+ * known semantics resolve through Web i18n, and locale-parameterized
+ * lookup machinery has no legitimate consumer (removed by #413 C4).
  */
 export const errorMessages = {
   AUTH_REQUIRED: "请先登录",
@@ -92,42 +77,14 @@ export function isErrorCode(code: string): code is ErrorCode {
 }
 
 /**
- * Fallback messages used when no locale-specific message is found for a given code.
- */
-export const fallbackMessages = {
-  unknownError: "未知错误",
-  operationFailed: "操作失败，请重试",
-} as const;
-
-const localeCatalogs: Record<SupportedLocale, typeof errorMessages> = {
-  "zh-CN": errorMessages,
-};
-
-/**
- * Returns the error message string for the given error code in the default locale.
+ * Returns the server default compatibility message for the given error code
+ * (message contract D0.5). Producers use this for top-level `error.message`;
+ * clients must not parse it.
  * @param code - A valid error code from the errorMessages registry.
- * @returns The localized error message string.
+ * @returns The compatibility message string.
  */
 export function getErrorMessage(code: ErrorCode): string {
   return errorMessages[code];
-}
-
-/**
- * Returns the error message for a given code and locale, falling back to the
- * default locale and then to the unknown error message if the code is unrecognized.
- * @param code - The error code to look up.
- * @param locale - The locale to use (defaults to zh-CN).
- * @returns The localized error message string.
- */
-export function getMessageForLocale(
-  code: string,
-  locale: SupportedLocale = DEFAULT_LOCALE,
-): string {
-  const catalog = isSupportedLocale(locale)
-    ? localeCatalogs[locale]
-    : localeCatalogs[DEFAULT_LOCALE];
-  const message = (catalog as Record<string, string>)[code];
-  return message ?? fallbackMessages.unknownError;
 }
 
 /**
