@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { STAFF_INVITATION_ROLES } from "@exam/contracts";
 import {
   buildInviteAcceptLink,
   buildPasswordResetLink,
@@ -49,12 +50,20 @@ describe("identity email renderers (#297)", () => {
     expect(rendered.bodyHtml).toContain("60 分钟内有效");
   });
 
-  it("falls back to the raw role string for an unknown role", () => {
-    const rendered = renderStaffInvitationEmail({
-      role: "FutureRole",
-      acceptUrl: `${ORIGIN}/invite/accept?token=abc`,
-      expiresInDays: 7,
-    });
-    expect(rendered.bodyText).toContain("FutureRole");
+  it("renders a zh label for EVERY invitable role with no raw fallback (C6 F-14)", () => {
+    // The role contract is the closed STAFF_INVITATION_ROLES enum (enforced
+    // by the wire schema); the renderer must localize each of them and never
+    // emit the raw machine key into the Email copy.
+    for (const role of STAFF_INVITATION_ROLES) {
+      const rendered = renderStaffInvitationEmail({
+        role,
+        acceptUrl: `${ORIGIN}/invite/accept?token=abc`,
+        expiresInDays: 7,
+      });
+      expect(rendered.bodyText).toContain(STAFF_ROLE_LABELS_ZH[role]);
+      expect(rendered.bodyText).not.toContain(role);
+      expect(rendered.bodyHtml).toContain(STAFF_ROLE_LABELS_ZH[role]);
+      expect(rendered.bodyHtml).not.toContain(role);
+    }
   });
 });

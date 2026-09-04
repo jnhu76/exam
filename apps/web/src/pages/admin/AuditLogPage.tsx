@@ -418,7 +418,14 @@ export function AuditLogPage() {
                     </DataTableCell>
                     <DataTableCell role="type">
                       <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
-                        {item.action}
+                        {/* Known actions render localized (same authority as
+                            the filter); a future unknown action falls back to
+                            the raw machine key instead of going blank (C6
+                            F-14). */}
+                        {t(
+                          `admin.audit.filterActions.${item.action}` as never,
+                          item.action,
+                        )}
                       </span>
                     </DataTableCell>
                     <DataTableCell role="type">{item.targetType}</DataTableCell>
