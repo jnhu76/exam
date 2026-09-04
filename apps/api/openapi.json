@@ -40539,7 +40539,7 @@
                           },
                           "type": {
                             "type": "string",
-                            "enum": ["result_published"]
+                            "enum": ["result_published", "exam_assigned"]
                           },
                           "title": {
                             "type": "string",
@@ -40551,7 +40551,7 @@
                           },
                           "actionPath": {
                             "type": "string",
-                            "pattern": "^\\/exam\\/[A-Za-z0-9_-]+\\/result$"
+                            "pattern": "^\\/exam(?:\\/[A-Za-z0-9_-]+\\/result|\\/list)$"
                           },
                           "createdAt": {
                             "type": "string",
@@ -40758,7 +40758,7 @@
                     },
                     "type": {
                       "type": "string",
-                      "enum": ["result_published"]
+                      "enum": ["result_published", "exam_assigned"]
                     },
                     "title": {
                       "type": "string",
@@ -40770,7 +40770,7 @@
                     },
                     "actionPath": {
                       "type": "string",
-                      "pattern": "^\\/exam\\/[A-Za-z0-9_-]+\\/result$"
+                      "pattern": "^\\/exam(?:\\/[A-Za-z0-9_-]+\\/result|\\/list)$"
                     },
                     "createdAt": {
                       "type": "string",

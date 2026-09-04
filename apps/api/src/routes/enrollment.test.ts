@@ -1,9 +1,19 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import {
+  candidateProfiles,
+  emailOutbox,
+  examEnrollments,
+  notifications,
+} from "@exam/db/src/schema/pg.js";
 
 describe("exam enrollment routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -237,5 +247,409 @@ describe("exam enrollment routes", () => {
         reason: "NOT_FOUND",
       },
     ]);
+  });
+
+  it("POST /api/exams/:examId/enrollments keeps pre-request duplicate semantics alongside a valid tail (#408)", async () => {
+    // Fresh A and B, order-independent of earlier tests in this file.
+    const mkCandidate = async (tag: string) => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/candidates",
+        payload: {
+          username: `enroll-${tag}-${uniquePrefix()}`,
+          password: "password123",
+          name: `Candidate ${tag}`,
+          fields: {},
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      return res.json().id as string;
+    };
+    const aId = await mkCandidate("pre-a");
+    const bId = await mkCandidate("pre-b");
+
+    // A is enrolled BEFORE the request under test.
+    const seed = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [aId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(seed.statusCode).toBe(200);
+    expect(seed.json().added).toBe(1);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [aId, bId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Existing public response semantics: A → DUPLICATE skip, B → added.
+    expect(body.added).toBe(1);
+    expect(body.skipped).toBe(1);
+    expect(body.enrollments).toHaveLength(1);
+    expect(body.enrollments[0].candidateId).toBe(bId);
+    expect(body.skippedCandidates).toEqual([
+      { candidateId: aId, reason: "DUPLICATE" },
+    ]);
+  });
+});
+
+describe("exam_assigned notifications on enrollment (#299)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let examId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(examRoutes);
+      await fastify.register(candidateRoutes);
+    });
+
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Notify Course",
+        code: `NOTIF-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+
+    const examRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Notification Exam",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    examId = examRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  async function createCandidateViaApi(
+    username: string,
+    email: string | null,
+  ): Promise<string> {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `notify-${username}-${uniquePrefix()}`,
+        password: "password123",
+        name: `Notify Candidate ${username}`,
+        ...(email === null ? {} : { email }),
+        fields: {},
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    return res.json().id as string;
+  }
+
+  function inboxRowsFor(candidateUserId: string) {
+    return ctx.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.recipientUserId, candidateUserId));
+  }
+
+  function outboxRowsFor(candidateUserId: string) {
+    return ctx.db
+      .select()
+      .from(emailOutbox)
+      .where(eq(emailOutbox.recipientUserId, candidateUserId));
+  }
+
+  async function resolveCandidateUserId(
+    candidateProfileId: string,
+  ): Promise<string> {
+    const [profile] = await ctx.db
+      .select()
+      .from(candidateProfiles)
+      .where(eq(candidateProfiles.id, candidateProfileId));
+    return profile!.userId;
+  }
+
+  it("a new enrollment with email atomically creates 1 Inbox + 1 Email outbox row", async () => {
+    const profileId = await createCandidateViaApi(
+      "withmail",
+      "with@example.com",
+    );
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().added).toBe(1);
+
+    const inbox = await inboxRowsFor(candidateUserId);
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]!.type).toBe("exam_assigned");
+    expect(inbox[0]!.title).toBe("考试已安排");
+    expect(inbox[0]!.body).toContain("Notification Exam");
+    // The action path is the authorized candidate exam list.
+    expect(inbox[0]!.actionPath).toBe("/exam/list");
+
+    const outbox = await outboxRowsFor(candidateUserId);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]!.type).toBe("exam_notification");
+    expect(outbox[0]!.notificationId).toBe(inbox[0]!.id);
+    expect(outbox[0]!.recipientEmail).toBe("with@example.com");
+    expect(outbox[0]!.subject).toBe("考试已安排");
+    expect(outbox[0]!.bodyText).toContain("/exam/list");
+  });
+
+  it("a new enrollment without email creates Inbox only (no outbox row)", async () => {
+    const profileId = await createCandidateViaApi("nomail", null);
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const inbox = await inboxRowsFor(candidateUserId);
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]!.type).toBe("exam_assigned");
+    expect(await outboxRowsFor(candidateUserId)).toHaveLength(0);
+  });
+
+  it("a duplicate enrollment notifies nothing (no new Inbox, no new Email)", async () => {
+    const profileId = await createCandidateViaApi("dupmail", "dup@example.com");
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(first.json().added).toBe(1);
+
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().added).toBe(0);
+    expect(second.json().skippedCandidates).toEqual([
+      { candidateId: profileId, reason: "DUPLICATE" },
+    ]);
+
+    expect(await inboxRowsFor(candidateUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(candidateUserId)).toHaveLength(1);
+  });
+
+  it("a candidate from another organization is skipped with no notification (tenant boundary)", async () => {
+    // Seed a foreign org + candidate profile + user directly (no API can do
+    // this cross-org), then offer the foreign profile id to the route.
+    const foreignOrg = await createOrganizationRepo(ctx.db).create(
+      {
+        actorId: "system",
+        organizationId: "system",
+        role: "Admin",
+        permissions: [],
+        sessionId: "s",
+      },
+      {
+        name: "Foreign Org",
+        displayName: "Foreign Org",
+        slug: `foreign-${uniquePrefix()}`,
+      },
+    );
+    const foreignUser = await createUserRepo(ctx.db).create(
+      {
+        actorId: "system",
+        organizationId: foreignOrg.id,
+        role: "Admin",
+        permissions: [],
+        sessionId: "s",
+      },
+      {
+        username: `foreign-${uniquePrefix()}`,
+        passwordHash: "x",
+        name: "Foreign Candidate",
+        role: "Candidate",
+        isActive: true,
+        email: "foreign@example.com",
+      },
+    );
+    const [foreignProfile] = await ctx.db
+      .insert(candidateProfiles)
+      .values({
+        id: randomUUID(),
+        organizationId: foreignOrg.id,
+        userId: foreignUser.id,
+        fields: {},
+      })
+      .returning();
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [foreignProfile!.id] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().added).toBe(0);
+    expect(res.json().skippedCandidates).toEqual([
+      { candidateId: foreignProfile!.id, reason: "NOT_FOUND" },
+    ]);
+
+    // No enrollment, no Inbox, no Email leaked across the tenant boundary.
+    const foreignUserRepoRows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, foreignProfile!.id));
+    expect(foreignUserRepoRows).toHaveLength(0);
+    expect(await inboxRowsFor(foreignUser.id)).toHaveLength(0);
+    expect(await outboxRowsFor(foreignUser.id)).toHaveLength(0);
+  });
+
+  it("re-enrollment after removal notifies again (new assignment episode)", async () => {
+    const profileId = await createCandidateViaApi("readd", "readd@example.com");
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    // First assignment: one Inbox + one outbox row.
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().added).toBe(1);
+    const enrollmentId = first.json().enrollments[0].id;
+    expect(await inboxRowsFor(candidateUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(candidateUserId)).toHaveLength(1);
+
+    // Remove the enrollment (only "assigned" enrollments are removable).
+    const del = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/exams/${examId}/enrollments/${enrollmentId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(del.statusCode).toBe(204);
+
+    // Re-assignment is a NEW enrollment row (new assignment episode): the
+    // candidate must get a SECOND notification + Email, not a dedupe no-op.
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().added).toBe(1);
+
+    const inbox = await inboxRowsFor(candidateUserId);
+    expect(inbox).toHaveLength(2);
+    expect(inbox.every((n) => n.type === "exam_assigned")).toBe(true);
+    expect(new Set(inbox.map((n) => n.id)).size).toBe(2);
+    const outbox = await outboxRowsFor(candidateUserId);
+    expect(outbox).toHaveLength(2);
+    expect(new Set(outbox.map((o) => o.dedupeKey)).size).toBe(2);
+  });
+
+  // #408 — a candidateId repeated within ONE payload must reuse the
+  // endpoint's DUPLICATE skip semantics, not reach the INSERT and hit the
+  // DB unique constraint (409) after the first copy already committed.
+  it("duplicate candidateIds within one payload skip as DUPLICATE (#408)", async () => {
+    const profileId = await createCandidateViaApi("dupin", "dupin@example.com");
+    const candidateUserId = await resolveCandidateUserId(profileId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [profileId, profileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.added).toBe(1);
+    expect(body.skipped).toBe(1);
+    expect(body.skippedCandidates).toEqual([
+      { candidateId: profileId, reason: "DUPLICATE" },
+    ]);
+
+    // Durable truth: exactly one enrollment row for A.
+    const rows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, profileId));
+    expect(rows).toHaveLength(1);
+
+    // The repeated item must not produce a second business effect:
+    // one effective assignment → exactly one Inbox + one Email row.
+    expect(await inboxRowsFor(candidateUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(candidateUserId)).toHaveLength(1);
+  });
+
+  it("duplicate payload item does not abort the valid tail (#408)", async () => {
+    const aId = await createCandidateViaApi("taila", "taila@example.com");
+    const bId = await createCandidateViaApi("tailb", "tailb@example.com");
+    const aUserId = await resolveCandidateUserId(aId);
+    const bUserId = await resolveCandidateUserId(bId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [aId, aId, bId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.added).toBe(2);
+    expect(body.skipped).toBe(1);
+    expect(body.skippedCandidates).toEqual([
+      { candidateId: aId, reason: "DUPLICATE" },
+    ]);
+    expect(
+      body.enrollments.map((e: { candidateId: string }) => e.candidateId),
+    ).toEqual([aId, bId]);
+
+    // Both candidates enrolled exactly once.
+    const aRows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, aId));
+    expect(aRows).toHaveLength(1);
+    const bRows = await ctx.db
+      .select()
+      .from(examEnrollments)
+      .where(eq(examEnrollments.candidateId, bId));
+    expect(bRows).toHaveLength(1);
+
+    // Each effective assignment notified exactly once.
+    expect(await inboxRowsFor(aUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(aUserId)).toHaveLength(1);
+    expect(await inboxRowsFor(bUserId)).toHaveLength(1);
+    expect(await outboxRowsFor(bUserId)).toHaveLength(1);
   });
 });

@@ -2,12 +2,13 @@ import { z } from "zod";
 import { NOTIFICATION_TYPES } from "@exam/domain";
 import { PaginationParamsSchema, PaginatedResponseSchema } from "./common.js";
 
-// P5-N1 — Notification Inbox contracts (V1: result_published only).
+// P5-N1 — Notification Inbox contracts.
 //
-// Authority: P5-N1-R0 §19 (frozen V1 API contract). Pagination REUSES the
-// repo's offset/page convention (PaginationParamsSchema), NOT an opaque
-// base64url cursor. Clients never pass organizationId or recipientUserId;
-// scope derives from authenticated context.
+// Authority: P5-N1-R0 §19 (frozen V1 API contract), extended additively for
+// `exam_assigned` (#402/#299). Pagination REUSES the repo's offset/page
+// convention (PaginationParamsSchema), NOT an opaque base64url cursor.
+// Clients never pass organizationId or recipientUserId; scope derives from
+// authenticated context.
 
 /**
  * Zod enum for the V1 NotificationType values. Derived from the domain
@@ -20,30 +21,31 @@ export const NotificationTypeSchema = z.enum(NOTIFICATION_TYPES);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 
 /**
- * Regex matching the V1 result-published action path:
- *   /exam/<attemptId>/result
+ * Regex matching the canonical notification action paths:
+ *   /exam/<attemptId>/result   (result_published)
+ *   /exam/list                 (exam_assigned)
  *
  * `<attemptId>` is restricted to URL-safe identifier characters
  * `[A-Za-z0-9_-]+` (UUIDs and any future id scheme that stays within that
- * class). This is the single source of truth shared by the trusted builder,
- * the write-time validator, and the render-time revalidator
- * (P5-N1-R0 §16.3 — frozen).
- *
- * Anchored with ^...$ so a trailing segment, traversal, or control character
- * cannot slip past.
+ * class). This is the single source of truth shared by the trusted builders,
+ * the write-time validator, and the render-time revalidator (P5-N1-R0 §16.3,
+ * extended additively for `exam_assigned` under #402/#299). Anchored with
+ * ^...$ so a trailing segment, traversal, or control character cannot slip
+ * past; every accepted shape maps to an authorized candidate-facing route.
  */
 export const NOTIFICATION_ACTION_PATH_PATTERN =
-  /^\/exam\/[A-Za-z0-9_-]+\/result$/;
+  /^\/exam(?:\/[A-Za-z0-9_-]+\/result|\/list)$/;
 
 /**
- * Returns true iff `path` is a canonical V1 result-published action path.
+ * Returns true iff `path` is a canonical notification action path (one of
+ * the trusted-builder shapes above).
  *
- * Used at write time (asserting the trusted builder's output) and at render
+ * Used at write time (asserting the trusted builders' output) and at render
  * time (re-validating before combining with PUBLIC_WEB_ORIGIN). Rejects
  * external URLs, protocol-relative URLs, dot-dot traversal, percent-encoded
  * traversal, backslashes, control characters, and unknown route prefixes.
  */
-export function isResultPublishedActionPath(path: string): boolean {
+export function isNotificationActionPath(path: string): boolean {
   if (typeof path !== "string") return false;
   // Fast reject: contains chars that can never appear in a canonical path.
   if (/[\\\u0000-\u001f\u007f]/.test(path)) return false;
@@ -56,11 +58,12 @@ export function isResultPublishedActionPath(path: string): boolean {
 /**
  * Schema for a single notification row as exposed over the Inbox API.
  *
- * `actionPath` is NOT NULL in V1: every result_published notification
- * navigates to the authoritative result page. Future informational types
- * that lack a navigation target must introduce an explicit contract change.
- * `readAt` is null while unread and set when marked read; it does NOT
- * represent business completion (P5-N1-R0 §19.4).
+ * `actionPath` is NOT NULL: every notification type navigates to an
+ * authorized candidate-facing surface (`/exam/:attemptId/result` for
+ * result_published, `/exam/list` for exam_assigned). Future types must map
+ * to an explicit trusted shape here. `readAt` is null while unread and set
+ * when marked read; it does NOT represent business completion
+ * (P5-N1-R0 §19.4).
  */
 export const NotificationSchema = z.object({
   id: z.string().uuid(),

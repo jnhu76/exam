@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import {
   dispatchResultPublishedFanOut,
   dispatchResultPublishedToRecipient,
+  dispatchExamAssigned,
 } from "./notificationService.js";
 
 // P5-N1-I2 Slice 6 — NotificationService transaction integration.
@@ -392,5 +393,252 @@ describe("dispatchResultPublishedFanOut", () => {
     expect(summary.recipientsProcessed).toBe(0);
     expect(summary.inboxRowsCreated).toBe(0);
     expect(summary.outboxRowsCreated).toBe(0);
+  });
+});
+
+describe("dispatchExamAssigned (transaction integration, #299)", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  let orgId: string;
+  let userCounter: number;
+
+  async function createTestUser(organizationId: string): Promise<string> {
+    const userRepo = createUserRepo(db);
+    const ctx: RequestContext = {
+      actorId: "system",
+      organizationId,
+      role: "Admin",
+      permissions: [],
+      sessionId: "s",
+    };
+    const user = await userRepo.create(ctx, {
+      username: `assigned-${userCounter++}-${randomUUID().slice(0, 6)}`,
+      passwordHash: "x",
+      name: `Assigned User ${userCounter}`,
+      role: "Candidate",
+      isActive: true,
+    });
+    return user.id;
+  }
+
+  beforeAll(async () => {
+    const env = await getIsolatedTestDb("api-notificationService-assigned");
+    db = env.db;
+    cleanup = env.cleanup;
+    userCounter = 0;
+    const org = await createOrganizationRepo(db).create(
+      {
+        actorId: "system",
+        organizationId: "system",
+        role: "Admin",
+        permissions: [],
+        sessionId: "s",
+      },
+      {
+        name: "Assigned Org",
+        displayName: "Assigned Org",
+        slug: `assigned-${randomUUID().slice(0, 8)}`,
+      },
+    );
+    orgId = org.id;
+  }, 30_000);
+
+  afterAll(async () => {
+    await cleanup();
+  }, 30_000);
+
+  it("creates an Inbox row and an exam_notification outbox row atomically (email exists)", async () => {
+    const ctx = createContext(orgId);
+    const recipientUserId = await createTestUser(orgId);
+    const enrollmentId = randomUUID();
+
+    const result = await executeInTransaction(db, async (tx) => {
+      return dispatchExamAssigned({
+        db: tx,
+        ctx,
+        enrollmentId,
+        examTitle: "Assigned Exam",
+        recipientUserId,
+        recipientEmail: "cand@example.com",
+        publicWebOrigin: PUBLIC_WEB_ORIGIN,
+        emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+        now: NOW,
+      });
+    });
+
+    expect(result.inboxCreated).toBe(true);
+    expect(result.outboxCreated).toBe(true);
+    expect(result.notification.recipientUserId).toBe(recipientUserId);
+    expect(result.notification.type).toBe("exam_assigned");
+    // The action path is the candidate exam list — the existing authorized
+    // surface — and passes the contract validator.
+    expect(result.notification.actionPath).toBe("/exam/list");
+    // The dedupe identity is the enrollment row (the assignment episode).
+    expect(result.notification.dedupeKey).toBe(`exam_assigned:${enrollmentId}`);
+
+    // Inbox row is committed.
+    const notifRepo = createNotificationRepo(db);
+    const unread = await notifRepo.countUnread(ctx, recipientUserId);
+    expect(unread).toBe(1);
+
+    // Outbox row is committed, links to the notification, and carries the
+    // absolute exam-list link.
+    const outboxRows = await db
+      .select()
+      .from(emailOutbox)
+      .where(eq(emailOutbox.notificationId, result.notification.id));
+    expect(outboxRows).toHaveLength(1);
+    expect(outboxRows[0]!.type).toBe("exam_notification");
+    expect(outboxRows[0]!.recipientEmail).toBe("cand@example.com");
+    expect(outboxRows[0]!.recipientUserId).toBe(recipientUserId);
+    expect(outboxRows[0]!.dedupeKey).toBe(`exam_assigned:${enrollmentId}`);
+    expect(outboxRows[0]!.subject).toBe("考试已安排");
+    expect(outboxRows[0]!.bodyText).toContain("Assigned Exam");
+    expect(outboxRows[0]!.bodyText).toContain(`${PUBLIC_WEB_ORIGIN}/exam/list`);
+  });
+
+  it("creates Inbox-only (no outbox row) when the candidate user has no email", async () => {
+    const ctx = createContext(orgId);
+    const recipientUserId = await createTestUser(orgId);
+    const enrollmentId = randomUUID();
+
+    const result = await executeInTransaction(db, async (tx) => {
+      return dispatchExamAssigned({
+        db: tx,
+        ctx,
+        enrollmentId,
+        examTitle: "No Email Assignment",
+        recipientUserId,
+        recipientEmail: null,
+        publicWebOrigin: PUBLIC_WEB_ORIGIN,
+        emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+        now: NOW,
+      });
+    });
+
+    expect(result.inboxCreated).toBe(true);
+    expect(result.outboxCreated).toBe(false);
+    const outboxRows = await db
+      .select()
+      .from(emailOutbox)
+      .where(eq(emailOutbox.notificationId, result.notification.id));
+    expect(outboxRows).toHaveLength(0);
+  });
+
+  it("is idempotent when the SAME enrollment row is dispatched twice (no new rows)", async () => {
+    const ctx = createContext(orgId);
+    const recipientUserId = await createTestUser(orgId);
+    const enrollmentId = randomUUID();
+    const base = {
+      db: db as Database,
+      ctx,
+      enrollmentId,
+      examTitle: "Duplicate Assignment",
+      recipientUserId,
+      recipientEmail: "cand@example.com",
+      publicWebOrigin: PUBLIC_WEB_ORIGIN,
+      emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+      now: NOW,
+    };
+
+    const first = await executeInTransaction(db, (tx) =>
+      dispatchExamAssigned({ ...base, db: tx }),
+    );
+    expect(first.inboxCreated).toBe(true);
+    expect(first.outboxCreated).toBe(true);
+
+    // A double dispatch of the same enrollment row: the dedupe keys make
+    // this a no-op (DB-level backstop — first-assignment idempotency is
+    // owned by the route DUPLICATE skip + the enrollment unique index).
+    const second = await executeInTransaction(db, (tx) =>
+      dispatchExamAssigned({ ...base, db: tx }),
+    );
+    expect(second.inboxCreated).toBe(false);
+    expect(second.outboxCreated).toBe(false);
+
+    const notifRepo = createNotificationRepo(db);
+    const { items } = await notifRepo.list(ctx, recipientUserId, {
+      page: 1,
+      pageSize: 100,
+    });
+    const own = items.filter(
+      (i) => i.dedupeKey === `exam_assigned:${enrollmentId}`,
+    );
+    expect(own).toHaveLength(1);
+  });
+
+  it("a DIFFERENT enrollment row notifies again (re-assignment after removal)", async () => {
+    // Re-enrolling a candidate after their enrollment was removed is a NEW
+    // assignment episode (new enrollment row) and must produce a second
+    // notification — the dedupe identity cannot be (exam, recipient).
+    const ctx = createContext(orgId);
+    const recipientUserId = await createTestUser(orgId);
+    const base = {
+      db: db as Database,
+      ctx,
+      examTitle: "Re-assignment",
+      recipientUserId,
+      recipientEmail: "cand@example.com",
+      publicWebOrigin: PUBLIC_WEB_ORIGIN,
+      emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+      now: NOW,
+    };
+
+    const first = await executeInTransaction(db, (tx) =>
+      dispatchExamAssigned({ ...base, db: tx, enrollmentId: randomUUID() }),
+    );
+    const second = await executeInTransaction(db, (tx) =>
+      dispatchExamAssigned({ ...base, db: tx, enrollmentId: randomUUID() }),
+    );
+    expect(first.inboxCreated).toBe(true);
+    expect(second.inboxCreated).toBe(true);
+    expect(second.notification.id).not.toBe(first.notification.id);
+  });
+
+  it("rolls back the Inbox row when the required outbox insert fails", async () => {
+    const ctx = createContext(orgId);
+    const recipientUserId = await createTestUser(orgId);
+    const enrollmentId = randomUUID();
+    const dedupeKey = `exam_assigned:${enrollmentId}`;
+
+    // Pre-seed an outbox row with the same dedupe key to force a unique
+    // violation on the required outbox insert — it must propagate and roll
+    // back the whole transaction (Inbox row included).
+    await createEmailOutboxRepo(db).create(ctx, {
+      type: "exam_notification",
+      recipientEmail: "cand@example.com",
+      subject: "pre-existing",
+      bodyText: "pre-existing",
+      bodyHtml: null,
+      maxAttempts: EMAIL_MAX_ATTEMPTS,
+      dedupeKey,
+    });
+
+    await expect(
+      executeInTransaction(db, async (tx) =>
+        dispatchExamAssigned({
+          db: tx,
+          ctx,
+          enrollmentId,
+          examTitle: "Rollback Assignment",
+          recipientUserId,
+          recipientEmail: "cand@example.com",
+          publicWebOrigin: PUBLIC_WEB_ORIGIN,
+          emailMaxAttempts: EMAIL_MAX_ATTEMPTS,
+          now: NOW,
+        }),
+      ),
+    ).rejects.toThrow();
+
+    // No Inbox row for this recipient/enrollment survived.
+    const notifRepo = createNotificationRepo(db);
+    const { items } = await notifRepo.list(ctx, recipientUserId, {
+      page: 1,
+      pageSize: 100,
+    });
+    const own = items.filter(
+      (i) => i.dedupeKey === `exam_assigned:${enrollmentId}`,
+    );
+    expect(own).toHaveLength(0);
   });
 });

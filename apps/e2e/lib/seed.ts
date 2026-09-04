@@ -190,6 +190,21 @@ export async function seedExam(
     totalScore?: number;
     resultPublicationMode?: "immediate" | "after_grading" | "manual";
     /**
+     * Timing mode of the seeded exam (#291 Phase A). Defaults to
+     * "timed_window". "deadline"/"untimed" seed the mode-legal field shapes
+     * (deadline: null duration + explicit closeAt; untimed: null duration +
+     * null closeAt); "timed_sync" is rejected by the canonical policy
+     * validator and is deliberately not accepted here.
+     */
+    timingMode?: "timed_window" | "deadline" | "untimed";
+    /** Availability-window start. Defaults to 1 hour ago. */
+    openAt?: Date;
+    /**
+     * Availability-window end (the hard deadline for "deadline" exams).
+     * Defaults to 24 hours from now; ignored (forced null) for "untimed".
+     */
+    closeAt?: Date;
+    /**
      * Interruption time-policy frozen into started attempts. Defaults to
      * "strict". Operator time-grant (POST /time-grants) requires an exam seeded
      * with "operator_incident"; pass that value for grant-focused scenarios.
@@ -282,14 +297,26 @@ export async function seedExam(
   const computedTotalScore =
     baseQuestionScore + subjectiveTotal + textResponseTotal;
 
+  // #291 Phase A mode-legal timing shape. timed_window keeps the historical
+  // defaults byte-identically (60min duration, +24h closeAt). deadline carries
+  // no personal duration (closeAt IS the deadline); untimed carries neither.
+  const timingMode = opts.timingMode ?? "timed_window";
+  const durationMinutes =
+    timingMode === "timed_window" ? (opts.durationMinutes ?? 60) : null;
+  const openAt = opts.openAt ?? new Date(Date.now() - 3600_000);
+  const closeAt =
+    timingMode === "untimed"
+      ? null
+      : (opts.closeAt ?? new Date(Date.now() + 86400_000));
+
   const exam = await adminPost(request, baseURL, token, "/api/exams", {
     title: examTitle,
     description: "",
     courseId,
-    timingMode: "timed_window",
-    durationMinutes: opts.durationMinutes ?? 60,
-    openAt: new Date(Date.now() - 3600_000).toISOString(),
-    closeAt: new Date(Date.now() + 86400_000).toISOString(),
+    timingMode,
+    durationMinutes,
+    openAt: openAt.toISOString(),
+    closeAt: closeAt ? closeAt.toISOString() : null,
     passingScore: opts.passingScore ?? 60,
     totalScore: opts.totalScore ?? computedTotalScore,
     questionSelectionMode: "manual",
