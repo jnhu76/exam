@@ -239,7 +239,7 @@ function PayloadSummary({ payload }: { payload: unknown }) {
   const entries = Object.entries(payload as Record<string, unknown>);
   if (entries.length === 0) return null;
   return (
-    <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+    <span className="flex flex-wrap gap-x-3 gap-y-0.5 type-metadata">
       {entries.map(([key, value]) => (
         <span key={key}>
           {key}:{" "}
@@ -337,7 +337,7 @@ export function RecoveryIncidentDetailPage() {
 
       {/* Snapshot indicator — the aggregate is one consistent read; the stale
           flag self-updates via the projection hook's wall-clock tick. */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 type-metadata">
         {snapshotStale && (
           <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
         )}
@@ -543,7 +543,7 @@ export function RecoveryIncidentDetailPage() {
         >
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.header.status")}
               </dt>
               <dd>
@@ -551,7 +551,7 @@ export function RecoveryIncidentDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.header.severity")}
               </dt>
               <dd className="text-sm">
@@ -561,7 +561,7 @@ export function RecoveryIncidentDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.header.type")}
               </dt>
               <dd className="text-sm">
@@ -571,26 +571,26 @@ export function RecoveryIncidentDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.header.createdAt")}
               </dt>
               <dd className="text-sm">{formatTime(data.incident.createdAt)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.reportedBy")}
               </dt>
               <dd className="text-sm">{data.incident.reportedBy}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.header.version")}
               </dt>
               <dd className="text-sm">{data.incident.version}</dd>
             </div>
             {data.incident.resolvedBy && (
               <div>
-                <dt className="text-xs text-muted-foreground">
+                <dt className="type-metadata">
                   {t("admin.recoveryIncident.resolvedBy")}
                 </dt>
                 <dd className="text-sm">{data.incident.resolvedBy}</dd>
@@ -598,7 +598,7 @@ export function RecoveryIncidentDetailPage() {
             )}
             {data.incident.resolutionSummary && (
               <div className="sm:col-span-2">
-                <dt className="text-xs text-muted-foreground">
+                <dt className="type-metadata">
                   {t("admin.recoveryIncident.resolutionSummary")}
                 </dt>
                 <dd className="text-sm">{data.incident.resolutionSummary}</dd>
@@ -611,7 +611,7 @@ export function RecoveryIncidentDetailPage() {
         <PageSection title={t("admin.recoveryIncident.sections.exam")}>
           <dl className="flex flex-col gap-2">
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.sections.exam")}
               </dt>
               <dd className="text-sm font-medium">
@@ -624,7 +624,7 @@ export function RecoveryIncidentDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryQueue.columns.severity")}
               </dt>
               <dd>
@@ -632,7 +632,7 @@ export function RecoveryIncidentDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">
+              <dt className="type-metadata">
                 {t("admin.recoveryIncident.examCloseAt")}
               </dt>
               <dd className="text-sm">
@@ -647,7 +647,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Candidate summaries */}
         <PageSection title={t("admin.recoveryIncident.sections.candidates")}>
           {data.candidateSummaries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noCandidates")}
             </p>
           ) : (
@@ -667,7 +667,7 @@ export function RecoveryIncidentDetailPage() {
           className="lg:col-span-2"
         >
           {data.attemptSummaries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noAttempts")}
             </p>
           ) : (
@@ -684,13 +684,13 @@ export function RecoveryIncidentDetailPage() {
                     {a.id}
                   </Link>
                   <StatusBadge status={a.status} />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryIncident.effectiveDeadline")}:{" "}
                     {a.effectiveDeadlineAt === null
                       ? "—"
                       : formatTime(a.effectiveDeadlineAt)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryIncident.score")}:{" "}
                     {a.score == null ? "—" : a.score}
                   </span>
@@ -703,7 +703,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Events — chronological (server-ordered) */}
         <PageSection title={t("admin.recoveryIncident.sections.events")}>
           {data.events.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noEvents")}
             </p>
           ) : (
@@ -716,12 +716,10 @@ export function RecoveryIncidentDetailPage() {
                         `admin.recoveryIncident.eventType.${e.eventType}` as never,
                       )}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="type-metadata">
                       {formatTime(e.createdAt)}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {e.actorId ?? "—"}
-                    </span>
+                    <span className="type-metadata">{e.actorId ?? "—"}</span>
                   </span>
                   <PayloadSummary payload={e.payload} />
                 </li>
@@ -733,7 +731,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Notes */}
         <PageSection title={t("admin.recoveryIncident.sections.notes")}>
           {data.notes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noNotes")}
             </p>
           ) : (
@@ -741,7 +739,7 @@ export function RecoveryIncidentDetailPage() {
               {data.notes.map((n) => (
                 <li key={n.operationId} className="flex flex-col gap-0.5">
                   <span className="text-sm">{n.body}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {n.actorId ?? "—"} · {formatTime(n.createdAt)}
                   </span>
                 </li>
@@ -753,7 +751,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Action links */}
         <PageSection title={t("admin.recoveryIncident.sections.actions")}>
           {data.actions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noActions")}
             </p>
           ) : (
@@ -773,7 +771,7 @@ export function RecoveryIncidentDetailPage() {
                       {a.attemptId}
                     </Link>
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryIncident.actor")}: {a.actorId ?? "—"} ·{" "}
                     {t("admin.recoveryIncident.operationId")}: {a.operationId} ·{" "}
                     {formatTime(a.linkedAt)}
@@ -787,7 +785,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Attempt memberships */}
         <PageSection title={t("admin.recoveryIncident.sections.memberships")}>
           {data.attemptMemberships.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noMemberships")}
             </p>
           ) : (
@@ -821,7 +819,7 @@ export function RecoveryIncidentDetailPage() {
             attempt operations page (Task 7 mapping DECISION-1). */}
         <PageSection title={t("admin.recoveryIncident.sections.interruptions")}>
           {data.interruptionLinks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noInterruptions")}
             </p>
           ) : (
@@ -831,7 +829,7 @@ export function RecoveryIncidentDetailPage() {
                   <span className="text-sm font-medium">
                     {l.interruptionId}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryIncident.sections.attempts")}:{" "}
                     <Link
                       to={routes.admin.recoveryAttempt(l.attemptId)}
@@ -850,7 +848,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Time adjustment summaries — incident-scoped (contract §6.1/§6.3). */}
         <PageSection title={t("admin.recoveryIncident.sections.adjustments")}>
           {data.timeAdjustmentSummaries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noAdjustments")}
             </p>
           ) : (
@@ -863,21 +861,21 @@ export function RecoveryIncidentDetailPage() {
                         `admin.recoveryIncident.policy.${adj.policy}` as never,
                       )}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="type-metadata">
                       {t(
                         `admin.recoveryIncident.source.${adj.source}` as never,
                       )}
                     </span>
                     <span className="text-xs">+{adj.addedSeconds}s</span>
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryIncident.beforeDeadline")}:{" "}
                     {formatTime(adj.beforeDeadline)}
                     {" · "}
                     {t("admin.recoveryIncident.afterDeadline")}:{" "}
                     {formatTime(adj.afterDeadline)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {t("admin.recoveryIncident.actor")}: {adj.actorId ?? "—"} ·{" "}
                     {adj.reasonText ?? adj.reasonCode ?? "—"} ·{" "}
                     {formatTime(adj.createdAt)}
@@ -891,7 +889,7 @@ export function RecoveryIncidentDetailPage() {
         {/* Audit references */}
         <PageSection title={t("admin.recoveryIncident.sections.audit")}>
           {data.auditReferences.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.recoveryIncident.noAudit")}
             </p>
           ) : (
@@ -902,10 +900,10 @@ export function RecoveryIncidentDetailPage() {
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
                 >
                   <span className="text-sm font-medium">{r.action}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {r.actorName ?? r.actorId ?? "—"}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="type-metadata">
                     {formatTime(r.createdAt)}
                   </span>
                 </li>

@@ -121,8 +121,9 @@ Confirmed surface roles:
 | `elevation.sticky` | `shadow-xs` | the sticky topbar (the only non-overlay elevation owner) |
 
 **Ordinary business content has NO shadow.** Enforced by `exam-ui/no-business-shadow`
-(baseline empty). The shadcn `Card` primitive still carries `shadow-sm` by
-default but lives in the excluded `components/ui/` scope.
+(baseline empty). The shadcn `Card` primitive is itself shadow-free (`border` +
+`radius` only); the excluded `components/ui/` scope exists for the interaction
+primitives, not for an elevation exception.
 
 ## Component authority
 
@@ -140,9 +141,9 @@ Per-component role ownership (from the component-authority record):
 | generic confirmation dialog | `ConfirmDialog` |
 | metric / KPI presentation | `StatsCard` (+ `type-metric`) |
 | content container (arbitrary body) | `PageSection` |
+| titled form-field section | `FormSection` (composes `PageSection`; owns the form content grid) |
 | tabular-data container | `DataTableShell` |
-| data-table operation toolbar | `DataToolbar` |
-| list operation toolbar | `ListToolbar` (provisional) |
+| list / data-table operation toolbar | `DataToolbar` (single toolbar authority; optional `search` slot) |
 | data-table pagination | `DataTablePagination` |
 | table row action group | `RowActions` |
 | controlled search input | `SearchInput` |
@@ -150,8 +151,10 @@ Per-component role ownership (from the component-authority record):
 | top-level error boundary | `ErrorBoundary` |
 
 Components own recipe/surface selection, not raw font/surface properties.
-`ConfirmActionDialog`, `ContentCard`, and `ConnectionIndicator` have no consumers
-and no distinct role — they must not be cited as authority owners.
+Former wrapper components with no distinct role (`ConfirmActionDialog`,
+`ContentCard`, `ConnectionIndicator`, `DataView`, `ListToolbar`,
+`SubmitConfirmDialog`, `ExamTopbar`, `RuntimeActionBar`, `AnswerPanel`) have
+been deleted; do not resurrect single-role wrappers over an existing authority.
 
 ## Tailwind boundary
 
@@ -245,7 +248,7 @@ these must come from shadcn/Radix/react-day-picker.
 
 ## Active `exam-ui/*` lint (wired as errors)
 
-Five rules in `apps/web/eslint.config.ts`, all `"error"`, baseline empty:
+Six rules in `apps/web/eslint.config.ts`, all `"error"`, baseline empty:
 
 | Rule | Enforces |
 | --- | --- |
@@ -254,6 +257,7 @@ Five rules in `apps/web/eslint.config.ts`, all `"error"`, baseline empty:
 | `exam-ui/no-arbitrary-typography` | no arbitrary `text-[…]`/`leading-[…]`/`tracking-[…]`/`font-[…]` (excl. color) |
 | `exam-ui/no-arbitrary-inline-typography` | no static one-off typography via inline `style` |
 | `exam-ui/no-typography-authority-conflict` | a `type-*` recipe + a sibling self-target utility touching a recipe-owned property is a conflict |
+| `exam-ui/no-recipe-recomposition` | the byte-exact raw stacks `text-sm text-muted-foreground` (→ `type-secondary`), `text-xs text-muted-foreground` (→ `type-metadata`), and bare `tabular-nums` (→ `type-numeric`); weight-emphasized and variant-prefixed stacks are deliberate local roles and stay legal |
 
 Retired rules (ownership enforced by migration review + recipe/component
 authority tests): `exam-ui/prefer-field-error`, `exam-ui/no-raw-typography`,

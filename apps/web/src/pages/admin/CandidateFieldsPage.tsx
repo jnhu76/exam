@@ -394,7 +394,7 @@ export function CandidateFieldsPage() {
             <Field>
               <Label>{t("admin.candidateFields.dialog.type")}</Label>
               {editing ? (
-                <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                <div className="rounded-md border bg-muted px-3 py-2 type-secondary">
                   {t(`admin.candidateFields.typeLabels.${fieldType}` as any)}
                   <span className="ml-2 text-xs">
                     {t("admin.candidateFields.dialog.typeNote")}

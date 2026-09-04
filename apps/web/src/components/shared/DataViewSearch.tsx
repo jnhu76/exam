@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 /**
- * Debounced search field for a DataView.
+ * Debounced search field for data toolbars.
  *
  * Wraps SearchInput (the visual authority — leading icon, clear button, focus
- * ring, placeholder) and adds the DataView search contract: a short debounce
+ * ring, placeholder) and adds a search contract: a short debounce
  * so the consumer's server-side query fires after typing settles, an optional
  * loading flag for the in-flight query, and a controlled `value`/`onSearch`
  * pair where `onSearch` receives the DEBOUNCED term (not every keystroke).

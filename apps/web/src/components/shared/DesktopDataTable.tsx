@@ -29,7 +29,7 @@ export interface DataViewColumnMeta {
 }
 
 /**
- * A DataView column definition: a TanStack ColumnDef carrying the role meta.
+ * A data-table column definition: a TanStack ColumnDef carrying the role meta.
  * Each page owns its own column array; DesktopDataTable consumes it.
  */
 export type DataViewColumnDef<TData> = ColumnDef<TData> & {

@@ -17,8 +17,8 @@ import type {
  * DataWorkbench — a single, continuous, compact data shell
  * (UI-TABLE-KOI-COMPACT-1 — "Koi Compact Data Workbench").
  *
- * Unlike DataView (which renders toolbar / table / pagination as three
- * separated boxes with gaps), the workbench renders ONE bordered surface whose
+ * Unlike DataTableShell pages (which render toolbar / table / pagination as
+ * separated stacked surfaces), the workbench renders ONE bordered surface whose
  * toolbar → table header → table body → footer are regions of the same shell.
  * It is the visual authority for the Question Management page; other admin
  * pages keep using DataTableShell directly.
@@ -36,7 +36,7 @@ import type {
  * The desktop table lives in the scroll region that emits
  * data-slot="admin-table-shell" (so role-based table/recipes.css +
  * workbench.css keep applying). The mobile list is a SEPARATE region of the
- * shell, mirroring DataView's separation, so a query scoped to
+ * shell, separate from the desktop table region, so a query scoped to
  * [data-slot="admin-table-shell"] matches only desktop table content.
  *
  * Overflow detection (scroll-fade / narrow hint) is ported from DataTableShell
@@ -209,7 +209,7 @@ export function DataWorkbenchFooter({
     <div
       data-slot="workbench-footer"
       className={cn(
-        "flex flex-col gap-3 px-3 py-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-3 px-3 py-2 type-secondary sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >

@@ -209,7 +209,7 @@ export function PermissionRegistryPage() {
             {t("admin.permissions.catalog.title")}
           </h2>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="type-secondary">
           {t("admin.permissions.catalog.description")}
         </p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -219,9 +219,7 @@ export function PermissionRegistryPage() {
                 {t(`admin.permissions.categories.${category}` as never, {
                   defaultValue: category,
                 })}
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {entries.length}
-                </span>
+                <span className="ml-2 type-metadata">{entries.length}</span>
               </h3>
               <ul className="flex flex-col gap-1">
                 {entries.map((entry) => (
@@ -247,7 +245,7 @@ export function PermissionRegistryPage() {
             {t("admin.permissions.roles.title")}
           </h2>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="type-secondary">
           {t("admin.permissions.roles.description")}
         </p>
         <div className="overflow-auto rounded-md border">
@@ -317,7 +315,7 @@ export function PermissionRegistryPage() {
             {t("admin.permissions.effective.title")}
           </h2>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="type-secondary">
           {t("admin.permissions.effective.description")}
         </p>
         <div className="flex max-w-md flex-col gap-3">
@@ -353,16 +351,14 @@ export function PermissionRegistryPage() {
                   <p className="text-sm font-medium">
                     {authority.user.name || authority.user.username}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {authority.user.username}
-                  </p>
+                  <p className="type-metadata">{authority.user.username}</p>
                 </div>
                 {authority.authority.ok ? (
                   <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
                     {authority.authority.authority.primaryRole}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 type-metadata">
                     {t("admin.permissions.effective.noActive")}
                   </span>
                 )}
@@ -384,7 +380,7 @@ export function PermissionRegistryPage() {
                         </span>
                       ))}
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="mt-2 type-metadata">
                       {t("admin.permissions.effective.scopeNote")}
                     </p>
                   </div>
@@ -415,7 +411,7 @@ export function PermissionRegistryPage() {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="type-secondary">
                   {t("admin.permissions.effective.reason", {
                     reason: authority.authority.reason,
                   })}

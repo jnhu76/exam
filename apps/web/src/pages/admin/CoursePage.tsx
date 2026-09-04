@@ -17,7 +17,7 @@ import {
   DataTableColumns,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
-import { ListToolbar } from "@/components/shared/ListToolbar";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -201,7 +201,7 @@ export function CoursePage() {
         />
 
         {courses.length > 0 && (
-          <ListToolbar
+          <DataToolbar
             search={
               <SearchInput
                 aria-label={t("admin.courses.searchLabel")}

@@ -54,7 +54,7 @@ export function SubjectiveAnswerInput({
         <label htmlFor={inputId} className="text-sm font-medium">
           {label ?? t("candidateRuntime.answer.subjective.label")}
         </label>
-        <span className="text-xs text-muted-foreground">{countLabel}</span>
+        <span className="type-metadata">{countLabel}</span>
       </div>
       <Textarea
         id={inputId}

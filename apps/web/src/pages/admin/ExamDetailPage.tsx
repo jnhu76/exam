@@ -21,8 +21,9 @@ import {
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { RowActions } from "@/components/shared/RowActions";
+import { StatsCard } from "@/components/shared/StatsCard";
+import { PageSection } from "@/components/shared/PageSection";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
@@ -575,107 +576,72 @@ export function ExamDetailPage() {
       {publishError && <InlineErrorBanner>{publishError}</InlineErrorBanner>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.examDetail.stats.status")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StatusBadge status={exam.status} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.examDetail.stats.duration")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Projection keys on the canonical timingMode — null duration is
+        <StatsCard
+          label={t("admin.examDetail.stats.status")}
+          value={<StatusBadge status={exam.status} />}
+        />
+        <StatsCard
+          label={t("admin.examDetail.stats.duration")}
+          value={
+            /* Projection keys on the canonical timingMode — null duration is
              * real for deadline/untimed and must never render as a fabricated
-             * duration (same narrowing as StartExamPage). */}
-            <p className="type-metric">
-              {exam.timingMode === "untimed"
-                ? t("admin.examDetail.stats.noDuration")
-                : exam.timingMode === "deadline"
-                  ? t("admin.examDetail.stats.deadlineMode")
-                  : exam.durationMinutes !== null
-                    ? t("admin.examDetail.stats.durationValue", {
-                        minutes: exam.durationMinutes,
-                      })
-                    : t("admin.examDetail.stats.deadlineMode")}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.examDetail.stats.passingScore")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="type-metric">
-              {exam.passingScore}/{exam.totalScore}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.examDetail.stats.questionCount")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="type-metric">{exam.questionIds.length}</p>
-          </CardContent>
-        </Card>
+             * duration (same narrowing as StartExamPage). */
+            exam.timingMode === "untimed"
+              ? t("admin.examDetail.stats.noDuration")
+              : exam.timingMode === "deadline"
+                ? t("admin.examDetail.stats.deadlineMode")
+                : exam.durationMinutes !== null
+                  ? t("admin.examDetail.stats.durationValue", {
+                      minutes: exam.durationMinutes,
+                    })
+                  : t("admin.examDetail.stats.deadlineMode")
+          }
+        />
+        <StatsCard
+          label={t("admin.examDetail.stats.passingScore")}
+          value={`${exam.passingScore}/${exam.totalScore}`}
+        />
+        <StatsCard
+          label={t("admin.examDetail.stats.questionCount")}
+          value={exam.questionIds.length}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("admin.examDetail.config.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-sm">
-          <div className="grid grid-cols-2 gap-2">
-            <span className="text-muted-foreground">
-              {t("admin.examDetail.config.timingMode")}
-            </span>
-            <span>{labelFor(policyLabels.timingMode)(exam.timingMode)}</span>
-            <span className="text-muted-foreground">
-              {t("admin.examDetail.config.retakePolicy")}
-            </span>
-            <span>
-              {labelFor(policyLabels.retakePolicy)(exam.retakePolicy)}
-            </span>
-            <span className="text-muted-foreground">
-              {t("admin.examDetail.config.scoreStrategy")}
-            </span>
-            <span>
-              {labelFor(policyLabels.scoreStrategy)(exam.scoreStrategy)}
-            </span>
-            <span className="text-muted-foreground">
-              {t("admin.examDetail.config.maxAttempts")}
-            </span>
-            <span>{exam.maxAttempts}</span>
-            <span className="text-muted-foreground">
-              {t("admin.examDetail.config.startTime")}
-            </span>
-            <span>{formatDateTime(exam.openAt)}</span>
-            <span className="text-muted-foreground">
-              {t("admin.examDetail.config.endTime")}
-            </span>
-            {/* closeAt is null for untimed exams; formatting null would render
-             * an epoch timestamp. "—" matches the RecoveryExamDetailPage
-             * missing-timestamp convention. */}
-            <span>
-              {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+      <PageSection title={t("admin.examDetail.config.title")}>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <span className="type-secondary">
+            {t("admin.examDetail.config.timingMode")}
+          </span>
+          <span>{labelFor(policyLabels.timingMode)(exam.timingMode)}</span>
+          <span className="type-secondary">
+            {t("admin.examDetail.config.retakePolicy")}
+          </span>
+          <span>{labelFor(policyLabels.retakePolicy)(exam.retakePolicy)}</span>
+          <span className="type-secondary">
+            {t("admin.examDetail.config.scoreStrategy")}
+          </span>
+          <span>
+            {labelFor(policyLabels.scoreStrategy)(exam.scoreStrategy)}
+          </span>
+          <span className="type-secondary">
+            {t("admin.examDetail.config.maxAttempts")}
+          </span>
+          <span>{exam.maxAttempts}</span>
+          <span className="type-secondary">
+            {t("admin.examDetail.config.startTime")}
+          </span>
+          <span>{formatDateTime(exam.openAt)}</span>
+          <span className="type-secondary">
+            {t("admin.examDetail.config.endTime")}
+          </span>
+          {/* closeAt is null for untimed exams; formatting null would render
+           * an epoch timestamp. "—" matches the RecoveryExamDetailPage
+           * missing-timestamp convention. */}
+          <span>
+            {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
+          </span>
+        </div>
+      </PageSection>
 
       <Tabs defaultValue="enrollment">
         <TabsList>
@@ -689,180 +655,148 @@ export function ExamDetailPage() {
 
         <TabsContent value="enrollment" className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  {t("admin.examDetail.stats.participantCount")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="type-metric">{exam.stats.participantCount}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  {t("admin.examDetail.stats.completedCount")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="type-metric">{exam.stats.completedCount}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  {t("admin.examDetail.stats.passedCount")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="type-metric">{exam.stats.passedCount}</p>
-              </CardContent>
-            </Card>
+            <StatsCard
+              label={t("admin.examDetail.stats.participantCount")}
+              value={exam.stats.participantCount}
+            />
+            <StatsCard
+              label={t("admin.examDetail.stats.completedCount")}
+              value={exam.stats.completedCount}
+            />
+            <StatsCard
+              label={t("admin.examDetail.stats.passedCount")}
+              value={exam.stats.passedCount}
+            />
           </div>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">
-                {t("admin.examDetail.enrollment.title")}
-              </CardTitle>
-              {mayManageEnrollments && (
+          <PageSection
+            title={t("admin.examDetail.enrollment.title")}
+            actions={
+              mayManageEnrollments && (
                 <Button size="sm" onClick={handleOpenAddDialog}>
                   <AppIcon icon={Plus} size="inline" />
                   {t("admin.examDetail.enrollment.addCandidate")}
                 </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {enrollments.length === 0 ? (
-                <EmptyState
-                  icon={<AppIcon icon={Users} size="state" />}
-                  title={t("admin.examDetail.enrollment.emptyTitle")}
-                  description={t(
-                    "admin.examDetail.enrollment.emptyDescription",
-                  )}
-                />
-              ) : (
-                <DataTableShell contentClassName="p-0">
-                  <Table>
-                    <DataTableColumns
-                      columns={[
-                        { role: "short-id" },
-                        { role: "primary-text" },
-                        { role: "status" },
-                        { role: "number" },
-                        { role: "score" },
-                        { role: "actions" },
-                      ]}
-                    />
-                    <TableHeader>
-                      <TableRow>
-                        <DataTableHead role="short-id">
-                          {t("admin.examDetail.enrollment.columns.identity")}
-                        </DataTableHead>
-                        <DataTableHead role="primary-text">
-                          {t("admin.examDetail.enrollment.columns.name")}
-                        </DataTableHead>
-                        <DataTableHead role="status">
-                          {t("admin.examDetail.enrollment.columns.status")}
-                        </DataTableHead>
-                        <DataTableHead role="number">
-                          {t(
-                            "admin.examDetail.enrollment.columns.attemptCount",
-                          )}
-                        </DataTableHead>
-                        <DataTableHead role="score">
-                          {t("admin.examDetail.enrollment.columns.score")}
-                        </DataTableHead>
-                        <DataTableHead role="actions">
-                          {t("admin.examDetail.enrollment.columns.actions")}
-                        </DataTableHead>
+              )
+            }
+          >
+            {enrollments.length === 0 ? (
+              <EmptyState
+                icon={<AppIcon icon={Users} size="state" />}
+                title={t("admin.examDetail.enrollment.emptyTitle")}
+                description={t("admin.examDetail.enrollment.emptyDescription")}
+              />
+            ) : (
+              <DataTableShell contentClassName="p-0">
+                <Table>
+                  <DataTableColumns
+                    columns={[
+                      { role: "short-id" },
+                      { role: "primary-text" },
+                      { role: "status" },
+                      { role: "number" },
+                      { role: "score" },
+                      { role: "actions" },
+                    ]}
+                  />
+                  <TableHeader>
+                    <TableRow>
+                      <DataTableHead role="short-id">
+                        {t("admin.examDetail.enrollment.columns.identity")}
+                      </DataTableHead>
+                      <DataTableHead role="primary-text">
+                        {t("admin.examDetail.enrollment.columns.name")}
+                      </DataTableHead>
+                      <DataTableHead role="status">
+                        {t("admin.examDetail.enrollment.columns.status")}
+                      </DataTableHead>
+                      <DataTableHead role="number">
+                        {t("admin.examDetail.enrollment.columns.attemptCount")}
+                      </DataTableHead>
+                      <DataTableHead role="score">
+                        {t("admin.examDetail.enrollment.columns.score")}
+                      </DataTableHead>
+                      <DataTableHead role="actions">
+                        {t("admin.examDetail.enrollment.columns.actions")}
+                      </DataTableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {enrollments.map((enrollment) => (
+                      <TableRow key={enrollment.id}>
+                        <DataTableCell role="short-id">
+                          {/* Prefer the configured CandidateField-derived
+                           * identity; never fall back to a truncated internal
+                           * candidateId (unfriendly + leaks an impl detail).
+                           * "-" matches the missing-value convention used by
+                           * finalScore etc. in this table. */}
+                          {enrollment.candidateIdentity ?? "-"}
+                        </DataTableCell>
+                        <DataTableCell role="primary-text">
+                          {enrollment.candidateDisplayName}
+                        </DataTableCell>
+                        <DataTableCell role="status">
+                          <StatusBadge status={enrollment.status} />
+                        </DataTableCell>
+                        <DataTableCell role="number">
+                          {enrollment.attemptCount}
+                        </DataTableCell>
+                        <DataTableCell role="score">
+                          {enrollment.finalScore ?? "-"}
+                        </DataTableCell>
+                        <DataTableCell role="actions">
+                          <RowActions>
+                            {mayManageEnrollments &&
+                              enrollment.status === "assigned" && (
+                                <ConfirmDialog
+                                  trigger={
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label={t(
+                                        "admin.examDetail.confirm.removeCandidate",
+                                      )}
+                                      data-row-action-tone="destructive"
+                                    >
+                                      <AppIcon icon={Trash2} size="inline" />
+                                    </Button>
+                                  }
+                                  title={t(
+                                    "admin.examDetail.confirm.removeTitle",
+                                  )}
+                                  description={t(
+                                    "admin.examDetail.confirm.removeDescription",
+                                    { name: enrollment.candidateDisplayName },
+                                  )}
+                                  destructive
+                                  onConfirm={() =>
+                                    void handleRemoveEnrollment(enrollment.id)
+                                  }
+                                />
+                              )}
+                          </RowActions>
+                        </DataTableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {enrollments.map((enrollment) => (
-                        <TableRow key={enrollment.id}>
-                          <DataTableCell role="short-id">
-                            {/* Prefer the configured CandidateField-derived
-                             * identity; never fall back to a truncated internal
-                             * candidateId (unfriendly + leaks an impl detail).
-                             * "-" matches the missing-value convention used by
-                             * finalScore etc. in this table. */}
-                            {enrollment.candidateIdentity ?? "-"}
-                          </DataTableCell>
-                          <DataTableCell role="primary-text">
-                            {enrollment.candidateDisplayName}
-                          </DataTableCell>
-                          <DataTableCell role="status">
-                            <StatusBadge status={enrollment.status} />
-                          </DataTableCell>
-                          <DataTableCell role="number">
-                            {enrollment.attemptCount}
-                          </DataTableCell>
-                          <DataTableCell role="score">
-                            {enrollment.finalScore ?? "-"}
-                          </DataTableCell>
-                          <DataTableCell role="actions">
-                            <RowActions>
-                              {mayManageEnrollments &&
-                                enrollment.status === "assigned" && (
-                                  <ConfirmDialog
-                                    trigger={
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        aria-label={t(
-                                          "admin.examDetail.confirm.removeCandidate",
-                                        )}
-                                        data-row-action-tone="destructive"
-                                      >
-                                        <AppIcon icon={Trash2} size="inline" />
-                                      </Button>
-                                    }
-                                    title={t(
-                                      "admin.examDetail.confirm.removeTitle",
-                                    )}
-                                    description={t(
-                                      "admin.examDetail.confirm.removeDescription",
-                                      { name: enrollment.candidateDisplayName },
-                                    )}
-                                    destructive
-                                    onConfirm={() =>
-                                      void handleRemoveEnrollment(enrollment.id)
-                                    }
-                                  />
-                                )}
-                            </RowActions>
-                          </DataTableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </DataTableShell>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </TableBody>
+                </Table>
+              </DataTableShell>
+            )}
+          </PageSection>
         </TabsContent>
 
         <TabsContent value="scores">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                {t("admin.examDetail.scoresTab.title")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                {t("admin.examDetail.scoresTab.description")}
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => void navigate(`/admin/exams/${id}/scores`)}
-              >
-                {t("admin.examDetail.scoresTab.goToScores")}
-              </Button>
-            </CardContent>
-          </Card>
+          <PageSection title={t("admin.examDetail.scoresTab.title")}>
+            <p className="type-secondary mb-4">
+              {t("admin.examDetail.scoresTab.description")}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => void navigate(`/admin/exams/${id}/scores`)}
+            >
+              {t("admin.examDetail.scoresTab.goToScores")}
+            </Button>
+          </PageSection>
         </TabsContent>
       </Tabs>
 
@@ -872,7 +806,7 @@ export function ExamDetailPage() {
             <DialogTitle>{t("admin.examDetail.addDialog.title")}</DialogTitle>
           </DialogHeader>
           {candidates.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
+            <p className="type-secondary py-4 text-center">
               {t("admin.examDetail.addDialog.emptyCandidates")}
             </p>
           ) : (

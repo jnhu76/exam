@@ -713,7 +713,7 @@ export function CandidatesPage() {
               <FieldError>{resetFieldError}</FieldError>
             </Field>
             {resetTarget && (
-              <p className="text-xs text-muted-foreground">
+              <p className="type-metadata">
                 {t("admin.candidates.dialog.resetDescription", {
                   name: resetTarget.name,
                 })}

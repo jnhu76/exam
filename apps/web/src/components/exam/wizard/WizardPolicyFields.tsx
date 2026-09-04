@@ -141,7 +141,7 @@ export function WizardPolicyFields({
                 </SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
+            <p className="type-metadata">
               {t(`admin.forms.exam.timingModeHint.${timingMode}`)}
             </p>
             {resetBtn("timingMode")}

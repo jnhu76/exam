@@ -1,9 +1,11 @@
-import { useId, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { PageSection } from "./PageSection";
 
 /**
- * Bordered card section with a title, optional description, action slot,
- * and a content grid. Used to group related form controls.
+ * Grouped form-field section: a titled PageSection whose children lay out in
+ * the shared form field grid. Composition, not a second chrome authority —
+ * section border/header/description/actions come from PageSection alone.
  */
 export function FormSection({
   title,
@@ -20,33 +22,15 @@ export function FormSection({
   className?: string;
   contentClassName?: string;
 }) {
-  const sectionId = useId();
-  const titleId = `${sectionId}-title`;
-  const descriptionId = description ? `${sectionId}-description` : undefined;
-
   return (
-    <section
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
-      className={cn("surface-content text-card-foreground", className)}
+    <PageSection
+      title={title}
+      description={description}
+      actions={actions}
+      className={className}
+      contentClassName={cn("grid gap-4", contentClassName)}
     >
-      <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2 id={titleId} className="type-section-title">
-            {title}
-          </h2>
-          {description && (
-            <p
-              id={descriptionId}
-              className="mt-1 text-sm text-muted-foreground"
-            >
-              {description}
-            </p>
-          )}
-        </div>
-        {actions && <div className="shrink-0">{actions}</div>}
-      </div>
-      <div className={cn("grid gap-4 p-5", contentClassName)}>{children}</div>
-    </section>
+      {children}
+    </PageSection>
   );
 }

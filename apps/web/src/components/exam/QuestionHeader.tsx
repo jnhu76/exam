@@ -30,7 +30,7 @@ export function QuestionHeader({
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-medium">
+          <h2 className="type-section-title">
             {t("candidateRuntime.question.number", { number })}
           </h2>
           <Badge variant="secondary">{typeLabel}</Badge>
@@ -38,11 +38,9 @@ export function QuestionHeader({
             {t("candidateRuntime.question.score", { score })}
           </Badge>
         </div>
-        {meta && <div className="text-sm text-muted-foreground">{meta}</div>}
+        {meta && <div className="type-secondary">{meta}</div>}
       </div>
-      {description && (
-        <div className="text-sm text-muted-foreground">{description}</div>
-      )}
+      {description && <div className="type-secondary">{description}</div>}
     </div>
   );
 }

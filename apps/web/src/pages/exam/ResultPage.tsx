@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageSection } from "@/components/shared/PageSection";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import {
@@ -128,7 +129,7 @@ export function ResultPage() {
               <p className="type-metric-hero" data-testid="result-total-score">
                 {result.totalScore}
               </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="type-secondary">
                 {t("candidateResult.summary.passingScore", {
                   score: result.passingScore,
                 })}
@@ -147,132 +148,127 @@ export function ResultPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("candidateResult.detail.title")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTableShell contentClassName="p-0">
-                <Table>
-                  <DataTableColumns
-                    columns={[
-                      { role: "number" },
-                      { role: "long-text", key: "question" },
-                      { role: "type" },
-                      { role: "secondary-text", key: "candidate-answer" },
-                      { role: "secondary-text", key: "correct-answer" },
-                      { role: "score" },
-                    ]}
-                  />
-                  <TableHeader>
-                    <TableRow>
-                      <DataTableHead role="number">
-                        {t("candidateResult.table.questionNumber")}
-                      </DataTableHead>
-                      <DataTableHead role="long-text">
-                        {t("candidateResult.table.questionContent")}
-                      </DataTableHead>
-                      <DataTableHead role="type">
-                        {t("candidateResult.table.questionType")}
-                      </DataTableHead>
-                      <DataTableHead role="secondary-text">
-                        {t("candidateResult.table.yourAnswer")}
-                      </DataTableHead>
-                      <DataTableHead role="secondary-text">
-                        {t("candidateResult.table.correctAnswer")}
-                      </DataTableHead>
-                      <DataTableHead role="score">
-                        {t("candidateResult.table.score")}
-                      </DataTableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.questionResults.map((question) => {
-                      const isManual = question.manualGraded === true;
-                      // Candidate DTO strips standardAnswer server-side
-                      // (RBAC-M10-E); an objective question whose answer is
-                      // absent was hidden, not manually graded.
-                      const answerHidden =
-                        !isManual && question.standardAnswer == null;
-                      return (
-                        <TableRow key={question.questionId}>
-                          <DataTableCell role="number">
-                            {question.order + 1}
-                          </DataTableCell>
-                          <DataTableCell role="long-text">
-                            <ContentRenderer
-                              content={question.content}
-                              document={question.contentDocument}
-                            />
-                          </DataTableCell>
-                          <DataTableCell role="type">
-                            {formatQuestionType(
-                              question.type,
-                              t as (key: string) => string,
-                            )}
-                          </DataTableCell>
-                          <DataTableCell role="secondary-text">
-                            <div className="flex items-center gap-2">
-                              {question.correct ? (
-                                <AppIcon
-                                  icon={CircleCheck}
-                                  decorative={false}
-                                  label={t("candidateResult.aria.correct")}
-                                  size="inline"
-                                  className="text-success"
-                                />
-                              ) : (
-                                <AppIcon
-                                  icon={CircleX}
-                                  decorative={false}
-                                  label={t("candidateResult.aria.incorrect")}
-                                  size="inline"
-                                  className="text-muted-foreground"
-                                />
-                              )}
-                              <AnswerText
-                                answer={question.candidateAnswer}
-                                answerMode={question.answerMode}
-                                truncate={question.type === "fill_blank"}
-                                t={t as (key: string) => string}
+          <PageSection title={t("candidateResult.detail.title")}>
+            <DataTableShell contentClassName="p-0">
+              <Table>
+                <DataTableColumns
+                  columns={[
+                    { role: "number" },
+                    { role: "long-text", key: "question" },
+                    { role: "type" },
+                    { role: "secondary-text", key: "candidate-answer" },
+                    { role: "secondary-text", key: "correct-answer" },
+                    { role: "score" },
+                  ]}
+                />
+                <TableHeader>
+                  <TableRow>
+                    <DataTableHead role="number">
+                      {t("candidateResult.table.questionNumber")}
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
+                      {t("candidateResult.table.questionContent")}
+                    </DataTableHead>
+                    <DataTableHead role="type">
+                      {t("candidateResult.table.questionType")}
+                    </DataTableHead>
+                    <DataTableHead role="secondary-text">
+                      {t("candidateResult.table.yourAnswer")}
+                    </DataTableHead>
+                    <DataTableHead role="secondary-text">
+                      {t("candidateResult.table.correctAnswer")}
+                    </DataTableHead>
+                    <DataTableHead role="score">
+                      {t("candidateResult.table.score")}
+                    </DataTableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {result.questionResults.map((question) => {
+                    const isManual = question.manualGraded === true;
+                    // Candidate DTO strips standardAnswer server-side
+                    // (RBAC-M10-E); an objective question whose answer is
+                    // absent was hidden, not manually graded.
+                    const answerHidden =
+                      !isManual && question.standardAnswer == null;
+                    return (
+                      <TableRow key={question.questionId}>
+                        <DataTableCell role="number">
+                          {question.order + 1}
+                        </DataTableCell>
+                        <DataTableCell role="long-text">
+                          <ContentRenderer
+                            content={question.content}
+                            document={question.contentDocument}
+                          />
+                        </DataTableCell>
+                        <DataTableCell role="type">
+                          {formatQuestionType(
+                            question.type,
+                            t as (key: string) => string,
+                          )}
+                        </DataTableCell>
+                        <DataTableCell role="secondary-text">
+                          <div className="flex items-center gap-2">
+                            {question.correct ? (
+                              <AppIcon
+                                icon={CircleCheck}
+                                decorative={false}
+                                label={t("candidateResult.aria.correct")}
+                                size="inline"
+                                className="text-success"
                               />
-                            </div>
-                          </DataTableCell>
-                          <DataTableCell
-                            role="secondary-text"
-                            data-testid={
-                              isManual
-                                ? `result-question-manual-${question.questionId}`
-                                : undefined
-                            }
-                          >
-                            {isManual ? (
-                              <span className="text-muted-foreground">
-                                {t("candidateResult.answer.manual")}
-                              </span>
-                            ) : answerHidden ? (
-                              <span className="text-muted-foreground">
-                                {t("candidateResult.answer.hidden")}
-                              </span>
                             ) : (
-                              <AnswerText
-                                answer={question.standardAnswer}
-                                truncate={question.type === "fill_blank"}
-                                t={t as (key: string) => string}
+                              <AppIcon
+                                icon={CircleX}
+                                decorative={false}
+                                label={t("candidateResult.aria.incorrect")}
+                                size="inline"
+                                className="text-muted-foreground"
                               />
                             )}
-                          </DataTableCell>
-                          <DataTableCell role="score">
-                            {question.score}/{question.maxScore}
-                          </DataTableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </DataTableShell>
-            </CardContent>
-          </Card>
+                            <AnswerText
+                              answer={question.candidateAnswer}
+                              answerMode={question.answerMode}
+                              truncate={question.type === "fill_blank"}
+                              t={t as (key: string) => string}
+                            />
+                          </div>
+                        </DataTableCell>
+                        <DataTableCell
+                          role="secondary-text"
+                          data-testid={
+                            isManual
+                              ? `result-question-manual-${question.questionId}`
+                              : undefined
+                          }
+                        >
+                          {isManual ? (
+                            <span className="type-secondary">
+                              {t("candidateResult.answer.manual")}
+                            </span>
+                          ) : answerHidden ? (
+                            <span className="type-secondary">
+                              {t("candidateResult.answer.hidden")}
+                            </span>
+                          ) : (
+                            <AnswerText
+                              answer={question.standardAnswer}
+                              truncate={question.type === "fill_blank"}
+                              t={t as (key: string) => string}
+                            />
+                          )}
+                        </DataTableCell>
+                        <DataTableCell role="score">
+                          {question.score}/{question.maxScore}
+                        </DataTableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </DataTableShell>
+          </PageSection>
         </>
       ) : (
         <Card>

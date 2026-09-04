@@ -10,7 +10,8 @@ export function StatsCard({
   suffix,
 }: {
   label: string;
-  value: number | string;
+  /** Metric value; ReactNode allows a StatusBadge as the summarised fact. */
+  value: ReactNode;
   icon?: ReactNode;
   trend?: string;
   supporting?: ReactNode;

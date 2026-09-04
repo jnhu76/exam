@@ -29,7 +29,7 @@ export function EmptyState({
       </div>
       <div>
         <h2 className="font-medium">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="type-secondary">{description}</p>
       </div>
       {action}
     </div>

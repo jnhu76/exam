@@ -27,7 +27,7 @@ export function LoadingState({
         size="state"
         className="animate-spin text-muted-foreground"
       />
-      <p className="text-sm text-muted-foreground">{text}</p>
+      <p className="type-secondary">{text}</p>
     </div>
   );
 }

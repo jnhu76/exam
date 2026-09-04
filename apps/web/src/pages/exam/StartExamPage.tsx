@@ -7,7 +7,7 @@ import { routes } from "@/lib/routes";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageSection } from "@/components/shared/PageSection";
 import { AppIcon } from "@/components/shared/AppIcon";
 import {
   TriangleAlert,
@@ -164,82 +164,70 @@ export function StartExamPage() {
     <div className="mx-auto max-w-2xl flex flex-col gap-6 p-6">
       <h1 className="type-page-title">{exam.title}</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("startExam.info.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-sm">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <AppIcon icon={Clock} size="inline" />
-              <span>{t("startExam.info.duration")}</span>
-            </div>
-            <span className="text-foreground">
-              {/* Projection keys on the canonical timingMode — null duration is
-               * real for deadline/untimed and must never be rendered as a
-               * fabricated duration (same narrowing as ExamListPage). */}
-              {exam.timingMode === "untimed"
-                ? t("startExam.info.noDuration")
-                : exam.timingMode === "deadline"
-                  ? t("startExam.info.deadlineMode")
-                  : exam.durationMinutes !== null
-                    ? t("startExam.info.durationValue", {
-                        minutes: exam.durationMinutes,
-                      })
-                    : t("startExam.info.deadlineMode")}
-            </span>
-
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <AppIcon icon={FileText} size="inline" />
-              <span>{t("startExam.info.questionCount")}</span>
-            </div>
-            <span className="text-foreground">
-              {t("startExam.info.questionCountValue", {
-                count: exam.questionCount,
-              })}
-            </span>
-
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <AppIcon icon={Shield} size="inline" />
-              <span>{t("startExam.info.passingScore")}</span>
-            </div>
-            <span className="text-foreground">
-              {exam.passingScore}/{exam.totalScore}
-            </span>
+      <PageSection
+        title={t("startExam.info.title")}
+        contentClassName="flex flex-col gap-3 text-sm"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div className="type-secondary flex items-center gap-2">
+            <AppIcon icon={Clock} size="inline" />
+            <span>{t("startExam.info.duration")}</span>
           </div>
+          <span className="type-body">
+            {/* Projection keys on the canonical timingMode — null duration is
+             * real for deadline/untimed and must never be rendered as a
+             * fabricated duration (same narrowing as ExamListPage). */}
+            {exam.timingMode === "untimed"
+              ? t("startExam.info.noDuration")
+              : exam.timingMode === "deadline"
+                ? t("startExam.info.deadlineMode")
+                : exam.durationMinutes !== null
+                  ? t("startExam.info.durationValue", {
+                      minutes: exam.durationMinutes,
+                    })
+                  : t("startExam.info.deadlineMode")}
+          </span>
 
-          {exam.controlFlags.detectTabSwitch && (
-            <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
-              <AppIcon
-                icon={TriangleAlert}
-                size="inline"
-                className="shrink-0"
-              />
-              <span>{t("startExam.info.tabSwitchWarning")}</span>
-            </div>
-          )}
+          <div className="type-secondary flex items-center gap-2">
+            <AppIcon icon={FileText} size="inline" />
+            <span>{t("startExam.info.questionCount")}</span>
+          </div>
+          <span className="type-body">
+            {t("startExam.info.questionCountValue", {
+              count: exam.questionCount,
+            })}
+          </span>
 
-          {exam.controlFlags.disableCopyPaste && (
-            <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
-              <AppIcon
-                icon={TriangleAlert}
-                size="inline"
-                className="shrink-0"
-              />
-              <span>{t("startExam.info.copyPasteWarning")}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <div className="type-secondary flex items-center gap-2">
+            <AppIcon icon={Shield} size="inline" />
+            <span>{t("startExam.info.passingScore")}</span>
+          </div>
+          <span className="type-body">
+            {exam.passingScore}/{exam.totalScore}
+          </span>
+        </div>
+
+        {exam.controlFlags.detectTabSwitch && (
+          <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
+            <AppIcon icon={TriangleAlert} size="inline" className="shrink-0" />
+            <span>{t("startExam.info.tabSwitchWarning")}</span>
+          </div>
+        )}
+
+        {exam.controlFlags.disableCopyPaste && (
+          <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
+            <AppIcon icon={TriangleAlert} size="inline" className="shrink-0" />
+            <span>{t("startExam.info.copyPasteWarning")}</span>
+          </div>
+        )}
+      </PageSection>
 
       <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
         <AppIcon icon={TriangleAlert} size="inline" className="mr-2 inline" />
         {t("startExam.notice")}
       </div>
 
-      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+      <div className="type-secondary flex flex-col gap-1">
         <span>
           {t("startExam.attempts", {
             used: exam.currentAttempts,

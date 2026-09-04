@@ -19,18 +19,8 @@ describe("PasswordChangeForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-  it("renders without card wrapper", () => {
-    render(<PasswordChangeForm cardWrapper={false} />);
-    expect(screen.getByText("修改密码")).toBeInTheDocument();
-  });
-
-  it("renders with card wrapper by default", () => {
-    render(<PasswordChangeForm />);
-    expect(screen.getAllByText("修改密码").length).toBeGreaterThanOrEqual(1);
-  });
-
   it("shows error when passwords do not match", async () => {
-    render(<PasswordChangeForm cardWrapper={false} />);
+    render(<PasswordChangeForm />);
     const { toast } = await import("sonner");
     await userEvent.type(screen.getByLabelText("当前密码"), "old123");
     await userEvent.type(screen.getByLabelText("新密码"), "new123");
@@ -47,7 +37,7 @@ describe("PasswordChangeForm", () => {
       value: { assign },
       writable: true,
     });
-    render(<PasswordChangeForm cardWrapper={false} />);
+    render(<PasswordChangeForm />);
     const { toast } = await import("sonner");
     await userEvent.type(screen.getByLabelText("当前密码"), "old12345");
     await userEvent.type(screen.getByLabelText("新密码"), "newpass123");
@@ -64,7 +54,7 @@ describe("PasswordChangeForm", () => {
   });
 
   it("rejects new password shorter than the policy minimum", async () => {
-    render(<PasswordChangeForm cardWrapper={false} />);
+    render(<PasswordChangeForm />);
     const { toast } = await import("sonner");
     await userEvent.type(screen.getByLabelText("当前密码"), "old12345");
     await userEvent.type(screen.getByLabelText("新密码"), "short12");
@@ -76,7 +66,7 @@ describe("PasswordChangeForm", () => {
 
   it("shows error toast on API failure", async () => {
     vi.mocked(api.patch).mockRejectedValueOnce(new Error("密码错误"));
-    render(<PasswordChangeForm cardWrapper={false} />);
+    render(<PasswordChangeForm />);
     const { toast } = await import("sonner");
     await userEvent.type(screen.getByLabelText("当前密码"), "old12345");
     await userEvent.type(screen.getByLabelText("新密码"), "newpass123");

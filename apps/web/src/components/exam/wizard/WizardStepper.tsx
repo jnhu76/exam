@@ -50,7 +50,7 @@ export function WizardStepper({
                 onClick={() => onNavigate(step)}
                 className={cn(isPast && !isCurrent && "opacity-70")}
               >
-                <span className="tabular-nums">{step}</span>
+                <span className="type-numeric">{step}</span>
                 <span>{t(`admin.examWizard.steps.${key}`)}</span>
               </Button>
               {idx < STEP_KEYS.length - 1 && (
@@ -62,7 +62,7 @@ export function WizardStepper({
           );
         })}
       </ol>
-      <p className="mt-2 text-sm text-muted-foreground">
+      <p className="mt-2 type-secondary">
         {t("admin.examWizard.stepOf", {
           current,
           total: STEP_KEYS.length,

@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { ListToolbar } from "@/components/shared/ListToolbar";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
@@ -378,117 +378,8 @@ export function QuestionPage() {
       <DataWorkbench
         toolbar={
           <DataWorkbenchToolbar>
-            <ListToolbar
-              appearance="quiet"
+            <DataToolbar
               aria-label={t("admin.questions.filterToolbar" as never)}
-              filters={
-                <>
-                  <Select
-                    value={filterCourse}
-                    onValueChange={(value) => {
-                      setFilterCourse(value);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-auto lg:w-[180px]">
-                      <SelectValue
-                        placeholder={t("admin.questions.filterCourse" as never)}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        {t("admin.questions.filterAllCourses" as never)}
-                      </SelectItem>
-                      {courses.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={filterType}
-                    onValueChange={(value) => {
-                      setFilterType(value);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger
-                      aria-label={t("admin.questions.filterType" as never)}
-                      className="w-auto lg:w-[150px]"
-                    >
-                      <SelectValue
-                        placeholder={t("admin.questions.filterType" as never)}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        {t("admin.questions.filterAllTypes" as never)}
-                      </SelectItem>
-                      <SelectItem value="single_choice">
-                        {t(
-                          "admin.questions.questionTypes.single_choice" as never,
-                        )}
-                      </SelectItem>
-                      <SelectItem value="multiple_choice">
-                        {t(
-                          "admin.questions.questionTypes.multiple_choice" as never,
-                        )}
-                      </SelectItem>
-                      <SelectItem value="fill_blank">
-                        {t("admin.questions.questionTypes.fill_blank" as never)}
-                      </SelectItem>
-                      <SelectItem value="true_false">
-                        {t("admin.questions.questionTypes.true_false" as never)}
-                      </SelectItem>
-                      <SelectItem value="text_response">
-                        {t(
-                          "admin.questions.questionTypes.text_response" as never,
-                        )}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={filterDifficulty}
-                    onValueChange={(value) => {
-                      setFilterDifficulty(value);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-auto lg:w-[140px]">
-                      <SelectValue
-                        placeholder={t(
-                          "admin.questions.filterDifficulty" as never,
-                        )}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        {t("admin.questions.filterAllDifficulties" as never)}
-                      </SelectItem>
-                      {[1, 2, 3, 4, 5].map((value) => (
-                        <SelectItem key={value} value={String(value)}>
-                          {t("admin.questions.difficultyLabel" as never, {
-                            value,
-                          })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <TagFilterSelect
-                    tags={tagVocabulary}
-                    selected={filterTags}
-                    onChange={(next) => {
-                      setFilterTags(next);
-                      setPage(1);
-                    }}
-                    aria-label={t("admin.questions.tagFilterLabel" as never)}
-                  />
-                </>
-              }
               search={
                 <DataViewSearch
                   aria-label={t("admin.questions.searchLabel" as never)}
@@ -505,7 +396,7 @@ export function QuestionPage() {
                       not reflow the actions cluster (which would shift the
                       search box position in the toolbar). Visibility toggles. */}
                   <span
-                    className={`inline-flex min-w-[5.5rem] items-center gap-2 text-sm text-muted-foreground ${
+                    className={`inline-flex min-w-[5.5rem] items-center gap-2 type-secondary ${
                       isTableLoading ? "visible" : "invisible"
                     }`}
                     aria-live="polite"
@@ -531,7 +422,106 @@ export function QuestionPage() {
                   )}
                 </>
               }
-            />
+            >
+              <Select
+                value={filterCourse}
+                onValueChange={(value) => {
+                  setFilterCourse(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-auto lg:w-[180px]">
+                  <SelectValue
+                    placeholder={t("admin.questions.filterCourse" as never)}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {t("admin.questions.filterAllCourses" as never)}
+                  </SelectItem>
+                  {courses.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterType}
+                onValueChange={(value) => {
+                  setFilterType(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger
+                  aria-label={t("admin.questions.filterType" as never)}
+                  className="w-auto lg:w-[150px]"
+                >
+                  <SelectValue
+                    placeholder={t("admin.questions.filterType" as never)}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {t("admin.questions.filterAllTypes" as never)}
+                  </SelectItem>
+                  <SelectItem value="single_choice">
+                    {t("admin.questions.questionTypes.single_choice" as never)}
+                  </SelectItem>
+                  <SelectItem value="multiple_choice">
+                    {t(
+                      "admin.questions.questionTypes.multiple_choice" as never,
+                    )}
+                  </SelectItem>
+                  <SelectItem value="fill_blank">
+                    {t("admin.questions.questionTypes.fill_blank" as never)}
+                  </SelectItem>
+                  <SelectItem value="true_false">
+                    {t("admin.questions.questionTypes.true_false" as never)}
+                  </SelectItem>
+                  <SelectItem value="text_response">
+                    {t("admin.questions.questionTypes.text_response" as never)}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterDifficulty}
+                onValueChange={(value) => {
+                  setFilterDifficulty(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-auto lg:w-[140px]">
+                  <SelectValue
+                    placeholder={t("admin.questions.filterDifficulty" as never)}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {t("admin.questions.filterAllDifficulties" as never)}
+                  </SelectItem>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <SelectItem key={value} value={String(value)}>
+                      {t("admin.questions.difficultyLabel" as never, {
+                        value,
+                      })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <TagFilterSelect
+                tags={tagVocabulary}
+                selected={filterTags}
+                onChange={(next) => {
+                  setFilterTags(next);
+                  setPage(1);
+                }}
+                aria-label={t("admin.questions.tagFilterLabel" as never)}
+              />
+            </DataToolbar>
           </DataWorkbenchToolbar>
         }
         footer={

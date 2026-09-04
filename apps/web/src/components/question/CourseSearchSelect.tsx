@@ -316,12 +316,12 @@ export function CourseSearchSelect({
           className="max-h-[300px] overflow-y-auto"
         >
           {loading && results.length === 0 && (
-            <div className="py-6 text-center text-sm text-muted-foreground">
+            <div className="py-6 text-center type-secondary">
               {t("admin.forms.question.courseSearching")}
             </div>
           )}
           {!loading && results.length === 0 && (
-            <div className="py-6 text-center text-sm text-muted-foreground">
+            <div className="py-6 text-center type-secondary">
               {t("admin.forms.question.courseNoResults")}
             </div>
           )}
@@ -344,16 +344,13 @@ export function CourseSearchSelect({
                   className={isSelected ? "opacity-100" : "opacity-0"}
                 />
                 <span className="flex-1 truncate">{c.name}</span>
-                <span className="text-xs text-muted-foreground">{c.code}</span>
+                <span className="type-metadata">{c.code}</span>
               </div>
             );
           })}
         </div>
         {truncated && (
-          <div
-            role="status"
-            className="border-t px-3 py-2 text-xs text-muted-foreground"
-          >
+          <div role="status" className="border-t px-3 py-2 type-metadata">
             {t("admin.forms.question.courseTruncatedHint")}
           </div>
         )}

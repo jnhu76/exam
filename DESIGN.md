@@ -146,10 +146,10 @@ the component or density role, not improvised per page.
 
 ### Admin toolbar
 
-`DataToolbar` and `ListToolbar` own filter grouping, search, counts, reset/query
-controls, and secondary actions. The toolbar is a white bordered surface with
-8px radius, coherent spacing, equal-height controls, and responsive wrapping.
-An empty toolbar or a strip containing only a count is forbidden.
+`DataToolbar` owns filter grouping, search, counts, reset/query controls, and
+secondary actions. The toolbar is a white bordered surface with 8px radius,
+coherent spacing, equal-height controls, and responsive wrapping. An empty
+toolbar or a strip containing only a count is forbidden.
 
 ### Admin table shell
 

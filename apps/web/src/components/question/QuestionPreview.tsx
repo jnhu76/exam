@@ -38,7 +38,7 @@ export function QuestionPreview({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-muted-foreground">
+        <CardTitle className="type-secondary">
           {t("admin.questionPreview.title")}
         </CardTitle>
       </CardHeader>
@@ -101,7 +101,7 @@ export function QuestionPreview({
         )}
 
         <Separator />
-        <div className="pt-2 text-xs text-muted-foreground">
+        <div className="pt-2 type-metadata">
           <p>
             {t("admin.questionPreview.standardAnswer")}
             {type === "true_false"

@@ -933,7 +933,7 @@ export function TakeExamPage() {
         <h1 className="type-section-title">
           {t("candidateRuntime.restore.restoringTitle")}
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="type-secondary">
           {t("candidateRuntime.restore.restoringDescription")}
         </p>
       </div>
@@ -997,7 +997,7 @@ export function TakeExamPage() {
                 ? t("candidateRuntime.status.ended")
                 : t("candidateRuntime.status.inProgress")}
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="type-secondary">
               {t("candidateRuntime.navigator.questionOf", {
                 current: currentIndex + 1,
                 total: snapshot.questions.length,
@@ -1058,7 +1058,7 @@ export function TakeExamPage() {
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start">
         <aside className="rounded-lg border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
-          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground xl:block">
+          <div className="mb-2 flex items-center justify-between type-metadata xl:block">
             <span>{t("candidateRuntime.navigator.questionId")}</span>
             <span className="xl:hidden">
               {t("candidateRuntime.navigator.progress", {
@@ -1139,7 +1139,7 @@ export function TakeExamPage() {
                         ? t("candidateRuntime.deadline.autoSubmitTitle")
                         : t("candidateRuntime.deadline.timeUp")}
                     </div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="type-secondary">
                       {autoSubmitFailed
                         ? t("candidateRuntime.deadline.retryHint")
                         : t("candidateRuntime.deadline.autoSubmitting")}
@@ -1157,13 +1157,13 @@ export function TakeExamPage() {
               )}
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
                 <div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="type-secondary">
                     {t("candidateRuntime.navigator.questionOf", {
                       current: currentIndex + 1,
                       total: snapshot.questions.length,
                     })}
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="type-secondary">
                     {t("candidateRuntime.question.score", {
                       score: currentQuestionView.maxScore,
                     })}
@@ -1214,7 +1214,7 @@ export function TakeExamPage() {
       <Separator />
       <footer className="sticky bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm text-muted-foreground">
+          <div className="type-secondary">
             {t("candidateRuntime.navigator.progressFull", {
               answered: answeredCount,
               unanswered: unansweredCount,

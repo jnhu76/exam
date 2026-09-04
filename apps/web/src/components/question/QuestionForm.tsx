@@ -457,9 +457,7 @@ export function QuestionForm({
                     onCheckedChange={() => toggleCorrect(opt.id)}
                   />
                 )}
-                <span className="w-8 text-sm text-muted-foreground">
-                  {opt.id}.
-                </span>
+                <span className="w-8 type-secondary">{opt.id}.</span>
                 {opt.contentDocument ? (
                   <div className="flex-1 flex flex-col gap-1">
                     <RichContentEditorLazy
@@ -540,7 +538,7 @@ export function QuestionForm({
             onChange={(e) => update({ standardAnswer: e.target.value })}
             placeholder={t("admin.forms.question.standardAnswerPlaceholder")}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="type-metadata">
             {t("admin.forms.question.standardAnswerHint")}
           </p>
         </Field>
@@ -556,7 +554,7 @@ export function QuestionForm({
               placeholder={t("admin.forms.question.rubricPlaceholder")}
               rows={4}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="type-metadata">
               {t("admin.forms.question.rubricHint")}
             </p>
           </Field>
@@ -577,7 +575,7 @@ export function QuestionForm({
                 <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
+            <p className="type-metadata">
               {t("admin.forms.question.answerModeHint")}
             </p>
           </Field>
@@ -594,7 +592,7 @@ export function QuestionForm({
               placeholder={t("admin.forms.question.referenceAnswerPlaceholder")}
               rows={4}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="type-metadata">
               {t("admin.forms.question.referenceAnswerHint")}
             </p>
           </Field>

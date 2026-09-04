@@ -208,10 +208,7 @@ export function ImportLogsPage() {
                   setExpandedId(expandedId === item.id ? null : item.id)
                 }
               >
-                <DataTableCell
-                  role="date"
-                  className="text-sm text-muted-foreground"
-                >
+                <DataTableCell role="date" className="type-secondary">
                   {formatDateTime(item.createdAt)}
                 </DataTableCell>
                 <DataTableCell role="type">
@@ -248,7 +245,7 @@ export function ImportLogsPage() {
                   <h3 className="mb-2 text-sm font-medium">
                     {t("admin.importLogs.details.errorDetail")}
                   </h3>
-                  <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                  <pre className="type-code rounded bg-muted p-3">
                     {JSON.stringify(item.errorsDetail, null, 2)}
                   </pre>
                 </>
@@ -258,7 +255,7 @@ export function ImportLogsPage() {
                   <h3 className="mb-2 mt-3 text-sm font-medium">
                     {t("admin.importLogs.details.metadata")}
                   </h3>
-                  <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                  <pre className="type-code rounded bg-muted p-3">
                     {JSON.stringify(item.metadata, null, 2)}
                   </pre>
                 </>

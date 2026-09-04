@@ -446,7 +446,7 @@ export function GradingDetailPage() {
         <div
           role="status"
           data-testid="grading-fully-graded-notice"
-          className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground"
+          className="rounded-md border bg-muted/30 p-3 type-secondary"
         >
           {t("admin.gradingDetail.fullyGradedNotice")}
         </div>
@@ -454,7 +454,7 @@ export function GradingDetailPage() {
         <div
           role="note"
           data-testid="grading-irrevocable-notice"
-          className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground"
+          className="rounded-md border bg-muted/30 p-3 type-secondary"
         >
           {t("admin.gradingDetail.irrevocableNotice")}
         </div>
@@ -474,7 +474,7 @@ export function GradingDetailPage() {
                   document={q.contentDocument}
                 />
               </CardTitle>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 type-secondary">
                 <span>
                   {t("admin.gradingDetail.question.maxScore", {
                     score: q.maxScore,
@@ -587,7 +587,7 @@ export function GradingDetailPage() {
               </div>
               {completed ? (
                 <div
-                  className="space-y-1 text-sm text-muted-foreground"
+                  className="space-y-1 type-secondary"
                   data-testid={`grading-submitted-meta-${q.questionId}`}
                 >
                   <div className="font-medium text-foreground">

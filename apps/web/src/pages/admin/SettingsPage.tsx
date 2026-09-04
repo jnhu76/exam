@@ -168,7 +168,7 @@ export function SettingsPage() {
         title={t("admin.settings.securitySection.title")}
         description={t("admin.settings.securitySection.description")}
       >
-        <PasswordChangeForm cardWrapper={false} />
+        <PasswordChangeForm />
       </FormSection>
     </div>
   );

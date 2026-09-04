@@ -24,7 +24,6 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Play,
   Send,
@@ -338,87 +337,80 @@ function TimelineSection({
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">
-          {t("admin.attemptDetail.timeline.title")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <LoadingState />
-        ) : hasError ? (
-          <ErrorState
-            message={t("admin.attemptDetail.timeline.loadFailed")}
-            onRetry={onRetry}
-          />
-        ) : !events || events.length === 0 ? (
-          <EmptyState
-            icon={<AppIcon icon={Clock} size="state" />}
-            title={t("admin.attemptDetail.timeline.emptyTitle")}
-            description={t("admin.attemptDetail.timeline.emptyDescription")}
-          />
-        ) : (
-          <div className="flex flex-col gap-1">
-            {events.map((event, index) => {
-              const meta = getEventMeta(event.action);
-              const Icon = meta.icon;
-              const isExpanded = expandedEventId === event.id;
-              // Unknown actions have no labelKey; fall back to the raw action.
-              const label = meta.labelKey
-                ? t(meta.labelKey as never)
-                : event.action;
-              return (
-                <div key={event.id}>
-                  {index > 0 && <Separator className="my-1" />}
-                  <button
-                    type="button"
-                    onClick={() => onToggleEvent(event.id)}
-                    className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
-                    aria-expanded={isExpanded}
-                  >
-                    <span className="text-muted-foreground" aria-hidden="true">
-                      <AppIcon icon={Icon} size="inline" />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className={eventToneClass[meta.tone]}
-                        >
-                          {label}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDateTime(event.createdAt)}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground truncate">
-                        {t("admin.attemptDetail.timeline.actorPrefix")}{" "}
-                        {event.actorId}
+    <PageSection title={t("admin.attemptDetail.timeline.title")}>
+      {isLoading ? (
+        <LoadingState />
+      ) : hasError ? (
+        <ErrorState
+          message={t("admin.attemptDetail.timeline.loadFailed")}
+          onRetry={onRetry}
+        />
+      ) : !events || events.length === 0 ? (
+        <EmptyState
+          icon={<AppIcon icon={Clock} size="state" />}
+          title={t("admin.attemptDetail.timeline.emptyTitle")}
+          description={t("admin.attemptDetail.timeline.emptyDescription")}
+        />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {events.map((event, index) => {
+            const meta = getEventMeta(event.action);
+            const Icon = meta.icon;
+            const isExpanded = expandedEventId === event.id;
+            // Unknown actions have no labelKey; fall back to the raw action.
+            const label = meta.labelKey
+              ? t(meta.labelKey as never)
+              : event.action;
+            return (
+              <div key={event.id}>
+                {index > 0 && <Separator className="my-1" />}
+                <button
+                  type="button"
+                  onClick={() => onToggleEvent(event.id)}
+                  className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="text-muted-foreground" aria-hidden="true">
+                    <AppIcon icon={Icon} size="inline" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant="secondary"
+                        className={eventToneClass[meta.tone]}
+                      >
+                        {label}
+                      </Badge>
+                      <span className="type-metadata whitespace-nowrap">
+                        {formatDateTime(event.createdAt)}
                       </span>
                     </span>
-                  </button>
-                  {isExpanded && (
-                    <div className="flex flex-col gap-1 px-2 pb-2">
-                      <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
-                        {JSON.stringify(event.metadata, null, 2)}
-                      </pre>
-                      {event.ipAddress && (
-                        <p className="text-xs text-muted-foreground">
-                          {t("admin.attemptDetail.timeline.ipAddress", {
-                            address: event.ipAddress,
-                          })}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                    <span className="type-metadata mt-0.5 block truncate">
+                      {t("admin.attemptDetail.timeline.actorPrefix")}{" "}
+                      {event.actorId}
+                    </span>
+                  </span>
+                </button>
+                {isExpanded && (
+                  <div className="flex flex-col gap-1 px-2 pb-2">
+                    <pre className="type-code rounded bg-muted p-3">
+                      {JSON.stringify(event.metadata, null, 2)}
+                    </pre>
+                    {event.ipAddress && (
+                      <p className="type-metadata">
+                        {t("admin.attemptDetail.timeline.ipAddress", {
+                          address: event.ipAddress,
+                        })}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PageSection>
   );
 }
 
@@ -579,37 +571,26 @@ export function AttemptDetailPage() {
             </div>
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("admin.attemptDetail.live.statusTitle")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <StatusBadge status={liveAttempt.status} />
-                {liveMisconduct && (
-                  <StatusBadge
-                    status={`misconduct_${liveMisconduct.severity}`}
-                  />
-                )}
-                {liveMisconduct && (
-                  <span className="text-sm text-muted-foreground">
-                    {liveMisconduct.notes}
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                className="w-fit"
-                onClick={() => setFlagDialogOpen(true)}
-              >
-                {t("admin.attemptDetail.actions.flagMisconduct")}
-              </Button>
+        <PageSection title={t("admin.attemptDetail.live.statusTitle")}>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <StatusBadge status={liveAttempt.status} />
+              {liveMisconduct && (
+                <StatusBadge status={`misconduct_${liveMisconduct.severity}`} />
+              )}
+              {liveMisconduct && (
+                <span className="type-secondary">{liveMisconduct.notes}</span>
+              )}
             </div>
-          </CardContent>
-        </Card>
+            <Button
+              variant="outline"
+              className="w-fit"
+              onClick={() => setFlagDialogOpen(true)}
+            >
+              {t("admin.attemptDetail.actions.flagMisconduct")}
+            </Button>
+          </div>
+        </PageSection>
 
         <TimelineSection
           events={timeline}
@@ -727,13 +708,13 @@ export function AttemptDetailPage() {
       <PageSection title={t("admin.attemptDetail.result.summaryTitle")}>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <div>
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.attemptDetail.result.totalScore")}
             </p>
             <p className="type-metric">{result.totalScore}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.attemptDetail.result.earnedScore")}
             </p>
             <p data-testid="earned-score" className="type-metric">
@@ -745,13 +726,13 @@ export function AttemptDetailPage() {
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.attemptDetail.result.passingLine")}
             </p>
             <p className="type-metric">{result.passingScore}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">
+            <p className="type-secondary">
               {t("admin.attemptDetail.result.status")}
             </p>
             <StatusBadge
@@ -762,93 +743,86 @@ export function AttemptDetailPage() {
         </div>
       </PageSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("admin.attemptDetail.result.detailTitle")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTableShell contentClassName="p-0">
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "number" },
-                  { role: "long-text", key: "question" },
-                  { role: "type" },
-                  { role: "secondary-text", key: "candidate-answer" },
-                  { role: "secondary-text", key: "standard-answer" },
-                  { role: "score", key: "earned-score" },
-                  { role: "score", key: "max-score" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="number">
-                    {t("admin.attemptDetail.result.columns.number")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.attemptDetail.result.columns.content")}
-                  </DataTableHead>
-                  <DataTableHead role="type">
-                    {t("admin.attemptDetail.result.columns.type")}
-                  </DataTableHead>
-                  <DataTableHead role="secondary-text">
-                    {t("admin.attemptDetail.result.columns.candidateAnswer")}
-                  </DataTableHead>
-                  <DataTableHead role="secondary-text">
-                    {t("admin.attemptDetail.result.columns.standardAnswer")}
-                  </DataTableHead>
-                  <DataTableHead role="score">
-                    {t("admin.attemptDetail.result.columns.score")}
-                  </DataTableHead>
-                  <DataTableHead role="score">
-                    {t("admin.attemptDetail.result.columns.maxScore")}
-                  </DataTableHead>
+      <PageSection title={t("admin.attemptDetail.result.detailTitle")}>
+        <DataTableShell contentClassName="p-0">
+          <Table>
+            <DataTableColumns
+              columns={[
+                { role: "number" },
+                { role: "long-text", key: "question" },
+                { role: "type" },
+                { role: "secondary-text", key: "candidate-answer" },
+                { role: "secondary-text", key: "standard-answer" },
+                { role: "score", key: "earned-score" },
+                { role: "score", key: "max-score" },
+              ]}
+            />
+            <TableHeader>
+              <TableRow>
+                <DataTableHead role="number">
+                  {t("admin.attemptDetail.result.columns.number")}
+                </DataTableHead>
+                <DataTableHead role="long-text">
+                  {t("admin.attemptDetail.result.columns.content")}
+                </DataTableHead>
+                <DataTableHead role="type">
+                  {t("admin.attemptDetail.result.columns.type")}
+                </DataTableHead>
+                <DataTableHead role="secondary-text">
+                  {t("admin.attemptDetail.result.columns.candidateAnswer")}
+                </DataTableHead>
+                <DataTableHead role="secondary-text">
+                  {t("admin.attemptDetail.result.columns.standardAnswer")}
+                </DataTableHead>
+                <DataTableHead role="score">
+                  {t("admin.attemptDetail.result.columns.score")}
+                </DataTableHead>
+                <DataTableHead role="score">
+                  {t("admin.attemptDetail.result.columns.maxScore")}
+                </DataTableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedQuestions.map((q) => (
+                <TableRow key={q.questionId}>
+                  <DataTableCell role="number">{q.order + 1}</DataTableCell>
+                  <DataTableCell
+                    role="long-text"
+                    className="truncate"
+                    title={q.content}
+                  >
+                    {q.content}
+                  </DataTableCell>
+                  <DataTableCell role="type">
+                    <Badge variant="outline">
+                      {(getTypeLabelKey(q.type)
+                        ? t(getTypeLabelKey(q.type) as never)
+                        : undefined) ?? q.type}
+                    </Badge>
+                  </DataTableCell>
+                  <DataTableCell role="secondary-text">
+                    <Badge variant={q.correct ? "success" : "secondary"}>
+                      {!q.correct && (
+                        <AppIcon
+                          icon={X}
+                          size="inline"
+                          className="text-muted-foreground"
+                        />
+                      )}
+                      {formatAnswer(q.candidateAnswer, q.answerMode)}
+                    </Badge>
+                  </DataTableCell>
+                  <DataTableCell role="secondary-text">
+                    {formatAnswer(q.standardAnswer)}
+                  </DataTableCell>
+                  <DataTableCell role="score">{q.score}</DataTableCell>
+                  <DataTableCell role="score">{q.maxScore}</DataTableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedQuestions.map((q) => (
-                  <TableRow key={q.questionId}>
-                    <DataTableCell role="number">{q.order + 1}</DataTableCell>
-                    <DataTableCell
-                      role="long-text"
-                      className="truncate"
-                      title={q.content}
-                    >
-                      {q.content}
-                    </DataTableCell>
-                    <DataTableCell role="type">
-                      <Badge variant="outline">
-                        {(getTypeLabelKey(q.type)
-                          ? t(getTypeLabelKey(q.type) as never)
-                          : undefined) ?? q.type}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="secondary-text">
-                      <Badge variant={q.correct ? "success" : "secondary"}>
-                        {!q.correct && (
-                          <AppIcon
-                            icon={X}
-                            size="inline"
-                            className="text-muted-foreground"
-                          />
-                        )}
-                        {formatAnswer(q.candidateAnswer, q.answerMode)}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="secondary-text">
-                      {formatAnswer(q.standardAnswer)}
-                    </DataTableCell>
-                    <DataTableCell role="score">{q.score}</DataTableCell>
-                    <DataTableCell role="score">{q.maxScore}</DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </DataTableShell>
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        </DataTableShell>
+      </PageSection>
 
       <TimelineSection
         events={timeline}

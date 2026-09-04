@@ -202,7 +202,7 @@ export function ExamPage() {
                         </DataTableCell>
                         <DataTableCell
                           role="date-range"
-                          className="text-sm text-muted-foreground"
+                          className="type-secondary"
                         >
                           {formatDateRange(exam.openAt, exam.closeAt)}
                         </DataTableCell>

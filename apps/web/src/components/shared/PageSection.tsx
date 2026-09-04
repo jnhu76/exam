@@ -50,7 +50,7 @@ export function PageSection({
             {description && (
               <p
                 id={descriptionId}
-                className={cn("text-sm text-muted-foreground", title && "mt-1")}
+                className={cn("type-secondary", title && "mt-1")}
               >
                 {description}
               </p>

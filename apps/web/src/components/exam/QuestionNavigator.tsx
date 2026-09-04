@@ -94,7 +94,7 @@ export function QuestionNavigator({
           );
         })}
       </div>
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-3 type-metadata">
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-3 rounded-sm border border-border bg-background" />
           {t("candidateRuntime.navigator.unanswered")}

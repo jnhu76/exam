@@ -33,7 +33,7 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { PageSection } from "@/components/shared/PageSection";
 import { Mail, Plus } from "lucide-react";
 import type { AssignableRole, StaffInvitationDTO } from "@exam/contracts";
 
@@ -172,102 +172,95 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <p className="font-medium">{t("admin.users.invitations.title")}</p>
-          <p className="type-secondary">
-            {t("admin.users.invitations.description")}
-          </p>
-        </div>
+    <PageSection
+      title={t("admin.users.invitations.title")}
+      description={t("admin.users.invitations.description")}
+      actions={
         <Button onClick={openInvite}>
           <AppIcon icon={Plus} size="inline" />
           {t("admin.users.invitations.inviteBtn")}
         </Button>
-      </CardHeader>
-      <CardContent>
-        {invitations.length === 0 && !isLoading ? (
-          <EmptyState
-            icon={<AppIcon icon={Mail} size="state" />}
-            title={t("admin.users.invitations.empty")}
-            description={t("admin.users.invitations.description")}
-          />
-        ) : (
-          <DataTableShell minTableWidth="compact" actionsDensity="normal">
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "primary-text" },
-                  { role: "type" },
-                  { role: "status" },
-                  { role: "type" },
-                  { role: "actions" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="primary-text">
-                    {t("admin.users.invitations.columns.email")}
-                  </DataTableHead>
-                  <DataTableHead role="type">
-                    {t("admin.users.invitations.columns.role")}
-                  </DataTableHead>
-                  <DataTableHead role="status">
-                    {t("admin.users.invitations.columns.status")}
-                  </DataTableHead>
-                  <DataTableHead role="type">
-                    {t("admin.users.invitations.columns.expiresAt")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.users.invitations.columns.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invitations.map((invitation) => (
-                  <TableRow key={invitation.id}>
-                    <DataTableCell role="primary-text">
-                      {invitation.email}
-                    </DataTableCell>
-                    <DataTableCell role="type">
-                      <Badge variant="outline">
-                        {roleLabel(invitation.role)}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="status">
-                      <Badge variant={statusBadgeVariant(invitation.status)}>
-                        {t(
-                          `admin.users.invitations.status.${invitation.status}`,
+      }
+    >
+      {invitations.length === 0 && !isLoading ? (
+        <EmptyState
+          icon={<AppIcon icon={Mail} size="state" />}
+          title={t("admin.users.invitations.empty")}
+          description={t("admin.users.invitations.description")}
+        />
+      ) : (
+        <DataTableShell minTableWidth="compact" actionsDensity="normal">
+          <Table>
+            <DataTableColumns
+              columns={[
+                { role: "primary-text" },
+                { role: "type" },
+                { role: "status" },
+                { role: "type" },
+                { role: "actions" },
+              ]}
+            />
+            <TableHeader>
+              <TableRow>
+                <DataTableHead role="primary-text">
+                  {t("admin.users.invitations.columns.email")}
+                </DataTableHead>
+                <DataTableHead role="type">
+                  {t("admin.users.invitations.columns.role")}
+                </DataTableHead>
+                <DataTableHead role="status">
+                  {t("admin.users.invitations.columns.status")}
+                </DataTableHead>
+                <DataTableHead role="type">
+                  {t("admin.users.invitations.columns.expiresAt")}
+                </DataTableHead>
+                <DataTableHead role="actions">
+                  {t("admin.users.invitations.columns.actions")}
+                </DataTableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invitations.map((invitation) => (
+                <TableRow key={invitation.id}>
+                  <DataTableCell role="primary-text">
+                    {invitation.email}
+                  </DataTableCell>
+                  <DataTableCell role="type">
+                    <Badge variant="outline">
+                      {roleLabel(invitation.role)}
+                    </Badge>
+                  </DataTableCell>
+                  <DataTableCell role="status">
+                    <Badge variant={statusBadgeVariant(invitation.status)}>
+                      {t(`admin.users.invitations.status.${invitation.status}`)}
+                    </Badge>
+                  </DataTableCell>
+                  <DataTableCell role="type">
+                    {new Date(invitation.expiresAt).toLocaleString()}
+                  </DataTableCell>
+                  <DataTableCell role="actions">
+                    {invitation.status === "pending" && (
+                      <ConfirmDialog
+                        destructive
+                        trigger={
+                          <Button size="sm" variant="outline">
+                            {t("admin.users.invitations.revoke")}
+                          </Button>
+                        }
+                        title={t("admin.users.invitations.revokeTitle")}
+                        description={t(
+                          "admin.users.invitations.revokeDescription",
                         )}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="type">
-                      {new Date(invitation.expiresAt).toLocaleString()}
-                    </DataTableCell>
-                    <DataTableCell role="actions">
-                      {invitation.status === "pending" && (
-                        <ConfirmDialog
-                          destructive
-                          trigger={
-                            <Button size="sm" variant="outline">
-                              {t("admin.users.invitations.revoke")}
-                            </Button>
-                          }
-                          title={t("admin.users.invitations.revokeTitle")}
-                          description={t(
-                            "admin.users.invitations.revokeDescription",
-                          )}
-                          onConfirm={() => void revoke(invitation)}
-                        />
-                      )}
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </DataTableShell>
-        )}
-      </CardContent>
+                        onConfirm={() => void revoke(invitation)}
+                      />
+                    )}
+                  </DataTableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DataTableShell>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -354,6 +347,6 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
           )}
         </DialogContent>
       </Dialog>
-    </Card>
+    </PageSection>
   );
 }
