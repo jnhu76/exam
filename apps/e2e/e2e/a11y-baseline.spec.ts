@@ -10,6 +10,162 @@ import {
 import { loginAsAdmin } from "../lib/login";
 
 /**
+ * Shadow-layer inspection for the #412 keyboard focus-ring evidence below:
+ * splits the computed box-shadow into layers (top-level commas) and extracts
+ * each layer's spread (4th length) plus the max color alpha among the
+ * ring-sized layers. The focus ring renders as a layer with a >=3px spread
+ * AND a non-transparent color, so asserting on both proves the FINAL
+ * rendered cascade — not merely that --tw-ring-shadow is registered (the
+ * original bug had the variable populated while a recipe-owned literal
+ * box-shadow erased the rendered ring), and not merely geometric (a
+ * ring-*transparent regression keeps the 3px spread at zero alpha).
+ */
+type ShadowEvidence = {
+  focusVisible: boolean;
+  shadow: string;
+  ringSizedLayers: number;
+  /** Max alpha among ring-sized layers (null when no ring-sized layer). */
+  ringSizedAlphaMax: number | null;
+};
+
+async function readShadow(
+  page: Page,
+  selector: string,
+): Promise<ShadowEvidence> {
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!(el instanceof HTMLElement)) throw new Error(`no element: ${sel}`);
+    const cs = getComputedStyle(el);
+    const shadow = cs.boxShadow;
+    const layers: string[] = [];
+    let depth = 0;
+    let cur = "";
+    for (const ch of shadow) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "," && depth === 0) {
+        layers.push(cur.trim());
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur.trim()) layers.push(cur.trim());
+    const RING_SPREAD_PX = 3;
+    const layerInfos = layers.map((layer) => {
+      const lengths = layer.match(/-?[\d.]+px/g) ?? [];
+      const spread = lengths.length >= 4 ? parseFloat(lengths[3] ?? "0") : 0;
+      // Chromium serializes layers color-first: "<color> <x> <y> <blur>
+      // <spread>". The color prefix ends at the first length token; its
+      // alpha is the trailing decimal inside the parens (rgba "..., a)" or
+      // oklab "... / a)"). A color function without a trailing alpha token
+      // serializes fully opaque per CSS serialization rules, so it parses
+      // as alpha 1.
+      const colorPart = layer.split(/(?=-?\d*\.?\d+px)/)[0] ?? "";
+      const alphaMatch = colorPart.match(/[\/,]\s*([\d.]+)\s*\)\s*$/);
+      const alpha = alphaMatch
+        ? parseFloat(alphaMatch[1] ?? "0")
+        : /(^[\w-]+\(.*\)\s*$)/.test(colorPart)
+          ? 1
+          : null;
+      return { spread, alpha };
+    });
+    const ringSized = layerInfos.filter(
+      (l) => l.spread >= RING_SPREAD_PX - 0.01,
+    );
+    const alphas = ringSized.map((l) => l.alpha ?? 0);
+    return {
+      focusVisible: el.matches(":focus-visible"),
+      shadow,
+      ringSizedLayers: ringSized.length,
+      ringSizedAlphaMax: alphas.length > 0 ? Math.max(...alphas) : null,
+    };
+  }, selector);
+}
+
+/**
+ * Proves the focus ring renders on the target control: the target must be
+ * actually :focus-visible, and its settled computed box-shadow must differ
+ * from the unfocused baseline by gaining a real ring-sized (>=3px spread)
+ * shadow layer.
+ *
+ * reach="tab" (default) walks to the control with keyboard Tab — required
+ * for buttons, where :focus-visible only follows keyboard focus. Text
+ * inputs match :focus-visible under any focus, so reach="focus" is enough
+ * for them and avoids a long walk across the admin sidebar.
+ */
+async function assertKeyboardFocusRing(
+  page: Page,
+  selector: string,
+  { reach = "tab" }: { reach?: "tab" | "focus" } = {},
+): Promise<void> {
+  await page.waitForSelector(selector, { state: "visible" });
+  if (reach === "focus") {
+    await page.locator(selector).first().focus();
+  } else {
+    for (let i = 0; i < 30; i++) {
+      const onTarget = await page.evaluate(
+        (sel) => document.activeElement?.matches(sel) ?? false,
+        selector,
+      );
+      if (onTarget) break;
+      await page.keyboard.press("Tab");
+    }
+    const onTarget = await page.evaluate(
+      (sel) => document.activeElement?.matches(sel) ?? false,
+      selector,
+    );
+    expect(onTarget, `Tab walk failed to reach ${selector}`).toBe(true);
+  }
+
+  // Settle wait: buttons do not transition box-shadow today, but a bounded
+  // wait (> the 150ms Tailwind transition default) keeps this robust if a
+  // shadow transition is ever added to the control recipes.
+  await page.waitForTimeout(250);
+  const focused = await readShadow(page, selector);
+  expect(
+    focused.focusVisible,
+    `${selector} must be :focus-visible after keyboard focus`,
+  ).toBe(true);
+
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  await page.waitForTimeout(250);
+  const baseline = await readShadow(page, selector);
+  expect(
+    baseline.ringSizedLayers,
+    `${selector} unfocused baseline must not contain a ring-sized layer`,
+  ).toBe(0);
+
+  expect(
+    focused.shadow,
+    "focused box-shadow must differ from the unfocused baseline",
+  ).not.toBe(baseline.shadow);
+  expect(
+    focused.ringSizedLayers,
+    `${selector} keyboard-focused box-shadow must render a >=3px focus-ring ` +
+      `layer; got "${focused.shadow}"`,
+  ).toBeGreaterThanOrEqual(1);
+
+  // Visibility: a ring can keep its 3px geometry while rendering invisible
+  // (e.g. a ring-transparent regression zeroes the color alpha), so the
+  // ring-sized layer must also carry non-zero alpha. The exact value stays
+  // unasserted — the design system may tune focus opacity — the invariant is
+  // "visible, not transparent".
+  expect(
+    focused.ringSizedAlphaMax,
+    `${selector} focus-ring layer color alpha must be parseable; ` +
+      `got "${focused.shadow}"`,
+  ).not.toBeNull();
+  expect(
+    focused.ringSizedAlphaMax ?? 0,
+    `${selector} focus-ring-sized layer must be visibly rendered ` +
+      `(alpha > 0.01); got "${focused.shadow}"`,
+  ).toBeGreaterThan(0.01);
+}
+
+/**
  * Product-wide accessibility baseline (Issue #307, UI-STABILIZATION-GOAL-1
  * G3). This is a BASELINE, not WCAG certification: automated axe scans on
  * representative surfaces (login, candidate exam list, take-exam runtime,
@@ -220,5 +376,56 @@ test.describe("a11y keyboard / focus evidence", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(submitBtn).toBeFocused();
+  });
+
+  // Issue #412: control/recipes.css owns resting elevation for the
+  // default/primary button variants through an unlayered literal
+  // box-shadow, which beats Tailwind's layered focus-ring utility in the
+  // cascade. If that literal does not compose the ring variable, keyboard
+  // users get no focus indicator (WCAG 2.4.7) even though --tw-ring-shadow
+  // stays registered. Both variants are exercised through real product
+  // controls: the login submit button (primary) and the exam start button
+  // (default).
+  test.describe("keyboard focus ring evidence (issue #412)", () => {
+    test("primary variant (login submit) renders the focus ring", async ({
+      page,
+    }) => {
+      await page.goto("/login");
+      await expect(page.getByTestId("login-layout")).toBeVisible();
+      await assertKeyboardFocusRing(
+        page,
+        '[data-slot="button"][data-variant="primary"]',
+      );
+    });
+
+    test("default variant (exam start) renders the focus ring", async ({
+      page,
+      request,
+    }) => {
+      const seeded = await seedExam(request, "a11y-ring", {
+        questionAnswer: true,
+      });
+      await candidateLogin(page, seeded.candidate);
+      await clickExamPrimaryAction(page, seeded.examId, "start");
+      await page.waitForURL(/\/exam\/[^/]+\/start$/);
+      await assertKeyboardFocusRing(page, '[data-testid="exam-start-btn"]');
+    });
+
+    // Adjacent-audit fix: the quiet-toolbar search input carries the same
+    // recipe-owned literal box-shadow erasure; prove it composes the ring.
+    test("toolbar search input renders the focus ring", async ({ page }) => {
+      await loginAsAdmin(page);
+      await page.goto("/admin/questions");
+      await page
+        .locator('[data-slot="toolbar-search"] [data-slot="input"]')
+        .waitFor({
+          state: "visible",
+        });
+      await assertKeyboardFocusRing(
+        page,
+        '[data-slot="toolbar-search"] [data-slot="input"]',
+        { reach: "focus" },
+      );
+    });
   });
 });
