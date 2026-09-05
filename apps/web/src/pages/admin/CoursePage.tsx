@@ -9,7 +9,6 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
@@ -277,35 +276,32 @@ export function CoursePage() {
                       )}
                     </DataTableCell>
                     <DataTableCell role="actions">
-                      <RowActions>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEdit(course)}
-                          aria-label={t("admin.courses.editLabel")}
-                        >
-                          <AppIcon icon={Pencil} size="inline" />
-                        </Button>
-                        <ConfirmDialog
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("admin.courses.deleteLabel")}
-                              data-row-action-tone="destructive"
-                            >
-                              <AppIcon icon={Trash2} size="inline" />
-                            </Button>
-                          }
-                          title={t("admin.common.confirm")}
-                          description={t("admin.courses.enableDisable", {
-                            action: t("admin.common.delete"),
-                            name: course.name,
-                          })}
-                          destructive
-                          onConfirm={() => void handleDelete(course.id)}
-                        />
-                      </RowActions>
+                      <RowActions
+                        row={course}
+                        actions={[
+                          {
+                            id: "edit",
+                            label: t("admin.courses.editLabel"),
+                            icon: Pencil,
+                            onSelect: () => openEdit(course),
+                          },
+                          {
+                            id: "delete",
+                            label: t("admin.courses.deleteLabel"),
+                            icon: Trash2,
+                            tone: "destructive",
+                            confirm: {
+                              title: t("admin.common.confirm"),
+                              description: t("admin.courses.enableDisable", {
+                                action: t("admin.common.delete"),
+                                name: course.name,
+                              }),
+                              destructive: true,
+                            },
+                            onSelect: () => void handleDelete(course.id),
+                          },
+                        ]}
+                      />
                     </DataTableCell>
                   </TableRow>
                 ))}

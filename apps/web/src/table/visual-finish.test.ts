@@ -74,19 +74,18 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("provides three actions-column density tiers", () => {
-    // Actions is a LOCKED column (fixed width = min-width) so it stays compact
-    // and never compresses below its density tier. Pages pick the tier that
-    // fits their worst-case row-action button set.
+  it("binds the actions column to the icon-only contract width", () => {
+    // #445 P3 §4.3: the inline row-action vocabulary is icon-only and
+    // count-bounded, so the actions column is a LOCKED column at the derived
+    // contract width (6rem fine / 7.5rem coarse) — not a per-page density
+    // tier. The density selectors are gone entirely.
     expect(tableCss).toMatch(
       /\[data-column-role="actions"\]\s+\{[^}]*width:\s*6rem/,
     );
     expect(tableCss).toMatch(
-      /\[data-actions-density="normal"\]\s+\[data-column-role="actions"\]\s+\{[^}]*width:\s*8rem/,
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\[data-column-role="actions"\]\s+\{[^}]*width:\s*7\.5rem/,
     );
-    expect(tableCss).toMatch(
-      /\[data-actions-density="wide"\]\s+\[data-column-role="actions"\]\s+\{[^}]*width:\s*10rem/,
-    );
+    expect(tableCss).not.toContain("data-actions-density");
   });
 
   it("splits columns into flexible (auto) and locked (fixed-width) tiers", () => {

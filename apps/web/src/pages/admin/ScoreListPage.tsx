@@ -32,7 +32,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { FileText } from "lucide-react";
+import { Eye, FileText } from "lucide-react";
 
 /** Aggregate score statistics for an exam. */
 interface ScoreListStats {
@@ -337,17 +337,18 @@ export function ScoreListPage() {
                     {item.submittedAt ? formatDateTime(item.submittedAt) : "-"}
                   </DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          void navigate(`/admin/attempts/${item.attemptId}`)
-                        }
-                      >
-                        {t("admin.scoreList.actions.viewDetail")}
-                      </Button>
-                    </RowActions>
+                    <RowActions
+                      row={item}
+                      actions={[
+                        {
+                          id: "view-detail",
+                          label: t("admin.scoreList.actions.viewDetail"),
+                          icon: Eye,
+                          onSelect: () =>
+                            void navigate(`/admin/attempts/${item.attemptId}`),
+                        },
+                      ]}
+                    />
                   </DataTableCell>
                 </TableRow>
               ))}

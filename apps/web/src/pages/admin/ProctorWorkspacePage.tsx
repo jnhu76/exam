@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
-import { Monitor } from "lucide-react";
+import { Monitor, MonitorPlay } from "lucide-react";
 
 type StatusFilter = "all" | ProctorExamStatus;
 
@@ -174,16 +174,17 @@ export function ProctorWorkspacePage() {
                     {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
                   </DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => enterMonitoring(exam)}
-                      >
-                        {t("admin.proctorWorkspace.actions.enter")}
-                      </Button>
-                    </RowActions>
+                    <RowActions
+                      row={exam}
+                      actions={[
+                        {
+                          id: "enter-monitoring",
+                          label: t("admin.proctorWorkspace.actions.enter"),
+                          icon: MonitorPlay,
+                          onSelect: () => enterMonitoring(exam),
+                        },
+                      ]}
+                    />
                   </DataTableCell>
                 </TableRow>
               ))}

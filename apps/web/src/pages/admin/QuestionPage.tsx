@@ -320,34 +320,32 @@ export function QuestionPage() {
       meta: { role: "actions" },
       header: t("admin.questions.columns.actions" as never),
       cell: ({ row }) => (
-        <RowActions>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() =>
-              void navigate(`/admin/questions/${row.original.id}/edit`)
-            }
-            aria-label={t("admin.questions.editLabel" as never)}
-          >
-            <AppIcon icon={Pencil} size="inline" />
-          </Button>
-          <ConfirmDialog
-            trigger={
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("admin.questions.deleteLabel" as never)}
-                data-row-action-tone="destructive"
-              >
-                <AppIcon icon={Trash2} size="inline" />
-              </Button>
-            }
-            title={t("admin.questions.confirmDelete" as never)}
-            description={t("admin.questions.confirmDeleteDescription" as never)}
-            destructive
-            onConfirm={() => void handleDelete(row.original.id)}
-          />
-        </RowActions>
+        <RowActions
+          row={row.original}
+          actions={[
+            {
+              id: "edit",
+              label: t("admin.questions.editLabel" as never),
+              icon: Pencil,
+              onSelect: () =>
+                void navigate(`/admin/questions/${row.original.id}/edit`),
+            },
+            {
+              id: "delete",
+              label: t("admin.questions.deleteLabel" as never),
+              icon: Trash2,
+              tone: "destructive",
+              confirm: {
+                title: t("admin.questions.confirmDelete" as never),
+                description: t(
+                  "admin.questions.confirmDeleteDescription" as never,
+                ),
+                destructive: true,
+              },
+              onSelect: () => void handleDelete(row.original.id),
+            },
+          ]}
+        />
       ),
     },
   ];
@@ -622,7 +620,6 @@ export function QuestionPage() {
                           variant="ghost"
                           size="icon-sm"
                           aria-label={t("admin.questions.deleteLabel" as never)}
-                          data-row-action-tone="destructive"
                         >
                           <AppIcon icon={MoreVertical} size="inline" />
                         </Button>

@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FieldError } from "@/components/shared/FieldError";
 import { Badge } from "@/components/ui/badge";
@@ -33,8 +32,9 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { RowActions } from "@/components/shared/RowActions";
 import { PageSection } from "@/components/shared/PageSection";
-import { Mail, Plus } from "lucide-react";
+import { Mail, Plus, Trash2 } from "lucide-react";
 import type { AssignableRole, StaffInvitationDTO } from "@exam/contracts";
 
 /** Assignable-role catalog item as returned by GET /roles/assignable. */
@@ -189,7 +189,7 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
           description={t("admin.users.invitations.description")}
         />
       ) : (
-        <DataTableShell minTableWidth="compact" actionsDensity="normal">
+        <DataTableShell minTableWidth="compact">
           <Table>
             <DataTableColumns
               columns={[
@@ -240,18 +240,24 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
                   </DataTableCell>
                   <DataTableCell role="actions">
                     {invitation.status === "pending" && (
-                      <ConfirmDialog
-                        destructive
-                        trigger={
-                          <Button size="sm" variant="outline">
-                            {t("admin.users.invitations.revoke")}
-                          </Button>
-                        }
-                        title={t("admin.users.invitations.revokeTitle")}
-                        description={t(
-                          "admin.users.invitations.revokeDescription",
-                        )}
-                        onConfirm={() => void revoke(invitation)}
+                      <RowActions
+                        row={invitation}
+                        actions={[
+                          {
+                            id: "revoke",
+                            label: t("admin.users.invitations.revoke"),
+                            icon: Trash2,
+                            tone: "destructive",
+                            confirm: {
+                              title: t("admin.users.invitations.revokeTitle"),
+                              description: t(
+                                "admin.users.invitations.revokeDescription",
+                              ),
+                              destructive: true,
+                            },
+                            onSelect: () => void revoke(invitation),
+                          },
+                        ]}
                       />
                     )}
                   </DataTableCell>

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
@@ -13,11 +14,20 @@ import {
 import { Button } from "@/components/ui/button";
 
 /**
- * Generic confirmation dialog built on AlertDialog, with a trigger element,
- * title, description, and customizable confirm/cancel labels and styling.
+ * Generic confirmation dialog built on AlertDialog, with an optional trigger
+ * element, title, description, and customizable confirm/cancel labels and
+ * styling.
+ *
+ * Two wiring modes:
+ * - uncontrolled (default): pass `trigger`; the dialog opens from it.
+ * - controlled: omit `trigger` and drive `open`/`onOpenChange` (used by
+ *   RowActions for actions surfaced from an overflow menu, where the trigger
+ *   is a menu item that is gone once the menu closes).
  */
 export function ConfirmDialog({
   trigger,
+  open,
+  onOpenChange,
   title,
   description,
   confirmLabel,
@@ -27,7 +37,9 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: {
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   title: string;
   description: string;
   confirmLabel?: string;
@@ -38,11 +50,22 @@ export function ConfirmDialog({
   onCancel?: () => void;
 }) {
   const { t } = useTranslation();
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = open !== undefined;
+  const effectiveOpen = isControlled ? open : internalOpen;
   const resolvedConfirmLabel = confirmLabel ?? t("common.confirm");
   const resolvedCancelLabel = cancelLabel ?? t("common.cancel");
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+    <AlertDialog
+      open={effectiveOpen}
+      onOpenChange={(next) => {
+        if (!isControlled) setInternalOpen(next);
+        onOpenChange?.(next);
+      }}
+    >
+      {trigger !== undefined && (
+        <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+      )}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
