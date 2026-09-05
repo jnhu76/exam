@@ -2,105 +2,293 @@
 
 ## Status
 
-Deferred
+Queue classification / adoption policy: **ACCEPTED — amended 2026-09-05**.
 
-## Context
+General-purpose job-queue platform: **DEFERRED**.
 
-Every Phase 1 and Phase 2 operation today completes within the synchronous request lifecycle:
+Workload-specific queue adoption remains governed by the corresponding
+Accepted ADR or other current normative design authority.
 
-- **Answer save / submit** — idempotent HTTP writes to PostgreSQL; fast and bounded.
-- **Auto-grading (objective)** — runs inline in the submit request; objective grading is fast and synchronous.
-- **CSV import** (candidate / question) — synchronous within the request; summaries are returned directly.
-- **CSV / score export** — synchronous generation; fine for current dataset sizes (P2E-J3 hardens this and explicitly forbids introducing a job queue).
-- **Deadline auto-submit scanner** (P2A-J2) — a DB-backed, single-owner scanner, not a generic worker pool.
-- **Manual grading** (P2D-J2..J4) — admin-driven, request-scoped writes; no background batch.
+> **Current authority note:** ADR-003 does not say that every structure named
+> "queue" is the same architectural mechanism. It defines how queue-like
+> workloads are classified, what authority they may own, and what evidence is
+> required before sharing infrastructure across them.
+>
+> Email has already taken the workload-specific path: ADR-011 adopts a
+> PostgreSQL `email_outbox` plus asynchronous delivery. That does **not** adopt a
+> generic job platform.
+>
+> Exam admission is a different class. `requireQueue` decides who may enter an
+> exam and when, so a production admission runtime participates in exam
+> correctness. The current `timed_sync` semantic contract freezes the boundary
+> between timing and admission; issue #292 tracks the still-open durable
+> admission work. The issue is tracking/evidence, not architecture authority by
+> itself.
 
-There is no async workload, no background worker, and no message broker in the runtime today.
+## Historical Context — Phase 2 acceptance-time baseline
 
-Discovery (`docs/archive/phase2-archive/phase2/discovery/06-phase2-gap-analysis.md` §Redis / MQ / Job Queue Assessment) explicitly concluded: **Job Queue is not needed for Phase 2** — all operations complete within the request lifecycle; if PDF export or email is added, reconsider. The Phase 2 plan (`docs/archive/phase2-archive/phase2/phase2.plan.md` §8) reinforces this: a job queue is only revisited when export/import/email/auto-submit becomes too slow for the request lifecycle.
+> This section is historical evidence. Later Accepted ADRs and current
+> architecture/contracts govern present runtime facts.
 
-This ADR records the pain points a job queue would solve, the conditions that would trigger adoption, and the minimal viable path.
+At the original Phase 2 decision point:
+
+- answer save / submit were synchronous PostgreSQL operations;
+- objective auto-grading ran inline on submit;
+- CSV import/export were synchronous;
+- deadline/heartbeat scanning used specialized in-process reconciliation loops;
+- manual grading was request-scoped;
+- there was no generic worker platform or message broker.
+
+The original decision therefore deferred a generic Job Queue until a real
+workload demonstrated the need. That judgment still holds for a platform-wide
+queue, but later work proved that "one queue decision" is too coarse: Email,
+long-running jobs, exam admission, and UI worklists have different authority
+and failure semantics.
+
+## Queue taxonomy
+
+Classify the workload **before** selecting technology or sharing a worker.
+
+| Class | Example | Authority | Failure tolerance | Default direction |
+| --- | --- | --- | --- | --- |
+| **A. Delivery / side-effect queue** | Email delivery (ADR-011) | Delivery attempts for a business fact committed elsewhere | Lag/retry/at-least-once may be acceptable; business truth survives delivery failure | Workload-specific transactional outbox in PostgreSQL |
+| **B. Async work queue** | Future large PDF/export/import/recompute | Slow-work execution and its job lifecycle; result/progress persisted separately | Bounded delay, retry and backpressure are expected | PostgreSQL-backed job records first; worker topology only as needed |
+| **C. Admission / control queue** | Exam `requireQueue` | Who is eligible/admitted to enter an exam and in what order/batch | **Correctness-critical**; restart loss or bypass changes exam behavior | Domain-specific durable admission state + explicit state machine + atomic admit/start boundary |
+| **D. Read-model / worklist called “queue”** | Manual grading queue, recovery queue | A projection/list over existing authoritative records | No execution transport exists | Keep as query/projection; do not add queue infrastructure because of the name |
+
+Deadline/heartbeat scanners are also not automatically Job Queues. They are
+specialized reconciliation loops over PostgreSQL authority. If scale later
+requires distributed ownership, backlog scheduling, or delayed retry, perform a
+scanner-specific architecture review first.
+
+## Criticality rule
+
+"Non-critical" here means **not authoritative for the originating business
+operation**, not "unimportant to the product".
+
+Email is a good example: SMTP may be unavailable while the exam/result/account
+operation that created the delivery intent remains correct. ADR-011 can
+therefore tolerate asynchronous lag and at-least-once delivery.
+
+Exam admission cannot use the same degradation rule. For an exam whose frozen
+policy has `requireQueue=true`, loss of admission authority must never silently
+fall back to "start normally". That would change who is permitted to enter and
+would bypass published policy.
 
 ## Decision
 
-**Do not introduce a Job Queue until a real long-running async workload appears.**
+The following policy is Accepted:
 
-Phase 2 keeps all operations synchronous and request-scoped. No background worker, broker, or queue table is added. A job queue may be re-evaluated **only** when a documented Trigger for Adoption is met, through a follow-up decision recorded against this ADR. The deadline scanner (P2A-J2) is explicitly **not** a job queue — it is a single-owner DB-backed loop, intentionally simpler.
+1. **Classify before sharing infrastructure.** Similar names do not create a
+   common authority boundary.
+2. **One workload may adopt a focused queue without activating a generic
+   platform.** ADR-011 Email is the current example.
+3. **General-purpose queue adoption remains Deferred.** One outbox or one
+   scanner is not evidence for BullMQ, RabbitMQ, Kafka, or a generic `jobs`
+   abstraction.
+4. **PostgreSQL is the default durable authority** for job/admission facts unless
+   an Accepted decision explicitly moves that authority.
+5. **Redis adoption is per responsibility.** ADR-001 currently adopts Redis for
+   shared rate limiting only. Redis availability does not authorize queue,
+   scanner, Email, or admission truth to move there.
+6. **Exam-control queues require a domain decision.** A worker library cannot
+   substitute for admission lifecycle, idempotency, locking, audit,
+   authorization, and admit→attempt atomicity.
+7. **Timing and admission are orthogonal.** ADR-006 owns server time. The
+   current `timed_sync` contract owns the T0/deadline relationship. Admission
+   delay or queue position must not become a second exam clock.
+8. **Real-time transport is orthogonal.** ADR-002 governs polling/SSE/WebSocket;
+   push may improve waiting UX but never becomes queue/admission authority.
+9. **Stateful test isolation follows ADR-007.** New queue/worker resources must
+   have explicit isolated namespaces/lifecycles; ordinary tests do not
+   implicitly start consumers.
+10. **Authorization follows the accepted scoped model.** Operator actions over
+    exam-control queues reuse the capability/resource-scope architecture
+    (ADR-010/ADR-015 where applicable), not coarse role-name checks.
 
-## Triggers for Adoption
+## Trigger register
 
-A job queue becomes a candidate **only** when at least one of the following is concretely demonstrated:
+A trigger means "perform the focused architecture review". It does **not** mean
+"install a generic queue".
 
-| Trigger | Why a queue | Discovery ref |
-| ------- | ----------- | ------------- |
-| Large CSV / PDF export that cannot finish in a request timeout | Synchronous generation blocks the request and risks proxy/server timeouts; user needs progress and a downloadable artifact. | 06 §Redis / MQ |
-| Large import processing that exceeds request lifecycle | Importing thousands of candidates/questions becomes too slow to hold an HTTP connection. | 06 §Redis / MQ |
-| Email notification | SMTP send is slow, flaky, and must not block the request or fail the operation if delivery is delayed. | 06 §Redis / MQ |
-| Async / slow manual grading batch | Grading workflows that aggregate or recompute across many attempts and cannot stay request-scoped. | 06 P1-6 |
-| Scanner work that outgrows a single in-process loop | Deadline/disrupted scanning needs to scale beyond one owner or needs retry/backoff across a backlog. | 06 P1-10 |
+| Trigger | Current status | Disposition |
+| --- | --- | --- |
+| Large CSV/PDF export cannot finish within the supported request budget | **Not demonstrated** | Class B review; measure rows/latency/memory first |
+| Large import exceeds request lifecycle | **Not demonstrated** | Class B review; preserve import idempotency and partial-failure semantics |
+| Email must not block/fail the originating business operation | **Triggered / resolved** | ADR-011 Class A PostgreSQL `email_outbox`; generic platform remains Deferred |
+| Slow grading recomputation/batch processing | **Not demonstrated** | Class B review; current grading worklist is Class D, not worker infrastructure |
+| Scanner outgrows a single reconciliation loop | **Not demonstrated** | Scanner-specific ownership/backlog review first |
+| Durable operational `requireQueue` capability | **Product need is live; durable runtime still open** | Class C review constrained by current `timed_sync` contract; implementation tracked by #292 |
 
-Each trigger must be evidenced by a measured limit (e.g. export of N rows exceeds the request timeout), not a forecast. "Exports might grow" is not a trigger.
+Performance triggers require measurements. Correctness/control triggers may be
+raised by a product requirement even at small scale: durability is required
+because semantics demand it, not because throughput crossed a benchmark.
 
-## Non-Goals
+## Current exam-admission reality
 
-- A generic background task framework. The queue, if adopted, targets one real workload first.
-- A replacement for the deadline scanner's single-owner design. The scanner is correct as-is for single-instance.
-- A reason to move auto-grading off the submit path. Objective auto-grading is fast and synchronous by design; it stays inline.
-- A Phase 2 dependency. All Phase 2 work stays synchronous.
+The repository currently has a legacy process-local `examQueues` Map and
+candidate queue/start gates. The current `timed_sync` contract records that
+`requireQueue=true` is product-reachable for existing timing modes but that this
+Map is non-durable, single-instance, and not an acceptable final admission
+runtime.
 
-## Minimal Viable Adoption
+Therefore:
 
-If a trigger is met, the smallest responsible adoption is:
+- the Map is **as-built reality**, not durable architecture authority;
+- this is a known implementation/design gap, tracked by #292;
+- #292 does not itself become authority merely because it is an issue;
+- the eventual admission state machine/commands must be explicitly
+  human-approved and recorded in a current normative decision/contract before
+  implementation is treated as conformant.
 
-1. **Pick the lightest durable option that fits.** Order of preference, decided per trigger:
-   1. **PostgreSQL-backed job table + single in-process worker** — no new dependency; reuses the existing DB and transaction model; sufficient for single-instance LAN. This is the default first choice.
-   2. **A dedicated queue library backed by PostgreSQL** (e.g. a pg-listen / `SELECT ... FOR UPDATE SKIP LOCKED` worker) — still no new service, better worker semantics.
-   3. **Redis-backed queue** — only if ADR-001 triggers have also been met (multi-instance, shared coordination). Do not introduce Redis solely for a queue.
-   4. **External broker (RabbitMQ, etc.)** — out of scope for LAN/on-premise unless a future ADR justifies it; default reject.
-2. **One workload at a time.** Ship exactly the triggering workload (e.g. large PDF export). Do not retrofit synchronous operations onto the queue opportunistically.
-3. **PostgreSQL stays source of truth.** The queue carries work items; all business state (attempts, answers, grades, exports, audit) lives in PostgreSQL. A lost queue item must be recoverable or safely retryable from DB state.
-4. **Idempotent workers.** Every job must be safe to retry (see Failure Modes). No "exactly once" assumptions.
-5. **Observability from day one.** Job status, age, failure count, and last error must be visible (extends the diagnostics page P2E-J6 and import/export job logs P2E-J5).
-6. **Config-gated.** The queued path is enabled by an explicit flag; the synchronous path remains available where feasible so the feature degrades.
+## Relationship to other decisions
 
-## Operational Burden
+| Decision / contract | Relationship to ADR-003 |
+| --- | --- |
+| **ADR-001 — Redis** | Redis is optional infrastructure; shared rate limiting is the only adopted Redis business responsibility. Admission/queue/scanner use requires a separate explicit decision. Redis may later coordinate or accelerate, but must not silently become durable exam truth. |
+| **ADR-002 — WebSocket/SSE** | Waiting/progress notification transport is separate from queue correctness. Polling/SSE/WebSocket cannot own work/admission state. |
+| **ADR-006 — Exam Time Authority** | Any exam queue consumes the canonical server `now`; it cannot invent a second clock. For `timed_sync`, admission never changes T0/shared deadline. |
+| **ADR-007 — Stateful Infrastructure Test Isolation** | New queue/worker state must use the accepted test-scope isolation model and explicit worker lifecycle. |
+| **ADR-010 / ADR-015 — Scoped authorization** | Admin/Proctor actions on exam-control queues use current capability/resource-scope authority. Queue ownership is not authorization. |
+| **ADR-011 — Notification / Email** | Accepted focused Class A adoption: PostgreSQL outbox + asynchronous delivery. ADR-011 does not supersede ADR-003 and does not authorize a generic queue. |
+| **Current `timed_sync` semantic contract** | Current normative source for the timing/admission boundary: timing authority and admission authority are separate; admission must not change shared deadline semantics. |
+| **Issue #292** | Tracks the still-open durable `requireQueue` admission implementation/design work. It is evidence/work tracking, not authority by itself. |
 
-- **A worker process to run, monitor, and restart.** Today there is only the API process; a worker adds a second lifecycle to manage.
-- **Failure handling** — retries, backoff, dead-letter/quarantine, and poison-message recovery must be designed, not improvised.
-- **Backpressure / concurrency limits** — a runaway worker can overload PostgreSQL or exhaust memory; needs caps.
-- **Operational visibility** — operators must be able to see queued / running / failed jobs and replay or cancel them.
-- **Test complexity** — async jobs are harder to test deterministically than synchronous handlers; CI must stub or fast-forward the worker.
-- **Deployment changes** — Docker Compose / bare-metal runbooks gain a worker service (or a second entrypoint mode).
+Later ADRs may adopt another focused Class A/B/C mechanism without superseding
+ADR-003. Supersession is required only if the project changes this
+classification policy or intentionally adopts a shared general-purpose job
+platform.
 
-## Failure Modes
+## Minimal viable adoption by class
 
-- **Worker crash mid-job.** The job must be idempotent: re-running it produces the same result (same export rows, same import rows, same grade). Use stable job keys / business identifiers for dedup, not queue-assigned IDs.
-- **Duplicate execution.** Workers may run a job twice after a crash or under overlapping ownership. Every job handler must be safe under double execution (idempotent writes, upserts, or unique constraints).
-- **Poison message / infinite retry.** Bounded retry with a dead-letter/quarantine state. A job that fails N times is parked for human action, never retried forever.
-- **Queue backlog / slow drain.** Must be observable and actionable (increase workers, shed load, alert). The synchronous path, if kept, provides a fallback.
-- **Job results lost.** Results are written to PostgreSQL (e.g. export artifact stored or referenced in DB), never held only in worker memory.
+### Class A — Delivery / side effect
 
-## Security Considerations
+Use a transactional outbox when the business transaction must durably record an
+intent to deliver while the external side effect occurs later.
 
-- Workers run with the same data-boundary rules as the API — every job carries its `organizationId` / `ctx`; no bypassing the repository pattern.
-- Export artifacts may contain candidate PII / answers; access to generated artifacts must be permission-checked and scoped.
-- Job parameters are validated (Zod) before enqueue, same as HTTP request bodies — no trusting internal-only input.
-- No external broker leaves the LAN; the platform stays LAN/on-premise and offline-capable.
+- enqueue inside the relevant PostgreSQL transaction when delivery intent must
+  be atomic with business state;
+- explicit claim/retry/terminal states;
+- bounded backoff and abandoned-work recovery;
+- at-least-once only when duplicate semantics are understood and accepted;
+- delivery state is not the originating domain fact.
 
-## Rollback Plan
+ADR-011 is the concrete implementation.
 
-1. Disable the feature flag that enqueues the async path. The workload reverts to the synchronous implementation (which is kept as the default/fallback where feasible).
-2. Drain or discard in-flight jobs. Because handlers are idempotent, re-running or discarding is safe; PostgreSQL holds all canonical state.
-3. Remove the worker process and the job table/queue from the deployment.
-4. Update this ADR to record why adoption was rolled back.
+### Class B — Async long-running work
 
-Rollback is safe because the design rule (queue = transport only, idempotent handlers, PostgreSQL = truth) guarantees the synchronous path can stand alone.
+When a measured workload cannot remain request-scoped:
 
-## Phase 2 Decision
+1. Start with PostgreSQL-backed job records and the smallest worker topology
+   that fits.
+2. Persist progress/result/reference; worker memory is never the sole result.
+3. Make handlers retry-safe/idempotent where required; do not assume exactly
+   once.
+4. Add backpressure, retry bounds, diagnostics, and operator recovery before
+   increasing worker concurrency.
+5. Keep a synchronous fallback only if it preserves identical semantics; two
+   divergent execution paths are worse than no fallback.
 
-**Do not introduce a Job Queue until a real long-running async workload appears.**
+### Class C — Exam admission / control
 
-- All Phase 2 operations (answer save, submit, auto-grading, import, CSV export, manual grading, deadline scanner) stay synchronous and request-scoped.
-- P2E-J3 (CSV hardening) and the deadline scanner (P2A-J2) explicitly do **not** introduce a job queue.
-- Any future adoption requires (a) a documented, measured trigger from the table above, (b) a minimal PostgreSQL-backed-first rollout, (c) idempotent handlers, and (d) an update to this ADR.
-- Redis-backed queuing is only considered if ADR-001 has also been triggered.
+Do **not** model exam admission as a generic background job by default.
+
+The eventual human-approved design must cover at least:
+
+- durable PostgreSQL admission records tied to the relevant exam and
+  candidate/enrollment identity;
+- an explicit admission lifecycle/state machine (state names belong to that
+  design, not this ADR);
+- stable idempotency/command identity for enqueue/admit/operator actions;
+- deterministic ordering/batch semantics from the frozen exam policy;
+- atomic serialization between consumed admission and attempt creation/start;
+- restart reconstruction from durable rows;
+- capability/resource-scope authorization and required audit evidence;
+- queue position/readiness as a derived projection, not a second authority;
+- no ownership of `timed_sync` T0/deadline; ADR-006 remains clock authority.
+
+Redis may later provide ephemeral coordination/wakeup/acceleration only after a
+separate ADR-001 decision. Redis loss must not erase admission facts or silently
+admit candidates.
+
+## When a generic job platform becomes a candidate
+
+Consider shared queue infrastructure only when specialized mechanisms create
+material duplicated complexity or measured operational limits, for example:
+
+- several independent Class B workloads need common delayed scheduling, retry,
+  cancellation, progress, and worker scaling;
+- job classes need independent worker pools;
+- PostgreSQL polling/claiming is a measured bottleneck;
+- operations need one supported cross-workload job-control plane;
+- duplicated worker lifecycle/retry implementations have become significant
+  maintenance debt.
+
+Even then, **Class C exam-control authority does not automatically migrate into
+the generic platform**. The adoption ADR must enumerate which workloads move,
+which PostgreSQL authority remains, and the failure/reconciliation contract for
+all migrated classes.
+
+## Non-goals
+
+- Building a generic task framework because Email has an outbox.
+- Treating every UI/business worklist named "queue" as queue infrastructure.
+- Replacing deadline/heartbeat scanners merely for architectural uniformity.
+- Moving objective auto-grading off submit without a separate semantic or
+  measured reason.
+- Letting Redis availability decide durable exam truth.
+- Letting a queue define the exam clock.
+- Bypassing a configured correctness-critical admission policy when admission
+  authority is unavailable.
+
+## Operational / failure principles
+
+All asynchronous mechanisms require some subset of supervised lifecycle,
+shutdown bounds, retries, backpressure, diagnostics, deterministic tests, and
+explicit teardown. An in-process loop such as Email does not require a second
+container, but it is still an independent lifecycle.
+
+For Classes A/B:
+
+- crash/retry/duplicate execution semantics must be explicit;
+- poison work must have bounded retry/quarantine where relevant;
+- backlog age/depth must be observable;
+- results must persist outside worker memory.
+
+For Class C admission:
+
+- restart must reconstruct membership/order/admission facts from durable state;
+- concurrent/duplicate admission commands must converge;
+- authority unavailable => queue-gated entry fails closed, not bypassed;
+- later Redis loss must be recoverable from PostgreSQL authority;
+- time-sensitive decisions use ADR-006's canonical server time.
+
+## Rollback principles
+
+Rollback is class-specific.
+
+Classes A/B may return to synchronous execution only when that path preserves
+the same business semantics and durable in-flight work is drained/migrated or
+explicitly dispositioned.
+
+Class C admission must **not** roll back by bypassing `requireQueue` on an exam
+whose frozen policy requires it. Safe rollback means preventing activation,
+restoring a previous durable implementation, explicitly migrating admission
+state, or failing closed until authority is restored.
+
+## Current disposition
+
+- **Queue classification / adoption policy:** `ACCEPTED`.
+- **General-purpose Job Queue:** `DEFERRED`.
+- **Email delivery:** Class A adoption `ACCEPTED` via ADR-011; PostgreSQL
+  `email_outbox` is the durable delivery queue.
+- **Large export/import/async grading:** no demonstrated Class B trigger.
+- **Deadline/heartbeat scanners:** specialized reconciliation loops; no generic
+  queue adoption.
+- **Exam admission (`requireQueue`):** Class C correctness problem is real;
+  durable admission runtime is not yet complete. Current normative constraints
+  come from the `timed_sync` contract; implementation work is tracked by #292.
+- **Legacy `examQueues` Map:** known non-durable as-built gap, not acceptable
+  final admission authority.
+- **Redis-backed queue/admission:** not adopted by ADR-001; requires a separate
+  per-responsibility decision.
