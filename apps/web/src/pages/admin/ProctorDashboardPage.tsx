@@ -1516,9 +1516,10 @@ export function ProctorDashboardPage() {
 
       <Tabs defaultValue="all">
         {/* The five status tabs are whitespace-nowrap with count badges; their
-            intrinsic width exceeds 390px, so the strip scrolls locally
-            instead of escaping the document (issue 306, R2). */}
-        <div className="max-w-full overflow-x-auto">
+            intrinsic width exceeds narrow viewports, so the strip scrolls
+            locally instead of escaping the document. The wrapper declares
+            itself a local overflow owner for the responsive overflow audit. */}
+        <div data-overflow-owner="local" className="max-w-full overflow-x-auto">
           <TabsList>
             <TabsTrigger value="all">
               {t("admin.proctorDashboard.tabs.all", { count: data.total })}
@@ -1872,7 +1873,7 @@ export function ProctorDashboardPage() {
                 <div className="flex items-center justify-between">
                   {/* min-w-0: without it the flex child's intrinsic width
                       (long candidate names) defeats truncate and pushes the
-                      status badge out of the card (issue 306, R7). */}
+                      status badge out of the card. */}
                   <CardTitle className="min-w-0 text-sm font-medium truncate">
                     {candidate.name}
                   </CardTitle>

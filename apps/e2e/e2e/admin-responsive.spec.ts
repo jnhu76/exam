@@ -80,12 +80,12 @@ async function gotoSettled(page: Page, path: string): Promise<string> {
 
 /** Every visible container on the page stays horizontally in the viewport. */
 async function assertLocalScrollRegionsContained(page: Page): Promise<void> {
-  // Both shared dense-content scroll owners: DataTableShell's explicit
-  // local-scroll region (data-overflow-owner="local") and the bare ui/Table
-  // container. Any other element overflowing the document fails the R1
-  // document assertion instead.
+  // Deliberate local-scroll owners: elements declaring the shared semantic
+  // marker data-overflow-owner="local" (DataTableShell's scroll region, the
+  // proctor tabs strip) plus the bare ui/Table container. Any other element
+  // overflowing the document fails the R1 document assertion instead.
   const containers = page.locator(
-    '[data-slot="table-scroll-region"], [data-slot="table-container"]',
+    '[data-overflow-owner="local"], [data-slot="table-container"]',
   );
   const count = await containers.count();
   for (let i = 0; i < count; i++) {
@@ -102,12 +102,17 @@ test.describe("admin responsive baseline 390x844", () => {
   let fixture: SweepFixture;
 
   test.beforeAll(async ({ request }) => {
+    // The fixture (three exams, attempts, grading, publishing, closing,
+    // incident, profile, queue scan) exceeds the default 30s hook budget on
+    // a cold run — bound this hook, not the whole suite.
+    test.setTimeout(60_000);
     const seededActive = await seedExam(request, "adm-resp-a", {
       questionAnswer: true,
       titleOverride: LONG_TITLE,
     });
     const seededGraded = await seedExam(request, "adm-resp-b", {
       questionAnswer: true,
+      titleOverride: LONG_TITLE,
       textResponseQuestions: [
         {
           score: 60,
@@ -238,9 +243,10 @@ test.describe("admin responsive baseline 390x844", () => {
     ).toBe(true);
     const profileId = ((await profileRes.json()) as { id: string }).id;
 
-    // The grading-queue/:id sweep target needs a real queue row. The queue
-    // paginates (20/page) and earlier runs may have filled page 1, so walk
-    // pages until the seeded attempt shows up.
+    // The grading-queue/:id sweep target needs a real queue row. --no-reseed
+    // runs reuse the persistent serial E2E database, where earlier runs keep
+    // accumulating grading rows, so search bounded pages for the fixture
+    // instead of assuming page 1.
     let inQueue = false;
     for (let qPage = 1; qPage <= 10 && !inQueue; qPage++) {
       const queueRes = await request.get(
@@ -396,7 +402,13 @@ test.describe("admin responsive baseline 390x844", () => {
     await page.setViewportSize(MOBILE_VIEWPORT);
     await loginAsAdmin(page);
 
-    const routes: Array<{ path: string; surface: string }> = [
+    const routes: Array<{
+      path: string;
+      surface: string;
+      /** Domain value that must actually reach the page for the geometry
+       * assertions below to have teeth on this route. */
+      expectText?: string;
+    }> = [
       { path: "/admin/dashboard", surface: "OTHER" },
       { path: "/admin/system", surface: "AUDIT_DIAGNOSTIC" },
       { path: "/admin/operations", surface: "OPERATIONS" },
@@ -450,6 +462,9 @@ test.describe("admin responsive baseline 390x844", () => {
       {
         path: `/admin/recovery/attempts/${fixture.attemptSubmitted}`,
         surface: "RECOVERY",
+        // The exam title (the page's long unbroken domain value) must reach
+        // this surface; otherwise the document-overflow assertion is vacuous.
+        expectText: LONG_TITLE,
       },
       {
         path: `/admin/recovery/exams/${fixture.examId}`,
@@ -458,24 +473,68 @@ test.describe("admin responsive baseline 390x844", () => {
     ];
 
     const visited: string[] = [];
-    for (const { path, surface } of routes) {
+    for (const { path, surface, expectText } of routes) {
       const title = await gotoSettled(page, path);
       expect(
         title.length,
         `${path} (${surface}) rendered an empty h1`,
       ).toBeGreaterThan(0);
+      if (expectText) {
+        await expect(
+          page.getByText(expectText).first(),
+          `${path} (${surface}) must render its long domain value`,
+        ).toBeVisible();
+      }
       await assertLocalScrollRegionsContained(page);
       await assertNoHorizontalOverflow(page);
       visited.push(`${path} → "${title}"`);
     }
-    // The sweep must stay non-vacuous: persist the anchored surfaces next
-    // to the run artifacts so a digest of what was actually proven survives
-    // (console output trips the code-quality gate; same pattern as the a11y
-    // digest file).
+    // Human-readable execution evidence: persist the anchored surfaces for
+    // debugging (console output trips the code-quality gate; same pattern as
+    // the a11y digest file). The non-vacuity proof lives in the assertions —
+    // per-route render anchor + real seeded IDs + geometry — not in this log.
     appendFileSync(
       "/tmp/admin-responsive-sweep.log",
       `anchored ${visited.length} surfaces @390x844:\n${visited.join("\n")}\n`,
     );
+  });
+
+  test("proctor tabs strip: declared local overflow owner actually scrolls", async ({
+    page,
+  }) => {
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await loginAsAdmin(page);
+
+    await gotoSettled(page, `/admin/exams/${fixture.examId}/proctor`);
+
+    // The five whitespace-nowrap status tabs (labels + count badges) are
+    // intrinsically wider than the 390px viewport. The wrapper declares
+    // itself a local overflow owner; the declaration must do real work —
+    // the strip's content must genuinely overflow the container, the owner
+    // must scroll locally (not clip, not escape the document), and both the
+    // owner box and the document must stay inside the viewport.
+    const owner = page
+      .locator('[data-overflow-owner="local"]')
+      .filter({ has: page.getByRole("tablist") });
+    await expect(owner, "proctor tabs local overflow owner").toHaveCount(1);
+
+    const strip = await owner.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      overflowX: getComputedStyle(el).overflowX,
+    }));
+    expect(
+      strip.scrollWidth,
+      `tabs strip content (${strip.scrollWidth}px) must overflow its local ` +
+        `container (${strip.clientWidth}px) at 390px`,
+    ).toBeGreaterThan(strip.clientWidth + 1);
+    expect(
+      ["auto", "scroll"],
+      "local overflow owner must scroll the overflowing strip",
+    ).toContain(strip.overflowX);
+
+    await assertLocalScrollContained(page, owner.first());
+    await assertNoHorizontalOverflow(page);
   });
 
   test("desktop 1280x720 sanity: list + detail non-regression", async ({

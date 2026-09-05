@@ -29,7 +29,7 @@ export function PageHeader({
         <div className="flex min-w-0 items-center gap-3">
           {/* Titles carry domain data (exam/course/candidate names) that can
               contain long unbroken tokens; without overflow-wrap they force
-              document-level horizontal escape at mobile widths (issue 306, R7). */}
+              document-level horizontal escape at narrow viewports. */}
           <h1 className="type-page-title min-w-0 break-words">{title}</h1>
           {status}
         </div>
