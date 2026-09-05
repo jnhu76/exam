@@ -2,107 +2,188 @@
 
 ## Status
 
-Deferred
+**DEFERRED**
 
-## Context
+No Desktop/Electron exam runtime has been adopted or implemented.
 
-The exam platform runs today as a web application: candidates take exams in a browser, with answers saved to the server via the Answer Save Protocol (HTTP POST, versioned, idempotent), a server-side timer as time authority, and a server-side heartbeat that detects disconnection.
+## Current binding decision
 
-For strict closed-book / proctored exam scenarios, a browser is not always sufficient. Lockdown — restricting clipboard, screen capture, application switching, and other-tab access — cannot be reliably enforced from a web page. `controlFlags.requireLockdown` exists in the schema (SPEC §2.6) and is explicitly a future capability; Phase 1 does not implement Electron lockdown.
+The product remains a server-authoritative web exam system. A privileged
+Desktop/Electron client is **not** a current runtime dependency and is not
+required for the normal web exam path.
 
-The project structure reserves `apps/desktop/` for an Electron shell (SPEC), but it is **not started**. The Phase 2 plan (§9 Future Phase — Desktop Exam Runtime) states plainly: Desktop/Electron implementation is **not** part of Phase 2; Phase 2 only records the ADR. The roadmap defers Electron lockdown to a future phase, and Phase 2 explicitly does not implement Electron lockdown (plan §11, non-goals).
+The following rules are binding while this ADR remains Deferred:
 
-This ADR records what problem Desktop would solve, why it is deferred, the scope a future implementation may consider, and the hard constraints it must obey — so a future team cannot start a Desktop spike without first reading this decision.
+1. **Do not implement or require Electron merely because `requireLockdown`
+   exists in the exam policy shape.** That flag is currently latent/unenforced;
+   its presence is not Desktop adoption.
+2. **Do not create a second exam protocol.** Any future Desktop client must
+   consume the then-current accepted server-side exam/save/submit/time/recovery
+   contracts rather than fork them.
+3. **Server/PostgreSQL authority remains unchanged.** Desktop must never become
+   the durable truth for attempts, answers, grading, results, incidents, audit,
+   or exam lifecycle.
+4. **A future local answer store is recovery state, not a second truth source.**
+   Its conflict/replay semantics require a separate current review.
+5. **Desktop remains optional unless a later accepted deployment decision says
+   otherwise.** Building an optional client and requiring it for a particular
+   deployment are separate decisions.
+6. **Future adoption requires a fresh security review.** Privileged main-process
+   capabilities, preload/IPC, local answer material, signing/update, endpoint
+   trust, and lockdown controls must be reviewed against the actual technology
+   and threat model chosen at adoption time.
 
-## Decision
+## Current reality
 
-**Desktop/Electron implementation is deferred. Phase 2 only records this ADR.**
+Repository review still shows Electron/Desktop as documentation/future scope,
+not an implemented runtime. `requireLockdown` exists in contracts/policy data,
+but current policy documentation explicitly classifies it among latent,
+unenforced control flags.
 
-No `apps/desktop/` code is written in Phase 2. `controlFlags.requireLockdown` remains schema-only and unused by any runtime path. Any future Desktop implementation requires a follow-up decision recorded against this ADR, and must obey the constraints in this document.
+Therefore:
 
-## Triggers for Adoption
+```text
+Desktop/Electron runtime     NOT IMPLEMENTED
+requireLockdown field        PRESENT, LATENT / UNENFORCED
+Desktop protocol authority   NONE
+Desktop local-data authority NONE
+ADR-004 status               DEFERRED
+```
 
-A Desktop runtime becomes a candidate **only** when at least one of the following is concretely required by a real deployment, not as a feature check-list:
+Browser-side controls such as tab-switch detection or copy/paste restrictions
+do **not** count as implementation of this ADR. They are ordinary web-client
+behaviors and cannot provide the OS-level authority implied by a privileged
+lockdown client.
 
-| Trigger | Why Desktop | Ref |
-| ------- | ----------- | --- |
-| A deployment requires enforced lockdown (clipboard, screen capture, tab/app switching) that a browser cannot guarantee | Only a desktop shell with OS-level restrictions can enforce closed-book behavior reliably. | SPEC §6, §9 |
-| A deployment needs a kiosk / single-purpose exam device experience | A locked-down desktop client is the runtime, not a tab among many. | SPEC §9 |
-| A deployment needs offline-resilient answer caching beyond the browser | Browser storage is unreliable for proctored exams; a local desktop cache with defined sync rules may be needed. | plan §9 |
+## Why Desktop may eventually be considered
 
-Each trigger must be tied to a real requirement from a real deployment. "Lockdown would be nice" is not a trigger.
+A browser cannot reliably enforce every closed-book/kiosk restriction. A
+Desktop runtime becomes a legitimate candidate only when a real deployment has
+a requirement that the browser path cannot responsibly satisfy.
 
-## Non-Goals
+Examples of triggers:
 
-- Phase 2 implementation. Desktop is deferred; Phase 2 records this ADR only.
-- Camera / screen proctoring, AI proctoring. Those are separate concerns, out of scope here and in Phase 2.
-- A second exam protocol. Desktop must reuse the server-side exam protocol (see Constraints).
-- A required runtime component. Desktop, if built, is an **optional** client. The web exam path must remain fully functional.
+| Trigger | Why a privileged client may be relevant |
+| --- | --- |
+| Enforced kiosk/lockdown behavior is a deployment requirement | OS-level/window/process controls are outside a normal web page's authority |
+| A managed single-purpose exam device is required | The exam client becomes part of the controlled device runtime rather than one browser tab |
+| Offline-resilient local persistence beyond the accepted browser model is required | A privileged local store may offer different durability/recovery capabilities, but needs its own semantics/security review |
 
-## Future Desktop Scope (illustrative)
+A trigger means **perform an adoption review**. It does not mean "use Electron".
+Electron, Tauri, a managed browser/kiosk runtime, or another mechanism must be
+compared against the actual requirement at that time.
 
-If adopted, a Desktop runtime **may** include — this list is descriptive, not a commitment:
+## Future adoption gate
 
-- **Electron shell** wrapping the existing web exam UI (`apps/desktop/`), not a separate application.
-- **Secure preload / IPC boundary** — a minimal, audited bridge between the renderer and main process; no arbitrary Node APIs exposed to the page.
-- **Lockdown mode** — restrict clipboard, screen capture, tab/application switching, and external links while an exam is in progress; released on submit.
-- **Local answer cache** for offline resilience — a bounded cache used only to recover from transient connectivity loss, never as the truth.
-- **Endpoint discovery for LAN server** — discover/configure the exam server URL on the local network.
-- **Auto-update and code signing** — signed updates with verification; no unsigned code execution.
-- **Device diagnostics reporting** — collect minimal environment info to support incident diagnosis, with candidate consent where required.
+Before implementation begins, a follow-up accepted decision must define at
+least:
 
-The exact scope must be pinned in the follow-up decision; this list exists to bound expectations.
+- the concrete deployment requirement and why the browser path is insufficient;
+- selected runtime technology and platform support matrix;
+- whether the client is optional globally and/or required by specific
+  deployment/exam policy;
+- server protocol reuse and compatibility contract;
+- local-data/recovery authority and conflict semantics, if any;
+- lockdown capability and known bypass limits;
+- preload/IPC or equivalent privilege boundary;
+- endpoint/server trust and certificate/configuration model;
+- code signing, update, downgrade, and distribution policy;
+- crash/restart/recovery behavior during an active attempt;
+- deterministic E2E/security test strategy;
+- rollback and migration behavior.
 
-## Hard Constraints
+No implementation spike should silently decide these semantics first and ask the
+ADR to catch up later.
 
-These are mandatory for any future Desktop implementation, non-negotiable:
+## Relationship to other decisions
 
-1. **Reuse the server-side exam protocol.** Desktop uses the same Answer Save Protocol (versioned, idempotent POSTs), the same server-side timer as time authority, the same heartbeat, and the same submit path. The server's exam-engine and command functions are the single authority for state transitions.
-2. **No second answer-save truth source.** The local answer cache (if any) is a **recovery cache**, never the system of record. PostgreSQL on the server is always the source of truth. Conflicts resolve in favor of the server's versioned save protocol.
-3. **PostgreSQL / server remains the single source of truth.** Attempt state, grading, results, audit — all server-owned. Desktop never mutates authoritative state locally.
-4. **Desktop is an optional client.** The web exam path (`TakeExamPage`, Answer Save Protocol, submit) must keep working without Desktop. `requireLockdown`, if honored, is enforced per-deployment; it must not make Desktop the only way to take an exam unless a deployment explicitly chooses that.
-5. **LAN / on-premise only.** Desktop connects to the on-premise server; no cloud dependency, no telemetry, no online-only behavior. Code signing keys are managed on-premise.
-6. **Security review before spike.** Because lockdown and local caching touch sensitive surfaces, a security review of the preload/IPC boundary and the cache is required before any implementation.
+Future Desktop adoption must **re-audit current authority at adoption time**.
+The original Phase-2 assumptions are not frozen interfaces forever.
 
-## Operational Burden
+At minimum, review the then-current accepted decisions/contracts for:
 
-- **A new build target** — Electron binaries per OS, code signing certificates, update infrastructure. This is the largest single new burden in this ADR set.
-- **Distribution / update mechanism** — how candidates get the client and how it updates securely; signing key management.
-- **Platform matrix** — Windows / macOS / Linux behavior differences (especially lockdown primitives).
-- **Local cache integrity** — cache corruption, partial writes, and cache-vs-server reconciliation logic must be designed and tested.
-- **Security surface** — the preload/IPC bridge and lockdown hooks are privileged; any bug is a security issue in a proctored exam.
-- **Test complexity** — lockdown and offline-resilience scenarios are hard to test deterministically; an Electron E2E matrix is required.
+- **Exam lifecycle/state authority** — the Desktop client consumes server
+  lifecycle semantics; it does not define them.
+- **Exam time authority (ADR-006)** — local clocks/countdowns are projections;
+  the accepted server time/deadline model remains authoritative unless
+  explicitly amended.
+- **Submit/save freeze semantics (ADR-008 and current submit authority)** —
+  local caching/replay must not bypass serialization/freeze boundaries.
+- **Candidate recovery (ADR-012 and later accepted recovery decisions)** — a
+  Desktop cache cannot invent a competing recovery protocol.
+- **Offline-resilient client direction (ADR-016)** — Desktop and offline
+  resilience overlap but are not the same decision; adoption of one does not
+  implicitly accept the other.
+- **Scoped authorization** — privileged client capabilities do not grant server
+  business authorization.
 
-## Failure Modes
+These are cross-references/adoption constraints, not an assertion that ADR-004
+currently depends on every listed ADR for runtime behavior; ADR-004 is Deferred.
 
-- **Server unreachable during an exam (Desktop).** The local answer cache buffers saves; on reconnect, the Answer Save Protocol reconciles (versioned, idempotent). If the exam cannot submit by deadline, the server-side deadline scanner (P2A-J2) handles auto-submit from server state — Desktop does not invent a fallback.
-- **Cache / server conflict.** Resolved by the server's versioned save protocol; the server wins. Desktop must surface the conflict to the candidate, not silently choose.
-- **Lockdown bypass / tampering.** Treated as a security incident. Lockdown is best-effort enforcement layered on top of server authority; it cannot be the only thing protecting exam integrity.
-- **Unsigned / stale client.** The client must refuse to run unsigned code or connect to an unconfigured endpoint; no silent fallback to an attacker-controlled server.
-- **Client crash mid-exam.** Recovery is identical to the web path: on relaunch, `restoreAttempt` (P2A-J5) restores answers + remaining time from the server.
+## Hard constraints for any future Desktop design
 
-## Security Considerations
+Unless explicitly changed by a later accepted decision:
 
-- **Lockdown is defense-in-depth, not a guarantee.** Determined adversaries can bypass OS-level restrictions. Exam integrity ultimately rests on server-side controls (time authority, server-owned state, audit). Desktop lockdown raises the bar; it does not replace server authority.
-- **Preload / IPC minimalism.** Only the exact capabilities needed are exposed to the renderer; `nodeIntegration` off, `contextIsolation` on. Every IPC channel is audited.
-- **Local cache protection.** The cache contains answer data; it must be stored with access restricted to the exam user and cleared after submit/timeout per policy.
-- **No new network egress.** Desktop talks only to the configured LAN server. No update/telemetry endpoints outside the on-premise update infrastructure.
-- **Code signing.** Updates must be signed and verified; downgrade attacks must be rejected.
+1. **Server business commands remain authoritative.** Desktop reuses accepted
+   save, heartbeat/recovery, submit, and state-transition APIs/commands.
+2. **No local durable business truth.** Local data may assist recovery but must
+   have an explicit reconciliation contract with server authority.
+3. **No hidden cloud dependency.** The deployment remains compatible with the
+   project's on-premise/LAN requirements unless architecture authority changes.
+4. **Least privilege.** Renderer/UI code must not receive arbitrary privileged
+   host capabilities; any bridge is narrow and auditable.
+5. **Security properties must be stated truthfully.** "Lockdown" is
+   defense-in-depth, not proof that a determined user cannot bypass the host OS.
+6. **Web compatibility is deliberate.** If a deployment later requires the
+   privileged client, the accepted decision must say where/why; do not let an
+   implementation accident silently disable the web path.
 
-## Rollback Plan
+## Failure / security questions for a future adoption
 
-1. Because Desktop is an optional client, rollback is per-deployment: stop distributing/requiring the client; candidates fall back to the web exam path.
-2. No server-side data reconciliation is needed — Desktop never owned the truth. All attempts, answers, grades, and audit records are server-side.
-3. Disable `requireLockdown` enforcement (it is a per-deployment control flag); the web path is unaffected.
-4. Remove the Desktop client from distribution; retire the update/signing infrastructure.
-5. Update this ADR to record why adoption was rolled back.
+The follow-up design must answer rather than inherit old Phase-2 prose:
 
-Rollback is safe because Desktop is optional and the server is always the source of truth.
+- What happens when the server is unreachable during an attempt?
+- Which local writes are durable, and when are they replayed?
+- How are server/local version conflicts surfaced and resolved?
+- What happens at the authoritative deadline while the client is offline?
+- How does crash/relaunch restore the current attempt?
+- How are answer files/cache encrypted or access-restricted and later cleared?
+- How is the intended server authenticated to the client?
+- How are binaries/updates signed and downgrade attacks handled?
+- What privileged APIs exist, and how are they exposed to renderer content?
+- Which lockdown guarantees are enforceable per OS, and which are only
+  best-effort?
 
-## Phase 2 Decision
+## Rollback principle
 
-**Desktop/Electron implementation is deferred. Phase 2 only records this ADR.**
+Because no Desktop runtime is currently adopted, there is no current runtime
+rollback procedure beyond keeping the web path authoritative.
 
-- `apps/desktop/` remains not-started.
-- `controlFlags.requireLockdown` stays schema-only; no runtime path enforces it in Phase 2.
-- Any future Desktop implementation requires (a) a documented, deployment-backed trigger, (b) a follow-up decision updating this ADR, (c) adherence to the hard constraints (reuse server protocol, no second truth source, server = source of truth, optional client, LAN-only), and (d) a security review of the preload/IPC and cache surfaces before any spike.
+A future adoption decision must define rollback for its own deployment model,
+including treatment of local in-flight recovery data and any exam policy that
+requires the privileged client. It must not assume that disabling a client is
+safe if candidates or un-reconciled local data are active.
+
+## Historical context — Phase 2 acceptance-time baseline
+
+> **NON-NORMATIVE CURRENT REALITY.** Phase 2 recorded this ADR specifically to
+> prevent speculative Electron work. At that time the project described an
+> `apps/desktop/` reservation, a future `requireLockdown` capability, and a
+> browser/server protocol baseline. Those facts explain the original decision
+> but are not a frozen specification for a future Desktop implementation.
+
+The durable conclusion from that period remains valid: Desktop should be
+introduced only for a concrete deployment requirement, after an explicit
+architecture and security review, and without creating a second source of exam
+truth.
+
+## Current disposition
+
+```text
+Desktop/Electron implementation     DEFERRED
+Concrete adoption trigger           NOT DEMONSTRATED / NOT ACCEPTED
+requireLockdown runtime enforcement NOT IMPLEMENTED
+Second exam protocol                FORBIDDEN WITHOUT EXPLICIT REDESIGN
+Local answer truth                  NOT ADOPTED
+Future Desktop technology           UNDECIDED
+```
