@@ -25,6 +25,51 @@ Every ADR carries this metadata (in its Status section or header):
 - **SUPERSEDED** — replaced by a later ADR (see `Superseded by`).
 - **REJECTED** — considered and not adopted.
 
+## Authority precedence
+
+Architecture authority originates from an explicit human-approved decision;
+an ADR is the durable record of that authority. When sources disagree, use the
+following precedence order:
+
+1. **Explicit human-approved decision in the current review**, provided the
+   decision is recorded as an ADR acceptance, amendment, revision, or
+   supersession before implementation proceeds.
+2. **Latest ACCEPTED amendment or revision** that explicitly changes an ADR.
+3. **Current ACCEPTED ADR** that has not been superseded or amended for the
+   disputed decision.
+4. **Current architecture / specification documentation** (`docs/architecture/`,
+   `SPEC`, contracts, or equivalent current normative documentation).
+5. **As-built implementation and tests**, which establish runtime reality but
+   do not silently redefine architecture authority.
+6. **Issues, roadmaps, audits, closeout reports, and historical records**, which
+   provide evidence and provenance but are not architecture authority by
+   themselves.
+
+Binding rules:
+
+- A newer ADR number does **not** implicitly supersede an older ADR.
+- An ACCEPTED ADR changes only through an explicit human-approved ACCEPTED
+  amendment, revision, or superseding ADR. The relationship must identify the
+  affected ADR and decision; chronological order alone is insufficient.
+- Code or test divergence does **not** implicitly supersede an ADR. It is an
+  as-built delta that requires disposition.
+- `PROPOSED` and `DEFERRED` ADRs are not binding implementation authority for
+  current runtime behavior. They may constrain future work only as their status
+  explicitly states.
+- Historical or acceptance-time facts retained inside an ADR are evidence, not
+  current normative requirements, unless the ADR explicitly marks them as
+  binding decisions or invariants.
+- If two ACCEPTED ADRs conflict and no explicit amendment / supersession /
+  precedence relation resolves the disputed decision, the result is
+  **AUTHORITY CONFLICT — HUMAN DISPOSITION REQUIRED**. Do not guess based on ADR
+  number, file date, code age, or implementation convenience.
+- An implementation audit must report `ADR says X / as-built says Y` as a delta
+  first. It must not automatically "fix" either side until the decision owner
+  chooses one of: keep ADR and fix implementation; accept implementation and
+  amend/supersede the ADR; or redesign both.
+
+This precedence governs ADR review and ADR-to-implementation conformance work.
+
 ## Index
 
 | ID | Title | Status | Current / Historical | Supersedes | Superseded by |
