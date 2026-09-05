@@ -1,7 +1,13 @@
 [data-slot="button"][data-variant="default"],
 [data-slot="button"][data-variant="primary"] {
   border: 1px solid color-mix(in srgb, var(--primary-active) 35%, transparent);
-  box-shadow: 0 1px 1px rgb(16 24 40 / 0.05);
+  /* OWNERSHIP: this rule owns resting elevation, so it must COMPOSE the
+     Tailwind focus-ring variable instead of erasing it — an unlayered
+     literal box-shadow beats the layered focus-visible:ring-* utility and
+     would leave keyboard users without a visible focus indicator (#412). */
+  box-shadow:
+    0 1px 1px rgb(16 24 40 / 0.05),
+    var(--tw-ring-shadow, 0 0 #0000);
 }
 
 [data-slot="button"][data-variant="outline"],
@@ -31,7 +37,11 @@
   [data-slot="input"] {
   background: var(--surface);
   border-color: var(--border-control);
-  box-shadow: 0 1px 2px rgb(16 24 40 / 0.04);
+  /* Same ownership rule as the button elevation above: compose the focus
+     ring instead of erasing it (#412, same proven defect on this rule). */
+  box-shadow:
+    0 1px 2px rgb(16 24 40 / 0.04),
+    var(--tw-ring-shadow, 0 0 #0000);
 }
 
 @media (min-width: 64rem) {
