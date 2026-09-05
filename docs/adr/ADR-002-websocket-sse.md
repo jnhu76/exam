@@ -4,6 +4,13 @@
 
 Deferred
 
+> **Current authority note (2026-09-05):** this ADR's Phase 2 role/organization
+> wording predates the accepted scoped-RBAC decisions in ADR-010 and ADR-015.
+> Any future real-time adoption MUST use the then-current accepted
+> capability/resource-scope authorization contract. In particular, Proctor
+> access is exam-assignment-scoped; organization membership or a coarse role
+> check alone is not sufficient authority.
+
 ## Context
 
 Phase 2 introduces a proctor workflow (P2C). The proctor dashboard (P2C-J5) needs to show candidate status — active / disrupted / submitted / graded, remaining time, and connection state — and must reflect admin interventions (force-submit P2C-J2, extend-time P2C-J3, misconduct flag P2C-J4).
@@ -66,6 +73,7 @@ If a trigger is met:
 4. **Polling stays as fallback.** The polling API must remain so that dashboards degrade gracefully when the real-time connection is unavailable. This also keeps the dashboard testable without a persistent connection.
 5. **Config-gated, default off.** Real-time is enabled by an explicit flag; polling remains the default.
 6. **Operations runbook.** Document connection limits, idle timeout, reconnect behavior, and auth (below) before enabling.
+7. **Re-audit authorization at adoption time.** The stream MUST reuse the current accepted capability and resource-scope authority. Do not copy the historical Phase 2 Admin/organization assumptions into a new transport.
 
 ## Operational Burden
 
@@ -87,7 +95,7 @@ If a trigger is met:
 
 - **Authentication.** The real-time channel authenticates with the same session cookie / JWT as HTTP routes. No separate token scheme. Unauthenticated connections are rejected on connect.
 - **Reconnection.** Use the transport's built-in reconnect (SSE `Last-Event-ID`) or a documented client-side backoff (WebSocket). Reconnect must re-authenticate.
-- **Permission / RBAC.** The server enforces RBAC on every event the same way it does on the polling API — a proctor dashboard stream is only opened for an authorized admin role, scoped to `organizationId`. Permission is checked server-side per event, not only at connect time, because role/scope can change mid-session.
+- **Permission / RBAC.** The real-time channel MUST reuse the same accepted capability and resource-scope authorization model as the corresponding HTTP projection. Authorization is not a coarse `role + organizationId` gate. A Proctor stream is limited to exams for which the actor has the required capability **and** the current Proctor→Exam assignment scope (ADR-010 / ADR-015); other roles follow their current accepted authority contract. Authorization must be revalidated whenever events are emitted or entitlement/scope may have changed, so a long-lived connection cannot preserve authority that has been revoked mid-session.
 - **Audit.** State-changing actions (force-submit, extend-time, misconduct) are audited via the existing audit log through their HTTP command functions, exactly as in Phase 2 polling. The real-time channel is a notification transport; it does not carry authority to mutate state. No second mutation path.
 
 ## Rollback Plan
