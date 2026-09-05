@@ -76,7 +76,7 @@ This precedence governs ADR review and ADR-to-implementation conformance work.
 | --- | --- | --- | --- | --- | --- |
 | [ADR-001](ADR-001-redis.md) | Redis as Optional Infrastructure | ACCEPTED (baseline; shared rate-limiting adoption amended 2026-08-08) / DEFERRED (full adoption) | Current | none | none |
 | [ADR-002](ADR-002-websocket-sse.md) | WebSocket / SSE for Real-Time Updates | DEFERRED | Current | none | none |
-| [ADR-003](ADR-003-job-queue.md) | Job Queue for Async / Long-Running Workloads | DEFERRED | Current | none | none |
+| [ADR-003](ADR-003-job-queue.md) | Job Queue for Async / Long-Running Workloads | ACCEPTED (queue classification/adoption policy, amended 2026-09-05) / DEFERRED (general-purpose job-queue platform) | Current | none | none |
 | [ADR-004](ADR-004-desktop-electron.md) | Desktop / Electron Exam Runtime | DEFERRED | Current | none | none |
 | [ADR-005](ADR-005-exam-operation-state-baseline.md) | Exam Operation State Baseline | ACCEPTED (implemented, Rev 2) | Current | none | none |
 | [ADR-006](ADR-006-exam-time-authority.md) | Exam Time Authority | ACCEPTED (amended 2026-07-21) | Current | none | none |
