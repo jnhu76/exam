@@ -821,7 +821,7 @@ export function RecoveryAttemptDetailPage() {
                 <dt className="type-metadata">
                   {t("admin.recoveryAttempt.sections.exam")}
                 </dt>
-                <dd className="text-sm font-medium">
+                <dd className="text-sm font-medium break-words">
                   <Link
                     to={routes.admin.recoveryExam(data.examSummary.id)}
                     className="underline-offset-4 hover:underline"

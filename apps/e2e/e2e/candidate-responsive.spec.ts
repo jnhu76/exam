@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import {
   candidateLogin,
@@ -6,6 +6,7 @@ import {
   answerTrueFalse,
   waitForSaveSaved,
 } from "../lib/flow";
+import { assertNoHorizontalOverflow, assertReachable } from "../lib/responsive";
 
 /**
  * Candidate-first responsive baseline (Issue #306, UI-STABILIZATION-GOAL-1
@@ -17,25 +18,10 @@ import {
  *   - the submit dialog fits the viewport;
  *   - timer / save state / submit never disappear at 390px;
  *   - desktop (1280x720) sanity on the same flow (non-regression).
+ *
+ * Geometry helpers live in lib/responsive.ts (shared with the Admin
+ * responsive baseline).
  */
-
-/** 1px tolerance for sub-pixel rounding on scrollWidth. */
-async function assertNoHorizontalOverflow(page: Page): Promise<void> {
-  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
-}
-
-/** The control is visible and its box sits inside the viewport width. */
-async function assertReachable(page: Page, locator: Locator): Promise<void> {
-  await expect(locator).toBeVisible();
-  const box = (await locator.boundingBox())!;
-  const viewport = page.viewportSize()!;
-  expect(box.x).toBeGreaterThanOrEqual(-1);
-  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
-}
 
 test.describe("candidate responsive baseline 390x844", () => {
   test("login → list → start → take → submit dialog → result", async ({

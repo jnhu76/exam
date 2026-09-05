@@ -320,7 +320,9 @@ export function RecoveryExamDetailPage() {
               <dt className="type-metadata">
                 {t("admin.recoveryExam.sections.exam")}
               </dt>
-              <dd className="text-sm font-medium">{data.examSummary.title}</dd>
+              <dd className="text-sm font-medium break-words">
+                {data.examSummary.title}
+              </dd>
             </div>
             <div>
               <dt className="type-metadata">
