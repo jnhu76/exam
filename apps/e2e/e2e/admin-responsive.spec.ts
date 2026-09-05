@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { appendFileSync } from "node:fs";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 import {
@@ -467,10 +468,13 @@ test.describe("admin responsive baseline 390x844", () => {
       await assertNoHorizontalOverflow(page);
       visited.push(`${path} → "${title}"`);
     }
-    // The sweep must stay non-vacuous: log the anchored surfaces so a
-    // digest of what was actually proven survives the run.
-    console.log(
-      `[admin-responsive] anchored ${visited.length} surfaces:\n${visited.join("\n")}`,
+    // The sweep must stay non-vacuous: persist the anchored surfaces next
+    // to the run artifacts so a digest of what was actually proven survives
+    // (console output trips the code-quality gate; same pattern as the a11y
+    // digest file).
+    appendFileSync(
+      "/tmp/admin-responsive-sweep.log",
+      `anchored ${visited.length} surfaces @390x844:\n${visited.join("\n")}\n`,
     );
   });
 
