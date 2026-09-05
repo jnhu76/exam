@@ -240,7 +240,9 @@ export function QuestionImportPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title={t("admin.questionImport.title")} />
 
-      <div className="flex items-end gap-4">
+      {/* flex-wrap: course select + template/download actions exceed 390px
+          as one nowrap row (issue 306, R5). */}
+      <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-2">
           <Label>{t("admin.questionImport.courseLabel")}</Label>
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>

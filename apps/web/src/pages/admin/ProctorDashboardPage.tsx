@@ -1515,31 +1515,36 @@ export function ProctorDashboardPage() {
       )}
 
       <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">
-            {t("admin.proctorDashboard.tabs.all", { count: data.total })}
-          </TabsTrigger>
-          <TabsTrigger value="active">
-            {t("admin.proctorDashboard.tabs.active", {
-              count: groups.active.length,
-            })}
-          </TabsTrigger>
-          <TabsTrigger value="disrupted">
-            {t("admin.proctorDashboard.tabs.disrupted", {
-              count: groups.disrupted.length,
-            })}
-          </TabsTrigger>
-          <TabsTrigger value="submitted">
-            {t("admin.proctorDashboard.tabs.submitted", {
-              count: groups.submitted.length,
-            })}
-          </TabsTrigger>
-          <TabsTrigger value="graded">
-            {t("admin.proctorDashboard.tabs.graded", {
-              count: groups.graded.length,
-            })}
-          </TabsTrigger>
-        </TabsList>
+        {/* The five status tabs are whitespace-nowrap with count badges; their
+            intrinsic width exceeds 390px, so the strip scrolls locally
+            instead of escaping the document (issue 306, R2). */}
+        <div className="max-w-full overflow-x-auto">
+          <TabsList>
+            <TabsTrigger value="all">
+              {t("admin.proctorDashboard.tabs.all", { count: data.total })}
+            </TabsTrigger>
+            <TabsTrigger value="active">
+              {t("admin.proctorDashboard.tabs.active", {
+                count: groups.active.length,
+              })}
+            </TabsTrigger>
+            <TabsTrigger value="disrupted">
+              {t("admin.proctorDashboard.tabs.disrupted", {
+                count: groups.disrupted.length,
+              })}
+            </TabsTrigger>
+            <TabsTrigger value="submitted">
+              {t("admin.proctorDashboard.tabs.submitted", {
+                count: groups.submitted.length,
+              })}
+            </TabsTrigger>
+            <TabsTrigger value="graded">
+              {t("admin.proctorDashboard.tabs.graded", {
+                count: groups.graded.length,
+              })}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {!hasAnyCandidates && (
           <div className="mt-4">
@@ -1865,7 +1870,10 @@ export function ProctorDashboardPage() {
             <Card key={candidate.candidateId}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium truncate">
+                  {/* min-w-0: without it the flex child's intrinsic width
+                      (long candidate names) defeats truncate and pushes the
+                      status badge out of the card (issue 306, R7). */}
+                  <CardTitle className="min-w-0 text-sm font-medium truncate">
                     {candidate.name}
                   </CardTitle>
                   <StatusBadge status={candidate.status} />

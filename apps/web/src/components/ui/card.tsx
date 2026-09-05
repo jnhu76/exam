@@ -20,7 +20,11 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-5 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-4",
+        // minmax(0,1fr): the implicit column must not size to content
+        // max-content — long titles (candidate/exam names) would widen the
+        // track past the card and push sibling actions out of the viewport
+        // (issue 306, R7).
+        "@container/card-header grid auto-rows-min grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] items-start gap-1.5 px-5 has-data-[slot=card-action]:grid-cols-[minmax(0,1fr)_auto] [.border-b]:pb-4",
         className
       )}
       {...props}

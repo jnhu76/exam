@@ -25,17 +25,25 @@ export function PageHeader({
         className,
       )}
     >
-      <div>
+      <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-3">
-          <h1 className="type-page-title">{title}</h1>
+          {/* Titles carry domain data (exam/course/candidate names) that can
+              contain long unbroken tokens; without overflow-wrap they force
+              document-level horizontal escape at mobile widths (issue 306, R7). */}
+          <h1 className="type-page-title min-w-0 break-words">{title}</h1>
           {status}
         </div>
         {description && (
-          <p className="type-page-description mt-1">{description}</p>
+          <p className="type-page-description mt-1 break-words">
+            {description}
+          </p>
         )}
       </div>
       {actions && (
-        <div className="flex shrink-0 flex-wrap gap-2 [&_button]:min-h-11 sm:[&_button]:min-h-9">
+        // INVARIANT: the actions slot must wrap at mobile widths — pages pass
+        // grouped button rows (`<div className="flex gap-2">`) as a single
+        // node, so flex-wrap on this container alone cannot reach them.
+        <div className="flex shrink-0 flex-wrap gap-2 [&_button]:min-h-11 [&_div]:flex-wrap sm:[&_button]:min-h-9">
           {actions}
         </div>
       )}
