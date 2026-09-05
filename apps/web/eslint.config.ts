@@ -120,6 +120,7 @@ const eslintConfig = [
       "exam-ui/no-typography-authority-conflict": "error",
       "exam-ui/no-heavy-font-weight": "error",
       "exam-ui/no-recipe-recomposition": "error",
+      "exam-ui/no-dialog-spatial-override": "error",
     },
   },
   {
@@ -145,6 +146,7 @@ const eslintConfig = [
       "exam-ui/no-typography-authority-conflict": "error",
       "exam-ui/no-heavy-font-weight": "error",
       "exam-ui/no-recipe-recomposition": "error",
+      "exam-ui/no-dialog-spatial-override": "error",
     },
   },
 ];

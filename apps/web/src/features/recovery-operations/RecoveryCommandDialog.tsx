@@ -102,26 +102,30 @@ export function RecoveryCommandDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        {indeterminate && (
-          <InlineErrorBanner>
-            <span className="flex items-center gap-2">
-              <AppIcon icon={CircleAlert} size="inline" />
-              {t("admin.recoveryOps.indeterminateHint")}
-            </span>
-          </InlineErrorBanner>
-        )}
+        {/* The dialog-body region owns vertical scrolling (header/footer stay
+            fixed in the composition). */}
+        <div data-slot="dialog-body" className="flex flex-col gap-3">
+          {indeterminate && (
+            <InlineErrorBanner>
+              <span className="flex items-center gap-2">
+                <AppIcon icon={CircleAlert} size="inline" />
+                {t("admin.recoveryOps.indeterminateHint")}
+              </span>
+            </InlineErrorBanner>
+          )}
 
-        {/* Form fields — read-only once the command is frozen (a retry must
-            resend the exact original bytes under the same operationId). */}
-        <fieldset disabled={frozen} className="flex flex-col gap-3">
-          {children}
-        </fieldset>
+          {/* Form fields — read-only once the command is frozen (a retry must
+              resend the exact original bytes under the same operationId). */}
+          <fieldset disabled={frozen} className="flex flex-col gap-3">
+            {children}
+          </fieldset>
+        </div>
 
         <DialogFooter>
           {indeterminate && onDismissIndeterminate && (

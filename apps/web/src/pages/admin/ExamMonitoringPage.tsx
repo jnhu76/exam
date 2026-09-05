@@ -322,7 +322,7 @@ export function ExamMonitoringPage() {
           if (!open) setSelectedAttemptId(null);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>
               {t("admin.examMonitoring.timeline.title", {
@@ -330,47 +330,50 @@ export function ExamMonitoringPage() {
               })}
             </DialogTitle>
           </DialogHeader>
-          {timelineLoading ? (
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : timelineError ? (
-            <Alert variant="destructive">
-              <AppIcon icon={CircleAlert} size="inline" />
-              <AlertDescription>{timelineError}</AlertDescription>
-            </Alert>
-          ) : timeline && timeline.items.length > 0 ? (
-            <div className="flex flex-col gap-1">
-              {timeline.items.map((ev) => (
-                <div
-                  key={ev.id}
-                  className="flex items-start gap-3 rounded-md border p-2 text-xs"
-                >
-                  <span className="text-muted-foreground shrink-0 w-16 type-numeric">
-                    {formatTime(ev.occurredAt)}
-                  </span>
-                  <EventBadge level={ev.level} kind={ev.kind} />
-                  <span>{ev.name}</span>
-                  {ev.route && (
-                    <span className="text-muted-foreground truncate max-w-32">
-                      {ev.route}
+          {/* dialog-body owns the vertical scroll; the header stays fixed. */}
+          <div data-slot="dialog-body" className="flex flex-col gap-1">
+            {timelineLoading ? (
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : timelineError ? (
+              <Alert variant="destructive">
+                <AppIcon icon={CircleAlert} size="inline" />
+                <AlertDescription>{timelineError}</AlertDescription>
+              </Alert>
+            ) : timeline && timeline.items.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {timeline.items.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="flex items-start gap-3 rounded-md border p-2 text-xs"
+                  >
+                    <span className="text-muted-foreground shrink-0 w-16 type-numeric">
+                      {formatTime(ev.occurredAt)}
                     </span>
-                  )}
-                  {ev.metadata && Object.keys(ev.metadata).length > 0 && (
-                    <span className="text-muted-foreground">
-                      {JSON.stringify(ev.metadata)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="type-secondary">
-              {t("admin.examMonitoring.timeline.noEvents")}
-            </p>
-          )}
+                    <EventBadge level={ev.level} kind={ev.kind} />
+                    <span>{ev.name}</span>
+                    {ev.route && (
+                      <span className="text-muted-foreground truncate max-w-32">
+                        {ev.route}
+                      </span>
+                    )}
+                    {ev.metadata && Object.keys(ev.metadata).length > 0 && (
+                      <span className="text-muted-foreground">
+                        {JSON.stringify(ev.metadata)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="type-secondary">
+                {t("admin.examMonitoring.timeline.noEvents")}
+              </p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -603,7 +603,7 @@ export function AttemptDetailPage() {
         />
 
         <Dialog open={flagDialogOpen} onOpenChange={setFlagDialogOpen}>
-          <DialogContent aria-describedby={undefined} className="max-w-sm">
+          <DialogContent aria-describedby={undefined} size="sm">
             <DialogHeader>
               <DialogTitle>
                 {t("admin.attemptDetail.live.flagDialog.title")}

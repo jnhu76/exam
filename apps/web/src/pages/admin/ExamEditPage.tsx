@@ -378,65 +378,65 @@ export function ExamEditPage() {
       </div>
 
       <Dialog open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
-        <DialogContent
-          aria-describedby={undefined}
-          className="max-w-2xl max-h-[80vh] overflow-y-auto"
-        >
+        <DialogContent aria-describedby={undefined} size="lg">
           <DialogHeader>
             <DialogTitle>{t("admin.examEdit.dialogTitle")}</DialogTitle>
           </DialogHeader>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "type" },
-                { role: "long-text" },
-                { role: "score" },
-                { role: "actions" },
-              ]}
-            />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="type">
-                  {t("admin.examEdit.tableHeaders.type")}
-                </DataTableHead>
-                <DataTableHead role="long-text">
-                  {t("admin.examEdit.tableHeaders.content")}
-                </DataTableHead>
-                <DataTableHead role="score">
-                  {t("admin.examEdit.tableHeaders.score")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.examEdit.dialogActions.add")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {availableQuestions.map((q) => (
-                <TableRow key={q.id}>
-                  <DataTableCell role="type">
-                    <Badge variant="outline">
-                      {getTypeLabel(q.type, t) ?? q.type}
-                    </Badge>
-                  </DataTableCell>
-                  <DataTableCell role="long-text" className="truncate">
-                    {q.content}
-                  </DataTableCell>
-                  <DataTableCell role="score">{q.score}</DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addQuestion(q.id)}
-                      >
-                        {t("admin.examEdit.dialogActions.add")}
-                      </Button>
-                    </RowActions>
-                  </DataTableCell>
+          {/* dialog-body owns the vertical scroll; header/footer fixed. */}
+          <div data-slot="dialog-body">
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "type" },
+                  { role: "long-text" },
+                  { role: "score" },
+                  { role: "actions" },
+                ]}
+              />
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="type">
+                    {t("admin.examEdit.tableHeaders.type")}
+                  </DataTableHead>
+                  <DataTableHead role="long-text">
+                    {t("admin.examEdit.tableHeaders.content")}
+                  </DataTableHead>
+                  <DataTableHead role="score">
+                    {t("admin.examEdit.tableHeaders.score")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
+                    {t("admin.examEdit.dialogActions.add")}
+                  </DataTableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {availableQuestions.map((q) => (
+                  <TableRow key={q.id}>
+                    <DataTableCell role="type">
+                      <Badge variant="outline">
+                        {getTypeLabel(q.type, t) ?? q.type}
+                      </Badge>
+                    </DataTableCell>
+                    <DataTableCell role="long-text" className="truncate">
+                      {q.content}
+                    </DataTableCell>
+                    <DataTableCell role="score">{q.score}</DataTableCell>
+                    <DataTableCell role="actions">
+                      <RowActions>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addQuestion(q.id)}
+                        >
+                          {t("admin.examEdit.dialogActions.add")}
+                        </Button>
+                      </RowActions>
+                    </DataTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"

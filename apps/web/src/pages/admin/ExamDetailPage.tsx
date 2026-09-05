@@ -797,7 +797,7 @@ export function ExamDetailPage() {
       </Tabs>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-lg">
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t("admin.examDetail.addDialog.title")}</DialogTitle>
           </DialogHeader>
@@ -837,7 +837,7 @@ export function ExamDetailPage() {
       </Dialog>
 
       <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm">
+        <DialogContent aria-describedby={undefined} size="sm">
           <DialogHeader>
             <DialogTitle>
               {t("admin.examDetail.extendDialog.title")}

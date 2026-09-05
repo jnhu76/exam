@@ -210,3 +210,19 @@
   margin-top: 0.25rem;
   padding-top: 0.5rem;
 }
+
+/*
+ * Dialog body-scroll ownership (P3 §12 dialog contract, issue 459).
+ *
+ * DialogContent / AlertDialogContent are flex columns capped at max-h
+ * (85dvh); header and footer stay fixed in the composition and the region
+ * marked data-slot="dialog-body" is the SINGLE vertical scroll owner. This is
+ * a data-slot convention, not a wrapper component — consumers group their
+ * scrollable content in a plain div. Dialog-level horizontal scrolling is
+ * never legal (too-wide content escalates the size vocabulary instead).
+ */
+[data-slot="dialog-body"] {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
