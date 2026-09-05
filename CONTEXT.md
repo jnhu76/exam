@@ -30,10 +30,10 @@ _Avoid_: scoring mode
 **standardAnswer**: The correct or reference answer for a question. Required for auto-graded questions. Optional (may be null) for text_response. Not a subjectivity marker.
 _Avoid_: answer key, correct answer (use standardAnswer), solution
 
-**rubric**: A scoring guide for manual grading. Phase 1 MVP stores it as plain text; no rubric builder UI. Required for text_response questions at publish time (rubric must be non-empty; standardAnswer is optional). Two-layer storage: `questions.rubric` is the authoring/editing source; `QuestionSnapshot.rubric` is the frozen grading source, copied at attempt creation time. Grading views must read from snapshot, never JOIN live questions table.
+**rubric**: A scoring guide for manual grading. Phase 1 MVP stores it as plain text; no rubric builder UI. Required for text_response questions at publish time (rubric must be non-empty; standardAnswer is optional). Two-layer storage: `questions.rubric` is the authoring/editing source; `QuestionSnapshot.rubric` is the frozen grading source, built into `exam.questionSnapshot` by `publishExam` at publish time. Attempt start copies that already-frozen exam snapshot (`startOrRestoreAttempt`); it never re-reads live questions. Grading views must read from snapshot, never JOIN live questions table.
 _Avoid_: marking scheme, scoring rubric (use rubric)
 
-**Known risk — per-attempt snapshot timing**: If snapshots are created when each candidate starts (not at exam publish), different candidates may receive different rubric versions if the teacher edits between starts. MVP accepts this risk; a future exam-publish-time snapshot would fix it.
+**Snapshot timing**: The question snapshot (including rubric and standardAnswer) is frozen once from live questions at exam publish (`publishExam` → `buildQuestionSnapshot` → `exam.questionSnapshot`). Attempt start copies that frozen snapshot into the attempt; it is not re-derived from live questions. Post-publish question-bank edits do not affect the published exam's snapshot or any attempt.
 
 **Publish validation**: Auto-graded questions (single_choice, multiple_choice, true_false, fill_blank) require a non-empty standardAnswer. text_response requires a non-empty rubric at publish time; standardAnswer is optional. Empty strings like "暂无" do not count as valid.
 
@@ -126,7 +126,7 @@ _Avoid_: working answers, draft column
 **submitted_answers** (column): The frozen snapshot of answers at submit time. Written once in the submit transaction as a clean `SubmittedAnswersSnapshot` (no clientSeq/baseVersion). Immutable after submit. Used exclusively by grading and result computation.
 _Avoid_: final answers, locked answers, grading answers
 
-**SubmittedAnswersSnapshot**: The shape of `submitted_answers`: `{ schemaVersion: 1, answers: { questionId: string, value: unknown }[] }`. Derived from draft answers by normalizing against the exam question snapshot and stripping protocol metadata.
+**SubmittedAnswersSnapshot**: The shape of `submitted_answers`: `{ schemaVersion: 1, answers: { questionId: string, value: unknown }[] }`. Derived from draft answers by normalizing against the attempt's frozen question snapshot and stripping protocol metadata.
 
 **submitted_answers_hash**: NOT a DB column in MVP. Hash utilities (`hashSubmittedAnswers()`) exist for testing, backfill verification, and optional audit logging, but idempotency is guaranteed by transactions + status guards + submitted_answers immutability, not by hash comparison.
 
