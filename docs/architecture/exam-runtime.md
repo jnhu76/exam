@@ -98,7 +98,7 @@ function getGradingMode(type: QuestionType): GradingMode {
 | 层级 | 字段 | 用途 |
 | ---- | ---- | ---- |
 | `questions.rubric` | 命题编辑源 | 教师创建/编辑题目时写入 |
-| `QuestionSnapshot.rubric` | 冻结评分源 | attempt 创建时从 questions 复制，评分只从此处读取 |
+| `QuestionSnapshot.rubric` | 冻结评分源 | `publishExam` 发布时从 `questions.rubric` 复制进 `exam.questionSnapshot`；attempt 开始时复制这份已冻结的 exam 快照，评分只从此处读取 |
 
 **关键约束**：grading 视图必须从 `QuestionSnapshot` 读取 rubric，禁止 JOIN live `questions` 表。
 
@@ -214,7 +214,18 @@ const OPEN_STATUSES = new Set(["published", "open"]);
 
 - Exam 处于 `published` 或 `open` 时，被分配/合格的 Candidate 可以开始 attempt。
 - 一个 Exam 可以有多个 Attempt（取决于 retake 策略）。
-- Attempt 创建时冻结 QuestionSnapshot（含 rubric）。
+- QuestionSnapshot（含 rubric）在 `publishExam` 发布时从 live questions 一次性构建并冻结到 `exam.questionSnapshot`；Attempt 创建时**复制**这份已冻结的 exam 快照（`startOrRestoreAttempt`），不重新读取 live questions，也不产生新版本——同一发布下的所有 attempt 共享同一冻结内容。
+
+```text
+live questions（可变命题源）
+    │ publishExam —— 发布 = 冻结点（buildQuestionSnapshot）
+    ▼
+exam.questionSnapshot
+    │ startOrRestoreAttempt —— attempt 开始 = 复制既有冻结快照
+    ▼
+attempt.questionSnapshot
+```
+
 - Exam 进入 `closed/canceled/archived` 后不再接受新 attempt；已有 attempt 的生命周期不受 Exam 状态变化影响（attempt 状态机独立，见 §3）。
 
 ---
@@ -664,7 +675,7 @@ maxScore
 
 上述元数据必须来自冻结 `QuestionSnapshot`（`QuestionSnapshot.standardAnswer`、`QuestionSnapshot.rubric`），不得 JOIN live `questions` 表。协议级要求 `rubric` 为 text_response 的冻结评分元数据（§1.5）。Candidate 可见性由 result/answer visibility 单独控制（§6.3），grader 元数据不通过 CandidateTakeSnapshot 泄漏（§6.1 安全投影）。
 
-> **实现差距记录**：当前 `GradingDetailsQuestionSchema` 与 grading-details 路由投影**尚未**投影 `standardAnswer` 与 `rubric`（两者在冻结 `QuestionSnapshot` 中已存在）。这是 P3-MOD-P1-1 已确认的生产缺陷（评分者缺少冻结评分依据），由 P1-1 修复——本协议要求不变。
+> **As-built**：`GradingDetailsQuestionSchema`（`packages/contracts/src/score.ts`）与 grading-details 路由（`apps/api/src/routes/gradingQueue.ts`）已投影 `standardAnswer` 与 `rubric`，两者均取自冻结 `QuestionSnapshot`（不 JOIN live questions）——上述协议要求已由实现满足。
 
 **教师/管理员评分可见性**：教师/管理员在评分视图中能看到考生已提交答案（来自冻结 entry 的 candidateAnswer），不受考生可见性策略约束。
 
@@ -901,7 +912,7 @@ type TransientEvent =
 
 - `questions` 表：`type` 枚举新增 `'text_response'`，新增 `rubric text`
 - `exam_attempts` 表：新增 `submitted_answers jsonb`，`submission_reason text nullable`
-- **无独立 `question_snapshots` 表**：`QuestionSnapshot.rubric` 作为 JSONB 内嵌字段存储在 `exam_attempts.question_snapshot` 列中，由 `buildQuestionSnapshot()` 在 attempt 创建时从 `questions.rubric` 冻结写入
+- **无独立 `question_snapshots` 表**：`QuestionSnapshot`（含 rubric）作为 JSONB 内嵌字段存储在 `exams.question_snapshot`（发布时由 `buildQuestionSnapshot()` 从 live questions 冻结构建）与 `exam_attempts.question_snapshot`（attempt 开始时复制的已冻结 exam 快照）两列中
 
 ### 9.2 Backfill 脚本（独立 TypeScript）
 
