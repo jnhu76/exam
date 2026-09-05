@@ -12,16 +12,20 @@ import { loginAsAdmin } from "../lib/login";
 /**
  * Shadow-layer inspection for the #412 keyboard focus-ring evidence below:
  * splits the computed box-shadow into layers (top-level commas) and extracts
- * each layer's spread (4th length). The focus ring renders as a layer with a
- * >=3px spread, so asserting on layers proves the FINAL rendered cascade —
- * not merely that --tw-ring-shadow is registered (the original bug had the
- * variable populated while a recipe-owned literal box-shadow erased the
- * rendered ring).
+ * each layer's spread (4th length) plus the max color alpha among the
+ * ring-sized layers. The focus ring renders as a layer with a >=3px spread
+ * AND a non-transparent color, so asserting on both proves the FINAL
+ * rendered cascade — not merely that --tw-ring-shadow is registered (the
+ * original bug had the variable populated while a recipe-owned literal
+ * box-shadow erased the rendered ring), and not merely geometric (a
+ * ring-*transparent regression keeps the 3px spread at zero alpha).
  */
 type ShadowEvidence = {
   focusVisible: boolean;
   shadow: string;
   ringSizedLayers: number;
+  /** Max alpha among ring-sized layers (null when no ring-sized layer). */
+  ringSizedAlphaMax: number | null;
 };
 
 async function readShadow(
@@ -47,14 +51,34 @@ async function readShadow(
       }
     }
     if (cur.trim()) layers.push(cur.trim());
-    const spreads = layers.map((layer) => {
+    const RING_SPREAD_PX = 3;
+    const layerInfos = layers.map((layer) => {
       const lengths = layer.match(/-?[\d.]+px/g) ?? [];
-      return lengths.length >= 4 ? parseFloat(lengths[3] ?? "0") : 0;
+      const spread = lengths.length >= 4 ? parseFloat(lengths[3] ?? "0") : 0;
+      // Chromium serializes layers color-first: "<color> <x> <y> <blur>
+      // <spread>". The color prefix ends at the first length token; its
+      // alpha is the trailing decimal inside the parens (rgba "..., a)" or
+      // oklab "... / a)"). A color function without a trailing alpha token
+      // serializes fully opaque per CSS serialization rules, so it parses
+      // as alpha 1.
+      const colorPart = layer.split(/(?=-?\d*\.?\d+px)/)[0] ?? "";
+      const alphaMatch = colorPart.match(/[\/,]\s*([\d.]+)\s*\)\s*$/);
+      const alpha = alphaMatch
+        ? parseFloat(alphaMatch[1] ?? "0")
+        : /(^[\w-]+\(.*\)\s*$)/.test(colorPart)
+          ? 1
+          : null;
+      return { spread, alpha };
     });
+    const ringSized = layerInfos.filter(
+      (l) => l.spread >= RING_SPREAD_PX - 0.01,
+    );
+    const alphas = ringSized.map((l) => l.alpha ?? 0);
     return {
       focusVisible: el.matches(":focus-visible"),
       shadow,
-      ringSizedLayers: spreads.filter((s) => s >= 3 - 0.01).length,
+      ringSizedLayers: ringSized.length,
+      ringSizedAlphaMax: alphas.length > 0 ? Math.max(...alphas) : null,
     };
   }, selector);
 }
@@ -123,6 +147,22 @@ async function assertKeyboardFocusRing(
     `${selector} keyboard-focused box-shadow must render a >=3px focus-ring ` +
       `layer; got "${focused.shadow}"`,
   ).toBeGreaterThanOrEqual(1);
+
+  // Visibility: a ring can keep its 3px geometry while rendering invisible
+  // (e.g. a ring-transparent regression zeroes the color alpha), so the
+  // ring-sized layer must also carry non-zero alpha. The exact value stays
+  // unasserted — the design system may tune focus opacity — the invariant is
+  // "visible, not transparent".
+  expect(
+    focused.ringSizedAlphaMax,
+    `${selector} focus-ring layer color alpha must be parseable; ` +
+      `got "${focused.shadow}"`,
+  ).not.toBeNull();
+  expect(
+    focused.ringSizedAlphaMax ?? 0,
+    `${selector} focus-ring-sized layer must be visibly rendered ` +
+      `(alpha > 0.01); got "${focused.shadow}"`,
+  ).toBeGreaterThan(0.01);
 }
 
 /**
