@@ -548,6 +548,27 @@ describe("FormSection", () => {
 
     expect(screen.getByRole("button", { name: "重置" })).toBeInTheDocument();
   });
+
+  it("lays out one column by default and two columns only when declared", () => {
+    const { rerender } = render(
+      <FormSection title="单列">
+        <p>甲</p>
+      </FormSection>,
+    );
+    // The content grid is the direct parent of the section's children.
+    const content = screen.getByText("甲").parentElement;
+    expect(content).toHaveClass("grid", "gap-4");
+    expect(content).not.toHaveClass("sm:grid-cols-2");
+
+    rerender(
+      <FormSection title="双列" columns={2}>
+        <p>甲</p>
+      </FormSection>,
+    );
+    // Two columns arrive at the sm breakpoint (below sm the section stacks —
+    // the shared form responsive behavior, same as FieldRow).
+    expect(content).toHaveClass("grid", "gap-4", "sm:grid-cols-2");
+  });
 });
 
 describe("DataToolbar", () => {
