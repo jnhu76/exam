@@ -202,6 +202,14 @@ export interface EmailConfig {
   fakeMode: EmailFakeMode;
   /** Simulated transport latency for the fake sender (0 = immediate). */
   fakeDelayMs: number;
+  /**
+   * Fake-transport-only witness path (#482): when non-empty, the fake sender
+   * writes this file on entry to send(), BEFORE the simulated delay — a
+   * happens-before "send entered" signal for deployment tests, which a
+   * queue-claim observation (status=processing) cannot provide. Empty
+   * disables; production deployments never set it.
+   */
+  fakeSendEnteredFile: string;
   maxAttempts: number;
   retryBaseSeconds: number;
   smtp: SmtpConfig | null;
@@ -433,6 +441,7 @@ function resolveEmailConfig(
     fromName: s.email.EMAIL_FROM_NAME,
     fakeMode: s.email.EMAIL_FAKE_MODE,
     fakeDelayMs: s.email.EMAIL_FAKE_DELAY_MS,
+    fakeSendEnteredFile: s.email.EMAIL_FAKE_SEND_ENTERED_FILE,
     maxAttempts: s.email.EMAIL_MAX_ATTEMPTS,
     retryBaseSeconds: s.email.EMAIL_RETRY_BASE_SECONDS,
     smtp,

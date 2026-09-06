@@ -778,6 +778,12 @@ export const SETTINGS = {
     EMAIL_TRANSPORT: enumLeaf(["fake", "smtp"] as const, "fake"),
     EMAIL_FAKE_MODE: enumLeaf(["success", "failure"] as const, "success"),
     EMAIL_FAKE_DELAY_MS: nonNegIntLeaf(0),
+    // Test/deployment-rehearsal-only witness seam (#482): when set, the fake
+    // sender writes this file the moment execution enters send(), BEFORE the
+    // simulated delay — a happens-before "send entered" signal that a
+    // queue-claim observation (status=processing) cannot provide. Empty =
+    // disabled; production deployments never set it.
+    EMAIL_FAKE_SEND_ENTERED_FILE: stringLeaf("", { trim: true }),
     EMAIL_FROM: stringLeaf("no-reply@example.local", { trim: true }),
     EMAIL_FROM_NAME: stringLeaf("Exam Platform", { trim: true }),
     EMAIL_MAX_ATTEMPTS: posIntLeaf(3),
