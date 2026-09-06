@@ -22,7 +22,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { DataTableShell } from "./DataTableShell";
+import {
+  DataTableShell,
+  isMobileRepresentationAllowed,
+} from "./DataTableShell";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -59,8 +62,33 @@ const scrollOnlyConsumers = [
 ] as const;
 
 describe("mobile card representation structural guards (issue 457)", () => {
+  // ── C2: production-safe archetype enforcement ──
+
+  it.each([
+    { archetype: "management-list" as const, hasMobile: true, expected: true },
+    {
+      archetype: "management-list" as const,
+      hasMobile: false,
+      expected: false,
+    },
+    {
+      archetype: "detail-comparison" as const,
+      hasMobile: true,
+      expected: false,
+    },
+    { archetype: "log-diagnostic" as const, hasMobile: true, expected: false },
+    { archetype: "embedded-picker" as const, hasMobile: true, expected: false },
+  ])(
+    "isMobileRepresentationAllowed($archetype, $hasMobile) → $expected",
+    ({ archetype, hasMobile, expected }) => {
+      expect(isMobileRepresentationAllowed(archetype, hasMobile)).toBe(
+        expected,
+      );
+    },
+  );
+
   it.each(["detail-comparison", "log-diagnostic"])(
-    "the shell fails loud when the mobile slot meets archetype %s",
+    "the shell fails loud when the mobile slot meets archetype %s (DEV/test)",
     (archetype) => {
       expect(() =>
         render(
@@ -109,20 +137,43 @@ describe("mobile card representation structural guards (issue 457)", () => {
     expect(source).not.toMatch(/actions=\{[\s\S]*<Button[\s\S]*ConfirmDialog/);
   });
 
+  // ── C3: single responsive policy owner ──
+
+  it("ResponsiveRepresentation is the sole owner of the lg:hidden / hidden lg:block viewport switch", () => {
+    const owner = read("./ResponsiveRepresentation.tsx");
+    expect(owner).toMatch(/lg:hidden/);
+    expect(owner).toMatch(/hidden min-w-0 lg:block/);
+
+    // DataTableShell and DataWorkbench must NOT independently encode the
+    // responsive viewport policy — they consume ResponsiveRepresentation.
+    const shell = read("./DataTableShell.tsx");
+    const workbench = read("./DataWorkbench.tsx");
+    // Shell may reference lg:hidden in the ResponsiveRepresentation import
+    // usage, but must not define its own lg:hidden class.
+    expect(shell).not.toMatch(/className="[^"]*lg:hidden/);
+    expect(shell).not.toMatch(/className="[^"]*hidden lg:block/);
+    // Workbench same.
+    expect(workbench).not.toMatch(/className="[^"]*lg:hidden/);
+    expect(workbench).not.toMatch(/className="[^"]*hidden lg:block/);
+  });
+
+  it("DataTableShell and DataWorkbench both consume ResponsiveRepresentation", () => {
+    const shell = read("./DataTableShell.tsx");
+    const workbench = read("./DataWorkbench.tsx");
+    expect(shell).toContain("ResponsiveRepresentation");
+    expect(workbench).toContain("ResponsiveRepresentation");
+  });
+
   it("keeps the viewport switch CSS-only (no JS breakpoint drives representation)", () => {
+    const owner = read("./ResponsiveRepresentation.tsx");
     const shell = read("./DataTableShell.tsx");
     const workbench = read("./DataWorkbench.tsx");
     const list = read("./MobileRecordList.tsx");
-    for (const source of [shell, workbench, list]) {
+    for (const source of [owner, shell, workbench, list]) {
       expect(source).not.toMatch(
         /matchMedia|useMediaQuery|innerWidth|addEventListener\("resize"/,
       );
     }
-    // The CSS switch classes themselves.
-    expect(shell).toMatch(/lg:hidden/);
-    expect(shell).toMatch(/hidden min-w-0 lg:block/);
-    expect(workbench).toMatch(/lg:hidden/);
-    expect(workbench).toMatch(/hidden lg:block/);
   });
 
   it("keeps MobileRecordCard the single card authority (no second card component)", () => {

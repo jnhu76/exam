@@ -113,8 +113,11 @@ function questionListPayload(
 
 /** The desktop table shell region (rows also render in the mobile card list). */
 function desktopShell(): HTMLElement {
+  // C3: admin-table-shell now contains both mobile and desktop regions via
+  // ResponsiveRepresentation. Scope to the desktop region so queries don't
+  // match mobile card content (jsdom doesn't apply CSS visibility).
   return document.querySelector(
-    '[data-slot="admin-table-shell"]',
+    '[data-slot="admin-table-shell"] [data-slot="responsive-desktop-region"]',
   ) as HTMLElement;
 }
 
@@ -189,9 +192,7 @@ describe("QuestionPage", () => {
       '[data-slot="data-workbench"]',
     ) as HTMLElement;
     expect(workbench).toHaveClass("surface-content", "overflow-hidden");
-    const desktop = document.querySelector(
-      '[data-slot="admin-table-shell"]',
-    ) as HTMLElement;
+    const desktop = desktopShell();
     // toolbar and footer are both regions inside the single workbench shell.
     expect(workbench.contains(screen.getByRole("toolbar"))).toBe(true);
     await waitFor(() =>

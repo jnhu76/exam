@@ -79,24 +79,23 @@ describe("DataWorkbench", () => {
     expect(region).toHaveAttribute("data-table-tier", "compact");
   });
 
-  it("keeps the mobile list OUTSIDE the admin-table-shell region", () => {
+  it("places both mobile and desktop representations under one responsive owner", () => {
     render(
       <DataWorkbench
         desktopTable={<table aria-label="桌面表" />}
         mobileList={<div>移动卡片内容</div>}
       />,
     );
+    // C3: both representations live inside admin-table-shell, governed by a
+    // single ResponsiveRepresentation owner. At desktop viewport the mobile
+    // region is CSS-hidden; at mobile the desktop region is CSS-hidden.
     const region = screen
       .getByRole("table", { name: "桌面表" })
       .closest('[data-slot="admin-table-shell"]') as HTMLElement;
-    // mobile content lives in the workbench shell but NOT inside the desktop
-    // table scroll region, so a query scoped to admin-table-shell matches only
-    // desktop content.
-    expect(region.contains(screen.getByText("移动卡片内容"))).toBe(false);
-    const workbench = screen
-      .getByRole("table", { name: "桌面表" })
-      .closest('[data-slot="data-workbench"]');
-    expect(workbench!.contains(screen.getByText("移动卡片内容"))).toBe(true);
+    expect(region.contains(screen.getByText("移动卡片内容"))).toBe(true);
+    expect(region.contains(screen.getByRole("table", { name: "桌面表" }))).toBe(
+      true,
+    );
   });
 
   it("surfaces scroll affordances when the table overflows", () => {

@@ -7,6 +7,7 @@ import {
   negotiateTier,
   type TableArchetype,
 } from "@/components/shared/DataTableShell";
+import { ResponsiveRepresentation } from "@/components/shared/ResponsiveRepresentation";
 
 /**
  * DataWorkbench — a single, continuous, compact data shell
@@ -23,16 +24,16 @@ import {
  *   <DataWorkbench>
  *   ├─ <DataWorkbenchToolbar>   // the shell's quiet TOP region (no own card)
  *   ├─ desktop table            // the viewport's scrollable table region
- *   │    (admin-table-shell)    //   (hidden below lg)
- *   ├─ mobile list              // a separate region (hidden at lg+), NOT inside
- *   │                           //   the admin-table-shell scroll region
+ *   │    (admin-table-shell)    //   (hidden below lg by the responsive owner)
+ *   ├─ mobile list              // sibling region of the same responsive owner
+ *   │                           //   (hidden at lg+)
  *   └─ <DataWorkbenchFooter>    // count + pagination, the shell's BOTTOM region
  *
- * The desktop table lives in the scroll region that emits
- * data-slot="admin-table-shell" (so role-based table/recipes.css +
- * workbench.css keep applying). The mobile list is a SEPARATE region of the
- * shell, separate from the desktop table region, so a query scoped to
- * [data-slot="admin-table-shell"] matches only desktop table content.
+ * Both representations are mounted inside the data-slot="admin-table-shell"
+ * region and composed through ResponsiveRepresentation (UI-TABLE-MOBILE-1 C3:
+ * the single lg-breakpoint policy owner), so role-based table/recipes.css +
+ * workbench.css keep applying. Text queries must scope to
+ * [data-slot="responsive-desktop-region"] to match only desktop content.
  *
  * Overflow facts come from the shared useOverflowObservation hook (the single
  * measurement authority), so the viewport still owns local horizontal scroll
@@ -100,8 +101,10 @@ export function DataWorkbench({
           data-scroll-end={String(overflow.atEnd)}
           className={cn("min-w-0 overflow-x-auto", contentClassName)}
         >
-          {/* Desktop table — hidden below lg; admin-table-shell owns its grid. */}
-          <div className="hidden lg:block">{desktopTable}</div>
+          <ResponsiveRepresentation
+            mobile={mobileList ?? null}
+            desktop={desktopTable}
+          />
         </div>
         {overflow.overflowing && !overflow.atStart && (
           <span data-slot="table-scroll-fade-left" aria-hidden="true" />
@@ -134,9 +137,6 @@ export function DataWorkbench({
           </div>
         )}
       </div>
-      {/* Mobile cards — a separate region (NOT inside admin-table-shell), so a
-          query scoped to admin-table-shell matches only desktop table content. */}
-      <div className="lg:hidden">{mobileList}</div>
       {footer}
     </section>
   );
