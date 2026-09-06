@@ -26,6 +26,8 @@ import {
   DataTableShell,
   isMobileRepresentationAllowed,
 } from "./DataTableShell";
+import { deriveMobileCardFields } from "./MobileRecordList";
+import type { DataViewColumnDef } from "./DesktopDataTable";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -135,6 +137,59 @@ describe("mobile card representation structural guards (issue 457)", () => {
     // The private hand-built card region (hand-wired Buttons + ConfirmDialog
     // inside MobileRecordCard slots) is gone.
     expect(source).not.toMatch(/actions=\{[\s\S]*<Button[\s\S]*ConfirmDialog/);
+  });
+
+  // ── C4: per-column priority audit (issue 457) ──
+  // Every decision below is a declaration-local override on the page's column
+  // array; the global ROLE_PRIORITY defaults are NOT modified.
+
+  it("keeps unbounded dynamic CandidateFields off the card meta line", () => {
+    // The mechanism: a secondary-text field participates in the meta line
+    // unless the declaration overrides it to low.
+    const card = (priority?: "low") =>
+      deriveMobileCardFields([
+        {
+          id: "username",
+          meta: { role: "primary-text" },
+          header: "用户名",
+          cell: () => "u",
+        },
+        {
+          id: "field-1",
+          meta: { role: "secondary-text", priority },
+          header: "动态字段",
+          cell: () => "v",
+        },
+      ] as DataViewColumnDef<{ username: string }>[]);
+    expect(card().map((f) => f.slot)).toEqual(["primary", "meta"]);
+    expect(card("low").map((f) => f.slot)).toEqual(["primary"]);
+
+    // The audited page: the dynamic fields.map declaration carries the
+    // priority "low" override (removing it must fail this pin — M-C4).
+    const source = read("../../pages/admin/CandidatesPage.tsx");
+    const dynamicDecl = source.match(
+      /\.\.\.fields\.map\(\(field\) => \(\{[\s\S]*?\}\)\),/,
+    );
+    expect(dynamicDecl, "dynamic field declaration found").toBeTruthy();
+    expect(dynamicDecl![0]).toMatch(/priority: "low"/);
+  });
+
+  it.each([
+    { file: "../../pages/admin/UsersPage", what: "account role" },
+    { file: "../../pages/admin/InvitationsCard", what: "invited role" },
+  ])("$what joins the card meta line (type defaults low)", ({ file }) => {
+    const source = read(`${file}.tsx`);
+    expect(source).toMatch(/id: "role",[\s\S]{0,200}priority: "normal"/);
+  });
+
+  it("keeps QuestionPage card parity: score is labeled meta, type+content lead", () => {
+    const source = read("../../pages/admin/QuestionPage.tsx");
+    // score (role "score" defaults high → header cluster) must stay a labeled
+    // meta line, matching the pre-derivation hand-mapped card.
+    expect(source).toMatch(/id: "score",[\s\S]{0,200}priority: "normal"/);
+    // type badge and content keep leading the card.
+    expect(source).toMatch(/id: "type",[\s\S]{0,200}priority: "high"/);
+    expect(source).toMatch(/id: "content",[\s\S]{0,200}priority: "high"/);
   });
 
   // ── C3: single responsive policy owner ──

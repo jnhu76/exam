@@ -417,7 +417,10 @@ export function CandidatesPage() {
     },
     ...fields.map((field) => ({
       id: field.id,
-      meta: { role: "secondary-text" as const },
+      // priority "low": deployment-defined fields are unbounded in count, so
+      // they stay off the card meta line (desktop ignores priority — it is
+      // card-selection metadata only, issue 457 audit).
+      meta: { role: "secondary-text" as const, priority: "low" as const },
       header: field.label,
       cell: ({ row }: { row: { original: Candidate } }) =>
         String(row.original.fields[field.name] ?? "-"),

@@ -181,7 +181,9 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
     },
     {
       id: "role",
-      meta: { role: "type" },
+      // priority "normal": the invited role is identity-critical on the card;
+      // role "type" alone would default to low and drop it (issue 457 audit).
+      meta: { role: "type", priority: "normal" },
       header: t("admin.users.invitations.columns.role"),
       cell: ({ row }) => (
         <Badge variant="outline">{roleLabel(row.original.role)}</Badge>

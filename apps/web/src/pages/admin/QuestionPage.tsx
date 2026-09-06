@@ -268,7 +268,9 @@ export function QuestionPage() {
     },
     {
       id: "score",
-      meta: { role: "score" },
+      // priority "normal": the card shows score as a labeled meta line, not a
+      // bare header-cluster value (issue 457 audit; role "score" defaults high).
+      meta: { role: "score", priority: "normal" },
       header: t("admin.questions.columns.score" as never),
       cell: ({ row }) => row.original.score,
     },
