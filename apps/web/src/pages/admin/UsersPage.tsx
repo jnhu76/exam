@@ -27,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   BookOpen,
   ClipboardCheck,
@@ -40,10 +39,10 @@ import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
 import { InvitationsCard } from "@/pages/admin/InvitationsCard";
@@ -407,6 +406,102 @@ export function UsersPage() {
     }
   }
 
+  // Single-source column declarations (issue 457): the same array feeds the
+  // desktop table and the derived mobile card list — no page-local mobile map.
+  const columns: DataViewColumnDef<UserRow>[] = [
+    {
+      id: "username",
+      meta: { role: "primary-text" },
+      header: t("admin.users.columns.username"),
+      cell: ({ row }) => row.original.username,
+    },
+    {
+      id: "name",
+      meta: { role: "primary-text" },
+      header: t("admin.users.columns.name"),
+      cell: ({ row }) => row.original.name,
+    },
+    {
+      id: "role",
+      meta: { role: "type" },
+      header: t("admin.users.columns.role"),
+      cell: ({ row }) => (
+        <Badge variant="outline">{roleLabel(row.original.role)}</Badge>
+      ),
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.users.columns.status"),
+      cell: ({ row }) => (
+        <StatusBadge status={row.original.isActive ? "active" : "inactive"} />
+      ),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.users.columns.actions"),
+      cell: ({ row }) => {
+        const user = row.original;
+        return (
+          <RowActions
+            row={user}
+            actions={[
+              {
+                id: "edit",
+                label: t("admin.users.editLabel"),
+                icon: Pencil,
+                onSelect: () => open(user),
+              },
+              ...(user.role === "Teacher"
+                ? [
+                    {
+                      id: "teacher-courses",
+                      label: t("admin.users.teacherCourses.openBtn"),
+                      icon: BookOpen,
+                      onSelect: () => void openAssignments(user),
+                    },
+                  ]
+                : []),
+              ...(user.role === "Grader"
+                ? [
+                    {
+                      id: "grader-exams",
+                      label: t("admin.users.graderExams.openBtn"),
+                      icon: ClipboardCheck,
+                      onSelect: () => void openExamAssignments(user),
+                    },
+                  ]
+                : []),
+              {
+                id: "toggle-active",
+                label: user.isActive
+                  ? t("admin.common.disable")
+                  : t("admin.common.enable"),
+                icon: Power,
+                tone: user.isActive ? "destructive" : "default",
+                disabled: togglingId !== null,
+                confirm: {
+                  title: user.isActive
+                    ? t("admin.common.confirmDisable")
+                    : t("admin.common.confirmEnable"),
+                  description: t("admin.users.enableDisable", {
+                    action: user.isActive
+                      ? t("admin.common.disable")
+                      : t("admin.common.enable"),
+                    name: user.name,
+                  }),
+                  destructive: user.isActive,
+                },
+                onSelect: () => void toggle(user),
+              },
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
@@ -428,110 +523,20 @@ export function UsersPage() {
           description={t("admin.users.emptyDescription")}
         />
       ) : (
-        <DataTableShell>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "primary-text", key: "username" },
-                { role: "primary-text", key: "name" },
-                { role: "type" },
-                { role: "status" },
-                { role: "actions" },
-              ]}
+        <DataTableShell
+          mobile={
+            <MobileRecordList
+              columns={columns}
+              rows={users}
+              getRowId={(u) => u.id}
             />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="primary-text">
-                  {t("admin.users.columns.username")}
-                </DataTableHead>
-                <DataTableHead role="primary-text">
-                  {t("admin.users.columns.name")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.users.columns.role")}
-                </DataTableHead>
-                <DataTableHead role="status">
-                  {t("admin.users.columns.status")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.users.columns.actions")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <DataTableCell role="primary-text">
-                    {user.username}
-                  </DataTableCell>
-                  <DataTableCell role="primary-text">{user.name}</DataTableCell>
-                  <DataTableCell role="type">
-                    <Badge variant="outline">{roleLabel(user.role)}</Badge>
-                  </DataTableCell>
-                  <DataTableCell role="status">
-                    <StatusBadge
-                      status={user.isActive ? "active" : "inactive"}
-                    />
-                  </DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions
-                      row={user}
-                      actions={[
-                        {
-                          id: "edit",
-                          label: t("admin.users.editLabel"),
-                          icon: Pencil,
-                          onSelect: () => open(user),
-                        },
-                        ...(user.role === "Teacher"
-                          ? [
-                              {
-                                id: "teacher-courses",
-                                label: t("admin.users.teacherCourses.openBtn"),
-                                icon: BookOpen,
-                                onSelect: () => void openAssignments(user),
-                              },
-                            ]
-                          : []),
-                        ...(user.role === "Grader"
-                          ? [
-                              {
-                                id: "grader-exams",
-                                label: t("admin.users.graderExams.openBtn"),
-                                icon: ClipboardCheck,
-                                onSelect: () => void openExamAssignments(user),
-                              },
-                            ]
-                          : []),
-                        {
-                          id: "toggle-active",
-                          label: user.isActive
-                            ? t("admin.common.disable")
-                            : t("admin.common.enable"),
-                          icon: Power,
-                          tone: user.isActive ? "destructive" : "default",
-                          disabled: togglingId !== null,
-                          confirm: {
-                            title: user.isActive
-                              ? t("admin.common.confirmDisable")
-                              : t("admin.common.confirmEnable"),
-                            description: t("admin.users.enableDisable", {
-                              action: user.isActive
-                                ? t("admin.common.disable")
-                                : t("admin.common.enable"),
-                              name: user.name,
-                            }),
-                            destructive: user.isActive,
-                          },
-                          onSelect: () => void toggle(user),
-                        },
-                      ]}
-                    />
-                  </DataTableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          }
+        >
+          <DesktopDataTable
+            columns={columns}
+            data={users}
+            getRowId={(u) => u.id}
+          />
         </DataTableShell>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

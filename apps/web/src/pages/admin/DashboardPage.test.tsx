@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -143,17 +143,16 @@ describe("DashboardPage", () => {
 
     it("renders status badges with centralized tones for each status", async () => {
       renderPage();
-      await waitFor(() => {
-        expect(screen.getByText("开放中")).toBeInTheDocument();
-      });
-
-      const openBadge = screen.getByText("开放中");
+      // Badges render twice by design (desktop table + mobile cards);
+      // scope to the desktop table representation.
+      const table = await screen.findByRole("table");
+      const openBadge = within(table).getByText("开放中");
       expect(openBadge).toHaveAttribute("data-status-tone", "success");
 
-      const draftBadge = screen.getByText("草稿");
+      const draftBadge = within(table).getByText("草稿");
       expect(draftBadge).toHaveAttribute("data-status-tone", "muted");
 
-      const closedBadge = screen.getByText("已关闭");
+      const closedBadge = within(table).getByText("已关闭");
       expect(closedBadge).toHaveAttribute("data-status-tone", "secondary");
     });
   });
@@ -165,9 +164,7 @@ describe("DashboardPage", () => {
 
     it("renders quick action buttons for creating exam and importing questions", async () => {
       renderPage();
-      await waitFor(() => {
-        expect(screen.getByText("期中考试")).toBeInTheDocument();
-      });
+      await screen.findByRole("table");
 
       expect(
         screen.getByRole("button", { name: "创建考试" }),
@@ -179,9 +176,7 @@ describe("DashboardPage", () => {
 
     it("navigates to exam creation on create button click", async () => {
       renderPage();
-      await waitFor(() => {
-        expect(screen.getByText("期中考试")).toBeInTheDocument();
-      });
+      await screen.findByRole("table");
 
       const user = userEvent.setup();
       const createBtn = screen.getByRole("button", { name: "创建考试" });
@@ -197,21 +192,22 @@ describe("DashboardPage", () => {
     it("renders recent exams with title, status, and participant count", async () => {
       apiGet.mockResolvedValue(mockDashboardData);
       renderPage();
-      expect(await screen.findByText("期中考试")).toBeInTheDocument();
-      expect(screen.getByText("模拟测试")).toBeInTheDocument();
-      expect(screen.getByText("结业考试")).toBeInTheDocument();
-      expect(screen.getByText("20")).toBeInTheDocument();
-      expect(screen.getByText("0")).toBeInTheDocument();
-      expect(screen.getByText("35")).toBeInTheDocument();
+      const table = await screen.findByRole("table");
+      expect(within(table).getByText("期中考试")).toBeInTheDocument();
+      expect(within(table).getByText("模拟测试")).toBeInTheDocument();
+      expect(within(table).getByText("结业考试")).toBeInTheDocument();
+      expect(within(table).getByText("20")).toBeInTheDocument();
+      expect(within(table).getByText("0")).toBeInTheDocument();
+      expect(within(table).getByText("35")).toBeInTheDocument();
     });
 
     it("renders view button for each exam", async () => {
       apiGet.mockResolvedValue(mockDashboardData);
       renderPage();
-      await waitFor(() => {
-        expect(screen.getByText("期中考试")).toBeInTheDocument();
+      const table = await screen.findByRole("table");
+      const viewButtons = within(table).getAllByRole("button", {
+        name: /查看考试/,
       });
-      const viewButtons = screen.getAllByRole("button", { name: /查看考试/ });
       expect(viewButtons).toHaveLength(3);
     });
 
@@ -241,7 +237,10 @@ describe("DashboardPage", () => {
         recentExams: [],
       });
       renderPage();
-      expect(await screen.findByText("暂无考试")).toBeInTheDocument();
+      // The empty fact renders in both representations (desktop EmptyState
+      // hidden below lg, mobile empty card hidden at lg+).
+      const empties = await screen.findAllByText("暂无考试");
+      expect(empties.length).toBeGreaterThanOrEqual(1);
     });
   });
 

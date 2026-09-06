@@ -111,8 +111,11 @@ describe("ExamProfilePage (list)", () => {
     await act(async () => {
       renderPage();
     });
-    expect(await screen.findByText("标准在线考试")).toBeInTheDocument();
-    expect(screen.getByText("基础测验")).toBeInTheDocument();
+    // Row content renders twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("标准在线考试")).toBeInTheDocument();
+    expect(within(table).getByText("基础测验")).toBeInTheDocument();
   });
 
   it("renders a human-readable summary, not raw enum codes", async () => {
@@ -120,7 +123,8 @@ describe("ExamProfilePage (list)", () => {
     await act(async () => {
       renderPage();
     });
-    const row = await screen.findByText("标准在线考试");
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("标准在线考试");
     // Summary should contain human labels, not raw enum values.
     const summary = row.closest("tr")?.textContent ?? "";
     expect(summary).toContain("60");
@@ -142,8 +146,8 @@ describe("ExamProfilePage (list)", () => {
     await act(async () => {
       renderPage();
     });
-    await screen.findByText("标准在线考试");
-    const deleteBtn = screen.getByRole("button", {
+    const table = await screen.findByRole("table");
+    const deleteBtn = within(table).getByRole("button", {
       name: "删除",
     });
     await userEvent.click(deleteBtn);
@@ -160,8 +164,8 @@ describe("ExamProfilePage (list)", () => {
     await act(async () => {
       renderPage();
     });
-    await screen.findByText("标准在线考试");
-    await userEvent.click(screen.getByRole("button", { name: "删除" }));
+    const table = await screen.findByRole("table");
+    await userEvent.click(within(table).getByRole("button", { name: "删除" }));
     const dialog = await screen.findByRole("alertdialog");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "确认删除" }),

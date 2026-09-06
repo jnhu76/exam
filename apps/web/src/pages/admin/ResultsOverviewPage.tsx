@@ -12,13 +12,12 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
 import type { ScoreViewDisabledReasonCode } from "@exam/contracts";
@@ -96,12 +95,78 @@ export function ResultsOverviewPage() {
     return exam.scoreViewDisabledReason ?? "";
   }
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array.
+  const columns: DataViewColumnDef<ExamRow>[] = [
+    {
+      id: "title",
+      meta: { role: "primary-text" },
+      header: t("admin.resultsOverview.columns.title"),
+      cell: ({ row }) => row.original.title,
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.resultsOverview.columns.status"),
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      id: "time",
+      meta: { role: "date" },
+      header: t("admin.resultsOverview.columns.time"),
+      cell: ({ row }) =>
+        row.original.openAt ? formatDateTime(row.original.openAt) : "-",
+    },
+    {
+      id: "gradedCount",
+      meta: { role: "number" },
+      header: t("admin.resultsOverview.columns.gradedCount"),
+      cell: ({ row }) => row.original.gradedAttemptCount ?? 0,
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.resultsOverview.columns.actions"),
+      cell: ({ row }) => {
+        const exam = row.original;
+        const canView = gradable(exam);
+        const reason = gradableReason(exam);
+        return (
+          <RowActions
+            row={exam}
+            actions={[
+              {
+                id: "view-scores",
+                label: t("admin.resultsOverview.actions.viewScores"),
+                icon: Eye,
+                disabled: canView ? false : { reason },
+                onSelect: () => void navigate(routes.admin.examScores(exam.id)),
+              },
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-6">
         <PageHeader title={t("admin.resultsOverview.title")} />
 
-        <DataTableShell title={t("admin.resultsOverview.cardTitle")}>
+        <DataTableShell
+          title={t("admin.resultsOverview.cardTitle")}
+          mobile={
+            <MobileRecordList
+              columns={columns}
+              rows={exams}
+              getRowId={(e) => e.id}
+              empty={exams.length === 0}
+              emptyTitle={t("admin.resultsOverview.empty.title")}
+              emptyDescription={t("admin.resultsOverview.empty.description")}
+            />
+          }
+        >
           {exams.length === 0 ? (
             <EmptyState
               icon={<AppIcon icon={Gauge} size="hero" />}
@@ -109,75 +174,11 @@ export function ResultsOverviewPage() {
               description={t("admin.resultsOverview.empty.description")}
             />
           ) : (
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "primary-text" },
-                  { role: "status" },
-                  { role: "date" },
-                  { role: "number" },
-                  { role: "actions" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="primary-text">
-                    {t("admin.resultsOverview.columns.title")}
-                  </DataTableHead>
-                  <DataTableHead role="status">
-                    {t("admin.resultsOverview.columns.status")}
-                  </DataTableHead>
-                  <DataTableHead role="date">
-                    {t("admin.resultsOverview.columns.time")}
-                  </DataTableHead>
-                  <DataTableHead role="number">
-                    {t("admin.resultsOverview.columns.gradedCount")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.resultsOverview.columns.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {exams.map((exam) => {
-                  const canView = gradable(exam);
-                  const reason = gradableReason(exam);
-                  return (
-                    <TableRow key={exam.id}>
-                      <DataTableCell role="primary-text">
-                        {exam.title}
-                      </DataTableCell>
-                      <DataTableCell role="status">
-                        <StatusBadge status={exam.status} />
-                      </DataTableCell>
-                      <DataTableCell role="date">
-                        {exam.openAt ? formatDateTime(exam.openAt) : "-"}
-                      </DataTableCell>
-                      <DataTableCell role="number">
-                        {exam.gradedAttemptCount ?? 0}
-                      </DataTableCell>
-                      <DataTableCell role="actions">
-                        <RowActions
-                          row={exam}
-                          actions={[
-                            {
-                              id: "view-scores",
-                              label: t(
-                                "admin.resultsOverview.actions.viewScores",
-                              ),
-                              icon: Eye,
-                              disabled: canView ? false : { reason },
-                              onSelect: () =>
-                                void navigate(routes.admin.examScores(exam.id)),
-                            },
-                          ]}
-                        />
-                      </DataTableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <DesktopDataTable
+              columns={columns}
+              data={exams}
+              getRowId={(e) => e.id}
+            />
           )}
         </DataTableShell>
       </div>

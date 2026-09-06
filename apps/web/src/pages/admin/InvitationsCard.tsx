@@ -25,12 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { RowActions } from "@/components/shared/RowActions";
 import { PageSection } from "@/components/shared/PageSection";
@@ -171,6 +170,66 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
     }
   }
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array.
+  const columns: DataViewColumnDef<StaffInvitationDTO>[] = [
+    {
+      id: "email",
+      meta: { role: "primary-text" },
+      header: t("admin.users.invitations.columns.email"),
+      cell: ({ row }) => row.original.email,
+    },
+    {
+      id: "role",
+      meta: { role: "type" },
+      header: t("admin.users.invitations.columns.role"),
+      cell: ({ row }) => (
+        <Badge variant="outline">{roleLabel(row.original.role)}</Badge>
+      ),
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.users.invitations.columns.status"),
+      cell: ({ row }) => (
+        <Badge variant={statusBadgeVariant(row.original.status)}>
+          {t(`admin.users.invitations.status.${row.original.status}`)}
+        </Badge>
+      ),
+    },
+    {
+      id: "expiresAt",
+      meta: { role: "type", priority: "normal" },
+      header: t("admin.users.invitations.columns.expiresAt"),
+      cell: ({ row }) => new Date(row.original.expiresAt).toLocaleString(),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.users.invitations.columns.actions"),
+      cell: ({ row }) =>
+        row.original.status === "pending" ? (
+          <RowActions
+            row={row.original}
+            actions={[
+              {
+                id: "revoke",
+                label: t("admin.users.invitations.revoke"),
+                icon: Trash2,
+                tone: "destructive",
+                confirm: {
+                  title: t("admin.users.invitations.revokeTitle"),
+                  description: t("admin.users.invitations.revokeDescription"),
+                  destructive: true,
+                },
+                onSelect: () => void revoke(row.original),
+              },
+            ]}
+          />
+        ) : null,
+    },
+  ];
+
   return (
     <PageSection
       title={t("admin.users.invitations.title")}
@@ -189,82 +248,20 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
           description={t("admin.users.invitations.description")}
         />
       ) : (
-        <DataTableShell>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "primary-text" },
-                { role: "type" },
-                { role: "status" },
-                { role: "type" },
-                { role: "actions" },
-              ]}
+        <DataTableShell
+          mobile={
+            <MobileRecordList
+              columns={columns}
+              rows={invitations}
+              getRowId={(i) => i.id}
             />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="primary-text">
-                  {t("admin.users.invitations.columns.email")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.users.invitations.columns.role")}
-                </DataTableHead>
-                <DataTableHead role="status">
-                  {t("admin.users.invitations.columns.status")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.users.invitations.columns.expiresAt")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.users.invitations.columns.actions")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invitations.map((invitation) => (
-                <TableRow key={invitation.id}>
-                  <DataTableCell role="primary-text">
-                    {invitation.email}
-                  </DataTableCell>
-                  <DataTableCell role="type">
-                    <Badge variant="outline">
-                      {roleLabel(invitation.role)}
-                    </Badge>
-                  </DataTableCell>
-                  <DataTableCell role="status">
-                    <Badge variant={statusBadgeVariant(invitation.status)}>
-                      {t(`admin.users.invitations.status.${invitation.status}`)}
-                    </Badge>
-                  </DataTableCell>
-                  <DataTableCell role="type">
-                    {new Date(invitation.expiresAt).toLocaleString()}
-                  </DataTableCell>
-                  <DataTableCell role="actions">
-                    {invitation.status === "pending" && (
-                      <RowActions
-                        row={invitation}
-                        actions={[
-                          {
-                            id: "revoke",
-                            label: t("admin.users.invitations.revoke"),
-                            icon: Trash2,
-                            tone: "destructive",
-                            confirm: {
-                              title: t("admin.users.invitations.revokeTitle"),
-                              description: t(
-                                "admin.users.invitations.revokeDescription",
-                              ),
-                              destructive: true,
-                            },
-                            onSelect: () => void revoke(invitation),
-                          },
-                        ]}
-                      />
-                    )}
-                  </DataTableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          }
+        >
+          <DesktopDataTable
+            columns={columns}
+            data={invitations}
+            getRowId={(i) => i.id}
+          />
         </DataTableShell>
       )}
 

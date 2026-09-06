@@ -120,9 +120,12 @@ describe("CoursePage", () => {
 
   it("renders course list", async () => {
     renderPage();
-    expect(await screen.findByText("数学")).toBeInTheDocument();
-    expect(screen.getByText("MATH101")).toBeInTheDocument();
-    expect(screen.getByText("英语")).toBeInTheDocument();
+    // Row content renders twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("数学")).toBeInTheDocument();
+    expect(within(table).getByText("MATH101")).toBeInTheDocument();
+    expect(within(table).getByText("英语")).toBeInTheDocument();
   });
 
   it("renders new course button", async () => {
@@ -235,31 +238,33 @@ describe("CoursePage", () => {
   it("searches courses by name", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("数学");
+    await screen.findByRole("table");
     await user.type(
       screen.getByPlaceholderText("搜索课程名称、代码或描述..."),
       "数",
     );
-    expect(screen.getByText("数学")).toBeInTheDocument();
-    expect(screen.queryByText("英语")).not.toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("数学")).toBeInTheDocument();
+    expect(within(table).queryByText("英语")).not.toBeInTheDocument();
   });
 
   it("searches courses by code", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("数学");
+    await screen.findByRole("table");
     await user.type(
       screen.getByPlaceholderText("搜索课程名称、代码或描述..."),
       "ENG",
     );
-    expect(screen.getByText("英语")).toBeInTheDocument();
-    expect(screen.queryByText("数学")).not.toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("英语")).toBeInTheDocument();
+    expect(within(table).queryByText("数学")).not.toBeInTheDocument();
   });
 
   it("shows empty search result state with clear action", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("数学");
+    await screen.findByRole("table");
     await user.type(
       screen.getByPlaceholderText("搜索课程名称、代码或描述..."),
       "不存在",
@@ -267,10 +272,14 @@ describe("CoursePage", () => {
     expect(screen.getByText("未找到匹配的课程")).toBeInTheDocument();
     expect(screen.getByLabelText("搜索课程")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "清除课程搜索" }));
-    expect(screen.getByText("数学")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("table")).getByText("数学"),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText("搜索课程"), "不存在");
     await user.click(screen.getByRole("button", { name: "清除搜索" }));
-    expect(screen.getByText("英语")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("table")).getByText("英语"),
+    ).toBeInTheDocument();
   });
 
   it("shows error state when loading fails", async () => {

@@ -147,8 +147,11 @@ describe("UsersPage", () => {
 
   it("renders user list with Admin role", async () => {
     renderPage();
-    expect(await screen.findByText("admin1")).toBeInTheDocument();
-    expect(screen.getByText("考试管理员")).toBeInTheDocument();
+    // Row content renders twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("admin1")).toBeInTheDocument();
+    expect(within(table).getByText("考试管理员")).toBeInTheDocument();
   });
 
   it("renders add user button", async () => {
@@ -307,8 +310,8 @@ describe("UsersPage", () => {
   it("opens confirmation before toggling user active status", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("admin1");
-    const toggleBtn = screen.getByRole("button", { name: "禁用" });
+    const table = await screen.findByRole("table");
+    const toggleBtn = within(table).getByRole("button", { name: "禁用" });
     await user.click(toggleBtn);
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/Admin One/)).toBeInTheDocument();
@@ -374,8 +377,10 @@ describe("UsersPage", () => {
       totalPages: 1,
     });
     renderPage();
-    expect(await screen.findByText("admin1")).toBeInTheDocument();
-    expect(screen.getByText("cand-teacher")).toBeInTheDocument();
+    const tables = await screen.findAllByRole("table");
+    const table = tables.find((t) => within(t).queryByText("admin1"))!;
+    expect(within(table).getByText("admin1")).toBeInTheDocument();
+    expect(within(table).getByText("cand-teacher")).toBeInTheDocument();
   });
 
   it("edit dialog never silently falls back to Admin when the current role is not in the assignable catalog (P7 review #6)", async () => {
@@ -508,8 +513,9 @@ describe("UsersPage", () => {
             },
     );
     renderPage();
-    await screen.findByText("aud1");
-    expect(screen.getByText("未知角色")).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("aud1")).toBeInTheDocument();
+    expect(within(table).getByText("未知角色")).toBeInTheDocument();
     expect(
       screen.queryByText(/admin\.users\.roleLabels\./),
     ).not.toBeInTheDocument();
@@ -537,7 +543,9 @@ describe("UsersPage", () => {
       totalPages: 1,
     });
     renderPage();
-    await screen.findByText("admin1");
-    expect(screen.getByText("cand1")).toBeInTheDocument();
+    const tables = await screen.findAllByRole("table");
+    const table = tables.find((t) => within(t).queryByText("admin1"))!;
+    expect(within(table).getByText("admin1")).toBeInTheDocument();
+    expect(within(table).getByText("cand1")).toBeInTheDocument();
   });
 });

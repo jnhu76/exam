@@ -124,7 +124,12 @@ async function openRowMenu(
   user: ReturnType<typeof userEvent.setup>,
   index = 0,
 ) {
-  const kebabs = await screen.findAllByRole("button", { name: "更多操作" });
+  // Row actions render twice by design (desktop table + mobile cards);
+  // index rows within the desktop table representation.
+  const table = screen.getByRole("table");
+  const kebabs = await within(table).findAllByRole("button", {
+    name: "更多操作",
+  });
   await user.click(kebabs[index]!);
   return await screen.findByRole("menu");
 }
@@ -156,17 +161,19 @@ describe("CandidatesPage", () => {
 
   it("renders candidate list with dynamic field columns", async () => {
     renderPage();
-    expect(await screen.findByText("Candidate One")).toBeInTheDocument();
-    expect(screen.getByText("Candidate Two")).toBeInTheDocument();
-    expect(screen.getByText("编号")).toBeInTheDocument();
-    expect(screen.getByText("部门")).toBeInTheDocument();
-    expect(screen.getByText("E001")).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Candidate One")).toBeInTheDocument();
+    expect(within(table).getByText("Candidate Two")).toBeInTheDocument();
+    expect(within(table).getByText("编号")).toBeInTheDocument();
+    expect(within(table).getByText("部门")).toBeInTheDocument();
+    expect(within(table).getByText("E001")).toBeInTheDocument();
   });
 
   it("renders status column", async () => {
     renderPage();
-    expect(await screen.findByText("candidate1")).toBeInTheDocument();
-    const rows = screen.getAllByRole("row");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("candidate1")).toBeInTheDocument();
+    const rows = within(table).getAllByRole("row");
     expect(rows.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -252,7 +259,7 @@ describe("CandidatesPage", () => {
   it("opens confirmation before toggling candidate active status", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("candidate1");
+    await screen.findByRole("table");
     const menu = await openRowMenu(user, 0);
     await user.click(within(menu).getByRole("menuitem", { name: "禁用" }));
     const dialog = await screen.findByRole("alertdialog");
@@ -269,7 +276,7 @@ describe("CandidatesPage", () => {
   it("opens confirmation before toggling inactive candidate to active", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("candidate2");
+    await screen.findByRole("table");
     const menu = await openRowMenu(user, 1);
     await user.click(within(menu).getByRole("menuitem", { name: "启用" }));
     const dialog = await screen.findByRole("alertdialog");
@@ -290,7 +297,7 @@ describe("CandidatesPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("candidate1");
+    await screen.findByRole("table");
     const menu = await openRowMenu(user, 0);
     await user.click(within(menu).getByRole("menuitem", { name: "禁用" }));
     const dialog = await screen.findByRole("alertdialog");
@@ -315,31 +322,33 @@ describe("CandidatesPage", () => {
   it("searches candidates by name", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("Candidate One");
+    await screen.findByRole("table");
     await user.type(
       screen.getByPlaceholderText("搜索考生姓名或用户名..."),
       "One",
     );
-    expect(screen.getByText("Candidate One")).toBeInTheDocument();
-    expect(screen.queryByText("Candidate Two")).not.toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Candidate One")).toBeInTheDocument();
+    expect(within(table).queryByText("Candidate Two")).not.toBeInTheDocument();
   });
 
   it("searches candidates by username", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("Candidate One");
+    await screen.findByRole("table");
     await user.type(
       screen.getByPlaceholderText("搜索考生姓名或用户名..."),
       "candidate2",
     );
-    expect(screen.getByText("Candidate Two")).toBeInTheDocument();
-    expect(screen.queryByText("Candidate One")).not.toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Candidate Two")).toBeInTheDocument();
+    expect(within(table).queryByText("Candidate One")).not.toBeInTheDocument();
   });
 
   it("shows empty search result state and keeps toolbar visible", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("Candidate One");
+    await screen.findByRole("table");
     await user.type(
       screen.getByPlaceholderText("搜索考生姓名或用户名..."),
       "不存在",
@@ -354,13 +363,17 @@ describe("CandidatesPage", () => {
   it("clears search using clear icon and empty state action", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("Candidate One");
+    await screen.findByRole("table");
     await user.type(screen.getByLabelText("搜索考生"), "不存在");
     await user.click(screen.getByRole("button", { name: "清除考生搜索" }));
-    expect(screen.getByText("Candidate One")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("table")).getByText("Candidate One"),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText("搜索考生"), "不存在");
     await user.click(screen.getByRole("button", { name: "清除搜索" }));
-    expect(screen.getByText("Candidate Two")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("table")).getByText("Candidate Two"),
+    ).toBeInTheDocument();
   });
 
   it("shows error state when loading fails", async () => {
@@ -512,7 +525,7 @@ describe("CandidatesPage", () => {
     it("opens reset-password dialog with candidate context", async () => {
       const user = userEvent.setup();
       renderPage();
-      await screen.findByText("Candidate One");
+      await screen.findByRole("table");
       const resetMenu = await openRowMenu(user, 0);
       await user.click(
         within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
@@ -525,7 +538,7 @@ describe("CandidatesPage", () => {
     it("rejects a too-short password before submitting", async () => {
       const user = userEvent.setup();
       renderPage();
-      await screen.findByText("Candidate One");
+      await screen.findByRole("table");
       const resetMenu = await openRowMenu(user, 0);
       await user.click(
         within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
@@ -546,7 +559,7 @@ describe("CandidatesPage", () => {
     it("rejects mismatched passwords before submitting", async () => {
       const user = userEvent.setup();
       renderPage();
-      await screen.findByText("Candidate One");
+      await screen.findByRole("table");
       const resetMenu = await openRowMenu(user, 0);
       await user.click(
         within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
@@ -569,7 +582,7 @@ describe("CandidatesPage", () => {
     it("submits reset-password request with valid matching password", async () => {
       const user = userEvent.setup();
       renderPage();
-      await screen.findByText("Candidate One");
+      await screen.findByRole("table");
       const resetMenu = await openRowMenu(user, 0);
       await user.click(
         within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
@@ -597,7 +610,7 @@ describe("CandidatesPage", () => {
       );
       const user = userEvent.setup();
       renderPage();
-      await screen.findByText("Candidate One");
+      await screen.findByRole("table");
       const resetMenu = await openRowMenu(user, 0);
       await user.click(
         within(resetMenu).getByRole("menuitem", { name: "重置密码" }),

@@ -135,10 +135,13 @@ describe("CandidateFieldsPage", () => {
 
   it("renders field list with columns", async () => {
     renderPage();
-    expect(await screen.findByText("employeeId")).toBeInTheDocument();
-    expect(screen.getByText("工号")).toBeInTheDocument();
-    expect(screen.getByText("文本")).toBeInTheDocument();
-    expect(screen.getAllByText("是").length).toBeGreaterThanOrEqual(1);
+    // Row content renders twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("employeeId")).toBeInTheDocument();
+    expect(within(table).getByText("工号")).toBeInTheDocument();
+    expect(within(table).getByText("文本")).toBeInTheDocument();
+    expect(within(table).getAllByText("是").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders second field correctly", async () => {
