@@ -84,9 +84,3 @@
 [data-slot="sidebar-nav-item"][aria-current="page"] svg {
   color: var(--primary);
 }
-
-[data-slot="row-actions"] [data-row-action-tone="destructive"]:hover {
-  background-color: var(--danger-soft) !important;
-  color: var(--danger) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 18%, transparent);
-}

@@ -172,19 +172,19 @@ export function DashboardPage() {
                       {exam.participantCount}
                     </DataTableCell>
                     <DataTableCell role="actions">
-                      <RowActions>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t(
-                            "admin.dashboard.recent.viewExamLabel",
-                            { title: exam.title },
-                          )}
-                          onClick={() => navigate(`/admin/exams/${exam.id}`)}
-                        >
-                          <AppIcon icon={Eye} size="inline" />
-                        </Button>
-                      </RowActions>
+                      <RowActions
+                        row={exam}
+                        actions={[
+                          {
+                            id: "view-exam",
+                            label: t("admin.dashboard.recent.viewExamLabel", {
+                              title: exam.title,
+                            }),
+                            icon: Eye,
+                            onSelect: () => navigate(`/admin/exams/${exam.id}`),
+                          },
+                        ]}
+                      />
                     </DataTableCell>
                   </TableRow>
                 ))}

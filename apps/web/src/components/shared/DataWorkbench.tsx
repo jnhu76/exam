@@ -2,10 +2,7 @@ import { useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
-import type {
-  ActionsDensity,
-  DataTableMinWidth,
-} from "@/components/shared/DataTableShell";
+import type { DataTableMinWidth } from "@/components/shared/DataTableShell";
 
 /**
  * DataWorkbench — a single, continuous, compact data shell
@@ -46,7 +43,6 @@ export function DataWorkbench({
   className,
   contentClassName,
   minTableWidth = "standard",
-  actionsDensity = "narrow",
 }: {
   /** The toolbar band (search + filters + actions). Rendered as the shell top. */
   toolbar?: ReactNode;
@@ -61,7 +57,6 @@ export function DataWorkbench({
   className?: string;
   contentClassName?: string;
   minTableWidth?: DataTableMinWidth;
-  actionsDensity?: ActionsDensity;
 }) {
   const { t } = useTranslation();
   const shellId = useId();
@@ -85,7 +80,6 @@ export function DataWorkbench({
           ref={scrollRef}
           data-slot="admin-table-shell"
           data-table-min-width={minTableWidth}
-          data-actions-density={actionsDensity}
           data-overflow-owner="local"
           data-overflowing={String(overflow.overflowing)}
           data-scroll-start={String(overflow.atStart)}

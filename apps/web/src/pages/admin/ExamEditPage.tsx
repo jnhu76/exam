@@ -340,17 +340,25 @@ export function ExamEditPage() {
                       </DataTableCell>
                       <DataTableCell role="score">{q.score}</DataTableCell>
                       <DataTableCell role="actions">
-                        <RowActions>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeQuestion(q.id)}
-                            aria-label={t("admin.examEdit.ariaDeleteQuestion")}
-                            data-row-action-tone="destructive"
-                          >
-                            <AppIcon icon={Trash2} size="inline" />
-                          </Button>
-                        </RowActions>
+                        <RowActions
+                          row={q}
+                          actions={[
+                            {
+                              id: "remove-question",
+                              label: t("admin.examEdit.ariaDeleteQuestion"),
+                              icon: Trash2,
+                              tone: "destructive",
+                              confirm: {
+                                title: t("admin.examEdit.confirmRemoveTitle"),
+                                description: t(
+                                  "admin.examEdit.confirmRemoveDescription",
+                                ),
+                                destructive: true,
+                              },
+                              onSelect: () => removeQuestion(q.id),
+                            },
+                          ]}
+                        />
                       </DataTableCell>
                     </TableRow>
                   ))}
@@ -423,15 +431,16 @@ export function ExamEditPage() {
                   </DataTableCell>
                   <DataTableCell role="score">{q.score}</DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addQuestion(q.id)}
-                      >
-                        {t("admin.examEdit.dialogActions.add")}
-                      </Button>
-                    </RowActions>
+                    {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
+                        picker tables keep a text add action — auto layout,
+                        outside the admin shell's icon-only vocabulary. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => addQuestion(q.id)}
+                    >
+                      {t("admin.examEdit.dialogActions.add")}
+                    </Button>
                   </DataTableCell>
                 </TableRow>
               ))}

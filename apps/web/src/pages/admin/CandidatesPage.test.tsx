@@ -118,6 +118,17 @@ function dialogSaveBtn(dialog: HTMLElement) {
     .find((b) => b.textContent === "保存")!;
 }
 
+/** Open a row's overflow menu and return it (row actions with N>2 live in
+ * the kebab under the typed RowActions API). */
+async function openRowMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  index = 0,
+) {
+  const kebabs = await screen.findAllByRole("button", { name: "更多操作" });
+  await user.click(kebabs[index]!);
+  return await screen.findByRole("menu");
+}
+
 describe("CandidatesPage", () => {
   beforeEach(() => {
     apiGet.mockReset();
@@ -242,8 +253,8 @@ describe("CandidatesPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("candidate1");
-    const toggleBtn = screen.getByRole("button", { name: "禁用" });
-    await user.click(toggleBtn);
+    const menu = await openRowMenu(user, 0);
+    await user.click(within(menu).getByRole("menuitem", { name: "禁用" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/Candidate One/)).toBeInTheDocument();
     const confirm = within(dialog).getByRole("button", { name: "确认" });
@@ -259,8 +270,8 @@ describe("CandidatesPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("candidate2");
-    const toggleBtn = screen.getByRole("button", { name: "启用" });
-    await user.click(toggleBtn);
+    const menu = await openRowMenu(user, 1);
+    await user.click(within(menu).getByRole("menuitem", { name: "启用" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/Candidate Two/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "确认" }));
@@ -280,11 +291,16 @@ describe("CandidatesPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("candidate1");
-    await user.click(screen.getByRole("button", { name: "禁用" }));
+    const menu = await openRowMenu(user, 0);
+    await user.click(within(menu).getByRole("menuitem", { name: "禁用" }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "确认" }));
-    expect(screen.getByRole("button", { name: "处理中..." })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "启用" })).toBeDisabled();
+    // While the toggle is in flight the busy guard disables the action in
+    // every row's menu (labels stay stable under the typed declaration API).
+    const otherMenu = await openRowMenu(user, 1);
+    expect(
+      within(otherMenu).getByRole("menuitem", { name: "启用" }),
+    ).toHaveAttribute("aria-disabled", "true");
     resolveToggle!({ ok: true });
     await act(async () => {});
   });
@@ -497,7 +513,10 @@ describe("CandidatesPage", () => {
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Candidate One");
-      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const resetMenu = await openRowMenu(user, 0);
+      await user.click(
+        within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
+      );
       const dialog = await screen.findByRole("dialog");
       expect(within(dialog).getByText("重置密码")).toBeInTheDocument();
       expect(within(dialog).getByText(/Candidate One/)).toBeInTheDocument();
@@ -507,7 +526,10 @@ describe("CandidatesPage", () => {
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Candidate One");
-      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const resetMenu = await openRowMenu(user, 0);
+      await user.click(
+        within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
+      );
       const dialog = await screen.findByRole("dialog");
       const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
       await user.type(inputs[0]!, "short");
@@ -525,7 +547,10 @@ describe("CandidatesPage", () => {
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Candidate One");
-      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const resetMenu = await openRowMenu(user, 0);
+      await user.click(
+        within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
+      );
       const dialog = await screen.findByRole("dialog");
       const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
       await user.type(inputs[0]!, "newpassword123");
@@ -545,7 +570,10 @@ describe("CandidatesPage", () => {
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Candidate One");
-      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const resetMenu = await openRowMenu(user, 0);
+      await user.click(
+        within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
+      );
       const dialog = await screen.findByRole("dialog");
       const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
       await user.type(inputs[0]!, "newpassword123");
@@ -570,7 +598,10 @@ describe("CandidatesPage", () => {
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Candidate One");
-      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const resetMenu = await openRowMenu(user, 0);
+      await user.click(
+        within(resetMenu).getByRole("menuitem", { name: "重置密码" }),
+      );
       const dialog = await screen.findByRole("dialog");
       const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
       await user.type(inputs[0]!, "newpassword123");

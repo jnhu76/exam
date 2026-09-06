@@ -105,6 +105,17 @@ function dialogInput(dialog: HTMLElement, index: number) {
   return dialog.querySelectorAll("input")[index]!;
 }
 
+/** Open a row's overflow menu and return it (row actions with N>2 live in
+ * the kebab under the typed RowActions API). */
+async function openRowMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  index: number,
+) {
+  const kebabs = await screen.findAllByRole("button", { name: "更多操作" });
+  await user.click(kebabs[index]!);
+  return await screen.findByRole("menu");
+}
+
 describe("CandidateFieldsPage", () => {
   beforeEach(() => {
     apiGet.mockReset();
@@ -300,8 +311,8 @@ describe("CandidateFieldsPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("employeeId");
-    const deleteButtons = screen.getAllByLabelText("删除字段");
-    await user.click(deleteButtons[0]!);
+    const menu = await openRowMenu(user, 0);
+    await user.click(within(menu).getByRole("menuitem", { name: "删除字段" }));
     const alertDialog = await screen.findByRole("alertdialog");
     const confirmBtn = within(alertDialog).getByRole("button", {
       name: "确认",
@@ -314,8 +325,8 @@ describe("CandidateFieldsPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("department");
-    const upButtons = screen.getAllByLabelText("上移");
-    await user.click(upButtons[1]!);
+    const menu = await openRowMenu(user, 1);
+    await user.click(within(menu).getByRole("menuitem", { name: "上移" }));
     expect(apiPatch).toHaveBeenCalledTimes(2);
   });
 
@@ -323,18 +334,27 @@ describe("CandidateFieldsPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("employeeId");
-    const downButtons = screen.getAllByLabelText("下移");
-    await user.click(downButtons[0]!);
+    const menu = await openRowMenu(user, 0);
+    await user.click(within(menu).getByRole("menuitem", { name: "下移" }));
     expect(apiPatch).toHaveBeenCalledTimes(2);
   });
 
-  it("first up button and last down button are disabled", async () => {
+  it("first up item and last down item are disabled", async () => {
+    const user = userEvent.setup();
     renderPage();
     await screen.findByText("employeeId");
-    const upButtons = screen.getAllByLabelText("上移");
-    const downButtons = screen.getAllByLabelText("下移");
-    expect(upButtons[0]!).toBeDisabled();
-    expect(downButtons[downButtons.length - 1]!).toBeDisabled();
+    const kebabs = await screen.findAllByRole("button", { name: "更多操作" });
+    await user.click(kebabs[0]!);
+    const firstMenu = await screen.findByRole("menu");
+    expect(
+      within(firstMenu).getByRole("menuitem", { name: "上移" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Escape}");
+    await user.click(kebabs[kebabs.length - 1]!);
+    const lastMenu = await screen.findByRole("menu");
+    expect(
+      within(lastMenu).getByRole("menuitem", { name: "下移" }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("cancels dialog", async () => {

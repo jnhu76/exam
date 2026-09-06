@@ -15,7 +15,6 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   DataTableCell,
@@ -189,41 +188,37 @@ export function ExamProfilePage() {
                     {formatDateTime(p.updatedAt)}
                   </DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          navigate(`/admin/exam-profiles/${p.id}/edit`)
-                        }
-                        aria-label={t("admin.examProfilePages.actions.edit")}
-                      >
-                        <AppIcon icon={Pencil} size="inline" />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t(
-                              "admin.examProfilePages.actions.delete",
-                            )}
-                            data-row-action-tone="destructive"
-                          >
-                            <AppIcon icon={Trash2} size="inline" />
-                          </Button>
-                        }
-                        title={t("admin.examProfilePages.deleteConfirmTitle")}
-                        description={t(
-                          "admin.examProfilePages.deleteConfirmDescription",
-                        )}
-                        confirmLabel={t(
-                          "admin.examProfilePages.deleteConfirmAction",
-                        )}
-                        destructive
-                        onConfirm={() => void handleDelete(p.id)}
-                      />
-                    </RowActions>
+                    <RowActions
+                      row={p}
+                      actions={[
+                        {
+                          id: "edit",
+                          label: t("admin.examProfilePages.actions.edit"),
+                          icon: Pencil,
+                          onSelect: () =>
+                            navigate(`/admin/exam-profiles/${p.id}/edit`),
+                        },
+                        {
+                          id: "delete",
+                          label: t("admin.examProfilePages.actions.delete"),
+                          icon: Trash2,
+                          tone: "destructive",
+                          confirm: {
+                            title: t(
+                              "admin.examProfilePages.deleteConfirmTitle",
+                            ),
+                            description: t(
+                              "admin.examProfilePages.deleteConfirmDescription",
+                            ),
+                            confirmLabel: t(
+                              "admin.examProfilePages.deleteConfirmAction",
+                            ),
+                            destructive: true,
+                          },
+                          onSelect: () => void handleDelete(p.id),
+                        },
+                      ]}
+                    />
                   </DataTableCell>
                 </TableRow>
               ))}

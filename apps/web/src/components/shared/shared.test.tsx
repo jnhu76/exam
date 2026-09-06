@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { Eye } from "lucide-react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -275,14 +276,19 @@ describe("TagBadge", () => {
 });
 
 describe("RowActions", () => {
-  it("renders children and action slots", () => {
+  it("renders typed declarations as the shared group surface", () => {
     render(
       <RowActions
-        leading={<button type="button">查看</button>}
-        trailing={<button type="button">删除</button>}
-      >
-        <button type="button">编辑</button>
-      </RowActions>,
+        row={{ id: "1" }}
+        actions={[
+          {
+            id: "view",
+            label: "查看",
+            icon: Eye,
+            onSelect: () => {},
+          },
+        ]}
+      />,
     );
 
     expect(screen.getByRole("group", { name: "行操作" })).toHaveAttribute(
@@ -295,8 +301,6 @@ describe("RowActions", () => {
     );
     expect(screen.getByRole("group", { name: "行操作" })).toHaveClass("gap-1");
     expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
   });
 });
 

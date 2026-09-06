@@ -206,31 +206,27 @@
 }
 
 /*
- * Actions column — three density tiers chosen per page by the number/type
- * of row-action buttons. Under fixed layout the col width is strict, so a
- * column that is too narrow for its buttons would clip them; the page picks
- * the tier that fits its worst-case action set.
+ * Actions column — contract-bound width (#445 P3 §4.3). The inline row-action
+ * vocabulary is icon-only and count-bounded (N ≤ 2 → [a1][a2]; N > 2 →
+ * [primary][kebab]), so the widest legal inline set is two icon buttons at
+ * any label length. The width is the derived bound of that vocabulary, not a
+ * per-page density guess:
  *
- *   narrow (default): 1-2 icon buttons                  — 6rem
- *   normal:           1 icon + 1 short text button       — 8rem
- *   wide:             4 icon, or 2 icon + 1 text button  — 10rem
- *
- * The density is set on the shell root via data-actions-density and cascades
- * to the col/cell selectors below.
+ *   fine:   2 × iconBtn(2rem) + gap(0.25rem) + 2 × cell padding(0.75rem)
+ *           + border/slack ≈ 6rem    (content box 71px ≥ max inline 68px)
+ *   coarse: 2 × iconBtn(2.75rem) + gap + padding + slack
+ *           ≈ 7.5rem                 (content box 95px ≥ max inline 92px)
  */
 [data-column-role="actions"] {
   width: 6rem;
   min-width: 6rem;
 }
 
-[data-actions-density="normal"] [data-column-role="actions"] {
-  width: 8rem;
-  min-width: 8rem;
-}
-
-[data-actions-density="wide"] [data-column-role="actions"] {
-  width: 10rem;
-  min-width: 10rem;
+@media (pointer: coarse) {
+  [data-column-role="actions"] {
+    width: 7.5rem;
+    min-width: 7.5rem;
+  }
 }
 
 [data-slot="table-head"][data-column-wrap="atomic"],

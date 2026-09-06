@@ -641,19 +641,29 @@ export function ExamCreatePage() {
                         </DataTableCell>
                         <DataTableCell role="score">{q.score}</DataTableCell>
                         <DataTableCell role="actions">
-                          <RowActions>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeQuestion(q.id)}
-                              aria-label={t(
-                                "admin.examWizard.questions.ariaDeleteQuestion",
-                              )}
-                              data-row-action-tone="destructive"
-                            >
-                              <AppIcon icon={Trash2} size="inline" />
-                            </Button>
-                          </RowActions>
+                          <RowActions
+                            row={q}
+                            actions={[
+                              {
+                                id: "remove-question",
+                                label: t(
+                                  "admin.examWizard.questions.ariaDeleteQuestion",
+                                ),
+                                icon: Trash2,
+                                tone: "destructive",
+                                confirm: {
+                                  title: t(
+                                    "admin.examWizard.questions.confirmRemoveTitle",
+                                  ),
+                                  description: t(
+                                    "admin.examWizard.questions.confirmRemoveDescription",
+                                  ),
+                                  destructive: true,
+                                },
+                                onSelect: () => removeQuestion(q.id),
+                              },
+                            ]}
+                          />
                         </DataTableCell>
                       </TableRow>
                     ))}
@@ -976,15 +986,16 @@ export function ExamCreatePage() {
                   </DataTableCell>
                   <DataTableCell role="score">{q.score}</DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addQuestion(q.id)}
-                      >
-                        {t("admin.examWizard.questions.dialogActions.add")}
-                      </Button>
-                    </RowActions>
+                    {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
+                        picker tables keep a text add action — auto layout,
+                        outside the admin shell's icon-only vocabulary. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => addQuestion(q.id)}
+                    >
+                      {t("admin.examWizard.questions.dialogActions.add")}
+                    </Button>
                   </DataTableCell>
                 </TableRow>
               ))}

@@ -277,6 +277,8 @@ const zhCN = {
     loadingState: "加载中...",
     empty: "暂无数据",
     rowActions: "行操作",
+    /** RowActions overflow-menu (kebab) trigger label. */
+    moreActions: "更多操作",
     /** SearchInput defaults. */
     search: {
       placeholder: "搜索",
@@ -1416,6 +1418,9 @@ const zhCN = {
         close: "关闭",
       },
       ariaDeleteQuestion: "删除题目",
+      confirmRemoveTitle: "移除题目",
+      confirmRemoveDescription:
+        "确定要从本次考试中移除该题目吗？移除后可重新添加。",
       validation: {
         titleRequired: "请输入考试名称",
         courseRequired: "请选择课程",
@@ -1625,6 +1630,9 @@ const zhCN = {
         dialogTitle: "选择题目",
         dialogActions: { add: "添加", close: "关闭" },
         ariaDeleteQuestion: "删除题目",
+        confirmRemoveTitle: "移除题目",
+        confirmRemoveDescription:
+          "确定要从本次考试中移除该题目吗？移除后可重新添加。",
         totalScore: "总分",
         autoCalc: "自动计算",
         manualInput: "手动输入",

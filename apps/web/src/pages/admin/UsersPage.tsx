@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -29,7 +28,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Plus, Users } from "lucide-react";
+import {
+  BookOpen,
+  ClipboardCheck,
+  Pencil,
+  Plus,
+  Power,
+  Users,
+} from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
@@ -422,7 +428,7 @@ export function UsersPage() {
           description={t("admin.users.emptyDescription")}
         />
       ) : (
-        <DataTableShell minTableWidth="compact" actionsDensity="normal">
+        <DataTableShell minTableWidth="compact">
           <Table>
             <DataTableColumns
               columns={[
@@ -466,62 +472,59 @@ export function UsersPage() {
                     />
                   </DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => open(user)}
-                        aria-label={t("admin.users.editLabel")}
-                      >
-                        <AppIcon icon={Pencil} size="inline" />
-                      </Button>
-                      {user.role === "Teacher" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void openAssignments(user)}
-                        >
-                          {t("admin.users.teacherCourses.openBtn")}
-                        </Button>
-                      )}
-                      {user.role === "Grader" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void openExamAssignments(user)}
-                        >
-                          {t("admin.users.graderExams.openBtn")}
-                        </Button>
-                      )}
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={togglingId !== null}
-                          >
-                            {togglingId === user.id
-                              ? t("admin.common.processing")
-                              : user.isActive
-                                ? t("admin.common.disable")
-                                : t("admin.common.enable")}
-                          </Button>
-                        }
-                        title={
-                          user.isActive
-                            ? t("admin.common.confirmDisable")
-                            : t("admin.common.confirmEnable")
-                        }
-                        description={t("admin.users.enableDisable", {
-                          action: user.isActive
+                    <RowActions
+                      row={user}
+                      actions={[
+                        {
+                          id: "edit",
+                          label: t("admin.users.editLabel"),
+                          icon: Pencil,
+                          onSelect: () => open(user),
+                        },
+                        ...(user.role === "Teacher"
+                          ? [
+                              {
+                                id: "teacher-courses",
+                                label: t("admin.users.teacherCourses.openBtn"),
+                                icon: BookOpen,
+                                onSelect: () => void openAssignments(user),
+                              },
+                            ]
+                          : []),
+                        ...(user.role === "Grader"
+                          ? [
+                              {
+                                id: "grader-exams",
+                                label: t("admin.users.graderExams.openBtn"),
+                                icon: ClipboardCheck,
+                                onSelect: () => void openExamAssignments(user),
+                              },
+                            ]
+                          : []),
+                        {
+                          id: "toggle-active",
+                          label: user.isActive
                             ? t("admin.common.disable")
                             : t("admin.common.enable"),
-                          name: user.name,
-                        })}
-                        destructive={user.isActive}
-                        onConfirm={() => void toggle(user)}
-                      />
-                    </RowActions>
+                          icon: Power,
+                          tone: user.isActive ? "destructive" : "default",
+                          disabled: togglingId !== null,
+                          confirm: {
+                            title: user.isActive
+                              ? t("admin.common.confirmDisable")
+                              : t("admin.common.confirmEnable"),
+                            description: t("admin.users.enableDisable", {
+                              action: user.isActive
+                                ? t("admin.common.disable")
+                                : t("admin.common.enable"),
+                              name: user.name,
+                            }),
+                            destructive: user.isActive,
+                          },
+                          onSelect: () => void toggle(user),
+                        },
+                      ]}
+                    />
                   </DataTableCell>
                 </TableRow>
               ))}

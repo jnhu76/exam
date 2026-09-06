@@ -19,12 +19,7 @@ import {
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
 import type { ScoreViewDisabledReasonCode } from "@exam/contracts";
 import { scoreViewDisabledReasonKey } from "@/lib/examDisabledReasons";
@@ -150,19 +145,6 @@ export function ResultsOverviewPage() {
                 {exams.map((exam) => {
                   const canView = gradable(exam);
                   const reason = gradableReason(exam);
-                  const viewButton = (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!canView}
-                      onClick={() =>
-                        void navigate(routes.admin.examScores(exam.id))
-                      }
-                    >
-                      <AppIcon icon={Eye} size="inline" />
-                      {t("admin.resultsOverview.actions.viewScores")}
-                    </Button>
-                  );
                   return (
                     <TableRow key={exam.id}>
                       <DataTableCell role="primary-text">
@@ -178,18 +160,21 @@ export function ResultsOverviewPage() {
                         {exam.gradedAttemptCount ?? 0}
                       </DataTableCell>
                       <DataTableCell role="actions">
-                        <RowActions>
-                          {canView ? (
-                            viewButton
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}>{viewButton}</span>
-                              </TooltipTrigger>
-                              <TooltipContent>{reason}</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </RowActions>
+                        <RowActions
+                          row={exam}
+                          actions={[
+                            {
+                              id: "view-scores",
+                              label: t(
+                                "admin.resultsOverview.actions.viewScores",
+                              ),
+                              icon: Eye,
+                              disabled: canView ? false : { reason },
+                              onSelect: () =>
+                                void navigate(routes.admin.examScores(exam.id)),
+                            },
+                          ]}
+                        />
                       </DataTableCell>
                     </TableRow>
                   );

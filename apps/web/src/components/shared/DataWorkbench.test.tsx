@@ -64,10 +64,9 @@ describe("DataWorkbench", () => {
     expect(region).toHaveAttribute("data-overflowing", "false");
   });
 
-  it("passes actions-density and min-table-width through to the table region", () => {
+  it("passes min-table-width through to the table region", () => {
     render(
       <DataWorkbench
-        actionsDensity="wide"
         minTableWidth="compact"
         desktopTable={<table aria-label="题目表" />}
       />,
@@ -75,7 +74,6 @@ describe("DataWorkbench", () => {
     const region = screen
       .getByRole("table", { name: "题目表" })
       .closest('[data-slot="admin-table-shell"]') as HTMLElement;
-    expect(region).toHaveAttribute("data-actions-density", "wide");
     expect(region).toHaveAttribute("data-table-min-width", "compact");
   });
 

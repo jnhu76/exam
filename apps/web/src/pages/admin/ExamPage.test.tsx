@@ -166,9 +166,6 @@ describe("ExamPage", () => {
     expect(
       document.querySelector('col[data-column-role="actions"]'),
     ).toBeInTheDocument();
-    expect(deleteButtons[0]).toHaveAttribute(
-      "data-row-action-tone",
-      "destructive",
-    );
+    expect(deleteButtons[0]).toHaveAttribute("data-action-id", "delete");
   });
 });
