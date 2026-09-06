@@ -1,7 +1,7 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
-import { adminApiToken, adminPost } from "../lib/flow";
+import { adminApiToken, adminGet, adminPost } from "../lib/flow";
 
 /**
  * #459 UI-DIALOG-SPATIAL-1 runtime validation — mobile (375px) dialog
@@ -25,11 +25,8 @@ interface DialogGeometry {
   footerBottom: number;
 }
 
-async function probeDialog(content: {
-  evaluate: (
-    fn: (el: HTMLElement) => DialogGeometry,
-  ) => Promise<DialogGeometry>;
-}): Promise<DialogGeometry> {
+/** Probe the dialog CONTENT element itself (role=dialog is the content). */
+async function probeDialog(content: Locator): Promise<DialogGeometry> {
   return content.evaluate((el) => {
     const body = el.querySelector<HTMLElement>('[data-slot="dialog-body"]');
     const header = el.querySelector<HTMLElement>('[data-slot="dialog-header"]');
@@ -49,21 +46,38 @@ function expectNoHorizontalOverflow(geometry: DialogGeometry) {
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
 }
 
+/**
+ * The extend action (sm fixture) requires status=open. The demo seed ships a
+ * deterministically-open exam (安全培训考核 A, openAt in the past), so we pick
+ * that instead of waiting for a published exam to flip.
+ */
+async function findOpenExamId(
+  request: import("@playwright/test").APIRequestContext,
+): Promise<string> {
+  const token = await adminApiToken(request);
+  const res = await adminGet(request, token, "/api/exams");
+  const body = (await res.json()) as {
+    items?: { id: string; status: string }[];
+  };
+  const open = body.items?.find((e) => e.status === "open");
+  if (!open) throw new Error("no open exam found in seed");
+  return open.id;
+}
+
 test("sm dialog (exam extend) fits 375px with footer reachable", async ({
   page,
   request,
 }) => {
-  const seeded = await seedExam(request, `dialog-spatial-sm-${Date.now()}`);
+  const examId = await findOpenExamId(request);
   await loginAsAdmin(page);
-  await page.goto(`/admin/exams/${seeded.examId}`);
+  await page.goto(`/admin/exams/${examId}`);
   const extendBtn = page.getByTestId("exam-detail-extend-btn");
   await expect(extendBtn).toBeVisible({ timeout: 15_000 });
   await extendBtn.click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  const content = dialog.locator('[data-slot="dialog-content"]');
-  const geometry = await probeDialog(content);
+  const geometry = await probeDialog(dialog);
   expectNoHorizontalOverflow(geometry);
   // Full-width-with-margins: at most 2rem of total margin at 375px.
   expect(geometry.contentWidth).toBeGreaterThanOrEqual(375 - 32 - 1);
@@ -104,12 +118,11 @@ test("lg dialog (question picker) scrolls its body with fixed bands at 375px", a
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  const content = dialog.locator('[data-slot="dialog-content"]');
-  const geometry = await probeDialog(content);
+  const geometry = await probeDialog(dialog);
   expectNoHorizontalOverflow(geometry);
   expect(geometry.contentWidth).toBeGreaterThanOrEqual(375 - 32 - 1);
   // Content cap holds: the dialog itself never exceeds the viewport height.
-  const box = await content.boundingBox();
+  const box = await dialog.boundingBox();
   expect(box!.y).toBeGreaterThanOrEqual(0);
   expect(box!.y + box!.height).toBeLessThanOrEqual(812 + 0.5);
   // The body region is the scroll owner; header and footer stay in view.
@@ -118,7 +131,7 @@ test("lg dialog (question picker) scrolls its body with fixed bands at 375px", a
   expect(geometry.footerBottom).toBeLessThanOrEqual(box!.y + box!.height + 0.5);
 
   // Scrolling the body never scrolls the dialog horizontally (never legal).
-  await content.evaluate((el) => {
+  await dialog.evaluate((el) => {
     const body = el.querySelector<HTMLElement>('[data-slot="dialog-body"]');
     body?.scrollTo({ top: 40 });
   });
