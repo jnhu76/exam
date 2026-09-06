@@ -78,7 +78,10 @@ The admin shell is a **three-state** layout (one primary breakpoint `lg`):
 - **`lg` to `xl`**: compact desktop rail (`w-14` collapsed / `w-[232px]` expanded).
 - **`xl` and above**: full/collapsible sidebar.
 
-No document-level horizontal overflow; wide tables scroll locally. The candidate
+No document-level horizontal overflow; wide tables scroll locally.
+Management-list tables switch between the desktop table and a mobile card list
+at `lg` (CSS-only, both representations derived from one column declaration);
+other table archetypes keep local scroll at every width. The candidate
 exam runtime shares tokens, primitives, status, icons, and clarity but stays
 task-focused.
 

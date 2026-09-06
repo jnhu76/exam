@@ -219,9 +219,23 @@ the border), optional title/description/`toolbar` slot, footer slot, an
 Column cell roles: **status** (StatusBadge), **date**, **duration**, **number**,
 **score**, **actions** (RowActions), plus text roles **primary-text**,
 **long-text**, **description**, **tag-list** (categorical `<Badge>`s). Headers
-use `surface-subtle`; body rows use `surface`. Related: `DataTablePagination`,
-`DataToolbar`, `DesktopDataTable` / `MobileRecordCard` / `MobileRecordList`
-(responsive table variants).
+use `surface-subtle`; body rows use `surface`.
+
+Management-list tables own a second representation below `lg`. The `mobile`
+slot on `DataTableShell` renders a `MobileRecordList` whose cards are derived
+from the same column declaration that feeds `DesktopDataTable`
+(`deriveMobileCardFields`); the viewport switch is CSS-only (`lg` breakpoints
+inside the shell, no JS breakpoint listeners). The priority-to-slot mapping is
+frozen: `high` renders in the card header — or as the card's primary content
+for `primary-text`/`long-text`; `normal` renders as a labeled meta line; `low`
+is omitted; the `actions` column becomes the card actions slot. Declaration
+order is preserved, and pages must not keep a second page-local mobile field
+map. The `detail-comparison` and `log-diagnostic` archetypes do not adopt the
+mobile slot and keep local horizontal scroll at every width (a DEV-time
+contract throw guards the shell).
+
+Related: `DataTablePagination`,
+`DataToolbar`, `DesktopDataTable` / `MobileRecordCard` / `MobileRecordList`.
 
 ## Accessibility
 
