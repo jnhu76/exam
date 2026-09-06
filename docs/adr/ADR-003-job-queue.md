@@ -171,7 +171,11 @@ intent to deliver while the external side effect occurs later.
 - explicit claim/retry/terminal states;
 - bounded backoff and abandoned-work recovery;
 - at-least-once only when duplicate semantics are understood and accepted;
-- delivery state is not the originating domain fact.
+- delivery state is not the originating domain fact;
+- queue claim establishes ownership, not side-effect execution: a claimed row
+  does not prove the external delivery has begun. The side-effect execution
+  boundary and its shutdown/recovery semantics are owned by the workload ADR
+  (ADR-011 §26).
 
 ADR-011 is the concrete implementation.
 
