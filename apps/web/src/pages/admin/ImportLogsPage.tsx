@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { Upload, X } from "lucide-react";
 import type { ImportJobLog, ImportLogListResponse } from "@exam/contracts";
 
@@ -122,7 +123,7 @@ export function ImportLogsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.importLogs.title")}
         description={t("admin.importLogs.description")}
@@ -268,6 +269,6 @@ export function ImportLogsPage() {
         total={data.total}
         onPageChange={setPage}
       />
-    </div>
+    </PageContainer>
   );
 }

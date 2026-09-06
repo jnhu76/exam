@@ -45,6 +45,7 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
 import { InvitationsCard } from "@/pages/admin/InvitationsCard";
 
@@ -410,7 +411,7 @@ export function UsersPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.users.title")}
         actions={
@@ -822,6 +823,6 @@ export function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

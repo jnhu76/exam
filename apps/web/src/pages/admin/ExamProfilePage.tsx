@@ -24,6 +24,7 @@ import {
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import type { ExamProfileDTO } from "@exam/contracts";
 
 /** Resolve i18n labels for the profile summary formatter (single source). */
@@ -126,7 +127,7 @@ export function ExamProfilePage() {
   if (error) return <ErrorState message={error} onRetry={loadProfiles} />;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.examProfilePages.listPageTitle")}
         description={t("admin.examProfilePages.listPageDescription")}
@@ -226,6 +227,6 @@ export function ExamProfilePage() {
           </Table>
         </DataTableShell>
       )}
-    </div>
+    </PageContainer>
   );
 }

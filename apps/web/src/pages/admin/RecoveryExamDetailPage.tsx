@@ -21,6 +21,7 @@ import { FieldError } from "@/components/shared/FieldError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { RecoveryCommandDialog } from "@/features/recovery-operations/RecoveryCommandDialog";
 import { useRecoveryOperation } from "@/features/recovery-operations/useRecoveryOperation";
 import {
@@ -256,7 +257,7 @@ export function RecoveryExamDetailPage() {
   const attemptStatusEntries = Object.entries(data.attemptStatusDistribution);
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.recoveryExam.title")}
         description={data.examSummary.title}
@@ -491,6 +492,6 @@ export function RecoveryExamDetailPage() {
           )}
         </PageSection>
       </div>
-    </div>
+    </PageContainer>
   );
 }

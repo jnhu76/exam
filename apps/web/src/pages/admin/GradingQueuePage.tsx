@@ -16,6 +16,7 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Pagination,
   PaginationContent,
@@ -98,7 +99,7 @@ export function GradingQueuePage() {
   const totalPages = Math.ceil(data.total / pageSize);
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.grading.title")}
         description={t("admin.grading.description")}
@@ -191,6 +192,6 @@ export function GradingQueuePage() {
           </PaginationContent>
         </Pagination>
       )}
-    </div>
+    </PageContainer>
   );
 }

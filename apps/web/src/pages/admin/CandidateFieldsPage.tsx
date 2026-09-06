@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ArrowDown,
   ArrowUp,
@@ -227,7 +228,7 @@ export function CandidateFieldsPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.candidateFields.title")}
         actions={
@@ -452,6 +453,6 @@ export function CandidateFieldsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

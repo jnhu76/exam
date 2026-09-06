@@ -26,6 +26,11 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
  * Shell layout for candidate-facing exam pages. Renders a top header
  * with branding, exam list link, user info, and logout.
  * Redirects non-candidate users to /login.
+ *
+ * OWNERSHIP (issue 455 Model A): the shell owns the main gutter (p-4 sm:p-6);
+ * page width is declared by each page through <PageContainer role="…">. The
+ * take-exam runtime page is the documented G.7a exception (page-owned gutter
+ * and full-bleed sticky chrome).
  */
 export function ExamLayout() {
   const { t } = useTranslation();
@@ -113,7 +118,11 @@ export function ExamLayout() {
           </DropdownMenu>
         </div>
       </header>
-      <main>
+      {/* OWNERSHIP (issue 455): the shell owns the candidate-page gutter
+          (p-4 sm:p-6); pages declare width via PageContainer and must not add
+          root padding. The take-exam runtime page is the G.7a exception — it
+          owns its gutter and full-bleed chrome, and neutralizes this one. */}
+      <main className="p-4 sm:p-6">
         <Outlet />
       </main>
     </div>

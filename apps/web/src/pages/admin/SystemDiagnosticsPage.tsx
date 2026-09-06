@@ -23,6 +23,7 @@ import {
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { StatsCard } from "@/components/shared/StatsCard";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Activity,
   CircleAlert,
@@ -208,7 +209,7 @@ export function SystemDiagnosticsPage() {
   const StatusIcon = statusView.icon;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-wide" className="flex flex-col gap-6">
       {Object.values(staleWarnings).map((message) => (
         <Alert key={message} variant="default">
           <AppIcon icon={CircleAlert} size="inline" />
@@ -460,7 +461,7 @@ export function SystemDiagnosticsPage() {
           </div>
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

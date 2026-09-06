@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
   SelectContent,
@@ -299,7 +300,7 @@ export function ExamProfileEditPage() {
   const showGraceCaps = form.interruptionTimePolicy === "bounded_grace";
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={
           isEdit
@@ -750,6 +751,6 @@ export function ExamProfileEditPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ChevronLeft,
   ChevronRight,
@@ -288,7 +289,7 @@ export function AuditLogPage() {
   if (error) return <ErrorState message={error} onRetry={() => loadLogs()} />;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.audit.title")}
         description={t("admin.audit.description")}
@@ -481,6 +482,6 @@ export function AuditLogPage() {
           </div>
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }

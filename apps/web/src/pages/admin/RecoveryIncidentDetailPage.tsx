@@ -21,6 +21,7 @@ import { FieldError } from "@/components/shared/FieldError";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
   SelectContent,
@@ -300,7 +301,7 @@ export function RecoveryIncidentDetailPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.recoveryIncident.title")}
         description={data.incident.description}
@@ -912,6 +913,6 @@ export function RecoveryIncidentDetailPage() {
           )}
         </PageSection>
       </div>
-    </div>
+    </PageContainer>
   );
 }

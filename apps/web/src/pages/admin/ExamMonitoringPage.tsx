@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   CircleAlert,
   RefreshCw,
@@ -176,7 +177,7 @@ export function ExamMonitoringPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       {staleWarning && (
         <Alert variant="default">
           <AppIcon icon={CircleAlert} size="inline" />
@@ -376,7 +377,7 @@ export function ExamMonitoringPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }
 

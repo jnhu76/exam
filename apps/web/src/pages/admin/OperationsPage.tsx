@@ -21,6 +21,7 @@ import { PageSection } from "@/components/shared/PageSection";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -221,7 +222,11 @@ export function OperationsPage() {
   else drillTone = "warning";
 
   return (
-    <div data-testid="operations-page" className="space-y-6">
+    <PageContainer
+      role="admin-standard"
+      data-testid="operations-page"
+      className="space-y-6"
+    >
       <PageHeader title={t("ops.title")} description={t("ops.subtitle")} />
 
       {stale && <InlineErrorBanner>{t("ops.staleWarning")}</InlineErrorBanner>}
@@ -699,7 +704,7 @@ export function OperationsPage() {
           </>
         )}
       </PageSection>
-    </div>
+    </PageContainer>
   );
 }
 

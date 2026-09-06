@@ -14,6 +14,7 @@ import {
   type QuestionFormData,
 } from "@/components/question/QuestionForm";
 import { QuestionPreview } from "@/components/question/QuestionPreview";
+import { PageContainer } from "@/components/shared/PageContainer";
 import type { ContentDocumentV1, ContentMode } from "@exam/domain";
 
 /** Minimal course representation used to populate the course selector. */
@@ -233,7 +234,7 @@ export function QuestionEditPage() {
   if (!formData) return null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader
         title={
           isEdit
@@ -277,6 +278,6 @@ export function QuestionEditPage() {
             : t("admin.questionEdit.actions.save")}
         </Button>
       </div>
-    </div>
+    </PageContainer>
   );
 }

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { TagBadge } from "@/components/shared/TagBadge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 import {
   FileUp,
@@ -348,7 +349,7 @@ export function QuestionPage() {
   const isEmpty = !isTableLoading && questions.length === 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.questions.title" as never)}
         actions={
@@ -642,6 +643,6 @@ export function QuestionPage() {
           </MobileRecordList>
         }
       />
-    </div>
+    </PageContainer>
   );
 }
