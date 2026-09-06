@@ -29,7 +29,13 @@
 #   - #351 budget contract: with a send stuck in flight (fake transport,
 #     60s delay ≫ the 8s loop shutdown budget), `docker stop` still exits
 #     0 BEFORE stop_grace_period (never 137), the abandoned row stays
-#     `processing`, and a restart recovers + re-claims it (at-least-once).
+#     `processing` with its ORIGINAL ownership evidence, and a restart
+#     recovers + re-claims it under a new owner (at-least-once).
+#   - #482 synchronization: `docker stop` is gated on BOTH a real
+#     happens-before pair — queue ownership (processing + lock) AND the
+#     fake-sender send-entered witness (written on entry to send(), before
+#     the simulated delay) — so the bounded-abandon warning is observed by
+#     bounded polling of the stop window, not a one-shot log grep.
 #
 # Usage: ./compose-smoke.sh <run-number>
 set -euo pipefail
@@ -606,6 +612,14 @@ echo "  PASS: authenticated redis profile started, probed, and was torn down."
 # exit (code 0) BEFORE stop_grace_period — not a Docker SIGKILL (137).
 # Also proves the abandoned row stays `processing` and is recovered and
 # re-claimed by the next app start (at-least-once redelivery).
+#
+# Synchronization model (#482 / ADR-011 §26): the two lifecycle boundaries
+# are asserted separately, in order, BEFORE the stop:
+#   1. QUEUE OWNERSHIP: status=processing with non-empty locked_by AND
+#      locked_at — claim evidence only. It does NOT prove the send began.
+#   2. SEND-ENTERED WITNESS: the fake sender writes EMAIL_FAKE_SEND_ENTERED_
+#      FILE on entry to send(), BEFORE the 60s simulated delay — so witness
+#      existence implies the delay is genuinely in flight.
 echo "--- TEST 17: stuck in-flight email send: bounded stop, exit 0, not 137 (#351) ---"
 STUCK_PROJECT="compose-smoke-stuck-${RUN_NUM}"
 STUCK_DATA_ROOT="${EXAM_DATA_ROOT}/stuck-stack"
@@ -614,10 +628,14 @@ STUCK_ORIGIN="http://localhost:${STUCK_PORT}"
 # 60s fake send latency ≫ the 8s loop shutdown budget: the send is still
 # in flight when SIGTERM arrives. 6s lock timeout makes the post-restart
 # recoverAbandoned check fast (fake transport skips the SMTP lease guard).
+# EMAIL_FAKE_SEND_ENTERED_FILE arms the #482 witness seam (test-only; a real
+# deployment never sets it).
+STUCK_WITNESS="/tmp/exam-test17-send-entered"
 (
   export EXAM_DATA_ROOT="${STUCK_DATA_ROOT}" EXAM_PORT="${STUCK_PORT}" \
     EMAIL_ENABLED=true EMAIL_TRANSPORT=fake EMAIL_FAKE_MODE=success \
-    EMAIL_FAKE_DELAY_MS=60000 EMAIL_WORKER_POLL_INTERVAL_MS=1000 \
+    EMAIL_FAKE_DELAY_MS=60000 EMAIL_FAKE_SEND_ENTERED_FILE="${STUCK_WITNESS}" \
+    EMAIL_WORKER_POLL_INTERVAL_MS=1000 \
     EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS=8000 EMAIL_WORKER_LOCK_TIMEOUT_MS=6000 \
     CORS_ORIGIN="${STUCK_ORIGIN}" PUBLIC_WEB_ORIGIN="${STUCK_ORIGIN}"
   run_compose "${STUCK_PROJECT}" up -d --quiet-pull >/dev/null
@@ -645,33 +663,67 @@ docker exec -e JWT_SECRET="${JWT_SECRET}" -e APP_MODE=production \
   --username "stuckadmin${RUN_NUM}" --password "${ADMIN_PASS}" \
   --name "Stuck Admin ${RUN_NUM}" --organization-name "Stuck Org ${RUN_NUM}" >/dev/null
 
-# One due outbox row; wait until the loop claims it (send now in flight).
-# (id has no DB-side default — the app layer generates it; supply one.)
+# One due outbox row. (id has no DB-side default — the app layer generates
+# it; supply one.) The witness file is cleared first so "witness exists" can
+# only mean THIS run's send (fresh container ⇒ fresh /tmp anyway).
+docker exec "${STUCK_APP}" rm -f "${STUCK_WITNESS}" >/dev/null 2>&1 || true
 docker exec "${STUCK_DB}" psql -U exam -d exam -qc \
   "INSERT INTO email_outbox (id, organization_id, type, recipient_email, subject, body_text, status, attempt_count, max_attempts) SELECT gen_random_uuid()::text, id, 'test_email', 'stuck@example.com', 's', 't', 'pending', 0, 3 FROM organizations LIMIT 1;"
+
+# ── Tier A step 1: queue ownership sanity (ADR-011 §26 Q1/Q2) ────────────
+# status=processing + non-empty locked_by AND locked_at proves the row was
+# CLAIMED. It is NOT send-in-flight evidence — that is the witness's job.
 STUCK_STATE=""
 for i in $(seq 1 30); do
   STUCK_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
-    "SELECT status || '|' || COALESCE(locked_by, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1" 2>/dev/null || true)
+    "SELECT status || '|' || COALESCE(locked_by, '') || '|' || COALESCE(locked_at::text, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1" 2>/dev/null || true)
   case "${STUCK_STATE}" in
-    processing\|*) break ;;
+    processing\|*\|*) break ;;
   esac
   sleep 1
 done
 case "${STUCK_STATE}" in
-  processing\|*)
-    echo "  row claimed and send in flight (${STUCK_STATE%%|*})."
+  processing\|*\|*)
+    STUCK_ORIGINAL_LOCKED_BY="$(printf '%s' "${STUCK_STATE#processing|}" | cut -d'|' -f1)"
+    STUCK_ORIGINAL_LOCKED_AT="$(printf '%s' "${STUCK_STATE#processing|}" | cut -d'|' -f2-)"
+    if [ -z "${STUCK_ORIGINAL_LOCKED_BY}" ] || [ -z "${STUCK_ORIGINAL_LOCKED_AT}" ]; then
+      echo "  FAIL: processing row without ownership evidence (state=${STUCK_STATE}) — ADR-011 §26 Q2 violated."
+      run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
+      compose_down_best_effort "${STUCK_PROJECT}"
+      exit 1
+    fi
+    echo "  PASS: queue ownership established (locked_by=${STUCK_ORIGINAL_LOCKED_BY})."
     ;;
   *)
-    echo "  FAIL: outbox row never reached status=processing (state=${STUCK_STATE})."
+    echo "  FAIL: outbox row never reached a valid claimed state (state=${STUCK_STATE})."
     run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
     compose_down_best_effort "${STUCK_PROJECT}"
     exit 1
     ;;
 esac
-STUCK_ORIGINAL_LOCKED_BY="${STUCK_STATE#processing|}"
+
+# ── Tier A step 2: send-entered witness (ADR-011 §26 Q3) ─────────────────
+# HARD happens-before gate: the fake sender touches the witness file on
+# entry to send(), before the 60s delay. Only once it exists is the send
+# genuinely in flight and `docker stop` meaningful.
+STUCK_WITNESS_SEEN=0
+for i in $(seq 1 30); do
+  if docker exec "${STUCK_APP}" test -f "${STUCK_WITNESS}" 2>/dev/null; then
+    STUCK_WITNESS_SEEN=1
+    break
+  fi
+  sleep 1
+done
+if [ "${STUCK_WITNESS_SEEN}" != "1" ]; then
+  echo "  FAIL: send-entered witness never appeared — send execution not observed before stop."
+  run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
+  compose_down_best_effort "${STUCK_PROJECT}"
+  exit 1
+fi
+echo "  PASS: send-entered witness observed — the 60s fake send is in flight."
 
 STUCK_T0=$(date +%s)
+STUCK_T0_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 docker stop "${STUCK_APP}" >/dev/null
 STUCK_T1=$(date +%s)
 STUCK_ELAPSED=$(( STUCK_T1 - STUCK_T0 ))
@@ -688,25 +740,50 @@ if [ "${STUCK_ELAPSED}" -ge 45 ]; then
 fi
 echo "  PASS: docker stop → app exited ${STUCK_EXIT} in ${STUCK_ELAPSED}s (< 45s grace; not 137)."
 
-if ! run_compose "${STUCK_PROJECT}" logs --tail=60 app 2>&1 | grep -q 'email outbox loop shutdown timeout'; then
-  echo "  FAIL: app logs do not contain the bounded-abandon warning — the stuck-send path was not exercised."
+# ── Tier B: bounded-abandon warning (observability evidence) ─────────────
+# #482: the one-shot `--tail=60 | grep` is gone. The stop landed on a
+# witnessed in-flight send, so the warning is emitted by the onClose
+# shutdown race before the process exits — deterministically inside this
+# stop window. Poll `logs --since` the stop start with a short bound;
+# no --tail, no unbounded wait.
+STUCK_WARN_SEEN=0
+for i in $(seq 1 15); do
+  # Capture first, grep second: under pipefail, a live `docker logs |` writer
+  # racing a `grep -q` early exit can surface SIGPIPE as a false negative.
+  STUCK_STOP_LOGS="$(docker logs --since "${STUCK_T0_ISO}" "${STUCK_APP}" 2>&1 || true)"
+  if echo "${STUCK_STOP_LOGS}" | grep -q 'email outbox loop shutdown timeout'; then
+    STUCK_WARN_SEEN=1
+    break
+  fi
+  sleep 1
+done
+if [ "${STUCK_WARN_SEEN}" != "1" ]; then
+  echo "  FAIL: app logs since the stop window do not contain the bounded-abandon warning — the stuck-send path was not exercised."
+  run_compose "${STUCK_PROJECT}" logs --tail=60 app || true
   compose_down_best_effort "${STUCK_PROJECT}"
   exit 1
 fi
-echo "  PASS: email loop logged the bounded shutdown-timeout abandonment."
+echo "  PASS: email loop logged the bounded shutdown-timeout abandonment within the stop window."
 
+# ── Tier A: ownership evidence preserved across the abandonment (Q4) ─────
+# The bounded shutdown must NOT touch the row: original owner + claim
+# timestamp survive verbatim (redelivery is reachable only via lock-timeout
+# recovery — Q5 — never by rewriting processing → pending).
 STUCK_ROW_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
-  "SELECT status FROM email_outbox ORDER BY created_at DESC LIMIT 1")
-if [ "${STUCK_ROW_STATE}" != "processing" ]; then
-  echo "  FAIL: abandoned row status is '${STUCK_ROW_STATE}' (expected 'processing')."
+  "SELECT status || '|' || COALESCE(locked_by, '') || '|' || COALESCE(locked_at::text, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1")
+if [ "${STUCK_ROW_STATE}" != "processing|${STUCK_ORIGINAL_LOCKED_BY}|${STUCK_ORIGINAL_LOCKED_AT}" ]; then
+  echo "  FAIL: abandoned row ownership changed across the stop (state=${STUCK_ROW_STATE}; expected processing|${STUCK_ORIGINAL_LOCKED_BY}|${STUCK_ORIGINAL_LOCKED_AT}) — ADR-011 §26 Q4 violated."
   compose_down_best_effort "${STUCK_PROJECT}"
   exit 1
 fi
-echo "  PASS: abandoned row remains 'processing' (at-least-once boundary)."
+echo "  PASS: abandoned row keeps status=processing with the ORIGINAL locked_by/locked_at."
 
 # Restart: lock timeout (6s) elapses, the next poll cycle's recoverAbandoned
-# re-queues the row and the NEW instance claims it — proof that the stuck
-# send's data is not lost.
+# re-queues the row (pending, lock fields cleared) and the NEW instance
+# claims it under a different owner — the #482/ADR-011 §26 Q5 at-least-once
+# redelivery proof. The transient `pending` state sits inside one poll
+# cycle and is intentionally not raced for.
+STUCK_RESTART_T0=$(date +%s)
 docker start "${STUCK_APP}" >/dev/null
 STUCK_HEALTH=""
 for i in $(seq 1 90); do
@@ -720,12 +797,14 @@ if [ "${STUCK_HEALTH}" != "healthy" ]; then
   exit 1
 fi
 STUCK_RECLAIMED=""
+STUCK_NEW_LOCKED_BY=""
 for i in $(seq 1 60); do
   STUCK_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
-    "SELECT status || '|' || COALESCE(locked_by, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1" 2>/dev/null || true)
+    "SELECT status || '|' || COALESCE(locked_by, '') || '|' || COALESCE(locked_at::text, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1" 2>/dev/null || true)
   case "${STUCK_STATE}" in
-    processing\|*)
-      if [ "${STUCK_STATE#processing|}" != "${STUCK_ORIGINAL_LOCKED_BY}" ]; then
+    processing\|*\|*)
+      STUCK_NEW_LOCKED_BY="$(printf '%s' "${STUCK_STATE#processing|}" | cut -d'|' -f1)"
+      if [ -n "${STUCK_NEW_LOCKED_BY}" ] && [ "${STUCK_NEW_LOCKED_BY}" != "${STUCK_ORIGINAL_LOCKED_BY}" ]; then
         STUCK_RECLAIMED="yes"
         break
       fi
@@ -734,12 +813,18 @@ for i in $(seq 1 60); do
   sleep 1
 done
 if [ "${STUCK_RECLAIMED}" != "yes" ]; then
-  echo "  FAIL: abandoned row was not recovered and re-claimed by the restarted instance (state=${STUCK_STATE})."
+  echo "  FAIL: abandoned row was not recovered and re-claimed by a NEW owner (state=${STUCK_STATE}; original owner=${STUCK_ORIGINAL_LOCKED_BY})."
   run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
   compose_down_best_effort "${STUCK_PROJECT}"
   exit 1
 fi
-echo "  PASS: row recovered and re-claimed by the new instance (at-least-once redelivery)."
+echo "  PASS: row recovered and re-claimed by a NEW owner (Q5: ${STUCK_ORIGINAL_LOCKED_BY} → ${STUCK_NEW_LOCKED_BY})."
+# Evidence of re-execution (not asserted): the new owner re-enters send(), so
+# the witness file is rewritten after the restart.
+STUCK_WITNESS_MTIME=$(docker exec "${STUCK_APP}" stat -c %Y "${STUCK_WITNESS}" 2>/dev/null || echo "0")
+if [ "${STUCK_WITNESS_MTIME}" -ge "${STUCK_RESTART_T0}" ] 2>/dev/null; then
+  echo "  PASS: witness rewritten after restart — the new owner's send re-entered execution."
+fi
 
 compose_down_best_effort "${STUCK_PROJECT}"
 
