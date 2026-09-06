@@ -114,7 +114,7 @@ test.describe("Proctor landing workspace", () => {
     ).toBeVisible();
     await expect(
       page
-        .locator('[data-slot="table-scroll-frame"]')
+        .locator('[data-slot="responsive-desktop-region"]')
         .getByText(seeded.examTitle),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "监考工作台" })).toBeVisible();

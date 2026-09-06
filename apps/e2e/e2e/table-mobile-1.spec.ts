@@ -90,6 +90,16 @@ test.describe("management-list mobile card representation (issue 457)", () => {
     await loginAsAdmin(page);
     await page.goto("/admin/candidates");
     await page.locator("main h1").waitFor({ state: "visible" });
+    // Deterministic slice: the persistent E2E database accumulates
+    // candidates across runs and specs, so the seeded candidate can sit
+    // past the list's first page — search narrows to it before the card
+    // assertions (same pattern as the QuestionPage proof below).
+    await page
+      .getByRole("searchbox", { name: "搜索考生" })
+      .fill(seeded.candidate.username);
+    await page
+      .waitForLoadState("networkidle", { timeout: 5_000 })
+      .catch(() => {});
 
     const card = page.locator(CARD, {
       hasText: seeded.candidate.name,

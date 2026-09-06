@@ -306,9 +306,14 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     await shell.waitFor({ state: "visible" });
     const g = await probeTable(shell);
     expect(g.archetype).toBe("management-list");
-    // The desktop scroll frame is hidden; the mobile card region takes over.
+    // The responsive owner hides the desktop REGION below lg (the wrapping
+    // frame stays mounted around both representations, issue 457 C3); the
+    // mobile card region takes over.
     expect(
-      page.locator('[data-slot="table-scroll-frame"]').last(),
+      page.locator('[data-slot="responsive-desktop-region"]').last(),
     ).toBeHidden();
+    expect(
+      page.locator('[data-slot="responsive-mobile-region"]').last(),
+    ).toBeVisible();
   });
 });
