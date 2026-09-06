@@ -52,6 +52,22 @@
 
 ## 已修复事故
 
+### 2026-09-06 — Deployment fresh-install gate TEST 17（#351 卡死邮件发送）日志断言时序 flake（PR #479 clean-HEAD CI）
+
+- **现象**：CI run 34009398179（2026-09-06T03:36Z，pull_request，`fix/db-test-worker-cap-463` @ 398e4fbb）的 Deployment fresh-install gate job（id 101422656944）失败；同 run 其余 7 个 job（Static checks / Package coverage / API coverage / Web coverage / E2E×2 / Build）全部通过。失败点是 fresh-install acceptance **TEST 17**（issue #351 stuck in-flight email send）的第二段日志断言；TEST 17 前半（docker stop 行为语义）通过。
+- **错误片段**：
+
+  ```text
+  PASS: docker stop → app exited 0 in 10s (< 45s grace; not 137).
+  FAIL: app logs do not contain the bounded-abandon warning — the stuck-send path was not exercised.
+  ```
+
+- **排除回归**：PR #479 的唯一改动是 `packages/db/vitest.config.ts` 的 Vitest worker cap（测试基础设施），与 compose smoke 运行时无因果路径；同一配置内容当日早些时候该 job 已 3 次通过（runs 34005293726 首跑 + 重跑、34006138677）；失败窗口内 master 前进（a2c99f4c→ed7a18af）仅含 `docs/` 改动。
+- **证据（同代码再跑就过，登记规则 #1）**：同一 commit、同一 run 的 failed-job 重跑 PASS（仅重跑 Deployment gate）；run 最终 conclusion=success，全部 8 job 绿。
+- **根因假设**：TEST 17 是时序敏感用例——先观察到 "row claimed and send in flight (processing)"，随后在 60s 假发送延迟下 `docker stop`；断言要求 app 日志出现 bounded-abandon warning。本次 stop 后进程 10s 干净退出（exit 0），但日志采集窗口内未出现该 warning——stop 落在 bounded-abandon 路径发出日志之前。失败面是"日志存在性断言 × 固定时序窗口"的竞态，不是停止路径本身的行为错误（停止语义断言全部 PASS，exit 0 / 非 137 / outbox loop 干净停止均在同 run 或历史 run 通过）。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry、不断言弱化）；failed-job 重跑转绿后按正常流程合并 PR #479（merge commit d5e55489）。
+- **后续动作**：同签名复发 ≥3 次时按登记规则 #3 升级为正式跟踪条目；结构性修复方向（若升级）：TEST 17 的 bounded-abandon 断言改为确定性信号（显式等待该日志行出现 / 事件注入），而非固定时序窗口下的日志存在性检查。
+
 ### 2026-09-01 — CI API coverage 4-worker 并行下 DB 生命周期钩子漂移超时（PR #362 S1 anti-decay）
 
 - **现象**：CI run 33425276029（2026-08-31T18:29Z，pull_request，`chore/recovery-anti-decay-s1` @ cdafbd38）的 API coverage job（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`）失败；同 run 其余 job（Build / Static / E2E×2 / Web / Package / fresh-install）全部通过。3 个文件 6 个错误，全部为 DB 生命周期钩子超时，无任何断言失败：
