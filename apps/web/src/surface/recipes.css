@@ -222,7 +222,11 @@
  * never legal (too-wide content escalates the size vocabulary instead).
  */
 [data-slot="dialog-body"] {
-  flex: 1 1 0;
+  /* Basis AUTO, not 0: the dialog's height is content-driven up to the
+   * max-h cap, so a basis-0 body would collapse the whole dialog to
+   * header+footer. min-height 0 lets the body shrink (and scroll) once the
+   * cap binds. */
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }

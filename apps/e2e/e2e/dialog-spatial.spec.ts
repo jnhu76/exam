@@ -18,8 +18,10 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 interface DialogGeometry {
   contentWidth: number;
+  contentHeight: number;
   scrollWidth: number;
   clientWidth: number;
+  bodyClientHeight: number;
   bodyScrollable: boolean;
   headerTop: number;
   footerBottom: number;
@@ -33,9 +35,13 @@ async function probeDialog(content: Locator): Promise<DialogGeometry> {
     const footer = el.querySelector<HTMLElement>('[data-slot="dialog-footer"]');
     return {
       contentWidth: el.getBoundingClientRect().width,
+      contentHeight: el.getBoundingClientRect().height,
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
-      bodyScrollable: body ? body.scrollHeight > body.clientHeight : false,
+      bodyClientHeight: body ? body.clientHeight : 0,
+      bodyScrollable: body
+        ? body.scrollHeight > body.clientHeight && body.clientHeight > 0
+        : false,
       headerTop: header ? header.getBoundingClientRect().top : -1,
       footerBottom: footer ? footer.getBoundingClientRect().bottom : -1,
     };
@@ -126,6 +132,11 @@ test("lg dialog (question picker) scrolls its body with fixed bands at 375px", a
   expect(box!.y).toBeGreaterThanOrEqual(0);
   expect(box!.y + box!.height).toBeLessThanOrEqual(812 + 0.5);
   // The body region is the scroll owner; header and footer stay in view.
+  // bodyClientHeight > 0 guards against the collapsed-dialog failure mode
+  // (a basis-0 body collapses the dialog to header+footer and would make
+  // scrollability assertions vacuously true).
+  expect(geometry.bodyClientHeight).toBeGreaterThan(0);
+  expect(geometry.contentHeight).toBeGreaterThan(200);
   expect(geometry.bodyScrollable).toBe(true);
   expect(geometry.headerTop).toBeGreaterThanOrEqual(box!.y - 0.5);
   expect(geometry.footerBottom).toBeLessThanOrEqual(box!.y + box!.height + 0.5);
