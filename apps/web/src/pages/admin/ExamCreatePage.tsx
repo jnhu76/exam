@@ -941,66 +941,69 @@ export function ExamCreatePage() {
         <DialogContent
           aria-describedby={undefined}
           showCloseButton={false}
-          className="max-w-2xl max-h-[80vh] overflow-y-auto"
+          size="lg"
         >
           <DialogHeader>
             <DialogTitle>
               {t("admin.examWizard.questions.dialogTitle")}
             </DialogTitle>
           </DialogHeader>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "type" },
-                { role: "long-text" },
-                { role: "score" },
-                { role: "actions" },
-              ]}
-            />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="type">
-                  {t("admin.examWizard.questions.tableHeaders.type")}
-                </DataTableHead>
-                <DataTableHead role="long-text">
-                  {t("admin.examWizard.questions.tableHeaders.content")}
-                </DataTableHead>
-                <DataTableHead role="score">
-                  {t("admin.examWizard.questions.tableHeaders.score")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.examWizard.questions.dialogActions.add")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {availableQuestions.map((q) => (
-                <TableRow key={q.id}>
-                  <DataTableCell role="type">
-                    <Badge variant="outline">
-                      {getTypeLabel(q.type, t) ?? q.type}
-                    </Badge>
-                  </DataTableCell>
-                  <DataTableCell role="long-text" className="truncate">
-                    {q.content}
-                  </DataTableCell>
-                  <DataTableCell role="score">{q.score}</DataTableCell>
-                  <DataTableCell role="actions">
-                    {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
-                        picker tables keep a text add action — auto layout,
-                        outside the admin shell's icon-only vocabulary. */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => addQuestion(q.id)}
-                    >
-                      {t("admin.examWizard.questions.dialogActions.add")}
-                    </Button>
-                  </DataTableCell>
+          {/* dialog-body owns the vertical scroll; header/footer fixed. */}
+          <div data-slot="dialog-body">
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "type" },
+                  { role: "long-text" },
+                  { role: "score" },
+                  { role: "actions" },
+                ]}
+              />
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="type">
+                    {t("admin.examWizard.questions.tableHeaders.type")}
+                  </DataTableHead>
+                  <DataTableHead role="long-text">
+                    {t("admin.examWizard.questions.tableHeaders.content")}
+                  </DataTableHead>
+                  <DataTableHead role="score">
+                    {t("admin.examWizard.questions.tableHeaders.score")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
+                    {t("admin.examWizard.questions.dialogActions.add")}
+                  </DataTableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {availableQuestions.map((q) => (
+                  <TableRow key={q.id}>
+                    <DataTableCell role="type">
+                      <Badge variant="outline">
+                        {getTypeLabel(q.type, t) ?? q.type}
+                      </Badge>
+                    </DataTableCell>
+                    <DataTableCell role="long-text" className="truncate">
+                      {q.content}
+                    </DataTableCell>
+                    <DataTableCell role="score">{q.score}</DataTableCell>
+                    <DataTableCell role="actions">
+                      {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
+                          picker tables keep a text add action — auto layout,
+                          outside the admin shell's icon-only vocabulary. */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => addQuestion(q.id)}
+                      >
+                        {t("admin.examWizard.questions.dialogActions.add")}
+                      </Button>
+                    </DataTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"

@@ -49,12 +49,12 @@ export function ImportWizard({
   const hasErrors = preview.some((row) => row.status === "error");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{instructions}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <div data-slot="dialog-body" className="flex flex-col gap-3">
           {warning && <p className="text-sm text-warning">{warning}</p>}
           <FileUpload onText={onCsvChange} />
           <Textarea

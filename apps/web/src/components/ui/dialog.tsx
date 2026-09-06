@@ -48,13 +48,31 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Shared dialog size vocabulary (P3 §12 dialog contract, issue 459):
+ *   sm = 384 (quick action / light form), md = 512 (default, standard form /
+ *   generic confirm), lg = 672 (complex form / wizard / picker).
+ * xl (896) is a documented extension rule only — add it when real content
+ * cannot avoid illegal horizontal scroll inside lg; never widen a dialog via
+ * a page-local max-w-* override.
+ */
+const DIALOG_SIZE_CLASSES = {
+  sm: "sm:max-w-sm",
+  md: "sm:max-w-lg",
+  lg: "sm:max-w-2xl",
+} as const
+
+export type DialogSize = keyof typeof DIALOG_SIZE_CLASSES
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "md",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  size?: DialogSize
 }) {
   const { t } = useTranslation()
   return (
@@ -62,8 +80,10 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        data-size={size}
         className={cn(
-          "fixed top-[50%] left-[50%] z-[51] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-[51] flex max-h-[85dvh] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          DIALOG_SIZE_CLASSES[size],
           className
         )}
         {...props}

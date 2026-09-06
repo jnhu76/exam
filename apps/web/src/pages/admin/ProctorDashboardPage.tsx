@@ -1594,7 +1594,7 @@ export function ProctorDashboardPage() {
           }
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {t("admin.proctorDashboard.extendDialog.title")}
@@ -1704,7 +1704,7 @@ export function ProctorDashboardPage() {
           }
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {t("admin.proctorDashboard.misconductDialog.title")}
@@ -1796,7 +1796,7 @@ export function ProctorDashboardPage() {
           }
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {t("admin.proctorDashboard.forceSubmit.title")}
