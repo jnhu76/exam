@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Pencil, Trash2, KeyRound } from "lucide-react";
@@ -148,18 +154,144 @@ describe("RowActions representation contract", () => {
     expect(disableItem).toHaveAttribute("data-action-id", "disable");
   });
 
-  it("surfaces a disabled reason as a focusable tooltip anchor", () => {
+  it.each([3, 4, 8])(
+    "keeps exactly two inline controls for N=%i (primary + kebab trigger)",
+    async (n) => {
+      const user = userEvent.setup();
+      const actions = Array.from({ length: n }, (_, i) =>
+        decl({ id: `a${i}`, label: `动作${i}` }),
+      );
+      renderActions(actions);
+      const group = screen.getByRole("group");
+      // The inline control count is bounded by the representation, not by N:
+      // exactly the primary action and the overflow trigger.
+      expect(group.querySelectorAll("button")).toHaveLength(2);
+      expect(screen.getByRole("button", { name: "动作0" })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "动作1" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "更多操作" }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "更多操作" }));
+      // Every non-primary action is reachable in the kebab.
+      const items = await screen.findAllByRole("menuitem");
+      expect(items).toHaveLength(n - 1);
+    },
+  );
+
+  it("surfaces a disabled reason as a focusable tooltip anchor", async () => {
+    vi.useFakeTimers();
+    try {
+      renderActions([
+        decl({
+          id: "view",
+          label: "查看",
+          disabled: { reason: "考试未结束，暂不可查看" },
+        }),
+      ]);
+      const anchor = screen
+        .getByRole("group")
+        .querySelector("span[tabindex]") as HTMLElement | null;
+      expect(anchor).toHaveAttribute("aria-label", "查看");
+      expect(anchor?.getAttribute("tabIndex")).toBe("0");
+      expect(screen.getByRole("button", { name: "查看" })).toBeDisabled();
+      // The reason is reachable from the keyboard: focusing the anchor opens
+      // the tooltip that carries the authoritative text (Radix also renders a
+      // visually-hidden sr-only copy, so scope to the visible content slot).
+      act(() => {
+        anchor?.focus();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(
+        screen.getByText("考试未结束，暂不可查看", {
+          selector: '[data-slot="tooltip-content"]',
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("RowActions disabled reason accessibility", () => {
+  it("exposes a disabled reason inside the overflow menu", async () => {
+    const user = userEvent.setup();
+    const onReset = vi.fn();
+    const reason = "考试未结束，暂不可重置";
     renderActions([
+      decl({ id: "edit", label: "编辑" }),
       decl({
-        id: "view",
-        label: "查看",
-        disabled: { reason: "考试未结束，暂不可查看" },
+        id: "reset",
+        label: "重置密码",
+        icon: KeyRound,
+        disabled: { reason },
+        onSelect: onReset,
       }),
+      decl({ id: "view", label: "查看" }),
     ]);
-    const anchor = screen.getByRole("group").querySelector("span[tabindex]");
-    expect(anchor).toHaveAttribute("aria-label", "查看");
-    expect(anchor?.getAttribute("tabIndex")).toBe("0");
-    expect(screen.getByRole("button", { name: "查看" })).toBeDisabled();
+
+    // Open the kebab with the keyboard.
+    screen.getByRole("button", { name: "更多操作" }).focus();
+    await user.keyboard("{Enter}");
+
+    // The disabled action is present in the menu and cannot be activated.
+    const item = await screen.findByRole("menuitem", { name: /重置密码/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(item);
+    expect(onReset).not.toHaveBeenCalled();
+
+    // The reason is perceivable as rendered text (not an HTML title) and is
+    // tied to the item as its accessible description.
+    expect(screen.getByText(reason)).toBeVisible();
+    expect(item.getAttribute("title")).toBeNull();
+    const describedBy = item.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(reason);
+  });
+
+  it("preserves label, disabled state, reason and non-activation across representations", async () => {
+    const user = userEvent.setup();
+    const onView = vi.fn();
+    const reason = "考试未结束，暂不可查看";
+    const viewAction = decl({
+      id: "view",
+      label: "查看成绩",
+      disabled: { reason },
+      onSelect: onView,
+    });
+    const editAction = decl({ id: "edit", label: "编辑" });
+
+    // N=2 → inline: same declaration renders as a disabled icon button whose
+    // reason stays reachable through the focusable tooltip anchor.
+    const { rerender } = renderActions([viewAction, editAction]);
+    expect(screen.getByRole("button", { name: "查看成绩" })).toBeDisabled();
+    expect(
+      screen.getByRole("group").querySelector("span[tabindex]"),
+    ).toHaveAttribute("aria-label", "查看成绩");
+
+    // N=3 → overflow: label, disabled state and reason survive the move into
+    // the kebab, and the action still cannot be activated. The non-disabled
+    // edit action is first declared, so it is primary and view moves into the
+    // overflow.
+    rerender(
+      <RowActions
+        actions={[
+          editAction,
+          viewAction,
+          decl({ id: "reset", label: "重置密码", icon: KeyRound }),
+        ]}
+        row={{ id: "r1" }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    const item = await screen.findByRole("menuitem", { name: /查看成绩/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(reason)).toBeVisible();
+    fireEvent.click(item);
+    expect(onView).not.toHaveBeenCalled();
   });
 });
 

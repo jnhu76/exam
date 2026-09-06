@@ -19,6 +19,10 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, "..");
 const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+const rowActionsSource = readFileSync(
+  join(webRoot, "components", "shared", "RowActions.tsx"),
+  "utf8",
+);
 
 const SCAN_ROOTS = [
   join(webRoot, "pages"),
@@ -90,6 +94,32 @@ describe("row-action capacity contract", () => {
     );
     expect(offenders.map((p) => relative(webRoot, p))).toEqual([]);
     expect(tableCss).not.toContain("data-actions-density");
+  });
+
+  it("keeps the declaration type a closed vocabulary (no always-inline escape hatch)", () => {
+    // The count-triggered representation (N>2 ⇒ exactly 2 inline controls)
+    // only holds if no declaration field can exempt an action from the kebab.
+    // Pin the exported declaration fields to the frozen set; a renamed
+    // equivalent of the removed `overflow: "pinned"` escape hatch fails here.
+    const interfaceMatch = rowActionsSource.match(
+      /export interface RowActionDeclaration<TRow = unknown> \{([\s\S]*?)\n\}/,
+    );
+    expect(interfaceMatch).not.toBeNull();
+    const body = interfaceMatch?.[1] ?? "";
+    const fields = [...body.matchAll(/^\s{2}(\w+)\??:/gm)].map(
+      (m) => m[1] as string,
+    );
+    expect(fields).toEqual([
+      "id",
+      "label",
+      "icon",
+      "tone",
+      "disabled",
+      "primary",
+      "confirm",
+      "onSelect",
+    ]);
+    expect(body).not.toMatch(/overflow|pinned|always.?inline/);
   });
 
   it("binds the actions column to the contract width (6rem fine / 7.5rem coarse)", () => {

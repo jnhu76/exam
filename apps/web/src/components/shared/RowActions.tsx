@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MoreVertical, type LucideIcon } from "lucide-react";
 import { AppIcon } from "./AppIcon";
@@ -19,15 +19,15 @@ import {
 import { cn } from "@/lib/utils";
 
 export type RowActionTone = "default" | "destructive";
-export type RowActionOverflowEligibility = "auto" | "pinned";
 
 /**
  * Typed semantic declaration of one table row action (P3 §3 (issue 445) — the
  * action capacity contract). Representation is derived from the declaration
  * list by COUNT alone (never width, never label text): N ≤ 2 actions render
- * inline as icon buttons; N > 2 renders [primary icon][kebab(rest)]. Inline
- * text buttons are not part of the vocabulary — the label lives in
- * aria-label (inline) or menu item text (kebab).
+ * inline as icon buttons; N > 2 renders exactly one primary inline plus a
+ * kebab with every other action. Inline text buttons are not part of the
+ * vocabulary — the label lives in aria-label (inline) or menu item text
+ * (kebab).
  */
 export interface RowActionDeclaration<TRow = unknown> {
   /** Stable identifier — test/audit anchor, emitted as data-action-id. */
@@ -51,8 +51,6 @@ export interface RowActionDeclaration<TRow = unknown> {
     confirmLabel?: string;
     destructive?: boolean;
   };
-  /** Default "auto"; "pinned" = never moves into the kebab (review-gated). */
-  overflow?: RowActionOverflowEligibility;
   /** Activation. RowActions stops propagation so clickable rows stay inert. */
   onSelect?: (row: TRow) => void;
 }
@@ -91,11 +89,13 @@ function contractViolations<TRow>(
  * Horizontal action group for table rows, rendered from typed declarations.
  *
  * INVARIANT: representation is a pure function of the declaration list —
- * count triggers the kebab, the first (or explicitly primary) action stays
- * inline, and disabled actions keep their slot so geometry never changes
- * while a row's actions toggle. With the icon-only vocabulary the inline
- * bound is two buttons (incl. the kebab), which is what the contract-bound
- * actions-column width (6rem fine / 7.5rem coarse) is derived from.
+ * count triggers the kebab (N > 2 ⇒ exactly one primary inline + one kebab
+ * trigger, i.e. two inline controls no matter how large N grows), the first
+ * (or explicitly primary) action stays inline, and disabled actions keep
+ * their slot so geometry never changes while a row's actions toggle. With the
+ * icon-only vocabulary the inline bound is two buttons (incl. the kebab),
+ * which is what the contract-bound actions-column width (6rem fine / 7.5rem
+ * coarse) is derived from.
  */
 export function RowActions<TRow>({
   actions,
@@ -111,6 +111,8 @@ export function RowActions<TRow>({
   const { t } = useTranslation();
   const [confirming, setConfirming] =
     useState<RowActionDeclaration<TRow> | null>(null);
+  // Unique per instance so describedby ids stay valid across table rows.
+  const instanceId = useId();
 
   if (import.meta.env.DEV) {
     const violations = contractViolations(actions);
@@ -129,10 +131,10 @@ export function RowActions<TRow>({
         actions[0]);
   const useOverflow = actions.length > 2;
   const inlineActions = useOverflow
-    ? actions.filter((a) => a === primary || a.overflow === "pinned")
+    ? actions.filter((a) => a === primary)
     : actions;
   const overflowActions = useOverflow
-    ? actions.filter((a) => a !== primary && a.overflow !== "pinned")
+    ? actions.filter((a) => a !== primary)
     : [];
 
   const activate = (action: RowActionDeclaration<TRow>) => {
@@ -222,21 +224,41 @@ export function RowActions<TRow>({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {overflowActions.map((action) => (
-              <DropdownMenuItem
-                key={action.id}
-                data-action-id={action.id}
-                variant={
-                  action.tone === "destructive" ? "destructive" : "default"
-                }
-                disabled={isDisabled(action)}
-                title={disabledReason(action)}
-                onSelect={() => activate(action)}
-              >
-                <AppIcon icon={action.icon} size="inline" />
-                {action.label}
-              </DropdownMenuItem>
-            ))}
+            {overflowActions.map((action) => {
+              const reason = disabledReason(action);
+              // A disabled item must keep its authoritative reason perceivable
+              // and accessible inside the kebab too (HTML title is neither a
+              // reliable keyboard nor a screen-reader contract). Rendering the
+              // reason as explicit secondary text inside the item keeps it
+              // visible AND in the accessibility tree; aria-describedby ties
+              // the description to the item. Native `disabled` keeps Radix
+              // non-activation (no onSelect) semantics.
+              const reasonId = `${instanceId}-${action.id}-reason`;
+              return (
+                <DropdownMenuItem
+                  key={action.id}
+                  data-action-id={action.id}
+                  variant={
+                    action.tone === "destructive" ? "destructive" : "default"
+                  }
+                  disabled={isDisabled(action)}
+                  aria-describedby={reason ? reasonId : undefined}
+                  onSelect={() => activate(action)}
+                >
+                  <AppIcon icon={action.icon} size="inline" />
+                  {action.label}
+                  {reason && (
+                    <span
+                      id={reasonId}
+                      data-disabled-reason
+                      className="ml-auto type-metadata"
+                    >
+                      {reason}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
