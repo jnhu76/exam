@@ -147,9 +147,12 @@ describe("table and color visual-finish authority", () => {
     // ResizeObserver loop. Before the convergence DataTableShell and
     // DataWorkbench each carried a byte-identical copy of the algorithm; any
     // second production owner (or a component re-deriving overflow facts)
-    // must fail here instead of drifting.
+    // must fail here instead of drifting. Test-infra (`src/test/`) is not a
+    // measurement owner — its ResizeObserver stub exists only so Radix
+    // popper primitives can mount under jsdom.
     const webRoot = join(here, "..");
     const owners = listSourceFiles(webRoot)
+      .filter((path) => !path.startsWith(join(webRoot, "test")))
       .map((path) => ({
         path: relative(webRoot, path),
         text: readFileSync(path, "utf8"),
