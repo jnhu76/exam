@@ -81,35 +81,25 @@ test.describe("management-list mobile card representation (issue 457)", () => {
 
   test("375px: CandidatesPage keeps dynamic CandidateFields off the card, desktop keeps them", async ({
     page,
-    request,
   }) => {
-    const seeded = await seedExam(request, "table-mobile-cand", {
-      questionAnswer: true,
-    });
+    // Deterministic target: the demo-seeded candidate `candidate1`
+    // (考生甲, carrying candidateNo + department values) is created by the
+    // canonical E2E seed and sorts first. The list is a single page-1
+    // fetch with client-side search, and the accumulated E2E database
+    // pushes freshly seeded rows past that slice — so the audit pins the
+    // seed-guaranteed row, never a run-created one.
     await page.setViewportSize({ width: 375, height: 812 });
     await loginAsAdmin(page);
     await page.goto("/admin/candidates");
     await page.locator("main h1").waitFor({ state: "visible" });
-    // Deterministic slice: the persistent E2E database accumulates
-    // candidates across runs and specs, so the seeded candidate can sit
-    // past the list's first page — search narrows to it before the card
-    // assertions (same pattern as the QuestionPage proof below).
-    await page
-      .getByRole("searchbox", { name: "搜索考生" })
-      .fill(seeded.candidate.username);
-    await page
-      .waitForLoadState("networkidle", { timeout: 5_000 })
-      .catch(() => {});
 
-    const card = page.locator(CARD, {
-      hasText: seeded.candidate.name,
-    });
+    const card = page.locator(CARD, { hasText: "考生甲" });
     await expect(card).toBeVisible();
 
     // The audited card field set: username + name (primary), status
     // (header), actions — and NOTHING else: every deployment-defined
-    // CandidateField column (candidateNo, department, …) is priority "low"
-    // and never renders on the card, whatever the deployment defines.
+    // CandidateField column (candidateNo 编号, department, …) is priority
+    // "low" and never renders on the card, whatever the deployment defines.
     const fieldIds = await card
       .locator("[data-field-id]")
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-field-id")));
