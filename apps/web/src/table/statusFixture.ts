@@ -45,6 +45,7 @@ export function estimateStatusBadgeWidth(
 export interface StatusBadgeFixtureRow {
   status: string;
   locale: string;
+  key: string;
   label: string;
   iconShown: boolean;
   estimatedWidthPx: number;
@@ -52,19 +53,23 @@ export interface StatusBadgeFixtureRow {
 
 /**
  * Derives the full status-badge verification universe from the authorities.
- * `t(key) !== key` is asserted by the structural test so an unresolved label
- * key (a new status whose zh-CN copy is missing) fails loudly.
+ * Labels are resolved per locale (`t(key, { lng: locale })`), and the
+ * structural test asserts `label !== key` so an unresolved label key (a new
+ * status whose copy is missing) fails loudly — i18next returns the key
+ * itself for a missing translation.
  */
 export function statusBadgeFixture(): StatusBadgeFixtureRow[] {
   const rows: StatusBadgeFixtureRow[] = [];
   for (const locale of SUPPORTED_LOCALES) {
     for (const [status, raw] of Object.entries(statusMeta)) {
       const meta = raw as StatusMeta;
-      const label = i18n.t(statusLabelKey(meta.labelKey));
+      const key = statusLabelKey(meta.labelKey);
+      const label = i18n.t(key, { lng: locale });
       const iconShown = meta.iconPolicy === "show";
       rows.push({
         status,
         locale,
+        key,
         label,
         iconShown,
         estimatedWidthPx: estimateStatusBadgeWidth(label, iconShown),

@@ -7,7 +7,8 @@
  *     beyond standard;
  *   - tier negotiation is pure with a deterministic initial state;
  *   - overflow/priority are closed vocabularies with role defaults that honor
- *     the never-silent-truncate list;
+ *     the never-silent-truncate list, and explicit overrides are confined to
+ *     per-role allowed domains (no escape hatch for the never-silent roles);
  *   - TanStack stays a row/header model (no columnSizing anywhere);
  *   - the status column token is bound to the auto-deriving fixture;
  *   - the actions column stays owned by issue 453 (6rem fine / 7.5rem coarse).
@@ -25,6 +26,8 @@ import {
   columnOverflow,
   columnPriority,
   middleTruncate,
+  ROLE_ALLOWED_OVERFLOW,
+  ROLE_OVERFLOW,
 } from "@/components/shared/DataTableContract";
 import {
   maxStatusBadgeWidth,
@@ -32,6 +35,7 @@ import {
   statusColumnContentBoxPx,
   STATUS_COLUMN_TOKEN,
 } from "@/table/statusFixture";
+import i18n, { SUPPORTED_LOCALES } from "@/i18n";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, "..");
@@ -113,6 +117,52 @@ describe("table contract v2 structural guards", () => {
     ).toBe("line-clamp-2");
   });
 
+  it("confines every role default to its own allowed overflow domain", () => {
+    for (const role of Object.keys(ROLE_ALLOWED_OVERFLOW)) {
+      expect(
+        ROLE_ALLOWED_OVERFLOW[role as keyof typeof ROLE_ALLOWED_OVERFLOW],
+        role,
+      ).toContain(ROLE_OVERFLOW[role as keyof typeof ROLE_OVERFLOW]);
+    }
+  });
+
+  it("rejects explicit overflow overrides outside the role's allowed domain", () => {
+    // Corrective C1 (issue 454 review): the never-silent-truncate roles have
+    // no escape hatch — an illegal override throws in dev/test (vitest runs
+    // with import.meta.env.DEV === true) instead of silently truncating.
+    for (const role of [
+      "status",
+      "score",
+      "actions",
+      "primary-text",
+    ] as const) {
+      expect(
+        () => columnOverflow({ role, overflow: "truncate" }),
+        role,
+      ).toThrow(/DataTable contract violation/);
+    }
+    expect(() =>
+      columnOverflow({ role: "primary-text", overflow: "truncate-middle" }),
+    ).toThrow(/DataTable contract violation/);
+    expect(() =>
+      columnOverflow({ role: "status", overflow: "line-clamp-2" }),
+    ).toThrow(/DataTable contract violation/);
+    // Presenter-backed and wrap-family overrides stay legal where allowed.
+    expect(columnOverflow({ role: "short-id" })).toBe("truncate-middle");
+    expect(columnOverflow({ role: "description", overflow: "truncate" })).toBe(
+      "truncate",
+    );
+    expect(
+      columnOverflow({ role: "description", overflow: "line-clamp-2" }),
+    ).toBe("line-clamp-2");
+    expect(columnOverflow({ role: "long-text", overflow: "truncate" })).toBe(
+      "truncate",
+    );
+    expect(
+      columnOverflow({ role: "primary-text", overflow: "break-token" }),
+    ).toBe("break-token");
+  });
+
   it("assigns priority metadata (desktop never degrades on it)", () => {
     expect(columnPriority({ role: "status" })).toBe("high");
     expect(columnPriority({ role: "score" })).toBe("high");
@@ -148,16 +198,60 @@ describe("table contract v2 structural guards", () => {
     // Full coverage: every statusMeta key × every supported locale enters the
     // universe automatically (no hand-copied label list).
     expect(rows.length).toBeGreaterThanOrEqual(53);
-    // Every label resolves through i18n (unresolved keys fail loudly).
+    // Every label resolves through i18n in its own locale. i18next returns
+    // the key itself for a missing translation, so `label !== key` is the
+    // loud-fail guard: a new status without catalog copy reds the test.
     for (const row of rows) {
       expect(row.label, `label for ${row.status}@${row.locale}`).not.toBe(
-        row.status,
+        row.key,
       );
+      expect(row.label, `label for ${row.status}@${row.locale}`).not.toBe("");
     }
     const max = maxStatusBadgeWidth();
     const contentBox = statusColumnContentBoxPx();
     // Frozen invariant: content box ≥ widest badge estimate.
     expect(max).toBeLessThanOrEqual(contentBox);
+  });
+
+  it("resolves every fixture row in the row's own locale, not the active language", async () => {
+    // Corrective C2 (issue 454 review): with a single supported locale this
+    // is only observable by activating a DIFFERENT language. Registering a
+    // distinguishable probe translation there proves the fixture passes
+    // `lng` per call — dropping it would resolve rows against the active
+    // language and only break once a second locale ships.
+    const rows = statusBadgeFixture();
+    const fixtureLocale = SUPPORTED_LOCALES[0];
+    const probe = rows[0];
+    if (!probe) throw new Error("fixture universe must be non-empty");
+    expect(probe.locale).toBe(fixtureLocale);
+
+    const parts = probe.key.split(".");
+    const leaf = parts.pop();
+    if (leaf === undefined) {
+      throw new Error("unreachable: every label key has a leaf segment");
+    }
+    const bundle: Record<string, unknown> = {};
+    let cursor = bundle;
+    for (const part of parts) {
+      cursor[part] = {};
+      cursor = cursor[part] as Record<string, unknown>;
+    }
+    cursor[leaf] = "PROBE-ACTIVE-LANGUAGE-LABEL";
+    i18n.addResourceBundle("en-US", "translation", bundle, true, true);
+    const activeLanguage = i18n.language;
+    await i18n.changeLanguage("en-US");
+    try {
+      const reRows = statusBadgeFixture();
+      const reProbe = reRows.find(
+        (row) => row.locale === fixtureLocale && row.key === probe.key,
+      );
+      expect(reProbe).toBeDefined();
+      expect(reProbe?.label).toBe(probe.label);
+      expect(reProbe?.label).not.toBe("PROBE-ACTIVE-LANGUAGE-LABEL");
+    } finally {
+      await i18n.changeLanguage(activeLanguage);
+      i18n.removeResourceBundle("en-US", "translation");
+    }
   });
 
   it("keeps the status token at the authoritative 8.5rem in recipes.css", () => {

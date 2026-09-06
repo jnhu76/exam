@@ -40,7 +40,7 @@ export type ColumnOverflow =
  * UI-TABLE-MOBILE-1 for card field selection — never by desktop tier logic). */
 export type ColumnPriority = "high" | "normal" | "low";
 
-const ROLE_OVERFLOW: Record<DataTableColumnRole, ColumnOverflow> = {
+export const ROLE_OVERFLOW: Record<DataTableColumnRole, ColumnOverflow> = {
   "primary-text": "wrap",
   "secondary-text": "wrap",
   "long-text": "wrap",
@@ -55,6 +55,34 @@ const ROLE_OVERFLOW: Record<DataTableColumnRole, ColumnOverflow> = {
   type: "nowrap",
   "tag-list": "wrap",
   actions: "nowrap",
+};
+
+/**
+ * Per-role legal overflow domains (issue 454 review corrective C1). An
+ * explicit override is only legal inside its role's domain; the
+ * never-silent-truncate roles (status, score, actions, primary-text) accept
+ * no truncating mode, so a declaration can never silently truncate them.
+ * INVARIANT: every `ROLE_OVERFLOW` default belongs to its own role's set
+ * (pinned by the structural test).
+ */
+export const ROLE_ALLOWED_OVERFLOW: Record<
+  DataTableColumnRole,
+  readonly ColumnOverflow[]
+> = {
+  "primary-text": ["wrap", "break-token"],
+  "secondary-text": ["wrap", "break-token"],
+  "long-text": ["wrap", "break-token", "truncate"],
+  description: ["truncate", "line-clamp-2", "wrap"],
+  status: ["nowrap"],
+  date: ["nowrap"],
+  "date-range": ["nowrap"],
+  duration: ["nowrap"],
+  number: ["nowrap"],
+  score: ["nowrap"],
+  "short-id": ["truncate-middle"],
+  type: ["nowrap"],
+  "tag-list": ["wrap"],
+  actions: ["nowrap"],
 };
 
 const ROLE_PRIORITY: Record<DataTableColumnRole, ColumnPriority> = {
@@ -91,7 +119,19 @@ export function columnOverflow(column: {
   role: DataTableColumnRole;
   overflow?: ColumnOverflow;
 }): ColumnOverflow {
-  return column.overflow ?? ROLE_OVERFLOW[column.role];
+  if (column.overflow === undefined) return ROLE_OVERFLOW[column.role];
+  if (!ROLE_ALLOWED_OVERFLOW[column.role].includes(column.overflow)) {
+    // DEV/test fail loud on an illegal override (RowActions precedent); a
+    // production build falls back to the role default so the semantic floor
+    // holds even for a violation that slipped through.
+    if (import.meta.env.DEV) {
+      throw new Error(
+        `DataTable contract violation: role "${column.role}" forbids overflow "${column.overflow}" (allowed: ${ROLE_ALLOWED_OVERFLOW[column.role].join(", ")})`,
+      );
+    }
+    return ROLE_OVERFLOW[column.role];
+  }
+  return column.overflow;
 }
 
 export function columnPriority(column: {
