@@ -486,10 +486,8 @@ describe("page geometry contract (issue 455)", () => {
         'path="questions/:id/edit"',
         'path="questions/:id/edit-mutant"',
       );
-      expect(mutant).not.toBe(
-        original,
-        "sanity: mutation must change the file",
-      );
+      // Sanity: the mutation must actually change the file.
+      expect(mutant).not.toBe(original);
       writeFileSync(appFile, mutant, "utf8");
 
       // The route-aware extraction now sees a new (route, page) pair that the
@@ -501,10 +499,9 @@ describe("page geometry contract (issue 455)", () => {
       const unexpected = actual.filter(
         (e) => !fixturePairs.has(`${e.route}::${e.page}`),
       );
-      expect(
-        unexpected.length,
-        "mutant route should produce an unexpected (route, page) pair",
-      ).toBeGreaterThan(0);
+      // The route-aware extraction must see at least one (route, page) pair
+      // the fixture does not contain → the route comparison test would fail.
+      expect(unexpected.length).toBeGreaterThan(0);
     } finally {
       writeFileSync(appFile, original, "utf8");
     }
