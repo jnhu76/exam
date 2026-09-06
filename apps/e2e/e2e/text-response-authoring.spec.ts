@@ -176,7 +176,10 @@ test.describe("P2 text_response authoring + product loop", () => {
     await page.getByPlaceholder(/搜索/).fill(Q_CONTENT);
     // The question content appears both in the list table cell (an aria-labeled
     // span) and in any live preview; pin the assertion to the table cell.
+    // Scope to the desktop table frame to avoid the hidden mobile card
+    // duplicate introduced by issue 457's dual-representation DOM.
     await page
+      .locator('[data-slot="table-scroll-frame"]')
       .getByLabel(Q_CONTENT, { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
 

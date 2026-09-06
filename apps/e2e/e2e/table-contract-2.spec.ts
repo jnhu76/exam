@@ -290,19 +290,25 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     expect(g.tableWidth).toBeLessThanOrEqual(1200 - 1);
   });
 
-  test("S6: management-list degrades to compact + scroll on a narrow container", async ({
+  test("S6: management-list shows mobile cards instead of compact scroll below lg", async ({
     page,
   }) => {
+    // Below lg, management-list pages render mobile cards — the compact
+    // scroll behavior is now card-replaced (issue 457). The compact tier
+    // floor remains structurally guaranteed for non-management-list
+    // archetypes (e.g. log-diagnostic) and for desktop-narrow containers
+    // at ≥lg viewports.
     await page.setViewportSize({ width: 720, height: 900 });
     await loginAsAdmin(page);
     await page.goto("/admin/users");
-    // Same two-shell page as the S6-huge case: users table is the last shell.
+    // Same two-shell page as S6-huge: users table is the last shell.
     const shell = page.locator('[data-slot="admin-table-shell"]').last();
     await shell.waitFor({ state: "visible" });
     const g = await probeTable(shell);
-    expect(g.tier).toBe("compact");
-    // The compact floor (720px) is a hard floor; content wider than the
-    // container scrolls instead of compressing.
-    expect(g.tableWidth).toBeGreaterThanOrEqual(716);
+    expect(g.archetype).toBe("management-list");
+    // The desktop scroll frame is hidden; the mobile card region takes over.
+    expect(
+      page.locator('[data-slot="table-scroll-frame"]').last(),
+    ).toBeHidden();
   });
 });
