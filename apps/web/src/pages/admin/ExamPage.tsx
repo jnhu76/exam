@@ -11,18 +11,17 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
 import {
   RowActions,
   type RowActionDeclaration,
 } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -120,6 +119,105 @@ export function ExamPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array. The time window joins the meta line —
+  // without the override it would be dropped (date-range defaults to low),
+  // losing the exam's availability window on mobile.
+  const columns: DataViewColumnDef<ExamRow>[] = [
+    {
+      id: "title",
+      meta: { role: "primary-text" },
+      header: t("admin.exams.columns.title"),
+      cell: ({ row }) => row.original.title,
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.exams.columns.status"),
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      id: "timeWindow",
+      meta: { role: "date-range", priority: "normal" },
+      header: t("admin.exams.columns.timeWindow"),
+      cell: ({ row }) => (
+        <span className="type-secondary">
+          {formatDateRange(row.original.openAt, row.original.closeAt)}
+        </span>
+      ),
+    },
+    {
+      id: "duration",
+      meta: { role: "duration" },
+      header: t("admin.exams.columns.duration"),
+      cell: ({ row }) =>
+        t("admin.exams.duration", { min: row.original.durationMinutes }),
+    },
+    {
+      id: "questionCount",
+      meta: { role: "number" },
+      header: t("admin.exams.columns.questionCount"),
+      cell: ({ row }) => row.original.questionIds.length,
+    },
+    {
+      id: "participantCount",
+      meta: { role: "number" },
+      header: t("admin.exams.columns.participants"),
+      cell: ({ row }) => row.original.participantCount,
+    },
+    {
+      id: "passingScore",
+      meta: { role: "score" },
+      header: t("admin.exams.columns.passingScore"),
+      cell: ({ row }) =>
+        `${row.original.passingScore}/${row.original.totalScore}`,
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.exams.columns.actions"),
+      cell: ({ row }) => {
+        const exam = row.original;
+        return (
+          <RowActions
+            row={exam}
+            actions={[
+              {
+                id: "view",
+                label: t("admin.exams.viewDetail"),
+                icon: Eye,
+                onSelect: () => void navigate(`/admin/exams/${exam.id}`),
+              },
+              ...(mayDeleteExam
+                ? ([
+                    {
+                      id: "delete",
+                      label: t("admin.exams.deleteLabel"),
+                      icon: Trash2,
+                      tone: "destructive",
+                      disabled: exam.canDelete
+                        ? false
+                        : {
+                            reason: deleteDisabledReasonPresentation(exam),
+                          },
+                      confirm: {
+                        title: t("admin.exams.confirmDelete"),
+                        description: t("admin.exams.confirmDeleteDescription", {
+                          title: exam.title,
+                        }),
+                        destructive: true,
+                      },
+                      onSelect: () => void handleDelete(exam.id),
+                    },
+                  ] as RowActionDeclaration<typeof exam>[])
+                : []),
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <TooltipProvider>
       <PageContainer role="admin-standard" className="flex flex-col gap-6">
@@ -151,125 +249,19 @@ export function ExamPage() {
                   {t("admin.exams.summary", { count: exams.length })}
                 </span>
               }
-            >
-              <Table>
-                <DataTableColumns
-                  columns={[
-                    { role: "primary-text" },
-                    { role: "status" },
-                    { role: "date-range" },
-                    { role: "duration" },
-                    { role: "number", key: "question-count" },
-                    { role: "number", key: "participant-count" },
-                    { role: "score" },
-                    { role: "actions" },
-                  ]}
+              mobile={
+                <MobileRecordList
+                  columns={columns}
+                  rows={exams}
+                  getRowId={(e) => e.id}
                 />
-                <TableHeader>
-                  <TableRow>
-                    <DataTableHead role="primary-text">
-                      {t("admin.exams.columns.title")}
-                    </DataTableHead>
-                    <DataTableHead role="status">
-                      {t("admin.exams.columns.status")}
-                    </DataTableHead>
-                    <DataTableHead role="date-range">
-                      {t("admin.exams.columns.timeWindow")}
-                    </DataTableHead>
-                    <DataTableHead role="duration">
-                      {t("admin.exams.columns.duration")}
-                    </DataTableHead>
-                    <DataTableHead role="number">
-                      {t("admin.exams.columns.questionCount")}
-                    </DataTableHead>
-                    <DataTableHead role="number">
-                      {t("admin.exams.columns.participants")}
-                    </DataTableHead>
-                    <DataTableHead role="score">
-                      {t("admin.exams.columns.passingScore")}
-                    </DataTableHead>
-                    <DataTableHead role="actions">
-                      {t("admin.exams.columns.actions")}
-                    </DataTableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {exams.map((exam) => {
-                    return (
-                      <TableRow key={exam.id}>
-                        <DataTableCell role="primary-text">
-                          {exam.title}
-                        </DataTableCell>
-                        <DataTableCell role="status">
-                          <StatusBadge status={exam.status} />
-                        </DataTableCell>
-                        <DataTableCell
-                          role="date-range"
-                          className="type-secondary"
-                        >
-                          {formatDateRange(exam.openAt, exam.closeAt)}
-                        </DataTableCell>
-                        <DataTableCell role="duration">
-                          {t("admin.exams.duration", {
-                            min: exam.durationMinutes,
-                          })}
-                        </DataTableCell>
-                        <DataTableCell role="number">
-                          {exam.questionIds.length}
-                        </DataTableCell>
-                        <DataTableCell role="number">
-                          {exam.participantCount}
-                        </DataTableCell>
-                        <DataTableCell role="score">
-                          {exam.passingScore}/{exam.totalScore}
-                        </DataTableCell>
-                        <DataTableCell role="actions">
-                          <RowActions
-                            row={exam}
-                            actions={[
-                              {
-                                id: "view",
-                                label: t("admin.exams.viewDetail"),
-                                icon: Eye,
-                                onSelect: () =>
-                                  void navigate(`/admin/exams/${exam.id}`),
-                              },
-                              ...(mayDeleteExam
-                                ? ([
-                                    {
-                                      id: "delete",
-                                      label: t("admin.exams.deleteLabel"),
-                                      icon: Trash2,
-                                      tone: "destructive",
-                                      disabled: exam.canDelete
-                                        ? false
-                                        : {
-                                            reason:
-                                              deleteDisabledReasonPresentation(
-                                                exam,
-                                              ),
-                                          },
-                                      confirm: {
-                                        title: t("admin.exams.confirmDelete"),
-                                        description: t(
-                                          "admin.exams.confirmDeleteDescription",
-                                          { title: exam.title },
-                                        ),
-                                        destructive: true,
-                                      },
-                                      onSelect: () =>
-                                        void handleDelete(exam.id),
-                                    },
-                                  ] as RowActionDeclaration<typeof exam>[])
-                                : []),
-                            ]}
-                          />
-                        </DataTableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              }
+            >
+              <DesktopDataTable
+                columns={columns}
+                data={exams}
+                getRowId={(e) => e.id}
+              />
             </DataTableShell>
           </>
         )}

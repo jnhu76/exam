@@ -54,7 +54,11 @@ test.describe("P7-M exam profile management product path", () => {
 
     // Back on the list, the new row is visible with a human-readable summary.
     await expect(page).toHaveURL(/\/admin\/exam-profiles(?:$|[/?#])/);
-    await expect(page.getByText(profileName).first()).toBeVisible();
+    await expect(
+      page
+        .locator('[data-slot="responsive-desktop-region"]')
+        .getByText(profileName),
+    ).toBeVisible();
     // Summary shows duration + human labels (not raw enum codes).
     const row = page.getByRole("row").filter({ hasText: profileName }).first();
     await expect(row).toContainText("45");
@@ -97,8 +101,13 @@ test.describe("P7-M exam profile management product path", () => {
     const deleted = await deleteResp;
     expect(deleted.ok(), `delete profile: ${deleted.status()}`).toBe(true);
 
-    // Row is gone.
-    await expect(page.getByText(profileName)).toHaveCount(0);
+    // Row is gone (desktop region scoping — the frame now wraps both
+    // representations under the responsive owner, issue 457 C3).
+    await expect(
+      page
+        .locator('[data-slot="responsive-desktop-region"]')
+        .getByText(profileName),
+    ).toHaveCount(0);
   });
 
   test("admin creates a profile from a starter recipe", async ({ page }) => {

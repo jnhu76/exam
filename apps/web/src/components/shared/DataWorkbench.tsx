@@ -4,9 +4,11 @@ import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
 import {
   ARCHETYPE_TIER_BOUNDS,
+  isMobileRepresentationAllowed,
   negotiateTier,
   type TableArchetype,
 } from "@/components/shared/DataTableShell";
+import { ResponsiveRepresentation } from "@/components/shared/ResponsiveRepresentation";
 
 /**
  * DataWorkbench — a single, continuous, compact data shell
@@ -22,17 +24,25 @@ import {
  *
  *   <DataWorkbench>
  *   ├─ <DataWorkbenchToolbar>   // the shell's quiet TOP region (no own card)
- *   ├─ desktop table            // the viewport's scrollable table region
- *   │    (admin-table-shell)    //   (hidden below lg)
- *   ├─ mobile list              // a separate region (hidden at lg+), NOT inside
- *   │                           //   the admin-table-shell scroll region
+ *   ├─ ResponsiveRepresentation // the single lg-breakpoint policy owner
+ *   │    ├─ mobile cards        // sibling of the desktop measurement branch
+ *   │    └─ desktop region      // owns the table measurement branch:
+ *   │         ├─ table-scroll-frame
+ *   │         ├─ admin-table-shell (scrollRef, tier attrs, overflow-x-auto)
+ *   │         ├─ desktop table
+ *   │         └─ scroll fades/hint
  *   └─ <DataWorkbenchFooter>    // count + pagination, the shell's BOTTOM region
  *
- * The desktop table lives in the scroll region that emits
- * data-slot="admin-table-shell" (so role-based table/recipes.css +
- * workbench.css keep applying). The mobile list is a SEPARATE region of the
- * shell, separate from the desktop table region, so a query scoped to
- * [data-slot="admin-table-shell"] matches only desktop table content.
+ * The viewport decides the representation FIRST (UI-TABLE-MOBILE-1 R2): only
+ * the desktop branch enters table measurement — mobile cards are never
+ * descendants of admin-table-shell / the overflow-x-auto measurement node, so
+ * they cannot participate in useOverflowObservation or tier negotiation.
+ *
+ * Mobile eligibility reuses the single authority from DataTableShell
+ * (isMobileRepresentationAllowed): only management-list with an explicit
+ * mobileList participates in the viewport switch; other archetypes keep the
+ * desktop/scroll representation at every viewport (DEV fails loud on the
+ * illegal combination).
  *
  * Overflow facts come from the shared useOverflowObservation hook (the single
  * measurement authority), so the viewport still owns local horizontal scroll
@@ -50,11 +60,12 @@ export function DataWorkbench({
 }: {
   /** The toolbar band (search + filters + actions). Rendered as the shell top. */
   toolbar?: ReactNode;
-  /** The desktop DataTable (rendered inside the admin-table-shell scroll region,
-   * hidden below lg). */
+  /** The desktop DataTable — the sole content of the admin-table-shell scroll
+   * region (desktop measurement branch of the responsive owner). */
   desktopTable?: ReactNode;
-  /** The mobile MobileRecordList. Rendered as a separate region (hidden at lg+),
-   * NOT inside the admin-table-shell scroll region. */
+  /** The mobile MobileRecordList. Rendered as the responsive owner's mobile
+   * branch — a sibling of the desktop measurement branch, never inside
+   * admin-table-shell. */
   mobileList?: ReactNode;
   /** The footer band (count + pagination). Rendered as the shell bottom. */
   footer?: ReactNode;
@@ -67,6 +78,26 @@ export function DataWorkbench({
   const scrollRef = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(scrollRef);
 
+  if (
+    import.meta.env.DEV &&
+    mobileList !== undefined &&
+    archetype !== "management-list"
+  ) {
+    throw new Error(
+      `DataWorkbench contract violation: the mobile card slot is a management-list mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
+    );
+  }
+
+  // Production-safe eligibility (same authority as DataTableShell): only
+  // management-list with an explicit mobileList participates in the CSS
+  // viewport switch. Other archetypes safely fall back to desktop/scroll at
+  // every width — illegal declarations in production do not change product
+  // semantics.
+  const mobileEnabled = isMobileRepresentationAllowed(
+    archetype,
+    mobileList !== undefined,
+  );
+
   const tier =
     archetype === "embedded-picker"
       ? null
@@ -78,6 +109,58 @@ export function DataWorkbench({
 
   const titleId = `${shellId}-label`;
 
+  // The desktop measurement branch: everything that observes overflow lives
+  // here (scrollRef, tier attributes, local scroll, fades/hint). When mobile
+  // is enabled this whole branch is the responsive owner's desktop region;
+  // otherwise it is the only representation.
+  const desktopRegion = (
+    <div data-slot="table-scroll-frame" className="relative min-w-0">
+      <div
+        ref={scrollRef}
+        data-slot="admin-table-shell"
+        data-table-archetype={archetype}
+        {...(tier ? { "data-table-tier": tier } : {})}
+        data-overflow-owner="local"
+        data-overflowing={String(overflow.overflowing)}
+        data-scroll-start={String(overflow.atStart)}
+        data-scroll-end={String(overflow.atEnd)}
+        className={cn("min-w-0 overflow-x-auto", contentClassName)}
+      >
+        {desktopTable}
+      </div>
+      {overflow.overflowing && !overflow.atStart && (
+        <span data-slot="table-scroll-fade-left" aria-hidden="true" />
+      )}
+      {overflow.overflowing && !overflow.atEnd && (
+        <span data-slot="table-scroll-fade-right" aria-hidden="true" />
+      )}
+      {overflow.overflowing && (
+        <div
+          data-slot="table-scroll-hint"
+          data-scroll-direction={
+            overflow.atStart ? "right" : overflow.atEnd ? "left" : "both"
+          }
+          className={cn(
+            "pointer-events-none flex h-6 items-center border-t border-border-divider bg-surface-soft px-3 text-xs text-text-muted",
+            overflow.atStart
+              ? "justify-end"
+              : overflow.atEnd
+                ? "justify-start"
+                : "justify-center",
+          )}
+        >
+          {t(
+            overflow.atStart
+              ? "common.table.scrollHintRight"
+              : overflow.atEnd
+                ? "common.table.scrollHintLeft"
+                : "common.table.scrollHintBoth",
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <section
       aria-labelledby={titleId}
@@ -88,55 +171,11 @@ export function DataWorkbench({
         {t("common.workbench.regionLabel")}
       </span>
       {toolbar}
-      <div data-slot="table-scroll-frame" className="relative min-w-0">
-        <div
-          ref={scrollRef}
-          data-slot="admin-table-shell"
-          data-table-archetype={archetype}
-          {...(tier ? { "data-table-tier": tier } : {})}
-          data-overflow-owner="local"
-          data-overflowing={String(overflow.overflowing)}
-          data-scroll-start={String(overflow.atStart)}
-          data-scroll-end={String(overflow.atEnd)}
-          className={cn("min-w-0 overflow-x-auto", contentClassName)}
-        >
-          {/* Desktop table — hidden below lg; admin-table-shell owns its grid. */}
-          <div className="hidden lg:block">{desktopTable}</div>
-        </div>
-        {overflow.overflowing && !overflow.atStart && (
-          <span data-slot="table-scroll-fade-left" aria-hidden="true" />
-        )}
-        {overflow.overflowing && !overflow.atEnd && (
-          <span data-slot="table-scroll-fade-right" aria-hidden="true" />
-        )}
-        {overflow.overflowing && (
-          <div
-            data-slot="table-scroll-hint"
-            data-scroll-direction={
-              overflow.atStart ? "right" : overflow.atEnd ? "left" : "both"
-            }
-            className={cn(
-              "pointer-events-none flex h-6 items-center border-t border-border-divider bg-surface-soft px-3 text-xs text-text-muted",
-              overflow.atStart
-                ? "justify-end"
-                : overflow.atEnd
-                  ? "justify-start"
-                  : "justify-center",
-            )}
-          >
-            {t(
-              overflow.atStart
-                ? "common.table.scrollHintRight"
-                : overflow.atEnd
-                  ? "common.table.scrollHintLeft"
-                  : "common.table.scrollHintBoth",
-            )}
-          </div>
-        )}
-      </div>
-      {/* Mobile cards — a separate region (NOT inside admin-table-shell), so a
-          query scoped to admin-table-shell matches only desktop table content. */}
-      <div className="lg:hidden">{mobileList}</div>
+      {mobileEnabled ? (
+        <ResponsiveRepresentation mobile={mobileList} desktop={desktopRegion} />
+      ) : (
+        desktopRegion
+      )}
       {footer}
     </section>
   );

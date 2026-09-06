@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { RowActions } from "@/components/shared/RowActions";
@@ -22,7 +21,6 @@ import {
 } from "@/components/shared/DesktopDataTable";
 import { DataTableOverflowText } from "@/components/shared/DataTableContract";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
-import { MobileRecordCard } from "@/components/shared/MobileRecordCard";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { TagFilterSelect } from "@/components/shared/TagFilterSelect";
 import { Button } from "@/components/ui/button";
@@ -40,7 +38,6 @@ import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 import {
   FileUp,
   LoaderCircle,
-  MoreVertical,
   Pencil,
   Plus,
   RotateCcw,
@@ -83,8 +80,8 @@ const PAGE_SIZE = 20;
  * UI-TABLE-KOI-COMPACT-1: the toolbar, table, and pagination are unified into
  * a single continuous DataWorkbench shell (toolbar → header → body → footer
  * are regions of one surface, not three separated cards). DesktopDataTable is
- * the TanStack headless engine with a role-based column contract; MobileRecordCard
- * renders below lg. Search is SERVER-SIDE over the full dataset (debounced);
+ * the TanStack headless engine with a role-based column contract; the derived
+ * MobileRecordList renders the same column declarations below lg (issue 457). Search is SERVER-SIDE over the full dataset (debounced);
  * the workbench shell stays mounted across loading/empty/error transitions —
  * only the table body swaps, so there is no layout jitter.
  */
@@ -248,7 +245,7 @@ export function QuestionPage() {
   const columns: DataViewColumnDef<QuestionRow>[] = [
     {
       id: "type",
-      meta: { role: "type" },
+      meta: { role: "type", priority: "high" },
       header: t("admin.questions.columns.type" as never),
       cell: ({ row }) => (
         <Badge variant={TYPE_VARIANT[row.original.type] ?? "default"}>
@@ -258,7 +255,7 @@ export function QuestionPage() {
     },
     {
       id: "content",
-      meta: { role: "long-text", overflow: "truncate" },
+      meta: { role: "long-text", overflow: "truncate", priority: "high" },
       header: t("admin.questions.columns.content" as never),
       cell: ({ row }) => (
         <DataTableOverflowText mode="truncate" value={row.original.content} />
@@ -272,7 +269,9 @@ export function QuestionPage() {
     },
     {
       id: "score",
-      meta: { role: "score" },
+      // priority "normal": the card shows score as a labeled meta line, not a
+      // bare header-cluster value (issue 457 audit; role "score" defaults high).
+      meta: { role: "score", priority: "normal" },
       header: t("admin.questions.columns.score" as never),
       cell: ({ row }) => row.original.score,
     },
@@ -562,85 +561,23 @@ export function QuestionPage() {
         }
         mobileList={
           <MobileRecordList
+            columns={columns}
+            rows={questions}
+            getRowId={(q) => q.id}
             loading={isTableLoading}
             empty={isEmpty}
             error={!isTableLoading ? error : null}
-            errorNode={
-              <MobileRecordCard
-                primary={t("common.loading.loadFailed" as never)}
-                meta={error ?? undefined}
-              />
+            emptyTitle={
+              hasActiveFilter
+                ? t("admin.questions.noMatch" as never)
+                : t("admin.questions.empty" as never)
             }
-            emptyNode={
-              <MobileRecordCard
-                primary={
-                  hasActiveFilter
-                    ? t("admin.questions.noMatch" as never)
-                    : t("admin.questions.empty" as never)
-                }
-                meta={
-                  hasActiveFilter
-                    ? t("admin.questions.noMatchDescription" as never)
-                    : t("admin.questions.emptyDescription" as never)
-                }
-              />
+            emptyDescription={
+              hasActiveFilter
+                ? t("admin.questions.noMatchDescription" as never)
+                : t("admin.questions.emptyDescription" as never)
             }
-          >
-            {questions.map((q) => (
-              <MobileRecordCard
-                key={q.id}
-                header={
-                  <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
-                    {getTypeLabel(q.type, t) ?? q.type}
-                  </Badge>
-                }
-                primary={q.content}
-                meta={
-                  <>
-                    <span>{courseMap.get(q.courseId) ?? "-"}</span>
-                    <span>
-                      {t("admin.questions.columns.score" as never)}: {q.score}
-                    </span>
-                    <span>
-                      {t("admin.questions.columns.difficulty" as never)}:{" "}
-                      {q.difficulty}
-                    </span>
-                  </>
-                }
-                actions={
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t("admin.questions.editLabel" as never)}
-                      onClick={() =>
-                        void navigate(`/admin/questions/${q.id}/edit`)
-                      }
-                    >
-                      <AppIcon icon={Pencil} size="inline" />
-                    </Button>
-                    <ConfirmDialog
-                      trigger={
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={t("admin.questions.deleteLabel" as never)}
-                        >
-                          <AppIcon icon={MoreVertical} size="inline" />
-                        </Button>
-                      }
-                      title={t("admin.questions.confirmDelete" as never)}
-                      description={t(
-                        "admin.questions.confirmDeleteDescription" as never,
-                      )}
-                      destructive
-                      onConfirm={() => void handleDelete(q.id)}
-                    />
-                  </>
-                }
-              />
-            ))}
-          </MobileRecordList>
+          />
         }
       />
     </PageContainer>

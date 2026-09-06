@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -105,16 +105,22 @@ describe("GradingQueuePage", () => {
 
   it("renders queue items with candidate names and exam titles", async () => {
     renderPage();
-    expect(await screen.findByText("张三")).toBeInTheDocument();
-    expect(screen.getByText("李四")).toBeInTheDocument();
-    expect(screen.getAllByText("期末考试").length).toBeGreaterThanOrEqual(1);
+    // Row content renders twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("张三")).toBeInTheDocument();
+    expect(within(table).getByText("李四")).toBeInTheDocument();
+    expect(
+      within(table).getAllByText("期末考试").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("renders pending question counts", async () => {
     renderPage();
-    expect(await screen.findByText("张三")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("张三")).toBeInTheDocument();
+    expect(within(table).getByText("3")).toBeInTheDocument();
+    expect(within(table).getByText("1")).toBeInTheDocument();
   });
 
   it("shows empty state when no pending attempts", async () => {
@@ -131,7 +137,8 @@ describe("GradingQueuePage", () => {
   it("shows loading state then data", async () => {
     renderPage();
     expect(screen.getByText("加载中...")).toBeInTheDocument();
-    expect(await screen.findByText("张三")).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("张三")).toBeInTheDocument();
   });
 
   it("shows error state on fetch failure", async () => {
@@ -143,9 +150,9 @@ describe("GradingQueuePage", () => {
   it("clicking a row navigates to grading detail", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("张三");
+    const table = await screen.findByRole("table");
 
-    const row = screen.getByText("张三").closest("tr");
+    const row = within(table).getByText("张三").closest("tr");
     expect(row).toBeTruthy();
     await user.click(row!);
 
@@ -159,6 +166,7 @@ describe("GradingQueuePage", () => {
 
     getMock.mockResolvedValue(mockQueueData);
     await userEvent.setup().click(screen.getByText("重试"));
-    expect(await screen.findByText("张三")).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("张三")).toBeInTheDocument();
   });
 });

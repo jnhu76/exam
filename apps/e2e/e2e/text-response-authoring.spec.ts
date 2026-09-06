@@ -176,7 +176,10 @@ test.describe("P2 text_response authoring + product loop", () => {
     await page.getByPlaceholder(/搜索/).fill(Q_CONTENT);
     // The question content appears both in the list table cell (an aria-labeled
     // span) and in any live preview; pin the assertion to the table cell.
+    // Scope to the responsive desktop region (issue 457 C3: the wrapping
+    // frame contains both representations; only the region is desktop-only).
     await page
+      .locator('[data-slot="responsive-desktop-region"]')
       .getByLabel(Q_CONTENT, { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
 

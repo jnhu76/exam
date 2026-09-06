@@ -11,10 +11,10 @@ import { routes } from "@/lib/routes";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { AppIcon } from "@/components/shared/AppIcon";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { Monitor, MonitorPlay } from "lucide-react";
 
@@ -82,6 +81,56 @@ export function ProctorWorkspacePage() {
     void navigate(routes.admin.examProctorMonitor(exam.examId));
   };
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array.
+  const columns: DataViewColumnDef<ProctorExamListItem>[] = [
+    {
+      id: "title",
+      meta: { role: "primary-text" },
+      header: t("admin.proctorWorkspace.columns.title"),
+      cell: ({ row }) => row.original.title,
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.proctorWorkspace.columns.status"),
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      id: "open",
+      meta: { role: "date" },
+      header: t("admin.proctorWorkspace.columns.openAt"),
+      cell: ({ row }) => formatDateTime(row.original.openAt),
+    },
+    {
+      id: "close",
+      meta: { role: "date" },
+      header: t("admin.proctorWorkspace.columns.closeAt"),
+      cell: ({ row }) =>
+        row.original.closeAt === null
+          ? "—"
+          : formatDateTime(row.original.closeAt),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.proctorWorkspace.columns.actions"),
+      cell: ({ row }) => (
+        <RowActions
+          row={row.original}
+          actions={[
+            {
+              id: "enter-monitoring",
+              label: t("admin.proctorWorkspace.actions.enter"),
+              icon: MonitorPlay,
+              onSelect: () => enterMonitoring(row.original),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
@@ -111,7 +160,29 @@ export function ProctorWorkspacePage() {
           </SelectContent>
         </Select>
       </DataToolbar>
-      <DataTableShell title={t("admin.proctorWorkspace.tableTitle")}>
+      <DataTableShell
+        title={t("admin.proctorWorkspace.tableTitle")}
+        mobile={
+          <MobileRecordList
+            columns={columns}
+            rows={visibleExams}
+            getRowId={(e) => e.examId}
+            loading={isLoading}
+            error={error}
+            empty={visibleExams.length === 0}
+            emptyTitle={t(
+              statusFilter === "all"
+                ? "admin.proctorWorkspace.empty.title"
+                : "admin.proctorWorkspace.empty.filteredTitle",
+            )}
+            emptyDescription={t(
+              statusFilter === "all"
+                ? "admin.proctorWorkspace.empty.description"
+                : "admin.proctorWorkspace.empty.filteredDescription",
+            )}
+          />
+        }
+      >
         {isLoading ? (
           <LoadingState label={t("admin.proctorWorkspace.loading")} />
         ) : error ? (
@@ -131,67 +202,11 @@ export function ProctorWorkspacePage() {
             )}
           />
         ) : (
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "primary-text" },
-                { role: "status" },
-                { role: "date", key: "open" },
-                { role: "date", key: "close" },
-                { role: "actions" },
-              ]}
-            />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="primary-text">
-                  {t("admin.proctorWorkspace.columns.title")}
-                </DataTableHead>
-                <DataTableHead role="status">
-                  {t("admin.proctorWorkspace.columns.status")}
-                </DataTableHead>
-                <DataTableHead role="date">
-                  {t("admin.proctorWorkspace.columns.openAt")}
-                </DataTableHead>
-                <DataTableHead role="date">
-                  {t("admin.proctorWorkspace.columns.closeAt")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.proctorWorkspace.columns.actions")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleExams.map((exam) => (
-                <TableRow key={exam.examId}>
-                  <DataTableCell role="primary-text">
-                    {exam.title}
-                  </DataTableCell>
-                  <DataTableCell role="status">
-                    <StatusBadge status={exam.status} />
-                  </DataTableCell>
-                  <DataTableCell role="date">
-                    {formatDateTime(exam.openAt)}
-                  </DataTableCell>
-                  <DataTableCell role="date">
-                    {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
-                  </DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions
-                      row={exam}
-                      actions={[
-                        {
-                          id: "enter-monitoring",
-                          label: t("admin.proctorWorkspace.actions.enter"),
-                          icon: MonitorPlay,
-                          onSelect: () => enterMonitoring(exam),
-                        },
-                      ]}
-                    />
-                  </DataTableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DesktopDataTable
+            columns={columns}
+            data={visibleExams}
+            getRowId={(e) => e.examId}
+          />
         )}
       </DataTableShell>
     </PageContainer>

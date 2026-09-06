@@ -112,7 +112,11 @@ test.describe("Proctor landing workspace", () => {
     await expect(
       page.getByRole("heading", { name: "监考工作台", level: 1 }),
     ).toBeVisible();
-    await expect(page.getByText(seeded.examTitle)).toBeVisible();
+    await expect(
+      page
+        .locator('[data-slot="responsive-desktop-region"]')
+        .getByText(seeded.examTitle),
+    ).toBeVisible();
     await expect(page.getByRole("link", { name: "监考工作台" })).toBeVisible();
     for (const forbidden of [
       "题目管理",

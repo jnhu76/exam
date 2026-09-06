@@ -12,10 +12,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -34,7 +34,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ArrowDown,
@@ -227,6 +226,110 @@ export function CandidateFieldsPage() {
   }
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array. Desktop keeps drag-to-reorder rows;
+  // cards reorder through the move actions in the actions slot.
+  const columns: DataViewColumnDef<Field>[] = [
+    {
+      id: "name",
+      meta: { role: "short-id" },
+      header: t("admin.candidateFields.columns.fieldName"),
+      cell: ({ row }) => row.original.name,
+    },
+    {
+      id: "label",
+      meta: { role: "primary-text" },
+      header: t("admin.candidateFields.columns.label"),
+      cell: ({ row }) => row.original.label,
+    },
+    {
+      id: "fieldType",
+      meta: { role: "type" },
+      header: t("admin.candidateFields.columns.type"),
+      cell: ({ row }) =>
+        t(
+          `admin.candidateFields.typeLabels.${row.original.fieldType}` as never,
+        ),
+    },
+    {
+      id: "required",
+      meta: { role: "type" },
+      header: t("admin.candidateFields.columns.required"),
+      cell: ({ row }) =>
+        t(
+          `admin.candidateFields.requiredLabels.${row.original.required}` as never,
+        ),
+    },
+    {
+      id: "unique",
+      meta: { role: "type" },
+      header: t("admin.candidateFields.columns.unique"),
+      cell: ({ row }) =>
+        t(
+          `admin.candidateFields.requiredLabels.${row.original.unique}` as never,
+        ),
+    },
+    {
+      id: "sortOrder",
+      meta: { role: "number" },
+      header: t("admin.candidateFields.columns.sortOrder"),
+      cell: ({ row }) => row.original.sortOrder,
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.candidateFields.columns.actions"),
+      cell: ({ row }) => {
+        const index = fields.indexOf(row.original);
+        const field = row.original;
+        return (
+          <RowActions
+            row={field}
+            actions={[
+              {
+                id: "edit",
+                label: t("admin.candidateFields.editLabel"),
+                icon: Pencil,
+                onSelect: () => dialog(field),
+              },
+              {
+                id: "move-up",
+                label: t("admin.candidateFields.moveUp"),
+                icon: ArrowUp,
+                disabled: index === 0,
+                onSelect: () => void move(field, -1),
+              },
+              {
+                id: "move-down",
+                label: t("admin.candidateFields.moveDown"),
+                icon: ArrowDown,
+                disabled: index === fields.length - 1,
+                onSelect: () => void move(field, 1),
+              },
+              {
+                id: "delete",
+                label: t("admin.candidateFields.deleteLabel"),
+                icon: Trash2,
+                tone: "destructive",
+                confirm: {
+                  title: t("admin.candidateFields.confirmDelete"),
+                  description: t(
+                    "admin.candidateFields.confirmDeleteDescription",
+                    {
+                      label: field.label,
+                    },
+                  ),
+                  destructive: true,
+                },
+                onSelect: () => void remove(field.id),
+              },
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
@@ -252,120 +355,27 @@ export function CandidateFieldsPage() {
           description={t("admin.candidateFields.emptyDescription")}
         />
       ) : (
-        <DataTableShell>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "short-id" },
-                { role: "primary-text" },
-                { role: "type", key: "field-type" },
-                { role: "type", key: "required" },
-                { role: "type", key: "unique" },
-                { role: "number" },
-                { role: "actions" },
-              ]}
+        <DataTableShell
+          mobile={
+            <MobileRecordList
+              columns={columns}
+              rows={fields}
+              getRowId={(f) => f.id}
             />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="short-id">
-                  {t("admin.candidateFields.columns.fieldName")}
-                </DataTableHead>
-                <DataTableHead role="primary-text">
-                  {t("admin.candidateFields.columns.label")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.candidateFields.columns.type")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.candidateFields.columns.required")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.candidateFields.columns.unique")}
-                </DataTableHead>
-                <DataTableHead role="number">
-                  {t("admin.candidateFields.columns.sortOrder")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.candidateFields.columns.actions")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {fields.map((field, index) => (
-                <TableRow
-                  key={field.id}
-                  draggable
-                  onDragStart={() => setDraggingId(field.id)}
-                  onDragEnd={() => setDraggingId(null)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => void drop(field)}
-                >
-                  <DataTableCell role="short-id">{field.name}</DataTableCell>
-                  <DataTableCell role="primary-text">
-                    {field.label}
-                  </DataTableCell>
-                  <DataTableCell role="type">
-                    {t(
-                      `admin.candidateFields.typeLabels.${field.fieldType}` as any,
-                    )}
-                  </DataTableCell>
-                  <DataTableCell role="type">
-                    {t(
-                      `admin.candidateFields.requiredLabels.${field.required}` as any,
-                    )}
-                  </DataTableCell>
-                  <DataTableCell role="type">
-                    {t(
-                      `admin.candidateFields.requiredLabels.${field.unique}` as any,
-                    )}
-                  </DataTableCell>
-                  <DataTableCell role="number">{field.sortOrder}</DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions
-                      row={field}
-                      actions={[
-                        {
-                          id: "edit",
-                          label: t("admin.candidateFields.editLabel"),
-                          icon: Pencil,
-                          onSelect: () => dialog(field),
-                        },
-                        {
-                          id: "move-up",
-                          label: t("admin.candidateFields.moveUp"),
-                          icon: ArrowUp,
-                          disabled: index === 0,
-                          onSelect: () => void move(field, -1),
-                        },
-                        {
-                          id: "move-down",
-                          label: t("admin.candidateFields.moveDown"),
-                          icon: ArrowDown,
-                          disabled: index === fields.length - 1,
-                          onSelect: () => void move(field, 1),
-                        },
-                        {
-                          id: "delete",
-                          label: t("admin.candidateFields.deleteLabel"),
-                          icon: Trash2,
-                          tone: "destructive",
-                          confirm: {
-                            title: t("admin.candidateFields.confirmDelete"),
-                            description: t(
-                              "admin.candidateFields.confirmDeleteDescription",
-                              { label: field.label },
-                            ),
-                            destructive: true,
-                          },
-                          onSelect: () => void remove(field.id),
-                        },
-                      ]}
-                    />
-                  </DataTableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          }
+        >
+          <DesktopDataTable
+            columns={columns}
+            data={fields}
+            getRowId={(f) => f.id}
+            rowProps={(field) => ({
+              draggable: true,
+              onDragStart: () => setDraggingId(field.id),
+              onDragEnd: () => setDraggingId(null),
+              onDragOver: (event) => event.preventDefault(),
+              onDrop: () => void drop(field),
+            })}
+          />
         </DataTableShell>
       )}
       <Dialog open={open} onOpenChange={setDialogOpen}>

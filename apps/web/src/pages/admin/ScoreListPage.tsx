@@ -15,14 +15,13 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataToolbar } from "@/components/shared/DataToolbar";
 import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageContainer } from "@/components/shared/PageContainer";
 import {
@@ -155,6 +154,70 @@ export function ScoreListPage() {
       />
     );
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array.
+  const columns: DataViewColumnDef<ScoreListItem>[] = [
+    {
+      id: "candidateName",
+      meta: { role: "primary-text" },
+      header: t("admin.scoreList.columns.candidateName"),
+      cell: ({ row }) => row.original.candidateName,
+    },
+    {
+      id: "candidateInfo",
+      // Deployment-defined candidate fields are unbounded in count/content;
+      // joining them into one JSX node does not make the information bounded
+      // (R3 audit correction). Mobile omits the field; desktop keeps it.
+      meta: { role: "secondary-text", priority: "low" },
+      header: t("admin.scoreList.columns.candidateInfo"),
+      cell: ({ row }) =>
+        Object.values(row.original.candidateFields).map(String).join(" / ") ||
+        "-",
+    },
+    {
+      id: "score",
+      meta: { role: "score" },
+      header: t("admin.scoreList.columns.score"),
+      cell: ({ row }) => row.original.score,
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.scoreList.columns.status"),
+      cell: ({ row }) => (
+        <StatusBadge status={row.original.passed ? "passed" : "not_passed"} />
+      ),
+    },
+    {
+      id: "submittedAt",
+      meta: { role: "date" },
+      header: t("admin.scoreList.columns.submittedAt"),
+      cell: ({ row }) =>
+        row.original.submittedAt
+          ? formatDateTime(row.original.submittedAt)
+          : "-",
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.scoreList.columns.actions"),
+      cell: ({ row }) => (
+        <RowActions
+          row={row.original}
+          actions={[
+            {
+              id: "view-detail",
+              label: t("admin.scoreList.actions.viewDetail"),
+              icon: Eye,
+              onSelect: () =>
+                void navigate(`/admin/attempts/${row.original.attemptId}`),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
@@ -229,6 +292,16 @@ export function ScoreListPage() {
 
       <DataTableShell
         title={t("admin.scoreList.listTitle")}
+        mobile={
+          <MobileRecordList
+            columns={columns}
+            rows={scores?.items ?? []}
+            getRowId={(i) => i.attemptId}
+            empty={!scores || scores.items.length === 0}
+            emptyTitle={t("admin.scoreList.empty.title")}
+            emptyDescription={t("admin.scoreList.empty.description")}
+          />
+        }
         footer={
           scores.total > scores.pageSize ? (
             <Pagination>
@@ -284,77 +357,14 @@ export function ScoreListPage() {
             description={t("admin.scoreList.empty.description")}
           />
         ) : (
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "primary-text" },
-                { role: "secondary-text" },
-                { role: "score" },
-                { role: "status" },
-                { role: "date" },
-                { role: "actions" },
-              ]}
-            />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="primary-text">
-                  {t("admin.scoreList.columns.candidateName")}
-                </DataTableHead>
-                <DataTableHead role="secondary-text">
-                  {t("admin.scoreList.columns.candidateInfo")}
-                </DataTableHead>
-                <DataTableHead role="score">
-                  {t("admin.scoreList.columns.score")}
-                </DataTableHead>
-                <DataTableHead role="status">
-                  {t("admin.scoreList.columns.status")}
-                </DataTableHead>
-                <DataTableHead role="date">
-                  {t("admin.scoreList.columns.submittedAt")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.scoreList.columns.actions")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {scores.items.map((item) => (
-                <TableRow key={item.attemptId}>
-                  <DataTableCell role="primary-text">
-                    {item.candidateName}
-                  </DataTableCell>
-                  <DataTableCell role="secondary-text">
-                    {Object.values(item.candidateFields)
-                      .map(String)
-                      .join(" / ") || "-"}
-                  </DataTableCell>
-                  <DataTableCell role="score">{item.score}</DataTableCell>
-                  <DataTableCell role="status">
-                    <StatusBadge
-                      status={item.passed ? "passed" : "not_passed"}
-                    />
-                  </DataTableCell>
-                  <DataTableCell role="date">
-                    {item.submittedAt ? formatDateTime(item.submittedAt) : "-"}
-                  </DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions
-                      row={item}
-                      actions={[
-                        {
-                          id: "view-detail",
-                          label: t("admin.scoreList.actions.viewDetail"),
-                          icon: Eye,
-                          onSelect: () =>
-                            void navigate(`/admin/attempts/${item.attemptId}`),
-                        },
-                      ]}
-                    />
-                  </DataTableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DesktopDataTable
+            columns={columns}
+            data={scores.items}
+            rowCount={scores.total}
+            page={page}
+            pageSize={scores.pageSize}
+            getRowId={(i) => i.attemptId}
+          />
         )}
       </DataTableShell>
     </PageContainer>

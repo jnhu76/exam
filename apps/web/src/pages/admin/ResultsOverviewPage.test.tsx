@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -110,7 +110,12 @@ describe("ResultsOverviewPage", () => {
 
     expect(await screen.findByText("成绩查询")).toBeInTheDocument();
 
-    const buttons = await screen.findAllByRole("button", { name: "查看成绩" });
+    // Row actions render twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    const buttons = await within(table).findAllByRole("button", {
+      name: "查看成绩",
+    });
     expect(buttons).toHaveLength(3);
     expect(buttons[0]).toBeDisabled();
     expect(buttons[1]).toBeDisabled();

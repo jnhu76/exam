@@ -2,6 +2,7 @@ import { useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
+import { ResponsiveRepresentation } from "@/components/shared/ResponsiveRepresentation";
 
 export type DataTableTier = "compact" | "standard" | "wide";
 
@@ -71,6 +72,19 @@ export function negotiateTier(
 }
 
 /**
+ * Production-safe mobile eligibility (issue 457 C2): only management-list
+ * archetypes with an explicit mobile slot participate in the CSS viewport
+ * switch. Other archetypes safely fall back to desktop/scroll at every width.
+ * Extracted as a pure function for direct unit testing.
+ */
+export function isMobileRepresentationAllowed(
+  archetype: TableArchetype,
+  hasMobile: boolean,
+): boolean {
+  return archetype === "management-list" && hasMobile;
+}
+
+/**
  * Standard shell for data table pages, providing an optional title, description,
  * toolbar slot, content area, and footer within a bordered card container.
  *
@@ -84,6 +98,7 @@ export function DataTableShell({
   description,
   toolbar,
   children,
+  mobile,
   footer,
   className,
   contentClassName,
@@ -93,6 +108,13 @@ export function DataTableShell({
   description?: string;
   toolbar?: ReactNode;
   children: ReactNode;
+  /**
+   * Mobile card list for the management-list archetype (issue 457): a
+   * viewport-only (<lg) representation derived from the same column
+   * declarations as the desktop table. The switch is pure CSS (`lg:`) — no JS
+   * breakpoint. Other archetypes keep horizontal scroll below lg.
+   */
+  mobile?: ReactNode;
   footer?: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -104,6 +126,25 @@ export function DataTableShell({
   const descriptionId = description ? `${shellId}-description` : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(scrollRef);
+
+  if (
+    import.meta.env.DEV &&
+    mobile !== undefined &&
+    archetype !== "management-list"
+  ) {
+    throw new Error(
+      `DataTableShell contract violation: the mobile card slot is a management-list mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
+    );
+  }
+
+  // Production-safe eligibility: only management-list with an explicit mobile
+  // slot participates in the CSS viewport switch. Other archetypes safely
+  // fall back to desktop/scroll at every width — illegal declarations in
+  // production do not change product semantics.
+  const mobileEnabled = isMobileRepresentationAllowed(
+    archetype,
+    mobile !== undefined,
+  );
 
   const tier =
     archetype === "embedded-picker"
@@ -149,17 +190,36 @@ export function DataTableShell({
         </div>
       )}
       <div data-slot="table-scroll-frame" className="relative min-w-0">
-        <div
-          ref={scrollRef}
-          data-slot="table-scroll-region"
-          data-overflow-owner="local"
-          data-overflowing={String(overflow.overflowing)}
-          data-scroll-start={String(overflow.atStart)}
-          data-scroll-end={String(overflow.atEnd)}
-          className={cn("min-w-0 overflow-x-auto", contentClassName)}
-        >
-          {children}
-        </div>
+        {mobileEnabled ? (
+          <ResponsiveRepresentation
+            mobile={mobile}
+            desktop={
+              <div
+                ref={scrollRef}
+                data-slot="table-scroll-region"
+                data-overflow-owner="local"
+                data-overflowing={String(overflow.overflowing)}
+                data-scroll-start={String(overflow.atStart)}
+                data-scroll-end={String(overflow.atEnd)}
+                className={cn("min-w-0 overflow-x-auto", contentClassName)}
+              >
+                {children}
+              </div>
+            }
+          />
+        ) : (
+          <div
+            ref={scrollRef}
+            data-slot="table-scroll-region"
+            data-overflow-owner="local"
+            data-overflowing={String(overflow.overflowing)}
+            data-scroll-start={String(overflow.atStart)}
+            data-scroll-end={String(overflow.atEnd)}
+            className={cn("min-w-0 overflow-x-auto", contentClassName)}
+          >
+            {children}
+          </div>
+        )}
         {overflow.overflowing && !overflow.atStart && (
           <span data-slot="table-scroll-fade-left" aria-hidden="true" />
         )}

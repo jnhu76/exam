@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -118,7 +118,10 @@ describe("ExamPage", () => {
 
     expect(await screen.findByText("考试管理")).toBeInTheDocument();
 
-    const deleteButtons = await screen.findAllByRole("button", {
+    // Row actions render twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    const deleteButtons = await within(table).findAllByRole("button", {
       name: "删除考试",
     });
     expect(deleteButtons).toHaveLength(2);
@@ -142,9 +145,12 @@ describe("ExamPage", () => {
   it("declares atomic duration, score, date and action columns", async () => {
     renderPage();
 
-    const duration = await screen.findAllByText("60分钟");
-    const score = await screen.findAllByText("60/100");
-    const deleteButtons = await screen.findAllByRole("button", {
+    // Atomic columns are a desktop-table declaration; scope to it (row
+    // content also renders in the mobile card list).
+    const table = await screen.findByRole("table");
+    const duration = within(table).getAllByText("60分钟");
+    const score = within(table).getAllByText("60/100");
+    const deleteButtons = within(table).getAllByRole("button", {
       name: "删除考试",
     });
 

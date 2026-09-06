@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -115,14 +115,17 @@ describe("ScoreListPage", () => {
 
   it("renders score table with candidate data", async () => {
     renderPage();
-    expect(await screen.findByText("张三")).toBeInTheDocument();
-    expect(screen.getByText("85")).toBeInTheDocument();
-    expect(screen.getAllByText("及格").length).toBeGreaterThanOrEqual(1);
+    // Row content renders twice by design (desktop table + mobile cards);
+    // scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("张三")).toBeInTheDocument();
+    expect(within(table).getByText("85")).toBeInTheDocument();
+    expect(within(table).getAllByText("及格").length).toBeGreaterThanOrEqual(1);
   });
 
   it("export calls authenticated downloadFile with the scores export path", async () => {
     renderPage();
-    await screen.findByText("张三");
+    await screen.findByRole("table");
 
     const user = userEvent.setup();
     await user.click(screen.getByText("导出CSV"));
@@ -138,7 +141,7 @@ describe("ScoreListPage", () => {
 
   it("export failure shows an error toast (no silent swallow)", async () => {
     renderPage();
-    await screen.findByText("张三");
+    await screen.findByRole("table");
 
     const { toast } = await import("sonner");
     const toastErrorSpy = vi
@@ -182,7 +185,9 @@ describe("ScoreListPage", () => {
       },
     });
     renderPage();
-    expect(await screen.findByText("暂无成绩")).toBeInTheDocument();
+    // The empty fact renders in both representations.
+    const empties = await screen.findAllByText("暂无成绩");
+    expect(empties.length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders each score metric through the StatsCard authority", async () => {

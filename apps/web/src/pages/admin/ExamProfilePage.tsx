@@ -17,13 +17,12 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import type { ExamProfileDTO } from "@exam/contracts";
 
@@ -126,6 +125,64 @@ export function ExamProfilePage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadProfiles} />;
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array. The summary digest is identifying
+  // content, so it joins the name in the card's primary area.
+  const columns: DataViewColumnDef<ExamProfileDTO>[] = [
+    {
+      id: "name",
+      meta: { role: "primary-text" },
+      header: t("admin.examProfilePages.columns.name"),
+      cell: ({ row }) => row.original.name,
+    },
+    {
+      id: "summary",
+      meta: { role: "long-text", priority: "high" },
+      header: t("admin.examProfilePages.columns.summary"),
+      cell: ({ row }) => summarizeProfile(row.original, labels),
+    },
+    {
+      id: "updatedAt",
+      meta: { role: "date" },
+      header: t("admin.examProfilePages.columns.updatedAt"),
+      cell: ({ row }) => formatDateTime(row.original.updatedAt),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.examProfilePages.columns.actions"),
+      cell: ({ row }) => (
+        <RowActions
+          row={row.original}
+          actions={[
+            {
+              id: "edit",
+              label: t("admin.examProfilePages.actions.edit"),
+              icon: Pencil,
+              onSelect: () =>
+                navigate(`/admin/exam-profiles/${row.original.id}/edit`),
+            },
+            {
+              id: "delete",
+              label: t("admin.examProfilePages.actions.delete"),
+              icon: Trash2,
+              tone: "destructive",
+              confirm: {
+                title: t("admin.examProfilePages.deleteConfirmTitle"),
+                description: t(
+                  "admin.examProfilePages.deleteConfirmDescription",
+                ),
+                confirmLabel: t("admin.examProfilePages.deleteConfirmAction"),
+                destructive: true,
+              },
+              onSelect: () => void handleDelete(row.original.id),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
@@ -152,79 +209,20 @@ export function ExamProfilePage() {
           }
         />
       ) : (
-        <DataTableShell>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "primary-text" },
-                { role: "long-text" },
-                { role: "date" },
-                { role: "actions" },
-              ]}
+        <DataTableShell
+          mobile={
+            <MobileRecordList
+              columns={columns}
+              rows={profiles}
+              getRowId={(p) => p.id}
             />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="primary-text">
-                  {t("admin.examProfilePages.columns.name")}
-                </DataTableHead>
-                <DataTableHead role="long-text">
-                  {t("admin.examProfilePages.columns.summary")}
-                </DataTableHead>
-                <DataTableHead role="date">
-                  {t("admin.examProfilePages.columns.updatedAt")}
-                </DataTableHead>
-                <DataTableHead role="actions">
-                  {t("admin.examProfilePages.columns.actions")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {profiles.map((p) => (
-                <TableRow key={p.id}>
-                  <DataTableCell role="primary-text">{p.name}</DataTableCell>
-                  <DataTableCell role="long-text">
-                    {summarizeProfile(p, labels)}
-                  </DataTableCell>
-                  <DataTableCell role="date">
-                    {formatDateTime(p.updatedAt)}
-                  </DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions
-                      row={p}
-                      actions={[
-                        {
-                          id: "edit",
-                          label: t("admin.examProfilePages.actions.edit"),
-                          icon: Pencil,
-                          onSelect: () =>
-                            navigate(`/admin/exam-profiles/${p.id}/edit`),
-                        },
-                        {
-                          id: "delete",
-                          label: t("admin.examProfilePages.actions.delete"),
-                          icon: Trash2,
-                          tone: "destructive",
-                          confirm: {
-                            title: t(
-                              "admin.examProfilePages.deleteConfirmTitle",
-                            ),
-                            description: t(
-                              "admin.examProfilePages.deleteConfirmDescription",
-                            ),
-                            confirmLabel: t(
-                              "admin.examProfilePages.deleteConfirmAction",
-                            ),
-                            destructive: true,
-                          },
-                          onSelect: () => void handleDelete(p.id),
-                        },
-                      ]}
-                    />
-                  </DataTableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          }
+        >
+          <DesktopDataTable
+            columns={columns}
+            data={profiles}
+            getRowId={(p) => p.id}
+          />
         </DataTableShell>
       )}
     </PageContainer>

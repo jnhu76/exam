@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ComponentProps } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -52,14 +52,27 @@ export type DataViewColumnDef<TData> = ColumnDef<TData> & {
 export interface DesktopDataTableProps<TData> {
   columns: DataViewColumnDef<TData>[];
   data: TData[];
-  /** Total row count on the server (for pagination; the table renders the page slice). */
-  rowCount: number;
+  /**
+   * Total row count on the server (for pagination; the table renders the page
+   * slice). Omit for fully-local tables — `page`/`pageSize` are then omitted
+   * too and the body renders the whole `data` array.
+   */
+  rowCount?: number;
   /** Controlled pagination state: 1-based page + page size. */
-  page: number;
-  pageSize: number;
+  page?: number;
+  pageSize?: number;
   onPaginationChange?: (table: TanStackTable<TData>) => void;
   /** Row key resolver. */
   getRowId?: (row: TData) => string;
+  /** Row interactivity: navigates (or opens) a row on click. */
+  onRowClick?: (row: TData) => void;
+  /** Stable per-row test anchor (e.g. GradingQueuePage queue rows). */
+  getRowTestId?: (row: TData) => string;
+  /**
+   * Page-specific row attributes (e.g. CandidateFieldsPage drag-reorder).
+   * Spread after the shared click/testid props — page-specific wins.
+   */
+  rowProps?: (row: TData) => Omit<ComponentProps<typeof TableRow>, "key">;
   /** Body state — exactly one of these renders below the header. */
   loading?: boolean;
   empty?: boolean;
@@ -88,6 +101,9 @@ export function DesktopDataTable<TData>({
   page,
   pageSize,
   getRowId,
+  onRowClick,
+  getRowTestId,
+  rowProps,
   loading = false,
   empty = false,
   error = null,
@@ -98,15 +114,31 @@ export function DesktopDataTable<TData>({
   const { t } = useTranslation();
   const span = colSpan ?? columns.length;
 
+  const paginated =
+    rowCount !== undefined && page !== undefined && pageSize !== undefined;
+  if (
+    import.meta.env.DEV &&
+    (rowCount ?? page ?? pageSize) !== undefined &&
+    !paginated
+  ) {
+    throw new Error(
+      "DesktopDataTable contract violation: rowCount, page and pageSize must be passed together (or all omitted for a fully-local table)",
+    );
+  }
+
   const table = useReactTable<TData>({
     data,
     columns: columns as ColumnDef<TData>[],
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualFiltering: true,
-    pageCount: Math.max(1, Math.ceil(rowCount / Math.max(pageSize, 1))),
-    rowCount,
-    state: { pagination: { pageIndex: page - 1, pageSize } },
+    pageCount: paginated
+      ? Math.max(1, Math.ceil(rowCount! / Math.max(pageSize!, 1)))
+      : undefined,
+    rowCount: paginated ? rowCount : undefined,
+    state: paginated
+      ? { pagination: { pageIndex: page! - 1, pageSize: pageSize! } }
+      : undefined,
     getRowId,
   });
 
@@ -190,7 +222,13 @@ export function DesktopDataTable<TData>({
           </TableRow>
         ) : (
           table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow
+              key={row.id}
+              data-testid={getRowTestId?.(row.original)}
+              className={onRowClick ? "cursor-pointer" : undefined}
+              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+              {...(rowProps?.(row.original) ?? {})}
+            >
               {row.getVisibleCells().map((cell) => {
                 const meta = cell.column.columnDef.meta as
                   | DataViewColumnMeta

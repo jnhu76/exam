@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DataWorkbench,
   DataWorkbenchToolbar,
@@ -79,24 +79,96 @@ describe("DataWorkbench", () => {
     expect(region).toHaveAttribute("data-table-tier", "compact");
   });
 
-  it("keeps the mobile list OUTSIDE the admin-table-shell region", () => {
+  it("T1/T5: mobile cards are the responsive owner's mobile branch, outside the desktop measurement branch", () => {
     render(
       <DataWorkbench
         desktopTable={<table aria-label="桌面表" />}
         mobileList={<div>移动卡片内容</div>}
       />,
     );
-    const region = screen
-      .getByRole("table", { name: "桌面表" })
-      .closest('[data-slot="admin-table-shell"]') as HTMLElement;
-    // mobile content lives in the workbench shell but NOT inside the desktop
-    // table scroll region, so a query scoped to admin-table-shell matches only
-    // desktop content.
-    expect(region.contains(screen.getByText("移动卡片内容"))).toBe(false);
-    const workbench = screen
-      .getByRole("table", { name: "桌面表" })
-      .closest('[data-slot="data-workbench"]');
-    expect(workbench!.contains(screen.getByText("移动卡片内容"))).toBe(true);
+    // Representation ownership: the mobile content lives in the responsive
+    // mobile region, the desktop table in the responsive desktop region.
+    const mobileRegion = document.querySelector(
+      '[data-slot="responsive-mobile-region"]',
+    )!;
+    const desktopRegion = document.querySelector(
+      '[data-slot="responsive-desktop-region"]',
+    )!;
+    expect(mobileRegion.contains(screen.getByText("移动卡片内容"))).toBe(true);
+    expect(
+      desktopRegion.contains(screen.getByRole("table", { name: "桌面表" })),
+    ).toBe(true);
+
+    // R2 measurement boundary: admin-table-shell (the useOverflowObservation
+    // scrollRef node) owns the desktop table only — mobile content must not
+    // be a descendant of the measurement node.
+    const shell = document.querySelector('[data-slot="admin-table-shell"]')!;
+    expect(shell.contains(screen.getByRole("table", { name: "桌面表" }))).toBe(
+      true,
+    );
+    expect(shell.contains(screen.getByText("移动卡片内容"))).toBe(false);
+    expect(
+      shell.querySelectorAll('[data-slot="responsive-mobile-region"]').length,
+    ).toBe(0);
+    // The measurement node itself is the desktop branch: when mobile is
+    // enabled, admin-table-shell sits inside the responsive desktop region.
+    expect(desktopRegion.contains(shell)).toBe(true);
+  });
+
+  it("T2: management-list without mobileList renders desktop-only at every viewport", () => {
+    render(<DataWorkbench desktopTable={<table aria-label="桌面表" />} />);
+    // No responsive owner is mounted, so the desktop region is not wrapped
+    // in the lg-gated desktop region — it cannot disappear below lg (no
+    // blank mobile region).
+    expect(
+      document.querySelector('[data-slot="responsive-desktop-region"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-slot="responsive-mobile-region"]'),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("table", { name: "桌面表" })
+        .closest('[data-slot="admin-table-shell"]'),
+    ).not.toBeNull();
+  });
+
+  it("T3: fails loud when mobileList meets a non-management archetype (DEV/test)", () => {
+    expect(() =>
+      render(
+        <DataWorkbench
+          archetype="log-diagnostic"
+          desktopTable={<table aria-label="桌面表" />}
+          mobileList={<div>移动卡片内容</div>}
+        />,
+      ),
+    ).toThrow(/management-list mechanism/);
+  });
+
+  it("R1 production fallback: illegal log-diagnostic + mobileList keeps the desktop representation", () => {
+    vi.stubEnv("DEV", false);
+    try {
+      render(
+        <DataWorkbench
+          archetype="log-diagnostic"
+          desktopTable={<table aria-label="桌面表" />}
+          mobileList={<div>移动卡片内容</div>}
+        />,
+      );
+      // No responsive owner mounts at all: the illegal mobile slot never
+      // renders anywhere and the desktop table stays the representation at
+      // every viewport — illegal input does not alter production semantics.
+      expect(
+        document.querySelector('[data-slot="responsive-mobile-region"]'),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-slot="responsive-desktop-region"]'),
+      ).toBeNull();
+      expect(screen.queryByText("移动卡片内容")).toBeNull();
+      expect(screen.getByRole("table", { name: "桌面表" })).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("surfaces scroll affordances when the table overflows", () => {

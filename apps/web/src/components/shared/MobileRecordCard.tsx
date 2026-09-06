@@ -13,6 +13,7 @@ export function MobileRecordCard({
   primary,
   meta,
   actions,
+  onClick,
   className,
 }: {
   children?: ReactNode;
@@ -24,12 +25,19 @@ export function MobileRecordCard({
   meta?: ReactNode;
   /** Optional explicit body (overrides primary/meta composition). */
   actions?: ReactNode;
+  /** Card-level activation (derived MobileRecordList rows mirror row clicks). */
+  onClick?: () => void;
   className?: string;
 }) {
   return (
     <div
       data-slot="mobile-record-card"
-      className={["surface-content flex flex-col gap-2 p-4", className]
+      onClick={onClick}
+      className={[
+        "surface-content flex flex-col gap-2 p-4",
+        onClick && "cursor-pointer",
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
     >

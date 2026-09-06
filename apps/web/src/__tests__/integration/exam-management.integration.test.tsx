@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { BrowserRouter } from "react-router";
@@ -82,7 +82,10 @@ describe("考试管理流程集成测试", () => {
     await waitFor(
       () => {
         expect(screen.getByText(/考试管理/)).toBeInTheDocument();
-        expect(screen.getByText(/测试考试1/)).toBeInTheDocument();
+        // Row content renders twice by design (desktop table + mobile
+        // cards); assert presence in at least the desktop table.
+        const table = screen.getByRole("table");
+        expect(within(table).getByText(/测试考试1/)).toBeInTheDocument();
       },
       { timeout: 3000 },
     );
@@ -106,7 +109,8 @@ describe("考试管理流程集成测试", () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText(/已发布/)).toBeInTheDocument();
+        const table = screen.getByRole("table");
+        expect(within(table).getByText(/已发布/)).toBeInTheDocument();
       },
       { timeout: 3000 },
     );

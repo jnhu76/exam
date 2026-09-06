@@ -113,8 +113,19 @@ function questionListPayload(
 
 /** The desktop table shell region (rows also render in the mobile card list). */
 function desktopShell(): HTMLElement {
+  // R2: admin-table-shell owns the desktop measurement branch ONLY (mobile
+  // cards are its sibling under the responsive owner), so scoping to it keeps
+  // desktop queries free of mobile card content (jsdom doesn't apply CSS
+  // visibility).
   return document.querySelector(
     '[data-slot="admin-table-shell"]',
+  ) as HTMLElement;
+}
+
+/** The mobile card region (the CSS-hidden twin of the desktop table). */
+function mobileRegion(): HTMLElement {
+  return document.querySelector(
+    '[data-slot="responsive-mobile-region"]',
   ) as HTMLElement;
 }
 
@@ -189,9 +200,7 @@ describe("QuestionPage", () => {
       '[data-slot="data-workbench"]',
     ) as HTMLElement;
     expect(workbench).toHaveClass("surface-content", "overflow-hidden");
-    const desktop = document.querySelector(
-      '[data-slot="admin-table-shell"]',
-    ) as HTMLElement;
+    const desktop = desktopShell();
     // toolbar and footer are both regions inside the single workbench shell.
     expect(workbench.contains(screen.getByRole("toolbar"))).toBe(true);
     await waitFor(() =>
@@ -447,5 +456,37 @@ describe("QuestionPage", () => {
     expect(screen.getByText(/共 5 条/)).toBeInTheDocument();
     expect(screen.getByText("加载中…")).toHaveAttribute("aria-hidden", "true");
     expect(screen.queryByText("加载考生列表失败")).not.toBeInTheDocument();
+  });
+
+  // Issue 457 C4 audit: the derived card must keep the field assignment the
+  // page's hand-mapped card had — type badge leads, content is primary,
+  // course/score/difficulty render as labeled meta lines, tags stay off.
+  it("renders the derived mobile card with the audited field slots", async () => {
+    renderPage();
+    await screen.findByText("题目管理");
+    await waitFor(() =>
+      expect(
+        within(desktopShell()).getByText("题目一内容"),
+      ).toBeInTheDocument(),
+    );
+    const mobile = mobileRegion();
+    // header cluster: the type badge.
+    expect(within(mobile).getByText("单选")).toBeInTheDocument();
+    // primary area: the question content.
+    expect(within(mobile).getByText("题目一内容")).toBeInTheDocument();
+    // meta line: labeled course/score/difficulty (score is NOT a bare
+    // header value — the score column carries priority "normal").
+    expect(within(mobile).getByText("所属课程: 课程一")).toBeInTheDocument();
+    expect(within(mobile).getByText("分值: 10")).toBeInTheDocument();
+    expect(within(mobile).getByText("难度: 1")).toBeInTheDocument();
+    // tag-list defaults low: tags stay off the card.
+    expect(within(mobile).queryByText("tag1")).not.toBeInTheDocument();
+    // actions slot: the RowActions edit/delete pair.
+    expect(
+      within(mobile).getByRole("button", { name: "编辑题目" }),
+    ).toBeInTheDocument();
+    expect(
+      within(mobile).getByRole("button", { name: "删除题目" }),
+    ).toBeInTheDocument();
   });
 });

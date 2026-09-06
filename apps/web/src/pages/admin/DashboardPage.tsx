@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import type { DashboardResponse } from "@exam/contracts";
+import type { DashboardRecentExam, DashboardResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -13,12 +13,11 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { RowActions } from "@/components/shared/RowActions";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ClipboardList,
@@ -75,6 +74,49 @@ export function DashboardPage() {
     );
   }
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array.
+  const columns: DataViewColumnDef<DashboardRecentExam>[] = [
+    {
+      id: "title",
+      meta: { role: "primary-text" },
+      header: t("admin.dashboard.recent.columns.title"),
+      cell: ({ row }) => row.original.title,
+    },
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.dashboard.recent.columns.status"),
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      id: "participantCount",
+      meta: { role: "number" },
+      header: t("admin.dashboard.recent.columns.participantCount"),
+      cell: ({ row }) => row.original.participantCount,
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.dashboard.recent.columns.actions"),
+      cell: ({ row }) => (
+        <RowActions
+          row={row.original}
+          actions={[
+            {
+              id: "view-exam",
+              label: t("admin.dashboard.recent.viewExamLabel", {
+                title: row.original.title,
+              }),
+              icon: Eye,
+              onSelect: () => navigate(`/admin/exams/${row.original.id}`),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader title={t("admin.dashboard.title")} />
@@ -116,7 +158,19 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <DataTableShell title={t("admin.dashboard.recent.title")}>
+      <DataTableShell
+        title={t("admin.dashboard.recent.title")}
+        mobile={
+          <MobileRecordList
+            columns={columns}
+            rows={data?.recentExams ?? []}
+            getRowId={(e) => e.id}
+            empty={!data?.recentExams || data.recentExams.length === 0}
+            emptyTitle={t("admin.dashboard.recent.emptyTitle")}
+            emptyDescription={t("admin.dashboard.recent.emptyDescription")}
+          />
+        }
+      >
         <div className="min-w-0">
           {!data?.recentExams || data.recentExams.length === 0 ? (
             <div className="p-6">
@@ -132,62 +186,11 @@ export function DashboardPage() {
               />
             </div>
           ) : (
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "primary-text" },
-                  { role: "status" },
-                  { role: "number" },
-                  { role: "actions" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="primary-text">
-                    {t("admin.dashboard.recent.columns.title")}
-                  </DataTableHead>
-                  <DataTableHead role="status">
-                    {t("admin.dashboard.recent.columns.status")}
-                  </DataTableHead>
-                  <DataTableHead role="number">
-                    {t("admin.dashboard.recent.columns.participantCount")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.dashboard.recent.columns.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.recentExams.map((exam) => (
-                  <TableRow key={exam.id}>
-                    <DataTableCell role="primary-text">
-                      {exam.title}
-                    </DataTableCell>
-                    <DataTableCell role="status">
-                      <StatusBadge status={exam.status} />
-                    </DataTableCell>
-                    <DataTableCell role="number">
-                      {exam.participantCount}
-                    </DataTableCell>
-                    <DataTableCell role="actions">
-                      <RowActions
-                        row={exam}
-                        actions={[
-                          {
-                            id: "view-exam",
-                            label: t("admin.dashboard.recent.viewExamLabel", {
-                              title: exam.title,
-                            }),
-                            icon: Eye,
-                            onSelect: () => navigate(`/admin/exams/${exam.id}`),
-                          },
-                        ]}
-                      />
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DesktopDataTable
+              columns={columns}
+              data={data.recentExams}
+              getRowId={(e) => e.id}
+            />
           )}
         </div>
       </DataTableShell>

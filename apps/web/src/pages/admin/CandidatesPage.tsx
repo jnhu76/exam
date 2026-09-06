@@ -30,7 +30,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Pencil,
   Plus,
@@ -45,10 +44,10 @@ import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
@@ -401,6 +400,91 @@ export function CandidatesPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array; dynamic CandidateField columns are
+  // declared from the field list, not hand-mapped per representation.
+  const columns: DataViewColumnDef<Candidate>[] = [
+    {
+      id: "username",
+      meta: { role: "primary-text" },
+      header: t("admin.candidates.columns.username"),
+      cell: ({ row }) => row.original.username,
+    },
+    {
+      id: "name",
+      meta: { role: "primary-text" },
+      header: t("admin.candidates.columns.name"),
+      cell: ({ row }) => row.original.name,
+    },
+    ...fields.map((field) => ({
+      id: field.id,
+      // priority "low": deployment-defined fields are unbounded in count, so
+      // they stay off the card meta line (desktop ignores priority — it is
+      // card-selection metadata only, issue 457 audit).
+      meta: { role: "secondary-text" as const, priority: "low" as const },
+      header: field.label,
+      cell: ({ row }: { row: { original: Candidate } }) =>
+        String(row.original.fields[field.name] ?? "-"),
+    })),
+    {
+      id: "status",
+      meta: { role: "status" },
+      header: t("admin.candidates.columns.status"),
+      cell: ({ row }) => (
+        <StatusBadge status={row.original.isActive ? "active" : "inactive"} />
+      ),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.candidates.columns.actions"),
+      cell: ({ row }) => {
+        const candidate = row.original;
+        return (
+          <RowActions
+            row={candidate}
+            actions={[
+              {
+                id: "edit",
+                label: t("admin.candidates.editLabel"),
+                icon: Pencil,
+                onSelect: () => open(candidate),
+              },
+              {
+                id: "reset-password",
+                label: t("admin.candidates.resetPassword"),
+                icon: KeyRound,
+                onSelect: () => openReset(candidate),
+              },
+              {
+                id: "toggle-active",
+                label: candidate.isActive
+                  ? t("admin.common.disable")
+                  : t("admin.common.enable"),
+                icon: Power,
+                tone: candidate.isActive ? "destructive" : "default",
+                disabled: togglingId !== null,
+                confirm: {
+                  title: candidate.isActive
+                    ? t("admin.common.confirmDisable")
+                    : t("admin.common.confirmEnable"),
+                  description: t("admin.candidates.enableDisable", {
+                    action: candidate.isActive
+                      ? t("admin.common.disable")
+                      : t("admin.common.enable"),
+                    name: candidate.name,
+                  }),
+                  destructive: candidate.isActive,
+                },
+                onSelect: () => void toggle(candidate),
+              },
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
@@ -470,107 +554,20 @@ export function CandidatesPage() {
         />
       ) : (
         <>
-          <DataTableShell>
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "primary-text", key: "username" },
-                  { role: "primary-text", key: "name" },
-                  ...fields.map((field) => ({
-                    role: "secondary-text" as const,
-                    key: field.id,
-                  })),
-                  { role: "status" },
-                  { role: "actions" },
-                ]}
+          <DataTableShell
+            mobile={
+              <MobileRecordList
+                columns={columns}
+                rows={filteredCandidates}
+                getRowId={(c) => c.id}
               />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="primary-text">
-                    {t("admin.candidates.columns.username")}
-                  </DataTableHead>
-                  <DataTableHead role="primary-text">
-                    {t("admin.candidates.columns.name")}
-                  </DataTableHead>
-                  {fields.map((field) => (
-                    <DataTableHead role="secondary-text" key={field.id}>
-                      {field.label}
-                    </DataTableHead>
-                  ))}
-                  <DataTableHead role="status">
-                    {t("admin.candidates.columns.status")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.candidates.columns.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCandidates.map((candidate) => (
-                  <TableRow key={candidate.id}>
-                    <DataTableCell role="primary-text">
-                      {candidate.username}
-                    </DataTableCell>
-                    <DataTableCell role="primary-text">
-                      {candidate.name}
-                    </DataTableCell>
-                    {fields.map((field) => (
-                      <DataTableCell role="secondary-text" key={field.id}>
-                        {String(candidate.fields[field.name] ?? "-")}
-                      </DataTableCell>
-                    ))}
-                    <DataTableCell role="status">
-                      <StatusBadge
-                        status={candidate.isActive ? "active" : "inactive"}
-                      />
-                    </DataTableCell>
-                    <DataTableCell role="actions">
-                      <RowActions
-                        row={candidate}
-                        actions={[
-                          {
-                            id: "edit",
-                            label: t("admin.candidates.editLabel"),
-                            icon: Pencil,
-                            onSelect: () => open(candidate),
-                          },
-                          {
-                            id: "reset-password",
-                            label: t("admin.candidates.resetPassword"),
-                            icon: KeyRound,
-                            onSelect: () => openReset(candidate),
-                          },
-                          {
-                            id: "toggle-active",
-                            label: candidate.isActive
-                              ? t("admin.common.disable")
-                              : t("admin.common.enable"),
-                            icon: Power,
-                            tone: candidate.isActive
-                              ? "destructive"
-                              : "default",
-                            disabled: togglingId !== null,
-                            confirm: {
-                              title: candidate.isActive
-                                ? t("admin.common.confirmDisable")
-                                : t("admin.common.confirmEnable"),
-                              description: t("admin.candidates.enableDisable", {
-                                action: candidate.isActive
-                                  ? t("admin.common.disable")
-                                  : t("admin.common.enable"),
-                                name: candidate.name,
-                              }),
-                              destructive: candidate.isActive,
-                            },
-                            onSelect: () => void toggle(candidate),
-                          },
-                        ]}
-                      />
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            }
+          >
+            <DesktopDataTable
+              columns={columns}
+              data={filteredCandidates}
+              getRowId={(c) => c.id}
+            />
           </DataTableShell>
         </>
       )}

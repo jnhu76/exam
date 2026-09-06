@@ -12,19 +12,18 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataTableOverflowText } from "@/components/shared/DataTableContract";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-  DataTableOverflowText,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataToolbar } from "@/components/shared/DataToolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -182,6 +181,70 @@ export function CoursePage() {
       )
     : courses;
 
+  // Single-source column declarations (issue 457): desktop table and mobile
+  // cards render from the same array.
+  const columns: DataViewColumnDef<CourseRow>[] = [
+    {
+      id: "name",
+      meta: { role: "primary-text" },
+      header: t("admin.courses.columns.name"),
+      cell: ({ row }) => row.original.name,
+    },
+    {
+      id: "code",
+      meta: { role: "short-id" },
+      header: t("admin.courses.columns.code"),
+      cell: ({ row }) => row.original.code,
+    },
+    {
+      id: "description",
+      meta: { role: "description", overflow: "line-clamp-2" },
+      header: t("admin.courses.columns.description"),
+      cell: ({ row }) =>
+        row.original.description ? (
+          <DataTableOverflowText
+            mode="line-clamp-2"
+            value={row.original.description}
+          />
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.courses.columns.actions"),
+      cell: ({ row }) => (
+        <RowActions
+          row={row.original}
+          actions={[
+            {
+              id: "edit",
+              label: t("admin.courses.editLabel"),
+              icon: Pencil,
+              onSelect: () => openEdit(row.original),
+            },
+            {
+              id: "delete",
+              label: t("admin.courses.deleteLabel"),
+              icon: Trash2,
+              tone: "destructive",
+              confirm: {
+                title: t("admin.common.confirm"),
+                description: t("admin.courses.enableDisable", {
+                  action: t("admin.common.delete"),
+                  name: row.original.name,
+                }),
+                destructive: true,
+              },
+              onSelect: () => void handleDelete(row.original.id),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <TooltipProvider>
       <PageContainer role="admin-standard" className="flex flex-col gap-6">
@@ -232,81 +295,20 @@ export function CoursePage() {
             }
           />
         ) : (
-          <DataTableShell>
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "primary-text" },
-                  { role: "short-id" },
-                  { role: "description", overflow: "line-clamp-2" },
-                  { role: "actions" },
-                ]}
+          <DataTableShell
+            mobile={
+              <MobileRecordList
+                columns={columns}
+                rows={filteredCourses}
+                getRowId={(c) => c.id}
               />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="primary-text">
-                    {t("admin.courses.columns.name")}
-                  </DataTableHead>
-                  <DataTableHead role="short-id">
-                    {t("admin.courses.columns.code")}
-                  </DataTableHead>
-                  <DataTableHead role="description">
-                    {t("admin.courses.columns.description")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.courses.columns.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCourses.map((course) => (
-                  <TableRow key={course.id}>
-                    <DataTableCell role="primary-text">
-                      {course.name}
-                    </DataTableCell>
-                    <DataTableCell role="short-id">{course.code}</DataTableCell>
-                    <DataTableCell role="description">
-                      {course.description ? (
-                        <DataTableOverflowText
-                          mode="line-clamp-2"
-                          value={course.description}
-                        />
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </DataTableCell>
-                    <DataTableCell role="actions">
-                      <RowActions
-                        row={course}
-                        actions={[
-                          {
-                            id: "edit",
-                            label: t("admin.courses.editLabel"),
-                            icon: Pencil,
-                            onSelect: () => openEdit(course),
-                          },
-                          {
-                            id: "delete",
-                            label: t("admin.courses.deleteLabel"),
-                            icon: Trash2,
-                            tone: "destructive",
-                            confirm: {
-                              title: t("admin.common.confirm"),
-                              description: t("admin.courses.enableDisable", {
-                                action: t("admin.common.delete"),
-                                name: course.name,
-                              }),
-                              destructive: true,
-                            },
-                            onSelect: () => void handleDelete(course.id),
-                          },
-                        ]}
-                      />
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            }
+          >
+            <DesktopDataTable
+              columns={columns}
+              data={filteredCourses}
+              getRowId={(c) => c.id}
+            />
           </DataTableShell>
         )}
 
