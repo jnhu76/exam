@@ -144,6 +144,164 @@ function routedPageComponents(): Map<string, string> {
 }
 
 /**
+ * Resolved route entry: fully-qualified route string + component name.
+ * Produced by walking the App.tsx JSX AST and resolving nested Route paths.
+ */
+interface ResolvedRouteEntry {
+  /** Fully-resolved route pattern (e.g. `/admin/questions/:id/edit`). */
+  route: string;
+  /** Page component name (imported from `@/pages/**`). */
+  page: string;
+}
+
+/**
+ * Route-aware extraction from App.tsx. Resolves nested React Router structure
+ * into fully-qualified `{route, page}` pairs so the fixture can be compared
+ * against actual routing — not just component-name sets.
+ *
+ * Deduplicates by `${route}::${page}` key so component-name-multiplicity is
+ * proven: if two routes render the same component, both appear.
+ */
+function resolvedRouteEntries(): ResolvedRouteEntry[] {
+  const appFile = join(srcRoot, "App.tsx");
+  const sourceFile = parse(appFile);
+  const imports = routedPageImports();
+  const seen = new Set<string>();
+  const entries: ResolvedRouteEntry[] = [];
+
+  function extractPath(
+    node: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  ): string | undefined {
+    const pathAttr = node.attributes.properties.find(
+      (a): a is ts.JsxAttribute =>
+        ts.isJsxAttribute(a) &&
+        ts.isIdentifier(a.name) &&
+        a.name.text === "path",
+    );
+    if (!pathAttr?.initializer) return undefined;
+    return ts.isStringLiteral(pathAttr.initializer)
+      ? pathAttr.initializer.text
+      : undefined;
+  }
+
+  function extractElement(
+    node: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  ): string | undefined {
+    const elemAttr = node.attributes.properties.find(
+      (a): a is ts.JsxAttribute =>
+        ts.isJsxAttribute(a) &&
+        ts.isIdentifier(a.name) &&
+        a.name.text === "element",
+    );
+    if (!elemAttr?.initializer) return undefined;
+    let expr: ts.Expression | undefined = elemAttr.initializer;
+    if (ts.isJsxExpression(expr)) expr = expr.expression;
+    if (expr && (ts.isJsxElement(expr) || ts.isJsxSelfClosingElement(expr))) {
+      const inner = ts.isJsxElement(expr)
+        ? expr.openingElement
+        : (expr as ts.JsxSelfClosingElement);
+      if (ts.isIdentifier(inner.tagName) && imports.has(inner.tagName.text)) {
+        return inner.tagName.text;
+      }
+    }
+    return undefined;
+  }
+
+  function isIndexRoute(
+    node: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  ): boolean {
+    return node.attributes.properties.some(
+      (a) =>
+        ts.isJsxAttribute(a) &&
+        ts.isIdentifier(a.name) &&
+        a.name.text === "index",
+    );
+  }
+
+  function addEntry(resolvedPath: string, componentName: string) {
+    const key = `${resolvedPath}::${componentName}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      entries.push({ route: resolvedPath, page: componentName });
+    }
+  }
+
+  function processRouteChildren(
+    routeNode: ts.JsxElement,
+    resolvedPath: string,
+  ) {
+    for (const child of routeNode.children) {
+      const childOpening = ts.isJsxElement(child)
+        ? child.openingElement
+        : ts.isJsxSelfClosingElement(child)
+          ? child
+          : null;
+      if (
+        !childOpening ||
+        !ts.isIdentifier(childOpening.tagName) ||
+        childOpening.tagName.text !== "Route"
+      )
+        continue;
+
+      if (isIndexRoute(childOpening)) {
+        const indexName = extractElement(childOpening);
+        if (indexName) {
+          addEntry(resolvedPath, indexName);
+        }
+      } else {
+        const localPath = extractPath(childOpening) ?? "";
+        const childResolvedPath = resolvedPath + "/" + localPath;
+        const componentName = extractElement(childOpening);
+        if (componentName) {
+          addEntry(childResolvedPath, componentName);
+        }
+        // Recurse into paired <Route> children.
+        if (ts.isJsxElement(child)) {
+          processRouteChildren(child, childResolvedPath);
+        }
+      }
+    }
+  }
+
+  // Walk top-level <Routes> → child <Route> elements.
+  sourceFile.forEachChild(function walk(node: ts.Node) {
+    if (
+      ts.isJsxElement(node) &&
+      ts.isIdentifier(node.openingElement.tagName) &&
+      node.openingElement.tagName.text === "Routes"
+    ) {
+      for (const child of node.children) {
+        // Top-level routes can be self-closing or paired elements.
+        const opening = ts.isJsxElement(child)
+          ? child.openingElement
+          : ts.isJsxSelfClosingElement(child)
+            ? child
+            : null;
+        if (
+          !opening ||
+          !ts.isIdentifier(opening.tagName) ||
+          opening.tagName.text !== "Route"
+        )
+          continue;
+
+        const localPath = extractPath(opening) ?? "";
+        const componentName = extractElement(opening);
+        if (componentName) {
+          addEntry(localPath, componentName);
+        }
+        // Recurse into nested Route children (only for paired elements).
+        if (ts.isJsxElement(child)) {
+          processRouteChildren(child, localPath);
+        }
+      }
+    }
+    node.forEachChild(walk);
+  });
+
+  return entries;
+}
+
+/**
  * Root-width rule: inside the exported page component, a top-level
  * `return (<el className="…">)` whose root element both centers itself and
  * picks its own max-width competes with PageContainer's geometry authority
@@ -269,17 +427,87 @@ describe("page geometry contract (issue 455)", () => {
     },
   );
 
-  it("covers every routed page exactly in the fixture (no silent additions)", () => {
-    const routedPages = new Set(routed.keys());
-    const fixturePages = new Set(ROUTE_PAGE_ROLES.map((f) => f.page));
+  it("proves route→page pairs match the fixture exactly (including multiplicity)", () => {
+    // Route-aware extraction: resolves nested React Router paths so the
+    // fixture is proved against actual (route, page) pairs — not just
+    // component-name sets. Deduplication via key ensures multiplicity is
+    // proven: two routes rendering the same component both appear.
+    const actual = resolvedRouteEntries();
+    const fixturePairs = ROUTE_PAGE_ROLES.map((f) => `${f.route}::${f.page}`);
+    const actualPairs = actual.map((e) => `${e.route}::${e.page}`);
+
+    const fixtureSet = new Set(fixturePairs);
+    const actualSet = new Set(actualPairs);
+
     expect(
-      [...routedPages].filter((p) => !fixturePages.has(p)),
-      "routed pages missing from ROUTE_PAGE_ROLES fixture — add them with their honest role",
+      [...actualSet].filter((p) => !fixtureSet.has(p)),
+      "actual (route, page) pairs missing from ROUTE_PAGE_ROLES fixture — add them with their honest role",
     ).toEqual([]);
     expect(
-      [...fixturePages].filter((p) => !routedPages.has(p)),
-      "fixture entries whose page is no longer routed",
+      [...fixtureSet].filter((p) => !actualSet.has(p)),
+      "fixture entries whose (route, page) pair no longer exists in App.tsx",
     ).toEqual([]);
+  });
+
+  it("proves route multiplicity: duplicate-component routes are individually proven", () => {
+    // This catches the class of bug where two routes share a component but
+    // only one appears in the fixture — deleting one route would still pass
+    // a component-name-set comparison.
+    const actual = resolvedRouteEntries();
+    const actualCounts = new Map<string, number>();
+    for (const e of actual) {
+      const key = `${e.route}::${e.page}`;
+      actualCounts.set(key, (actualCounts.get(key) ?? 0) + 1);
+    }
+    const fixtureCounts = new Map<string, number>();
+    for (const f of ROUTE_PAGE_ROLES) {
+      const key = `${f.route}::${f.page}`;
+      fixtureCounts.set(key, (fixtureCounts.get(key) ?? 0) + 1);
+    }
+    for (const [key, count] of actualCounts) {
+      expect(
+        fixtureCounts.get(key),
+        `actual pair ${key} appears ${count} time(s) but fixture has ${fixtureCounts.get(key) ?? 0}`,
+      ).toBe(count);
+    }
+  });
+
+  it("mutation proof: changing a duplicate-component route path breaks the route fixture", async () => {
+    // C1 corrective: prove the route-aware extraction catches path changes
+    // that a component-name-set comparison would miss. Both
+    // /admin/questions/new and /admin/questions/:id/edit render
+    // QuestionEditPage — mutating one path must break the fixture.
+    const { writeFileSync, readFileSync: readFS } = await import("node:fs");
+    const appFile = join(srcRoot, "App.tsx");
+    const original = readFS(appFile, "utf8");
+    try {
+      // Mutate: append "-mutant" to the :id/edit route path.
+      const mutant = original.replace(
+        'path="questions/:id/edit"',
+        'path="questions/:id/edit-mutant"',
+      );
+      expect(mutant).not.toBe(
+        original,
+        "sanity: mutation must change the file",
+      );
+      writeFileSync(appFile, mutant, "utf8");
+
+      // The route-aware extraction now sees a new (route, page) pair that the
+      // fixture does not contain → the route comparison test must fail.
+      const actual = resolvedRouteEntries();
+      const fixturePairs = new Set(
+        ROUTE_PAGE_ROLES.map((f) => `${f.route}::${f.page}`),
+      );
+      const unexpected = actual.filter(
+        (e) => !fixturePairs.has(`${e.route}::${e.page}`),
+      );
+      expect(
+        unexpected.length,
+        "mutant route should produce an unexpected (route, page) pair",
+      ).toBeGreaterThan(0);
+    } finally {
+      writeFileSync(appFile, original, "utf8");
+    }
   });
 
   it.each([
