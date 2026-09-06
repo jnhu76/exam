@@ -329,4 +329,27 @@ describe("page geometry contract (issue 455)", () => {
     );
     expect(violations).toEqual([]);
   });
+
+  it("freezes layout gutters and pairs the G.7a full-bleed escape with them", () => {
+    // Model A: the layout owns exactly this gutter and nothing else. A change
+    // here must be a conscious contract change — it re-flows every page under
+    // the layout and silently breaks TakeExamPage's full-bleed escape, whose
+    // negative margins must cancel the ExamLayout gutter exactly (G.7a).
+    const admin = readFileSync(
+      join(srcRoot, "components/layout/AdminLayout.tsx"),
+      "utf8",
+    );
+    expect(admin).toContain('<main className="p-4 lg:p-8">');
+    const exam = readFileSync(
+      join(srcRoot, "components/layout/ExamLayout.tsx"),
+      "utf8",
+    );
+    expect(exam).toContain('<main className="p-4 sm:p-6">');
+    const takeExam = readFileSync(
+      join(srcRoot, "pages/exam/TakeExamPage.tsx"),
+      "utf8",
+    );
+    expect(takeExam).toContain("-m-4 ");
+    expect(takeExam).toContain("sm:-m-6");
+  });
 });
