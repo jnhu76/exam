@@ -17,6 +17,14 @@
   color: var(--text-secondary);
 }
 
+/* Toolbar filter semantic tiers (issue 458): the ToolbarFilter wrapper owns the
+   width; the inner control fills it so consumers never write px/rem classes. */
+[data-slot="toolbar-filter"] [data-slot="select-trigger"],
+[data-slot="toolbar-filter"] [data-slot="input"],
+[data-slot="toolbar-filter"] [data-slot="button"] {
+  width: 100%;
+}
+
 [data-slot="input"],
 [data-slot="select-trigger"],
 [data-slot="textarea"] {

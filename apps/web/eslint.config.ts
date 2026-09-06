@@ -121,6 +121,7 @@ const eslintConfig = [
       "exam-ui/no-heavy-font-weight": "error",
       "exam-ui/no-recipe-recomposition": "error",
       "exam-ui/no-dialog-spatial-override": "error",
+      "exam-ui/no-arbitrary-filter-width": "error",
     },
   },
   {
@@ -147,6 +148,7 @@ const eslintConfig = [
       "exam-ui/no-heavy-font-weight": "error",
       "exam-ui/no-recipe-recomposition": "error",
       "exam-ui/no-dialog-spatial-override": "error",
+      "exam-ui/no-arbitrary-filter-width": "error",
     },
   },
 ];

@@ -14,7 +14,7 @@ import {
   DataTableColumns,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
-import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
@@ -135,12 +135,11 @@ export function ImportLogsPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger
-            className="w-[160px]"
-            aria-label={t("admin.importLogs.typeFilter")}
-          >
-            <SelectValue />
-          </SelectTrigger>
+          <ToolbarFilter size="narrow">
+            <SelectTrigger aria-label={t("admin.importLogs.typeFilter")}>
+              <SelectValue />
+            </SelectTrigger>
+          </ToolbarFilter>
           <SelectContent>
             {TYPE_FILTERS.map((f) => (
               <SelectItem key={f.value} value={f.value}>

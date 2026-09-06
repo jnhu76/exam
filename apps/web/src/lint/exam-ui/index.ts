@@ -63,6 +63,7 @@ import noArbitraryInlineTypography from "./rules/no-arbitrary-inline-typography"
 import noHeavyFontWeight from "./rules/no-heavy-font-weight";
 import noRecipeRecomposition from "./rules/no-recipe-recomposition";
 import noDialogSpatialOverride from "./rules/no-dialog-spatial-override";
+import noArbitraryFilterWidth from "./rules/no-arbitrary-filter-width";
 
 /**
  * The rules are typed as typescript-eslint v8 `RuleModule`s, but ESLint v10's
@@ -80,6 +81,7 @@ const rules = {
   "no-heavy-font-weight": noHeavyFontWeight,
   "no-recipe-recomposition": noRecipeRecomposition,
   "no-dialog-spatial-override": noDialogSpatialOverride,
+  "no-arbitrary-filter-width": noArbitraryFilterWidth,
 } as unknown as ESLint.Plugin["rules"];
 
 const plugin: ESLint.Plugin = {
@@ -97,4 +99,5 @@ export {
   noHeavyFontWeight,
   noRecipeRecomposition,
   noDialogSpatialOverride,
+  noArbitraryFilterWidth,
 };

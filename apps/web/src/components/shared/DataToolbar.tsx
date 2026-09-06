@@ -3,6 +3,50 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
+ * Semantic width tier for one toolbar filter control (issue 458, P3 §C toolbar).
+ * Exactly two tiers exist — never a third, never a page-owned px:
+ *
+ *   narrow = 9rem    short closed enums (status / type selects)
+ *   wide   = 11.25rem entity selectors (tag/person/course) and free-text
+ *                     filter inputs that are not the main search
+ *
+ * Search sizing belongs to DataToolbar's search slot (w-72 / lg:w-80) and
+ * date sizing belongs to DatePicker (self-owned 10rem) — neither migrates
+ * into these tiers.
+ */
+export type ToolbarFilterSize = "narrow" | "wide";
+
+/**
+ * Wraps one toolbar filter control in its semantic width tier. Below `sm`
+ * the control participates naturally in the responsive flow (full width);
+ * at `sm+` the semantic width applies. The inner control fills the wrapper
+ * (see control/recipes.css), so consumers never write px/rem classes.
+ */
+export function ToolbarFilter({
+  size,
+  className,
+  children,
+}: {
+  size: ToolbarFilterSize;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-slot="toolbar-filter"
+      data-toolbar-filter-size={size}
+      className={cn(
+        size === "narrow" ? "w-full sm:w-[9rem]" : "w-full sm:w-[11.25rem]",
+        "shrink-0",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
  * Toolbar for data/list pages: optional search slot, filter children, action
  * buttons, and a summary line with responsive layout. The single toolbar
  * authority. Default accessible label resolves from `common.toolbar.dataLabel`;

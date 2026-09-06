@@ -13,10 +13,11 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DatePicker } from "@/components/shared/DatePicker";
+import { Input } from "@/components/ui/input";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import {
@@ -279,12 +280,13 @@ export function RecoveryQueuePage() {
           value={filters.status || "all"}
           onValueChange={(v) => commitFilter({ status: v === "all" ? "" : v })}
         >
-          <SelectTrigger
-            className="w-[150px]"
-            aria-label={t("admin.recoveryQueue.filters.statusAll")}
-          >
-            <SelectValue />
-          </SelectTrigger>
+          <ToolbarFilter size="narrow">
+            <SelectTrigger
+              aria-label={t("admin.recoveryQueue.filters.statusAll")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+          </ToolbarFilter>
           <SelectContent>
             <SelectItem value="all">
               {t("admin.recoveryQueue.filters.statusAll")}
@@ -302,12 +304,13 @@ export function RecoveryQueuePage() {
             commitFilter({ severity: v === "all" ? "" : v })
           }
         >
-          <SelectTrigger
-            className="w-[150px]"
-            aria-label={t("admin.recoveryQueue.filters.severityAll")}
-          >
-            <SelectValue />
-          </SelectTrigger>
+          <ToolbarFilter size="narrow">
+            <SelectTrigger
+              aria-label={t("admin.recoveryQueue.filters.severityAll")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+          </ToolbarFilter>
           <SelectContent>
             <SelectItem value="all">
               {t("admin.recoveryQueue.filters.severityAll")}
@@ -319,38 +322,38 @@ export function RecoveryQueuePage() {
             ))}
           </SelectContent>
         </Select>
-        <input
-          type="text"
-          className="h-9 w-[180px] rounded-md border border-input bg-transparent px-3 text-sm"
-          aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
-          placeholder={t("admin.recoveryQueue.filters.examPlaceholder")}
-          value={examIdDraft}
-          onChange={(e) => {
-            setExamIdDraft(e.target.value);
-            draftRef.current.examId = e.target.value;
-            scheduleDebouncedCommit();
-          }}
-          onBlur={flushDebouncedCommit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") flushDebouncedCommit();
-          }}
-        />
-        <input
-          type="text"
-          className="h-9 w-[180px] rounded-md border border-input bg-transparent px-3 text-sm"
-          aria-label={t("admin.recoveryQueue.filters.candidatePlaceholder")}
-          placeholder={t("admin.recoveryQueue.filters.candidatePlaceholder")}
-          value={candidateIdDraft}
-          onChange={(e) => {
-            setCandidateIdDraft(e.target.value);
-            draftRef.current.candidateId = e.target.value;
-            scheduleDebouncedCommit();
-          }}
-          onBlur={flushDebouncedCommit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") flushDebouncedCommit();
-          }}
-        />
+        <ToolbarFilter size="wide">
+          <Input
+            aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
+            placeholder={t("admin.recoveryQueue.filters.examPlaceholder")}
+            value={examIdDraft}
+            onChange={(e) => {
+              setExamIdDraft(e.target.value);
+              draftRef.current.examId = e.target.value;
+              scheduleDebouncedCommit();
+            }}
+            onBlur={flushDebouncedCommit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") flushDebouncedCommit();
+            }}
+          />
+        </ToolbarFilter>
+        <ToolbarFilter size="wide">
+          <Input
+            aria-label={t("admin.recoveryQueue.filters.candidatePlaceholder")}
+            placeholder={t("admin.recoveryQueue.filters.candidatePlaceholder")}
+            value={candidateIdDraft}
+            onChange={(e) => {
+              setCandidateIdDraft(e.target.value);
+              draftRef.current.candidateId = e.target.value;
+              scheduleDebouncedCommit();
+            }}
+            onBlur={flushDebouncedCommit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") flushDebouncedCommit();
+            }}
+          />
+        </ToolbarFilter>
         <DatePicker
           aria-label={t("admin.recoveryQueue.filters.startDate")}
           placeholder={t("admin.recoveryQueue.filters.startDate")}

@@ -23,7 +23,7 @@ function trigger() {
 
 describe("TagFilterSelect", () => {
   // Issue #182: the toolbar must not jitter when the selection changes. The
-  // trigger width is fixed below lg too (w-[180px]), shrinking only when the
+  // trigger width is fixed below lg too (w-full), shrinking only when the
   // container is narrower (max-w-full). A content-driven `w-auto` trigger
   // would resize as the selected label grows.
   it("keeps a stable trigger width regardless of selection", async () => {
@@ -31,7 +31,7 @@ describe("TagFilterSelect", () => {
     render(<Wrapper />);
 
     const before = trigger().className;
-    expect(before).toContain("w-[180px]");
+    expect(before).toContain("w-full");
     expect(before).not.toContain("w-auto");
     expect(before).not.toContain("lg:");
 

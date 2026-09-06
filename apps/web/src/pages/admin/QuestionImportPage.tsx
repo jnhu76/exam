@@ -13,6 +13,7 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { ToolbarFilter } from "@/components/shared/DataToolbar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -246,11 +247,13 @@ export function QuestionImportPage() {
         <div className="flex flex-col gap-2">
           <Label>{t("admin.questionImport.courseLabel")}</Label>
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue
-                placeholder={t("admin.questionImport.coursePlaceholder")}
-              />
-            </SelectTrigger>
+            <ToolbarFilter size="wide">
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={t("admin.questionImport.coursePlaceholder")}
+                />
+              </SelectTrigger>
+            </ToolbarFilter>
             <SelectContent>
               {courses.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
