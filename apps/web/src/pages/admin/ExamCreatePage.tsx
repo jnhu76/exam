@@ -54,6 +54,7 @@ import { BookOpen, Trash2 } from "lucide-react";
 import { getTypeLabel } from "@/lib/constants";
 import { WizardStepper } from "@/components/exam/wizard/WizardStepper";
 import { WizardPolicyFields } from "@/components/exam/wizard/WizardPolicyFields";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   buildCreateExamPayload,
   goToStep,
@@ -452,7 +453,7 @@ export function ExamCreatePage() {
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.examWizard.pageTitle")}
         description={t("admin.examWizard.pageDescription")}
@@ -1021,6 +1022,6 @@ export function ExamCreatePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

@@ -50,6 +50,7 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 /** Configuration of a candidate identity or metadata field. */
@@ -401,7 +402,7 @@ export function CandidatesPage() {
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.candidates.title")}
         actions={
@@ -770,6 +771,6 @@ export function CandidatesPage() {
         summary={importSummary}
         onConfirm={() => void importCsv()}
       />
-    </div>
+    </PageContainer>
   );
 }

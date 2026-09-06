@@ -36,6 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { BookOpen, Trash2 } from "lucide-react";
 import { getTypeLabel } from "@/lib/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 /** Minimal course representation used in the exam edit form. */
 interface CourseRow {
@@ -263,7 +264,7 @@ export function ExamEditPage() {
   const scheduleOnly = examStatus === "published";
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader title={t("admin.examEdit.pageTitle")} />
 
       {scheduleOnly && (
@@ -463,6 +464,6 @@ export function ExamEditPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

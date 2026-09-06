@@ -26,7 +26,6 @@ import {
   canAccessAdminRoute,
 } from "@/lib/adminRouteCapabilities";
 import { AccessDeniedPage } from "@/pages/admin/AccessDeniedPage";
-import { PageContainer } from "@/components/shared/PageContainer";
 
 /**
  * Three-state responsive admin shell (DESIGN.md §9):
@@ -42,6 +41,10 @@ import { PageContainer } from "@/components/shared/PageContainer";
  * renders <AppSidebar> (test-visible) and selects `collapsed` from the xl
  * breakpoint. The mobile drawer reuses the same SidebarContent authority.
  * Redirects unauthenticated or candidate-role users to /login.
+ *
+ * OWNERSHIP (issue 455 Model A): this shell owns navigation chrome and the
+ * main gutter only. Page width roles are declared by each page through
+ * <PageContainer role="…">; the shell must never infer a role from the URL.
  */
 export function AdminLayout() {
   const { t } = useTranslation();
@@ -125,16 +128,6 @@ export function AdminLayout() {
     relativePath !== null && !canAccessAdminRoute(user, relativePath);
 
   const topbarTitle = getPageTitle(location.pathname);
-  const containerRole =
-    location.pathname === "/admin/system"
-      ? "admin-wide"
-      : location.pathname === "/admin/users"
-        ? "admin-sparse"
-        : /^\/admin\/(settings|questions\/(new|import|[^/]+\/edit)|exams\/(new|[^/]+\/edit))$/.test(
-              location.pathname,
-            )
-          ? "form"
-          : "admin-standard";
 
   return (
     <div
@@ -171,9 +164,7 @@ export function AdminLayout() {
           </div>
         </header>
         <main className="p-4 lg:p-8">
-          <PageContainer role={containerRole}>
-            {routeDenied ? <AccessDeniedPage /> : <Outlet />}
-          </PageContainer>
+          {routeDenied ? <AccessDeniedPage /> : <Outlet />}
         </main>
       </div>
 

@@ -19,6 +19,7 @@ import {
 } from "@/components/shared/DataTableContract";
 import { RowActions } from "@/components/shared/RowActions";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ClipboardList,
   Eye,
@@ -75,7 +76,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader title={t("admin.dashboard.title")} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -190,7 +191,7 @@ export function DashboardPage() {
           )}
         </div>
       </DataTableShell>
-    </div>
+    </PageContainer>
   );
 }
 

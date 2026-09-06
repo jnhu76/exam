@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { Monitor, MonitorPlay } from "lucide-react";
 
 type StatusFilter = "all" | ProctorExamStatus;
@@ -82,7 +83,7 @@ export function ProctorWorkspacePage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.proctorWorkspace.title")}
         description={t("admin.proctorWorkspace.description")}
@@ -193,6 +194,6 @@ export function ProctorWorkspacePage() {
           </Table>
         )}
       </DataTableShell>
-    </div>
+    </PageContainer>
   );
 }

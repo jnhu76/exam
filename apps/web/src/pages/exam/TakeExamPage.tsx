@@ -21,6 +21,7 @@ import { routes } from "@/lib/routes";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { Separator } from "@/components/ui/separator";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { QuestionNavigator } from "@/components/exam/QuestionNavigator";
 import { ExamTimer } from "@/components/exam/ExamTimer";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
@@ -151,7 +152,7 @@ function RestoreFailedSurface({
   }, []);
   return (
     <div
-      className="mx-auto flex min-h-screen max-w-xl flex-col items-stretch justify-center gap-4 bg-background p-6"
+      className="mx-auto flex min-h-screen max-w-xl flex-col items-stretch justify-center gap-4 bg-background"
       data-testid="restore-failed-surface"
     >
       <Alert variant="destructive">
@@ -1028,9 +1029,12 @@ export function TakeExamPage() {
   const requiresSubmitOverride = failedSaveCount > 0 || flushTimedOut;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="-m-4 flex min-h-screen flex-col bg-background sm:-m-6">
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <PageContainer
+          role="exam-runtime"
+          className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+        >
           <div>
             <div className="text-lg font-medium">
               {view.isLocked
@@ -1093,10 +1097,13 @@ export function TakeExamPage() {
               </Button>
             )}
           </div>
-        </div>
+        </PageContainer>
       </header>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start">
+      <PageContainer
+        role="exam-runtime"
+        className="flex w-full flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start"
+      >
         <aside className="rounded-lg border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
           <div className="mb-2 flex items-center justify-between type-metadata xl:block">
             <span>{t("candidateRuntime.navigator.questionId")}</span>
@@ -1250,11 +1257,14 @@ export function TakeExamPage() {
             </section>
           </div>
         </div>
-      </div>
+      </PageContainer>
 
       <Separator />
       <footer className="sticky bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <PageContainer
+          role="exam-runtime"
+          className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+        >
           <div className="type-secondary">
             {t("candidateRuntime.navigator.progressFull", {
               answered: answeredCount,
@@ -1308,7 +1318,7 @@ export function TakeExamPage() {
               )}
             </div>
           )}
-        </div>
+        </PageContainer>
       </footer>
 
       <Dialog

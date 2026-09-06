@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError } from "@/components/shared/FieldError";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -427,7 +428,7 @@ export function GradingDetailPage() {
   const isFullyGraded = data.gradingStatus === "fully_graded";
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.gradingDetail.title")}
         description={`${data.examTitle} — ${data.candidateName}`}
@@ -694,6 +695,6 @@ export function GradingDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageContainer>
   );
 }

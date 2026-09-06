@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { adminLandingPath } from "@/lib/capabilities";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -28,17 +29,19 @@ export function AccessDeniedPage() {
   const landing = user ? adminLandingPath(user) : null;
 
   return (
-    <ErrorState
-      message={t("adminRouteGuard.accessDenied")}
-      extraAction={
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => navigate(landing ?? "/login")}
-        >
-          {t("adminRouteGuard.backToPermitted")}
-        </Button>
-      }
-    />
+    <PageContainer role="admin-standard">
+      <ErrorState
+        message={t("adminRouteGuard.accessDenied")}
+        extraAction={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => navigate(landing ?? "/login")}
+          >
+            {t("adminRouteGuard.backToPermitted")}
+          </Button>
+        }
+      />
+    </PageContainer>
   );
 }

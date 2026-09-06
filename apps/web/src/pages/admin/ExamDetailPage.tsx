@@ -36,6 +36,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { Users, Plus, Trash2 } from "lucide-react";
 import {
   EnrollmentPicker,
@@ -413,7 +414,7 @@ export function ExamDetailPage() {
     );
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={exam.title}
         actions={
@@ -880,6 +881,6 @@ export function ExamDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

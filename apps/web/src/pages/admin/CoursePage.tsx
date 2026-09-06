@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { BookOpen, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 /** A course record with name, code, and description. */
 /** A single course record returned from the API. */
@@ -183,7 +184,7 @@ export function CoursePage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6">
+      <PageContainer role="admin-standard" className="flex flex-col gap-6">
         <PageHeader
           title={t("admin.courses.title")}
           actions={
@@ -382,7 +383,7 @@ export function CoursePage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageContainer>
     </TooltipProvider>
   );
 }

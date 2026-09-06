@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { PageSection } from "@/components/shared/PageSection";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   TriangleAlert,
   Clock,
@@ -162,7 +163,7 @@ export function StartExamPage() {
         : error;
 
   return (
-    <div className="mx-auto max-w-2xl flex flex-col gap-6 p-6">
+    <PageContainer role="candidate" className="flex flex-col gap-6">
       <h1 className="type-page-title">{exam.title}</h1>
 
       <PageSection
@@ -289,6 +290,6 @@ export function StartExamPage() {
           {isStarting ? t("startExam.actions.entering") : actionLabel}
         </Button>
       </div>
-    </div>
+    </PageContainer>
   );
 }

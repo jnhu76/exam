@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ClipboardList,
   Clock,
@@ -236,7 +237,7 @@ export function ExamListPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl flex flex-col gap-6 p-6">
+    <PageContainer role="candidate" className="flex flex-col gap-6">
       {canTake.length > 0 && (
         <section className="flex flex-col gap-4">
           <h2 className="type-section-title">
@@ -298,6 +299,6 @@ export function ExamListPage() {
           description={t("examList.empty.description")}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }

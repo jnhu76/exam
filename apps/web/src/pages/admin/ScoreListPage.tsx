@@ -24,6 +24,7 @@ import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Pagination,
   PaginationContent,
@@ -155,7 +156,7 @@ export function ScoreListPage() {
     );
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={`${scores.items[0]?.examTitle || t("admin.scoreList.fallbackExamTitle")} - ${t("admin.scoreList.titleSuffix")}`}
         actions={
@@ -356,6 +357,6 @@ export function ScoreListPage() {
           </Table>
         )}
       </DataTableShell>
-    </div>
+    </PageContainer>
   );
 }
