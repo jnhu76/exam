@@ -49,6 +49,7 @@ import {
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 /** Configuration of a candidate identity or metadata field. */
@@ -485,7 +486,7 @@ export function CandidatesPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.candidates.title")}
         actions={
@@ -767,6 +768,6 @@ export function CandidatesPage() {
         summary={importSummary}
         onConfirm={() => void importCsv()}
       />
-    </div>
+    </PageContainer>
   );
 }

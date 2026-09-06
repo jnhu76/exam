@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import { createContextSafeUuid } from "@/lib/uuid";
 import { getPendingGrantCoordinator } from "@/features/operator-grant/pendingGrantCoordinatorSingleton";
@@ -1300,7 +1301,7 @@ export function ProctorDashboardPage() {
   const hasAnyCandidates = data.candidates.length > 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.proctorDashboard.title")}
         actions={
@@ -1846,7 +1847,7 @@ export function ProctorDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 
   /** Renders a grid of candidate status cards. */

@@ -1,6 +1,6 @@
 # ADR-011: Notification Inbox and Email Delivery Architecture
 
-- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**; **Amended 2026-09-03 (#402/#300 — EmailDeliveryService retired, renderer convergence, see §24; #299 — second operational event `exam_assigned`, see §25)**
+- **Status:** Accepted (2026-07-25, P5-N1-R0); **Amended 2026-08-29 (#320 CONVERGE — email delivery moved in-process; §8.6 revised, see §23)**; **Amended 2026-09-03 (#402/#300 — EmailDeliveryService retired, renderer convergence, see §24; #299 — second operational event `exam_assigned`, see §25)**; **Amended 2026-09-06 (#482 — queue-claim vs send-execution boundary, see §26)**
 - **Date:** 2026-07-23
 - **Owners:** EXAM maintainers
 - **Related:** ADR-003 Job Queue, ADR-001 Redis, P5-0 Email Delivery Runtime, P3 Result Publishing Closeout, P5-N1 Notification Inbox
@@ -1369,3 +1369,102 @@ evidence (#402 brake).
 duplicate no-op, required-write rollback) and route-level tests (Inbox +
 outbox wiring, no-email, duplicate skip, cross-org leakage fail-closed);
 `pnpm verify` green.
+
+## 26. Amendment 2026-09-06 — #482 queue-claim vs send-execution boundary
+
+**Decision**: The outbox state machine's transition to `processing`
+(`pending → processing`, `retry_wait → processing`) establishes **queue
+ownership only**. It is a different lifecycle event from the **side-effect
+execution boundary** — the entry into `EmailSender.send()`. Conflating the
+two is a semantic error: a claimed row is not a sending row.
+
+The following invariants are normative:
+
+### Q1 — Claim semantics
+
+`pending → processing` and `retry_wait → processing` mean:
+
+> queue ownership was successfully established by the claiming worker
+> (atomic `FOR UPDATE SKIP LOCKED` claim, §6.3).
+
+They do NOT mean:
+
+> the external send has begun.
+
+### Q2 — Processing invariant
+
+Any row with `status = processing` must simultaneously satisfy
+`locked_at != NULL` and `locked_by != NULL` (§3.1). The claim sets status and
+both lock fields in one atomic statement, and every other state transition
+fences on `locked_by`, so an ownerless `processing` row cannot be produced by
+the implementation. Consumers of this state — including tests — must treat
+`processing` with an empty owner as invalid evidence, never as a valid claim.
+
+### Q3 — Side-effect execution boundary
+
+Entry into `EmailSender.send()` is a second, independent lifecycle boundary
+after the claim. Conceptually a claimed row passes through a runtime
+execution state:
+
+```text
+pending
+   | claim
+   v
+processing (owner=A)
+   | execution enters sender
+   v
+send-in-flight
+```
+
+`send-in-flight` is a **runtime execution state, not a queue status**: it is
+NOT persisted, and the status enum stays exactly `pending`, `processing`,
+`retry_wait`, `sent`, `dead` (§3.1). Persisted states such as `sending` or
+`in_flight` must not be introduced to represent it.
+
+### Q4 — Shutdown abandonment semantics
+
+When the bounded shutdown (§8.6, #351) abandons a send-in-flight row, the row
+must keep its original ownership evidence:
+
+```text
+status     = processing
+locked_by  = original owner
+locked_at  = original claim timestamp
+```
+
+Shutdown must NOT rewrite `processing → pending` for retry convenience. At
+process exit the real SMTP side effect's delivery outcome is **unknown**
+(the provider may already have accepted the message), so releasing ownership
+immediately would widen the duplicate-send window described in §11.1.
+Redelivery is reachable exclusively through lock-timeout recovery (Q5).
+
+### Q5 — Recovery semantics
+
+Recovery of an abandoned row continues through the existing abandoned-lock
+contract:
+
+```text
+processing (owner=A)
+   | lock timeout
+   v
+recoverAbandoned → pending (lock fields cleared)
+   | new claim
+   v
+processing (owner=B), B != A, B != empty
+```
+
+A re-claim by a different, non-empty owner is the at-least-once redelivery
+proof. Recovery must not preserve the previous owner's identity.
+
+**Scope**: this amendment clarifies semantics only. It changes no queue
+technology decision (§6, ADR-003 Class A unchanged), no retry/backoff policy,
+and no Email business semantics (§11, §12). The distinction is a workload-
+level refinement of ADR-003 Class A ("delivery state is not the originating
+domain fact"), not a new mechanism.
+
+**Evidence**: #482 — deployment TEST 17 (#351) had used `status = processing`
+as the proxy for "send in flight", racing the claim→send-enter window and
+making a log-existence assertion flakier than the lifecycle behavior it
+observed. The behavior-first fix (fake-transport-only send-entered witness +
+queue-ownership assertions) is test infrastructure; no production delivery
+behavior changes.

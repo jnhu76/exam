@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
   SelectContent,
@@ -250,7 +251,7 @@ export function RecoveryQueuePage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.recoveryQueue.title")}
         description={t("admin.recoveryQueue.description")}
@@ -580,6 +581,6 @@ export function RecoveryQueuePage() {
           </Button>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

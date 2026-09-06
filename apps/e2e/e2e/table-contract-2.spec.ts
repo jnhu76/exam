@@ -285,9 +285,13 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     await shell.waitFor({ state: "visible" });
     const g = await probeTable(shell);
     expect(g.archetype).toBe("management-list");
-    // maxTier=standard: even a >1200px container must NOT reach wide.
+    // maxTier=standard: even a >1200px container must NOT reach wide. The
+    // tier attribute is the contract signal; the table itself may fill the
+    // container (the vehicle page's role ceiling moved from admin-sparse
+    // 1024 to admin-standard 1280 with issue 455, so a 1024-era width
+    // ceiling here would encode a stale page width, not the tier rule).
     expect(g.tier).toBe("standard");
-    expect(g.tableWidth).toBeLessThanOrEqual(1200 - 1);
+    expect(g.tableWidth).toBeLessThanOrEqual(g.containerWidth + 1);
   });
 
   test("S6: management-list shows mobile cards instead of compact scroll below lg", async ({

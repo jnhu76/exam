@@ -15,6 +15,7 @@ import {
   type DataViewColumnDef,
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Pagination,
   PaginationContent,
@@ -135,7 +136,7 @@ export function GradingQueuePage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.grading.title")}
         description={t("admin.grading.description")}
@@ -193,6 +194,6 @@ export function GradingQueuePage() {
           </PaginationContent>
         </Pagination>
       )}
-    </div>
+    </PageContainer>
   );
 }

@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
   SelectContent,
@@ -582,7 +583,7 @@ export function RecoveryAttemptDetailPage() {
     attempt.effectiveDeadlineAt !== attempt.deadlineAt;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.recoveryAttempt.title")}
         description={t("admin.recoveryAttempt.attemptNo", {
@@ -1236,6 +1237,6 @@ export function RecoveryAttemptDetailPage() {
           )}
         </div>
       </RecoveryCommandDialog>
-    </div>
+    </PageContainer>
   );
 }

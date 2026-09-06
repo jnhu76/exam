@@ -103,18 +103,22 @@ Numeric scores, counts, durations, dates, and percentages use tabular numbers.
 
 ## Page containers
 
-`PageContainer` owns all page widths.
+`PageContainer` owns all page widths. A page declares its container role
+explicitly on the `PageContainer` it renders; layouts own only the responsive
+gutter and never infer a container role from the URL.
 
 | Role | Maximum | Use |
 | --- | --- | --- |
 | admin-standard | 1280px | dashboards and ordinary admin pages |
 | admin-wide | 1536px | diagnostics and genuinely wide data |
+| candidate | 896px | candidate-facing list, detail, and result pages |
 | form | 896px | create/edit and focused forms |
 | auth | 448px | authentication |
 | exam-runtime | 1280px | task-focused candidate runtime |
 
-Containers are centered and full-width with shell-owned responsive gutters.
-Pages may not introduce arbitrary per-page maximum widths.
+The role vocabulary is closed. Containers are centered and full-width; the
+surrounding layout owns the responsive gutter. Pages may not introduce
+arbitrary per-page maximum widths.
 
 ## Component contracts
 

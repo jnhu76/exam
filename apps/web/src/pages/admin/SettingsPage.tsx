@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { FieldError } from "@/components/shared/FieldError";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 /** Branding settings data shape, reusing the contract type directly. */
 type SettingsData = UpdateBrandingRequest;
@@ -118,7 +119,7 @@ export function SettingsPage() {
     );
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader title={t("admin.settings.pageTitle")} />
       <FormSection
         title={t("admin.settings.profileSection.title")}
@@ -171,6 +172,6 @@ export function SettingsPage() {
       >
         <PasswordChangeForm />
       </FormSection>
-    </div>
+    </PageContainer>
   );
 }

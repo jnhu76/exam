@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { BadgeCheck, KeyRound, ShieldCheck, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
   SelectContent,
@@ -195,7 +196,7 @@ export function PermissionRegistryPage() {
   const selectedUser = users.find((u) => u.id === selectedUserId);
 
   return (
-    <div className="flex flex-col gap-8">
+    <PageContainer role="admin-standard" className="flex flex-col gap-8">
       <PageHeader
         title={t("admin.permissions.title")}
         description={t("admin.permissions.description")}
@@ -421,6 +422,6 @@ export function PermissionRegistryPage() {
           )}
         </div>
       </section>
-    </div>
+    </PageContainer>
   );
 }

@@ -23,6 +23,7 @@ import {
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/shared/PageContainer";
 import type { ExamProfileDTO } from "@exam/contracts";
 
 /** Resolve i18n labels for the profile summary formatter (single source). */
@@ -183,7 +184,7 @@ export function ExamProfilePage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.examProfilePages.listPageTitle")}
         description={t("admin.examProfilePages.listPageDescription")}
@@ -224,6 +225,6 @@ export function ExamProfilePage() {
           />
         </DataTableShell>
       )}
-    </div>
+    </PageContainer>
   );
 }

@@ -23,6 +23,7 @@ import {
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 /** Formats an answer value into a human-readable string via i18n. */
 function formatAnswer(answer: unknown, t: (key: string) => string): string {
@@ -118,7 +119,7 @@ export function ResultPage() {
   if (!result) return <LoadingState />;
 
   return (
-    <div className="mx-auto max-w-5xl flex flex-col gap-6 p-6">
+    <PageContainer role="candidate" className="flex flex-col gap-6">
       <h1 className="type-page-title">{result.examTitle}</h1>
 
       {result.showResultImmediately ? (
@@ -315,6 +316,6 @@ export function ResultPage() {
           {t("candidateResult.actions.backToList")}
         </Button>
       </div>
-    </div>
+    </PageContainer>
   );
 }

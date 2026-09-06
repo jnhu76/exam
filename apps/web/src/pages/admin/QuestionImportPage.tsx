@@ -26,6 +26,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { CircleCheck, CircleAlert, CircleX } from "lucide-react";
 import { getTypeLabelKey } from "@/lib/constants";
 
@@ -239,7 +240,7 @@ export function QuestionImportPage() {
   if (error) return <ErrorState message={error} onRetry={loadCourses} />;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader title={t("admin.questionImport.title")} />
 
       {/* flex-wrap: course select + template/download actions exceed narrow
@@ -464,6 +465,6 @@ export function QuestionImportPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

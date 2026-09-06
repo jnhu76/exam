@@ -1,4 +1,8 @@
 import { type Transporter } from "nodemailer";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DisabledEmailSender,
@@ -7,6 +11,9 @@ import {
   createEmailSender,
   type EmailSenderConfig,
 } from "./senders.js";
+
+/** Small bounded delay for polling a file the sender writes. */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * A recording transporter: captures the payload handed to `sendMail` so tests
@@ -66,6 +73,69 @@ describe("FakeEmailSender", () => {
         text: "t",
       }),
     ).rejects.toThrow("Fake email sender failure");
+  });
+
+  it("writes the send-entered witness BEFORE the simulated delay resolves (#482)", async () => {
+    const witness = join(tmpdir(), `exam-fake-witness-${randomUUID()}`);
+    try {
+      let settled = false;
+      const send = new FakeEmailSender("success", 500, witness).send({
+        to: "x@example.com",
+        subject: "s",
+        text: "t",
+      });
+      void send.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      // The witness must appear while the delay is still in flight — that
+      // ordering IS the happens-before contract the deployment test relies on.
+      let appeared = false;
+      for (let i = 0; i < 50 && !appeared; i += 1) {
+        appeared = existsSync(witness);
+        if (!appeared) await sleep(10);
+      }
+      expect(appeared).toBe(true);
+      expect(settled).toBe(false);
+      await send;
+    } finally {
+      rmSync(witness, { force: true });
+    }
+  });
+
+  it("witness content records the writing process (pid + timestamp)", async () => {
+    const witness = join(tmpdir(), `exam-fake-witness-${randomUUID()}`);
+    try {
+      await new FakeEmailSender("success", 0, witness).send({
+        to: "x@example.com",
+        subject: "s",
+        text: "t",
+      });
+      expect(readFileSync(witness, "utf-8")).toContain(String(process.pid));
+    } finally {
+      rmSync(witness, { force: true });
+    }
+  });
+
+  it("fails the send (not silently) when the witness path is unwritable", async () => {
+    // A regular file where a directory would be needed: mkdir/writes fail.
+    const blocker = join(tmpdir(), `exam-fake-witness-blocker-${randomUUID()}`);
+    writeFileSync(blocker, "not a directory");
+    try {
+      await expect(
+        new FakeEmailSender("success", 0, join(blocker, "witness")).send({
+          to: "x@example.com",
+          subject: "s",
+          text: "t",
+        }),
+      ).rejects.toThrow(/fake-send-entered witness/);
+    } finally {
+      rmSync(blocker, { force: true, recursive: true });
+    }
   });
 });
 
@@ -199,6 +269,19 @@ describe("createEmailSender (factory)", () => {
         baseConfig({ enabled: true, transport: "fake", fakeMode: "success" }),
       ).constructor.name,
     ).toBe("FakeEmailSender");
+  });
+
+  it("forwards fakeSendEnteredFile to the fake sender (witness written on send)", async () => {
+    const witness = join(tmpdir(), `exam-fake-witness-${randomUUID()}`);
+    try {
+      const sender = createEmailSender(
+        baseConfig({ enabled: true, fakeSendEnteredFile: witness }),
+      );
+      await sender.send({ to: "x@example.com", subject: "s", text: "t" });
+      expect(existsSync(witness)).toBe(true);
+    } finally {
+      rmSync(witness, { force: true });
+    }
   });
 
   it("returns SmtpEmailSender when enabled + transport smtp (with valid config)", () => {

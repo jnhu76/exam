@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { getTypeLabelKey } from "@/lib/constants";
 import type {
   AttemptTimelineEvent,
@@ -692,7 +693,7 @@ export function AttemptDetailPage() {
   const earnedScore = sortedQuestions.reduce((sum, q) => sum + q.score, 0);
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={`${result.examTitle} - ${t(
           "admin.attemptDetail.result.titleSuffix",
@@ -830,6 +831,6 @@ export function AttemptDetailPage() {
         expandedEventId={expandedEventId}
         onToggleEvent={toggleEvent}
       />
-    </div>
+    </PageContainer>
   );
 }

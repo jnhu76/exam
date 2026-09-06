@@ -19,6 +19,7 @@ import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { Gauge, Eye } from "lucide-react";
 import type { ScoreViewDisabledReasonCode } from "@exam/contracts";
 import { scoreViewDisabledReasonKey } from "@/lib/examDisabledReasons";
@@ -151,7 +152,7 @@ export function ResultsOverviewPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6">
+      <PageContainer role="admin-standard" className="flex flex-col gap-6">
         <PageHeader title={t("admin.resultsOverview.title")} />
 
         <DataTableShell
@@ -181,7 +182,7 @@ export function ResultsOverviewPage() {
             />
           )}
         </DataTableShell>
-      </div>
+      </PageContainer>
     </TooltipProvider>
   );
 }

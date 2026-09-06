@@ -99,6 +99,8 @@ describe("resolveSettings primitives", () => {
     expect(s.redis.REDIS_STARTUP_TIMEOUT_MS).toBe(8000);
     expect(s.email.EMAIL_TRANSPORT).toBe("fake");
     expect(s.email.EMAIL_FAKE_MODE).toBe("success");
+    // Test-only witness seam (#482): disabled unless a deployment test sets it.
+    expect(s.email.EMAIL_FAKE_SEND_ENTERED_FILE).toBe("");
     expect(s.email.EMAIL_FROM).toBe("no-reply@example.local");
     expect(s.email.EMAIL_FROM_NAME).toBe("Exam Platform");
     expect(s.email.SMTP_PORT).toBe(587);

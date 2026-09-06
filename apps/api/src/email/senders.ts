@@ -1,4 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { EmailMessage, EmailSender, EmailSendResult } from "@exam/domain";
 import { sanitizeEmailError } from "./sanitizeError.js";
 
@@ -32,6 +34,15 @@ export interface EmailSenderConfig {
   fakeMode: EmailFakeMode;
   /** Simulated transport latency for the fake sender (0 = immediate). */
   fakeDelayMs?: number;
+  /**
+   * Test-only witness seam (#482): when set, `FakeEmailSender` writes this
+   * file the moment execution enters `send()`, BEFORE the simulated delay,
+   * so a test can observe "send entered" with a real happens-before
+   * guarantee (a queue-claim observation — status=processing — cannot
+   * provide that). Fake transport only; ignored by the SMTP and disabled
+   * senders. Empty/unset disables.
+   */
+  fakeSendEnteredFile?: string | null;
   smtp: SmtpOptions | null;
 }
 
@@ -50,13 +61,39 @@ export class DisabledEmailSender implements EmailSender {
  * resolves; `failure` always rejects with a fixed message so `lastError` is
  * assertable. Never touches the network. `delayMs` simulates transport
  * latency before resolving/rejecting (0 = immediate).
+ *
+ * When `sendEnteredFile` is set (test/deployment-rehearsal seam, #482), the
+ * file is written synchronously on entry to `send()`, BEFORE the delay —
+ * "witness exists" therefore implies "send body entered and the fake delay
+ * is now in flight". The real SMTP path never writes it.
  */
 export class FakeEmailSender implements EmailSender {
   constructor(
     private readonly mode: EmailFakeMode,
     private readonly delayMs = 0,
+    private readonly sendEnteredFile: string | null = null,
   ) {}
   async send(_message: EmailMessage): Promise<EmailSendResult> {
+    if (this.sendEnteredFile) {
+      // INVARIANT (#482): the witness must be on disk BEFORE the simulated
+      // delay starts, so "witness exists" => "send entered and delay is in
+      // flight". Written synchronously (no await before the delay timer) so
+      // the ordering cannot race. A write failure fails the send: a silent
+      // witness miss would leave a test waiting on a signal never emitted.
+      try {
+        mkdirSync(dirname(this.sendEnteredFile), { recursive: true });
+        writeFileSync(
+          this.sendEnteredFile,
+          `${process.pid} ${new Date().toISOString()}\n`,
+        );
+      } catch (err) {
+        throw new EmailSendError(
+          `failed to write fake-send-entered witness ${this.sendEnteredFile}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
     if (this.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     }
@@ -200,7 +237,11 @@ export function createEmailSender(config: EmailSenderConfig): EmailSender {
     return new DisabledEmailSender();
   }
   if (config.transport === "fake") {
-    return new FakeEmailSender(config.fakeMode, config.fakeDelayMs ?? 0);
+    return new FakeEmailSender(
+      config.fakeMode,
+      config.fakeDelayMs ?? 0,
+      config.fakeSendEnteredFile ?? null,
+    );
   }
   if (config.transport === "smtp") {
     if (!config.smtp || !config.smtp.host || config.smtp.host.length === 0) {

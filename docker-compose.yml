@@ -45,6 +45,9 @@ services:
       EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
       EMAIL_FAKE_MODE: ${EMAIL_FAKE_MODE:-}
       EMAIL_FAKE_DELAY_MS: ${EMAIL_FAKE_DELAY_MS:-}
+      # Test/rehearsal-only fake-sender witness (#482): empty in any real
+      # deployment; set by deployment tests to observe fake-send entry.
+      EMAIL_FAKE_SEND_ENTERED_FILE: ${EMAIL_FAKE_SEND_ENTERED_FILE:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-}
       EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-}

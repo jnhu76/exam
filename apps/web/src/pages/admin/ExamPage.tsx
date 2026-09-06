@@ -22,6 +22,7 @@ import {
 } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PageContainer } from "@/components/shared/PageContainer";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { canCreateExam, canDeleteExam } from "@/lib/capabilities";
@@ -219,7 +220,7 @@ export function ExamPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6">
+      <PageContainer role="admin-standard" className="flex flex-col gap-6">
         <PageHeader
           title={t("admin.exams.title")}
           actions={
@@ -264,7 +265,7 @@ export function ExamPage() {
             </DataTableShell>
           </>
         )}
-      </div>
+      </PageContainer>
     </TooltipProvider>
   );
 }

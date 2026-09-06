@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PageContainer } from "@/components/shared/PageContainer";
 import {
   ArrowDown,
   ArrowUp,
@@ -330,7 +331,7 @@ export function CandidateFieldsPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.candidateFields.title")}
         actions={
@@ -462,6 +463,6 @@ export function CandidateFieldsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }
