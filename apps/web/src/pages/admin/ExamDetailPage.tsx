@@ -741,36 +741,40 @@ export function ExamDetailPage() {
                           {enrollment.finalScore ?? "-"}
                         </DataTableCell>
                         <DataTableCell role="actions">
-                          <RowActions>
-                            {mayManageEnrollments &&
-                              enrollment.status === "assigned" && (
-                                <ConfirmDialog
-                                  trigger={
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      aria-label={t(
+                          <RowActions
+                            row={enrollment}
+                            actions={
+                              mayManageEnrollments &&
+                              enrollment.status === "assigned"
+                                ? [
+                                    {
+                                      id: "remove-candidate",
+                                      label: t(
                                         "admin.examDetail.confirm.removeCandidate",
-                                      )}
-                                      data-row-action-tone="destructive"
-                                    >
-                                      <AppIcon icon={Trash2} size="inline" />
-                                    </Button>
-                                  }
-                                  title={t(
-                                    "admin.examDetail.confirm.removeTitle",
-                                  )}
-                                  description={t(
-                                    "admin.examDetail.confirm.removeDescription",
-                                    { name: enrollment.candidateDisplayName },
-                                  )}
-                                  destructive
-                                  onConfirm={() =>
-                                    void handleRemoveEnrollment(enrollment.id)
-                                  }
-                                />
-                              )}
-                          </RowActions>
+                                      ),
+                                      icon: Trash2,
+                                      tone: "destructive",
+                                      confirm: {
+                                        title: t(
+                                          "admin.examDetail.confirm.removeTitle",
+                                        ),
+                                        description: t(
+                                          "admin.examDetail.confirm.removeDescription",
+                                          {
+                                            name: enrollment.candidateDisplayName,
+                                          },
+                                        ),
+                                        destructive: true,
+                                      },
+                                      onSelect: () =>
+                                        void handleRemoveEnrollment(
+                                          enrollment.id,
+                                        ),
+                                    },
+                                  ]
+                                : []
+                            }
+                          />
                         </DataTableCell>
                       </TableRow>
                     ))}

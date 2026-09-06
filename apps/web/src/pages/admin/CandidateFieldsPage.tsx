@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
@@ -252,7 +251,7 @@ export function CandidateFieldsPage() {
           description={t("admin.candidateFields.emptyDescription")}
         />
       ) : (
-        <DataTableShell actionsDensity="wide">
+        <DataTableShell>
           <Table>
             <DataTableColumns
               columns={[
@@ -321,53 +320,46 @@ export function CandidateFieldsPage() {
                   </DataTableCell>
                   <DataTableCell role="number">{field.sortOrder}</DataTableCell>
                   <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        disabled={index === 0}
-                        onClick={() => void move(field, -1)}
-                        aria-label={t("admin.candidateFields.moveUp")}
-                      >
-                        <AppIcon icon={ArrowUp} size="inline" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        disabled={index === fields.length - 1}
-                        onClick={() => void move(field, 1)}
-                        aria-label={t("admin.candidateFields.moveDown")}
-                      >
-                        <AppIcon icon={ArrowDown} size="inline" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => dialog(field)}
-                        aria-label={t("admin.candidateFields.editLabel")}
-                      >
-                        <AppIcon icon={Pencil} size="inline" />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={t("admin.candidateFields.deleteLabel")}
-                            data-row-action-tone="destructive"
-                          >
-                            <AppIcon icon={Trash2} size="inline" />
-                          </Button>
-                        }
-                        title={t("admin.candidateFields.confirmDelete")}
-                        description={t(
-                          "admin.candidateFields.confirmDeleteDescription",
-                          { label: field.label },
-                        )}
-                        destructive
-                        onConfirm={() => void remove(field.id)}
-                      />
-                    </RowActions>
+                    <RowActions
+                      row={field}
+                      actions={[
+                        {
+                          id: "edit",
+                          label: t("admin.candidateFields.editLabel"),
+                          icon: Pencil,
+                          onSelect: () => dialog(field),
+                        },
+                        {
+                          id: "move-up",
+                          label: t("admin.candidateFields.moveUp"),
+                          icon: ArrowUp,
+                          disabled: index === 0,
+                          onSelect: () => void move(field, -1),
+                        },
+                        {
+                          id: "move-down",
+                          label: t("admin.candidateFields.moveDown"),
+                          icon: ArrowDown,
+                          disabled: index === fields.length - 1,
+                          onSelect: () => void move(field, 1),
+                        },
+                        {
+                          id: "delete",
+                          label: t("admin.candidateFields.deleteLabel"),
+                          icon: Trash2,
+                          tone: "destructive",
+                          confirm: {
+                            title: t("admin.candidateFields.confirmDelete"),
+                            description: t(
+                              "admin.candidateFields.confirmDeleteDescription",
+                              { label: field.label },
+                            ),
+                            destructive: true,
+                          },
+                          onSelect: () => void remove(field.id),
+                        },
+                      ]}
+                    />
                   </DataTableCell>
                 </TableRow>
               ))}

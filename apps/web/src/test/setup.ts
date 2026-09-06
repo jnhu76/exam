@@ -24,6 +24,20 @@ if (typeof window !== "undefined") {
   }
 }
 
+// jsdom ships no ResizeObserver; Radix popper/measurement primitives
+// (Tooltip, Popover, floating content) call it from layout effects. A
+// no-op observer keeps those components openable in jsdom (positioning
+// itself is real-DOM territory, covered by E2E).
+if (typeof window !== "undefined" && !window.ResizeObserver) {
+  class ResizeObserverStub implements ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  window.ResizeObserver = ResizeObserverStub;
+  globalThis.ResizeObserver = ResizeObserverStub;
+}
+
 if (!URL.createObjectURL) {
   URL.createObjectURL = vi.fn(() => "blob:mock");
 }

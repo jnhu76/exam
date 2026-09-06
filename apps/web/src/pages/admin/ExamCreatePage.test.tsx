@@ -230,6 +230,10 @@ describe("ExamCreatePage wizard — step 3 (questions + scores)", () => {
       expect(screen.getByText("已选题目 (1)")).toBeInTheDocument(),
     );
     await user.click(screen.getByRole("button", { name: "删除题目" }));
+    const confirmDialog = await screen.findByRole("alertdialog");
+    await user.click(
+      within(confirmDialog).getByRole("button", { name: "确认" }),
+    );
     await waitFor(() =>
       expect(screen.getByText("已选题目 (0)")).toBeInTheDocument(),
     );

@@ -9,7 +9,6 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
@@ -17,14 +16,12 @@ import {
   DataTableColumns,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
-import { RowActions } from "@/components/shared/RowActions";
-import { Button } from "@/components/ui/button";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  RowActions,
+  type RowActionDeclaration,
+} from "@/components/shared/RowActions";
+import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -197,18 +194,6 @@ export function ExamPage() {
                 </TableHeader>
                 <TableBody>
                   {exams.map((exam) => {
-                    const deleteButton = (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("admin.exams.deleteLabel")}
-                        disabled={!exam.canDelete}
-                        data-row-action-tone="destructive"
-                      >
-                        <AppIcon icon={Trash2} size="inline" />
-                      </Button>
-                    );
-
                     return (
                       <TableRow key={exam.id}>
                         <DataTableCell role="primary-text">
@@ -238,45 +223,46 @@ export function ExamPage() {
                           {exam.passingScore}/{exam.totalScore}
                         </DataTableCell>
                         <DataTableCell role="actions">
-                          <RowActions>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() =>
-                                void navigate(`/admin/exams/${exam.id}`)
-                              }
-                              aria-label={t("admin.exams.viewDetail")}
-                            >
-                              <AppIcon icon={Eye} size="inline" />
-                            </Button>
-                            {mayDeleteExam &&
-                              (exam.canDelete ? (
-                                <ConfirmDialog
-                                  trigger={deleteButton}
-                                  title={t("admin.exams.confirmDelete")}
-                                  description={t(
-                                    "admin.exams.confirmDeleteDescription",
-                                    { title: exam.title },
-                                  )}
-                                  destructive
-                                  onConfirm={() => void handleDelete(exam.id)}
-                                />
-                              ) : (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span
-                                      tabIndex={0}
-                                      aria-label={t("admin.exams.deleteLabel")}
-                                    >
-                                      {deleteButton}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {deleteDisabledReasonPresentation(exam)}
-                                  </TooltipContent>
-                                </Tooltip>
-                              ))}
-                          </RowActions>
+                          <RowActions
+                            row={exam}
+                            actions={[
+                              {
+                                id: "view",
+                                label: t("admin.exams.viewDetail"),
+                                icon: Eye,
+                                onSelect: () =>
+                                  void navigate(`/admin/exams/${exam.id}`),
+                              },
+                              ...(mayDeleteExam
+                                ? ([
+                                    {
+                                      id: "delete",
+                                      label: t("admin.exams.deleteLabel"),
+                                      icon: Trash2,
+                                      tone: "destructive",
+                                      disabled: exam.canDelete
+                                        ? false
+                                        : {
+                                            reason:
+                                              deleteDisabledReasonPresentation(
+                                                exam,
+                                              ),
+                                          },
+                                      confirm: {
+                                        title: t("admin.exams.confirmDelete"),
+                                        description: t(
+                                          "admin.exams.confirmDeleteDescription",
+                                          { title: exam.title },
+                                        ),
+                                        destructive: true,
+                                      },
+                                      onSelect: () =>
+                                        void handleDelete(exam.id),
+                                    },
+                                  ] as RowActionDeclaration<typeof exam>[])
+                                : []),
+                            ]}
+                          />
                         </DataTableCell>
                       </TableRow>
                     );

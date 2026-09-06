@@ -11,7 +11,6 @@ import {
 import type { CandidateFieldConfig } from "@/lib/candidateImport";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
@@ -32,7 +31,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Plus, Search, Upload, Users, KeyRound } from "lucide-react";
+import {
+  Pencil,
+  Plus,
+  Search,
+  Upload,
+  Users,
+  KeyRound,
+  Power,
+} from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
@@ -462,7 +469,7 @@ export function CandidatesPage() {
         />
       ) : (
         <>
-          <DataTableShell minTableWidth="standard" actionsDensity="wide">
+          <DataTableShell minTableWidth="standard">
             <Table>
               <DataTableColumns
                 columns={[
@@ -517,53 +524,47 @@ export function CandidatesPage() {
                       />
                     </DataTableCell>
                     <DataTableCell role="actions">
-                      <RowActions>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => open(candidate)}
-                          aria-label={t("admin.candidates.editLabel")}
-                        >
-                          <AppIcon icon={Pencil} size="inline" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => openReset(candidate)}
-                          aria-label={t("admin.candidates.resetPassword")}
-                          data-testid={`candidate-reset-password-${candidate.id}`}
-                        >
-                          <AppIcon icon={KeyRound} size="inline" />
-                        </Button>
-                        <ConfirmDialog
-                          trigger={
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={togglingId !== null}
-                            >
-                              {togglingId === candidate.id
-                                ? t("admin.common.processing")
-                                : candidate.isActive
-                                  ? t("admin.common.disable")
-                                  : t("admin.common.enable")}
-                            </Button>
-                          }
-                          title={
-                            candidate.isActive
-                              ? t("admin.common.confirmDisable")
-                              : t("admin.common.confirmEnable")
-                          }
-                          description={t("admin.candidates.enableDisable", {
-                            action: candidate.isActive
+                      <RowActions
+                        row={candidate}
+                        actions={[
+                          {
+                            id: "edit",
+                            label: t("admin.candidates.editLabel"),
+                            icon: Pencil,
+                            onSelect: () => open(candidate),
+                          },
+                          {
+                            id: "reset-password",
+                            label: t("admin.candidates.resetPassword"),
+                            icon: KeyRound,
+                            onSelect: () => openReset(candidate),
+                          },
+                          {
+                            id: "toggle-active",
+                            label: candidate.isActive
                               ? t("admin.common.disable")
                               : t("admin.common.enable"),
-                            name: candidate.name,
-                          })}
-                          destructive={candidate.isActive}
-                          onConfirm={() => void toggle(candidate)}
-                        />
-                      </RowActions>
+                            icon: Power,
+                            tone: candidate.isActive
+                              ? "destructive"
+                              : "default",
+                            disabled: togglingId !== null,
+                            confirm: {
+                              title: candidate.isActive
+                                ? t("admin.common.confirmDisable")
+                                : t("admin.common.confirmEnable"),
+                              description: t("admin.candidates.enableDisable", {
+                                action: candidate.isActive
+                                  ? t("admin.common.disable")
+                                  : t("admin.common.enable"),
+                                name: candidate.name,
+                              }),
+                              destructive: candidate.isActive,
+                            },
+                            onSelect: () => void toggle(candidate),
+                          },
+                        ]}
+                      />
                     </DataTableCell>
                   </TableRow>
                 ))}

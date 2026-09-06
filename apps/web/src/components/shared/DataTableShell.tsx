@@ -1,25 +1,9 @@
-import {
-  useCallback,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
 
 export type DataTableMinWidth = "compact" | "standard" | "wide";
-
-/**
- * Actions column density tier. Under the shell's fixed table layout the
- * actions column width is strict, so a page picks the tier that fits its
- * worst-case row-action set:
- *   - "narrow" (default): 1-2 icon buttons (6.5rem)
- *   - "normal": 1 icon + 1 short text button, e.g. enable/disable (9rem)
- *   - "wide": 4 icon buttons, or 2 icon + 1 text button (11rem)
- */
-export type ActionsDensity = "narrow" | "normal" | "wide";
 
 /**
  * Standard shell for data table pages, providing an optional title, description,
@@ -34,7 +18,6 @@ export function DataTableShell({
   className,
   contentClassName,
   minTableWidth = "standard",
-  actionsDensity = "narrow",
 }: {
   title?: string;
   description?: string;
@@ -44,48 +27,13 @@ export function DataTableShell({
   className?: string;
   contentClassName?: string;
   minTableWidth?: DataTableMinWidth;
-  actionsDensity?: ActionsDensity;
 }) {
   const { t } = useTranslation();
   const shellId = useId();
   const titleId = title ? `${shellId}-title` : undefined;
   const descriptionId = description ? `${shellId}-description` : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState({
-    overflowing: false,
-    atStart: true,
-    atEnd: true,
-    narrow: false,
-  });
-  const updateOverflow = useCallback(() => {
-    const region = scrollRef.current;
-    if (!region) return;
-    const maxScroll = Math.max(0, region.scrollWidth - region.clientWidth);
-    const overflowing = maxScroll > 1;
-    setOverflow({
-      overflowing,
-      atStart: !overflowing || region.scrollLeft <= 1,
-      atEnd: !overflowing || region.scrollLeft >= maxScroll - 1,
-      narrow: window.innerWidth < 640,
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    const region = scrollRef.current;
-    if (!region) return;
-    updateOverflow();
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(updateOverflow);
-    observer?.observe(region);
-    if (region.firstElementChild) observer?.observe(region.firstElementChild);
-    window.addEventListener("resize", updateOverflow);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updateOverflow);
-    };
-  }, [children, updateOverflow]);
+  const overflow = useOverflowObservation(scrollRef);
 
   return (
     <section
@@ -93,7 +41,6 @@ export function DataTableShell({
       aria-describedby={descriptionId}
       data-slot="admin-table-shell"
       data-table-min-width={minTableWidth}
-      data-actions-density={actionsDensity}
       className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (
@@ -130,7 +77,6 @@ export function DataTableShell({
           data-scroll-start={String(overflow.atStart)}
           data-scroll-end={String(overflow.atEnd)}
           className={cn("min-w-0 overflow-x-auto", contentClassName)}
-          onScroll={updateOverflow}
         >
           {children}
         </div>
@@ -140,7 +86,7 @@ export function DataTableShell({
         {overflow.overflowing && !overflow.atEnd && (
           <span data-slot="table-scroll-fade-right" aria-hidden="true" />
         )}
-        {overflow.overflowing && overflow.narrow && (
+        {overflow.overflowing && (
           <div
             data-slot="table-scroll-hint"
             data-scroll-direction={
