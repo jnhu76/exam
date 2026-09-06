@@ -12,14 +12,18 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, "..");
 
-function parse(file: string): ts.SourceFile {
+function parseText(fileName: string, text: string): ts.SourceFile {
   return ts.createSourceFile(
-    file,
-    readFileSync(file, "utf8"),
+    fileName,
+    text,
     ts.ScriptTarget.Latest,
     /* setParentNodes */ true,
     ts.ScriptKind.TSX,
   );
+}
+
+function parse(file: string): ts.SourceFile {
+  return parseText(file, readFileSync(file, "utf8"));
 }
 
 /**
@@ -84,10 +88,10 @@ function declaredPageContainerRoles(file: string): string[] {
   return roles;
 }
 
-/** Import specifier → file path for every `@/pages/**` import in App.tsx. */
-function routedPageImports(): Map<string, string> {
-  const appFile = join(srcRoot, "App.tsx");
-  const sourceFile = parse(appFile);
+/** Import specifier → file path for every `@/pages/**` import in a parsed App source. */
+function pageImportsFromSourceFile(
+  sourceFile: ts.SourceFile,
+): Map<string, string> {
   const imports = new Map<string, string>();
   sourceFile.forEachChild((node) => {
     if (!ts.isImportDeclaration(node)) return;
@@ -101,6 +105,11 @@ function routedPageImports(): Map<string, string> {
     }
   });
   return imports;
+}
+
+/** Import specifier → file path for every `@/pages/**` import in App.tsx. */
+function routedPageImports(): Map<string, string> {
+  return pageImportsFromSourceFile(parse(join(srcRoot, "App.tsx")));
 }
 
 /** The page components referenced by `<Route element={<X />}>` in App.tsx. */
@@ -155,17 +164,22 @@ interface ResolvedRouteEntry {
 }
 
 /**
- * Route-aware extraction from App.tsx. Resolves nested React Router structure
- * into fully-qualified `{route, page}` pairs so the fixture can be compared
- * against actual routing — not just component-name sets.
+ * Route-aware extraction from App.tsx source text. Resolves nested React
+ * Router structure into fully-qualified `{route, page}` pairs so the fixture
+ * can be compared against actual routing — not just component-name sets.
+ * Pure: operates on the given source string, never on disk (mutation proofs
+ * parse mutants in memory).
  *
- * Deduplicates by `${route}::${page}` key so component-name-multiplicity is
- * proven: if two routes render the same component, both appear.
+ * Deduplicates by `${route}::${page}` key, so distinct route identities
+ * remain independently proven: multiple distinct routes pointing to the same
+ * component (duplicate-component route coverage) each appear. Identical
+ * duplicate entries (the same route::page twice) collapse to one — exact
+ * duplicate-pair multiplicity is not claimed.
  */
-function resolvedRouteEntries(): ResolvedRouteEntry[] {
+function resolvedRouteEntriesFromSource(source: string): ResolvedRouteEntry[] {
   const appFile = join(srcRoot, "App.tsx");
-  const sourceFile = parse(appFile);
-  const imports = routedPageImports();
+  const sourceFile = parseText(appFile, source);
+  const imports = pageImportsFromSourceFile(sourceFile);
   const seen = new Set<string>();
   const entries: ResolvedRouteEntry[] = [];
 
@@ -301,6 +315,13 @@ function resolvedRouteEntries(): ResolvedRouteEntry[] {
   return entries;
 }
 
+/** The route entries of the on-disk App.tsx (production reading path). */
+function resolvedRouteEntries(): ResolvedRouteEntry[] {
+  return resolvedRouteEntriesFromSource(
+    readFileSync(join(srcRoot, "App.tsx"), "utf8"),
+  );
+}
+
 /**
  * Root-width rule: inside the exported page component, a top-level
  * `return (<el className="…">)` whose root element both centers itself and
@@ -427,11 +448,12 @@ describe("page geometry contract (issue 455)", () => {
     },
   );
 
-  it("proves route→page pairs match the fixture exactly (including multiplicity)", () => {
+  it("proves route→page pairs match the fixture exactly", () => {
     // Route-aware extraction: resolves nested React Router paths so the
     // fixture is proved against actual (route, page) pairs — not just
-    // component-name sets. Deduplication via key ensures multiplicity is
-    // proven: two routes rendering the same component both appear.
+    // component-name sets. Deduplication by route::page key keeps this about
+    // distinct route identities: two routes rendering the same component
+    // both appear as separate pairs.
     const actual = resolvedRouteEntries();
     const fixturePairs = ROUTE_PAGE_ROLES.map((f) => `${f.route}::${f.page}`);
     const actualPairs = actual.map((e) => `${e.route}::${e.page}`);
@@ -449,15 +471,25 @@ describe("page geometry contract (issue 455)", () => {
     ).toEqual([]);
   });
 
-  it("proves route multiplicity: duplicate-component routes are individually proven", () => {
-    // This catches the class of bug where two routes share a component but
-    // only one appears in the fixture — deleting one route would still pass
-    // a component-name-set comparison.
-    const actual = resolvedRouteEntries();
+  it("duplicate-component route coverage: distinct route identities remain independently proven", () => {
+    // Duplicate-component coverage: two distinct routes render
+    // QuestionEditPage — a component-name-set comparison could not tell them
+    // apart, and deleting one route would silently pass it. Both identities
+    // must appear independently in the fixture and in App.tsx.
+    const actualPairs = resolvedRouteEntries().map(
+      (e) => `${e.route}::${e.page}`,
+    );
+    expect(actualPairs).toContain("/admin/questions/new::QuestionEditPage");
+    expect(actualPairs).toContain(
+      "/admin/questions/:id/edit::QuestionEditPage",
+    );
+
+    // Extraction dedupes identical route::page pairs, so each distinct
+    // identity is expected exactly once in the fixture — an exact-duplicate
+    // fixture entry (the same route::page twice) fails count parity.
     const actualCounts = new Map<string, number>();
-    for (const e of actual) {
-      const key = `${e.route}::${e.page}`;
-      actualCounts.set(key, (actualCounts.get(key) ?? 0) + 1);
+    for (const pair of actualPairs) {
+      actualCounts.set(pair, (actualCounts.get(pair) ?? 0) + 1);
     }
     const fixtureCounts = new Map<string, number>();
     for (const f of ROUTE_PAGE_ROLES) {
@@ -472,39 +504,45 @@ describe("page geometry contract (issue 455)", () => {
     }
   });
 
-  it("mutation proof: changing a duplicate-component route path breaks the route fixture", async () => {
+  it("mutation proof (in memory): changing a duplicate-component route path breaks the route fixture", () => {
     // C1 corrective: prove the route-aware extraction catches path changes
     // that a component-name-set comparison would miss. Both
     // /admin/questions/new and /admin/questions/:id/edit render
-    // QuestionEditPage — mutating one path must break the fixture.
-    const { writeFileSync, readFileSync: readFS } = await import("node:fs");
+    // QuestionEditPage — mutating one path must break the fixture. The proof
+    // is pure: the mutant source is parsed in memory, never written to disk.
     const appFile = join(srcRoot, "App.tsx");
-    const original = readFS(appFile, "utf8");
-    try {
-      // Mutate: append "-mutant" to the :id/edit route path.
-      const mutant = original.replace(
-        'path="questions/:id/edit"',
-        'path="questions/:id/edit-mutant"',
-      );
-      // Sanity: the mutation must actually change the file.
-      expect(mutant).not.toBe(original);
-      writeFileSync(appFile, mutant, "utf8");
-
-      // The route-aware extraction now sees a new (route, page) pair that the
-      // fixture does not contain → the route comparison test must fail.
-      const actual = resolvedRouteEntries();
-      const fixturePairs = new Set(
-        ROUTE_PAGE_ROLES.map((f) => `${f.route}::${f.page}`),
-      );
-      const unexpected = actual.filter(
+    const original = readFileSync(appFile, "utf8");
+    const fixturePairs = new Set(
+      ROUTE_PAGE_ROLES.map((f) => `${f.route}::${f.page}`),
+    );
+    const unexpectedPairs = (source: string) =>
+      resolvedRouteEntriesFromSource(source).filter(
         (e) => !fixturePairs.has(`${e.route}::${e.page}`),
       );
-      // The route-aware extraction must see at least one (route, page) pair
-      // the fixture does not contain → the route comparison test would fail.
-      expect(unexpected.length).toBeGreaterThan(0);
-    } finally {
-      writeFileSync(appFile, original, "utf8");
-    }
+
+    // Negative control: the real App.tsx yields no unexpected pair.
+    expect(unexpectedPairs(original)).toEqual([]);
+
+    // Mutate: append "-mutant" to the :id/edit route path.
+    const mutant = original.replace(
+      'path="questions/:id/edit"',
+      'path="questions/:id/edit-mutant"',
+    );
+    // Sanity: the mutation must actually change the source.
+    expect(mutant).not.toBe(original);
+
+    // The route-aware extraction now sees a new (route, page) pair the
+    // fixture does not contain → the route comparison test would fail.
+    expect(unexpectedPairs(mutant).length).toBeGreaterThan(0);
+  });
+
+  it("never mutates repository sources during the geometry proof", () => {
+    // F1 test hygiene: this contract must stay pure — no in-place source
+    // mutation racing other structure tests that read App.tsx. The regex
+    // matches a write call site only; this matcher's own literal (broken by
+    // the comment here) does not match itself.
+    const ownSource = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    expect(ownSource).not.toMatch(/writeFileSync\s*\(/);
   });
 
   it.each([
