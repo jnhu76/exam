@@ -3,6 +3,7 @@ import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 import {
   adminApiToken,
+  adminGet,
   adminPost,
   answerTrueFalse,
   candidateLogin,
@@ -11,6 +12,11 @@ import {
   waitForSaveSaved,
 } from "../lib/flow";
 import { assertNoHorizontalOverflow } from "../lib/responsive";
+// INTENTIONAL e2e → web-src coupling: these imports ARE the authorities the
+// V4 matrix derives from (status keys, locale set, i18n labels). Hand-copying
+// them would create a second authority; importing them makes a vocabulary
+// change red this gate at compile/run time. Web-side edits to these modules
+// therefore also affect e2e — that is the drift alarm working.
 import { statusMeta, type StatusMeta } from "../../web/src/lib/statusMeta";
 import { statusLabelKey } from "../../web/src/lib/statusMetaUtils";
 import i18n, {
@@ -131,6 +137,26 @@ async function waitForSettledLayout(page: Page): Promise<void> {
   });
 }
 
+/**
+ * The users-page fixtures are located inside the rendered table, which shows
+ * ONE server page (default pageSize 20, createdAt ASC — freshly created
+ * fixtures sort last). The reseeded E2E baseline keeps the staff list small,
+ * but if it ever grows past one page the fixtures would sit on page 2 and the
+ * row lookup would fail as an opaque visibility timeout — fail loudly with
+ * the reason instead.
+ */
+async function assertStaffListFitsOnePage(
+  request: import("@playwright/test").APIRequestContext,
+): Promise<void> {
+  const token = await adminApiToken(request);
+  const list = await adminGet(request, token, "/api/users?page=1&pageSize=20");
+  const body = (await list.json()) as { total: number };
+  expect(
+    body.total,
+    `staff list has ${body.total} users (> pageSize 20): newly created fixtures sort onto page 2, breaking users-page row pinning`,
+  ).toBeLessThanOrEqual(20);
+}
+
 test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
   test("V1 fine pointer: teacher row [edit][kebab] inside 6rem, status cell untouched", async ({
     page,
@@ -139,6 +165,7 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
     const stamp = Date.now();
     const teacherName = `E2E Governance Teacher ${stamp}`;
     await createTeacher(request, teacherName, `e2e-gov1-teacher-${stamp}`);
+    await assertStaffListFitsOnePage(request);
 
     await loginAsAdmin(page);
     await page.goto("/admin/users");
@@ -183,6 +210,7 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
       const stamp = Date.now();
       const teacherName = `E2E Governance Coarse Teacher ${stamp}`;
       await createTeacher(request, teacherName, `e2e-gov1-coarse-${stamp}`);
+      await assertStaffListFitsOnePage(request);
 
       await loginAsAdmin(page);
       await page.goto("/admin/users");
@@ -286,6 +314,7 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
     const cjkName = `超长中文姓名测试超长中文姓名测试超长中文姓名测试${stamp}`;
     const unbrokenToken = `G3${stamp}UNBROKEN_MACHINE_IDENTIFIER_XZZZZ`;
     await createTeacher(request, cjkName, unbrokenToken);
+    await assertStaffListFitsOnePage(request);
 
     await loginAsAdmin(page);
     await page.goto("/admin/users");
@@ -372,13 +401,24 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
   }) => {
     await loginAsAdmin(page);
     await page.goto("/admin/audit-logs");
-    const presenter = page
-      .locator(
-        '[data-slot="table-cell"] [data-overflow-policy="truncate-middle"]',
-      )
-      .first();
-    await expect(presenter).toBeVisible({ timeout: 15_000 });
+    const presenters = page.locator(
+      '[data-slot="table-cell"] [data-overflow-policy="truncate-middle"]',
+    );
+    await expect(presenters.first()).toBeVisible({ timeout: 15_000 });
     await waitForSettledLayout(page);
+
+    // middleTruncate never truncates values ≤ 12 glyphs (DataTableContract),
+    // so pin the assertions to the first presenter whose FULL value actually
+    // truncates — a short id (e.g. "ops-policy") on top of the audit list is
+    // legal behavior, not a truncation failure.
+    const longIndex = await presenters.evaluateAll((els) =>
+      els.findIndex((el) => (el.getAttribute("title") ?? "").length > 12),
+    );
+    expect(
+      longIndex,
+      "audit list contains at least one long machine identifier",
+    ).toBeGreaterThanOrEqual(0);
+    const presenter = presenters.nth(longIndex);
 
     // The full value stays accessible; the visible form is the shortened one.
     const title = await presenter.getAttribute("title");

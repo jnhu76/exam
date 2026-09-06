@@ -96,7 +96,7 @@ governance boundary, §Page geometry, §Tables). Implementation ownership:
 | ordinary table-page surface composition | `DataTableShell` (title band / scroll frame / fades / hint / footer) |
 | continuous workbench surface composition | `components/shared/DataWorkbench.tsx` (toolbar → table → footer as one shell; Question Management) |
 | column role/overflow/priority + presenters | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
-| viewport representation switch (the only `lg:hidden` policy owner) | `components/shared/ResponsiveRepresentation.tsx` |
+| viewport representation switch (the only owner of the table representation-switch `lg` policy) | `components/shared/ResponsiveRepresentation.tsx` |
 | mobile card list + priority→slot derivation | `components/shared/MobileRecordList.tsx` (`deriveMobileCardFields`) / `MobileRecordCard.tsx` |
 | container-overflow facts (the only ResizeObserver) | `hooks/useOverflowObservation.ts` (facts only — no tier/archetype/representation vocabulary) |
 | physical column widths, tier floors, sticky context column | `table/recipes.css` (fixed layout + col width/min-width; `detail-comparison` sticky first child) |

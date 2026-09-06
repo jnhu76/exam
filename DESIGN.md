@@ -25,9 +25,9 @@ semantic tokens
 
 Business pages own structural layout and responsive composition. They may not
 recompose an appearance role already owned by a recipe or component, and they
-may not redefine spatial semantics already owned by an archetype, component
-contract, or shared mechanism — the normative boundary (what pages may own,
-what they may not, and the promotion rule) is frozen in
+may not redefine spatial semantics already owned by an archetype, authoritative
+component contract, or shared mechanism — the normative boundary (what pages
+may own, what they may not, and the promotion rule) is frozen in
 [`docs/standards/ui-system.md`](docs/standards/ui-system.md)
 §Spatial governance boundary.
 
